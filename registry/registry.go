@@ -32,6 +32,8 @@ type VersionEntry struct {
 	Capabilities []string           `json:"capabilities,omitempty"`
 	RiskClass    string             `json:"risk_class,omitempty"`
 	Artifacts    []PlatformArtifact `json:"artifacts"`
+	Signature    []byte             `json:"signature,omitempty"`
+	SignerKeyPEM []byte             `json:"signer_key_pem,omitempty"`
 }
 
 // PlatformArtifact describes a platform-specific binary for a plugin version.
