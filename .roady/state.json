@@ -1,6 +1,6 @@
 {
   "project_id": "hardline",
-  "version": 44,
+  "version": 45,
   "task_states": {
     "task-1": {
       "status": "done",
@@ -51,8 +51,12 @@
       ]
     },
     "task-15": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "commit 14fe7d9 — feat: implement agent-assist module with LLM-powered finding explanations. assist/ package with Provider interface, OpenAI provider, Explainer orchestrator with batching, CLI explain command, 16 new tests all passing."
+      ]
     },
     "task-16": {
       "status": "done",
@@ -127,8 +131,12 @@
       ]
     },
     "task-24": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "commit c794f43 — feat: implement CLI plugin and registry management commands. cli/plugin_cmd.go (search, info, install, update, list, remove, call) and cli/registry_cmd.go (add, list, remove) with full test coverage."
+      ]
     },
     "task-25": {
       "status": "pending",
@@ -191,5 +199,5 @@
       ]
     }
   },
-  "updated_at": "2026-02-08T17:16:51.907099+01:00"
+  "updated_at": "2026-02-08T21:20:26.333473+01:00"
 }
