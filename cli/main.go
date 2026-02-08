@@ -47,6 +47,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  scan <path>    Scan a directory for security issues\n")
 		fmt.Fprintf(os.Stderr, "  serve          Start MCP server on stdio\n")
+		fmt.Fprintf(os.Stderr, "  registry       Manage plugin registries\n")
+		fmt.Fprintf(os.Stderr, "  plugin         Manage and invoke plugins\n")
 		fmt.Fprintf(os.Stderr, "  version        Print version and exit\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
@@ -77,6 +79,10 @@ func run(args []string) int {
 		return runScan(remaining[1], formatFlag, outputDir, quietFlag, verboseFlag)
 	case "serve":
 		return runServe(remaining[1:])
+	case "registry":
+		return runRegistry(remaining[1:])
+	case "plugin":
+		return runPlugin(remaining[1:])
 	case "version":
 		fmt.Printf("hardline %s\n", version)
 		return 0
