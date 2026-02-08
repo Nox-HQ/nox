@@ -27,7 +27,7 @@ const (
 
 // Policy defines the safety bounds a plugin must operate within.
 // The host validates each plugin's manifest against this policy
-// before allowing registration.
+// before allowing registration, and enforces runtime constraints.
 type Policy struct {
 	AllowedNetworkHosts    []string
 	AllowedNetworkCIDRs    []string
@@ -38,6 +38,8 @@ type Policy struct {
 	MaxArtifactBytes       int64
 	MaxConcurrency         int
 	ToolInvocationTimeout  time.Duration
+	RequestsPerMinute      int   // 0 = unlimited
+	BandwidthBytesPerMin   int64 // 0 = unlimited
 }
 
 // DefaultPolicy returns a conservative policy suitable for untrusted plugins:

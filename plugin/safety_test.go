@@ -24,6 +24,12 @@ func TestDefaultPolicy(t *testing.T) {
 	if p.ToolInvocationTimeout.Seconds() != 30 {
 		t.Errorf("ToolInvocationTimeout = %v, want 30s", p.ToolInvocationTimeout)
 	}
+	if p.RequestsPerMinute != 0 {
+		t.Errorf("RequestsPerMinute = %d, want 0 (unlimited)", p.RequestsPerMinute)
+	}
+	if p.BandwidthBytesPerMin != 0 {
+		t.Errorf("BandwidthBytesPerMin = %d, want 0 (unlimited)", p.BandwidthBytesPerMin)
+	}
 }
 
 func TestValidateManifest_NilSafety(t *testing.T) {

@@ -73,12 +73,13 @@ type ResourceInfo struct {
 // Plugin manages a single gRPC connection to a plugin process.
 // It acts as the entity for plugin lifecycle: init → ready → stopped.
 type Plugin struct {
-	info   PluginInfo
-	state  PluginState
-	client pluginv1.PluginServiceClient
-	conn   *grpc.ClientConn
-	cmd    *exec.Cmd // nil if connected to an external process
-	mu     sync.Mutex
+	info        PluginInfo
+	state       PluginState
+	client      pluginv1.PluginServiceClient
+	conn        *grpc.ClientConn
+	cmd         *exec.Cmd // nil if connected to an external process
+	rateLimiter *RateLimiter
+	mu          sync.Mutex
 }
 
 // NewPlugin creates a Plugin from an existing gRPC client connection.
@@ -182,6 +183,30 @@ func (p *Plugin) InvokeTool(ctx context.Context, toolName string, input map[stri
 	return p.client.InvokeTool(ctx, req)
 }
 
+// fail transitions the plugin to StateFailed. Called by the violation handler
+// before Close to mark the plugin as failed rather than cleanly stopped.
+func (p *Plugin) fail() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.state != StateStopped && p.state != StateStopping {
+		p.state = StateFailed
+	}
+}
+
+// getToolInfo looks up a tool definition by name from the parsed manifest.
+func (p *Plugin) getToolInfo(name string) *ToolInfo {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, cap := range p.info.Capabilities {
+		for i, tool := range cap.Tools {
+			if tool.Name == name {
+				return &cap.Tools[i]
+			}
+		}
+	}
+	return nil
+}
+
 // HasTool reports whether this plugin declares a tool with the given name.
 func (p *Plugin) HasTool(name string) bool {
 	p.mu.Lock()
@@ -206,6 +231,7 @@ func (p *Plugin) Close() error {
 	if p.state == StateStopped || p.state == StateStopping {
 		return nil
 	}
+	wasFailed := p.state == StateFailed
 	p.state = StateStopping
 
 	var errs []error
@@ -235,7 +261,11 @@ func (p *Plugin) Close() error {
 		}
 	}
 
-	p.state = StateStopped
+	if wasFailed {
+		p.state = StateFailed
+	} else {
+		p.state = StateStopped
+	}
 	return errors.Join(errs...)
 }
 

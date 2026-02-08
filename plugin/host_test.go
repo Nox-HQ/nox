@@ -2,8 +2,12 @@ package plugin
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/felixgeelhaar/hardline/core"
 	"github.com/felixgeelhaar/hardline/core/analyzers/ai"
@@ -462,5 +466,430 @@ func TestHost_WithPolicy(t *testing.T) {
 	}
 	if h.policy.MaxArtifactBytes != 100 {
 		t.Errorf("MaxArtifactBytes = %d, want 100", h.policy.MaxArtifactBytes)
+	}
+}
+
+// manifestWithWriteTool returns a manifest with a non-read-only tool.
+func manifestWithWriteTool() *pluginv1.GetManifestResponse {
+	return &pluginv1.GetManifestResponse{
+		Name:       "writer-plugin",
+		Version:    "1.0.0",
+		ApiVersion: "v1",
+		Capabilities: []*pluginv1.Capability{
+			{
+				Name: "writing",
+				Tools: []*pluginv1.ToolDef{
+					{
+						Name:        "write-file",
+						Description: "Write a file",
+						ReadOnly:    false,
+					},
+					{
+						Name:        "read-file",
+						Description: "Read a file",
+						ReadOnly:    true,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestHost_ReadOnlyEnforcement_PassiveRejectsWrite(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: manifestWithWriteTool(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+
+	// Default policy is passive.
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	// Non-read-only tool should be rejected.
+	_, err := h.InvokeTool(context.Background(), "writer-plugin.write-file", nil, "/workspace")
+	if err == nil {
+		t.Fatal("expected error for non-read-only tool under passive policy")
+	}
+
+	// Plugin should be terminated.
+	if len(h.Plugins()) != 0 {
+		t.Error("plugin should be removed after unauthorized action")
+	}
+
+	violations := h.Violations()
+	if len(violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(violations))
+	}
+	if violations[0].Type != ViolationUnauthorizedAction {
+		t.Errorf("violation type = %q, want %q", violations[0].Type, ViolationUnauthorizedAction)
+	}
+}
+
+func TestHost_ReadOnlyEnforcement_ActiveAllowsWrite(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: manifestWithWriteTool(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+
+	policy := DefaultPolicy()
+	policy.MaxRiskClass = RiskClassActive
+	h := newTestHost(WithPolicy(policy))
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	// Non-read-only tool should be allowed under active policy.
+	_, err := h.InvokeTool(context.Background(), "writer-plugin.write-file", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("expected write tool to be allowed under active policy, got %v", err)
+	}
+
+	if len(h.Violations()) != 0 {
+		t.Error("no violations expected under active policy")
+	}
+}
+
+func TestHost_ReadOnlyEnforcement_PassiveAllowsReadOnly(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: manifestWithWriteTool(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+
+	// Default policy is passive.
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	// Read-only tool should be allowed under passive policy.
+	_, err := h.InvokeTool(context.Background(), "writer-plugin.read-file", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("expected read-only tool to be allowed under passive policy, got %v", err)
+	}
+}
+
+func TestHost_SecretRedaction(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: validManifest(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{
+						Id:       "f-1",
+						RuleId:   "SEC-001",
+						Severity: pluginv1.Severity_SEVERITY_HIGH,
+						Message:  "Found AKIAIOSFODNN7EXAMPLE in code",
+					},
+				},
+			}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	resp, err := h.InvokeTool(context.Background(), "scan", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("InvokeTool: %v", err)
+	}
+
+	// Secret should be redacted.
+	msg := resp.GetFindings()[0].GetMessage()
+	if strings.Contains(msg, "AKIAIOSFODNN7EXAMPLE") {
+		t.Errorf("AWS key should be redacted, got %q", msg)
+	}
+	if !strings.Contains(msg, "[REDACTED]") {
+		t.Errorf("should contain [REDACTED] placeholder, got %q", msg)
+	}
+
+	// Violation should be recorded but plugin should NOT be terminated.
+	if len(h.Plugins()) != 1 {
+		t.Error("plugin should still be running after secret redaction")
+	}
+
+	violations := h.Violations()
+	if len(violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(violations))
+	}
+	if violations[0].Type != ViolationSecretLeaked {
+		t.Errorf("violation type = %q, want %q", violations[0].Type, ViolationSecretLeaked)
+	}
+}
+
+func TestHost_SecretRedaction_CleanResponse(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: validManifest(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{
+						Id:      "f-1",
+						Message: "Clean finding with no secrets",
+					},
+				},
+			}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+	h := newTestHost()
+	_ = h.RegisterPlugin(context.Background(), conn)
+
+	_, err := h.InvokeTool(context.Background(), "scan", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("InvokeTool: %v", err)
+	}
+
+	if len(h.Violations()) != 0 {
+		t.Error("clean response should not produce violations")
+	}
+}
+
+func TestHost_Violations_ReturnsCopy(t *testing.T) {
+	h := newTestHost()
+
+	v1 := h.Violations()
+	if len(v1) != 0 {
+		t.Error("new host should have no violations")
+	}
+
+	// Mutating returned slice should not affect host.
+	v1 = append(v1, RuntimeViolation{Type: ViolationRateLimit, PluginName: "fake"})
+	v2 := h.Violations()
+	if len(v2) != 0 {
+		t.Error("mutating returned slice should not affect host")
+	}
+}
+
+func TestHost_RateLimitViolation(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: validManifest(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+
+	policy := DefaultPolicy()
+	policy.RequestsPerMinute = 1 // Very restrictive: 1 RPM.
+	h := newTestHost(WithPolicy(policy))
+
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	// First call uses burst allowance.
+	_, err := h.InvokeTool(context.Background(), "scan", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("first call should succeed: %v", err)
+	}
+
+	// Second call should be rate limited (burst = 1, rate = 1/60s).
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err = h.InvokeTool(ctx, "scan", nil, "/workspace")
+	if err == nil {
+		t.Fatal("second call should be rate limited")
+	}
+
+	violations := h.Violations()
+	if len(violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(violations))
+	}
+	if violations[0].Type != ViolationRateLimit {
+		t.Errorf("violation type = %q, want %q", violations[0].Type, ViolationRateLimit)
+	}
+
+	// Plugin should be terminated.
+	if len(h.Plugins()) != 0 {
+		t.Error("plugin should be removed after rate limit violation")
+	}
+}
+
+func TestHost_ConfigBasedPolicy(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".hardline.yaml")
+	data := `
+plugin_policy:
+  max_risk_class: active
+  requests_per_minute: 100
+  bandwidth_mb_per_minute: 5
+  tool_timeout_seconds: 10
+`
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	policy := cfg.PluginPolicy.ToPolicy()
+	if policy.MaxRiskClass != RiskClassActive {
+		t.Errorf("MaxRiskClass = %q, want %q", policy.MaxRiskClass, RiskClassActive)
+	}
+	if policy.RequestsPerMinute != 100 {
+		t.Errorf("RequestsPerMinute = %d, want 100", policy.RequestsPerMinute)
+	}
+	if policy.BandwidthBytesPerMin != 5*1024*1024 {
+		t.Errorf("BandwidthBytesPerMin = %d, want %d", policy.BandwidthBytesPerMin, 5*1024*1024)
+	}
+
+	// Create a host with the config-based policy.
+	h := NewHost(WithPolicy(policy))
+	if h.policy.MaxRiskClass != RiskClassActive {
+		t.Errorf("host policy MaxRiskClass = %q, want %q", h.policy.MaxRiskClass, RiskClassActive)
+	}
+}
+
+func TestHost_BandwidthViolation(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: validManifest(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			// Return a response with a large message to exhaust bandwidth.
+			bigMsg := strings.Repeat("x", 1024*1024) // 1 MB message
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{Id: "f-1", Message: bigMsg},
+				},
+			}, nil
+		},
+	}
+	conn := startMockPlugin(t, mock)
+
+	policy := DefaultPolicy()
+	policy.BandwidthBytesPerMin = 100 // 100 bytes/min — will be exceeded.
+	h := newTestHost(WithPolicy(policy))
+
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	_, err := h.InvokeTool(context.Background(), "scan", nil, "/workspace")
+	if err == nil {
+		t.Fatal("expected error for bandwidth violation")
+	}
+
+	violations := h.Violations()
+	foundBandwidth := false
+	for _, v := range violations {
+		if v.Type == ViolationBandwidth {
+			foundBandwidth = true
+			break
+		}
+	}
+	if !foundBandwidth {
+		t.Error("expected bandwidth violation")
+	}
+
+	// Plugin should be terminated.
+	if len(h.Plugins()) != 0 {
+		t.Error("plugin should be removed after bandwidth violation")
+	}
+}
+
+func TestHost_InvokeAll_RateLimitedPlugin(t *testing.T) {
+	// Plugin 1: will be rate-limited.
+	mock1 := &mockPluginServer{
+		manifest: validManifest(), // has "scan"
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{Id: "f1", RuleId: "SEC-001", Severity: pluginv1.Severity_SEVERITY_HIGH},
+				},
+			}, nil
+		},
+	}
+
+	// Plugin 2: also has "scan", should succeed.
+	manifest2 := secondPluginManifest()
+	manifest2.Capabilities[0].Tools = append(manifest2.Capabilities[0].Tools, &pluginv1.ToolDef{
+		Name:     "scan",
+		ReadOnly: true,
+	})
+	mock2 := &mockPluginServer{
+		manifest: manifest2,
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{Id: "f2", RuleId: "DEP-001", Severity: pluginv1.Severity_SEVERITY_MEDIUM},
+				},
+			}, nil
+		},
+	}
+
+	conn1 := startMockPlugin(t, mock1)
+	conn2 := startMockPlugin(t, mock2)
+
+	policy := DefaultPolicy()
+	policy.MaxConcurrency = 1 // Sequential so we control ordering.
+	policy.RequestsPerMinute = 1
+	h := newTestHost(WithPolicy(policy))
+
+	if err := h.RegisterPlugin(context.Background(), conn1); err != nil {
+		t.Fatalf("register plugin 1: %v", err)
+	}
+	if err := h.RegisterPlugin(context.Background(), conn2); err != nil {
+		t.Fatalf("register plugin 2: %v", err)
+	}
+
+	// First InvokeAll: both plugins use their burst allowance.
+	responses, err := h.InvokeAll(context.Background(), "scan", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("first InvokeAll: %v", err)
+	}
+	if len(responses) != 2 {
+		t.Fatalf("first InvokeAll: expected 2 responses, got %d", len(responses))
+	}
+
+	// Second InvokeAll with tight timeout: rate-limited plugins get violations.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	responses2, err := h.InvokeAll(ctx, "scan", nil, "/workspace")
+	if err != nil {
+		t.Fatalf("second InvokeAll: %v", err)
+	}
+
+	// Some plugins may have been rate-limited and removed.
+	// At minimum, violations should exist for rate-limited plugins.
+	violations := h.Violations()
+	rateLimitViolations := 0
+	for _, v := range violations {
+		if v.Type == ViolationRateLimit {
+			rateLimitViolations++
+		}
+	}
+
+	// The total of responses + violations should account for all plugins.
+	// Either a plugin responded successfully or was rate-limited.
+	total := len(responses2) + rateLimitViolations
+	if total == 0 {
+		t.Error("expected at least one response or violation from second InvokeAll")
+	}
+
+	// Diagnostics should record the violations.
+	diags := h.Diagnostics()
+	foundRateLimitDiag := false
+	for _, d := range diags {
+		if strings.Contains(d.Message, "rate_limit_exceeded") {
+			foundRateLimitDiag = true
+			break
+		}
+	}
+	if rateLimitViolations > 0 && !foundRateLimitDiag {
+		t.Error("rate limit violation should produce a diagnostic")
 	}
 }

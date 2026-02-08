@@ -22,6 +22,8 @@ type Host struct {
 	plugins     map[string]*Plugin // name → plugin
 	toolIndex   map[string]*Plugin // "pluginName.toolName" → plugin
 	diagnostics []Diagnostic
+	violations  []RuntimeViolation
+	redactor    *Redactor
 	mu          sync.RWMutex
 	logger      *slog.Logger
 }
@@ -40,12 +42,13 @@ func WithLogger(l *slog.Logger) HostOption {
 }
 
 // NewHost creates a Host with the given options.
-// Defaults: DefaultPolicy(), slog.Default().
+// Defaults: DefaultPolicy(), slog.Default(), NewRedactor().
 func NewHost(opts ...HostOption) *Host {
 	h := &Host{
 		policy:    DefaultPolicy(),
 		plugins:   make(map[string]*Plugin),
 		toolIndex: make(map[string]*Plugin),
+		redactor:  NewRedactor(),
 		logger:    slog.Default(),
 	}
 	for _, opt := range opts {
@@ -82,6 +85,8 @@ func (h *Host) RegisterPlugin(ctx context.Context, conn *grpc.ClientConn) error 
 		}
 		return fmt.Errorf("plugin %q rejected: %s", info.Name, strings.Join(msgs, "; "))
 	}
+
+	p.rateLimiter = NewRateLimiter(h.policy.RequestsPerMinute, h.policy.BandwidthBytesPerMin)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -128,6 +133,8 @@ func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) e
 		return fmt.Errorf("plugin %q rejected: %s", info.Name, strings.Join(msgs, "; "))
 	}
 
+	p.rateLimiter = NewRateLimiter(h.policy.RequestsPerMinute, h.policy.BandwidthBytesPerMin)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -152,10 +159,46 @@ func (h *Host) Plugins() []PluginInfo {
 
 // InvokeTool routes a tool invocation to the appropriate plugin.
 // Supports qualified "pluginName.toolName" and unqualified "toolName" (first match).
+// Enforces read-only policy, rate limits, bandwidth limits, and secret redaction.
 func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string]any, workspaceRoot string) (*pluginv1.InvokeToolResponse, error) {
 	p, resolvedName, err := h.resolveToolPlugin(toolName)
 	if err != nil {
 		return nil, err
+	}
+
+	pluginName := p.Info().Name
+
+	// Read-only enforcement: reject non-read-only tools under passive policy.
+	if h.policy.MaxRiskClass == RiskClassPassive {
+		ti := p.getToolInfo(resolvedName)
+		if ti != nil && !ti.ReadOnly {
+			v := RuntimeViolation{
+				Type:       ViolationUnauthorizedAction,
+				PluginName: pluginName,
+				Message:    fmt.Sprintf("tool %q is not read-only but policy is passive", resolvedName),
+				Timestamp:  time.Now(),
+			}
+			h.mu.Lock()
+			h.handleViolationLocked(v, p)
+			h.mu.Unlock()
+			return nil, v
+		}
+	}
+
+	// Rate limit check.
+	if p.rateLimiter != nil {
+		if err := p.rateLimiter.AllowRequest(ctx); err != nil {
+			v := RuntimeViolation{
+				Type:       ViolationRateLimit,
+				PluginName: pluginName,
+				Message:    fmt.Sprintf("request rate limit exceeded: %v", err),
+				Timestamp:  time.Now(),
+			}
+			h.mu.Lock()
+			h.handleViolationLocked(v, p)
+			h.mu.Unlock()
+			return nil, v
+		}
 	}
 
 	timeout := h.policy.ToolInvocationTimeout
@@ -170,13 +213,54 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 		return nil, err
 	}
 
-	h.collectDiagnostics(p.Info().Name, resp)
+	// Bandwidth check on response size.
+	if p.rateLimiter != nil {
+		size := estimateResponseSize(resp)
+		if err := p.rateLimiter.AllowBandwidth(ctx, size); err != nil {
+			v := RuntimeViolation{
+				Type:       ViolationBandwidth,
+				PluginName: pluginName,
+				Message:    fmt.Sprintf("bandwidth limit exceeded (%d bytes): %v", size, err),
+				Timestamp:  time.Now(),
+			}
+			h.mu.Lock()
+			h.handleViolationLocked(v, p)
+			h.mu.Unlock()
+			return nil, v
+		}
+	}
+
+	// Secret redaction. Redaction is a warning, not a termination event.
+	resp, redacted := h.redactor.RedactResponse(resp)
+	if redacted {
+		v := RuntimeViolation{
+			Type:       ViolationSecretLeaked,
+			PluginName: pluginName,
+			Message:    "plugin output contained secrets (redacted before delivery)",
+			Timestamp:  time.Now(),
+		}
+		h.mu.Lock()
+		h.violations = append(h.violations, v)
+		h.diagnostics = append(h.diagnostics, Diagnostic{
+			Severity: "warning",
+			Message:  v.Error(),
+			Source:   pluginName,
+		})
+		h.mu.Unlock()
+		h.logger.Warn("secret redacted from plugin output", "plugin", pluginName)
+	}
+
+	h.mu.Lock()
+	h.collectDiagnostics(pluginName, resp)
+	h.mu.Unlock()
+
 	return resp, nil
 }
 
 // InvokeAll invokes a tool on all plugins that declare it.
 // Uses errgroup with a concurrency semaphore from Policy.MaxConcurrency.
 // Individual plugin errors become diagnostics, not fatal errors.
+// Enforcement (rate limiting, read-only, redaction) is applied per-plugin.
 func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]any, workspaceRoot string) ([]*pluginv1.InvokeToolResponse, error) {
 	h.mu.RLock()
 	var targets []*Plugin
@@ -217,19 +301,92 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 	for i, p := range targets {
 		i, p := i, p
 		g.Go(func() error {
+			pluginName := p.Info().Name
+
+			// Read-only enforcement.
+			if h.policy.MaxRiskClass == RiskClassPassive {
+				ti := p.getToolInfo(toolName)
+				if ti != nil && !ti.ReadOnly {
+					v := RuntimeViolation{
+						Type:       ViolationUnauthorizedAction,
+						PluginName: pluginName,
+						Message:    fmt.Sprintf("tool %q is not read-only but policy is passive", toolName),
+						Timestamp:  time.Now(),
+					}
+					h.mu.Lock()
+					h.handleViolationLocked(v, p)
+					h.mu.Unlock()
+					return nil
+				}
+			}
+
+			// Rate limit check.
+			if p.rateLimiter != nil {
+				if err := p.rateLimiter.AllowRequest(gCtx); err != nil {
+					v := RuntimeViolation{
+						Type:       ViolationRateLimit,
+						PluginName: pluginName,
+						Message:    fmt.Sprintf("request rate limit exceeded: %v", err),
+						Timestamp:  time.Now(),
+					}
+					h.mu.Lock()
+					h.handleViolationLocked(v, p)
+					h.mu.Unlock()
+					return nil
+				}
+			}
+
 			resp, err := p.InvokeTool(gCtx, toolName, input, workspaceRoot)
 			if err != nil {
 				h.mu.Lock()
 				h.diagnostics = append(h.diagnostics, Diagnostic{
 					Severity: "error",
-					Message:  fmt.Sprintf("plugin %q InvokeTool(%q) failed: %v", p.Info().Name, toolName, err),
-					Source:   p.Info().Name,
+					Message:  fmt.Sprintf("plugin %q InvokeTool(%q) failed: %v", pluginName, toolName, err),
+					Source:   pluginName,
 				})
 				h.mu.Unlock()
 				return nil // Non-fatal: record as diagnostic.
 			}
+
+			// Bandwidth check.
+			if p.rateLimiter != nil {
+				size := estimateResponseSize(resp)
+				if err := p.rateLimiter.AllowBandwidth(gCtx, size); err != nil {
+					v := RuntimeViolation{
+						Type:       ViolationBandwidth,
+						PluginName: pluginName,
+						Message:    fmt.Sprintf("bandwidth limit exceeded (%d bytes): %v", size, err),
+						Timestamp:  time.Now(),
+					}
+					h.mu.Lock()
+					h.handleViolationLocked(v, p)
+					h.mu.Unlock()
+					return nil
+				}
+			}
+
+			// Secret redaction.
+			resp, redacted := h.redactor.RedactResponse(resp)
+			if redacted {
+				v := RuntimeViolation{
+					Type:       ViolationSecretLeaked,
+					PluginName: pluginName,
+					Message:    "plugin output contained secrets (redacted before delivery)",
+					Timestamp:  time.Now(),
+				}
+				h.mu.Lock()
+				h.violations = append(h.violations, v)
+				h.diagnostics = append(h.diagnostics, Diagnostic{
+					Severity: "warning",
+					Message:  v.Error(),
+					Source:   pluginName,
+				})
+				h.mu.Unlock()
+				h.logger.Warn("secret redacted from plugin output", "plugin", pluginName)
+			}
+
 			h.mu.Lock()
-			h.collectDiagnostics(p.Info().Name, resp)
+			h.collectDiagnostics(pluginName, resp)
 			h.mu.Unlock()
 
 			resultsMu.Lock()
@@ -285,6 +442,73 @@ func (h *Host) Diagnostics() []Diagnostic {
 	out := make([]Diagnostic, len(h.diagnostics))
 	copy(out, h.diagnostics)
 	return out
+}
+
+// Violations returns all recorded runtime violations.
+func (h *Host) Violations() []RuntimeViolation {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]RuntimeViolation, len(h.violations))
+	copy(out, h.violations)
+	return out
+}
+
+// handleViolation logs a violation, records it, marks the plugin as failed,
+// terminates it, and removes it from the host. Acquires h.mu internally.
+func (h *Host) handleViolation(v RuntimeViolation, p *Plugin) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.handleViolationLocked(v, p)
+}
+
+// handleViolationLocked is the lock-held implementation of handleViolation.
+// Must be called with h.mu held.
+func (h *Host) handleViolationLocked(v RuntimeViolation, p *Plugin) {
+	h.logger.Error("runtime violation",
+		"type", string(v.Type),
+		"plugin", v.PluginName,
+		"message", v.Message,
+	)
+
+	h.violations = append(h.violations, v)
+	h.diagnostics = append(h.diagnostics, Diagnostic{
+		Severity: "error",
+		Message:  v.Error(),
+		Source:   v.PluginName,
+	})
+
+	p.fail()
+	_ = p.Close()
+
+	delete(h.plugins, v.PluginName)
+	h.buildToolIndex()
+}
+
+// estimateResponseSize sums the approximate byte size of text fields in a
+// plugin response, for bandwidth accounting.
+func estimateResponseSize(resp *pluginv1.InvokeToolResponse) int64 {
+	if resp == nil {
+		return 0
+	}
+	var size int64
+	for _, f := range resp.GetFindings() {
+		size += int64(len(f.GetMessage()))
+		for k, v := range f.GetMetadata() {
+			size += int64(len(k) + len(v))
+		}
+	}
+	for _, d := range resp.GetDiagnostics() {
+		size += int64(len(d.GetMessage()))
+	}
+	for _, ac := range resp.GetAiComponents() {
+		for k, v := range ac.GetDetails() {
+			size += int64(len(k) + len(v))
+		}
+	}
+	for _, p := range resp.GetPackages() {
+		size += int64(len(p.GetName()) + len(p.GetVersion()) + len(p.GetEcosystem()))
+	}
+	return size
 }
 
 // AvailableTools returns all registered tool names in "pluginName.toolName" format.
