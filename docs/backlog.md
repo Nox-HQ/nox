@@ -82,3 +82,51 @@ Model Context Protocol server using mcp-go with stdio transport. Exposes read-on
 Optional LLM-powered module built on agent-go that consumes findings and AI inventory to produce human-readable explanations. Strictly no side effects, never affects scan results, opt-in only, lives in a separate module boundary from core.
 
 ---
+
+## Plugin gRPC Interface
+
+Protobuf definitions and gRPC service contract for plugin manifests, tool invocations, and artifact exchange. Defines the PluginService with GetManifest, InvokeTool, and StreamArtifacts RPCs. Plugin manifests declare capabilities (analyzers, reporters, tools), safety requirements (network hosts, file paths, environment variables), and API version compatibility. All message types are versioned and backwards-compatible.
+
+---
+
+## Plugin Host Runtime
+
+Core runtime that discovers plugin endpoints (local binaries, containers, remote gRPC), calls GetManifest to learn capabilities, validates safety constraints against host policy, manages plugin lifecycle (init, invoke, shutdown), and merges plugin results (findings, SBOM components, AI inventory entries) into Hardline's unified outputs. Supports parallel plugin execution with configurable concurrency limits.
+
+---
+
+## Plugin Safety Engine
+
+Host-enforced safety model that validates and constrains plugin behavior. Enforces scope allowlists (permitted network hosts/CIDRs, file path globs, environment variables), rate limits (requests per minute, bandwidth), concurrency caps, read-only defaults, artifact size limits, and secret redaction from plugin outputs. Destructive actions require explicit opt-in via hardline.yaml. Safety violations are logged and cause plugin termination.
+
+---
+
+## Plugin SDK
+
+Minimal SDK for plugin authors providing: versioned protobuf definitions, gRPC server scaffolding (Go initially, with extension points for other languages), manifest and capability declaration helpers, safety envelope parsing and enforcement utilities, artifact serialization helpers (findings, SBOM components, AI inventory entries), and a conformance test runner that validates plugin behavior against the contract. Includes a plugin template generator for bootstrapping new plugins.
+
+---
+
+## MCP Plugin Bridge
+
+Expose plugin capabilities through the MCP server interface. Adds plugin.list tool (enumerate installed plugins and capabilities), plugin.call_tool tool (invoke a specific plugin tool with arguments), and plugin.read_resource tool (read plugin-provided resources). Supports convenience aliases that map friendly names to plugin tools (e.g., hardline.dast.scan maps to a DAST plugin's scan tool). Plugin tools inherit workspace allowlisting and output size limits from the MCP server.
+
+---
+
+## Plugin Registry & Distribution
+
+Registry client for discovering and installing plugins. Supports static index fetching from registry URLs, OCI artifact download with local caching and digest verification, semantic version resolution with compatibility constraints, and multiple registry sources (official Hardline registry, community registries, enterprise private registries). Registry metadata includes plugin manifests, compatibility matrices, and trust information. Implements offline-friendly caching with TTL-based refresh.
+
+---
+
+## Plugin Trust & Verification
+
+Signature validation and trust management for plugins. Verifies artifact signatures against configurable trust roots, checks content digests on download and before execution, validates API version compatibility between plugin and host, runs conformance tests as part of installation verification. Implements trust levels (verified: signed by known key, community: signed but unknown key, unverified: unsigned) with configurable minimum trust requirements. Enterprise deployments can mandate verified-only plugins.
+
+---
+
+## CLI Plugin Commands
+
+CLI commands for managing registries and plugins. Registry commands: 'hardline registry add <url>' (add registry source), 'hardline registry list' (show configured registries), 'hardline registry remove <name>' (remove registry). Plugin commands: 'hardline plugin search <query>' (search registries), 'hardline plugin info <name>' (show plugin details and trust status), 'hardline plugin install <name>[@version]' (install with verification), 'hardline plugin update [name]' (update one or all plugins), 'hardline plugin list' (show installed plugins), 'hardline plugin remove <name>' (uninstall), 'hardline plugin call <name> <tool> [args]' (invoke plugin tool directly from CLI).
+
+---
