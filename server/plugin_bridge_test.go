@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/plugin"
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	"github.com/nox-hq/nox/plugin"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
 func TestSerializePluginList_Empty(t *testing.T) {
@@ -32,7 +32,7 @@ func TestSerializePluginList_SinglePlugin(t *testing.T) {
 						{Name: "scan", Description: "Run scan", ReadOnly: true},
 					},
 					Resources: []plugin.ResourceInfo{
-						{URITemplate: "hardline://plugins/test-scanner/results", Name: "results", MimeType: "application/json"},
+						{URITemplate: "nox://plugins/test-scanner/results", Name: "results", MimeType: "application/json"},
 					},
 				},
 			},
@@ -73,7 +73,7 @@ func TestSerializePluginList_SinglePlugin(t *testing.T) {
 	if len(cap.Resources) != 1 {
 		t.Fatalf("expected 1 resource, got %d", len(cap.Resources))
 	}
-	if cap.Resources[0].URITemplate != "hardline://plugins/test-scanner/results" {
+	if cap.Resources[0].URITemplate != "nox://plugins/test-scanner/results" {
 		t.Errorf("resource URI = %q", cap.Resources[0].URITemplate)
 	}
 }

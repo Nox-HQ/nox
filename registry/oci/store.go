@@ -1,4 +1,4 @@
-// Package oci provides content-addressed artifact storage for Hardline plugins.
+// Package oci provides content-addressed artifact storage for Nox plugins.
 // It downloads plugin binaries, verifies digests via the trust layer, and
 // stores them in a sharded local cache.
 package oci
@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/registry"
-	"github.com/felixgeelhaar/hardline/registry/trust"
+	"github.com/nox-hq/nox/registry"
+	"github.com/nox-hq/nox/registry/trust"
 )
 
 const (
@@ -80,7 +80,7 @@ func WithMirrorBase(base string) StoreOption {
 // NewStore creates a Store with the given options.
 func NewStore(opts ...StoreOption) *Store {
 	s := &Store{
-		cacheDir:   filepath.Join(os.Getenv("HOME"), ".hardline", "cache", "artifacts"),
+		cacheDir:   filepath.Join(os.Getenv("HOME"), ".nox", "cache", "artifacts"),
 		httpClient: &http.Client{Timeout: defaultDownloadTimeout},
 		verifier:   trust.NewVerifier(),
 		maxSize:    defaultMaxDownloadSize,

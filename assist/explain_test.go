@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	core "github.com/felixgeelhaar/hardline/core"
-	"github.com/felixgeelhaar/hardline/core/analyzers/ai"
-	"github.com/felixgeelhaar/hardline/core/analyzers/deps"
-	"github.com/felixgeelhaar/hardline/core/findings"
+	core "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 func makeScanResult(ff []findings.Finding) *core.ScanResult {

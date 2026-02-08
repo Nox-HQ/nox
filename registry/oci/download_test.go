@@ -136,7 +136,7 @@ func TestRewriteURL(t *testing.T) {
 		WithMirrorBase("https://mirror.internal:8443"),
 	)
 
-	got, err := s.rewriteURL("https://registry.hardline.dev/plugins/scanner/v1.0.0/linux-amd64.tar.gz")
+	got, err := s.rewriteURL("https://registry.nox-hq.dev/plugins/scanner/v1.0.0/linux-amd64.tar.gz")
 	if err != nil {
 		t.Fatalf("rewriteURL: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestRewriteURL(t *testing.T) {
 func TestRewriteURLNoMirror(t *testing.T) {
 	s := NewStore(WithCacheDir(t.TempDir()))
 
-	original := "https://registry.hardline.dev/plugins/scanner.tar.gz"
+	original := "https://registry.nox-hq.dev/plugins/scanner.tar.gz"
 	got, err := s.rewriteURL(original)
 	if err != nil {
 		t.Fatalf("rewriteURL: %v", err)

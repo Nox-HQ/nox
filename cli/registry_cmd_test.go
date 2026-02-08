@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
-// setupStateDir creates a temp HARDLINE_HOME and sets the env var.
+// setupStateDir creates a temp NOX_HOME and sets the env var.
 func setupStateDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 	return dir
 }
 

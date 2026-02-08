@@ -1,4 +1,4 @@
-# Product Requirements — Hardline
+# Product Requirements — Nox
 
 ## Objective
 
@@ -26,7 +26,7 @@ Build a language-agnostic security scanner that produces standard artifacts
 
 ### Outputs
 
-Hardline must always be able to produce:
+Nox must always be able to produce:
 
 - `results.sarif` (SARIF 2.1.0, GitHub compatible)
 - `sbom.cdx.json` (CycloneDX)
@@ -36,7 +36,7 @@ Hardline must always be able to produce:
 
 ### Interfaces
 
-- CLI (`hardline scan .`)
+- CLI (`nox scan .`)
 - MCP Server (stdio, read-only by default)
 
 ### Rule System
@@ -48,7 +48,7 @@ Hardline must always be able to produce:
 
 ### AI Security (First-Class)
 
-Hardline must detect:
+Nox must detect:
 
 - prompt and RAG boundary violations
 - unsafe tool exposure

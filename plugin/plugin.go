@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -94,7 +94,7 @@ func NewPlugin(conn *grpc.ClientConn) *Plugin {
 }
 
 // StartBinary spawns a plugin binary as a subprocess, reads the
-// HARDLINE_PLUGIN_ADDR=host:port line from its stdout, and establishes
+// NOX_PLUGIN_ADDR=host:port line from its stdout, and establishes
 // a gRPC connection. The returned Plugin is in StateInit.
 func StartBinary(ctx context.Context, path string, args []string, timeout time.Duration) (*Plugin, error) {
 	cmd := exec.CommandContext(ctx, path, args...)
@@ -305,7 +305,7 @@ func parseManifest(resp *pluginv1.GetManifestResponse) PluginInfo {
 }
 
 // waitForAddr reads from the plugin's stdout looking for a line starting with
-// HARDLINE_PLUGIN_ADDR=. It respects the context deadline.
+// NOX_PLUGIN_ADDR=. It respects the context deadline.
 func waitForAddr(ctx context.Context, stdout io.Reader) (string, error) {
 	scanner := bufio.NewScanner(stdout)
 	addrCh := make(chan string, 1)
@@ -314,15 +314,15 @@ func waitForAddr(ctx context.Context, stdout io.Reader) (string, error) {
 	go func() {
 		for scanner.Scan() {
 			line := scanner.Text()
-			if strings.HasPrefix(line, "HARDLINE_PLUGIN_ADDR=") {
-				addrCh <- strings.TrimPrefix(line, "HARDLINE_PLUGIN_ADDR=")
+			if strings.HasPrefix(line, "NOX_PLUGIN_ADDR=") {
+				addrCh <- strings.TrimPrefix(line, "NOX_PLUGIN_ADDR=")
 				return
 			}
 		}
 		if err := scanner.Err(); err != nil {
 			errCh <- err
 		} else {
-			errCh <- fmt.Errorf("plugin stdout closed without emitting HARDLINE_PLUGIN_ADDR")
+			errCh <- fmt.Errorf("plugin stdout closed without emitting NOX_PLUGIN_ADDR")
 		}
 	}()
 

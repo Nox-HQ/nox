@@ -47,7 +47,7 @@ func WithHTTPClient(hc *http.Client) ClientOption {
 
 // NewClient creates a registry Client with the given options.
 func NewClient(opts ...ClientOption) *Client {
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".hardline", "cache", "registry")
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".nox", "cache", "registry")
 
 	c := &Client{
 		cache:      newFileCache(cacheDir, defaultCacheTTL),

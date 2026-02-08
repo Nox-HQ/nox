@@ -1,4 +1,4 @@
-// Package plugin implements the plugin host runtime for Hardline.
+// Package plugin implements the plugin host runtime for Nox.
 // It manages plugin lifecycle (discover, connect, handshake, invoke, shutdown),
 // validates safety constraints, converts between proto and domain types,
 // and merges plugin results into ScanResult.
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
 // RiskClass classifies the level of system interaction a plugin requires.

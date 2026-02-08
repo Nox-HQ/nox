@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // Reporter defines the contract for serializing a FindingSet into a byte
@@ -63,7 +63,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		Meta: Meta{
 			SchemaVersion: "1.0.0",
 			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-			ToolName:      "hardline",
+			ToolName:      "nox",
 			ToolVersion:   r.ToolVersion,
 		},
 		Findings: f,

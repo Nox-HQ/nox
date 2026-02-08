@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/felixgeelhaar/hardline/plugin"
+	"github.com/nox-hq/nox/plugin"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

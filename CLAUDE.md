@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hardline is an open-source, language-agnostic security scanner that produces standard artifacts (SARIF, SBOM) and explicitly models AI application security risks. It is designed to be callable by humans, CI systems, and AI agents (via MCP). Written in Go.
+Nox is an open-source, language-agnostic security scanner that produces standard artifacts (SARIF, SBOM) and explicitly models AI application security risks. It is designed to be callable by humans, CI systems, and AI agents (via MCP). Written in Go.
 
 Key design constraints:
 - **Deterministic**: same inputs produce same outputs, no hidden state
@@ -83,7 +83,7 @@ go run ./cli/main.go scan .
 
 ## AI Security Scanning (First-Class Feature)
 
-Hardline detects:
+Nox detects:
 - Prompt and RAG boundary violations
 - Unsafe tool exposure in MCP/agent configurations
 - Insecure logging of prompts/responses
@@ -99,4 +99,4 @@ The project follows a phased roadmap starting from Phase 0 (foundation: CLI scaf
 
 - **Findings model**: stable versioned fingerprinting, explicit severity/confidence, precise location, SARIF-compatible
 - **SBOM**: CycloneDX is primary, SPDX is secondary; optional vulnerability enrichment via OSV
-- **No SaaS, no dashboards, no automatic remediation** — Hardline is a security primitive, not a platform
+- **No SaaS, no dashboards, no automatic remediation** — Nox is a security primitive, not a platform

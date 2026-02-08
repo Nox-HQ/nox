@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/felixgeelhaar/hardline/core/discovery"
-	"github.com/felixgeelhaar/hardline/core/findings"
-	"github.com/felixgeelhaar/hardline/core/rules"
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // Analyzer wraps a rules.Engine pre-loaded with secret detection rules.

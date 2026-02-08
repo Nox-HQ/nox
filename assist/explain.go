@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	core "github.com/felixgeelhaar/hardline/core"
+	core "github.com/nox-hq/nox/core"
 )
 
 const defaultBatchSize = 10

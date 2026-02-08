@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/core"
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	"github.com/nox-hq/nox/core"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )

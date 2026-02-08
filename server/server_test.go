@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
-	"github.com/felixgeelhaar/hardline/plugin"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/plugin"
 	"github.com/mark3labs/mcp-go/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -271,7 +271,7 @@ func TestHandleGetSBOM_SPDX(t *testing.T) {
 func TestResourceFindings_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://findings"
+	req.Params.URI = "nox://findings"
 
 	_, err := s.handleResourceFindings(context.Background(), req)
 	if err == nil {
@@ -282,7 +282,7 @@ func TestResourceFindings_BeforeScan(t *testing.T) {
 func TestResourceFindings_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://findings"
+	req.Params.URI = "nox://findings"
 
 	contents, err := s.handleResourceFindings(context.Background(), req)
 	if err != nil {
@@ -296,8 +296,8 @@ func TestResourceFindings_AfterScan(t *testing.T) {
 	if !ok {
 		t.Fatal("expected TextResourceContents")
 	}
-	if tc.URI != "hardline://findings" {
-		t.Fatalf("expected URI hardline://findings, got %s", tc.URI)
+	if tc.URI != "nox://findings" {
+		t.Fatalf("expected URI nox://findings, got %s", tc.URI)
 	}
 	if !strings.Contains(tc.Text, `"findings"`) {
 		t.Fatalf("expected findings JSON, got: %s", tc.Text)
@@ -307,7 +307,7 @@ func TestResourceFindings_AfterScan(t *testing.T) {
 func TestResourceSARIF_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://sarif"
+	req.Params.URI = "nox://sarif"
 
 	contents, err := s.handleResourceSARIF(context.Background(), req)
 	if err != nil {
@@ -329,7 +329,7 @@ func TestResourceSARIF_AfterScan(t *testing.T) {
 func TestResourceCDX_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://sbom/cdx"
+	req.Params.URI = "nox://sbom/cdx"
 
 	contents, err := s.handleResourceCDX(context.Background(), req)
 	if err != nil {
@@ -351,7 +351,7 @@ func TestResourceCDX_AfterScan(t *testing.T) {
 func TestResourceSPDX_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://sbom/spdx"
+	req.Params.URI = "nox://sbom/spdx"
 
 	contents, err := s.handleResourceSPDX(context.Background(), req)
 	if err != nil {
@@ -373,7 +373,7 @@ func TestResourceSPDX_AfterScan(t *testing.T) {
 func TestResourceAIInventory_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
 	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "hardline://ai-inventory"
+	req.Params.URI = "nox://ai-inventory"
 
 	contents, err := s.handleResourceAIInventory(context.Background(), req)
 	if err != nil {
@@ -751,7 +751,7 @@ func TestHandlePluginReadResource_Stub(t *testing.T) {
 	s := New("0.1.0", nil)
 	req := makeToolRequest(t, "plugin.read_resource", map[string]any{
 		"plugin": "test",
-		"uri":    "hardline://test/results",
+		"uri":    "nox://test/results",
 	})
 
 	result, err := s.handlePluginReadResource(context.Background(), req)

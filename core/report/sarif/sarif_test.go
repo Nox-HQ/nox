@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
-	"github.com/felixgeelhaar/hardline/core/rules"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // ---------------------------------------------------------------------------
@@ -141,8 +141,8 @@ func TestToolDriverHasCorrectNameAndVersion(t *testing.T) {
 
 	driver := report.Runs[0].Tool.Driver
 
-	if driver.Name != "hardline" {
-		t.Errorf("expected driver name 'hardline', got %q", driver.Name)
+	if driver.Name != "nox" {
+		t.Errorf("expected driver name 'nox', got %q", driver.Name)
 	}
 
 	if driver.Version != "1.2.3" {
@@ -279,9 +279,9 @@ func TestFingerprintsAreIncludedInResults(t *testing.T) {
 			continue
 		}
 
-		fp, ok := res.Fingerprints["hardline/v1"]
+		fp, ok := res.Fingerprints["nox/v1"]
 		if !ok {
-			t.Errorf("result for %s missing 'hardline/v1' fingerprint key", res.RuleID)
+			t.Errorf("result for %s missing 'nox/v1' fingerprint key", res.RuleID)
 			continue
 		}
 

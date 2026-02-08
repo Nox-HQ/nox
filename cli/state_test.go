@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 func TestLoadState_MissingFile(t *testing.T) {
@@ -27,14 +27,14 @@ func TestState_RoundTrip(t *testing.T) {
 	now := time.Date(2026, 2, 8, 12, 0, 0, 0, time.UTC)
 	original := &State{
 		Sources: []registry.Source{
-			{Name: "official", URL: "https://registry.hardline.dev/index.json"},
+			{Name: "official", URL: "https://registry.nox-hq.dev/index.json"},
 		},
 		Plugins: []InstalledPlugin{
 			{
-				Name:        "hardline/dast",
+				Name:        "nox/dast",
 				Version:     "1.2.0",
 				Digest:      "sha256:abc123",
-				BinaryPath:  "/home/user/.hardline/cache/artifacts/sha256/ab/abc123",
+				BinaryPath:  "/home/user/.nox/cache/artifacts/sha256/ab/abc123",
 				TrustLevel:  "verified",
 				RiskClass:   "active",
 				InstalledAt: now,
@@ -55,7 +55,7 @@ func TestState_RoundTrip(t *testing.T) {
 	if len(loaded.Sources) != 1 || loaded.Sources[0].Name != "official" {
 		t.Errorf("sources mismatch: got %+v", loaded.Sources)
 	}
-	if len(loaded.Plugins) != 1 || loaded.Plugins[0].Name != "hardline/dast" {
+	if len(loaded.Plugins) != 1 || loaded.Plugins[0].Name != "nox/dast" {
 		t.Errorf("plugins mismatch: got %+v", loaded.Plugins)
 	}
 	if loaded.Plugins[0].Version != "1.2.0" {
@@ -131,9 +131,9 @@ func TestState_InstalledDigests(t *testing.T) {
 	}
 }
 
-func TestDefaultStatePath_HardlineHome(t *testing.T) {
+func TestDefaultStatePath_NoxHome(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	path := DefaultStatePath()
 	expected := filepath.Join(dir, "state.json")

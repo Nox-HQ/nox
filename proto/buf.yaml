@@ -1,7 +1,7 @@
 version: v2
 modules:
   - path: .
-    name: buf.build/felixgeelhaar/hardline
+    name: buf.build/nox-hq/nox
 lint:
   use:
     - STANDARD

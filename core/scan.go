@@ -1,13 +1,13 @@
-// Package core provides the shared scan pipeline for hardline.
+// Package core provides the shared scan pipeline for nox.
 package core
 
 import (
-	"github.com/felixgeelhaar/hardline/core/analyzers/ai"
-	"github.com/felixgeelhaar/hardline/core/analyzers/deps"
-	"github.com/felixgeelhaar/hardline/core/analyzers/iac"
-	"github.com/felixgeelhaar/hardline/core/analyzers/secrets"
-	"github.com/felixgeelhaar/hardline/core/discovery"
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/secrets"
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // ScanResult holds the complete output of a scan pipeline run.

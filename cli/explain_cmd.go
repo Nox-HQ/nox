@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/felixgeelhaar/hardline/assist"
-	hardline "github.com/felixgeelhaar/hardline/core"
-	"github.com/felixgeelhaar/hardline/plugin"
+	"github.com/nox-hq/nox/assist"
+	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/plugin"
 )
 
 // runExplain runs a scan and generates LLM-powered explanations of findings.
@@ -38,7 +38,7 @@ func runExplain(args []string) int {
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline explain <path> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: nox explain <path> [flags]")
 		return 2
 	}
 	target := fs.Arg(0)
@@ -50,8 +50,8 @@ func runExplain(args []string) int {
 	}
 
 	// Run scan.
-	fmt.Printf("hardline — scanning %s\n", target)
-	result, err := hardline.RunScan(target)
+	fmt.Printf("nox — scanning %s\n", target)
+	result, err := nox.RunScan(target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 		return 2

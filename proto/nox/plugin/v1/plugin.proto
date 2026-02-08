@@ -1,13 +1,13 @@
 syntax = "proto3";
 
-package hardline.plugin.v1;
+package nox.plugin.v1;
 
 import "google/protobuf/struct.proto";
-import "hardline/plugin/v1/types.proto";
+import "nox/plugin/v1/types.proto";
 
-option go_package = "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1";
+option go_package = "github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1";
 
-// PluginService defines the interface that all Hardline plugins must implement.
+// PluginService defines the interface that all Nox plugins must implement.
 service PluginService {
   // GetManifest returns the plugin's capabilities and safety requirements.
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);

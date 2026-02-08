@@ -1,6 +1,6 @@
-# Hardline Extension System
+# Nox Extension System
 
-Hardline's plugin architecture enables a rich ecosystem of runtime, environment, and intelligence plugins while preserving Hardline's core guarantees: deterministic, inspectable, safe by default, composable, and agent-aware.
+Nox's plugin architecture enables a rich ecosystem of runtime, environment, and intelligence plugins while preserving Nox's core guarantees: deterministic, inspectable, safe by default, composable, and agent-aware.
 
 ---
 
@@ -13,11 +13,11 @@ Hardline's plugin architecture enables a rich ecosystem of runtime, environment,
 - Honor host-enforced safety constraints
 
 ### Plugin Lifecycle
-1. Hardline discovers plugin endpoint
-2. Hardline calls `GetManifest`
-3. Hardline validates safety requirements
+1. Nox discovers plugin endpoint
+2. Nox calls `GetManifest`
+3. Nox validates safety requirements
 4. Plugin tools/resources become available
-5. Results are merged into Hardline outputs
+5. Results are merged into Nox outputs
 
 Plugins **never** bypass host policy.
 
@@ -26,7 +26,7 @@ Plugins **never** bypass host policy.
 ## Safety Model (Non-Negotiable)
 
 Because plugins may access networks, environments, or credentials,
-Hardline enforces strict safety rules.
+Nox enforces strict safety rules.
 
 ### Host-Enforced Constraints
 - Scope allowlists (hosts, CIDRs, paths)
@@ -49,12 +49,12 @@ If a plugin violates declared safety guarantees, it is disabled.
 
 ## gRPC Interface
 
-Plugins communicate with Hardline over gRPC using versioned protobuf definitions.
+Plugins communicate with Nox over gRPC using versioned protobuf definitions.
 
 ### Service Contract
 
 ```protobuf
-// proto/hardline/plugin/v1/plugin.proto
+// proto/nox/plugin/v1/plugin.proto
 
 service PluginService {
   rpc GetManifest(GetManifestRequest) returns (PluginManifest);
@@ -99,17 +99,17 @@ All message types are versioned and backwards-compatible.
 
 ## MCP Integration
 
-Hardline exposes plugin functionality to MCP clients.
+Nox exposes plugin functionality to MCP clients.
 
 ### MCP Surface
-Hardline provides generic MCP tools:
+Nox provides generic MCP tools:
 - `plugin.list`
 - `plugin.call_tool`
 - `plugin.read_resource`
 
-Additionally, Hardline may expose **convenience aliases**:
-- `hardline.dast.scan`
-- `hardline.policy.evaluate`
+Additionally, Nox may expose **convenience aliases**:
+- `nox.dast.scan`
+- `nox.policy.evaluate`
 
 These are thin wrappers around plugin tools.
 
@@ -147,7 +147,7 @@ Agents **never** influence scan results or core logic.
 
 ## Plugin SDK
 
-Hardline provides a minimal SDK to simplify plugin development.
+Nox provides a minimal SDK to simplify plugin development.
 
 ### SDK Includes
 - Versioned protobuf definitions
@@ -169,7 +169,7 @@ The SDK is intentionally small and stable.
 
 ## Plugin Distribution & Marketplace
 
-Hardline supports a **decentralized plugin marketplace** model.
+Nox supports a **decentralized plugin marketplace** model.
 
 ### Registry Concept
 A registry is a static index containing:
@@ -200,7 +200,7 @@ Artifacts contain:
 
 ## Trust & Verification
 
-Hardline verifies plugins before installation:
+Nox verifies plugins before installation:
 
 - Signature validation (publisher identity)
 - Artifact digest verification
@@ -220,33 +220,33 @@ Trust roots are configurable.
 
 ### Registry Management
 ```sh
-hardline registry add https://registry.hardline.dev/index.json
-hardline registry list
-hardline registry remove <name>
+nox registry add https://registry.nox-hq.dev/index.json
+nox registry list
+nox registry remove <name>
 ```
 
 ### Plugin Discovery
 ```sh
-hardline plugin search dast
-hardline plugin info hardline/dast
+nox plugin search dast
+nox plugin info nox/dast
 ```
 
 ### Installation & Updates
 ```sh
-hardline plugin install hardline/dast
-hardline plugin update hardline/dast
-hardline plugin list --installed
+nox plugin install nox/dast
+nox plugin update nox/dast
+nox plugin list --installed
 ```
 
 ### Removal
 ```sh
-hardline plugin remove hardline/dast
+nox plugin remove nox/dast
 ```
 
 ### Running Plugin Tools
 ```sh
-hardline dast scan https://staging.example.com
-hardline plugin call hardline-dast dast.scan --input scan.json
+nox dast scan https://staging.example.com
+nox plugin call nox-dast dast.scan --input scan.json
 ```
 
 ---
@@ -278,9 +278,9 @@ The extension system will not:
 
 ## Summary
 
-The Hardline extension system enables a rich ecosystem of
+The Nox extension system enables a rich ecosystem of
 runtime, environment, and intelligence plugins while preserving
-Hardline's core values:
+Nox's core values:
 
 - deterministic
 - inspectable
@@ -288,4 +288,4 @@ Hardline's core values:
 - composable
 - agent-aware, not agent-dependent
 
-Extensions expand Hardline's reach — they never weaken its guarantees.
+Extensions expand Nox's reach — they never weaken its guarantees.

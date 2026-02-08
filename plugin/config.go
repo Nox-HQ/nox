@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the .hardline.yaml configuration file.
+// Config represents the .nox.yaml configuration file.
 type Config struct {
 	PluginPolicy PluginPolicyConfig `yaml:"plugin_policy"`
 }
@@ -28,7 +28,7 @@ type PluginPolicyConfig struct {
 	BandwidthMBPerMinute  int      `yaml:"bandwidth_mb_per_minute"`
 }
 
-// LoadConfig reads a .hardline.yaml configuration file. If the file does not
+// LoadConfig reads a .nox.yaml configuration file. If the file does not
 // exist, it returns a default Config without error. Returns an error only for
 // malformed YAML or read failures.
 func LoadConfig(path string) (*Config, error) {

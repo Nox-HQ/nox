@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // ---------------------------------------------------------------------------

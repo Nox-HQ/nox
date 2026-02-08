@@ -12,8 +12,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
-	"github.com/felixgeelhaar/hardline/core/rules"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 const (
@@ -24,10 +24,10 @@ const (
 	sarifSchema = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
 
 	// toolName is the name of the tool embedded in the SARIF driver.
-	toolName = "hardline"
+	toolName = "nox"
 
 	// informationURI is the project URL embedded in the SARIF driver.
-	informationURI = "https://github.com/felixgeelhaar/hardline"
+	informationURI = "https://github.com/nox-hq/nox"
 )
 
 // ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 				},
 			},
 			Fingerprints: map[string]string{
-				"hardline/v1": f.Fingerprint,
+				"nox/v1": f.Fingerprint,
 			},
 		}
 		results = append(results, result)
@@ -220,7 +220,7 @@ func (r *Reporter) WriteToFile(fs *findings.FindingSet, path string) error {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// severityToLevel maps a Hardline severity to the corresponding SARIF level
+// severityToLevel maps a Nox severity to the corresponding SARIF level
 // string. Critical and high map to "error", medium to "warning", and low/info
 // to "note".
 func severityToLevel(s findings.Severity) string {

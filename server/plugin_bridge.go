@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 
-	"github.com/felixgeelhaar/hardline/plugin"
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	"github.com/nox-hq/nox/plugin"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
 // JSON serialization types for clean output (not protojson).

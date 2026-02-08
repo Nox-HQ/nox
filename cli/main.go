@@ -1,4 +1,4 @@
-// Package main is the entry point for the hardline CLI.
+// Package main is the entry point for the nox CLI.
 package main
 
 import (
@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	hardline "github.com/felixgeelhaar/hardline/core"
-	"github.com/felixgeelhaar/hardline/core/report"
-	"github.com/felixgeelhaar/hardline/core/report/sarif"
-	"github.com/felixgeelhaar/hardline/core/report/sbom"
-	"github.com/felixgeelhaar/hardline/server"
+	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/report"
+	"github.com/nox-hq/nox/core/report/sarif"
+	"github.com/nox-hq/nox/core/report/sbom"
+	"github.com/nox-hq/nox/server"
 )
 
 const version = "0.1.0"
@@ -24,7 +24,7 @@ func main() {
 // run executes the CLI and returns the exit code.
 // 0 = clean (no findings), 1 = findings detected, 2 = error.
 func run(args []string) int {
-	fs := flag.NewFlagSet("hardline", flag.ContinueOnError)
+	fs := flag.NewFlagSet("nox", flag.ContinueOnError)
 
 	var (
 		formatFlag  string
@@ -43,7 +43,7 @@ func run(args []string) int {
 	fs.BoolVar(&versionFlag, "version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: hardline <command> [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  scan <path>    Scan a directory for security issues\n")
 		fmt.Fprintf(os.Stderr, "  explain <path> Explain findings using an LLM\n")
@@ -60,13 +60,13 @@ func run(args []string) int {
 	}
 
 	if versionFlag {
-		fmt.Printf("hardline %s\n", version)
+		fmt.Printf("nox %s\n", version)
 		return 0
 	}
 
 	remaining := fs.Args()
 	if len(remaining) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline <command> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: nox <command> [flags]")
 		return 2
 	}
 
@@ -74,7 +74,7 @@ func run(args []string) int {
 	switch command {
 	case "scan":
 		if len(remaining) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: hardline scan <path> [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: nox scan <path> [flags]")
 			return 2
 		}
 		return runScan(remaining[1], formatFlag, outputDir, quietFlag, verboseFlag)
@@ -87,11 +87,11 @@ func run(args []string) int {
 	case "plugin":
 		return runPlugin(remaining[1:])
 	case "version":
-		fmt.Printf("hardline %s\n", version)
+		fmt.Printf("nox %s\n", version)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", command)
-		fmt.Fprintln(os.Stderr, "Usage: hardline <command> [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: nox <command> [flags]")
 		return 2
 	}
 }
@@ -100,14 +100,14 @@ func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
 	formats := parseFormats(formatFlag)
 
 	if !quiet {
-		fmt.Printf("hardline %s — scanning %s\n", version, target)
+		fmt.Printf("nox %s — scanning %s\n", version, target)
 	}
 
 	if verbose {
 		fmt.Println("[discover] walking directory...")
 	}
 
-	result, err := hardline.RunScan(target)
+	result, err := nox.RunScan(target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 		return 2

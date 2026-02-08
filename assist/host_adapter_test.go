@@ -3,7 +3,7 @@ package assist
 import (
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/plugin"
+	"github.com/nox-hq/nox/plugin"
 )
 
 // TestHostAdapter_ImplementsPluginSource is a compile-time check that

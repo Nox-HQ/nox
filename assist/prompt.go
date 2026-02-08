@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	core "github.com/felixgeelhaar/hardline/core"
-	"github.com/felixgeelhaar/hardline/core/findings"
+	core "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // systemPrompt returns the system message that instructs the LLM on how to
-// analyze and explain Hardline scan findings.
+// analyze and explain Nox scan findings.
 func systemPrompt() string {
-	return `You are a security expert analyzing findings from Hardline, a security scanner.
+	return `You are a security expert analyzing findings from Nox, a security scanner.
 For each finding, provide a JSON array with objects containing these fields:
 - "finding_id": the finding ID (string)
 - "rule_id": the rule ID (string)

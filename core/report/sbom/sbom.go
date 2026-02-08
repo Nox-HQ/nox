@@ -10,7 +10,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/deps"
 )
 
 // ---------------------------------------------------------------------------
@@ -86,14 +86,14 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 	report := CDXReport{
 		BOMFormat:    "CycloneDX",
 		SpecVersion:  "1.5",
-		SerialNumber: "urn:uuid:hardline-scan",
+		SerialNumber: "urn:uuid:nox-scan",
 		Version:      1,
 		Metadata: CDXMetadata{
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Tools: []CDXTool{
 				{
-					Vendor:  "hardline",
-					Name:    "hardline",
+					Vendor:  "nox",
+					Name:    "nox",
 					Version: r.ToolVersion,
 				},
 			},
@@ -222,11 +222,11 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 		SPDXVersion:       "SPDX-2.3",
 		DataLicense:       "CC0-1.0",
 		SPDXID:            "SPDXRef-DOCUMENT",
-		Name:              "hardline-scan",
-		DocumentNamespace: "https://github.com/felixgeelhaar/hardline/scans",
+		Name:              "nox-scan",
+		DocumentNamespace: "https://github.com/nox-hq/nox/scans",
 		CreationInfo: SPDXCreationInfo{
 			Created:  time.Now().UTC().Format(time.RFC3339),
-			Creators: []string{fmt.Sprintf("Tool: hardline-%s", r.ToolVersion)},
+			Creators: []string{fmt.Sprintf("Tool: nox-%s", r.ToolVersion)},
 		},
 		Packages:      spdxPkgs,
 		Relationships: relationships,

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/discovery"
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // ---------------------------------------------------------------------------

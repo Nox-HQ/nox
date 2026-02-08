@@ -134,11 +134,11 @@ func SaveKeyring(path string, kr *Keyring) error {
 }
 
 // DefaultKeyringPath returns the default keyring file location:
-// ~/.hardline/trust/keyring.json
+// ~/.nox/trust/keyring.json
 func DefaultKeyringPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	return filepath.Join(home, ".hardline", "trust", "keyring.json")
+	return filepath.Join(home, ".nox", "trust", "keyring.json")
 }

@@ -1,4 +1,4 @@
-# Technical Design — Hardline
+# Technical Design — Nox
 
 ## High-Level Architecture
 

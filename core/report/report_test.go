@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // sampleFindingSet returns a FindingSet with two findings added in reverse
@@ -85,8 +85,8 @@ func TestGenerateContainsCorrectMeta(t *testing.T) {
 	if report.Meta.SchemaVersion != "1.0.0" {
 		t.Errorf("expected schema version 1.0.0, got %q", report.Meta.SchemaVersion)
 	}
-	if report.Meta.ToolName != "hardline" {
-		t.Errorf("expected tool name hardline, got %q", report.Meta.ToolName)
+	if report.Meta.ToolName != "nox" {
+		t.Errorf("expected tool name nox, got %q", report.Meta.ToolName)
 	}
 	if report.Meta.ToolVersion != "1.2.3" {
 		t.Errorf("expected tool version 1.2.3, got %q", report.Meta.ToolVersion)

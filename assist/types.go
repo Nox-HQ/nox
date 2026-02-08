@@ -1,4 +1,4 @@
-// Package assist provides optional LLM-based explanations of Hardline scan
+// Package assist provides optional LLM-based explanations of Nox scan
 // findings. It consumes a core.ScanResult and produces human-friendly
 // explanations of what each finding means, why it matters, and how to fix it.
 //

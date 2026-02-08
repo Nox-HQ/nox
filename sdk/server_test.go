@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -211,7 +211,7 @@ func TestServer_Serve_WritesAddr(t *testing.T) {
 	<-done
 
 	output := buf.String()
-	if !strings.HasPrefix(output, "HARDLINE_PLUGIN_ADDR=") {
-		t.Errorf("expected HARDLINE_PLUGIN_ADDR= prefix, got %q", output)
+	if !strings.HasPrefix(output, "NOX_PLUGIN_ADDR=") {
+		t.Errorf("expected NOX_PLUGIN_ADDR= prefix, got %q", output)
 	}
 }

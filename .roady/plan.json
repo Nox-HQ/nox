@@ -1,6 +1,6 @@
 {
-  "id": "plan-hardline-1770498831",
-  "spec_id": "hardline",
+  "id": "plan-nox-1770498831",
+  "spec_id": "nox",
   "tasks": [
     {
       "id": "task-23",
@@ -27,7 +27,7 @@
     {
       "id": "task-24",
       "title": "Implement CLI plugin commands",
-      "description": "Add CLI commands: 'hardline registry add/list/remove' for registry management, 'hardline plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
+      "description": "Add CLI commands: 'nox registry add/list/remove' for registry management, 'nox plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
       "priority": "medium",
       "estimate": "L",
       "depends_on": [
@@ -86,7 +86,7 @@
     {
       "id": "task-17",
       "title": "Implement plugin host runtime",
-      "description": "Core plugin runtime: discover plugin endpoints (local binary via exec, container via docker, remote gRPC address), call GetManifest on startup, validate manifest against host policy, manage plugin lifecycle (init/invoke/shutdown with graceful timeout), merge plugin-produced findings and SBOM components into Hardline's unified ScanResult. Support parallel plugin execution with configurable concurrency. Package: core/plugins/host.",
+      "description": "Core plugin runtime: discover plugin endpoints (local binary via exec, container via docker, remote gRPC address), call GetManifest on startup, validate manifest against host policy, manage plugin lifecycle (init/invoke/shutdown with graceful timeout), merge plugin-produced findings and SBOM components into Nox's unified ScanResult. Support parallel plugin execution with configurable concurrency. Package: core/plugins/host.",
       "priority": "high",
       "estimate": "L",
       "depends_on": [
@@ -97,7 +97,7 @@
     {
       "id": "task-18",
       "title": "Implement plugin safety engine",
-      "description": "Host-side safety enforcement: parse and validate plugin-declared safety requirements against host policy (.hardline.yaml), enforce scope allowlists (network hosts/CIDRs, file path globs, env vars), apply rate limits (RPM, bandwidth), enforce concurrency caps, default read-only mode, artifact size limits, redact secrets from plugin outputs, require explicit opt-in for destructive actions. Log violations and terminate non-compliant plugins. Package: core/plugins/safety.",
+      "description": "Host-side safety enforcement: parse and validate plugin-declared safety requirements against host policy (.nox.yaml), enforce scope allowlists (network hosts/CIDRs, file path globs, env vars), apply rate limits (RPM, bandwidth), enforce concurrency caps, default read-only mode, artifact size limits, redact secrets from plugin outputs, require explicit opt-in for destructive actions. Log violations and terminate non-compliant plugins. Package: core/plugins/safety.",
       "priority": "high",
       "estimate": "L",
       "depends_on": [
@@ -108,7 +108,7 @@
     {
       "id": "task-20",
       "title": "Implement MCP plugin bridge",
-      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., hardline.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
+      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., nox.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
       "priority": "high",
       "estimate": "M",
       "depends_on": [
@@ -143,7 +143,7 @@
     {
       "id": "task-8",
       "title": "Implement CLI scaffold with scan command",
-      "description": "CLI entry point using cobra or similar. 'hardline scan \u003cpath\u003e' command wiring discovery -\u003e analyzers -\u003e reporters. Output format flag (--format sarif,cdx,spdx,json,all). Exit codes (0=clean, 1=findings, 2=error). Quiet/verbose flags. Config file loading (.hardline.yaml). Package: cli.",
+      "description": "CLI entry point using cobra or similar. 'nox scan \u003cpath\u003e' command wiring discovery -\u003e analyzers -\u003e reporters. Output format flag (--format sarif,cdx,spdx,json,all). Exit codes (0=clean, 1=findings, 2=error). Quiet/verbose flags. Config file loading (.nox.yaml). Package: cli.",
       "priority": "high",
       "estimate": "M",
       "depends_on": [
@@ -168,7 +168,7 @@
     {
       "id": "task-16",
       "title": "Define protobuf plugin interface",
-      "description": "Define proto/hardline/plugin/v1/plugin.proto with PluginService (GetManifest, InvokeTool, StreamArtifacts RPCs), PluginManifest message (name, version, capabilities, safety requirements, API compatibility), ToolInvocation request/response messages, and artifact streaming messages. Generate Go code via buf/protoc. Establish versioning scheme for the plugin API.",
+      "description": "Define proto/nox/plugin/v1/plugin.proto with PluginService (GetManifest, InvokeTool, StreamArtifacts RPCs), PluginManifest message (name, version, capabilities, safety requirements, API compatibility), ToolInvocation request/response messages, and artifact streaming messages. Generate Go code via buf/protoc. Establish versioning scheme for the plugin API.",
       "priority": "high",
       "estimate": "M",
       "depends_on": [
@@ -232,7 +232,7 @@
     {
       "id": "task-19",
       "title": "Implement plugin SDK",
-      "description": "Minimal SDK for plugin authors: include versioned protobuf definitions, gRPC server scaffolding (Go), manifest builder helpers, capability declaration utilities, safety envelope parsing, artifact serialization helpers (Finding, SBOM Component, AI Inventory Entry), and a conformance test runner that validates plugin behavior against the contract. Include a 'hardline plugin init' template generator. Package: sdk/.",
+      "description": "Minimal SDK for plugin authors: include versioned protobuf definitions, gRPC server scaffolding (Go), manifest builder helpers, capability declaration utilities, safety envelope parsing, artifact serialization helpers (Finding, SBOM Component, AI Inventory Entry), and a conformance test runner that validates plugin behavior against the contract. Include a 'nox plugin init' template generator. Package: sdk/.",
       "priority": "medium",
       "estimate": "L",
       "depends_on": [
@@ -254,7 +254,7 @@
     {
       "id": "task-6",
       "title": "Implement secrets scanner analyzer",
-      "description": "Pattern-based analyzer using rule engine for detecting AWS keys, GitHub tokens, private keys, generic high-entropy strings. Configurable entropy threshold. Allowlist/ignore via .hardline.yaml. Line-level location reporting into findings model. Package: core/analyzers/secrets.",
+      "description": "Pattern-based analyzer using rule engine for detecting AWS keys, GitHub tokens, private keys, generic high-entropy strings. Configurable entropy threshold. Allowlist/ignore via .nox.yaml. Line-level location reporting into findings model. Package: core/analyzers/secrets.",
       "priority": "high",
       "estimate": "M",
       "depends_on": [

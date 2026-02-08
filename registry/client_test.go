@@ -15,9 +15,9 @@ func testIndex() Index {
 		GeneratedAt:   time.Date(2026, 2, 8, 0, 0, 0, 0, time.UTC),
 		Plugins: []PluginEntry{
 			{
-				Name:        "hardline/dast",
+				Name:        "nox/dast",
 				Description: "Web DAST scanner",
-				Homepage:    "https://github.com/hardline/dast",
+				Homepage:    "https://github.com/nox-hq/dast",
 				Versions: []VersionEntry{
 					{
 						Version:      "1.0.0",
@@ -44,7 +44,7 @@ func testIndex() Index {
 				},
 			},
 			{
-				Name:        "hardline/sbom",
+				Name:        "nox/sbom",
 				Description: "SBOM generator plugin",
 				Versions: []VersionEntry{
 					{
@@ -136,8 +136,8 @@ func TestClientSearch(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("search results = %d, want 1", len(results))
 	}
-	if results[0].Name != "hardline/dast" {
-		t.Errorf("result name = %q, want %q", results[0].Name, "hardline/dast")
+	if results[0].Name != "nox/dast" {
+		t.Errorf("result name = %q, want %q", results[0].Name, "nox/dast")
 	}
 
 	// Search by description.
@@ -148,8 +148,8 @@ func TestClientSearch(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("search results = %d, want 1", len(results))
 	}
-	if results[0].Name != "hardline/sbom" {
-		t.Errorf("result name = %q, want %q", results[0].Name, "hardline/sbom")
+	if results[0].Name != "nox/sbom" {
+		t.Errorf("result name = %q, want %q", results[0].Name, "nox/sbom")
 	}
 
 	// Case insensitive.
@@ -181,7 +181,7 @@ func TestClientResolveExact(t *testing.T) {
 
 	ctx := context.Background()
 
-	ve, err := c.Resolve(ctx, "hardline/dast", "1.0.0")
+	ve, err := c.Resolve(ctx, "nox/dast", "1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve exact: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestClientResolveCaret(t *testing.T) {
 	ctx := context.Background()
 
 	// ^1.0.0 should match highest 1.x.x (1.2.0, not 2.0.0-beta.1)
-	ve, err := c.Resolve(ctx, "hardline/dast", "^1.0.0")
+	ve, err := c.Resolve(ctx, "nox/dast", "^1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve caret: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestClientResolveTilde(t *testing.T) {
 	ctx := context.Background()
 
 	// ~1.0.0 should match only 1.0.x
-	ve, err := c.Resolve(ctx, "hardline/dast", "~1.0.0")
+	ve, err := c.Resolve(ctx, "nox/dast", "~1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve tilde: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestClientResolveGTE(t *testing.T) {
 	// because 1.2.0 stable > 2.0.0-beta.1? No — 2.0.0-beta.1 has major 2 which
 	// is higher in numeric comparison. Pre-release only affects same major.minor.patch.
 	// So 2.0.0-beta.1 > 1.2.0.
-	ve, err := c.Resolve(ctx, "hardline/dast", ">=1.0.0")
+	ve, err := c.Resolve(ctx, "nox/dast", ">=1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve gte: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestClientResolveWildcard(t *testing.T) {
 
 	ctx := context.Background()
 
-	ve, err := c.Resolve(ctx, "hardline/dast", "*")
+	ve, err := c.Resolve(ctx, "nox/dast", "*")
 	if err != nil {
 		t.Fatalf("Resolve wildcard: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestClientResolveNoMatch(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err := c.Resolve(ctx, "hardline/dast", "99.0.0")
+	_, err := c.Resolve(ctx, "nox/dast", "99.0.0")
 	if err == nil {
 		t.Error("expected error for no matching version")
 	}
@@ -305,7 +305,7 @@ func TestClientResolveWithFilter(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter that rejects everything.
-	_, err := c.Resolve(ctx, "hardline/dast", "*", WithFilter(func(p PluginEntry) bool {
+	_, err := c.Resolve(ctx, "nox/dast", "*", WithFilter(func(p PluginEntry) bool {
 		return false
 	}))
 	if err == nil {
@@ -313,7 +313,7 @@ func TestClientResolveWithFilter(t *testing.T) {
 	}
 
 	// Filter that accepts only passive risk class plugins.
-	ve, err := c.Resolve(ctx, "hardline/sbom", "*", WithFilter(func(p PluginEntry) bool {
+	ve, err := c.Resolve(ctx, "nox/sbom", "*", WithFilter(func(p PluginEntry) bool {
 		for _, v := range p.Versions {
 			if v.RiskClass == "passive" {
 				return true
@@ -482,13 +482,13 @@ func TestClientResolveCopiesResult(t *testing.T) {
 
 	ctx := context.Background()
 
-	ve1, err := c.Resolve(ctx, "hardline/dast", "1.0.0")
+	ve1, err := c.Resolve(ctx, "nox/dast", "1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	ve1.Version = "mutated"
 
-	ve2, err := c.Resolve(ctx, "hardline/dast", "1.0.0")
+	ve2, err := c.Resolve(ctx, "nox/dast", "1.0.0")
 	if err != nil {
 		t.Fatalf("Resolve again: %v", err)
 	}

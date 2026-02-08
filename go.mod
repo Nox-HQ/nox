@@ -1,4 +1,4 @@
-module github.com/felixgeelhaar/hardline
+module github.com/nox-hq/nox
 
 go 1.25.6
 

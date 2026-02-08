@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             (unknown)
-// source: hardline/plugin/v1/plugin.proto
+// source: nox/plugin/v1/plugin.proto
 
 package pluginv1
 
@@ -19,16 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginService_GetManifest_FullMethodName     = "/hardline.plugin.v1.PluginService/GetManifest"
-	PluginService_InvokeTool_FullMethodName      = "/hardline.plugin.v1.PluginService/InvokeTool"
-	PluginService_StreamArtifacts_FullMethodName = "/hardline.plugin.v1.PluginService/StreamArtifacts"
+	PluginService_GetManifest_FullMethodName     = "/nox.plugin.v1.PluginService/GetManifest"
+	PluginService_InvokeTool_FullMethodName      = "/nox.plugin.v1.PluginService/InvokeTool"
+	PluginService_StreamArtifacts_FullMethodName = "/nox.plugin.v1.PluginService/StreamArtifacts"
 )
 
 // PluginServiceClient is the client API for PluginService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// PluginService defines the interface that all Hardline plugins must implement.
+// PluginService defines the interface that all Nox plugins must implement.
 type PluginServiceClient interface {
 	// GetManifest returns the plugin's capabilities and safety requirements.
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
@@ -89,7 +89,7 @@ type PluginService_StreamArtifactsClient = grpc.ServerStreamingClient[StreamArti
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
 //
-// PluginService defines the interface that all Hardline plugins must implement.
+// PluginService defines the interface that all Nox plugins must implement.
 type PluginServiceServer interface {
 	// GetManifest returns the plugin's capabilities and safety requirements.
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
@@ -188,7 +188,7 @@ type PluginService_StreamArtifactsServer = grpc.ServerStreamingServer[StreamArti
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var PluginService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "hardline.plugin.v1.PluginService",
+	ServiceName: "nox.plugin.v1.PluginService",
 	HandlerType: (*PluginServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -207,5 +207,5 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "hardline/plugin/v1/plugin.proto",
+	Metadata: "nox/plugin/v1/plugin.proto",
 }

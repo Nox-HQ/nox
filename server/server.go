@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	hardline "github.com/felixgeelhaar/hardline/core"
-	"github.com/felixgeelhaar/hardline/core/report"
-	"github.com/felixgeelhaar/hardline/core/report/sarif"
-	"github.com/felixgeelhaar/hardline/core/report/sbom"
-	"github.com/felixgeelhaar/hardline/plugin"
+	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/report"
+	"github.com/nox-hq/nox/core/report/sarif"
+	"github.com/nox-hq/nox/core/report/sbom"
+	"github.com/nox-hq/nox/plugin"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -22,13 +22,13 @@ const (
 	maxOutputBytes = 1 << 20
 )
 
-// Server is the hardline MCP server.
+// Server is the nox MCP server.
 type Server struct {
 	version      string
 	allowedPaths []string
 
 	mu    sync.RWMutex
-	cache *hardline.ScanResult
+	cache *nox.ScanResult
 
 	host    *plugin.Host      // optional plugin host
 	aliases map[string]string // tool name aliases
@@ -72,7 +72,7 @@ func New(version string, allowedPaths []string, opts ...ServerOption) *Server {
 // Serve starts the MCP server on stdio and blocks until the client disconnects.
 func (s *Server) Serve() error {
 	srv := mcpserver.NewMCPServer(
-		"hardline",
+		"nox",
 		s.version,
 		mcpserver.WithRecovery(),
 		mcpserver.WithToolCapabilities(false),
@@ -180,15 +180,15 @@ func (s *Server) registerPluginTools(srv *mcpserver.MCPServer) {
 
 func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 	srv.AddResource(
-		mcp.NewResource("hardline://findings", "Findings JSON",
-			mcp.WithResourceDescription("Security findings in hardline JSON format"),
+		mcp.NewResource("nox://findings", "Findings JSON",
+			mcp.WithResourceDescription("Security findings in nox JSON format"),
 			mcp.WithMIMEType("application/json"),
 		),
 		s.handleResourceFindings,
 	)
 
 	srv.AddResource(
-		mcp.NewResource("hardline://sarif", "SARIF Report",
+		mcp.NewResource("nox://sarif", "SARIF Report",
 			mcp.WithResourceDescription("Security findings in SARIF 2.1.0 format"),
 			mcp.WithMIMEType("application/json"),
 		),
@@ -196,7 +196,7 @@ func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 	)
 
 	srv.AddResource(
-		mcp.NewResource("hardline://sbom/cdx", "CycloneDX SBOM",
+		mcp.NewResource("nox://sbom/cdx", "CycloneDX SBOM",
 			mcp.WithResourceDescription("Software bill of materials in CycloneDX format"),
 			mcp.WithMIMEType("application/json"),
 		),
@@ -204,7 +204,7 @@ func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 	)
 
 	srv.AddResource(
-		mcp.NewResource("hardline://sbom/spdx", "SPDX SBOM",
+		mcp.NewResource("nox://sbom/spdx", "SPDX SBOM",
 			mcp.WithResourceDescription("Software bill of materials in SPDX format"),
 			mcp.WithMIMEType("application/json"),
 		),
@@ -212,7 +212,7 @@ func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 	)
 
 	srv.AddResource(
-		mcp.NewResource("hardline://ai-inventory", "AI Inventory",
+		mcp.NewResource("nox://ai-inventory", "AI Inventory",
 			mcp.WithResourceDescription("Inventory of AI components discovered during scan"),
 			mcp.WithMIMEType("application/json"),
 		),
@@ -256,7 +256,7 @@ func (s *Server) handleScan(_ context.Context, request mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	result, err := hardline.RunScan(path)
+	result, err := nox.RunScan(path)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("scan failed: %v", err)), nil
 	}

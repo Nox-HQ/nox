@@ -5,7 +5,7 @@ import "time"
 // Source represents a registry endpoint that serves plugin indexes.
 type Source struct {
 	Name string `json:"name"` // e.g. "official", "enterprise"
-	URL  string `json:"url"`  // e.g. "https://registry.hardline.dev/index.json"
+	URL  string `json:"url"`  // e.g. "https://registry.nox-hq.dev/index.json"
 }
 
 // Index is the top-level registry index document served by a Source.

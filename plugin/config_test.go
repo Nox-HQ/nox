@@ -9,7 +9,7 @@ import (
 
 func TestLoadConfig_ValidYAML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".hardline.yaml")
+	path := filepath.Join(dir, ".nox.yaml")
 	data := `
 plugin_policy:
   allowed_network_hosts:
@@ -51,7 +51,7 @@ plugin_policy:
 }
 
 func TestLoadConfig_MissingFile(t *testing.T) {
-	cfg, err := LoadConfig("/nonexistent/.hardline.yaml")
+	cfg, err := LoadConfig("/nonexistent/.nox.yaml")
 	if err != nil {
 		t.Fatalf("missing file should not error, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestLoadConfig_MissingFile(t *testing.T) {
 
 func TestLoadConfig_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".hardline.yaml")
+	path := filepath.Join(dir, ".nox.yaml")
 	if err := os.WriteFile(path, []byte("invalid: yaml: [[["), 0o644); err != nil {
 		t.Fatal(err)
 	}

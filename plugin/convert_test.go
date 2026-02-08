@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/analyzers/ai"
-	"github.com/felixgeelhaar/hardline/core/analyzers/deps"
-	"github.com/felixgeelhaar/hardline/core/findings"
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/findings"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
 func TestProtoSeverityToGo(t *testing.T) {

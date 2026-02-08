@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: hardline/plugin/v1/types.proto
+// source: nox/plugin/v1/types.proto
 
 package pluginv1
 
@@ -64,11 +64,11 @@ func (x Severity) String() string {
 }
 
 func (Severity) Descriptor() protoreflect.EnumDescriptor {
-	return file_hardline_plugin_v1_types_proto_enumTypes[0].Descriptor()
+	return file_nox_plugin_v1_types_proto_enumTypes[0].Descriptor()
 }
 
 func (Severity) Type() protoreflect.EnumType {
-	return &file_hardline_plugin_v1_types_proto_enumTypes[0]
+	return &file_nox_plugin_v1_types_proto_enumTypes[0]
 }
 
 func (x Severity) Number() protoreflect.EnumNumber {
@@ -77,7 +77,7 @@ func (x Severity) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Severity.Descriptor instead.
 func (Severity) EnumDescriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{0}
 }
 
 // Confidence represents the certainty level of a finding.
@@ -117,11 +117,11 @@ func (x Confidence) String() string {
 }
 
 func (Confidence) Descriptor() protoreflect.EnumDescriptor {
-	return file_hardline_plugin_v1_types_proto_enumTypes[1].Descriptor()
+	return file_nox_plugin_v1_types_proto_enumTypes[1].Descriptor()
 }
 
 func (Confidence) Type() protoreflect.EnumType {
-	return &file_hardline_plugin_v1_types_proto_enumTypes[1]
+	return &file_nox_plugin_v1_types_proto_enumTypes[1]
 }
 
 func (x Confidence) Number() protoreflect.EnumNumber {
@@ -130,7 +130,7 @@ func (x Confidence) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Confidence.Descriptor instead.
 func (Confidence) EnumDescriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 // ArtifactType classifies discovered files and components.
@@ -179,11 +179,11 @@ func (x ArtifactType) String() string {
 }
 
 func (ArtifactType) Descriptor() protoreflect.EnumDescriptor {
-	return file_hardline_plugin_v1_types_proto_enumTypes[2].Descriptor()
+	return file_nox_plugin_v1_types_proto_enumTypes[2].Descriptor()
 }
 
 func (ArtifactType) Type() protoreflect.EnumType {
-	return &file_hardline_plugin_v1_types_proto_enumTypes[2]
+	return &file_nox_plugin_v1_types_proto_enumTypes[2]
 }
 
 func (x ArtifactType) Number() protoreflect.EnumNumber {
@@ -192,7 +192,7 @@ func (x ArtifactType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ArtifactType.Descriptor instead.
 func (ArtifactType) EnumDescriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
 // Location identifies a region within a source file.
@@ -209,7 +209,7 @@ type Location struct {
 
 func (x *Location) Reset() {
 	*x = Location{}
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[0]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -221,7 +221,7 @@ func (x *Location) String() string {
 func (*Location) ProtoMessage() {}
 
 func (x *Location) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[0]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -234,7 +234,7 @@ func (x *Location) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Location.ProtoReflect.Descriptor instead.
 func (*Location) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Location) GetFilePath() string {
@@ -277,8 +277,8 @@ type Finding struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	RuleId        string                 `protobuf:"bytes,2,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
-	Severity      Severity               `protobuf:"varint,3,opt,name=severity,proto3,enum=hardline.plugin.v1.Severity" json:"severity,omitempty"`
-	Confidence    Confidence             `protobuf:"varint,4,opt,name=confidence,proto3,enum=hardline.plugin.v1.Confidence" json:"confidence,omitempty"`
+	Severity      Severity               `protobuf:"varint,3,opt,name=severity,proto3,enum=nox.plugin.v1.Severity" json:"severity,omitempty"`
+	Confidence    Confidence             `protobuf:"varint,4,opt,name=confidence,proto3,enum=nox.plugin.v1.Confidence" json:"confidence,omitempty"`
 	Location      *Location              `protobuf:"bytes,5,opt,name=location,proto3" json:"location,omitempty"`
 	Message       string                 `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
 	Fingerprint   string                 `protobuf:"bytes,7,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
@@ -289,7 +289,7 @@ type Finding struct {
 
 func (x *Finding) Reset() {
 	*x = Finding{}
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[1]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +301,7 @@ func (x *Finding) String() string {
 func (*Finding) ProtoMessage() {}
 
 func (x *Finding) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[1]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +314,7 @@ func (x *Finding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Finding.ProtoReflect.Descriptor instead.
 func (*Finding) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Finding) GetId() string {
@@ -378,7 +378,7 @@ type Artifact struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	AbsPath       string                 `protobuf:"bytes,2,opt,name=abs_path,json=absPath,proto3" json:"abs_path,omitempty"`
-	Type          ArtifactType           `protobuf:"varint,3,opt,name=type,proto3,enum=hardline.plugin.v1.ArtifactType" json:"type,omitempty"`
+	Type          ArtifactType           `protobuf:"varint,3,opt,name=type,proto3,enum=nox.plugin.v1.ArtifactType" json:"type,omitempty"`
 	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	Content       []byte                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	MimeType      string                 `protobuf:"bytes,6,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
@@ -388,7 +388,7 @@ type Artifact struct {
 
 func (x *Artifact) Reset() {
 	*x = Artifact{}
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[2]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -400,7 +400,7 @@ func (x *Artifact) String() string {
 func (*Artifact) ProtoMessage() {}
 
 func (x *Artifact) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[2]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -413,7 +413,7 @@ func (x *Artifact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Artifact.ProtoReflect.Descriptor instead.
 func (*Artifact) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Artifact) GetPath() string {
@@ -470,7 +470,7 @@ type Package struct {
 
 func (x *Package) Reset() {
 	*x = Package{}
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[3]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +482,7 @@ func (x *Package) String() string {
 func (*Package) ProtoMessage() {}
 
 func (x *Package) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[3]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +495,7 @@ func (x *Package) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Package.ProtoReflect.Descriptor instead.
 func (*Package) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Package) GetName() string {
@@ -532,7 +532,7 @@ type AIComponent struct {
 
 func (x *AIComponent) Reset() {
 	*x = AIComponent{}
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[4]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +544,7 @@ func (x *AIComponent) String() string {
 func (*AIComponent) ProtoMessage() {}
 
 func (x *AIComponent) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_types_proto_msgTypes[4]
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +557,7 @@ func (x *AIComponent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AIComponent.ProtoReflect.Descriptor instead.
 func (*AIComponent) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AIComponent) GetName() string {
@@ -588,11 +588,11 @@ func (x *AIComponent) GetDetails() map[string]string {
 	return nil
 }
 
-var File_hardline_plugin_v1_types_proto protoreflect.FileDescriptor
+var File_nox_plugin_v1_types_proto protoreflect.FileDescriptor
 
-const file_hardline_plugin_v1_types_proto_rawDesc = "" +
+const file_nox_plugin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1ehardline/plugin/v1/types.proto\x12\x12hardline.plugin.v1\"\xa3\x01\n" +
+	"\x19nox/plugin/v1/types.proto\x12\rnox.plugin.v1\"\xa3\x01\n" +
 	"\bLocation\x12\x1b\n" +
 	"\tfile_path\x18\x01 \x01(\tR\bfilePath\x12\x1d\n" +
 	"\n" +
@@ -600,37 +600,37 @@ const file_hardline_plugin_v1_types_proto_rawDesc = "" +
 	"\bend_line\x18\x03 \x01(\x05R\aendLine\x12!\n" +
 	"\fstart_column\x18\x04 \x01(\x05R\vstartColumn\x12\x1d\n" +
 	"\n" +
-	"end_column\x18\x05 \x01(\x05R\tendColumn\"\xa6\x03\n" +
+	"end_column\x18\x05 \x01(\x05R\tendColumn\"\x92\x03\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
-	"\arule_id\x18\x02 \x01(\tR\x06ruleId\x128\n" +
-	"\bseverity\x18\x03 \x01(\x0e2\x1c.hardline.plugin.v1.SeverityR\bseverity\x12>\n" +
+	"\arule_id\x18\x02 \x01(\tR\x06ruleId\x123\n" +
+	"\bseverity\x18\x03 \x01(\x0e2\x17.nox.plugin.v1.SeverityR\bseverity\x129\n" +
 	"\n" +
-	"confidence\x18\x04 \x01(\x0e2\x1e.hardline.plugin.v1.ConfidenceR\n" +
-	"confidence\x128\n" +
-	"\blocation\x18\x05 \x01(\v2\x1c.hardline.plugin.v1.LocationR\blocation\x12\x18\n" +
+	"confidence\x18\x04 \x01(\x0e2\x19.nox.plugin.v1.ConfidenceR\n" +
+	"confidence\x123\n" +
+	"\blocation\x18\x05 \x01(\v2\x17.nox.plugin.v1.LocationR\blocation\x12\x18\n" +
 	"\amessage\x18\x06 \x01(\tR\amessage\x12 \n" +
-	"\vfingerprint\x18\a \x01(\tR\vfingerprint\x12E\n" +
-	"\bmetadata\x18\b \x03(\v2).hardline.plugin.v1.Finding.MetadataEntryR\bmetadata\x1a;\n" +
+	"\vfingerprint\x18\a \x01(\tR\vfingerprint\x12@\n" +
+	"\bmetadata\x18\b \x03(\v2$.nox.plugin.v1.Finding.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xba\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb5\x01\n" +
 	"\bArtifact\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x19\n" +
-	"\babs_path\x18\x02 \x01(\tR\aabsPath\x124\n" +
-	"\x04type\x18\x03 \x01(\x0e2 .hardline.plugin.v1.ArtifactTypeR\x04type\x12\x12\n" +
+	"\babs_path\x18\x02 \x01(\tR\aabsPath\x12/\n" +
+	"\x04type\x18\x03 \x01(\x0e2\x1b.nox.plugin.v1.ArtifactTypeR\x04type\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x18\n" +
 	"\acontent\x18\x05 \x01(\fR\acontent\x12\x1b\n" +
 	"\tmime_type\x18\x06 \x01(\tR\bmimeType\"U\n" +
 	"\aPackage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1c\n" +
-	"\tecosystem\x18\x03 \x01(\tR\tecosystem\"\xcd\x01\n" +
+	"\tecosystem\x18\x03 \x01(\tR\tecosystem\"\xc8\x01\n" +
 	"\vAIComponent\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x12F\n" +
-	"\adetails\x18\x04 \x03(\v2,.hardline.plugin.v1.AIComponent.DetailsEntryR\adetails\x1a:\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12A\n" +
+	"\adetails\x18\x04 \x03(\v2'.nox.plugin.v1.AIComponent.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x88\x01\n" +
@@ -654,41 +654,41 @@ const file_hardline_plugin_v1_types_proto_rawDesc = "" +
 	"\x16ARTIFACT_TYPE_LOCKFILE\x10\x03\x12\x1b\n" +
 	"\x17ARTIFACT_TYPE_CONTAINER\x10\x04\x12\x1e\n" +
 	"\x1aARTIFACT_TYPE_AI_COMPONENT\x10\x05\x12\x19\n" +
-	"\x15ARTIFACT_TYPE_UNKNOWN\x10\x06BCZAgithub.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1b\x06proto3"
+	"\x15ARTIFACT_TYPE_UNKNOWN\x10\x06B2Z0github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1b\x06proto3"
 
 var (
-	file_hardline_plugin_v1_types_proto_rawDescOnce sync.Once
-	file_hardline_plugin_v1_types_proto_rawDescData []byte
+	file_nox_plugin_v1_types_proto_rawDescOnce sync.Once
+	file_nox_plugin_v1_types_proto_rawDescData []byte
 )
 
-func file_hardline_plugin_v1_types_proto_rawDescGZIP() []byte {
-	file_hardline_plugin_v1_types_proto_rawDescOnce.Do(func() {
-		file_hardline_plugin_v1_types_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_hardline_plugin_v1_types_proto_rawDesc), len(file_hardline_plugin_v1_types_proto_rawDesc)))
+func file_nox_plugin_v1_types_proto_rawDescGZIP() []byte {
+	file_nox_plugin_v1_types_proto_rawDescOnce.Do(func() {
+		file_nox_plugin_v1_types_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_nox_plugin_v1_types_proto_rawDesc), len(file_nox_plugin_v1_types_proto_rawDesc)))
 	})
-	return file_hardline_plugin_v1_types_proto_rawDescData
+	return file_nox_plugin_v1_types_proto_rawDescData
 }
 
-var file_hardline_plugin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_hardline_plugin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_hardline_plugin_v1_types_proto_goTypes = []any{
-	(Severity)(0),       // 0: hardline.plugin.v1.Severity
-	(Confidence)(0),     // 1: hardline.plugin.v1.Confidence
-	(ArtifactType)(0),   // 2: hardline.plugin.v1.ArtifactType
-	(*Location)(nil),    // 3: hardline.plugin.v1.Location
-	(*Finding)(nil),     // 4: hardline.plugin.v1.Finding
-	(*Artifact)(nil),    // 5: hardline.plugin.v1.Artifact
-	(*Package)(nil),     // 6: hardline.plugin.v1.Package
-	(*AIComponent)(nil), // 7: hardline.plugin.v1.AIComponent
-	nil,                 // 8: hardline.plugin.v1.Finding.MetadataEntry
-	nil,                 // 9: hardline.plugin.v1.AIComponent.DetailsEntry
+var file_nox_plugin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_nox_plugin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_nox_plugin_v1_types_proto_goTypes = []any{
+	(Severity)(0),       // 0: nox.plugin.v1.Severity
+	(Confidence)(0),     // 1: nox.plugin.v1.Confidence
+	(ArtifactType)(0),   // 2: nox.plugin.v1.ArtifactType
+	(*Location)(nil),    // 3: nox.plugin.v1.Location
+	(*Finding)(nil),     // 4: nox.plugin.v1.Finding
+	(*Artifact)(nil),    // 5: nox.plugin.v1.Artifact
+	(*Package)(nil),     // 6: nox.plugin.v1.Package
+	(*AIComponent)(nil), // 7: nox.plugin.v1.AIComponent
+	nil,                 // 8: nox.plugin.v1.Finding.MetadataEntry
+	nil,                 // 9: nox.plugin.v1.AIComponent.DetailsEntry
 }
-var file_hardline_plugin_v1_types_proto_depIdxs = []int32{
-	0, // 0: hardline.plugin.v1.Finding.severity:type_name -> hardline.plugin.v1.Severity
-	1, // 1: hardline.plugin.v1.Finding.confidence:type_name -> hardline.plugin.v1.Confidence
-	3, // 2: hardline.plugin.v1.Finding.location:type_name -> hardline.plugin.v1.Location
-	8, // 3: hardline.plugin.v1.Finding.metadata:type_name -> hardline.plugin.v1.Finding.MetadataEntry
-	2, // 4: hardline.plugin.v1.Artifact.type:type_name -> hardline.plugin.v1.ArtifactType
-	9, // 5: hardline.plugin.v1.AIComponent.details:type_name -> hardline.plugin.v1.AIComponent.DetailsEntry
+var file_nox_plugin_v1_types_proto_depIdxs = []int32{
+	0, // 0: nox.plugin.v1.Finding.severity:type_name -> nox.plugin.v1.Severity
+	1, // 1: nox.plugin.v1.Finding.confidence:type_name -> nox.plugin.v1.Confidence
+	3, // 2: nox.plugin.v1.Finding.location:type_name -> nox.plugin.v1.Location
+	8, // 3: nox.plugin.v1.Finding.metadata:type_name -> nox.plugin.v1.Finding.MetadataEntry
+	2, // 4: nox.plugin.v1.Artifact.type:type_name -> nox.plugin.v1.ArtifactType
+	9, // 5: nox.plugin.v1.AIComponent.details:type_name -> nox.plugin.v1.AIComponent.DetailsEntry
 	6, // [6:6] is the sub-list for method output_type
 	6, // [6:6] is the sub-list for method input_type
 	6, // [6:6] is the sub-list for extension type_name
@@ -696,27 +696,27 @@ var file_hardline_plugin_v1_types_proto_depIdxs = []int32{
 	0, // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_hardline_plugin_v1_types_proto_init() }
-func file_hardline_plugin_v1_types_proto_init() {
-	if File_hardline_plugin_v1_types_proto != nil {
+func init() { file_nox_plugin_v1_types_proto_init() }
+func file_nox_plugin_v1_types_proto_init() {
+	if File_nox_plugin_v1_types_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hardline_plugin_v1_types_proto_rawDesc), len(file_hardline_plugin_v1_types_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nox_plugin_v1_types_proto_rawDesc), len(file_nox_plugin_v1_types_proto_rawDesc)),
 			NumEnums:      3,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_hardline_plugin_v1_types_proto_goTypes,
-		DependencyIndexes: file_hardline_plugin_v1_types_proto_depIdxs,
-		EnumInfos:         file_hardline_plugin_v1_types_proto_enumTypes,
-		MessageInfos:      file_hardline_plugin_v1_types_proto_msgTypes,
+		GoTypes:           file_nox_plugin_v1_types_proto_goTypes,
+		DependencyIndexes: file_nox_plugin_v1_types_proto_depIdxs,
+		EnumInfos:         file_nox_plugin_v1_types_proto_enumTypes,
+		MessageInfos:      file_nox_plugin_v1_types_proto_msgTypes,
 	}.Build()
-	File_hardline_plugin_v1_types_proto = out.File
-	file_hardline_plugin_v1_types_proto_goTypes = nil
-	file_hardline_plugin_v1_types_proto_depIdxs = nil
+	File_nox_plugin_v1_types_proto = out.File
+	file_nox_plugin_v1_types_proto_goTypes = nil
+	file_nox_plugin_v1_types_proto_depIdxs = nil
 }

@@ -12,9 +12,9 @@ func TestIndexJSONRoundTrip(t *testing.T) {
 		GeneratedAt:   time.Date(2026, 2, 8, 0, 0, 0, 0, time.UTC),
 		Plugins: []PluginEntry{
 			{
-				Name:        "hardline/dast",
+				Name:        "nox/dast",
 				Description: "Web DAST scanner",
-				Homepage:    "https://github.com/hardline/dast",
+				Homepage:    "https://github.com/nox-hq/dast",
 				Versions: []VersionEntry{
 					{
 						Version:      "1.2.0",
@@ -59,8 +59,8 @@ func TestIndexJSONRoundTrip(t *testing.T) {
 	}
 
 	p := decoded.Plugins[0]
-	if p.Name != "hardline/dast" {
-		t.Errorf("plugin name = %q, want %q", p.Name, "hardline/dast")
+	if p.Name != "nox/dast" {
+		t.Errorf("plugin name = %q, want %q", p.Name, "nox/dast")
 	}
 	if len(p.Versions) != 1 {
 		t.Fatalf("versions count = %d, want 1", len(p.Versions))

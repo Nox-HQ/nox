@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: hardline/plugin/v1/plugin.proto
+// source: nox/plugin/v1/plugin.proto
 
 package pluginv1
 
@@ -59,11 +59,11 @@ func (x DiagnosticSeverity) String() string {
 }
 
 func (DiagnosticSeverity) Descriptor() protoreflect.EnumDescriptor {
-	return file_hardline_plugin_v1_plugin_proto_enumTypes[0].Descriptor()
+	return file_nox_plugin_v1_plugin_proto_enumTypes[0].Descriptor()
 }
 
 func (DiagnosticSeverity) Type() protoreflect.EnumType {
-	return &file_hardline_plugin_v1_plugin_proto_enumTypes[0]
+	return &file_nox_plugin_v1_plugin_proto_enumTypes[0]
 }
 
 func (x DiagnosticSeverity) Number() protoreflect.EnumNumber {
@@ -72,7 +72,7 @@ func (x DiagnosticSeverity) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DiagnosticSeverity.Descriptor instead.
 func (DiagnosticSeverity) EnumDescriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
 // GetManifestRequest is sent by the host to discover plugin capabilities.
@@ -85,7 +85,7 @@ type GetManifestRequest struct {
 
 func (x *GetManifestRequest) Reset() {
 	*x = GetManifestRequest{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[0]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -97,7 +97,7 @@ func (x *GetManifestRequest) String() string {
 func (*GetManifestRequest) ProtoMessage() {}
 
 func (x *GetManifestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[0]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -110,7 +110,7 @@ func (x *GetManifestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetManifestRequest.ProtoReflect.Descriptor instead.
 func (*GetManifestRequest) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *GetManifestRequest) GetApiVersion() string {
@@ -134,7 +134,7 @@ type GetManifestResponse struct {
 
 func (x *GetManifestResponse) Reset() {
 	*x = GetManifestResponse{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[1]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -146,7 +146,7 @@ func (x *GetManifestResponse) String() string {
 func (*GetManifestResponse) ProtoMessage() {}
 
 func (x *GetManifestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[1]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -159,7 +159,7 @@ func (x *GetManifestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetManifestResponse.ProtoReflect.Descriptor instead.
 func (*GetManifestResponse) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetManifestResponse) GetName() string {
@@ -210,7 +210,7 @@ type Capability struct {
 
 func (x *Capability) Reset() {
 	*x = Capability{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[2]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +222,7 @@ func (x *Capability) String() string {
 func (*Capability) ProtoMessage() {}
 
 func (x *Capability) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[2]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +235,7 @@ func (x *Capability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capability.ProtoReflect.Descriptor instead.
 func (*Capability) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{2}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Capability) GetName() string {
@@ -279,7 +279,7 @@ type ToolDef struct {
 
 func (x *ToolDef) Reset() {
 	*x = ToolDef{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[3]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -291,7 +291,7 @@ func (x *ToolDef) String() string {
 func (*ToolDef) ProtoMessage() {}
 
 func (x *ToolDef) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[3]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -304,7 +304,7 @@ func (x *ToolDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolDef.ProtoReflect.Descriptor instead.
 func (*ToolDef) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ToolDef) GetName() string {
@@ -348,7 +348,7 @@ type ResourceDef struct {
 
 func (x *ResourceDef) Reset() {
 	*x = ResourceDef{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -360,7 +360,7 @@ func (x *ResourceDef) String() string {
 func (*ResourceDef) ProtoMessage() {}
 
 func (x *ResourceDef) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -373,7 +373,7 @@ func (x *ResourceDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceDef.ProtoReflect.Descriptor instead.
 func (*ResourceDef) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ResourceDef) GetUriTemplate() string {
@@ -420,7 +420,7 @@ type SafetyRequirements struct {
 
 func (x *SafetyRequirements) Reset() {
 	*x = SafetyRequirements{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +432,7 @@ func (x *SafetyRequirements) String() string {
 func (*SafetyRequirements) ProtoMessage() {}
 
 func (x *SafetyRequirements) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +445,7 @@ func (x *SafetyRequirements) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SafetyRequirements.ProtoReflect.Descriptor instead.
 func (*SafetyRequirements) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SafetyRequirements) GetNetworkHosts() []string {
@@ -509,7 +509,7 @@ type InvokeToolRequest struct {
 
 func (x *InvokeToolRequest) Reset() {
 	*x = InvokeToolRequest{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -521,7 +521,7 @@ func (x *InvokeToolRequest) String() string {
 func (*InvokeToolRequest) ProtoMessage() {}
 
 func (x *InvokeToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -534,7 +534,7 @@ func (x *InvokeToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeToolRequest.ProtoReflect.Descriptor instead.
 func (*InvokeToolRequest) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *InvokeToolRequest) GetToolName() string {
@@ -571,7 +571,7 @@ type InvokeToolResponse struct {
 
 func (x *InvokeToolResponse) Reset() {
 	*x = InvokeToolResponse{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -583,7 +583,7 @@ func (x *InvokeToolResponse) String() string {
 func (*InvokeToolResponse) ProtoMessage() {}
 
 func (x *InvokeToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -596,7 +596,7 @@ func (x *InvokeToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeToolResponse.ProtoReflect.Descriptor instead.
 func (*InvokeToolResponse) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InvokeToolResponse) GetFindings() []*Finding {
@@ -630,7 +630,7 @@ func (x *InvokeToolResponse) GetDiagnostics() []*Diagnostic {
 // Diagnostic carries a non-finding message from a plugin (errors, warnings, info).
 type Diagnostic struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Severity      DiagnosticSeverity     `protobuf:"varint,1,opt,name=severity,proto3,enum=hardline.plugin.v1.DiagnosticSeverity" json:"severity,omitempty"`
+	Severity      DiagnosticSeverity     `protobuf:"varint,1,opt,name=severity,proto3,enum=nox.plugin.v1.DiagnosticSeverity" json:"severity,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -639,7 +639,7 @@ type Diagnostic struct {
 
 func (x *Diagnostic) Reset() {
 	*x = Diagnostic{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +651,7 @@ func (x *Diagnostic) String() string {
 func (*Diagnostic) ProtoMessage() {}
 
 func (x *Diagnostic) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +664,7 @@ func (x *Diagnostic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Diagnostic.ProtoReflect.Descriptor instead.
 func (*Diagnostic) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Diagnostic) GetSeverity() DiagnosticSeverity {
@@ -692,14 +692,14 @@ func (x *Diagnostic) GetSource() string {
 type StreamArtifactsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ArtifactTypes []ArtifactType         `protobuf:"varint,2,rep,packed,name=artifact_types,json=artifactTypes,proto3,enum=hardline.plugin.v1.ArtifactType" json:"artifact_types,omitempty"`
+	ArtifactTypes []ArtifactType         `protobuf:"varint,2,rep,packed,name=artifact_types,json=artifactTypes,proto3,enum=nox.plugin.v1.ArtifactType" json:"artifact_types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamArtifactsRequest) Reset() {
 	*x = StreamArtifactsRequest{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +711,7 @@ func (x *StreamArtifactsRequest) String() string {
 func (*StreamArtifactsRequest) ProtoMessage() {}
 
 func (x *StreamArtifactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,7 +724,7 @@ func (x *StreamArtifactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamArtifactsRequest.ProtoReflect.Descriptor instead.
 func (*StreamArtifactsRequest) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StreamArtifactsRequest) GetRunId() string {
@@ -751,7 +751,7 @@ type StreamArtifactsResponse struct {
 
 func (x *StreamArtifactsResponse) Reset() {
 	*x = StreamArtifactsResponse{}
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -763,7 +763,7 @@ func (x *StreamArtifactsResponse) String() string {
 func (*StreamArtifactsResponse) ProtoMessage() {}
 
 func (x *StreamArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hardline_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_nox_plugin_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -776,7 +776,7 @@ func (x *StreamArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*StreamArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_hardline_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_nox_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StreamArtifactsResponse) GetArtifact() *Artifact {
@@ -786,27 +786,27 @@ func (x *StreamArtifactsResponse) GetArtifact() *Artifact {
 	return nil
 }
 
-var File_hardline_plugin_v1_plugin_proto protoreflect.FileDescriptor
+var File_nox_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
-const file_hardline_plugin_v1_plugin_proto_rawDesc = "" +
+const file_nox_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1fhardline/plugin/v1/plugin.proto\x12\x12hardline.plugin.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1ehardline/plugin/v1/types.proto\"5\n" +
+	"\x1anox/plugin/v1/plugin.proto\x12\rnox.plugin.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x19nox/plugin/v1/types.proto\"5\n" +
 	"\x12GetManifestRequest\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\tR\n" +
-	"apiVersion\"\xe8\x01\n" +
+	"apiVersion\"\xde\x01\n" +
 	"\x13GetManifestResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1f\n" +
 	"\vapi_version\x18\x03 \x01(\tR\n" +
-	"apiVersion\x12B\n" +
-	"\fcapabilities\x18\x04 \x03(\v2\x1e.hardline.plugin.v1.CapabilityR\fcapabilities\x12>\n" +
-	"\x06safety\x18\x05 \x01(\v2&.hardline.plugin.v1.SafetyRequirementsR\x06safety\"\xb4\x01\n" +
+	"apiVersion\x12=\n" +
+	"\fcapabilities\x18\x04 \x03(\v2\x19.nox.plugin.v1.CapabilityR\fcapabilities\x129\n" +
+	"\x06safety\x18\x05 \x01(\v2!.nox.plugin.v1.SafetyRequirementsR\x06safety\"\xaa\x01\n" +
 	"\n" +
 	"Capability\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x121\n" +
-	"\x05tools\x18\x03 \x03(\v2\x1b.hardline.plugin.v1.ToolDefR\x05tools\x12=\n" +
-	"\tresources\x18\x04 \x03(\v2\x1f.hardline.plugin.v1.ResourceDefR\tresources\"\x98\x01\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12,\n" +
+	"\x05tools\x18\x03 \x03(\v2\x16.nox.plugin.v1.ToolDefR\x05tools\x128\n" +
+	"\tresources\x18\x04 \x03(\v2\x1a.nox.plugin.v1.ResourceDefR\tresources\"\x98\x01\n" +
 	"\aToolDef\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
@@ -830,87 +830,87 @@ const file_hardline_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x11InvokeToolRequest\x12\x1b\n" +
 	"\ttool_name\x18\x01 \x01(\tR\btoolName\x12-\n" +
 	"\x05input\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05input\x12%\n" +
-	"\x0eworkspace_root\x18\x03 \x01(\tR\rworkspaceRoot\"\x8e\x02\n" +
-	"\x12InvokeToolResponse\x127\n" +
-	"\bfindings\x18\x01 \x03(\v2\x1b.hardline.plugin.v1.FindingR\bfindings\x127\n" +
-	"\bpackages\x18\x02 \x03(\v2\x1b.hardline.plugin.v1.PackageR\bpackages\x12D\n" +
-	"\rai_components\x18\x03 \x03(\v2\x1f.hardline.plugin.v1.AIComponentR\faiComponents\x12@\n" +
-	"\vdiagnostics\x18\x04 \x03(\v2\x1e.hardline.plugin.v1.DiagnosticR\vdiagnostics\"\x82\x01\n" +
+	"\x0eworkspace_root\x18\x03 \x01(\tR\rworkspaceRoot\"\xfa\x01\n" +
+	"\x12InvokeToolResponse\x122\n" +
+	"\bfindings\x18\x01 \x03(\v2\x16.nox.plugin.v1.FindingR\bfindings\x122\n" +
+	"\bpackages\x18\x02 \x03(\v2\x16.nox.plugin.v1.PackageR\bpackages\x12?\n" +
+	"\rai_components\x18\x03 \x03(\v2\x1a.nox.plugin.v1.AIComponentR\faiComponents\x12;\n" +
+	"\vdiagnostics\x18\x04 \x03(\v2\x19.nox.plugin.v1.DiagnosticR\vdiagnostics\"}\n" +
 	"\n" +
-	"Diagnostic\x12B\n" +
-	"\bseverity\x18\x01 \x01(\x0e2&.hardline.plugin.v1.DiagnosticSeverityR\bseverity\x12\x18\n" +
+	"Diagnostic\x12=\n" +
+	"\bseverity\x18\x01 \x01(\x0e2!.nox.plugin.v1.DiagnosticSeverityR\bseverity\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source\"x\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"s\n" +
 	"\x16StreamArtifactsRequest\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12G\n" +
-	"\x0eartifact_types\x18\x02 \x03(\x0e2 .hardline.plugin.v1.ArtifactTypeR\rartifactTypes\"S\n" +
-	"\x17StreamArtifactsResponse\x128\n" +
-	"\bartifact\x18\x01 \x01(\v2\x1c.hardline.plugin.v1.ArtifactR\bartifact*\x97\x01\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12B\n" +
+	"\x0eartifact_types\x18\x02 \x03(\x0e2\x1b.nox.plugin.v1.ArtifactTypeR\rartifactTypes\"N\n" +
+	"\x17StreamArtifactsResponse\x123\n" +
+	"\bartifact\x18\x01 \x01(\v2\x17.nox.plugin.v1.ArtifactR\bartifact*\x97\x01\n" +
 	"\x12DiagnosticSeverity\x12#\n" +
 	"\x1fDIAGNOSTIC_SEVERITY_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DIAGNOSTIC_SEVERITY_ERROR\x10\x01\x12\x1f\n" +
 	"\x1bDIAGNOSTIC_SEVERITY_WARNING\x10\x02\x12\x1c\n" +
-	"\x18DIAGNOSTIC_SEVERITY_INFO\x10\x032\xba\x02\n" +
-	"\rPluginService\x12^\n" +
-	"\vGetManifest\x12&.hardline.plugin.v1.GetManifestRequest\x1a'.hardline.plugin.v1.GetManifestResponse\x12[\n" +
+	"\x18DIAGNOSTIC_SEVERITY_INFO\x10\x032\x9c\x02\n" +
+	"\rPluginService\x12T\n" +
+	"\vGetManifest\x12!.nox.plugin.v1.GetManifestRequest\x1a\".nox.plugin.v1.GetManifestResponse\x12Q\n" +
 	"\n" +
-	"InvokeTool\x12%.hardline.plugin.v1.InvokeToolRequest\x1a&.hardline.plugin.v1.InvokeToolResponse\x12l\n" +
-	"\x0fStreamArtifacts\x12*.hardline.plugin.v1.StreamArtifactsRequest\x1a+.hardline.plugin.v1.StreamArtifactsResponse0\x01BCZAgithub.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1b\x06proto3"
+	"InvokeTool\x12 .nox.plugin.v1.InvokeToolRequest\x1a!.nox.plugin.v1.InvokeToolResponse\x12b\n" +
+	"\x0fStreamArtifacts\x12%.nox.plugin.v1.StreamArtifactsRequest\x1a&.nox.plugin.v1.StreamArtifactsResponse0\x01B2Z0github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1b\x06proto3"
 
 var (
-	file_hardline_plugin_v1_plugin_proto_rawDescOnce sync.Once
-	file_hardline_plugin_v1_plugin_proto_rawDescData []byte
+	file_nox_plugin_v1_plugin_proto_rawDescOnce sync.Once
+	file_nox_plugin_v1_plugin_proto_rawDescData []byte
 )
 
-func file_hardline_plugin_v1_plugin_proto_rawDescGZIP() []byte {
-	file_hardline_plugin_v1_plugin_proto_rawDescOnce.Do(func() {
-		file_hardline_plugin_v1_plugin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_hardline_plugin_v1_plugin_proto_rawDesc), len(file_hardline_plugin_v1_plugin_proto_rawDesc)))
+func file_nox_plugin_v1_plugin_proto_rawDescGZIP() []byte {
+	file_nox_plugin_v1_plugin_proto_rawDescOnce.Do(func() {
+		file_nox_plugin_v1_plugin_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_nox_plugin_v1_plugin_proto_rawDesc), len(file_nox_plugin_v1_plugin_proto_rawDesc)))
 	})
-	return file_hardline_plugin_v1_plugin_proto_rawDescData
+	return file_nox_plugin_v1_plugin_proto_rawDescData
 }
 
-var file_hardline_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hardline_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
-var file_hardline_plugin_v1_plugin_proto_goTypes = []any{
-	(DiagnosticSeverity)(0),         // 0: hardline.plugin.v1.DiagnosticSeverity
-	(*GetManifestRequest)(nil),      // 1: hardline.plugin.v1.GetManifestRequest
-	(*GetManifestResponse)(nil),     // 2: hardline.plugin.v1.GetManifestResponse
-	(*Capability)(nil),              // 3: hardline.plugin.v1.Capability
-	(*ToolDef)(nil),                 // 4: hardline.plugin.v1.ToolDef
-	(*ResourceDef)(nil),             // 5: hardline.plugin.v1.ResourceDef
-	(*SafetyRequirements)(nil),      // 6: hardline.plugin.v1.SafetyRequirements
-	(*InvokeToolRequest)(nil),       // 7: hardline.plugin.v1.InvokeToolRequest
-	(*InvokeToolResponse)(nil),      // 8: hardline.plugin.v1.InvokeToolResponse
-	(*Diagnostic)(nil),              // 9: hardline.plugin.v1.Diagnostic
-	(*StreamArtifactsRequest)(nil),  // 10: hardline.plugin.v1.StreamArtifactsRequest
-	(*StreamArtifactsResponse)(nil), // 11: hardline.plugin.v1.StreamArtifactsResponse
+var file_nox_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_nox_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_nox_plugin_v1_plugin_proto_goTypes = []any{
+	(DiagnosticSeverity)(0),         // 0: nox.plugin.v1.DiagnosticSeverity
+	(*GetManifestRequest)(nil),      // 1: nox.plugin.v1.GetManifestRequest
+	(*GetManifestResponse)(nil),     // 2: nox.plugin.v1.GetManifestResponse
+	(*Capability)(nil),              // 3: nox.plugin.v1.Capability
+	(*ToolDef)(nil),                 // 4: nox.plugin.v1.ToolDef
+	(*ResourceDef)(nil),             // 5: nox.plugin.v1.ResourceDef
+	(*SafetyRequirements)(nil),      // 6: nox.plugin.v1.SafetyRequirements
+	(*InvokeToolRequest)(nil),       // 7: nox.plugin.v1.InvokeToolRequest
+	(*InvokeToolResponse)(nil),      // 8: nox.plugin.v1.InvokeToolResponse
+	(*Diagnostic)(nil),              // 9: nox.plugin.v1.Diagnostic
+	(*StreamArtifactsRequest)(nil),  // 10: nox.plugin.v1.StreamArtifactsRequest
+	(*StreamArtifactsResponse)(nil), // 11: nox.plugin.v1.StreamArtifactsResponse
 	(*structpb.Struct)(nil),         // 12: google.protobuf.Struct
-	(*Finding)(nil),                 // 13: hardline.plugin.v1.Finding
-	(*Package)(nil),                 // 14: hardline.plugin.v1.Package
-	(*AIComponent)(nil),             // 15: hardline.plugin.v1.AIComponent
-	(ArtifactType)(0),               // 16: hardline.plugin.v1.ArtifactType
-	(*Artifact)(nil),                // 17: hardline.plugin.v1.Artifact
+	(*Finding)(nil),                 // 13: nox.plugin.v1.Finding
+	(*Package)(nil),                 // 14: nox.plugin.v1.Package
+	(*AIComponent)(nil),             // 15: nox.plugin.v1.AIComponent
+	(ArtifactType)(0),               // 16: nox.plugin.v1.ArtifactType
+	(*Artifact)(nil),                // 17: nox.plugin.v1.Artifact
 }
-var file_hardline_plugin_v1_plugin_proto_depIdxs = []int32{
-	3,  // 0: hardline.plugin.v1.GetManifestResponse.capabilities:type_name -> hardline.plugin.v1.Capability
-	6,  // 1: hardline.plugin.v1.GetManifestResponse.safety:type_name -> hardline.plugin.v1.SafetyRequirements
-	4,  // 2: hardline.plugin.v1.Capability.tools:type_name -> hardline.plugin.v1.ToolDef
-	5,  // 3: hardline.plugin.v1.Capability.resources:type_name -> hardline.plugin.v1.ResourceDef
-	12, // 4: hardline.plugin.v1.ToolDef.input_schema:type_name -> google.protobuf.Struct
-	12, // 5: hardline.plugin.v1.InvokeToolRequest.input:type_name -> google.protobuf.Struct
-	13, // 6: hardline.plugin.v1.InvokeToolResponse.findings:type_name -> hardline.plugin.v1.Finding
-	14, // 7: hardline.plugin.v1.InvokeToolResponse.packages:type_name -> hardline.plugin.v1.Package
-	15, // 8: hardline.plugin.v1.InvokeToolResponse.ai_components:type_name -> hardline.plugin.v1.AIComponent
-	9,  // 9: hardline.plugin.v1.InvokeToolResponse.diagnostics:type_name -> hardline.plugin.v1.Diagnostic
-	0,  // 10: hardline.plugin.v1.Diagnostic.severity:type_name -> hardline.plugin.v1.DiagnosticSeverity
-	16, // 11: hardline.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> hardline.plugin.v1.ArtifactType
-	17, // 12: hardline.plugin.v1.StreamArtifactsResponse.artifact:type_name -> hardline.plugin.v1.Artifact
-	1,  // 13: hardline.plugin.v1.PluginService.GetManifest:input_type -> hardline.plugin.v1.GetManifestRequest
-	7,  // 14: hardline.plugin.v1.PluginService.InvokeTool:input_type -> hardline.plugin.v1.InvokeToolRequest
-	10, // 15: hardline.plugin.v1.PluginService.StreamArtifacts:input_type -> hardline.plugin.v1.StreamArtifactsRequest
-	2,  // 16: hardline.plugin.v1.PluginService.GetManifest:output_type -> hardline.plugin.v1.GetManifestResponse
-	8,  // 17: hardline.plugin.v1.PluginService.InvokeTool:output_type -> hardline.plugin.v1.InvokeToolResponse
-	11, // 18: hardline.plugin.v1.PluginService.StreamArtifacts:output_type -> hardline.plugin.v1.StreamArtifactsResponse
+var file_nox_plugin_v1_plugin_proto_depIdxs = []int32{
+	3,  // 0: nox.plugin.v1.GetManifestResponse.capabilities:type_name -> nox.plugin.v1.Capability
+	6,  // 1: nox.plugin.v1.GetManifestResponse.safety:type_name -> nox.plugin.v1.SafetyRequirements
+	4,  // 2: nox.plugin.v1.Capability.tools:type_name -> nox.plugin.v1.ToolDef
+	5,  // 3: nox.plugin.v1.Capability.resources:type_name -> nox.plugin.v1.ResourceDef
+	12, // 4: nox.plugin.v1.ToolDef.input_schema:type_name -> google.protobuf.Struct
+	12, // 5: nox.plugin.v1.InvokeToolRequest.input:type_name -> google.protobuf.Struct
+	13, // 6: nox.plugin.v1.InvokeToolResponse.findings:type_name -> nox.plugin.v1.Finding
+	14, // 7: nox.plugin.v1.InvokeToolResponse.packages:type_name -> nox.plugin.v1.Package
+	15, // 8: nox.plugin.v1.InvokeToolResponse.ai_components:type_name -> nox.plugin.v1.AIComponent
+	9,  // 9: nox.plugin.v1.InvokeToolResponse.diagnostics:type_name -> nox.plugin.v1.Diagnostic
+	0,  // 10: nox.plugin.v1.Diagnostic.severity:type_name -> nox.plugin.v1.DiagnosticSeverity
+	16, // 11: nox.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> nox.plugin.v1.ArtifactType
+	17, // 12: nox.plugin.v1.StreamArtifactsResponse.artifact:type_name -> nox.plugin.v1.Artifact
+	1,  // 13: nox.plugin.v1.PluginService.GetManifest:input_type -> nox.plugin.v1.GetManifestRequest
+	7,  // 14: nox.plugin.v1.PluginService.InvokeTool:input_type -> nox.plugin.v1.InvokeToolRequest
+	10, // 15: nox.plugin.v1.PluginService.StreamArtifacts:input_type -> nox.plugin.v1.StreamArtifactsRequest
+	2,  // 16: nox.plugin.v1.PluginService.GetManifest:output_type -> nox.plugin.v1.GetManifestResponse
+	8,  // 17: nox.plugin.v1.PluginService.InvokeTool:output_type -> nox.plugin.v1.InvokeToolResponse
+	11, // 18: nox.plugin.v1.PluginService.StreamArtifacts:output_type -> nox.plugin.v1.StreamArtifactsResponse
 	16, // [16:19] is the sub-list for method output_type
 	13, // [13:16] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
@@ -918,28 +918,28 @@ var file_hardline_plugin_v1_plugin_proto_depIdxs = []int32{
 	0,  // [0:13] is the sub-list for field type_name
 }
 
-func init() { file_hardline_plugin_v1_plugin_proto_init() }
-func file_hardline_plugin_v1_plugin_proto_init() {
-	if File_hardline_plugin_v1_plugin_proto != nil {
+func init() { file_nox_plugin_v1_plugin_proto_init() }
+func file_nox_plugin_v1_plugin_proto_init() {
+	if File_nox_plugin_v1_plugin_proto != nil {
 		return
 	}
-	file_hardline_plugin_v1_types_proto_init()
+	file_nox_plugin_v1_types_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hardline_plugin_v1_plugin_proto_rawDesc), len(file_hardline_plugin_v1_plugin_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nox_plugin_v1_plugin_proto_rawDesc), len(file_nox_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_hardline_plugin_v1_plugin_proto_goTypes,
-		DependencyIndexes: file_hardline_plugin_v1_plugin_proto_depIdxs,
-		EnumInfos:         file_hardline_plugin_v1_plugin_proto_enumTypes,
-		MessageInfos:      file_hardline_plugin_v1_plugin_proto_msgTypes,
+		GoTypes:           file_nox_plugin_v1_plugin_proto_goTypes,
+		DependencyIndexes: file_nox_plugin_v1_plugin_proto_depIdxs,
+		EnumInfos:         file_nox_plugin_v1_plugin_proto_enumTypes,
+		MessageInfos:      file_nox_plugin_v1_plugin_proto_msgTypes,
 	}.Build()
-	File_hardline_plugin_v1_plugin_proto = out.File
-	file_hardline_plugin_v1_plugin_proto_goTypes = nil
-	file_hardline_plugin_v1_plugin_proto_depIdxs = nil
+	File_nox_plugin_v1_plugin_proto = out.File
+	file_nox_plugin_v1_plugin_proto_goTypes = nil
+	file_nox_plugin_v1_plugin_proto_depIdxs = nil
 }

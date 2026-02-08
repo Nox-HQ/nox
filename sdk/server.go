@@ -9,14 +9,14 @@ import (
 	"os/signal"
 	"time"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // PluginServer wraps a gRPC server implementing the PluginService with
-// the HARDLINE_PLUGIN_ADDR stdout handshake protocol and signal handling.
+// the NOX_PLUGIN_ADDR stdout handshake protocol and signal handling.
 type PluginServer struct {
 	pluginv1.UnimplementedPluginServiceServer
 	manifest *pluginv1.GetManifestResponse
@@ -61,7 +61,7 @@ type serveConfig struct {
 	addrWriter io.Writer
 }
 
-// WithAddrWriter redirects the HARDLINE_PLUGIN_ADDR output to w instead of os.Stdout.
+// WithAddrWriter redirects the NOX_PLUGIN_ADDR output to w instead of os.Stdout.
 func WithAddrWriter(w io.Writer) ServeOption {
 	return func(cfg *serveConfig) {
 		cfg.addrWriter = w
@@ -86,7 +86,7 @@ func (s *PluginServer) Serve(ctx context.Context, opts ...ServeOption) error {
 
 	// Print the address for the host to connect to.
 	addr := lis.Addr().String()
-	fmt.Fprintf(cfg.addrWriter, "HARDLINE_PLUGIN_ADDR=%s\n", addr)
+	fmt.Fprintf(cfg.addrWriter, "NOX_PLUGIN_ADDR=%s\n", addr)
 
 	// Serve in a goroutine.
 	serveErr := make(chan error, 1)

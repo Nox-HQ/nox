@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
 func TestConformance_ValidPlugin(t *testing.T) {

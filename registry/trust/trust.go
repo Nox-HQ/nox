@@ -1,4 +1,4 @@
-// Package trust provides plugin trust and verification primitives for Hardline.
+// Package trust provides plugin trust and verification primitives for Nox.
 // It validates artifact digests, Ed25519 signatures, and enforces trust policies.
 // This package depends only on the Go standard library.
 package trust

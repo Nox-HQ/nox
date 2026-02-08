@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/discovery"
+	"github.com/nox-hq/nox/core/discovery"
 )
 
 func TestParseGoSum(t *testing.T) {

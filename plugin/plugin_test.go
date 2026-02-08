@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -86,7 +86,7 @@ func validManifest() *pluginv1.GetManifestResponse {
 				},
 				Resources: []*pluginv1.ResourceDef{
 					{
-						UriTemplate: "hardline://plugins/test-scanner/results",
+						UriTemplate: "nox://plugins/test-scanner/results",
 						Name:        "results",
 						Description: "Scan results",
 						MimeType:    "application/json",
@@ -260,7 +260,7 @@ func TestParseManifest(t *testing.T) {
 	if info.Capabilities[0].Tools[0].Name != "scan" {
 		t.Errorf("first tool name = %q, want %q", info.Capabilities[0].Tools[0].Name, "scan")
 	}
-	if info.Capabilities[0].Resources[0].URITemplate != "hardline://plugins/test-scanner/results" {
+	if info.Capabilities[0].Resources[0].URITemplate != "nox://plugins/test-scanner/results" {
 		t.Errorf("resource URI template = %q", info.Capabilities[0].Resources[0].URITemplate)
 	}
 }

@@ -1,6 +1,6 @@
 .PHONY: build test lint run clean proto-lint proto-generate proto-breaking
 
-BINARY := hardline
+BINARY := nox
 CLI_PKG := ./cli
 
 build:

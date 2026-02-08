@@ -1,4 +1,4 @@
-# Hardline Roadmap
+# Nox Roadmap
 
 ## Phase 0 — Foundation (v0.1)
 

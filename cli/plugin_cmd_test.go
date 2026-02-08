@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 func testRegistryIndex() registry.Index {
@@ -17,9 +17,9 @@ func testRegistryIndex() registry.Index {
 		GeneratedAt:   time.Date(2026, 2, 8, 0, 0, 0, 0, time.UTC),
 		Plugins: []registry.PluginEntry{
 			{
-				Name:        "hardline/dast",
+				Name:        "nox/dast",
 				Description: "Web DAST scanner",
-				Homepage:    "https://github.com/hardline/dast",
+				Homepage:    "https://github.com/nox-hq/dast",
 				Versions: []registry.VersionEntry{
 					{
 						Version:      "1.0.0",
@@ -39,7 +39,7 @@ func testRegistryIndex() registry.Index {
 				},
 			},
 			{
-				Name:        "hardline/sbom",
+				Name:        "nox/sbom",
 				Description: "SBOM generator plugin",
 				Versions: []registry.VersionEntry{
 					{
@@ -66,7 +66,7 @@ func serveTestIndex(t *testing.T) *httptest.Server {
 func setupPluginTestState(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	st := &State{
 		Sources: []registry.Source{
@@ -112,7 +112,7 @@ func TestRunPluginSearch_MissingQuery(t *testing.T) {
 
 func TestRunPluginSearch_NoRegistries(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := runPlugin([]string{"search", "anything"})
 	if code != 2 {
@@ -126,7 +126,7 @@ func TestRunPluginInfo(t *testing.T) {
 
 	setupPluginTestState(t, srv)
 
-	code := runPlugin([]string{"info", "hardline/dast"})
+	code := runPlugin([]string{"info", "nox/dast"})
 	if code != 0 {
 		t.Fatalf("plugin info: expected exit 0, got %d", code)
 	}
@@ -138,7 +138,7 @@ func TestRunPluginInfo_NotFound(t *testing.T) {
 
 	setupPluginTestState(t, srv)
 
-	code := runPlugin([]string{"info", "hardline/nonexistent"})
+	code := runPlugin([]string{"info", "nox/nonexistent"})
 	if code != 2 {
 		t.Fatalf("plugin info not found: expected exit 2, got %d", code)
 	}
@@ -160,13 +160,13 @@ func TestRunPluginInfo_ShowsInstalled(t *testing.T) {
 	// Pre-install a plugin in state.
 	st, _ := LoadState(filepath.Join(dir, "state.json"))
 	st.AddPlugin(InstalledPlugin{
-		Name:       "hardline/dast",
+		Name:       "nox/dast",
 		Version:    "1.0.0",
 		TrustLevel: "verified",
 	})
 	_ = SaveState(filepath.Join(dir, "state.json"), st)
 
-	code := runPlugin([]string{"info", "hardline/dast"})
+	code := runPlugin([]string{"info", "nox/dast"})
 	if code != 0 {
 		t.Fatalf("plugin info installed: expected exit 0, got %d", code)
 	}
@@ -174,7 +174,7 @@ func TestRunPluginInfo_ShowsInstalled(t *testing.T) {
 
 func TestRunPluginList_Empty(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := runPlugin([]string{"list"})
 	if code != 0 {
@@ -184,13 +184,13 @@ func TestRunPluginList_Empty(t *testing.T) {
 
 func TestRunPluginList_WithPlugins(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	now := time.Now()
 	st := &State{
 		Plugins: []InstalledPlugin{
-			{Name: "hardline/dast", Version: "1.2.0", TrustLevel: "verified", InstalledAt: now},
-			{Name: "hardline/sbom", Version: "0.5.0", TrustLevel: "community", InstalledAt: now},
+			{Name: "nox/dast", Version: "1.2.0", TrustLevel: "verified", InstalledAt: now},
+			{Name: "nox/sbom", Version: "0.5.0", TrustLevel: "community", InstalledAt: now},
 		},
 	}
 	_ = SaveState(filepath.Join(dir, "state.json"), st)
@@ -203,17 +203,17 @@ func TestRunPluginList_WithPlugins(t *testing.T) {
 
 func TestRunPluginRemove(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	st := &State{
 		Plugins: []InstalledPlugin{
-			{Name: "hardline/dast", Version: "1.2.0", Digest: "sha256:bbb"},
-			{Name: "hardline/sbom", Version: "0.5.0", Digest: "sha256:ddd"},
+			{Name: "nox/dast", Version: "1.2.0", Digest: "sha256:bbb"},
+			{Name: "nox/sbom", Version: "0.5.0", Digest: "sha256:ddd"},
 		},
 	}
 	_ = SaveState(filepath.Join(dir, "state.json"), st)
 
-	code := runPlugin([]string{"remove", "hardline/dast"})
+	code := runPlugin([]string{"remove", "nox/dast"})
 	if code != 0 {
 		t.Fatalf("plugin remove: expected exit 0, got %d", code)
 	}
@@ -222,14 +222,14 @@ func TestRunPluginRemove(t *testing.T) {
 	if len(updated.Plugins) != 1 {
 		t.Fatalf("expected 1 plugin after remove, got %d", len(updated.Plugins))
 	}
-	if updated.Plugins[0].Name != "hardline/sbom" {
+	if updated.Plugins[0].Name != "nox/sbom" {
 		t.Errorf("remaining plugin = %q", updated.Plugins[0].Name)
 	}
 }
 
 func TestRunPluginRemove_NotInstalled(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := runPlugin([]string{"remove", "nonexistent"})
 	if code != 2 {
@@ -272,7 +272,7 @@ func TestRunPluginCall_MissingArgs(t *testing.T) {
 
 func TestRunPluginCall_NotInstalled(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := runPlugin([]string{"call", "nonexistent", "tool"})
 	if code != 2 {
@@ -289,7 +289,7 @@ func TestRunPluginInstall_MissingArg(t *testing.T) {
 
 func TestRunPluginInstall_NoRegistries(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := runPlugin([]string{"install", "some-plugin"})
 	if code != 2 {
@@ -299,7 +299,7 @@ func TestRunPluginInstall_NoRegistries(t *testing.T) {
 
 func TestRunPluginUpdate_NoPlugins(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	// No sources means early "no registries" exit.
 	code := runPlugin([]string{"update"})
@@ -373,7 +373,7 @@ func TestRunPluginInstall_ResolveError(t *testing.T) {
 
 func TestRunMainRegistryCommand(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := run([]string{"registry", "list"})
 	if code != 0 {
@@ -383,7 +383,7 @@ func TestRunMainRegistryCommand(t *testing.T) {
 
 func TestRunMainPluginCommand(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HARDLINE_HOME", dir)
+	t.Setenv("NOX_HOME", dir)
 
 	code := run([]string{"plugin", "list"})
 	if code != 0 {

@@ -1,11 +1,11 @@
 // Package rules implements the YAML-based declarative rule engine for the
-// Hardline security scanner. Rules are loaded from YAML files, matched against
+// Nox security scanner. Rules are loaded from YAML files, matched against
 // source content using pluggable matchers, and produce canonical Finding values
 // from the core/findings package.
 package rules
 
 import (
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // ValidMatcherTypes enumerates the matcher type strings that a Rule may

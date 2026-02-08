@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 func TestSelectArtifactFor(t *testing.T) {

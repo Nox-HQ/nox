@@ -4,7 +4,7 @@ import (
 	"errors"
 	"runtime"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 // ErrNoPlatformMatch indicates no artifact matches the current platform.

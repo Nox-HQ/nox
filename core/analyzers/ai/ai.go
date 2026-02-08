@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/felixgeelhaar/hardline/core/discovery"
-	"github.com/felixgeelhaar/hardline/core/findings"
-	"github.com/felixgeelhaar/hardline/core/rules"
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // Component represents a single AI component discovered in the workspace.

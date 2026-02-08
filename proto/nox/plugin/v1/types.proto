@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package hardline.plugin.v1;
+package nox.plugin.v1;
 
-option go_package = "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1";
+option go_package = "github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1";
 
 // Severity represents the impact level of a security finding.
 enum Severity {

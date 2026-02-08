@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,7 +16,7 @@ import (
 const conformanceBufSize = 1024 * 1024
 
 // RunConformance validates that a PluginServiceServer implementation conforms
-// to the Hardline plugin contract. It runs as a set of subtests under t.
+// to the Nox plugin contract. It runs as a set of subtests under t.
 func RunConformance(t *testing.T, server pluginv1.PluginServiceServer) {
 	t.Helper()
 

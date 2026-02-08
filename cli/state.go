@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 // InstalledPlugin records metadata for a locally installed plugin.
@@ -109,16 +109,16 @@ func SaveState(path string, s *State) error {
 	return nil
 }
 
-// DefaultStatePath returns the default state file path, respecting HARDLINE_HOME.
+// DefaultStatePath returns the default state file path, respecting NOX_HOME.
 func DefaultStatePath() string {
-	return filepath.Join(hardlineHome(), "state.json")
+	return filepath.Join(noxHome(), "state.json")
 }
 
-// hardlineHome returns the hardline home directory, respecting HARDLINE_HOME.
-func hardlineHome() string {
-	if h := os.Getenv("HARDLINE_HOME"); h != "" {
+// noxHome returns the nox home directory, respecting NOX_HOME.
+func noxHome() string {
+	if h := os.Getenv("NOX_HOME"); h != "" {
 		return h
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hardline")
+	return filepath.Join(home, ".nox")
 }

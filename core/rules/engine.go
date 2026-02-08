@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/felixgeelhaar/hardline/core/findings"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // Engine ties a RuleSet and a MatcherRegistry together to scan file content

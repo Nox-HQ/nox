@@ -1,5 +1,5 @@
 // Package findings defines the canonical security findings model used across
-// all Hardline analyzers and reporters. Every scanner produces Finding values
+// all Nox analyzers and reporters. Every scanner produces Finding values
 // which are collected into a FindingSet for deduplication, sorting, and
 // downstream consumption by report formatters (SARIF, SBOM, etc.).
 package findings
@@ -44,7 +44,7 @@ type Location struct {
 }
 
 // Finding is a single security observation produced by an analyzer. It is the
-// canonical unit of output for the entire Hardline pipeline.
+// canonical unit of output for the entire Nox pipeline.
 type Finding struct {
 	ID          string
 	RuleID      string

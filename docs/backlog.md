@@ -55,7 +55,7 @@ Emit canonical findings.json with the full findings model, usable as machine-rea
 
 ## CLI Interface
 
-Command-line interface with 'hardline scan &lt;path&gt;' as the primary command. Supports output format selection (sarif, cdx, spdx, json, all), exit codes reflecting finding severity, quiet/verbose modes, and config file support (.hardline.yaml).
+Command-line interface with 'nox scan &lt;path&gt;' as the primary command. Supports output format selection (sarif, cdx, spdx, json, all), exit codes reflecting finding severity, quiet/verbose modes, and config file support (.nox.yaml).
 
 ---
 
@@ -67,7 +67,7 @@ Basic security rules for Terraform (public access, encryption), Dockerfiles (no 
 
 ## AI Security Rules
 
-First-class AI security scanning: detect prompt/RAG boundary violations, unsafe MCP/agent tool exposure, insecure prompt/response logging, unpinned model/prompt versions. Produces ai.inventory.json with extracted AI component inventory. This is a differentiating feature of Hardline.
+First-class AI security scanning: detect prompt/RAG boundary violations, unsafe MCP/agent tool exposure, insecure prompt/response logging, unpinned model/prompt versions. Produces ai.inventory.json with extracted AI component inventory. This is a differentiating feature of Nox.
 
 ---
 
@@ -91,13 +91,13 @@ Protobuf definitions and gRPC service contract for plugin manifests, tool invoca
 
 ## Plugin Host Runtime
 
-Core runtime that discovers plugin endpoints (local binaries, containers, remote gRPC), calls GetManifest to learn capabilities, validates safety constraints against host policy, manages plugin lifecycle (init, invoke, shutdown), and merges plugin results (findings, SBOM components, AI inventory entries) into Hardline's unified outputs. Supports parallel plugin execution with configurable concurrency limits.
+Core runtime that discovers plugin endpoints (local binaries, containers, remote gRPC), calls GetManifest to learn capabilities, validates safety constraints against host policy, manages plugin lifecycle (init, invoke, shutdown), and merges plugin results (findings, SBOM components, AI inventory entries) into Nox's unified outputs. Supports parallel plugin execution with configurable concurrency limits.
 
 ---
 
 ## Plugin Safety Engine
 
-Host-enforced safety model that validates and constrains plugin behavior. Enforces scope allowlists (permitted network hosts/CIDRs, file path globs, environment variables), rate limits (requests per minute, bandwidth), concurrency caps, read-only defaults, artifact size limits, and secret redaction from plugin outputs. Destructive actions require explicit opt-in via hardline.yaml. Safety violations are logged and cause plugin termination.
+Host-enforced safety model that validates and constrains plugin behavior. Enforces scope allowlists (permitted network hosts/CIDRs, file path globs, environment variables), rate limits (requests per minute, bandwidth), concurrency caps, read-only defaults, artifact size limits, and secret redaction from plugin outputs. Destructive actions require explicit opt-in via nox.yaml. Safety violations are logged and cause plugin termination.
 
 ---
 
@@ -109,13 +109,13 @@ Minimal SDK for plugin authors providing: versioned protobuf definitions, gRPC s
 
 ## MCP Plugin Bridge
 
-Expose plugin capabilities through the MCP server interface. Adds plugin.list tool (enumerate installed plugins and capabilities), plugin.call_tool tool (invoke a specific plugin tool with arguments), and plugin.read_resource tool (read plugin-provided resources). Supports convenience aliases that map friendly names to plugin tools (e.g., hardline.dast.scan maps to a DAST plugin's scan tool). Plugin tools inherit workspace allowlisting and output size limits from the MCP server.
+Expose plugin capabilities through the MCP server interface. Adds plugin.list tool (enumerate installed plugins and capabilities), plugin.call_tool tool (invoke a specific plugin tool with arguments), and plugin.read_resource tool (read plugin-provided resources). Supports convenience aliases that map friendly names to plugin tools (e.g., nox.dast.scan maps to a DAST plugin's scan tool). Plugin tools inherit workspace allowlisting and output size limits from the MCP server.
 
 ---
 
 ## Plugin Registry & Distribution
 
-Registry client for discovering and installing plugins. Supports static index fetching from registry URLs, OCI artifact download with local caching and digest verification, semantic version resolution with compatibility constraints, and multiple registry sources (official Hardline registry, community registries, enterprise private registries). Registry metadata includes plugin manifests, compatibility matrices, and trust information. Implements offline-friendly caching with TTL-based refresh.
+Registry client for discovering and installing plugins. Supports static index fetching from registry URLs, OCI artifact download with local caching and digest verification, semantic version resolution with compatibility constraints, and multiple registry sources (official Nox registry, community registries, enterprise private registries). Registry metadata includes plugin manifests, compatibility matrices, and trust information. Implements offline-friendly caching with TTL-based refresh.
 
 ---
 
@@ -127,6 +127,6 @@ Signature validation and trust management for plugins. Verifies artifact signatu
 
 ## CLI Plugin Commands
 
-CLI commands for managing registries and plugins. Registry commands: 'hardline registry add <url>' (add registry source), 'hardline registry list' (show configured registries), 'hardline registry remove <name>' (remove registry). Plugin commands: 'hardline plugin search <query>' (search registries), 'hardline plugin info <name>' (show plugin details and trust status), 'hardline plugin install <name>[@version]' (install with verification), 'hardline plugin update [name]' (update one or all plugins), 'hardline plugin list' (show installed plugins), 'hardline plugin remove <name>' (uninstall), 'hardline plugin call <name> <tool> [args]' (invoke plugin tool directly from CLI).
+CLI commands for managing registries and plugins. Registry commands: 'nox registry add <url>' (add registry source), 'nox registry list' (show configured registries), 'nox registry remove <name>' (remove registry). Plugin commands: 'nox plugin search <query>' (search registries), 'nox plugin info <name>' (show plugin details and trust status), 'nox plugin install <name>[@version]' (install with verification), 'nox plugin update [name]' (update one or all plugins), 'nox plugin list' (show installed plugins), 'nox plugin remove <name>' (uninstall), 'nox plugin call <name> <tool> [args]' (invoke plugin tool directly from CLI).
 
 ---

@@ -7,13 +7,13 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/felixgeelhaar/hardline/registry"
+	"github.com/nox-hq/nox/registry"
 )
 
 // runRegistry dispatches registry subcommands.
 func runRegistry(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline registry <add|list|remove>")
+		fmt.Fprintln(os.Stderr, "Usage: nox registry <add|list|remove>")
 		return 2
 	}
 
@@ -26,7 +26,7 @@ func runRegistry(args []string) int {
 		return runRegistryRemove(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown registry command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: hardline registry <add|list|remove>")
+		fmt.Fprintln(os.Stderr, "Usage: nox registry <add|list|remove>")
 		return 2
 	}
 }
@@ -42,7 +42,7 @@ func runRegistryAdd(args []string) int {
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline registry add <url> [--name <name>]")
+		fmt.Fprintln(os.Stderr, "Usage: nox registry add <url> [--name <name>]")
 		return 2
 	}
 
@@ -109,7 +109,7 @@ func runRegistryList(args []string) int {
 // runRegistryRemove removes a registry source by name.
 func runRegistryRemove(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline registry remove <name>")
+		fmt.Fprintln(os.Stderr, "Usage: nox registry remove <name>")
 		return 2
 	}
 

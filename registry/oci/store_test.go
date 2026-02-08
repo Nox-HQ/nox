@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/registry"
-	"github.com/felixgeelhaar/hardline/registry/trust"
+	"github.com/nox-hq/nox/registry"
+	"github.com/nox-hq/nox/registry/trust"
 )
 
 // buildTarGz creates an in-memory tar.gz from the given file entries.

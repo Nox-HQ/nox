@@ -11,15 +11,15 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/felixgeelhaar/hardline/plugin"
-	"github.com/felixgeelhaar/hardline/registry"
-	"github.com/felixgeelhaar/hardline/registry/oci"
+	"github.com/nox-hq/nox/plugin"
+	"github.com/nox-hq/nox/registry"
+	"github.com/nox-hq/nox/registry/oci"
 )
 
 // runPlugin dispatches plugin subcommands.
 func runPlugin(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin <search|info|install|update|list|remove|call>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call>")
 		return 2
 	}
 
@@ -40,14 +40,14 @@ func runPlugin(args []string) int {
 		return runPluginCall(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin <search|info|install|update|list|remove|call>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call>")
 		return 2
 	}
 }
 
 // newRegistryClient creates a registry client configured from state sources.
 func newRegistryClient(st *State) *registry.Client {
-	cacheDir := filepath.Join(hardlineHome(), "cache", "registry")
+	cacheDir := filepath.Join(noxHome(), "cache", "registry")
 	c := registry.NewClient(registry.WithCacheDir(cacheDir))
 	for _, s := range st.Sources {
 		_ = c.AddSource(s)
@@ -55,16 +55,16 @@ func newRegistryClient(st *State) *registry.Client {
 	return c
 }
 
-// newOCIStore creates an OCI artifact store using the hardline home cache.
+// newOCIStore creates an OCI artifact store using the nox home cache.
 func newOCIStore() *oci.Store {
-	cacheDir := filepath.Join(hardlineHome(), "cache", "artifacts")
+	cacheDir := filepath.Join(noxHome(), "cache", "artifacts")
 	return oci.NewStore(oci.WithCacheDir(cacheDir))
 }
 
 // runPluginSearch searches registries for plugins matching a query.
 func runPluginSearch(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin search <query>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin search <query>")
 		return 2
 	}
 
@@ -76,7 +76,7 @@ func runPluginSearch(args []string) int {
 	}
 
 	if len(st.Sources) == 0 {
-		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: hardline registry add <url>")
+		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: nox registry add <url>")
 		return 2
 	}
 
@@ -110,7 +110,7 @@ func runPluginSearch(args []string) int {
 // runPluginInfo shows detailed information about a plugin.
 func runPluginInfo(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin info <name>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin info <name>")
 		return 2
 	}
 
@@ -122,7 +122,7 @@ func runPluginInfo(args []string) int {
 	}
 
 	if len(st.Sources) == 0 {
-		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: hardline registry add <url>")
+		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: nox registry add <url>")
 		return 2
 	}
 
@@ -177,7 +177,7 @@ func runPluginInfo(args []string) int {
 // runPluginInstall installs a plugin from a registry.
 func runPluginInstall(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin install <name[@version]>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin install <name[@version]>")
 		return 2
 	}
 
@@ -192,7 +192,7 @@ func runPluginInstall(args []string) int {
 	}
 
 	if len(st.Sources) == 0 {
-		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: hardline registry add <url>")
+		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: nox registry add <url>")
 		return 2
 	}
 
@@ -268,7 +268,7 @@ func runPluginUpdate(args []string) int {
 	}
 
 	if len(st.Sources) == 0 {
-		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: hardline registry add <url>")
+		fmt.Fprintln(os.Stderr, "No registries configured. Add one with: nox registry add <url>")
 		return 2
 	}
 
@@ -374,7 +374,7 @@ func runPluginList(args []string) int {
 // runPluginRemove removes an installed plugin.
 func runPluginRemove(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin remove <name>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin remove <name>")
 		return 2
 	}
 
@@ -420,7 +420,7 @@ func runPluginCall(args []string) int {
 
 	remaining := fs.Args()
 	if len(remaining) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: hardline plugin call <name> <tool> [--input <file.json>] [key=value ...]")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin call <name> <tool> [--input <file.json>] [key=value ...]")
 		return 2
 	}
 
@@ -462,9 +462,9 @@ func runPluginCall(args []string) int {
 		input[parts[0]] = parts[1]
 	}
 
-	// Load policy from .hardline.yaml if present.
+	// Load policy from .nox.yaml if present.
 	cwd, _ := os.Getwd()
-	cfg, err := plugin.LoadConfig(filepath.Join(cwd, ".hardline.yaml"))
+	cfg, err := plugin.LoadConfig(filepath.Join(cwd, ".nox.yaml"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
 		return 2

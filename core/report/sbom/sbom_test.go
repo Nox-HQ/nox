@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/hardline/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/deps"
 )
 
 // ---------------------------------------------------------------------------
@@ -66,8 +66,8 @@ func TestCycloneDX_ToolMetadata(t *testing.T) {
 		t.Fatalf("expected 1 tool, got %d", len(report.Metadata.Tools))
 	}
 	tool := report.Metadata.Tools[0]
-	if tool.Name != "hardline" {
-		t.Fatalf("expected tool name 'hardline', got %q", tool.Name)
+	if tool.Name != "nox" {
+		t.Fatalf("expected tool name 'nox', got %q", tool.Name)
 	}
 	if tool.Version != "0.1.0" {
 		t.Fatalf("expected tool version '0.1.0', got %q", tool.Version)
@@ -230,8 +230,8 @@ func TestSPDX_CreatorInfo(t *testing.T) {
 	if len(doc.CreationInfo.Creators) != 1 {
 		t.Fatalf("expected 1 creator, got %d", len(doc.CreationInfo.Creators))
 	}
-	if doc.CreationInfo.Creators[0] != "Tool: hardline-0.1.0" {
-		t.Fatalf("expected creator 'Tool: hardline-0.1.0', got %q", doc.CreationInfo.Creators[0])
+	if doc.CreationInfo.Creators[0] != "Tool: nox-0.1.0" {
+		t.Fatalf("expected creator 'Tool: nox-0.1.0', got %q", doc.CreationInfo.Creators[0])
 	}
 }
 
