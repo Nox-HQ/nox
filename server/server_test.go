@@ -3,12 +3,18 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	pluginv1 "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1"
+	"github.com/felixgeelhaar/hardline/plugin"
 	"github.com/mark3labs/mcp-go/mcp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 func TestIsPathAllowed_NoRestrictions(t *testing.T) {
@@ -464,4 +470,298 @@ func scanCleanDir(t *testing.T) *Server {
 		t.Fatalf("scan returned error: %s", toolResultText(result))
 	}
 	return s
+}
+
+// --- mock plugin server for bridge integration tests ---
+
+const testBufSize = 1024 * 1024
+
+type testMockPluginServer struct {
+	pluginv1.UnimplementedPluginServiceServer
+	manifest   *pluginv1.GetManifestResponse
+	invokeFunc func(context.Context, *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error)
+}
+
+func (m *testMockPluginServer) GetManifest(_ context.Context, _ *pluginv1.GetManifestRequest) (*pluginv1.GetManifestResponse, error) {
+	return m.manifest, nil
+}
+
+func (m *testMockPluginServer) InvokeTool(ctx context.Context, req *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+	if m.invokeFunc != nil {
+		return m.invokeFunc(ctx, req)
+	}
+	return &pluginv1.InvokeToolResponse{}, nil
+}
+
+func testValidManifest() *pluginv1.GetManifestResponse {
+	return &pluginv1.GetManifestResponse{
+		Name:       "test-scanner",
+		Version:    "1.0.0",
+		ApiVersion: "v1",
+		Capabilities: []*pluginv1.Capability{
+			{
+				Name:        "scanning",
+				Description: "Security scanning capability",
+				Tools: []*pluginv1.ToolDef{
+					{Name: "scan", Description: "Run security scan", ReadOnly: true},
+					{Name: "analyze", Description: "Analyze findings", ReadOnly: true},
+				},
+			},
+		},
+	}
+}
+
+func startTestMockPlugin(t *testing.T, srv pluginv1.PluginServiceServer) *grpc.ClientConn {
+	t.Helper()
+	lis := bufconn.Listen(testBufSize)
+
+	s := grpc.NewServer()
+	pluginv1.RegisterPluginServiceServer(s, srv)
+
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			// Server stopped.
+		}
+	}()
+	t.Cleanup(func() { s.Stop() })
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("connecting to bufconn: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	return conn
+}
+
+func createHostWithMockPlugin(t *testing.T) *plugin.Host {
+	t.Helper()
+	mock := &testMockPluginServer{
+		manifest: testValidManifest(),
+		invokeFunc: func(_ context.Context, req *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return &pluginv1.InvokeToolResponse{
+				Findings: []*pluginv1.Finding{
+					{
+						Id:         "f-1",
+						RuleId:     "SEC-001",
+						Severity:   pluginv1.Severity_SEVERITY_HIGH,
+						Confidence: pluginv1.Confidence_CONFIDENCE_HIGH,
+						Message:    "test finding from " + req.GetToolName(),
+					},
+				},
+			}, nil
+		},
+	}
+	conn := startTestMockPlugin(t, mock)
+	h := plugin.NewHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("registering mock plugin: %v", err)
+	}
+	return h
+}
+
+// --- plugin bridge integration tests ---
+
+func TestHandlePluginList_NoHost(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "plugin.list", map[string]any{})
+
+	result, err := s.handlePluginList(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for nil host")
+	}
+	if !strings.Contains(toolResultText(result), "no plugin host") {
+		t.Fatalf("expected 'no plugin host' message, got: %s", toolResultText(result))
+	}
+}
+
+func TestHandlePluginList_EmptyHost(t *testing.T) {
+	h := plugin.NewHost()
+	s := New("0.1.0", nil, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.list", map[string]any{})
+
+	result, err := s.handlePluginList(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if text != "[]" {
+		t.Fatalf("expected empty array, got: %s", text)
+	}
+}
+
+func TestHandlePluginList_WithPlugins(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", nil, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.list", map[string]any{})
+
+	result, err := s.handlePluginList(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "test-scanner") {
+		t.Fatalf("expected 'test-scanner' in output, got: %s", text)
+	}
+	if !strings.Contains(text, `"scan"`) {
+		t.Fatalf("expected 'scan' tool in output, got: %s", text)
+	}
+}
+
+func TestHandlePluginCallTool_NoHost(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{"tool": "scan"})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for nil host")
+	}
+	if !strings.Contains(toolResultText(result), "no plugin host") {
+		t.Fatalf("expected 'no plugin host' message, got: %s", toolResultText(result))
+	}
+}
+
+func TestHandlePluginCallTool_MissingToolArg(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", nil, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing tool argument")
+	}
+	if !strings.Contains(toolResultText(result), "missing required argument: tool") {
+		t.Fatalf("expected missing tool message, got: %s", toolResultText(result))
+	}
+}
+
+func TestHandlePluginCallTool_Success(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", nil, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
+		"tool": "test-scanner.scan",
+	})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "f-1") {
+		t.Fatalf("expected finding ID in output, got: %s", text)
+	}
+	if !strings.Contains(text, `"severity":"high"`) {
+		t.Fatalf("expected severity as string, got: %s", text)
+	}
+}
+
+func TestHandlePluginCallTool_UnknownTool(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", nil, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
+		"tool": "nonexistent",
+	})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for unknown tool")
+	}
+	if !strings.Contains(toolResultText(result), "no plugin provides tool") {
+		t.Fatalf("expected 'no plugin provides tool' message, got: %s", toolResultText(result))
+	}
+}
+
+func TestHandlePluginCallTool_WorkspaceBlocked(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", []string{"/allowed/only"}, WithPluginHost(h))
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
+		"tool":           "test-scanner.scan",
+		"workspace_root": "/not/allowed",
+	})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for blocked workspace")
+	}
+	if !strings.Contains(toolResultText(result), "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", toolResultText(result))
+	}
+}
+
+func TestHandlePluginCallTool_Alias(t *testing.T) {
+	h := createHostWithMockPlugin(t)
+	s := New("0.1.0", nil,
+		WithPluginHost(h),
+		WithAliases(map[string]string{
+			"quick-scan": "test-scanner.scan",
+		}),
+	)
+	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
+		"tool": "quick-scan",
+	})
+
+	result, err := s.handlePluginCallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "f-1") {
+		t.Fatalf("expected finding from aliased tool, got: %s", text)
+	}
+}
+
+func TestHandlePluginReadResource_Stub(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "plugin.read_resource", map[string]any{
+		"plugin": "test",
+		"uri":    "hardline://test/results",
+	})
+
+	result, err := s.handlePluginReadResource(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for stub")
+	}
+	if !strings.Contains(toolResultText(result), "not yet implemented") {
+		t.Fatalf("expected 'not yet implemented' message, got: %s", toolResultText(result))
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/felixgeelhaar/hardline/core/report"
 	"github.com/felixgeelhaar/hardline/core/report/sarif"
 	"github.com/felixgeelhaar/hardline/core/report/sbom"
+	"github.com/felixgeelhaar/hardline/plugin"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -28,10 +29,28 @@ type Server struct {
 
 	mu    sync.RWMutex
 	cache *hardline.ScanResult
+
+	host    *plugin.Host      // optional plugin host
+	aliases map[string]string // tool name aliases
+}
+
+// ServerOption is a functional option for configuring a Server.
+type ServerOption func(*Server)
+
+// WithPluginHost attaches a plugin Host to the server, enabling
+// the plugin.list, plugin.call_tool, and plugin.read_resource tools.
+func WithPluginHost(h *plugin.Host) ServerOption {
+	return func(s *Server) { s.host = h }
+}
+
+// WithAliases sets tool name aliases for the plugin bridge.
+// Keys are alias names, values are the real tool names.
+func WithAliases(aliases map[string]string) ServerOption {
+	return func(s *Server) { s.aliases = aliases }
 }
 
 // New creates a new MCP server. If allowedPaths is empty, any path is allowed.
-func New(version string, allowedPaths []string) *Server {
+func New(version string, allowedPaths []string, opts ...ServerOption) *Server {
 	// Resolve allowed paths to absolute for consistent comparison.
 	resolved := make([]string, 0, len(allowedPaths))
 	for _, p := range allowedPaths {
@@ -40,10 +59,14 @@ func New(version string, allowedPaths []string) *Server {
 			resolved = append(resolved, abs)
 		}
 	}
-	return &Server{
+	s := &Server{
 		version:      version,
 		allowedPaths: resolved,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Serve starts the MCP server on stdio and blocks until the client disconnects.
@@ -102,6 +125,56 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetSBOM,
+	)
+
+	s.registerPluginTools(srv)
+}
+
+func (s *Server) registerPluginTools(srv *mcpserver.MCPServer) {
+	if s.host == nil {
+		return
+	}
+
+	srv.AddTool(
+		mcp.NewTool("plugin.list",
+			mcp.WithDescription("List registered plugins and their capabilities"),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handlePluginList,
+	)
+
+	srv.AddTool(
+		mcp.NewTool("plugin.call_tool",
+			mcp.WithDescription("Invoke a tool provided by a registered plugin"),
+			mcp.WithString("tool",
+				mcp.Description("Qualified (plugin.tool) or unqualified tool name"),
+				mcp.Required(),
+			),
+			mcp.WithObject("input",
+				mcp.Description("Input parameters for the tool"),
+			),
+			mcp.WithString("workspace_root",
+				mcp.Description("Absolute path to the workspace root"),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handlePluginCallTool,
+	)
+
+	srv.AddTool(
+		mcp.NewTool("plugin.read_resource",
+			mcp.WithDescription("Read a resource from a plugin"),
+			mcp.WithString("plugin",
+				mcp.Description("Plugin name"),
+				mcp.Required(),
+			),
+			mcp.WithString("uri",
+				mcp.Description("Resource URI"),
+				mcp.Required(),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handlePluginReadResource,
 	)
 }
 
@@ -261,6 +334,78 @@ func (s *Server) handleGetSBOM(_ context.Context, request mcp.CallToolRequest) (
 	}
 
 	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Plugin bridge handlers.
+
+func (s *Server) handlePluginList(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.host == nil {
+		return mcp.NewToolResultError("no plugin host configured"), nil
+	}
+
+	data, err := serializePluginList(s.host.Plugins())
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("serializing plugin list: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+func (s *Server) handlePluginCallTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if s.host == nil {
+		return mcp.NewToolResultError("no plugin host configured"), nil
+	}
+
+	toolName, err := request.RequireString("tool")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: tool"), nil
+	}
+
+	toolName = s.resolveToolName(toolName)
+
+	var input map[string]any
+	if raw := request.GetArguments()["input"]; raw != nil {
+		if m, ok := raw.(map[string]any); ok {
+			input = m
+		}
+	}
+
+	workspaceRoot := request.GetString("workspace_root", "")
+	if workspaceRoot != "" {
+		if err := s.isPathAllowed(workspaceRoot); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+
+	resp, err := s.host.InvokeTool(ctx, toolName, input, workspaceRoot)
+	if err != nil {
+		if _, ok := err.(plugin.RuntimeViolation); ok {
+			return mcp.NewToolResultError(fmt.Sprintf("plugin violation: %v", err)), nil
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("plugin tool invocation failed: %v", err)), nil
+	}
+
+	data, err := serializeInvokeResult(resp)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("serializing plugin response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+func (s *Server) handlePluginReadResource(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return mcp.NewToolResultError("plugin.read_resource is not yet implemented"), nil
+}
+
+// resolveToolName resolves tool name aliases.
+func (s *Server) resolveToolName(name string) string {
+	if s.aliases == nil {
+		return name
+	}
+	if resolved, ok := s.aliases[name]; ok {
+		return resolved
+	}
+	return name
 }
 
 // Resource handlers.
