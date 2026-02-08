@@ -139,8 +139,12 @@
       ]
     },
     "task-25": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "commit e262762 — feat: integrate plugin capability discovery into assist module. PluginSource interface, HostAdapter, enrichment tools, CLI --plugin-dir/--enrich flags, 15 new tests all passing."
+      ]
     },
     "task-3": {
       "status": "done",
