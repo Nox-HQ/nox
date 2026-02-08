@@ -18,6 +18,14 @@ type ExplanationReport struct {
 	Explanations  []FindingExplanation `json:"explanations"`
 	Summary       string               `json:"summary"`
 	Usage         UsageStats           `json:"usage"`
+	PluginContext *PluginContextInfo   `json:"plugin_context,omitempty"`
+}
+
+// PluginContextInfo records which plugin capabilities and enrichment tools
+// were available during explanation generation.
+type PluginContextInfo struct {
+	Capabilities []string `json:"capabilities"`
+	Enrichments  []string `json:"enrichment_tools,omitempty"`
 }
 
 // FindingExplanation holds the LLM-generated explanation for a single finding.

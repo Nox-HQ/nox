@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	core "github.com/felixgeelhaar/hardline/core"
 )
@@ -13,8 +14,10 @@ const defaultBatchSize = 10
 // Explainer orchestrates LLM-based explanation of scan findings. It batches
 // findings, sends them to a Provider, and assembles an ExplanationReport.
 type Explainer struct {
-	provider  Provider
-	batchSize int
+	provider     Provider
+	batchSize    int
+	pluginSource PluginSource
+	enrichTools  []string
 }
 
 // Option configures an Explainer.
@@ -27,6 +30,19 @@ func WithBatchSize(n int) Option {
 			e.batchSize = n
 		}
 	}
+}
+
+// WithPluginSource provides access to plugin capabilities and read-only tools
+// for enriching LLM context during explanation.
+func WithPluginSource(ps PluginSource) Option {
+	return func(e *Explainer) { e.pluginSource = ps }
+}
+
+// WithEnrichmentTools specifies which read-only plugin tools to invoke for
+// additional context before generating explanations. Each tool name should be
+// in "pluginName.toolName" or plain "toolName" form.
+func WithEnrichmentTools(tools ...string) Option {
+	return func(e *Explainer) { e.enrichTools = tools }
 }
 
 // NewExplainer creates an Explainer with the given provider and options.
@@ -59,6 +75,35 @@ func (e *Explainer) Explain(ctx context.Context, result *core.ScanResult) (*Expl
 	}
 
 	ctxMsg := formatContext(result)
+
+	// Enrich context with plugin capabilities and tool results.
+	if e.pluginSource != nil {
+		caps := e.pluginSource.Capabilities(ctx)
+		if pluginCtx := formatPluginContext(caps); pluginCtx != "" {
+			ctxMsg += "\n" + pluginCtx
+		}
+
+		// Record plugin context in report.
+		capNames := make([]string, len(caps))
+		for i, c := range caps {
+			capNames[i] = c.PluginName + "." + c.Name
+		}
+		report.PluginContext = &PluginContextInfo{Capabilities: capNames}
+
+		// Invoke enrichment tools (best-effort).
+		for _, toolName := range e.enrichTools {
+			result, err := e.pluginSource.InvokeReadOnly(ctx, toolName, nil, "")
+			if err != nil {
+				slog.Warn("enrichment tool failed", "tool", toolName, "error", err)
+				continue
+			}
+			ctxMsg += "\n" + formatToolResult(result)
+			if report.PluginContext != nil {
+				report.PluginContext.Enrichments = append(report.PluginContext.Enrichments, toolName)
+			}
+		}
+	}
+
 	sysMsgs := []Message{
 		{Role: RoleSystem, Content: systemPrompt()},
 		{Role: RoleUser, Content: ctxMsg},

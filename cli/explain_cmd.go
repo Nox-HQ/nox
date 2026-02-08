@@ -5,9 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/felixgeelhaar/hardline/assist"
 	hardline "github.com/felixgeelhaar/hardline/core"
+	"github.com/felixgeelhaar/hardline/plugin"
 )
 
 // runExplain runs a scan and generates LLM-powered explanations of findings.
@@ -19,12 +22,16 @@ func runExplain(args []string) int {
 		baseURL   string
 		batchSize int
 		output    string
+		pluginDir string
+		enrich    string
 	)
 
 	fs.StringVar(&model, "model", "gpt-4o", "LLM model name")
 	fs.StringVar(&baseURL, "base-url", "", "custom OpenAI-compatible API base URL")
 	fs.IntVar(&batchSize, "batch-size", 10, "findings per LLM request")
 	fs.StringVar(&output, "output", "explanations.json", "output file path")
+	fs.StringVar(&pluginDir, "plugin-dir", "", "directory containing plugin binaries for enrichment")
+	fs.StringVar(&enrich, "enrich", "", "comma-separated list of read-only plugin tools to invoke for enrichment")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -71,6 +78,44 @@ func runExplain(args []string) int {
 	if batchSize > 0 {
 		explainerOpts = append(explainerOpts, assist.WithBatchSize(batchSize))
 	}
+
+	// Wire plugin source if --plugin-dir is set.
+	var pluginHost *plugin.Host
+	if pluginDir != "" {
+		pluginHost = plugin.NewHost()
+		defer pluginHost.Close()
+
+		entries, err := os.ReadDir(pluginDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: reading plugin dir %s: %v\n", pluginDir, err)
+			return 2
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			binPath := filepath.Join(pluginDir, entry.Name())
+			if err := pluginHost.RegisterBinary(context.Background(), binPath, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: plugin %s failed to register: %v\n", entry.Name(), err)
+				continue
+			}
+			fmt.Printf("[plugins] registered %s\n", entry.Name())
+		}
+
+		adapter := assist.NewHostAdapter(pluginHost, target)
+		explainerOpts = append(explainerOpts, assist.WithPluginSource(adapter))
+	}
+
+	// Wire enrichment tools if --enrich is set.
+	if enrich != "" {
+		tools := strings.Split(enrich, ",")
+		for i := range tools {
+			tools[i] = strings.TrimSpace(tools[i])
+		}
+		explainerOpts = append(explainerOpts, assist.WithEnrichmentTools(tools...))
+	}
+
 	explainer := assist.NewExplainer(provider, explainerOpts...)
 
 	// Generate explanations.
