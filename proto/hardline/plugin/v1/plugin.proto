@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package hardline.plugin.v1;
+
+import "google/protobuf/struct.proto";
+import "hardline/plugin/v1/types.proto";
+
+option go_package = "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1";
+
+// PluginService defines the interface that all Hardline plugins must implement.
+service PluginService {
+  // GetManifest returns the plugin's capabilities and safety requirements.
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
+  // InvokeTool executes a named tool and returns findings and artifacts.
+  rpc InvokeTool(InvokeToolRequest) returns (InvokeToolResponse);
+
+  // StreamArtifacts streams discovered artifacts from a scan run.
+  rpc StreamArtifacts(StreamArtifactsRequest) returns (stream StreamArtifactsResponse);
+}
+
+// GetManifestRequest is sent by the host to discover plugin capabilities.
+message GetManifestRequest {
+  string api_version = 1;
+}
+
+// GetManifestResponse wraps the plugin manifest returned by GetManifest.
+message GetManifestResponse {
+  string name = 1;
+  string version = 2;
+  string api_version = 3;
+  repeated Capability capabilities = 4;
+  SafetyRequirements safety = 5;
+}
+
+// Capability groups related tools and resources under a named feature.
+message Capability {
+  string name = 1;
+  string description = 2;
+  repeated ToolDef tools = 3;
+  repeated ResourceDef resources = 4;
+}
+
+// ToolDef describes a single invocable tool provided by a plugin.
+message ToolDef {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+  bool read_only = 4;
+}
+
+// ResourceDef describes a resource that a plugin can serve.
+message ResourceDef {
+  string uri_template = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+}
+
+// SafetyRequirements declares the scopes and constraints a plugin needs.
+message SafetyRequirements {
+  repeated string network_hosts = 1;
+  repeated string network_cidrs = 2;
+  repeated string file_paths = 3;
+  repeated string env_vars = 4;
+  string risk_class = 5;
+  bool needs_confirmation = 6;
+  int64 max_artifact_bytes = 7;
+}
+
+// InvokeToolRequest asks a plugin to execute a specific tool.
+message InvokeToolRequest {
+  string tool_name = 1;
+  google.protobuf.Struct input = 2;
+  string workspace_root = 3;
+}
+
+// InvokeToolResponse contains the results of a tool invocation.
+message InvokeToolResponse {
+  repeated Finding findings = 1;
+  repeated Package packages = 2;
+  repeated AIComponent ai_components = 3;
+  repeated Diagnostic diagnostics = 4;
+}
+
+// DiagnosticSeverity indicates the severity of a diagnostic message.
+enum DiagnosticSeverity {
+  DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0;
+  DIAGNOSTIC_SEVERITY_ERROR = 1;
+  DIAGNOSTIC_SEVERITY_WARNING = 2;
+  DIAGNOSTIC_SEVERITY_INFO = 3;
+}
+
+// Diagnostic carries a non-finding message from a plugin (errors, warnings, info).
+message Diagnostic {
+  DiagnosticSeverity severity = 1;
+  string message = 2;
+  string source = 3;
+}
+
+// StreamArtifactsRequest asks a plugin to stream artifacts from a run.
+message StreamArtifactsRequest {
+  string run_id = 1;
+  repeated ArtifactType artifact_types = 2;
+}
+
+// StreamArtifactsResponse wraps a single artifact in the streaming response.
+message StreamArtifactsResponse {
+  Artifact artifact = 1;
+}

@@ -1,4 +1,4 @@
-.PHONY: build test lint run clean
+.PHONY: build test lint run clean proto-lint proto-generate proto-breaking
 
 BINARY := hardline
 CLI_PKG := ./cli
@@ -30,3 +30,12 @@ vet:
 	go vet ./...
 
 check: lint test vet
+
+proto-lint:
+	cd proto && buf lint
+
+proto-generate:
+	cd proto && buf generate
+
+proto-breaking:
+	cd proto && buf breaking --against '.git#subdir=proto'

@@ -1,0 +1,12 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/felixgeelhaar/hardline
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE

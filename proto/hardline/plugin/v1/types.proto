@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package hardline.plugin.v1;
+
+option go_package = "github.com/felixgeelhaar/hardline/gen/hardline/plugin/v1;pluginv1";
+
+// Severity represents the impact level of a security finding.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_CRITICAL = 1;
+  SEVERITY_HIGH = 2;
+  SEVERITY_MEDIUM = 3;
+  SEVERITY_LOW = 4;
+  SEVERITY_INFO = 5;
+}
+
+// Confidence represents the certainty level of a finding.
+enum Confidence {
+  CONFIDENCE_UNSPECIFIED = 0;
+  CONFIDENCE_HIGH = 1;
+  CONFIDENCE_MEDIUM = 2;
+  CONFIDENCE_LOW = 3;
+}
+
+// ArtifactType classifies discovered files and components.
+enum ArtifactType {
+  ARTIFACT_TYPE_UNSPECIFIED = 0;
+  ARTIFACT_TYPE_SOURCE = 1;
+  ARTIFACT_TYPE_CONFIG = 2;
+  ARTIFACT_TYPE_LOCKFILE = 3;
+  ARTIFACT_TYPE_CONTAINER = 4;
+  ARTIFACT_TYPE_AI_COMPONENT = 5;
+  ARTIFACT_TYPE_UNKNOWN = 6;
+}
+
+// Location identifies a region within a source file.
+message Location {
+  string file_path = 1;
+  int32 start_line = 2;
+  int32 end_line = 3;
+  int32 start_column = 4;
+  int32 end_column = 5;
+}
+
+// Finding represents a single security finding produced by an analyzer.
+message Finding {
+  string id = 1;
+  string rule_id = 2;
+  Severity severity = 3;
+  Confidence confidence = 4;
+  Location location = 5;
+  string message = 6;
+  string fingerprint = 7;
+  map<string, string> metadata = 8;
+}
+
+// Artifact represents a discovered file or component in the scan target.
+message Artifact {
+  string path = 1;
+  string abs_path = 2;
+  ArtifactType type = 3;
+  int64 size = 4;
+  bytes content = 5;
+  string mime_type = 6;
+}
+
+// Package represents a software dependency.
+message Package {
+  string name = 1;
+  string version = 2;
+  string ecosystem = 3;
+}
+
+// AIComponent represents an AI-related component detected in the codebase.
+message AIComponent {
+  string name = 1;
+  string type = 2;
+  string path = 3;
+  map<string, string> details = 4;
+}
