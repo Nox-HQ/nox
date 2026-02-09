@@ -19,6 +19,24 @@ import (
 
 // runShow implements the "nox show" command.
 func runShow(args []string) int {
+	// Extract positional args (paths) before parsing flags so that
+	// "nox show . --severity critical" works like "nox show --severity critical .".
+	var flagArgs []string
+	var positionalArgs []string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			flagArgs = append(flagArgs, args[i])
+			// If this flag takes a value (not a boolean), consume the next arg too.
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") &&
+				!isBoolFlag(args[i]) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			positionalArgs = append(positionalArgs, args[i])
+		}
+	}
+
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 
 	var (
@@ -37,9 +55,11 @@ func runShow(args []string) int {
 	fs.BoolVar(&jsonOutput, "json", false, "output JSON instead of TUI")
 	fs.IntVar(&contextN, "context", 5, "number of source context lines")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
+	// Merge any remaining positional args from flag parse with pre-extracted ones.
+	positionalArgs = append(positionalArgs, fs.Args()...)
 
 	// Load or generate findings.
 	var store *detail.Store
@@ -56,8 +76,8 @@ func runShow(args []string) int {
 	} else {
 		// Determine target path.
 		target := "."
-		if fs.NArg() > 0 {
-			target = fs.Arg(0)
+		if len(positionalArgs) > 0 {
+			target = positionalArgs[0]
 		}
 
 		fmt.Printf("nox — scanning %s\n", target)
@@ -136,6 +156,18 @@ func toFindingSet(ff []findings.Finding) *findings.FindingSet {
 		fs.Add(f)
 	}
 	return fs
+}
+
+// isBoolFlag returns true if the given flag name is a boolean flag
+// (i.e., it does not consume a following value argument).
+func isBoolFlag(name string) bool {
+	name = strings.TrimLeft(name, "-")
+	switch name {
+	case "json":
+		return true
+	default:
+		return false
+	}
 }
 
 // isTerminal returns true if stdout is connected to a terminal.
