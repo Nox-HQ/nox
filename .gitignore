@@ -1,6 +1,9 @@
 # Binary
 /nox
 
+# GoReleaser
+dist/
+
 # Go
 *.exe
 *.exe~

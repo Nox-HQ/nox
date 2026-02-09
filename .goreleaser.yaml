@@ -1,0 +1,122 @@
+# GoReleaser configuration for Nox
+# https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: nox
+    binary: nox
+    main: ./cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: nox-archive
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: 'Refactoring'
+      regexp: "^.*refactor[(\\w)]*:+.*$"
+      order: 3
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: nox-hq
+    name: nox
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "Release {{.Tag}}"
+  header: |
+    ## Nox {{ .Tag }} ({{ .Date }})
+
+    Language-agnostic security scanner with first-class AI application security.
+
+    ### Installation
+
+    #### macOS/Linux (Homebrew)
+    ```bash
+    brew tap felixgeelhaar/tap
+    brew install nox
+    ```
+
+    #### Direct Download
+    Download the appropriate archive for your platform from the assets below.
+
+    ### What's Changed
+  footer: |
+    **Full Changelog**: https://github.com/nox-hq/nox/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+homebrew_casks:
+  - name: nox
+    repository:
+      owner: felixgeelhaar
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/nox-hq/nox"
+    description: "Language-agnostic security scanner with first-class AI application security"
+    skip_upload: auto
+
+sboms:
+  - artifacts: archive
+    ids:
+      - nox-archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'

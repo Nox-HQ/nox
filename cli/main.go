@@ -15,7 +15,11 @@ import (
 	"github.com/nox-hq/nox/server"
 )
 
-const version = "0.1.0"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -60,7 +64,7 @@ func run(args []string) int {
 	}
 
 	if versionFlag {
-		fmt.Printf("nox %s\n", version)
+		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
 	}
 
@@ -87,7 +91,7 @@ func run(args []string) int {
 	case "plugin":
 		return runPlugin(remaining[1:])
 	case "version":
-		fmt.Printf("nox %s\n", version)
+		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", command)
