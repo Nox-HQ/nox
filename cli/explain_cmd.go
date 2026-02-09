@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nox-hq/nox/assist"
 	nox "github.com/nox-hq/nox/core"
@@ -24,6 +25,7 @@ func runExplain(args []string) int {
 		output    string
 		pluginDir string
 		enrich    string
+		timeout   time.Duration
 	)
 
 	fs.StringVar(&model, "model", "gpt-4o", "LLM model name")
@@ -32,6 +34,7 @@ func runExplain(args []string) int {
 	fs.StringVar(&output, "output", "explanations.json", "output file path")
 	fs.StringVar(&pluginDir, "plugin-dir", "", "directory containing plugin binaries for enrichment")
 	fs.StringVar(&enrich, "enrich", "", "comma-separated list of read-only plugin tools to invoke for enrichment")
+	fs.DurationVar(&timeout, "timeout", 2*time.Minute, "timeout per LLM request")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -72,6 +75,7 @@ func runExplain(args []string) int {
 	if baseURL != "" {
 		providerOpts = append(providerOpts, assist.WithBaseURL(baseURL))
 	}
+	providerOpts = append(providerOpts, assist.WithTimeout(timeout))
 	provider := assist.NewOpenAIProvider(providerOpts...)
 
 	// Build explainer.
@@ -120,9 +124,11 @@ func runExplain(args []string) int {
 	explainerOpts = append(explainerOpts, assist.WithBasePath(target))
 	explainer := assist.NewExplainer(provider, explainerOpts...)
 
-	// Generate explanations.
+	// Generate explanations with timeout.
 	fmt.Println("[explain] generating explanations...")
-	report, err := explainer.Explain(context.Background(), result)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	report, err := explainer.Explain(ctx, result)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: explain failed: %v\n", err)
 		return 2

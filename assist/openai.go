@@ -3,6 +3,7 @@ package assist
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -22,6 +23,7 @@ type openaiConfig struct {
 	model   string
 	apiKey  string
 	baseURL string
+	timeout time.Duration
 }
 
 // WithModel sets the model name (default: "gpt-4o").
@@ -40,6 +42,11 @@ func WithBaseURL(url string) OpenAIOption {
 	return func(c *openaiConfig) { c.baseURL = url }
 }
 
+// WithTimeout sets the per-request timeout for API calls (default: 2 minutes).
+func WithTimeout(d time.Duration) OpenAIOption {
+	return func(c *openaiConfig) { c.timeout = d }
+}
+
 // NewOpenAIProvider creates an OpenAIProvider with the given options.
 func NewOpenAIProvider(opts ...OpenAIOption) *OpenAIProvider {
 	cfg := openaiConfig{model: "gpt-4o"}
@@ -53,6 +60,9 @@ func NewOpenAIProvider(opts ...OpenAIOption) *OpenAIProvider {
 	}
 	if cfg.baseURL != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(cfg.baseURL))
+	}
+	if cfg.timeout > 0 {
+		clientOpts = append(clientOpts, option.WithRequestTimeout(cfg.timeout))
 	}
 
 	return &OpenAIProvider{
