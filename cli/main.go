@@ -50,6 +50,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  scan <path>    Scan a directory for security issues\n")
+		fmt.Fprintf(os.Stderr, "  show [path]    Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path> Explain findings using an LLM\n")
 		fmt.Fprintf(os.Stderr, "  serve          Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry       Manage plugin registries\n")
@@ -82,6 +83,8 @@ func run(args []string) int {
 			return 2
 		}
 		return runScan(remaining[1], formatFlag, outputDir, quietFlag, verboseFlag)
+	case "show":
+		return runShow(remaining[1:])
 	case "explain":
 		return runExplain(remaining[1:])
 	case "serve":

@@ -48,18 +48,18 @@ reports/
   ai.inventory.json    # AI component inventory (if detected)
 ```
 
-### Use in CI
+### Use in CI (GitHub Action)
 
 ```yaml
 # .github/workflows/security.yml
-- uses: actions/setup-go@v5
+- uses: nox-hq/nox@v1
   with:
-    go-version: '1.25'
-- run: go install github.com/nox-hq/nox/cli@latest
-- run: nox scan . --format sarif --output results
+    path: '.'
+    format: sarif
 - uses: github/codeql-action/upload-sarif@v3
+  if: always()
   with:
-    sarif_file: results/results.sarif
+    sarif_file: nox-results/results.sarif
 ```
 
 ### Use with AI Agents (MCP)
@@ -170,6 +170,7 @@ nox <command> [flags]
 
 Commands:
   scan <path>       Scan a directory for security issues
+  show [path]       Inspect findings interactively
   explain <path>    Explain findings using an LLM
   serve             Start MCP server on stdio
   registry          Manage plugin registries
@@ -260,7 +261,7 @@ The built-in MCP server allows AI agents to invoke scans safely:
 nox serve --allowed-paths /path/to/project
 ```
 
-**Tools:** `scan`, `get_findings`, `get_sbom`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
+**Tools:** `scan`, `get_findings`, `get_sbom`, `get_finding_detail`, `list_findings`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
 
 **Resources:** `nox://findings`, `nox://sarif`, `nox://sbom/cdx`, `nox://sbom/spdx`, `nox://ai-inventory`
 

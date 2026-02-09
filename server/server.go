@@ -3,12 +3,16 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/detail"
+	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -27,8 +31,9 @@ type Server struct {
 	version      string
 	allowedPaths []string
 
-	mu    sync.RWMutex
-	cache *nox.ScanResult
+	mu           sync.RWMutex
+	cache        *nox.ScanResult
+	scanBasePath string // base path of last scan for source context
 
 	host    *plugin.Host      // optional plugin host
 	aliases map[string]string // tool name aliases
@@ -125,6 +130,43 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetSBOM,
+	)
+
+	// get_finding_detail tool — returns enriched detail for a single finding.
+	srv.AddTool(
+		mcp.NewTool("get_finding_detail",
+			mcp.WithDescription("Get detailed information about a finding including source context and remediation"),
+			mcp.WithString("finding_id",
+				mcp.Description("Finding ID (e.g., SEC-002:config.env:8)"),
+				mcp.Required(),
+			),
+			mcp.WithNumber("context_lines",
+				mcp.Description("Number of context lines around the finding"),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleGetFindingDetail,
+	)
+
+	// list_findings tool — returns filtered findings with rule metadata.
+	srv.AddTool(
+		mcp.NewTool("list_findings",
+			mcp.WithDescription("List findings with optional severity, rule, and file filters"),
+			mcp.WithString("severity",
+				mcp.Description("Comma-separated severities: critical,high,medium,low,info"),
+			),
+			mcp.WithString("rule",
+				mcp.Description("Rule ID pattern (e.g., AI-*, SEC-001)"),
+			),
+			mcp.WithString("file",
+				mcp.Description("File path pattern"),
+			),
+			mcp.WithNumber("limit",
+				mcp.Description("Max findings to return (default: 50)"),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleListFindings,
 	)
 
 	s.registerPluginTools(srv)
@@ -264,6 +306,7 @@ func (s *Server) handleScan(_ context.Context, request mcp.CallToolRequest) (*mc
 	// Cache the result for subsequent tool/resource calls.
 	s.mu.Lock()
 	s.cache = result
+	s.scanBasePath = path
 	s.mu.Unlock()
 
 	findingCount := len(result.Findings.Findings())
@@ -406,6 +449,104 @@ func (s *Server) resolveToolName(name string) string {
 		return resolved
 	}
 	return name
+}
+
+// Finding detail handlers.
+
+func (s *Server) handleGetFindingDetail(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.RLock()
+	cache := s.cache
+	basePath := s.scanBasePath
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	findingID, err := request.RequireString("finding_id")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: finding_id"), nil
+	}
+
+	contextLines := 5
+	if cl, ok := request.GetArguments()["context_lines"].(float64); ok && cl > 0 {
+		contextLines = int(cl)
+	}
+
+	store := detail.LoadFromSet(cache.Findings, basePath)
+	f, ok := store.ByID(findingID)
+	if !ok {
+		return mcp.NewToolResultError(fmt.Sprintf("finding %q not found", findingID)), nil
+	}
+
+	cat := catalog.Catalog()
+	enriched := detail.Enrich(f, basePath, store.All(), cat, contextLines)
+
+	data, err := json.MarshalIndent(enriched, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling detail: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+func (s *Server) handleListFindings(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.RLock()
+	cache := s.cache
+	basePath := s.scanBasePath
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	store := detail.LoadFromSet(cache.Findings, basePath)
+	cat := catalog.Catalog()
+
+	// Build filter.
+	var filter detail.Filter
+	if sev := request.GetString("severity", ""); sev != "" {
+		for _, s := range strings.Split(sev, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				filter.Severities = append(filter.Severities, findings.Severity(s))
+			}
+		}
+	}
+	filter.RulePattern = request.GetString("rule", "")
+	filter.FilePattern = request.GetString("file", "")
+
+	filtered := store.Filter(filter)
+
+	// Apply limit.
+	limit := 50
+	if l, ok := request.GetArguments()["limit"].(float64); ok && l > 0 {
+		limit = int(l)
+	}
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
+	}
+
+	// Enrich each finding with rule metadata.
+	type findingSummary struct {
+		findings.Finding
+		Rule *catalog.RuleMeta `json:"rule,omitempty"`
+	}
+	var results []findingSummary
+	for _, f := range filtered {
+		fs := findingSummary{Finding: f}
+		if meta, ok := cat[f.RuleID]; ok {
+			fs.Rule = &meta
+		}
+		results = append(results, fs)
+	}
+
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling findings: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
 }
 
 // Resource handlers.

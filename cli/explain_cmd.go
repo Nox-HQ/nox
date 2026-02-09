@@ -117,6 +117,7 @@ func runExplain(args []string) int {
 		explainerOpts = append(explainerOpts, assist.WithEnrichmentTools(tools...))
 	}
 
+	explainerOpts = append(explainerOpts, assist.WithBasePath(target))
 	explainer := assist.NewExplainer(provider, explainerOpts...)
 
 	// Generate explanations.

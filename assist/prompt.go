@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	core "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -25,8 +27,9 @@ Respond ONLY with a valid JSON array. Do not include markdown fences or other te
 Be concise and actionable. Focus on practical remediation advice.`
 }
 
-// formatFindings converts a batch of findings into structured text for the LLM.
-func formatFindings(ff []findings.Finding) string {
+// formatFindings converts a batch of findings into structured text for the LLM,
+// enriched with source context and rule metadata when available.
+func formatFindings(ff []findings.Finding, basePath string, allFindings []findings.Finding, cat map[string]catalog.RuleMeta) string {
 	var b strings.Builder
 	for i, f := range ff {
 		if i > 0 {
@@ -44,6 +47,27 @@ func formatFindings(ff []findings.Finding) string {
 		if len(f.Metadata) > 0 {
 			for k, v := range f.Metadata {
 				fmt.Fprintf(&b, "Metadata %s: %s\n", k, v)
+			}
+		}
+
+		// Enrich with source context and rule metadata.
+		d := detail.Enrich(f, basePath, allFindings, cat, 3)
+		if d.Source != nil && len(d.Source.Lines) > 0 {
+			b.WriteString("Source:\n")
+			for _, line := range d.Source.Lines {
+				prefix := "  "
+				if line.IsMatch {
+					prefix = "→ "
+				}
+				fmt.Fprintf(&b, "%s%4d │ %s\n", prefix, line.Number, line.Text)
+			}
+		}
+		if d.Rule != nil {
+			if d.Rule.CWE != "" {
+				fmt.Fprintf(&b, "CWE: %s\n", d.Rule.CWE)
+			}
+			if d.Rule.Remediation != "" {
+				fmt.Fprintf(&b, "Known Remediation: %s\n", d.Rule.Remediation)
 			}
 		}
 	}

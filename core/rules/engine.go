@@ -23,6 +23,9 @@ func NewEngine(rules *RuleSet) *Engine {
 	}
 }
 
+// Rules returns the engine's RuleSet.
+func (e *Engine) Rules() *RuleSet { return e.rules }
+
 // ScanFile runs every applicable rule against the given file content and
 // returns the resulting findings. A rule applies if its FilePatterns list is
 // empty (matches everything) or if at least one of its patterns matches the

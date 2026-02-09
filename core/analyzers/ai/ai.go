@@ -87,6 +87,8 @@ func NewAnalyzer() *Analyzer {
 			Pattern:     `(?i)(user_input|user_message|user_query)\s*[:=]\s*[^{]*\+\s*(prompt|system_prompt|instructions)`,
 			Tags:        []string{"ai", "prompt-injection"},
 			Metadata:    map[string]string{"cwe": "CWE-77"},
+			Remediation: "Use structured message arrays with distinct system/user roles instead of string concatenation. Apply input sanitisation before injecting user content into prompts.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/77.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
 		{
 			ID:          "AI-002",
@@ -97,8 +99,10 @@ func NewAnalyzer() *Analyzer {
 			MatcherType: "regex",
 			Pattern: `(?i)(f["']|\.format\(|%s).*?` +
 				`(user_input|user_message|user_query|user_prompt)`,
-			Tags:     []string{"ai", "prompt-injection"},
-			Metadata: map[string]string{"cwe": "CWE-77"},
+			Tags:        []string{"ai", "prompt-injection"},
+			Metadata:    map[string]string{"cwe": "CWE-77"},
+			Remediation: "Use parameterised prompt templates or structured message arrays. Never concatenate untrusted input directly into prompt strings.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/77.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
 		{
 			ID:          "AI-003",
@@ -110,6 +114,8 @@ func NewAnalyzer() *Analyzer {
 			Pattern:     `(?i)(context|retrieved_docs?|rag_results?|search_results?)\s*[:=].*\+\s*(prompt|system|messages)`,
 			Tags:        []string{"ai", "rag", "prompt-injection"},
 			Metadata:    map[string]string{"cwe": "CWE-77"},
+			Remediation: "Wrap retrieved documents in explicit boundary markers (e.g., XML tags). Sanitise retrieved content and limit its influence on system instructions.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/77.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -126,6 +132,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"mcp.json", "*.json"},
 			Tags:         []string{"ai", "mcp", "tool-exposure"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
+			Remediation: "Restrict MCP tools to read-only operations. Use an explicit allowlist in your mcp.json configuration and remove write/execute capabilities.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/284.html", "https://modelcontextprotocol.io/docs/concepts/tools"},
 		},
 		{
 			ID:           "AI-005",
@@ -138,6 +146,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"mcp.json", "*.json", "*.yaml", "*.yml"},
 			Tags:         []string{"ai", "mcp", "tool-exposure"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
+			Remediation: "Replace the wildcard '*' with an explicit list of allowed tool names. Follow the principle of least privilege for agent tool access.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/284.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -152,8 +162,10 @@ func NewAnalyzer() *Analyzer {
 			MatcherType: "regex",
 			Pattern: `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?` +
 				`(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
-			Tags:     []string{"ai", "logging", "data-exposure"},
-			Metadata: map[string]string{"cwe": "CWE-532"},
+			Tags:        []string{"ai", "logging", "data-exposure"},
+			Metadata:    map[string]string{"cwe": "CWE-532"},
+			Remediation: "Redact or truncate prompt and response content before logging. Use structured logging with PII-safe fields. Avoid logging full LLM interactions in production.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 		{
 			ID:          "AI-007",
@@ -164,8 +176,10 @@ func NewAnalyzer() *Analyzer {
 			MatcherType: "regex",
 			Pattern: `(?i)(log|logger|print|console\.log|fmt\.Print)\S*\(.*?` +
 				`(openai_api_key|anthropic_api_key|api_key|bearer_token)`,
-			Tags:     []string{"ai", "logging", "secrets"},
-			Metadata: map[string]string{"cwe": "CWE-532"},
+			Tags:        []string{"ai", "logging", "secrets"},
+			Metadata:    map[string]string{"cwe": "CWE-532"},
+			Remediation: "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -181,6 +195,8 @@ func NewAnalyzer() *Analyzer {
 			Pattern:     `(?i)(model\s*[:=]\s*["'])(gpt-4|gpt-3\.5|claude|gemini|llama|mistral|command)["']`,
 			Tags:        []string{"ai", "model", "supply-chain"},
 			Metadata:    map[string]string{"cwe": "CWE-829"},
+			Remediation: "Pin model references to specific versions (e.g., 'gpt-4-0613' instead of 'gpt-4'). This ensures reproducible behaviour and protects against unintended model changes.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
 	}
 
@@ -192,6 +208,9 @@ func NewAnalyzer() *Analyzer {
 		engine: rules.NewEngine(rs),
 	}
 }
+
+// Rules returns the analyzer's RuleSet for catalog aggregation.
+func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
 
 // ScanFile delegates to the underlying rules engine to scan the given file
 // content and returns any AI security findings.

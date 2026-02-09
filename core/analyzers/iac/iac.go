@@ -37,6 +37,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"Dockerfile", "*.dockerfile"},
 			Tags:         []string{"iac", "docker", "privilege"},
 			Metadata:     map[string]string{"cwe": "CWE-250"},
+			Remediation:  "Create a non-root user and switch to it with USER directive. Example: RUN adduser --disabled-password appuser && USER appuser.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#user"},
 		},
 		{
 			ID:           "IAC-002",
@@ -49,6 +51,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"Dockerfile", "*.dockerfile"},
 			Tags:         []string{"iac", "docker", "supply-chain"},
 			Metadata:     map[string]string{"cwe": "CWE-829"},
+			Remediation:  "Pin base images to a specific version and digest (e.g., 'node:20-alpine@sha256:abc...'). This ensures reproducible builds and protects against supply chain attacks.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
 		{
 			ID:           "IAC-003",
@@ -60,6 +64,8 @@ func NewAnalyzer() *Analyzer {
 			Pattern:      `(?im)^\s*ADD\s+`,
 			FilePatterns: []string{"Dockerfile", "*.dockerfile"},
 			Tags:         []string{"iac", "docker", "best-practice"},
+			Remediation:  "Use COPY instead of ADD for local file copying. ADD has implicit tar extraction and remote URL support that can introduce unexpected behaviour.",
+			References:   []string{"https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#add-or-copy"},
 		},
 
 		// -----------------------------------------------------------------
@@ -76,6 +82,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.tf", "*.tfvars"},
 			Tags:         []string{"iac", "terraform", "network"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
+			Remediation:  "Restrict CIDR blocks to specific IP ranges or VPC subnets instead of 0.0.0.0/0. Use security groups and NACLs for defense in depth.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
 		},
 		{
 			ID:           "IAC-005",
@@ -88,6 +96,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.tf", "*.tfvars"},
 			Tags:         []string{"iac", "terraform", "encryption"},
 			Metadata:     map[string]string{"cwe": "CWE-311"},
+			Remediation:  "Enable server-side encryption on S3 buckets. Use aws_s3_bucket_server_side_encryption_configuration with AES-256 or AWS KMS.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/311.html", "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-encryption.html"},
 		},
 		{
 			ID:           "IAC-006",
@@ -100,6 +110,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.tf"},
 			Tags:         []string{"iac", "terraform", "network"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
+			Remediation:  "Restrict SSH access to specific CIDR blocks or use AWS Systems Manager Session Manager instead of direct SSH. Never combine port 22 with 0.0.0.0/0.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -116,6 +128,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.yaml", "*.yml"},
 			Tags:         []string{"iac", "kubernetes", "privilege"},
 			Metadata:     map[string]string{"cwe": "CWE-250"},
+			Remediation:  "Set privileged: false in the pod security context. Use specific capabilities (add/drop) instead of full privilege. Apply Pod Security Standards.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://kubernetes.io/docs/concepts/security/pod-security-standards/"},
 		},
 		{
 			ID:           "IAC-008",
@@ -128,6 +142,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.yaml", "*.yml"},
 			Tags:         []string{"iac", "kubernetes", "network"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
+			Remediation:  "Remove hostNetwork: true and use Kubernetes Services and NetworkPolicies for pod communication. Host networking bypasses network isolation.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://kubernetes.io/docs/concepts/services-networking/network-policies/"},
 		},
 		{
 			ID:           "IAC-009",
@@ -140,6 +156,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.yaml", "*.yml"},
 			Tags:         []string{"iac", "kubernetes", "privilege"},
 			Metadata:     map[string]string{"cwe": "CWE-250"},
+			Remediation:  "Set allowPrivilegeEscalation: false in the container security context. This prevents child processes from gaining more privileges than the parent.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://kubernetes.io/docs/concepts/security/pod-security-standards/"},
 		},
 		{
 			ID:           "IAC-010",
@@ -152,6 +170,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"*.yaml", "*.yml"},
 			Tags:         []string{"iac", "kubernetes", "privilege"},
 			Metadata:     map[string]string{"cwe": "CWE-250"},
+			Remediation:  "Set runAsUser to a non-zero UID (e.g., 1000) and runAsNonRoot: true in the pod security context. Build container images to run as non-root.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
 	}
 
@@ -163,6 +183,9 @@ func NewAnalyzer() *Analyzer {
 		engine: rules.NewEngine(rs),
 	}
 }
+
+// Rules returns the analyzer's RuleSet for catalog aggregation.
+func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
 
 // ScanFile delegates to the underlying rules engine to scan the given file
 // content and returns any IaC-related findings.

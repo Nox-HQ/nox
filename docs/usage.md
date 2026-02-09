@@ -6,6 +6,7 @@ Complete reference for the Nox CLI, configuration, and integrations.
 
 - [Commands](#commands)
   - [scan](#scan)
+  - [show](#show)
   - [explain](#explain)
   - [serve](#serve)
   - [registry](#registry)
@@ -85,6 +86,65 @@ The scan pipeline:
 6. Deduplicates findings by fingerprint
 7. Sorts deterministically for reproducible output
 8. Writes reports in the requested formats
+
+### show
+
+Inspect findings interactively with a terminal UI or as structured JSON.
+
+```
+nox show [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--severity` | (all) | Filter by severity: `critical,high,medium,low,info` (comma-separated) |
+| `--rule` | (all) | Filter by rule pattern (e.g., `AI-*`, `SEC-001`) |
+| `--file` | (all) | Filter by file pattern (e.g., `src/`) |
+| `--input` | (none) | Path to `findings.json` to inspect (skips scan) |
+| `--json` | `false` | Output JSON instead of TUI |
+| `--context` | `5` | Number of source context lines |
+
+**Examples:**
+
+```bash
+# Interactive TUI (default)
+nox show .
+
+# Inspect an existing findings file
+nox show --input findings.json
+
+# Filter critical findings as JSON (pipe-friendly)
+nox show --severity critical --json | jq '.[] | .Rule.Remediation'
+
+# Filter by rule pattern
+nox show --rule "AI-*" --json
+
+# Show findings for specific files
+nox show --file "config.*" --context 10
+```
+
+**TUI Key Bindings:**
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` or `j`/`k` | Navigate list |
+| `enter` | Open detail view |
+| `esc` | Back to list |
+| `/` | Search (fuzzy over file path, rule ID, message) |
+| `s` | Cycle severity filter |
+| `n`/`p` | Next/previous finding (in detail view) |
+| `q` | Quit |
+
+The detail view shows:
+- Source context with the matching line highlighted
+- CWE identifier
+- Remediation guidance
+- Reference links
+- Related findings (same file or same rule)
+
+When stdout is not a TTY or `--json` is passed, the command outputs enriched JSON with source context and rule metadata for each finding.
 
 ### explain
 
@@ -405,7 +465,89 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 
 ### GitHub Actions
 
-Upload SARIF results to GitHub Code Scanning:
+#### Using the Nox Action (recommended)
+
+The `nox-hq/nox` action downloads a pre-built binary (no Go required) and runs the scan in a single step:
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  nox:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Nox security scan
+        uses: nox-hq/nox@v1
+        with:
+          path: '.'
+          format: sarif
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: nox-results/results.sarif
+```
+
+**Action inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `path` | `.` | Directory to scan |
+| `format` | `sarif` | Output format(s): `json`, `sarif`, `cdx`, `spdx`, `all` |
+| `output` | `nox-results` | Output directory for reports |
+| `version` | `latest` | Nox version to install (e.g., `0.1.0` or `latest`) |
+| `fail-on-findings` | `true` | Fail the step if findings are detected |
+
+**Action outputs:**
+
+| Output | Description |
+|--------|-------------|
+| `findings-count` | Number of findings detected |
+| `sarif-file` | Path to `results.sarif` (if generated) |
+| `findings-file` | Path to `findings.json` (if generated) |
+| `exit-code` | Raw nox exit code (`0`/`1`/`2`) |
+
+**Generate all formats and upload as artifact:**
+
+```yaml
+      - name: Run Nox security scan
+        uses: nox-hq/nox@v1
+        with:
+          format: all
+          output: reports
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/results.sarif
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nox-reports
+          path: reports/
+```
+
+**Allow findings without failing the workflow:**
+
+```yaml
+      - name: Run Nox security scan
+        uses: nox-hq/nox@v1
+        with:
+          fail-on-findings: 'false'
+```
+
+#### Manual setup
+
+If you need full control, install nox manually:
 
 ```yaml
 name: Security Scan
@@ -496,6 +638,8 @@ nox serve --allowed-paths /path/to/project
 | `scan` | Scan a directory | `path` (absolute path, must be in allowed-paths) |
 | `get_findings` | Get findings from last scan | `format` (`json` or `sarif`, default: `json`) |
 | `get_sbom` | Get SBOM from last scan | `format` (`cdx` or `spdx`, default: `cdx`) |
+| `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
+| `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
 | `plugin.read_resource` | Read a plugin resource | `plugin`, `uri` |

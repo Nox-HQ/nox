@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	core "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/catalog"
 )
 
 const defaultBatchSize = 10
@@ -18,6 +19,7 @@ type Explainer struct {
 	batchSize    int
 	pluginSource PluginSource
 	enrichTools  []string
+	basePath     string
 }
 
 // Option configures an Explainer.
@@ -43,6 +45,12 @@ func WithPluginSource(ps PluginSource) Option {
 // in "pluginName.toolName" or plain "toolName" form.
 func WithEnrichmentTools(tools ...string) Option {
 	return func(e *Explainer) { e.enrichTools = tools }
+}
+
+// WithBasePath sets the workspace root used for reading source context around
+// findings. If not set, source context is omitted from LLM prompts.
+func WithBasePath(path string) Option {
+	return func(e *Explainer) { e.basePath = path }
 }
 
 // NewExplainer creates an Explainer with the given provider and options.
@@ -74,6 +82,7 @@ func (e *Explainer) Explain(ctx context.Context, result *core.ScanResult) (*Expl
 		return report, nil
 	}
 
+	cat := catalog.Catalog()
 	ctxMsg := formatContext(result)
 
 	// Enrich context with plugin capabilities and tool results.
@@ -123,7 +132,7 @@ func (e *Explainer) Explain(ctx context.Context, result *core.ScanResult) (*Expl
 		copy(messages, sysMsgs)
 		messages[len(sysMsgs)] = Message{
 			Role:    RoleUser,
-			Content: "Explain these findings:\n\n" + formatFindings(batch),
+			Content: "Explain these findings:\n\n" + formatFindings(batch, e.basePath, ff, cat),
 		}
 
 		resp, err := e.provider.Complete(ctx, messages)

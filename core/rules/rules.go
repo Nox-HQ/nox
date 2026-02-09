@@ -31,6 +31,8 @@ type Rule struct {
 	FilePatterns []string            `yaml:"file_patterns"`
 	Tags         []string            `yaml:"tags"`
 	Metadata     map[string]string   `yaml:"metadata"`
+	Remediation  string              `yaml:"remediation"`
+	References   []string            `yaml:"references"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
