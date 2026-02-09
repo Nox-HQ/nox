@@ -28,5 +28,12 @@ Thumbs.db
 .env
 .env.local
 
+# Scan output artifacts
+findings.json
+results.sarif
+sbom.cdx.json
+sbom.spdx.json
+ai.inventory.json
+
 # Claude Code
 .claude/

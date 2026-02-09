@@ -8,91 +8,220 @@
 
 Nox produces standard artifacts (SARIF, SBOM) and explicitly models AI application security risks. It is designed to be callable by humans, CI systems, and AI agents (via MCP).
 
-## Highlights
-
 - **Deterministic** -- same inputs produce same outputs, no hidden state
-- **Auditable** -- all detection logic is versioned and inspectable
-- **Language-agnostic** -- analyzes artifacts: files, configs, dependencies, containers, AI components
-- **Agent-native** -- safely callable by AI agents via the Model Context Protocol (MCP)
-- **Safe by default** -- never uploads source code, never executes untrusted code, never auto-applies fixes
 - **Offline-first** -- zero required external services
-- **Standard output** -- SARIF 2.1.0, CycloneDX SBOM, SPDX SBOM
+- **Safe by default** -- never uploads source code, never executes untrusted code, never auto-applies fixes
+- **Agent-native** -- safely callable via the Model Context Protocol (MCP)
 
-## Quick Start
+## Quick Demo
 
-### Install
+Install and scan a project in under a minute:
+
+```bash
+# Install
+brew tap felixgeelhaar/tap && brew install nox
+# or: go install github.com/nox-hq/nox/cli@latest
+
+# Scan the current directory
+nox scan .
+
+# Output:
+# nox dev -- scanning .
+# [results] 12 findings, 47 dependencies, 3 AI components
+# [done]
+```
+
+Nox writes `findings.json` to the current directory. To generate all output formats at once:
+
+```bash
+nox scan . --format all --output reports/
+```
+
+This produces:
+
+```
+reports/
+  findings.json        # Nox canonical findings
+  results.sarif        # SARIF 2.1.0 (GitHub Code Scanning)
+  sbom.cdx.json        # CycloneDX SBOM
+  sbom.spdx.json       # SPDX SBOM
+  ai.inventory.json    # AI component inventory (if detected)
+```
+
+### Use in CI
+
+```yaml
+# .github/workflows/security.yml
+- uses: actions/setup-go@v5
+  with:
+    go-version: '1.25'
+- run: go install github.com/nox-hq/nox/cli@latest
+- run: nox scan . --format sarif --output results
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results/results.sarif
+```
+
+### Use with AI Agents (MCP)
+
+```bash
+nox serve --allowed-paths /path/to/project
+```
+
+This starts an MCP server on stdio with read-only tools (`scan`, `get_findings`, `get_sbom`) and resources (`nox://findings`, `nox://sarif`, `nox://sbom/cdx`).
+
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap felixgeelhaar/tap
+brew install nox
+```
+
+### Go
 
 ```bash
 go install github.com/nox-hq/nox/cli@latest
 ```
 
-### Build from source
+### Build from Source
 
 ```bash
 git clone https://github.com/nox-hq/nox.git
 cd nox
 make build
+./nox scan .
 ```
 
-### Run a scan
+## What Nox Detects
 
-```bash
-nox scan .
+Nox ships with **23 built-in rules** across four analyzer suites:
+
+### Secrets (5 rules)
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| SEC-001 | High | AWS Access Key ID |
+| SEC-002 | Critical | AWS Secret Access Key |
+| SEC-003 | High | GitHub token |
+| SEC-004 | Critical | Private key header |
+| SEC-005 | Medium | Generic API key assignment |
+
+### AI Security (8 rules)
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| AI-001 | High | Prompt injection boundary missing or weak |
+| AI-002 | High | User input concatenated into prompt template |
+| AI-003 | Medium | RAG context injected without sanitisation boundary |
+| AI-004 | Critical | MCP server exposes file system write without restrictions |
+| AI-005 | High | MCP config allows all tools without allowlist |
+| AI-006 | Medium | Prompt/response logged without redaction |
+| AI-007 | High | LLM API key logged or printed |
+| AI-008 | Medium | Model reference without version pin |
+
+### Infrastructure as Code (10 rules)
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| IAC-001 | High | Dockerfile runs as root |
+| IAC-002 | Medium | Dockerfile uses unpinned base image |
+| IAC-003 | Low | Dockerfile uses ADD instead of COPY |
+| IAC-004 | High | Terraform allows public access (0.0.0.0/0) |
+| IAC-005 | High | S3 bucket missing encryption |
+| IAC-006 | Critical | Security group allows unrestricted SSH |
+| IAC-007 | Critical | Kubernetes pod running as privileged |
+| IAC-008 | High | Kubernetes pod uses host network |
+| IAC-009 | Critical | Kubernetes pod allows privilege escalation |
+| IAC-010 | High | Kubernetes pod running as root |
+
+### Dependencies
+
+Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and generates a software bill of materials. Vulnerability enrichment via OSV is planned.
+
+## Configuration
+
+Create a `.nox.yaml` in your project root to customize scan behavior:
+
+```yaml
+scan:
+  exclude:
+    - "vendor/"
+    - "testdata/"
+    - "*.test.js"
+  rules:
+    disable:
+      - "AI-008"           # Unpinned model refs OK here
+    severity_override:
+      SEC-005: low          # Downgrade for this project
+
+output:
+  format: sarif             # Default output format
+  directory: reports        # Default output directory
 ```
 
-This discovers artifacts in the current directory, runs all applicable analyzers, and writes results to the output directory.
+CLI flags always take precedence over config file values.
+
+## CLI Reference
+
+```
+nox <command> [flags]
+
+Commands:
+  scan <path>       Scan a directory for security issues
+  explain <path>    Explain findings using an LLM
+  serve             Start MCP server on stdio
+  registry          Manage plugin registries
+  plugin            Manage and invoke plugins
+  version           Print version and exit
+
+Scan Flags:
+  --format string   Output formats: json, sarif, cdx, spdx, all (default: json)
+  --output string   Output directory (default: .)
+  --quiet, -q       Suppress output except errors
+  --verbose, -v     Verbose output
+
+Exit Codes:
+  0   No findings
+  1   Findings detected
+  2   Error
+```
+
+See [`docs/usage.md`](docs/usage.md) for the full CLI reference.
 
 ## Architecture
 
-Nox is organized into four top-level packages with a strict dependency direction (`core` depends on nothing, others depend on `core`):
+Four top-level packages with strict dependency direction (`core` depends on nothing):
 
 ```
 core/       Scan engine (no CLI, no network)
 cli/        Argument parsing, output handling
 server/     MCP server (stdio, sandboxed, rate-limited)
-plugin/     gRPC-based plugin system with 10 security tracks
+plugin/     gRPC-based plugin host with safety profiles
+sdk/        Plugin authoring SDK with conformance tests
+registry/   Plugin registry client (index + OCI distribution)
+assist/     Optional LLM-powered explanations (no side effects)
 ```
 
 ### Scan Pipeline
 
 ```
-Discover --> Classify --> Analyze --> Normalize --> Deduplicate --> Report
+1. Load config (.nox.yaml)
+2. Discover artifacts (respects .gitignore + excludes)
+3. Run analyzers (secrets, IaC, AI security, dependencies)
+4. Apply rule config (disable, severity override)
+5. Deduplicate by fingerprint
+6. Sort deterministically
+7. Emit reports
 ```
-
-1. **Discover** artifacts (files, configs, lockfiles, containers, AI components)
-2. **Classify** artifact types
-3. **Run analyzers** (pattern-based secrets, dependencies, IaC, AI security)
-4. **Normalize** findings into a canonical schema
-5. **Fingerprint and deduplicate**
-6. **Emit reports** in standard formats
-
-## Output Formats
-
-| File | Format |
-|---|---|
-| `results.sarif` | SARIF 2.1.0 (GitHub Code Scanning compatible) |
-| `sbom.cdx.json` | CycloneDX JSON |
-| `sbom.spdx.json` | SPDX JSON |
-| `findings.json` | Canonical findings schema |
-| `ai.inventory.json` | AI component inventory |
-
-## AI Security
-
-AI security is a first-class feature, not an afterthought. Nox detects:
-
-- **Prompt and RAG boundary violations** -- injection vectors in prompt templates and retrieval pipelines
-- **Unsafe MCP tool exposure** -- overly permissive tool definitions in agent configurations
-- **Insecure prompt logging** -- sensitive data leaking through prompt/response logs
-- **Unpinned models and prompts** -- unversioned or unverified model references
-
-AI security rules live alongside traditional security rules in the core engine and follow the same deterministic, auditable design.
 
 ## Plugin Ecosystem
 
-Nox supports a gRPC-based plugin system organized into 10 security tracks:
+Nox supports a gRPC-based plugin system organized into **10 security tracks**:
 
 | Track | Purpose |
-|---|---|
+|-------|---------|
 | core-analysis | Static analysis, secrets, code patterns |
 | dynamic-runtime | Runtime behavior and dynamic analysis |
 | ai-security | AI/ML-specific security concerns |
@@ -104,20 +233,49 @@ Nox supports a gRPC-based plugin system organized into 10 security tracks:
 | developer-experience | Developer tooling and feedback |
 | agent-assistance | AI agent integration and safety |
 
-The official plugin registry includes 37 plugins across these tracks. See `docs/plugin-authoring.md` for building your own plugins using the SDK at `sdk/`.
+### Scaffold a Plugin
+
+```bash
+nox plugin init --name my-scanner --track core-analysis
+cd nox-plugin-my-scanner
+make test
+```
+
+See [`docs/plugin-authoring.md`](docs/plugin-authoring.md) for the full SDK guide.
+
+### Install and Use Plugins
+
+```bash
+nox registry add https://registry.nox.dev/index.json
+nox plugin search sast
+nox plugin install nox/sast
+nox plugin call nox/sast scan workspace_root=/path/to/project
+```
 
 ## MCP Server
 
-Nox includes a built-in MCP (Model Context Protocol) server that allows AI agents to invoke scans safely:
-
-- Read-only tools with workspace allowlisting
-- Artifact serving via MCP resources
-- Output size limits enforced
-- Sandboxed execution with rate limiting
+The built-in MCP server allows AI agents to invoke scans safely:
 
 ```bash
-nox server --stdio
+nox serve --allowed-paths /path/to/project
 ```
+
+**Tools:** `scan`, `get_findings`, `get_sbom`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
+
+**Resources:** `nox://findings`, `nox://sarif`, `nox://sbom/cdx`, `nox://sbom/spdx`, `nox://ai-inventory`
+
+All tools are read-only. Output is truncated at 1 MB. Workspace paths are allowlisted.
+
+## LLM-Powered Explanations
+
+Generate human-readable explanations of findings using any OpenAI-compatible API:
+
+```bash
+export OPENAI_API_KEY=sk-...
+nox explain . --model gpt-4o --output explanations.json
+```
+
+This produces per-finding explanations with remediation guidance and an executive summary. The explain module is optional and never affects scan results.
 
 ## Contributing
 
