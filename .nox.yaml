@@ -1,0 +1,5 @@
+scan:
+  exclude:
+    - "plugin-repos/"
+    - "dist/"
+    - "registry-scaffold/"

@@ -315,6 +315,118 @@ func TestFindingSet_SortDeterministic_Idempotent(t *testing.T) {
 // FindingSet.Findings tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// FindingSet.RemoveByRuleIDs tests
+// ---------------------------------------------------------------------------
+
+func TestFindingSet_RemoveByRuleIDs(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "secret"})
+	fs.Add(Finding{RuleID: "AI-008", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "unpinned model"})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "c.go", StartLine: 3}, Message: "weak hash"})
+	fs.Add(Finding{RuleID: "AI-008", Location: Location{FilePath: "d.go", StartLine: 4}, Message: "unpinned model 2"})
+
+	fs.RemoveByRuleIDs([]string{"AI-008"})
+
+	findings := fs.Findings()
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 findings after removal, got %d", len(findings))
+	}
+	for _, f := range findings {
+		if f.RuleID == "AI-008" {
+			t.Errorf("found AI-008 finding that should have been removed")
+		}
+	}
+}
+
+func TestFindingSet_RemoveByRuleIDs_Multiple(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "SEC-003", Location: Location{FilePath: "c.go", StartLine: 3}, Message: "c"})
+
+	fs.RemoveByRuleIDs([]string{"SEC-001", "SEC-003"})
+
+	findings := fs.Findings()
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if findings[0].RuleID != "SEC-002" {
+		t.Errorf("expected SEC-002, got %s", findings[0].RuleID)
+	}
+}
+
+func TestFindingSet_RemoveByRuleIDs_Empty(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+
+	fs.RemoveByRuleIDs(nil)
+
+	if len(fs.Findings()) != 1 {
+		t.Fatalf("expected no change with nil ids, got %d findings", len(fs.Findings()))
+	}
+}
+
+func TestFindingSet_RemoveByRuleIDs_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+
+	fs.RemoveByRuleIDs([]string{"NONEXISTENT"})
+
+	if len(fs.Findings()) != 1 {
+		t.Fatalf("expected no change for non-matching ids, got %d findings", len(fs.Findings()))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FindingSet.OverrideSeverity tests
+// ---------------------------------------------------------------------------
+
+func TestFindingSet_OverrideSeverity(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "SEC-002", Severity: SeverityCritical, Location: Location{FilePath: "c.go", StartLine: 3}, Message: "c"})
+
+	fs.OverrideSeverity("SEC-001", SeverityMedium)
+
+	for _, f := range fs.Findings() {
+		if f.RuleID == "SEC-001" && f.Severity != SeverityMedium {
+			t.Errorf("SEC-001 severity = %q, want %q", f.Severity, SeverityMedium)
+		}
+		if f.RuleID == "SEC-002" && f.Severity != SeverityCritical {
+			t.Errorf("SEC-002 severity should be unchanged, got %q", f.Severity)
+		}
+	}
+}
+
+func TestFindingSet_OverrideSeverity_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+
+	fs.OverrideSeverity("NONEXISTENT", SeverityLow)
+
+	if fs.Findings()[0].Severity != SeverityHigh {
+		t.Errorf("severity should be unchanged, got %q", fs.Findings()[0].Severity)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FindingSet.Findings tests
+// ---------------------------------------------------------------------------
+
 func TestFindingSet_Findings_ReturnsEmptySliceOnNew(t *testing.T) {
 	t.Parallel()
 

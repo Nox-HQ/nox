@@ -109,6 +109,33 @@ func (fs *FindingSet) SortDeterministic() {
 	})
 }
 
+// RemoveByRuleIDs removes all findings whose RuleID matches any of the given IDs.
+func (fs *FindingSet) RemoveByRuleIDs(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	disabled := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		disabled[id] = struct{}{}
+	}
+	kept := make([]Finding, 0, len(fs.items))
+	for _, f := range fs.items {
+		if _, skip := disabled[f.RuleID]; !skip {
+			kept = append(kept, f)
+		}
+	}
+	fs.items = kept
+}
+
+// OverrideSeverity changes the severity for all findings with the given rule ID.
+func (fs *FindingSet) OverrideSeverity(ruleID string, severity Severity) {
+	for i := range fs.items {
+		if fs.items[i].RuleID == ruleID {
+			fs.items[i].Severity = severity
+		}
+	}
+}
+
 // Findings returns the current slice of findings. The caller must not modify
 // the returned slice.
 func (fs *FindingSet) Findings() []Finding {

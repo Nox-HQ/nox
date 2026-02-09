@@ -101,6 +101,21 @@ func run(args []string) int {
 }
 
 func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
+	// Load project config for output defaults.
+	cfg, err := nox.LoadScanConfig(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: loading .nox.yaml: %v\n", err)
+		return 2
+	}
+
+	// Apply output defaults from config (CLI flags take precedence).
+	if formatFlag == "json" && cfg.Output.Format != "" {
+		formatFlag = cfg.Output.Format
+	}
+	if outputDir == "." && cfg.Output.Directory != "" {
+		outputDir = cfg.Output.Directory
+	}
+
 	formats := parseFormats(formatFlag)
 
 	if !quiet {

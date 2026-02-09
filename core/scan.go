@@ -2,6 +2,8 @@
 package core
 
 import (
+	"fmt"
+
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
@@ -19,10 +21,18 @@ type ScanResult struct {
 
 // RunScan executes the full scan pipeline against the given target path.
 // It discovers artifacts, runs all analyzers, deduplicates findings,
-// and returns the combined results.
+// and returns the combined results. If a .nox.yaml config file is present
+// in the target directory, its scan settings are applied.
 func RunScan(target string) (*ScanResult, error) {
+	// Load project config.
+	cfg, err := LoadScanConfig(target)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
 	// Phase 1: Discover artifacts.
 	walker := discovery.NewWalker(target)
+	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
 	artifacts, err := walker.Walk()
 	if err != nil {
 		return nil, err
@@ -71,7 +81,15 @@ func RunScan(target string) (*ScanResult, error) {
 		allFindings.Add(f)
 	}
 
-	// Phase 3: Deduplicate and sort.
+	// Phase 3: Apply rule config.
+	if len(cfg.Scan.Rules.Disable) > 0 {
+		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
+	}
+	for ruleID, sev := range cfg.Scan.Rules.SeverityOverride {
+		allFindings.OverrideSeverity(ruleID, findings.Severity(sev))
+	}
+
+	// Phase 4: Deduplicate and sort.
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 
