@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -274,6 +276,226 @@ func parseGemfileLock(content []byte) ([]Package, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scanning Gemfile.lock: %w", err)
+	}
+
+	return pkgs, nil
+}
+
+// parseCargoLock extracts crate names and versions from a Cargo.lock file.
+//
+// Cargo.lock uses a TOML-like format with [[package]] blocks:
+//
+//	[[package]]
+//	name = "serde"
+//	version = "1.0.193"
+func parseCargoLock(content []byte) ([]Package, error) {
+	var pkgs []Package
+	var name, version string
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "[[package]]" {
+			// Emit previous package if complete.
+			if name != "" && version != "" {
+				pkgs = append(pkgs, Package{
+					Name:      name,
+					Version:   version,
+					Ecosystem: "cargo",
+				})
+			}
+			name = ""
+			version = ""
+			continue
+		}
+
+		if strings.HasPrefix(line, "name = ") {
+			name = unquoteTOML(strings.TrimPrefix(line, "name = "))
+		} else if strings.HasPrefix(line, "version = ") {
+			version = unquoteTOML(strings.TrimPrefix(line, "version = "))
+		}
+	}
+
+	// Emit the last package.
+	if name != "" && version != "" {
+		pkgs = append(pkgs, Package{
+			Name:      name,
+			Version:   version,
+			Ecosystem: "cargo",
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning Cargo.lock: %w", err)
+	}
+
+	return pkgs, nil
+}
+
+// unquoteTOML strips surrounding double quotes from a TOML value.
+func unquoteTOML(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// pomXML is the minimal structure needed to extract dependencies from a Maven
+// pom.xml file.
+type pomXML struct {
+	Dependencies struct {
+		Dependency []struct {
+			GroupID    string `xml:"groupId"`
+			ArtifactID string `xml:"artifactId"`
+			Version   string `xml:"version"`
+		} `xml:"dependency"`
+	} `xml:"dependencies"`
+	DependencyManagement struct {
+		Dependencies struct {
+			Dependency []struct {
+				GroupID    string `xml:"groupId"`
+				ArtifactID string `xml:"artifactId"`
+				Version   string `xml:"version"`
+			} `xml:"dependency"`
+		} `xml:"dependencies"`
+	} `xml:"dependencyManagement"`
+}
+
+// parsePomXML extracts dependencies from a Maven pom.xml file.
+// Dependencies are named as "groupId:artifactId".
+func parsePomXML(content []byte) ([]Package, error) {
+	var pom pomXML
+	if err := xml.Unmarshal(content, &pom); err != nil {
+		return nil, fmt.Errorf("parsing pom.xml: %w", err)
+	}
+
+	type key struct{ name, ver string }
+	seen := make(map[key]struct{})
+	var pkgs []Package
+
+	addDeps := func(deps []struct {
+		GroupID    string `xml:"groupId"`
+		ArtifactID string `xml:"artifactId"`
+		Version   string `xml:"version"`
+	}) {
+		for _, d := range deps {
+			if d.GroupID == "" || d.ArtifactID == "" || d.Version == "" {
+				continue
+			}
+			// Skip Maven property references like ${project.version}.
+			if strings.HasPrefix(d.Version, "${") {
+				continue
+			}
+			name := d.GroupID + ":" + d.ArtifactID
+			k := key{name, d.Version}
+			if _, exists := seen[k]; exists {
+				continue
+			}
+			seen[k] = struct{}{}
+			pkgs = append(pkgs, Package{
+				Name:      name,
+				Version:   d.Version,
+				Ecosystem: "maven",
+			})
+		}
+	}
+
+	addDeps(pom.Dependencies.Dependency)
+	addDeps(pom.DependencyManagement.Dependencies.Dependency)
+
+	return pkgs, nil
+}
+
+// reGradleDep matches Gradle dependency declarations such as:
+//
+//	implementation 'group:artifact:version'
+//	implementation "group:artifact:version"
+//	api("group:artifact:version")
+//	compile 'group:artifact:version'
+//	testImplementation("group:artifact:version")
+var reGradleDep = regexp.MustCompile(
+	`(?:implementation|api|compile|compileOnly|runtimeOnly|testImplementation|testCompileOnly|testRuntimeOnly|classpath|annotationProcessor)\s*[\("']+([^:'"]+):([^:'"]+):([^'")\s]+)`,
+)
+
+// parseBuildGradle extracts dependencies from a Gradle build file
+// (build.gradle or build.gradle.kts) using line-based regex matching.
+func parseBuildGradle(content []byte) ([]Package, error) {
+	var pkgs []Package
+	type key struct{ name, ver string }
+	seen := make(map[key]struct{})
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := reGradleDep.FindAllStringSubmatch(line, -1)
+		for _, m := range matches {
+			if len(m) < 4 {
+				continue
+			}
+			group, artifact, ver := m[1], m[2], m[3]
+			// Skip Gradle property references.
+			if strings.HasPrefix(ver, "$") {
+				continue
+			}
+			name := group + ":" + artifact
+			k := key{name, ver}
+			if _, exists := seen[k]; exists {
+				continue
+			}
+			seen[k] = struct{}{}
+			pkgs = append(pkgs, Package{
+				Name:      name,
+				Version:   ver,
+				Ecosystem: "gradle",
+			})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scanning build.gradle: %w", err)
+	}
+
+	return pkgs, nil
+}
+
+// nugetPackagesLock is the structure of a NuGet packages.lock.json file.
+// The top-level keys are target framework monikers, each containing a
+// dependencies map of package name -> info.
+type nugetPackagesLock struct {
+	Dependencies map[string]map[string]struct {
+		Resolved string `json:"resolved"`
+	} `json:"dependencies"`
+}
+
+// parseNuGetPackagesLock extracts packages from a NuGet packages.lock.json file.
+func parseNuGetPackagesLock(content []byte) ([]Package, error) {
+	var lock nugetPackagesLock
+	if err := json.Unmarshal(content, &lock); err != nil {
+		return nil, fmt.Errorf("parsing packages.lock.json: %w", err)
+	}
+
+	type key struct{ name, ver string }
+	seen := make(map[key]struct{})
+	var pkgs []Package
+
+	for _, frameworks := range lock.Dependencies {
+		for name, info := range frameworks {
+			if name == "" || info.Resolved == "" {
+				continue
+			}
+			k := key{name, info.Resolved}
+			if _, exists := seen[k]; exists {
+				continue
+			}
+			seen[k] = struct{}{}
+			pkgs = append(pkgs, Package{
+				Name:      name,
+				Version:   info.Resolved,
+				Ecosystem: "nuget",
+			})
+		}
 	}
 
 	return pkgs, nil

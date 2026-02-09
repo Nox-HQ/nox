@@ -83,14 +83,18 @@ type DefaultClassifier struct{}
 
 // lockfileNames contains exact file names that identify lockfiles.
 var lockfileNames = map[string]bool{
-	"package-lock.json": true,
-	"go.sum":            true,
-	"yarn.lock":         true,
-	"poetry.lock":       true,
-	"Gemfile.lock":      true,
-	"Cargo.lock":        true,
-	"pnpm-lock.yaml":    true,
-	"requirements.txt":  true,
+	"package-lock.json":  true,
+	"go.sum":             true,
+	"yarn.lock":          true,
+	"poetry.lock":        true,
+	"Gemfile.lock":       true,
+	"Cargo.lock":         true,
+	"pnpm-lock.yaml":     true,
+	"requirements.txt":   true,
+	"pom.xml":            true,
+	"build.gradle":       true,
+	"build.gradle.kts":   true,
+	"packages.lock.json": true,
 }
 
 // containerNames contains exact file names that identify container files.

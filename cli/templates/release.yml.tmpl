@@ -1,0 +1,13 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    uses: nox-hq/nox/.github/workflows/plugin-release.yml@main
+    with:
+      go-version: '1.25'
+    secrets:
+      NOX_SIGNING_KEY: ${{`{{ secrets.NOX_SIGNING_KEY }}`}}

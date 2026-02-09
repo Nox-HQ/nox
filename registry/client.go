@@ -16,9 +16,14 @@ import (
 const (
 	defaultCacheTTL    = 1 * time.Hour
 	defaultHTTPTimeout = 30 * time.Second
-	supportedSchema    = "1"
 	maxIndexSize       = 10 * 1024 * 1024 // 10 MB
 )
+
+// supportedSchemas lists schema versions the client can parse.
+var supportedSchemas = map[string]bool{
+	"1": true,
+	"2": true,
+}
 
 // Client fetches, caches, and queries plugin registry indexes.
 type Client struct {
@@ -110,9 +115,33 @@ func (c *Client) Refresh(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// SearchOption configures the behavior of Search.
+type SearchOption func(*searchConfig)
+
+type searchConfig struct {
+	track Track
+	tags  []string
+}
+
+// WithTrackFilter restricts search results to plugins in the given track.
+func WithTrackFilter(t Track) SearchOption {
+	return func(sc *searchConfig) { sc.track = t }
+}
+
+// WithTagFilter restricts search results to plugins that have all given tags.
+func WithTagFilter(tags ...string) SearchOption {
+	return func(sc *searchConfig) { sc.tags = tags }
+}
+
 // Search returns plugins matching a query string (case-insensitive substring
-// match on name or description) across all sources.
-func (c *Client) Search(ctx context.Context, query string) ([]PluginEntry, error) {
+// match on name, description, or tags) across all sources. Optional filters
+// restrict results by track and tags.
+func (c *Client) Search(ctx context.Context, query string, opts ...SearchOption) ([]PluginEntry, error) {
+	var sc searchConfig
+	for _, opt := range opts {
+		opt(&sc)
+	}
+
 	indexes, err := c.loadAll(ctx)
 	if err != nil {
 		return nil, err
@@ -127,14 +156,53 @@ func (c *Client) Search(ctx context.Context, query string) ([]PluginEntry, error
 			if seen[p.Name] {
 				continue
 			}
-			if strings.Contains(strings.ToLower(p.Name), query) ||
-				strings.Contains(strings.ToLower(p.Description), query) {
+			if sc.track != "" && p.Track != sc.track {
+				continue
+			}
+			if len(sc.tags) > 0 && !hasAllTags(p.Tags, sc.tags) {
+				continue
+			}
+			if matchesQuery(p, query) {
 				seen[p.Name] = true
 				results = append(results, p)
 			}
 		}
 	}
 	return results, nil
+}
+
+// matchesQuery checks if a plugin matches a text query by name, description,
+// track, or tags.
+func matchesQuery(p PluginEntry, query string) bool {
+	if strings.Contains(strings.ToLower(p.Name), query) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(p.Description), query) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(string(p.Track)), query) {
+		return true
+	}
+	for _, tag := range p.Tags {
+		if strings.Contains(strings.ToLower(tag), query) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAllTags returns true if pluginTags contains every tag in required.
+func hasAllTags(pluginTags, required []string) bool {
+	set := make(map[string]bool, len(pluginTags))
+	for _, t := range pluginTags {
+		set[strings.ToLower(t)] = true
+	}
+	for _, r := range required {
+		if !set[strings.ToLower(r)] {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveOption configures the behavior of Resolve.
@@ -279,8 +347,8 @@ func (c *Client) fetch(ctx context.Context, src Source) (*Index, error) {
 		return nil, fmt.Errorf("parsing index: %w", err)
 	}
 
-	if idx.SchemaVersion != supportedSchema {
-		return nil, fmt.Errorf("unsupported schema version %q (expected %q)", idx.SchemaVersion, supportedSchema)
+	if !supportedSchemas[idx.SchemaVersion] {
+		return nil, fmt.Errorf("unsupported schema version %q", idx.SchemaVersion)
 	}
 
 	return &idx, nil

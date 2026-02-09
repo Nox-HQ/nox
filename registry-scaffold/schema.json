@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nox Plugin Registry Index",
+  "description": "Schema for the Nox plugin registry index (v2)",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "plugins"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1", "2"]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "versions"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9-]+/[a-z0-9-]+$" },
+          "description": { "type": "string" },
+          "homepage": { "type": "string", "format": "uri" },
+          "track": {
+            "type": "string",
+            "enum": [
+              "core-analysis", "dynamic-runtime", "ai-security",
+              "threat-modeling", "supply-chain", "intelligence",
+              "policy-governance", "incident-readiness",
+              "developer-experience", "agent-assistance"
+            ]
+          },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "maintainers": { "type": "array", "items": { "type": "string" } },
+          "license": { "type": "string" },
+          "repository": { "type": "string", "format": "uri" },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["version", "api_version", "digest"],
+              "properties": {
+                "version": { "type": "string" },
+                "api_version": { "type": "string" },
+                "published_at": { "type": "string", "format": "date-time" },
+                "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                "capabilities": { "type": "array", "items": { "type": "string" } },
+                "risk_class": { "type": "string", "enum": ["passive", "active", "runtime"] },
+                "minimum_nox_version": { "type": "string" },
+                "changelog_url": { "type": "string", "format": "uri" },
+                "artifacts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["os", "arch", "url", "digest"],
+                    "properties": {
+                      "os": { "type": "string" },
+                      "arch": { "type": "string" },
+                      "url": { "type": "string", "format": "uri" },
+                      "size": { "type": "integer" },
+                      "digest": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -59,6 +59,61 @@ func testIndex() Index {
 	}
 }
 
+func testIndexV2() Index {
+	return Index{
+		SchemaVersion: "2",
+		GeneratedAt:   time.Date(2026, 2, 8, 0, 0, 0, 0, time.UTC),
+		Plugins: []PluginEntry{
+			{
+				Name:        "nox/sast",
+				Description: "Static analysis extensions",
+				Track:       TrackCoreAnalysis,
+				Tags:        []string{"sast", "vulnerabilities"},
+				Maintainers: []string{"nox-hq"},
+				License:     "Apache-2.0",
+				Repository:  "https://github.com/nox-hq/nox-plugin-sast",
+				Versions: []VersionEntry{
+					{
+						Version:       "1.0.0",
+						APIVersion:    "v1",
+						Digest:        "sha256:eee",
+						RiskClass:     "passive",
+						MinNoxVersion: "0.1.0",
+					},
+				},
+			},
+			{
+				Name:        "nox/dast",
+				Description: "Web DAST scanner",
+				Track:       TrackDynamicRuntime,
+				Tags:        []string{"dast", "owasp"},
+				Versions: []VersionEntry{
+					{
+						Version:    "1.0.0",
+						APIVersion: "v1",
+						Digest:     "sha256:fff",
+						RiskClass:  "active",
+					},
+				},
+			},
+			{
+				Name:        "nox/ai-inventory",
+				Description: "Deep AI component inventory",
+				Track:       TrackAISecurity,
+				Tags:        []string{"ai", "inventory", "llm"},
+				Versions: []VersionEntry{
+					{
+						Version:    "1.0.0",
+						APIVersion: "v1",
+						Digest:     "sha256:ggg",
+						RiskClass:  "passive",
+					},
+				},
+			},
+		},
+	}
+}
+
 func serveIndex(t *testing.T, idx Index) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -399,25 +454,6 @@ func TestClientOfflineFallback(t *testing.T) {
 	}
 }
 
-func TestClientInvalidSchemaVersion(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"schema_version":"99","plugins":[]}`))
-	}))
-	defer srv.Close()
-
-	c := NewClient(
-		WithCacheDir(t.TempDir()),
-		WithCacheTTL(0),
-	)
-	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
-
-	_, err := c.Search(context.Background(), "anything")
-	if err == nil {
-		t.Error("expected error for unsupported schema version")
-	}
-}
-
 func TestClientServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -494,5 +530,158 @@ func TestClientResolveCopiesResult(t *testing.T) {
 	}
 	if ve2.Version != "1.0.0" {
 		t.Error("Resolve should return independent copies")
+	}
+}
+
+func TestClientSearchV2TrackFilter(t *testing.T) {
+	idx := testIndexV2()
+	srv := serveIndex(t, idx)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	ctx := context.Background()
+
+	// Search with track filter — only core-analysis plugins.
+	results, err := c.Search(ctx, "", WithTrackFilter(TrackCoreAnalysis))
+	if err != nil {
+		t.Fatalf("Search with track: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("search results = %d, want 1", len(results))
+	}
+	if results[0].Name != "nox/sast" {
+		t.Errorf("result = %q, want nox/sast", results[0].Name)
+	}
+
+	// Search with AI track.
+	results, err = c.Search(ctx, "", WithTrackFilter(TrackAISecurity))
+	if err != nil {
+		t.Fatalf("Search ai-security: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("search results = %d, want 1", len(results))
+	}
+	if results[0].Name != "nox/ai-inventory" {
+		t.Errorf("result = %q, want nox/ai-inventory", results[0].Name)
+	}
+}
+
+func TestClientSearchV2TagFilter(t *testing.T) {
+	idx := testIndexV2()
+	srv := serveIndex(t, idx)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	ctx := context.Background()
+
+	// Search with tag filter.
+	results, err := c.Search(ctx, "", WithTagFilter("ai", "llm"))
+	if err != nil {
+		t.Fatalf("Search with tags: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("search results = %d, want 1", len(results))
+	}
+	if results[0].Name != "nox/ai-inventory" {
+		t.Errorf("result = %q, want nox/ai-inventory", results[0].Name)
+	}
+
+	// Tag that doesn't match any.
+	results, err = c.Search(ctx, "", WithTagFilter("nonexistent"))
+	if err != nil {
+		t.Fatalf("Search with nonexistent tag: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("search results = %d, want 0", len(results))
+	}
+}
+
+func TestClientSearchByTrackName(t *testing.T) {
+	idx := testIndexV2()
+	srv := serveIndex(t, idx)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	ctx := context.Background()
+
+	// Query text matches track name.
+	results, err := c.Search(ctx, "ai-security")
+	if err != nil {
+		t.Fatalf("Search by track name: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("search results = %d, want 1", len(results))
+	}
+	if results[0].Name != "nox/ai-inventory" {
+		t.Errorf("result = %q, want nox/ai-inventory", results[0].Name)
+	}
+}
+
+func TestClientSearchByTag(t *testing.T) {
+	idx := testIndexV2()
+	srv := serveIndex(t, idx)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	ctx := context.Background()
+
+	// Query text matches a tag.
+	results, err := c.Search(ctx, "owasp")
+	if err != nil {
+		t.Fatalf("Search by tag: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("search results = %d, want 1", len(results))
+	}
+	if results[0].Name != "nox/dast" {
+		t.Errorf("result = %q, want nox/dast", results[0].Name)
+	}
+}
+
+func TestClientSchemaV2Accepted(t *testing.T) {
+	idx := testIndexV2()
+	srv := serveIndex(t, idx)
+	defer srv.Close()
+
+	c := NewClient(
+		WithCacheDir(t.TempDir()),
+		WithCacheTTL(0),
+	)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	// Schema v2 should be accepted.
+	results, err := c.Search(context.Background(), "sast")
+	if err != nil {
+		t.Fatalf("Search v2 index: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("search results = %d, want 1", len(results))
+	}
+}
+
+func TestClientInvalidSchemaVersionV99(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"schema_version":"99","plugins":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(
+		WithCacheDir(t.TempDir()),
+		WithCacheTTL(0),
+	)
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	_, err := c.Search(context.Background(), "anything")
+	if err == nil {
+		t.Error("expected error for unsupported schema version 99")
 	}
 }

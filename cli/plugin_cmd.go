@@ -19,7 +19,7 @@ import (
 // runPlugin dispatches plugin subcommands.
 func runPlugin(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test>")
 		return 2
 	}
 
@@ -38,9 +38,13 @@ func runPlugin(args []string) int {
 		return runPluginRemove(args[1:])
 	case "call":
 		return runPluginCall(args[1:])
+	case "init":
+		return runPluginInit(args[1:])
+	case "test":
+		return runPluginTest(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test>")
 		return 2
 	}
 }
@@ -63,12 +67,21 @@ func newOCIStore() *oci.Store {
 
 // runPluginSearch searches registries for plugins matching a query.
 func runPluginSearch(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin search <query>")
+	fs := flag.NewFlagSet("plugin search", flag.ContinueOnError)
+	var trackFlag string
+	fs.StringVar(&trackFlag, "track", "", "filter by track (e.g. core-analysis, ai-security)")
+
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
-	query := args[0]
+	remaining := fs.Args()
+	if len(remaining) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin search [--track <track>] <query>")
+		return 2
+	}
+
+	query := remaining[0]
 	st, err := LoadState(DefaultStatePath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: loading state: %v\n", err)
@@ -83,7 +96,12 @@ func runPluginSearch(args []string) int {
 	client := newRegistryClient(st)
 	ctx := context.Background()
 
-	results, err := client.Search(ctx, query)
+	var searchOpts []registry.SearchOption
+	if trackFlag != "" {
+		searchOpts = append(searchOpts, registry.WithTrackFilter(registry.Track(trackFlag)))
+	}
+
+	results, err := client.Search(ctx, query, searchOpts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: searching registries: %v\n", err)
 		return 2
@@ -95,13 +113,17 @@ func runPluginSearch(args []string) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tDESCRIPTION\tLATEST")
+	fmt.Fprintln(w, "NAME\tTRACK\tDESCRIPTION\tLATEST")
 	for _, p := range results {
 		latest := ""
 		if len(p.Versions) > 0 {
 			latest = p.Versions[len(p.Versions)-1].Version
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Description, latest)
+		track := string(p.Track)
+		if track == "" {
+			track = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, p.Description, latest)
 	}
 	w.Flush()
 	return 0
@@ -151,8 +173,23 @@ func runPluginInfo(args []string) int {
 
 	fmt.Printf("Name:        %s\n", found.Name)
 	fmt.Printf("Description: %s\n", found.Description)
+	if found.Track != "" {
+		fmt.Printf("Track:       %s\n", found.Track)
+	}
 	if found.Homepage != "" {
 		fmt.Printf("Homepage:    %s\n", found.Homepage)
+	}
+	if found.Repository != "" {
+		fmt.Printf("Repository:  %s\n", found.Repository)
+	}
+	if found.License != "" {
+		fmt.Printf("License:     %s\n", found.License)
+	}
+	if len(found.Tags) > 0 {
+		fmt.Printf("Tags:        %s\n", strings.Join(found.Tags, ", "))
+	}
+	if len(found.Maintainers) > 0 {
+		fmt.Printf("Maintainers: %s\n", strings.Join(found.Maintainers, ", "))
 	}
 	fmt.Printf("Versions:    %d\n", len(found.Versions))
 	for _, v := range found.Versions {

@@ -24,6 +24,7 @@ type Host struct {
 	diagnostics []Diagnostic
 	violations  []RuntimeViolation
 	redactor    *Redactor
+	telemetry   *telemetryCollector
 	mu          sync.RWMutex
 	logger      *slog.Logger
 }
@@ -49,6 +50,7 @@ func NewHost(opts ...HostOption) *Host {
 		plugins:   make(map[string]*Plugin),
 		toolIndex: make(map[string]*Plugin),
 		redactor:  NewRedactor(),
+		telemetry: newTelemetryCollector(),
 		logger:    slog.Default(),
 	}
 	for _, opt := range opts {
@@ -208,8 +210,11 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 		defer cancel()
 	}
 
+	invokeStart := time.Now()
 	resp, err := p.InvokeTool(ctx, resolvedName, input, workspaceRoot)
+	invokeDuration := time.Since(invokeStart)
 	if err != nil {
+		h.telemetry.Record(pluginName, invokeDuration, 0, 0, 0, 0, true)
 		return nil, err
 	}
 
@@ -253,6 +258,14 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 	h.mu.Lock()
 	h.collectDiagnostics(pluginName, resp)
 	h.mu.Unlock()
+
+	h.telemetry.Record(pluginName, invokeDuration,
+		len(resp.GetFindings()),
+		len(resp.GetPackages()),
+		len(resp.GetAiComponents()),
+		len(resp.GetDiagnostics()),
+		false,
+	)
 
 	return resp, nil
 }
@@ -451,6 +464,11 @@ func (h *Host) Violations() []RuntimeViolation {
 	out := make([]RuntimeViolation, len(h.violations))
 	copy(out, h.violations)
 	return out
+}
+
+// Telemetry returns a snapshot of collected plugin telemetry.
+func (h *Host) Telemetry() []PluginTelemetry {
+	return h.telemetry.Snapshot()
 }
 
 // handleViolation logs a violation, records it, marks the plugin as failed,

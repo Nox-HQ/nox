@@ -1,0 +1,14 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: nox-hq/nox/.github/workflows/plugin-ci.yml@main
+    with:
+      go-version: '1.25'
+      run-conformance: true

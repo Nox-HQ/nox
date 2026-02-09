@@ -95,9 +95,10 @@ func NewAnalyzer() *Analyzer {
 			Severity:    findings.SeverityHigh,
 			Confidence:  findings.ConfidenceHigh,
 			MatcherType: "regex",
-			Pattern:     `(?i)(f["']|\.format\(|%s).*?(user_input|user_message|user_query|user_prompt)`,
-			Tags:        []string{"ai", "prompt-injection"},
-			Metadata:    map[string]string{"cwe": "CWE-77"},
+			Pattern: `(?i)(f["']|\.format\(|%s).*?` +
+				`(user_input|user_message|user_query|user_prompt)`,
+			Tags:     []string{"ai", "prompt-injection"},
+			Metadata: map[string]string{"cwe": "CWE-77"},
 		},
 		{
 			ID:          "AI-003",
@@ -149,9 +150,10 @@ func NewAnalyzer() *Analyzer {
 			Severity:    findings.SeverityMedium,
 			Confidence:  findings.ConfidenceMedium,
 			MatcherType: "regex",
-			Pattern:     `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
-			Tags:        []string{"ai", "logging", "data-exposure"},
-			Metadata:    map[string]string{"cwe": "CWE-532"},
+			Pattern: `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?` +
+				`(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
+			Tags:     []string{"ai", "logging", "data-exposure"},
+			Metadata: map[string]string{"cwe": "CWE-532"},
 		},
 		{
 			ID:          "AI-007",
@@ -160,9 +162,10 @@ func NewAnalyzer() *Analyzer {
 			Severity:    findings.SeverityHigh,
 			Confidence:  findings.ConfidenceHigh,
 			MatcherType: "regex",
-			Pattern:     `(?i)(log|logger|print|console\.log|fmt\.Print)\S*\(.*?(openai_api_key|anthropic_api_key|api_key|bearer_token)`,
-			Tags:        []string{"ai", "logging", "secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-532"},
+			Pattern: `(?i)(log|logger|print|console\.log|fmt\.Print)\S*\(.*?` +
+				`(openai_api_key|anthropic_api_key|api_key|bearer_token)`,
+			Tags:     []string{"ai", "logging", "secrets"},
+			Metadata: map[string]string{"cwe": "CWE-532"},
 		},
 
 		// -----------------------------------------------------------------

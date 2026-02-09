@@ -1,0 +1,42 @@
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/sdk"
+)
+
+var version = "dev"
+
+func main() {
+	manifest := sdk.NewManifest("{{.Name}}", version).
+		Capability("{{.CapabilityName}}", "{{.CapabilityDesc}}").
+		Tool("scan", "Run {{.DisplayName}} scan", {{.ReadOnly}}).
+		Done().
+		Safety({{.SafetyOpts}}).
+		Build()
+
+	srv := sdk.NewPluginServer(manifest).
+		HandleTool("scan", handleScan)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	if err := srv.Serve(ctx); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+	workspaceRoot := req.WorkspaceRoot
+	_ = workspaceRoot // TODO: implement scan logic
+
+	return sdk.NewResponse().
+		// TODO: Add findings, packages, or AI components
+		Diagnostic(pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_INFO, "scan completed", "{{.Name}}").
+		Build(), nil
+}

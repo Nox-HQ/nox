@@ -20,7 +20,7 @@ import (
 type Package struct {
 	Name      string
 	Version   string
-	Ecosystem string // "npm", "go", "pypi", "rubygems", "cargo"
+	Ecosystem string // "npm", "go", "pypi", "rubygems", "cargo", "maven", "gradle", "nuget"
 }
 
 // Vulnerability describes a known security issue for a package.
@@ -84,10 +84,15 @@ func NewAnalyzer() *Analyzer {
 // supportedLockfiles maps well-known lockfile basenames to their parser
 // functions.
 var supportedLockfiles = map[string]func([]byte) ([]Package, error){
-	"go.sum":            parseGoSum,
-	"package-lock.json": parsePackageLockJSON,
-	"requirements.txt":  parseRequirementsTxt,
-	"Gemfile.lock":      parseGemfileLock,
+	"go.sum":             parseGoSum,
+	"package-lock.json":  parsePackageLockJSON,
+	"requirements.txt":   parseRequirementsTxt,
+	"Gemfile.lock":       parseGemfileLock,
+	"Cargo.lock":         parseCargoLock,
+	"pom.xml":            parsePomXML,
+	"build.gradle":       parseBuildGradle,
+	"build.gradle.kts":   parseBuildGradle,
+	"packages.lock.json": parseNuGetPackagesLock,
 }
 
 // ParseLockfile detects the lockfile format from its filename and delegates

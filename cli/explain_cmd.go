@@ -44,8 +44,9 @@ func runExplain(args []string) int {
 	target := fs.Arg(0)
 
 	// Check for API key.
-	if os.Getenv("OPENAI_API_KEY") == "" && baseURL == "" {
-		fmt.Fprintln(os.Stderr, "error: OPENAI_API_KEY environment variable is required (or set --base-url for a local endpoint)")
+	apiKeyEnv := "OPENAI_API_KEY"
+	if os.Getenv(apiKeyEnv) == "" && baseURL == "" {
+		fmt.Fprintf(os.Stderr, "error: %s environment variable is required (or set --base-url for a local endpoint)\n", apiKeyEnv)
 		return 2
 	}
 

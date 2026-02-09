@@ -1,0 +1,61 @@
+name: Deploy Registry
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [plugin-release]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Merge version fragment (on dispatch)
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          echo '${{ toJson(github.event.client_payload.version_entry) }}' > /tmp/fragment.json
+          ./merge-version.sh /tmp/fragment.json index.json
+
+      - name: Validate index schema
+        run: |
+          # Basic structural validation
+          jq empty index.json
+          SCHEMA_VER=$(jq -r '.schema_version' index.json)
+          if [ "$SCHEMA_VER" != "1" ] && [ "$SCHEMA_VER" != "2" ]; then
+            echo "error: unsupported schema version: $SCHEMA_VER" >&2
+            exit 1
+          fi
+          PLUGIN_COUNT=$(jq '.plugins | length' index.json)
+          echo "Index valid: ${PLUGIN_COUNT} plugins, schema v${SCHEMA_VER}"
+
+      - name: Commit updated index
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          git config user.name "nox-registry-bot"
+          git config user.email "bot@nox-hq.dev"
+          git add index.json
+          git diff --cached --quiet || git commit -m "feat: update index for ${{ github.event.client_payload.version_entry.name }}"
+          git push
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: nox-registry
+          directory: .

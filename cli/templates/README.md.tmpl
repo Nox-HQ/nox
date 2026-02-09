@@ -1,0 +1,33 @@
+# {{.DisplayName}}
+
+{{.Description}}
+
+## Track
+
+**{{.TrackDisplayName}}** — {{.TrackDescription}}
+
+Risk class: `{{.RiskClass}}`
+
+## Installation
+
+```bash
+nox plugin install {{.Name}}
+```
+
+## Usage
+
+```bash
+nox plugin call {{.Name}} scan workspace_root=/path/to/project
+```
+
+## Development
+
+```bash
+make build
+make test
+make lint
+```
+
+## License
+
+Apache-2.0

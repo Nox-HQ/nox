@@ -1,0 +1,22 @@
+package main
+
+import (
+	"testing"
+
+	"github.com/nox-hq/nox/registry"
+	"github.com/nox-hq/nox/sdk"
+)
+
+func TestConformance(t *testing.T) {
+	manifest := sdk.NewManifest("{{.Name}}", "0.0.0-test").
+		Capability("{{.CapabilityName}}", "{{.CapabilityDesc}}").
+		Tool("scan", "Run {{.DisplayName}} scan", {{.ReadOnly}}).
+		Done().
+		Safety({{.SafetyOpts}}).
+		Build()
+
+	srv := sdk.NewPluginServer(manifest).
+		HandleTool("scan", handleScan)
+
+	sdk.RunForTrack(t, srv, registry.Track("{{.Track}}"))
+}
