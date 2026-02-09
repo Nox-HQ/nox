@@ -26,8 +26,11 @@ jobs:
         with:
           version: v2.7.2
 
-      - name: Run tests
-        run: go test ./...
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Coverage summary
+        run: go tool cover -func coverage.out
 
       - name: Run vet
         run: go vet ./...

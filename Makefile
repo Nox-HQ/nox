@@ -1,4 +1,4 @@
-.PHONY: build test lint run clean proto-lint proto-generate proto-breaking
+.PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html
 
 BINARY := nox
 CLI_PKG := ./cli
@@ -30,6 +30,13 @@ vet:
 	go vet ./...
 
 check: lint test vet
+
+cover:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func coverage.out
+
+cover-html: cover
+	go tool cover -html=coverage.out
 
 proto-lint:
 	cd proto && buf lint
