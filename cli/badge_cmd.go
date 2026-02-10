@@ -149,11 +149,11 @@ var gradeThresholds = []struct {
 	maxScore int
 	grade    Grade
 }{
-	{0, Grade{"A", "#4c1"}},      // bright green
-	{4, Grade{"B", "#a3c51c"}},   // yellow-green
-	{14, Grade{"C", "#dfb317"}},  // yellow
-	{29, Grade{"D", "#fe7d37"}},  // orange
-	{49, Grade{"E", "#e05d44"}},  // red
+	{0, Grade{"A", "#4c1"}},     // bright green
+	{4, Grade{"B", "#a3c51c"}},  // yellow-green
+	{14, Grade{"C", "#dfb317"}}, // yellow
+	{29, Grade{"D", "#fe7d37"}}, // orange
+	{49, Grade{"E", "#e05d44"}}, // red
 }
 
 var gradeF = Grade{"F", "#b60205"} // dark red
