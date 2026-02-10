@@ -16,7 +16,7 @@ on:
     secrets:
       NOX_SIGNING_KEY:
         description: 'Ed25519 private key for artifact signing (base64-encoded)'
-        required: true
+        required: false
       REGISTRY_DISPATCH_TOKEN:
         description: 'GitHub token with repo dispatch permission on registry repo'
         required: false

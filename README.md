@@ -1,6 +1,7 @@
 # Nox
 
 ![CI](https://github.com/nox-hq/nox/actions/workflows/ci.yml/badge.svg)
+![Security](.github/nox-badge.svg)
 ![Coverage](.github/coverage-badge.svg)
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
