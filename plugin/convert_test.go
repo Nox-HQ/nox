@@ -34,8 +34,8 @@ func TestProtoSeverityToGo(t *testing.T) {
 
 func TestGoSeverityToProto(t *testing.T) {
 	tests := []struct {
-		go_  findings.Severity
-		want pluginv1.Severity
+		goSev findings.Severity
+		want  pluginv1.Severity
 	}{
 		{findings.SeverityCritical, pluginv1.Severity_SEVERITY_CRITICAL},
 		{findings.SeverityHigh, pluginv1.Severity_SEVERITY_HIGH},
@@ -45,10 +45,10 @@ func TestGoSeverityToProto(t *testing.T) {
 		{findings.Severity("unknown"), pluginv1.Severity_SEVERITY_UNSPECIFIED},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.go_), func(t *testing.T) {
-			got := GoSeverityToProto(tt.go_)
+		t.Run(string(tt.goSev), func(t *testing.T) {
+			got := GoSeverityToProto(tt.goSev)
 			if got != tt.want {
-				t.Errorf("GoSeverityToProto(%q) = %v, want %v", tt.go_, got, tt.want)
+				t.Errorf("GoSeverityToProto(%q) = %v, want %v", tt.goSev, got, tt.want)
 			}
 		})
 	}

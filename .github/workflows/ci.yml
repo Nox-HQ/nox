@@ -47,6 +47,7 @@ jobs:
 
       - name: Install coverctl
         run: go install github.com/pterm/coverctl@latest
+        continue-on-error: true
 
       - name: Check coverage thresholds
         run: coverctl check --config .coverctl.yaml --profile coverage.out
@@ -55,11 +56,15 @@ jobs:
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          coverctl badge --config .coverctl.yaml --profile coverage.out --output .github/coverage-badge.svg
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/coverage-badge.svg
-          git diff --cached --quiet || git commit -m "ci: update coverage badge [skip ci]" && git push
+          if command -v coverctl &>/dev/null; then
+            coverctl badge --config .coverctl.yaml --profile coverage.out --output .github/coverage-badge.svg
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/coverage-badge.svg
+            git diff --cached --quiet || git commit -m "ci: update coverage badge [skip ci]" && git push
+          else
+            echo "coverctl not available, skipping badge update"
+          fi
 
   build:
     name: Build & Scan

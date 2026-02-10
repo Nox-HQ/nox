@@ -5,6 +5,7 @@ import "time"
 // Track identifies the functional category a plugin belongs to.
 type Track string
 
+// Plugin security tracks.
 const (
 	TrackCoreAnalysis        Track = "core-analysis"
 	TrackDynamicRuntime      Track = "dynamic-runtime"
