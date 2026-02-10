@@ -1,0 +1,56 @@
+name: 'Nox Security Scanner'
+description: 'Language-agnostic security scanner with first-class AI application security. Produces SARIF, SBOM, and AI inventory reports.'
+
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format(s): json, sarif, cdx, spdx, all (comma-separated)'
+    required: false
+    default: 'sarif'
+  output:
+    description: 'Output directory for reports'
+    required: false
+    default: 'nox-results'
+  version:
+    description: 'Nox version to install (e.g., 0.1.0 or latest)'
+    required: false
+    default: 'latest'
+  fail-on-findings:
+    description: 'Fail the step if findings are detected'
+    required: false
+    default: 'true'
+
+outputs:
+  findings-count:
+    description: 'Number of findings detected'
+    value: ${{ steps.scan.outputs.findings-count }}
+  sarif-file:
+    description: 'Path to results.sarif (if generated)'
+    value: ${{ steps.scan.outputs.sarif-file }}
+  findings-file:
+    description: 'Path to findings.json (if generated)'
+    value: ${{ steps.scan.outputs.findings-file }}
+  exit-code:
+    description: 'Raw nox exit code (0 = no findings, 1 = findings, 2 = error)'
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Nox Security Scanner
+      id: scan
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: bash "${{ github.action_path }}/action.sh"

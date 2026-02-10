@@ -25,9 +25,52 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
+// extractInterspersedArgs reorders args so that flags come before positional
+// arguments, allowing "nox scan . --format sarif" to work the same as
+// "nox --format sarif scan .".
+func extractInterspersedArgs(args []string) []string {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positional = append(positional, args[i:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			// If --flag=value, the value is already part of the arg.
+			if strings.Contains(arg, "=") {
+				continue
+			}
+			// Boolean flags don't consume a following argument.
+			name := strings.TrimLeft(arg, "-")
+			if isTopLevelBoolFlag(name) {
+				continue
+			}
+			// String flags consume the next argument as value.
+			if i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+	return append(flags, positional...)
+}
+
+func isTopLevelBoolFlag(name string) bool {
+	switch name {
+	case "quiet", "q", "verbose", "v", "version":
+		return true
+	}
+	return false
+}
+
 // run executes the CLI and returns the exit code.
 // 0 = clean (no findings), 1 = findings detected, 2 = error.
 func run(args []string) int {
+	args = extractInterspersedArgs(args)
 	fs := flag.NewFlagSet("nox", flag.ContinueOnError)
 
 	var (

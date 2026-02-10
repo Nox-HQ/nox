@@ -8,6 +8,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -37,3 +41,21 @@ jobs:
 
       - name: Build binary
         run: make build
+
+      - name: Run nox on itself
+        run: |
+          ./nox --format sarif,json --output nox-results -q scan . || true
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: nox-results/results.sarif
+        continue-on-error: true
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nox-results
+          path: nox-results/

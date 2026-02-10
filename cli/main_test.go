@@ -112,6 +112,87 @@ func TestRun_ScanAllFormats(t *testing.T) {
 	}
 }
 
+func TestExtractInterspersedArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			"flags before command",
+			[]string{"--format", "sarif", "scan", "."},
+			[]string{"--format", "sarif", "scan", "."},
+		},
+		{
+			"flags after command and path",
+			[]string{"scan", ".", "--format", "sarif", "--output", "/tmp/out"},
+			[]string{"--format", "sarif", "--output", "/tmp/out", "scan", "."},
+		},
+		{
+			"mixed ordering",
+			[]string{"scan", ".", "--format", "all", "-q", "--output", "/tmp/out"},
+			[]string{"--format", "all", "-q", "--output", "/tmp/out", "scan", "."},
+		},
+		{
+			"bool flags interspersed",
+			[]string{"-q", "scan", ".", "-v"},
+			[]string{"-q", "-v", "scan", "."},
+		},
+		{
+			"flag=value syntax",
+			[]string{"scan", ".", "--format=sarif"},
+			[]string{"--format=sarif", "scan", "."},
+		},
+		{
+			"no flags",
+			[]string{"scan", "."},
+			[]string{"scan", "."},
+		},
+		{
+			"version flag only",
+			[]string{"--version"},
+			[]string{"--version"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractInterspersedArgs(tt.input)
+			if len(result) != len(tt.expected) {
+				t.Fatalf("expected %d args, got %d: %v", len(tt.expected), len(result), result)
+			}
+			for i, arg := range result {
+				if arg != tt.expected[i] {
+					t.Fatalf("arg[%d]: expected %q, got %q (full: %v)", i, tt.expected[i], arg, result)
+				}
+			}
+		})
+	}
+}
+
+func TestRun_ScanInterspersedFlags(t *testing.T) {
+	dir := t.TempDir()
+
+	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
+		t.Fatalf("writing temp file: %v", err)
+	}
+
+	outDir := filepath.Join(dir, "output")
+
+	// Flags placed after "scan <path>" should still be parsed.
+	code := run([]string{"scan", dir, "--quiet", "--format", "sarif", "--output", outDir})
+	if code != 1 {
+		t.Fatalf("expected exit code 1 for findings, got %d", code)
+	}
+
+	// Verify SARIF was written (proving --format sarif was parsed).
+	sarifPath := filepath.Join(outDir, "results.sarif")
+	if _, err := os.Stat(sarifPath); os.IsNotExist(err) {
+		t.Fatal("expected results.sarif to be created (--format flag after scan was ignored)")
+	}
+}
+
 func TestParseFormats(t *testing.T) {
 	tests := []struct {
 		input    string
