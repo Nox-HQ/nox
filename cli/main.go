@@ -25,43 +25,55 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-// extractInterspersedArgs reorders args so that flags come before positional
-// arguments, allowing "nox scan . --format sarif" to work the same as
-// "nox --format sarif scan .".
+// extractInterspersedArgs reorders args so that known top-level flags come
+// before positional arguments, allowing "nox scan . --format sarif" to work
+// the same as "nox --format sarif scan .". Subcommand-specific flags (e.g.,
+// --severity, --json for "show") are left in place for the subcommand to parse.
 func extractInterspersedArgs(args []string) []string {
-	var flags, positional []string
+	var flags, rest []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			positional = append(positional, args[i:]...)
+			rest = append(rest, args[i:]...)
 			break
 		}
-		if strings.HasPrefix(arg, "-") {
+		if !strings.HasPrefix(arg, "-") {
+			rest = append(rest, arg)
+			continue
+		}
+		// Extract the flag name (strip leading dashes, handle --flag=value).
+		name := strings.TrimLeft(arg, "-")
+		if eq := strings.Index(name, "="); eq >= 0 {
+			name = name[:eq]
+		}
+		if isTopLevelBoolFlag(name) {
 			flags = append(flags, arg)
-			// If --flag=value, the value is already part of the arg.
-			if strings.Contains(arg, "=") {
-				continue
-			}
-			// Boolean flags don't consume a following argument.
-			name := strings.TrimLeft(arg, "-")
-			if isTopLevelBoolFlag(name) {
-				continue
-			}
-			// String flags consume the next argument as value.
-			if i+1 < len(args) {
+		} else if isTopLevelStringFlag(name) {
+			flags = append(flags, arg)
+			// Consume the value unless it was --flag=value.
+			if !strings.Contains(arg, "=") && i+1 < len(args) {
 				i++
 				flags = append(flags, args[i])
 			}
 		} else {
-			positional = append(positional, arg)
+			// Unknown flag — belongs to a subcommand, leave in place.
+			rest = append(rest, arg)
 		}
 	}
-	return append(flags, positional...)
+	return append(flags, rest...)
 }
 
 func isTopLevelBoolFlag(name string) bool {
 	switch name {
 	case "quiet", "q", "verbose", "v", "version":
+		return true
+	}
+	return false
+}
+
+func isTopLevelStringFlag(name string) bool {
+	switch name {
+	case "format", "output":
 		return true
 	}
 	return false

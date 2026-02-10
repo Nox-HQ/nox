@@ -153,6 +153,16 @@ func TestExtractInterspersedArgs(t *testing.T) {
 			[]string{"--version"},
 			[]string{"--version"},
 		},
+		{
+			"subcommand flags stay in place",
+			[]string{"show", ".", "--severity", "critical", "--json"},
+			[]string{"show", ".", "--severity", "critical", "--json"},
+		},
+		{
+			"mixed top-level and subcommand flags",
+			[]string{"show", ".", "--severity", "critical", "-q"},
+			[]string{"-q", "show", ".", "--severity", "critical"},
+		},
 	}
 
 	for _, tt := range tests {
