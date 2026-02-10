@@ -81,9 +81,8 @@ func runBadge(args []string) int {
 	}
 
 	counts := countBySeverity(findingsList)
-	maxSev := maxSeverity(findingsList)
-	value := badgeValue(len(findingsList), maxSev, counts)
-	color := badgeColor(maxSev, len(findingsList))
+	value := badgeValue(counts)
+	color := badgeColor(counts)
 
 	svg := generateBadgeSVG(label, value, color)
 
@@ -113,15 +112,6 @@ func dirOf(path string) string {
 	return "."
 }
 
-// severityRank maps severity to a numeric rank for comparison.
-var severityRank = map[findings.Severity]int{
-	findings.SeverityCritical: 5,
-	findings.SeverityHigh:     4,
-	findings.SeverityMedium:   3,
-	findings.SeverityLow:      2,
-	findings.SeverityInfo:     1,
-}
-
 func countBySeverity(ff []findings.Finding) map[findings.Severity]int {
 	counts := make(map[findings.Severity]int)
 	for _, f := range ff {
@@ -130,48 +120,62 @@ func countBySeverity(ff []findings.Finding) map[findings.Severity]int {
 	return counts
 }
 
-func maxSeverity(ff []findings.Finding) findings.Severity {
-	best := findings.Severity("")
-	bestRank := 0
-	for _, f := range ff {
-		r := severityRank[f.Severity]
-		if r > bestRank {
-			bestRank = r
-			best = f.Severity
+// severityWeight maps severity to a point value for scoring.
+var severityWeight = map[findings.Severity]int{
+	findings.SeverityCritical: 10,
+	findings.SeverityHigh:     5,
+	findings.SeverityMedium:   2,
+	findings.SeverityLow:      1,
+	findings.SeverityInfo:     0,
+}
+
+// securityScore computes a weighted score from finding severity counts.
+func securityScore(counts map[findings.Severity]int) int {
+	score := 0
+	for sev, n := range counts {
+		score += severityWeight[sev] * n
+	}
+	return score
+}
+
+// Grade represents a security letter grade A through F.
+type Grade struct {
+	Letter string
+	Color  string
+}
+
+// gradeThresholds maps score ranges to letter grades and badge colors.
+var gradeThresholds = []struct {
+	maxScore int
+	grade    Grade
+}{
+	{0, Grade{"A", "#4c1"}},      // bright green
+	{4, Grade{"B", "#a3c51c"}},   // yellow-green
+	{14, Grade{"C", "#dfb317"}},  // yellow
+	{29, Grade{"D", "#fe7d37"}},  // orange
+	{49, Grade{"E", "#e05d44"}},  // red
+}
+
+var gradeF = Grade{"F", "#b60205"} // dark red
+
+// gradeFromScore returns the letter grade for a given score.
+func gradeFromScore(score int) Grade {
+	for _, t := range gradeThresholds {
+		if score <= t.maxScore {
+			return t.grade
 		}
 	}
-	return best
+	return gradeF
 }
 
-func badgeValue(total int, maxSev findings.Severity, counts map[findings.Severity]int) string {
-	if total == 0 {
-		return "clean"
-	}
-	n := counts[maxSev]
-	if n == total {
-		return fmt.Sprintf("%d %s", total, maxSev)
-	}
-	return fmt.Sprintf("%d %s · %d total", n, maxSev, total)
+func badgeValue(counts map[findings.Severity]int) string {
+	score := securityScore(counts)
+	return gradeFromScore(score).Letter
 }
 
-func badgeColor(maxSev findings.Severity, total int) string {
-	if total == 0 {
-		return "#4c1" // bright green
-	}
-	switch maxSev {
-	case findings.SeverityCritical:
-		return "#e05d44" // red
-	case findings.SeverityHigh:
-		return "#fe7d37" // orange
-	case findings.SeverityMedium:
-		return "#dfb317" // yellow
-	case findings.SeverityLow:
-		return "#a3c51c" // yellow-green
-	case findings.SeverityInfo:
-		return "#9f9f9f" // gray
-	default:
-		return "#9f9f9f"
-	}
+func badgeColor(counts map[findings.Severity]int) string {
+	score := securityScore(counts)
+	return gradeFromScore(score).Color
 }
 
 // badgeTextWidth estimates the pixel width of a string rendered in Verdana 11px,

@@ -49,8 +49,8 @@ func TestBadge_CleanScan(t *testing.T) {
 		t.Fatalf("reading badge: %v", err)
 	}
 	svg := string(data)
-	if !strings.Contains(svg, "clean") {
-		t.Fatal("expected badge to contain 'clean'")
+	if !strings.Contains(svg, ">A<") {
+		t.Fatal("expected badge to contain grade 'A'")
 	}
 	if !strings.Contains(svg, "#4c1") {
 		t.Fatal("expected green color for clean badge")
@@ -76,11 +76,12 @@ func TestBadge_CriticalFindings(t *testing.T) {
 		t.Fatalf("reading badge: %v", err)
 	}
 	svg := string(data)
-	if !strings.Contains(svg, "#e05d44") {
-		t.Fatal("expected red color for critical findings")
+	// 1 critical (10) + 1 high (5) = 15 → grade D (orange)
+	if !strings.Contains(svg, "#fe7d37") {
+		t.Fatalf("expected orange color for grade D, got:\n%s", svg)
 	}
-	if !strings.Contains(svg, "1 critical") {
-		t.Fatalf("expected '1 critical' in badge, got:\n%s", svg)
+	if !strings.Contains(svg, ">D<") {
+		t.Fatalf("expected grade 'D' in badge, got:\n%s", svg)
 	}
 }
 
@@ -103,11 +104,12 @@ func TestBadge_MediumOnly(t *testing.T) {
 		t.Fatalf("reading badge: %v", err)
 	}
 	svg := string(data)
-	if !strings.Contains(svg, "#dfb317") {
-		t.Fatal("expected yellow color for medium findings")
+	// 2 medium (2*2=4) → grade B (yellow-green)
+	if !strings.Contains(svg, "#a3c51c") {
+		t.Fatalf("expected yellow-green color for grade B, got:\n%s", svg)
 	}
-	if !strings.Contains(svg, "2 medium") {
-		t.Fatalf("expected '2 medium' in badge, got:\n%s", svg)
+	if !strings.Contains(svg, ">B<") {
+		t.Fatalf("expected grade 'B' in badge, got:\n%s", svg)
 	}
 }
 
@@ -128,6 +130,35 @@ func TestBadge_CustomLabel(t *testing.T) {
 	svg := string(data)
 	if !strings.Contains(svg, "security") {
 		t.Fatal("expected custom label 'security' in badge")
+	}
+}
+
+func TestBadge_HighFindings(t *testing.T) {
+	dir := t.TempDir()
+	ff := []findings.Finding{
+		{RuleID: "IAC-001", Severity: findings.SeverityHigh, Message: "issue 1"},
+		{RuleID: "IAC-002", Severity: findings.SeverityHigh, Message: "issue 2"},
+		{RuleID: "IAC-003", Severity: findings.SeverityMedium, Message: "issue 3"},
+	}
+	input := writeFindingsJSON(t, dir, ff)
+	output := filepath.Join(dir, "badge.svg")
+
+	code := runBadge([]string{"--input", input, "--output", output})
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("reading badge: %v", err)
+	}
+	svg := string(data)
+	// 2 high (10) + 1 medium (2) = 12 → grade C (yellow)
+	if !strings.Contains(svg, "#dfb317") {
+		t.Fatalf("expected yellow color for grade C, got:\n%s", svg)
+	}
+	if !strings.Contains(svg, ">C<") {
+		t.Fatalf("expected grade 'C' in badge, got:\n%s", svg)
 	}
 }
 
@@ -156,22 +187,75 @@ func TestBadge_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestSecurityScore(t *testing.T) {
+	tests := []struct {
+		name   string
+		counts map[findings.Severity]int
+		want   int
+	}{
+		{"empty", nil, 0},
+		{"1 critical", map[findings.Severity]int{findings.SeverityCritical: 1}, 10},
+		{"2 high + 1 medium", map[findings.Severity]int{findings.SeverityHigh: 2, findings.SeverityMedium: 1}, 12},
+		{"info only", map[findings.Severity]int{findings.SeverityInfo: 5}, 0},
+		{"3 low", map[findings.Severity]int{findings.SeverityLow: 3}, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := securityScore(tt.counts)
+			if got != tt.want {
+				t.Fatalf("securityScore(%v) = %d, want %d", tt.counts, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGradeFromScore(t *testing.T) {
+	tests := []struct {
+		score  int
+		letter string
+		color  string
+	}{
+		{0, "A", "#4c1"},
+		{1, "B", "#a3c51c"},
+		{4, "B", "#a3c51c"},
+		{5, "C", "#dfb317"},
+		{14, "C", "#dfb317"},
+		{15, "D", "#fe7d37"},
+		{29, "D", "#fe7d37"},
+		{30, "E", "#e05d44"},
+		{49, "E", "#e05d44"},
+		{50, "F", "#b60205"},
+		{100, "F", "#b60205"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.letter, func(t *testing.T) {
+			g := gradeFromScore(tt.score)
+			if g.Letter != tt.letter {
+				t.Fatalf("gradeFromScore(%d).Letter = %q, want %q", tt.score, g.Letter, tt.letter)
+			}
+			if g.Color != tt.color {
+				t.Fatalf("gradeFromScore(%d).Color = %q, want %q", tt.score, g.Color, tt.color)
+			}
+		})
+	}
+}
+
 func TestBadgeValue(t *testing.T) {
 	tests := []struct {
 		name     string
-		total    int
-		maxSev   findings.Severity
 		counts   map[findings.Severity]int
 		expected string
 	}{
-		{"clean", 0, "", nil, "clean"},
-		{"all critical", 3, findings.SeverityCritical, map[findings.Severity]int{findings.SeverityCritical: 3}, "3 critical"},
-		{"mixed", 5, findings.SeverityHigh, map[findings.Severity]int{findings.SeverityHigh: 2, findings.SeverityMedium: 3}, "2 high · 5 total"},
+		{"grade A", nil, "A"},
+		{"grade B - low findings", map[findings.Severity]int{findings.SeverityLow: 3}, "B"},
+		{"grade C - high findings", map[findings.Severity]int{findings.SeverityHigh: 1}, "C"},
+		{"grade D - critical", map[findings.Severity]int{findings.SeverityCritical: 2}, "D"},
+		{"grade F - many critical", map[findings.Severity]int{findings.SeverityCritical: 5, findings.SeverityHigh: 3}, "F"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := badgeValue(tt.total, tt.maxSev, tt.counts)
+			got := badgeValue(tt.counts)
 			if got != tt.expected {
 				t.Fatalf("expected %q, got %q", tt.expected, got)
 			}
@@ -182,21 +266,19 @@ func TestBadgeValue(t *testing.T) {
 func TestBadgeColor(t *testing.T) {
 	tests := []struct {
 		name     string
-		maxSev   findings.Severity
-		total    int
+		counts   map[findings.Severity]int
 		expected string
 	}{
-		{"clean", "", 0, "#4c1"},
-		{"critical", findings.SeverityCritical, 1, "#e05d44"},
-		{"high", findings.SeverityHigh, 2, "#fe7d37"},
-		{"medium", findings.SeverityMedium, 1, "#dfb317"},
-		{"low", findings.SeverityLow, 1, "#a3c51c"},
-		{"info", findings.SeverityInfo, 1, "#9f9f9f"},
+		{"A green", nil, "#4c1"},
+		{"B yellow-green", map[findings.Severity]int{findings.SeverityLow: 2}, "#a3c51c"},
+		{"C yellow", map[findings.Severity]int{findings.SeverityHigh: 1}, "#dfb317"},
+		{"D orange", map[findings.Severity]int{findings.SeverityCritical: 2}, "#fe7d37"},
+		{"F dark red", map[findings.Severity]int{findings.SeverityCritical: 10}, "#b60205"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := badgeColor(tt.maxSev, tt.total)
+			got := badgeColor(tt.counts)
 			if got != tt.expected {
 				t.Fatalf("expected %q, got %q", tt.expected, got)
 			}
@@ -205,20 +287,20 @@ func TestBadgeColor(t *testing.T) {
 }
 
 func TestGenerateBadgeSVG(t *testing.T) {
-	svg := generateBadgeSVG("nox", "clean", "#4c1")
+	svg := generateBadgeSVG("nox", "A", "#4c1")
 	if !strings.HasPrefix(svg, "<svg") {
 		t.Fatal("expected SVG output")
 	}
 	if !strings.Contains(svg, "nox") {
 		t.Fatal("expected label in SVG")
 	}
-	if !strings.Contains(svg, "clean") {
-		t.Fatal("expected value in SVG")
+	if !strings.Contains(svg, ">A<") {
+		t.Fatal("expected grade in SVG")
 	}
 	if !strings.Contains(svg, "#4c1") {
 		t.Fatal("expected color in SVG")
 	}
-	if !strings.Contains(svg, `aria-label="nox: clean"`) {
+	if !strings.Contains(svg, `aria-label="nox: A"`) {
 		t.Fatal("expected aria-label in SVG")
 	}
 }
