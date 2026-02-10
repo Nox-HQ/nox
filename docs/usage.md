@@ -8,6 +8,12 @@ Complete reference for the Nox CLI, configuration, and integrations.
   - [scan](#scan)
   - [show](#show)
   - [explain](#explain)
+  - [badge](#badge)
+  - [baseline](#baseline)
+  - [diff](#diff)
+  - [watch](#watch)
+  - [annotate](#annotate)
+  - [completion](#completion)
   - [serve](#serve)
   - [registry](#registry)
   - [plugin](#plugin)
@@ -16,7 +22,9 @@ Complete reference for the Nox CLI, configuration, and integrations.
   - [Exclude Patterns](#exclude-patterns)
   - [Rule Overrides](#rule-overrides)
   - [Output Defaults](#output-defaults)
+  - [Policy Settings](#policy-settings)
   - [Explain Defaults](#explain-defaults)
+- [Inline Suppressions](#inline-suppressions)
 - [Output Formats](#output-formats)
   - [findings.json](#findingsjson)
   - [results.sarif](#resultssarif)
@@ -86,7 +94,10 @@ The scan pipeline:
 5. Applies rule disabling and severity overrides from config
 6. Deduplicates findings by fingerprint
 7. Sorts deterministically for reproducible output
-8. Writes reports in the requested formats
+8. Applies inline suppressions (`nox:ignore` comments)
+9. Applies baseline matching (marks known findings)
+10. Evaluates policy (determines pass/fail based on thresholds)
+11. Writes reports in the requested formats
 
 ### show
 
@@ -198,6 +209,219 @@ The explain command:
 5. Reports token usage
 
 The explain module is optional and never affects scan results.
+
+### badge
+
+Generate an SVG status badge showing scan results.
+
+```
+nox badge [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--input` | (none) | Path to `findings.json` (default: run scan) |
+| `--output` | `.github/nox-badge.svg` | Output SVG file path |
+| `--label` | `nox` | Badge label text |
+
+**Examples:**
+
+```bash
+# Scan and generate badge
+nox badge .
+
+# Generate badge from existing findings
+nox badge --input findings.json
+
+# Custom label and output path
+nox badge . --label "security" --output docs/badge.svg
+```
+
+The badge color reflects the highest severity level found:
+
+| Severity | Color |
+|----------|-------|
+| Clean (0 findings) | Green |
+| Info only | Gray |
+| Low only | Yellow-green |
+| Medium | Yellow |
+| High | Orange |
+| Critical | Red |
+
+The badge text shows the count at the highest severity (e.g., `3 critical · 12 total`) or `clean` if no findings were detected.
+
+**Use in CI to auto-update the badge:**
+
+```yaml
+- name: Update security badge
+  run: nox badge . --output .github/nox-badge.svg
+
+- name: Commit badge
+  run: |
+    git add .github/nox-badge.svg
+    git diff --staged --quiet || git commit -m "chore: update nox badge [skip ci]"
+    git push
+```
+
+Then reference it in your README:
+
+```markdown
+![Nox](.github/nox-badge.svg)
+```
+
+### baseline
+
+Manage finding baselines for tracking known issues that should not block CI.
+
+```
+nox baseline <write|update|show> [path] [flags]
+```
+
+**Subcommands:**
+
+```bash
+# Write a baseline from all current findings
+nox baseline write .
+
+# Write to a custom path
+nox baseline write . --output custom-baseline.json
+
+# Merge new findings into existing baseline and prune stale entries
+nox baseline update .
+
+# Show baseline statistics
+nox baseline show .
+```
+
+The baseline file is stored at `.nox/baseline.json` by default. When a finding matches a baseline entry (by fingerprint), it is marked as `baselined` and may be excluded from CI failure depending on the policy `baseline_mode` setting.
+
+**Baseline file format:**
+
+```json
+{
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "fingerprint": "a1b2c3...",
+      "rule_id": "SEC-001",
+      "file_path": "config.env",
+      "severity": "high",
+      "reason": "accepted risk",
+      "created_at": "2026-02-10T00:00:00Z",
+      "expires_at": "2026-06-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### diff
+
+Show findings only in files changed relative to a git base ref.
+
+```
+nox diff [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--base` | `main` | Base ref for comparison |
+| `--head` | `HEAD` | Head ref for comparison |
+| `--json` | `false` | Output as JSON |
+
+**Examples:**
+
+```bash
+# Show findings in files changed vs main
+nox diff --base main
+
+# JSON output for CI
+nox diff --base main --json
+
+# Compare specific refs
+nox diff --base v1.0.0 --head feature-branch
+```
+
+### watch
+
+Watch for file changes and re-scan automatically. Useful during development.
+
+```
+nox watch [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--debounce` | `500ms` | Debounce interval for file changes |
+
+**Examples:**
+
+```bash
+# Watch the current directory
+nox watch .
+
+# Custom debounce interval
+nox watch . --debounce 1s
+```
+
+Press `Ctrl+C` to stop. The terminal is cleared between scans.
+
+### annotate
+
+Post inline review comments on a GitHub pull request with finding details.
+
+```
+nox annotate [flags]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--input` | `findings.json` | Path to findings.json |
+| `--pr` | (auto) | PR number (auto-detected from `GITHUB_REF`) |
+| `--repo` | (auto) | Repository owner/name (auto-detected from `GITHUB_REPOSITORY`) |
+
+**Examples:**
+
+```bash
+# Auto-detect PR context in CI
+nox annotate --input nox-results/findings.json
+
+# Explicit PR and repo
+nox annotate --input findings.json --pr 42 --repo myorg/myrepo
+```
+
+Requires the `gh` CLI to be installed and authenticated. Each finding is posted as an inline comment with severity badge, rule ID, and message.
+
+### completion
+
+Generate shell completion scripts.
+
+```
+nox completion <bash|zsh|fish|powershell>
+```
+
+**Setup:**
+
+```bash
+# Bash (add to ~/.bashrc)
+eval "$(nox completion bash)"
+
+# Zsh (add to ~/.zshrc or use fpath)
+nox completion zsh > "${fpath[1]}/_nox"
+
+# Fish
+nox completion fish | source
+
+# PowerShell
+nox completion powershell | Out-String | Invoke-Expression
+```
 
 ### serve
 
@@ -330,6 +554,13 @@ output:
   format: json         # json, sarif, cdx, spdx, all
   directory: .          # Output directory
 
+# Policy settings for CI pass/fail behavior
+policy:
+  fail_on: high          # Only fail on high+ severity
+  warn_on: medium        # Warn on medium findings
+  baseline_mode: warn    # warn | strict | off
+  baseline_path: ""      # Default: .nox/baseline.json
+
 # Default explain settings (CLI flags override these)
 explain:
   api_key_env: OPENAI_API_KEY   # Env var name to read API key from
@@ -375,6 +606,45 @@ nox scan .
 nox scan . --format json --output ./custom-dir
 ```
 
+### Policy Settings
+
+The `policy` section controls CI pass/fail behavior:
+
+```yaml
+policy:
+  fail_on: high          # Only fail on high+ severity findings
+  warn_on: medium        # Warn on medium severity findings
+  baseline_mode: warn    # How baselined findings affect results
+  baseline_path: ""      # Custom baseline file path (default: .nox/baseline.json)
+```
+
+**`fail_on`** — Minimum severity to cause a non-zero exit code. Findings below this threshold do not cause failure. Valid values: `critical`, `high`, `medium`, `low`, `info`. When not set, any finding causes failure.
+
+**`warn_on`** — Minimum severity to produce a warning (printed but does not affect exit code).
+
+**`baseline_mode`** — Controls how baselined findings are handled:
+
+| Mode | Behavior |
+|------|----------|
+| `warn` | Baselined findings produce warnings but do not count toward failure |
+| `strict` | Baselined findings count toward failure (same as new findings) |
+| `off` | Baseline not applied |
+
+**Examples:**
+
+```yaml
+# Gradual adoption: only fail on critical, warn on everything else
+policy:
+  fail_on: critical
+  warn_on: low
+  baseline_mode: warn
+
+# Strict mode: all findings must be addressed
+policy:
+  fail_on: info
+  baseline_mode: strict
+```
+
 ### Explain Defaults
 
 The `explain` section configures defaults for `nox explain`. CLI flags always take precedence.
@@ -407,6 +677,53 @@ explain:
 ```
 
 The API key itself is **never** stored in `.nox.yaml` — only the name of the environment variable. This prevents accidental commits of secrets.
+
+---
+
+## Inline Suppressions
+
+Suppress specific findings directly in source code using `nox:ignore` comments. This works with any comment style:
+
+```go
+// nox:ignore SEC-001 -- false positive in test data
+var testKey = "AKIAIOSFODNN7EXAMPLE"
+```
+
+```python
+# nox:ignore SEC-005
+api_key = os.environ["API_KEY"]
+```
+
+```sql
+-- nox:ignore SEC-003 -- test credentials
+INSERT INTO users (token) VALUES ('test-token');
+```
+
+```html
+<!-- nox:ignore AI-001 -->
+<div>{{ user_input }}</div>
+```
+
+```css
+/* nox:ignore IAC-001 */
+```
+
+**Syntax:** `<comment-marker> nox:ignore <RULE-ID>[,RULE-ID...] [-- reason] [expires:YYYY-MM-DD]`
+
+**Features:**
+
+| Feature | Syntax | Example |
+|---------|--------|---------|
+| Single rule | `nox:ignore SEC-001` | Suppress one rule |
+| Multiple rules | `nox:ignore SEC-001,SEC-002` | Suppress multiple rules |
+| With reason | `nox:ignore SEC-001 -- false positive` | Document why |
+| With expiration | `nox:ignore SEC-001 -- expires:2026-06-01` | Auto-expire |
+| Trailing comment | `var x = 1 // nox:ignore SEC-001` | Suppress on same line |
+| Dedicated comment | `// nox:ignore SEC-001` (line above) | Suppress next line |
+
+**Supported comment styles:** `//` (Go, JS, Java, C, Rust), `#` (Python, Ruby, Shell, YAML), `--` (SQL, Lua), `/*` (CSS, C), `<!--` (HTML, XML).
+
+Suppressed findings are marked with `status: "suppressed"` in the output and do not count toward policy failure.
 
 ---
 
@@ -548,6 +865,7 @@ jobs:
 | `output` | `nox-results` | Output directory for reports |
 | `version` | `latest` | Nox version to install (e.g., `0.1.0` or `latest`) |
 | `fail-on-findings` | `true` | Fail the step if findings are detected |
+| `annotate` | `true` | Post inline PR annotations for findings |
 
 **Action outputs:**
 
@@ -685,6 +1003,8 @@ nox serve --allowed-paths /path/to/project
 | `get_sbom` | Get SBOM from last scan | `format` (`cdx` or `spdx`, default: `cdx`) |
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
+| `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
+| `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
 | `plugin.read_resource` | Read a plugin resource | `plugin`, `uri` |
@@ -808,9 +1128,11 @@ See [`docs/plugin-authoring.md`](plugin-authoring.md) for the full SDK guide and
 
 | Code | Meaning |
 |------|---------|
-| `0` | Scan completed, no findings |
-| `1` | Scan completed, findings detected |
+| `0` | Scan completed, no findings (or policy pass) |
+| `1` | Scan completed, findings detected (or policy fail) |
 | `2` | Error (invalid arguments, scan failure, config error) |
+
+When policy is configured via `.nox.yaml`, the exit code reflects the policy evaluation result rather than raw finding count. Findings below the `fail_on` threshold do not cause exit code 1.
 
 Use exit codes in CI to gate deployments:
 

@@ -14,6 +14,15 @@ type ScanConfig struct {
 	Scan    ScanSettings    `yaml:"scan"`
 	Output  OutputSettings  `yaml:"output"`
 	Explain ExplainSettings `yaml:"explain"`
+	Policy  PolicySettings  `yaml:"policy"`
+}
+
+// PolicySettings controls pass/fail thresholds and baseline behavior.
+type PolicySettings struct {
+	FailOn       string `yaml:"fail_on"`
+	WarnOn       string `yaml:"warn_on"`
+	BaselineMode string `yaml:"baseline_mode"`
+	BaselinePath string `yaml:"baseline_path"`
 }
 
 // ScanSettings controls which files are scanned and how rules behave.

@@ -29,7 +29,20 @@ func main() {
 // before positional arguments, allowing "nox scan . --format sarif" to work
 // the same as "nox --format sarif scan .". Subcommand-specific flags (e.g.,
 // --severity, --json for "show") are left in place for the subcommand to parse.
+//
+// The string flags --format and --output are only extracted for the "scan"
+// subcommand, since other subcommands may define their own --output flag.
+// Bool flags (-q, -v, --version) are always extracted regardless of subcommand.
 func extractInterspersedArgs(args []string) []string {
+	// Determine the subcommand so we know whether to extract --format/--output.
+	subcommand := ""
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			subcommand = arg
+			break
+		}
+	}
+
 	var flags, rest []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -48,7 +61,7 @@ func extractInterspersedArgs(args []string) []string {
 		}
 		if isTopLevelBoolFlag(name) {
 			flags = append(flags, arg)
-		} else if isTopLevelStringFlag(name) {
+		} else if subcommand == "scan" && isTopLevelStringFlag(name) {
 			flags = append(flags, arg)
 			// Consume the value unless it was --flag=value.
 			if !strings.Contains(arg, "=") && i+1 < len(args) {
@@ -104,13 +117,19 @@ func run(args []string) int {
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
-		fmt.Fprintf(os.Stderr, "  scan <path>    Scan a directory for security issues\n")
-		fmt.Fprintf(os.Stderr, "  show [path]    Inspect findings interactively\n")
-		fmt.Fprintf(os.Stderr, "  explain <path> Explain findings using an LLM\n")
-		fmt.Fprintf(os.Stderr, "  serve          Start MCP server on stdio\n")
-		fmt.Fprintf(os.Stderr, "  registry       Manage plugin registries\n")
-		fmt.Fprintf(os.Stderr, "  plugin         Manage and invoke plugins\n")
-		fmt.Fprintf(os.Stderr, "  version        Print version and exit\n\n")
+		fmt.Fprintf(os.Stderr, "  scan <path>      Scan a directory for security issues\n")
+		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
+		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
+		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
+		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
+		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
+		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
+		fmt.Fprintf(os.Stderr, "  annotate         Annotate a PR with findings\n")
+		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
+		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
+		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
+		fmt.Fprintf(os.Stderr, "  plugin           Manage and invoke plugins\n")
+		fmt.Fprintf(os.Stderr, "  version          Print version and exit\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
@@ -142,12 +161,24 @@ func run(args []string) int {
 		return runShow(remaining[1:])
 	case "explain":
 		return runExplain(remaining[1:])
+	case "badge":
+		return runBadge(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
 	case "registry":
 		return runRegistry(remaining[1:])
 	case "plugin":
 		return runPlugin(remaining[1:])
+	case "baseline":
+		return runBaseline(remaining[1:])
+	case "diff":
+		return runDiff(remaining[1:])
+	case "watch":
+		return runWatch(remaining[1:])
+	case "completion":
+		return runCompletion(remaining[1:])
+	case "annotate":
+		return runAnnotate(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
@@ -190,12 +221,20 @@ func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
 		return 2
 	}
 
-	findingCount := len(result.Findings.Findings())
+	activeFindings := result.Findings.ActiveFindings()
+	findingCount := len(activeFindings)
+	totalCount := len(result.Findings.Findings())
+	suppressedCount := totalCount - findingCount
 	pkgCount := len(result.Inventory.Packages())
 
 	if !quiet {
-		fmt.Printf("[results] %d findings, %d dependencies, %d AI components\n",
-			findingCount, pkgCount, len(result.AIInventory.Components))
+		if suppressedCount > 0 {
+			fmt.Printf("[results] %d findings (%d suppressed), %d dependencies, %d AI components\n",
+				findingCount, suppressedCount, pkgCount, len(result.AIInventory.Components))
+		} else {
+			fmt.Printf("[results] %d findings, %d dependencies, %d AI components\n",
+				findingCount, pkgCount, len(result.AIInventory.Components))
+		}
 	}
 
 	// Generate reports.
@@ -264,8 +303,23 @@ func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
 		}
 	}
 
+	// Policy evaluation output.
+	if result.PolicyResult != nil {
+		if !quiet {
+			for _, w := range result.PolicyResult.Warnings {
+				fmt.Printf("[warn] %s\n", w)
+			}
+			fmt.Printf("[policy] %s\n", result.PolicyResult.Summary)
+		}
+	}
+
 	if !quiet {
 		fmt.Println("[done]")
+	}
+
+	// If policy is configured, use its exit code.
+	if result.PolicyResult != nil {
+		return result.PolicyResult.ExitCode
 	}
 
 	if findingCount > 0 {

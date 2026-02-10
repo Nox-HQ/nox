@@ -163,6 +163,16 @@ func TestExtractInterspersedArgs(t *testing.T) {
 			[]string{"show", ".", "--severity", "critical", "-q"},
 			[]string{"-q", "show", ".", "--severity", "critical"},
 		},
+		{
+			"output flag stays with non-scan subcommand",
+			[]string{"badge", ".", "--output", "/tmp/badge.svg"},
+			[]string{"badge", ".", "--output", "/tmp/badge.svg"},
+		},
+		{
+			"output flag extracted for scan only",
+			[]string{"scan", ".", "--output", "/tmp/out"},
+			[]string{"--output", "/tmp/out", "scan", "."},
+		},
 	}
 
 	for _, tt := range tests {

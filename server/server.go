@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/findings"
@@ -167,6 +169,38 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListFindings,
+	)
+
+	// baseline_status tool — returns baseline statistics.
+	srv.AddTool(
+		mcp.NewTool("baseline_status",
+			mcp.WithDescription("Show baseline statistics: total entries, expired count, per-severity breakdown"),
+			mcp.WithString("path",
+				mcp.Description("Absolute path to the project root"),
+				mcp.Required(),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleBaselineStatus,
+	)
+
+	// baseline_add tool — add a finding to the baseline by fingerprint.
+	srv.AddTool(
+		mcp.NewTool("baseline_add",
+			mcp.WithDescription("Add a finding to the baseline by fingerprint"),
+			mcp.WithString("path",
+				mcp.Description("Absolute path to the project root"),
+				mcp.Required(),
+			),
+			mcp.WithString("fingerprint",
+				mcp.Description("Finding fingerprint to baseline"),
+				mcp.Required(),
+			),
+			mcp.WithString("reason",
+				mcp.Description("Reason for baselining this finding"),
+			),
+		),
+		s.handleBaselineAdd,
 	)
 
 	s.registerPluginTools(srv)
@@ -668,6 +702,110 @@ func (s *Server) handleResourceAIInventory(_ context.Context, request mcp.ReadRe
 			Text:     truncate(string(data)),
 		},
 	}, nil
+}
+
+// Baseline handlers.
+
+func (s *Server) handleBaselineStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: path"), nil
+	}
+
+	if err := s.isPathAllowed(path); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	bl, err := baseline.Load(baseline.DefaultPath(path))
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("loading baseline: %v", err)), nil
+	}
+
+	type statusResponse struct {
+		Total   int            `json:"total"`
+		Expired int            `json:"expired"`
+		BySev   map[string]int `json:"by_severity"`
+		Path    string         `json:"path"`
+	}
+
+	bySev := make(map[string]int)
+	for _, e := range bl.Entries {
+		bySev[string(e.Severity)]++
+	}
+
+	resp := statusResponse{
+		Total:   bl.Len(),
+		Expired: bl.ExpiredCount(),
+		BySev:   bySev,
+		Path:    baseline.DefaultPath(path),
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: path"), nil
+	}
+
+	if err := s.isPathAllowed(path); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	fingerprint, err := request.RequireString("fingerprint")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: fingerprint"), nil
+	}
+
+	reason := request.GetString("reason", "")
+
+	// Find the finding in cached scan results.
+	s.mu.RLock()
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	var matched *findings.Finding
+	for _, f := range cache.Findings.Findings() {
+		if f.Fingerprint == fingerprint {
+			matched = &f
+			break
+		}
+	}
+
+	if matched == nil {
+		return mcp.NewToolResultError(fmt.Sprintf("finding with fingerprint %q not found in scan results", fingerprint)), nil
+	}
+
+	blPath := baseline.DefaultPath(path)
+	bl, err := baseline.Load(blPath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("loading baseline: %v", err)), nil
+	}
+
+	bl.Add(baseline.Entry{
+		Fingerprint: matched.Fingerprint,
+		RuleID:      matched.RuleID,
+		FilePath:    matched.Location.FilePath,
+		Severity:    matched.Severity,
+		Reason:      reason,
+		CreatedAt:   time.Now().UTC(),
+	})
+
+	if err := bl.Save(blPath); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("saving baseline: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Added finding %s to baseline (%d total entries)", fingerprint[:12], bl.Len())), nil
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.

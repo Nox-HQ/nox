@@ -193,6 +193,26 @@ run_scan() {
   return "${exit_code}"
 }
 
+# --- Annotate PR ---
+
+annotate_pr() {
+  local output_dir="$1"
+  local install_dir="${GITHUB_ACTION_PATH:-.}"
+
+  # Only annotate in PR context.
+  if [[ -z "${GITHUB_REF:-}" ]] || [[ "${GITHUB_REF}" != refs/pull/* ]]; then
+    return 0
+  fi
+
+  local findings_file="${output_dir}/findings.json"
+  if [[ ! -f "${findings_file}" ]]; then
+    return 0
+  fi
+
+  echo "Annotating PR with findings..."
+  "${install_dir}/nox" annotate --input "${findings_file}" || true
+}
+
 # --- Main ---
 
 main() {
@@ -202,7 +222,15 @@ main() {
   version="$(resolve_version "${INPUT_VERSION}")"
 
   install_nox "${version}" "${platform}"
-  run_scan "${INPUT_PATH}" "${INPUT_FORMAT}" "${INPUT_OUTPUT}" "${INPUT_FAIL_ON_FINDINGS}"
+
+  local scan_exit=0
+  run_scan "${INPUT_PATH}" "${INPUT_FORMAT}" "${INPUT_OUTPUT}" "${INPUT_FAIL_ON_FINDINGS}" || scan_exit=$?
+
+  if [[ "${INPUT_ANNOTATE:-true}" == "true" ]]; then
+    annotate_pr "${INPUT_OUTPUT}"
+  fi
+
+  exit "${scan_exit}"
 }
 
 main

@@ -57,6 +57,7 @@ reports/
   with:
     path: '.'
     format: sarif
+    annotate: 'true'    # Post inline PR comments (default: true)
 - uses: github/codeql-action/upload-sarif@v3
   if: always()
   with:
@@ -170,6 +171,84 @@ explain:
   output: explanations.json     # Output file path
 ```
 
+### Policy & Baseline
+
+Control CI pass/fail behavior and manage known findings:
+
+```yaml
+# .nox.yaml
+policy:
+  fail_on: high          # Only fail on high+ severity (critical, high)
+  warn_on: medium        # Warn on medium findings
+  baseline_mode: warn    # warn | strict | off
+  baseline_path: ""      # Default: .nox/baseline.json
+```
+
+```bash
+# Create a baseline from all current findings
+nox baseline write .
+
+# Update baseline (add new, prune stale)
+nox baseline update .
+
+# Show baseline statistics
+nox baseline show .
+```
+
+### Inline Suppressions
+
+Suppress specific findings directly in source code:
+
+```go
+// nox:ignore SEC-001 -- false positive in test
+var testKey = "AKIAIOSFODNN7EXAMPLE"
+
+var apiKey = "test" // nox:ignore SEC-005
+```
+
+Supports all comment styles: `//`, `#`, `--`, `/*`, `<!--`. Multi-rule: `nox:ignore SEC-001,SEC-002`. Expiring: `nox:ignore SEC-001 -- expires:2025-12-31`.
+
+### Diff Mode
+
+Show only findings in changed files:
+
+```bash
+nox diff --base main --head HEAD
+nox diff --base main --json
+```
+
+### Watch Mode
+
+Re-scan automatically on file changes:
+
+```bash
+nox watch .
+nox watch . --debounce 1s
+```
+
+### Shell Completions
+
+```bash
+# Bash
+eval "$(nox completion bash)"
+
+# Zsh
+nox completion zsh > "${fpath[1]}/_nox"
+
+# Fish
+nox completion fish | source
+```
+
+### PR Annotations
+
+Post inline review comments on GitHub PRs:
+
+```bash
+nox annotate --input findings.json --pr 123 --repo owner/name
+```
+
+Auto-detects PR number and repo from `GITHUB_REF` and `GITHUB_REPOSITORY` environment variables in CI.
+
 CLI flags always take precedence over config file values.
 
 ## CLI Reference
@@ -178,13 +257,19 @@ CLI flags always take precedence over config file values.
 nox <command> [flags]
 
 Commands:
-  scan <path>       Scan a directory for security issues
-  show [path]       Inspect findings interactively
-  explain <path>    Explain findings using an LLM
-  serve             Start MCP server on stdio
-  registry          Manage plugin registries
-  plugin            Manage and invoke plugins
-  version           Print version and exit
+  scan <path>         Scan a directory for security issues
+  show [path]         Inspect findings interactively
+  explain <path>      Explain findings using an LLM
+  badge [path]        Generate an SVG status badge
+  baseline <cmd>      Manage finding baselines (write, update, show)
+  diff [path]         Show findings in changed files only
+  watch [path]        Watch for changes and re-scan automatically
+  annotate            Annotate a GitHub PR with inline findings
+  completion <shell>  Generate shell completions (bash, zsh, fish, powershell)
+  serve               Start MCP server on stdio
+  registry            Manage plugin registries
+  plugin              Manage and invoke plugins
+  version             Print version and exit
 
 Scan Flags:
   --format string   Output formats: json, sarif, cdx, spdx, all (default: json)
@@ -193,8 +278,8 @@ Scan Flags:
   --verbose, -v     Verbose output
 
 Exit Codes:
-  0   No findings
-  1   Findings detected
+  0   No findings (or policy pass)
+  1   Findings detected (or policy fail)
   2   Error
 ```
 
@@ -223,7 +308,10 @@ assist/     Optional LLM-powered explanations (no side effects)
 4. Apply rule config (disable, severity override)
 5. Deduplicate by fingerprint
 6. Sort deterministically
-7. Emit reports
+7. Apply inline suppressions (nox:ignore)
+8. Apply baseline matching
+9. Evaluate policy (pass/fail thresholds)
+10. Emit reports
 ```
 
 ## Plugin Ecosystem
@@ -270,7 +358,7 @@ The built-in MCP server allows AI agents to invoke scans safely:
 nox serve --allowed-paths /path/to/project
 ```
 
-**Tools:** `scan`, `get_findings`, `get_sbom`, `get_finding_detail`, `list_findings`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
+**Tools:** `scan`, `get_findings`, `get_sbom`, `get_finding_detail`, `list_findings`, `baseline_status`, `baseline_add`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
 
 **Resources:** `nox://findings`, `nox://sarif`, `nox://sbom/cdx`, `nox://sbom/spdx`, `nox://ai-inventory`
 

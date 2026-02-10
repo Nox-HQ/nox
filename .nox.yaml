@@ -3,3 +3,4 @@ scan:
     - "plugin-repos/"
     - "dist/"
     - "registry-scaffold/"
+    - "*_test.go"

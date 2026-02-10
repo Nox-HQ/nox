@@ -26,6 +26,10 @@ inputs:
     description: 'Fail the step if findings are detected'
     required: false
     default: 'true'
+  annotate:
+    description: 'Post inline PR annotations for findings'
+    required: false
+    default: 'true'
 
 outputs:
   findings-count:
@@ -53,4 +57,5 @@ runs:
         INPUT_OUTPUT: ${{ inputs.output }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUT_ANNOTATE: ${{ inputs.annotate }}
       run: bash "${{ github.action_path }}/action.sh"

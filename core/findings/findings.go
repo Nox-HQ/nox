@@ -21,6 +21,16 @@ const (
 	SeverityInfo     Severity = "info"
 )
 
+// Status indicates the disposition of a finding relative to baselines and
+// inline suppressions.
+type Status string
+
+const (
+	StatusNew        Status = "new"
+	StatusBaselined  Status = "baselined"
+	StatusSuppressed Status = "suppressed"
+)
+
 // Confidence expresses how certain the scanner is that the finding is a true
 // positive rather than a false positive.
 type Confidence string
@@ -54,6 +64,7 @@ type Finding struct {
 	Message     string
 	Fingerprint string
 	Metadata    map[string]string
+	Status      Status `json:"Status,omitempty"`
 }
 
 // FindingSet is an ordered, deduplicated collection of findings. It is the
@@ -134,6 +145,39 @@ func (fs *FindingSet) OverrideSeverity(ruleID string, severity Severity) {
 			fs.items[i].Severity = severity
 		}
 	}
+}
+
+// SetStatus sets the status of the finding at the given index.
+func (fs *FindingSet) SetStatus(i int, s Status) {
+	if i >= 0 && i < len(fs.items) {
+		fs.items[i].Status = s
+	}
+}
+
+// CountByStatus returns a count of findings grouped by status.
+// Findings with an empty status are counted under StatusNew.
+func (fs *FindingSet) CountByStatus() map[Status]int {
+	counts := make(map[Status]int)
+	for _, f := range fs.items {
+		s := f.Status
+		if s == "" {
+			s = StatusNew
+		}
+		counts[s]++
+	}
+	return counts
+}
+
+// ActiveFindings returns findings that are not suppressed or baselined.
+func (fs *FindingSet) ActiveFindings() []Finding {
+	var active []Finding
+	for _, f := range fs.items {
+		if f.Status == StatusSuppressed || f.Status == StatusBaselined {
+			continue
+		}
+		active = append(active, f)
+	}
+	return active
 }
 
 // Findings returns the current slice of findings. The caller must not modify
