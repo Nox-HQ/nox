@@ -105,10 +105,14 @@ func printScanResults(target string, jsonOutput bool) {
 		return
 	}
 
-	ff := result.Findings.Findings()
+	ff := result.Findings.ActiveFindings()
+	suppressed := len(result.Findings.Findings()) - len(ff)
 	counts := countBySeverity(ff)
 
 	fmt.Printf("[results] %d finding(s)", len(ff))
+	if suppressed > 0 {
+		fmt.Printf(" (%d suppressed)", suppressed)
+	}
 	if len(counts) > 0 {
 		parts := make([]string, 0, len(counts))
 		for sev, count := range counts {

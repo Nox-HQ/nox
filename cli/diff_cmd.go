@@ -70,7 +70,7 @@ func runDiff(args []string) int {
 		Line     int    `json:"line"`
 		Message  string `json:"message"`
 	}
-	for _, f := range result.Findings.Findings() {
+	for _, f := range result.Findings.ActiveFindings() {
 		if _, ok := changedSet[f.Location.FilePath]; ok {
 			filtered = append(filtered, struct {
 				RuleID   string `json:"rule_id"`

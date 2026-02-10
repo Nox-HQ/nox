@@ -71,8 +71,13 @@ func runBadge(args []string) int {
 			fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 			return 2
 		}
-		findingsList = result.Findings.Findings()
-		fmt.Printf("[results] %d findings\n", len(findingsList))
+		findingsList = result.Findings.ActiveFindings()
+		suppressed := len(result.Findings.Findings()) - len(findingsList)
+		if suppressed > 0 {
+			fmt.Printf("[results] %d findings (%d suppressed)\n", len(findingsList), suppressed)
+		} else {
+			fmt.Printf("[results] %d findings\n", len(findingsList))
+		}
 	}
 
 	counts := countBySeverity(findingsList)
