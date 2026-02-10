@@ -34,6 +34,7 @@ results.sarif
 sbom.cdx.json
 sbom.spdx.json
 ai.inventory.json
+explanations.json
 
 # Claude Code
 .claude/
