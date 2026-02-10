@@ -1,0 +1,49 @@
+version: 1
+language: go
+
+policy:
+  default:
+    min: 70
+
+  domains:
+    - name: core
+      match:
+        - github.com/nox-hq/nox/core
+        - github.com/nox-hq/nox/core/catalog/...
+        - github.com/nox-hq/nox/core/detail/...
+        - github.com/nox-hq/nox/core/discovery/...
+        - github.com/nox-hq/nox/core/findings/...
+        - github.com/nox-hq/nox/core/report/...
+        - github.com/nox-hq/nox/core/rules/...
+      min: 80
+
+    - name: analyzers
+      match:
+        - github.com/nox-hq/nox/core/analyzers/...
+      min: 85
+
+    - name: cli
+      match:
+        - github.com/nox-hq/nox/cli/...
+      min: 45
+
+    - name: server
+      match:
+        - github.com/nox-hq/nox/server/...
+      min: 65
+
+    - name: plugin
+      match:
+        - github.com/nox-hq/nox/plugin/...
+        - github.com/nox-hq/nox/sdk/...
+      min: 70
+
+    - name: registry
+      match:
+        - github.com/nox-hq/nox/registry/...
+      min: 70
+
+    - name: assist
+      match:
+        - github.com/nox-hq/nox/assist/...
+      min: 60

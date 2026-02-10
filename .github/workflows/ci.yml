@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
   security-events: write
 
 jobs:
@@ -35,6 +35,21 @@ jobs:
 
       - name: Coverage summary
         run: go tool cover -func coverage.out
+
+      - name: Install coverctl
+        run: go install github.com/pterm/coverctl@latest
+
+      - name: Check coverage thresholds
+        run: coverctl check --config .coverctl.yaml --profile coverage.out
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          coverctl badge --config .coverctl.yaml --profile coverage.out --output .github/coverage-badge.svg
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/coverage-badge.svg
+          git diff --cached --quiet || git commit -m "ci: update coverage badge [skip ci]" && git push
 
       - name: Run vet
         run: go vet ./...

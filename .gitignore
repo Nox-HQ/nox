@@ -36,5 +36,8 @@ sbom.spdx.json
 ai.inventory.json
 explanations.json
 
+# Coverage
+.cover/
+
 # Claude Code
 .claude/
