@@ -159,6 +159,14 @@ scan:
 output:
   format: sarif             # Default output format
   directory: reports        # Default output directory
+
+explain:
+  api_key_env: OPENAI_API_KEY   # Env var to read API key from
+  model: gpt-4o                 # LLM model name
+  base_url: ""                  # Custom OpenAI-compatible endpoint
+  timeout: 2m                   # Per-request timeout
+  batch_size: 10                # Findings per LLM request
+  output: explanations.json     # Output file path
 ```
 
 CLI flags always take precedence over config file values.

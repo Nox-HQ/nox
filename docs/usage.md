@@ -16,6 +16,7 @@ Complete reference for the Nox CLI, configuration, and integrations.
   - [Exclude Patterns](#exclude-patterns)
   - [Rule Overrides](#rule-overrides)
   - [Output Defaults](#output-defaults)
+  - [Explain Defaults](#explain-defaults)
 - [Output Formats](#output-formats)
   - [findings.json](#findingsjson)
   - [results.sarif](#resultssarif)
@@ -328,6 +329,17 @@ scan:
 output:
   format: json         # json, sarif, cdx, spdx, all
   directory: .          # Output directory
+
+# Default explain settings (CLI flags override these)
+explain:
+  api_key_env: OPENAI_API_KEY   # Env var name to read API key from
+  model: gpt-4o                 # LLM model name
+  base_url: ""                  # Custom OpenAI-compatible endpoint
+  timeout: 2m                   # Per-request timeout
+  batch_size: 10                # Findings per LLM request
+  output: explanations.json     # Output file path
+  enrich: ""                    # Comma-separated enrichment tools
+  plugin_dir: ""                # Plugin binary directory
 ```
 
 If `.nox.yaml` does not exist, nox runs with default settings (no exclusions, all rules enabled, JSON output).
@@ -362,6 +374,39 @@ nox scan .
 # CLI flags override config
 nox scan . --format json --output ./custom-dir
 ```
+
+### Explain Defaults
+
+The `explain` section configures defaults for `nox explain`. CLI flags always take precedence.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `api_key_env` | `OPENAI_API_KEY` | Environment variable name to read the API key from |
+| `model` | `gpt-4o` | LLM model name |
+| `base_url` | (empty) | Custom OpenAI-compatible API endpoint |
+| `timeout` | `2m` | Per-request timeout |
+| `batch_size` | `10` | Findings per LLM request |
+| `output` | `explanations.json` | Output file path |
+| `enrich` | (empty) | Comma-separated plugin enrichment tools |
+| `plugin_dir` | (empty) | Directory containing plugin binaries |
+
+Use `api_key_env` to configure a different provider without changing code:
+
+```yaml
+# Use Anthropic instead of OpenAI
+explain:
+  api_key_env: ANTHROPIC_API_KEY
+  model: claude-sonnet-4-5-20250929
+  base_url: https://api.anthropic.com/v1
+
+# Use a local Ollama instance (no API key needed)
+explain:
+  base_url: http://localhost:11434/v1
+  model: llama3
+  timeout: 5m
+```
+
+The API key itself is **never** stored in `.nox.yaml` — only the name of the environment variable. This prevents accidental commits of secrets.
 
 ---
 

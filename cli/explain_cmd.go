@@ -16,6 +16,23 @@ import (
 
 // runExplain runs a scan and generates LLM-powered explanations of findings.
 func runExplain(args []string) int {
+	// Extract positional args (paths) before parsing flags so that
+	// "nox explain . --model gpt-4o" works like "nox explain --model gpt-4o .".
+	var flagArgs []string
+	var positionalArgs []string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			flagArgs = append(flagArgs, args[i])
+			// If this flag takes a value (not a boolean), consume the next arg too.
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		} else {
+			positionalArgs = append(positionalArgs, args[i])
+		}
+	}
+
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 
 	var (
@@ -36,18 +53,30 @@ func runExplain(args []string) int {
 	fs.StringVar(&enrich, "enrich", "", "comma-separated list of read-only plugin tools to invoke for enrichment")
 	fs.DurationVar(&timeout, "timeout", 2*time.Minute, "timeout per LLM request")
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
+	positionalArgs = append(positionalArgs, fs.Args()...)
 
-	if fs.NArg() < 1 {
+	if len(positionalArgs) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: nox explain <path> [flags]")
 		return 2
 	}
-	target := fs.Arg(0)
+	target := positionalArgs[0]
+
+	// Load project config and apply defaults (CLI flags take precedence).
+	cfg, err := nox.LoadScanConfig(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: loading .nox.yaml: %v\n", err)
+		return 2
+	}
+	applyExplainDefaults(fs, cfg)
 
 	// Check for API key.
 	apiKeyEnv := "OPENAI_API_KEY"
+	if cfg.Explain.APIKeyEnv != "" {
+		apiKeyEnv = cfg.Explain.APIKeyEnv
+	}
 	if os.Getenv(apiKeyEnv) == "" && baseURL == "" {
 		fmt.Fprintf(os.Stderr, "error: %s environment variable is required (or set --base-url for a local endpoint)\n", apiKeyEnv)
 		return 2
@@ -146,4 +175,34 @@ func runExplain(args []string) int {
 	}
 	fmt.Println("[done]")
 	return 0
+}
+
+// applyExplainDefaults applies .nox.yaml explain settings as defaults for any
+// flags that were not explicitly set on the command line.
+func applyExplainDefaults(fs *flag.FlagSet, cfg *nox.ScanConfig) {
+	ec := cfg.Explain
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
+	if !set["model"] && ec.Model != "" {
+		fs.Set("model", ec.Model)
+	}
+	if !set["base-url"] && ec.BaseURL != "" {
+		fs.Set("base-url", ec.BaseURL)
+	}
+	if !set["timeout"] && ec.Timeout != "" {
+		fs.Set("timeout", ec.Timeout)
+	}
+	if !set["batch-size"] && ec.BatchSize > 0 {
+		fs.Set("batch-size", fmt.Sprintf("%d", ec.BatchSize))
+	}
+	if !set["output"] && ec.Output != "" {
+		fs.Set("output", ec.Output)
+	}
+	if !set["enrich"] && ec.Enrich != "" {
+		fs.Set("enrich", ec.Enrich)
+	}
+	if !set["plugin-dir"] && ec.PluginDir != "" {
+		fs.Set("plugin-dir", ec.PluginDir)
+	}
 }

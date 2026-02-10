@@ -129,6 +129,55 @@ func TestLoadScanConfig_Partial(t *testing.T) {
 	}
 }
 
+func TestLoadScanConfig_ExplainSettings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `explain:
+  api_key_env: ANTHROPIC_API_KEY
+  model: claude-sonnet-4-5-20250929
+  base_url: http://localhost:11434/v1
+  timeout: 30s
+  batch_size: 5
+  output: my-explanations.json
+  enrich: sast.scan,deps.check
+  plugin_dir: ./plugins
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Explain.APIKeyEnv != "ANTHROPIC_API_KEY" {
+		t.Errorf("api_key_env = %q, want %q", cfg.Explain.APIKeyEnv, "ANTHROPIC_API_KEY")
+	}
+	if cfg.Explain.Model != "claude-sonnet-4-5-20250929" {
+		t.Errorf("model = %q, want %q", cfg.Explain.Model, "claude-sonnet-4-5-20250929")
+	}
+	if cfg.Explain.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("base_url = %q, want %q", cfg.Explain.BaseURL, "http://localhost:11434/v1")
+	}
+	if cfg.Explain.Timeout != "30s" {
+		t.Errorf("timeout = %q, want %q", cfg.Explain.Timeout, "30s")
+	}
+	if cfg.Explain.BatchSize != 5 {
+		t.Errorf("batch_size = %d, want %d", cfg.Explain.BatchSize, 5)
+	}
+	if cfg.Explain.Output != "my-explanations.json" {
+		t.Errorf("output = %q, want %q", cfg.Explain.Output, "my-explanations.json")
+	}
+	if cfg.Explain.Enrich != "sast.scan,deps.check" {
+		t.Errorf("enrich = %q, want %q", cfg.Explain.Enrich, "sast.scan,deps.check")
+	}
+	if cfg.Explain.PluginDir != "./plugins" {
+		t.Errorf("plugin_dir = %q, want %q", cfg.Explain.PluginDir, "./plugins")
+	}
+}
+
 func TestLoadScanConfig_Invalid(t *testing.T) {
 	t.Parallel()
 

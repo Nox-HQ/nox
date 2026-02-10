@@ -11,8 +11,9 @@ import (
 
 // ScanConfig holds project-level configuration loaded from .nox.yaml.
 type ScanConfig struct {
-	Scan   ScanSettings   `yaml:"scan"`
-	Output OutputSettings `yaml:"output"`
+	Scan    ScanSettings    `yaml:"scan"`
+	Output  OutputSettings  `yaml:"output"`
+	Explain ExplainSettings `yaml:"explain"`
 }
 
 // ScanSettings controls which files are scanned and how rules behave.
@@ -31,6 +32,18 @@ type RulesConfig struct {
 type OutputSettings struct {
 	Format    string `yaml:"format"`
 	Directory string `yaml:"directory"`
+}
+
+// ExplainSettings controls defaults for the explain command.
+type ExplainSettings struct {
+	APIKeyEnv string `yaml:"api_key_env"` // env var name to read API key from (default: OPENAI_API_KEY)
+	Model     string `yaml:"model"`       // LLM model name (default: gpt-4o)
+	BaseURL   string `yaml:"base_url"`    // custom OpenAI-compatible API base URL
+	Timeout   string `yaml:"timeout"`     // per-request timeout (e.g., "2m", "30s")
+	BatchSize int    `yaml:"batch_size"`  // findings per LLM request (default: 10)
+	Output    string `yaml:"output"`      // output file path (default: explanations.json)
+	Enrich    string `yaml:"enrich"`      // comma-separated enrichment tool names
+	PluginDir string `yaml:"plugin_dir"`  // directory containing plugin binaries
 }
 
 // LoadScanConfig reads .nox.yaml from root and returns the parsed config.
