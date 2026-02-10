@@ -15,9 +15,9 @@ import (
 
 // mockPluginSource is an in-package test double for PluginSource.
 type mockPluginSource struct {
-	caps       []PluginCapability
-	results    map[string]*PluginToolResult
-	errors     map[string]error
+	caps        []PluginCapability
+	results     map[string]*PluginToolResult
+	errors      map[string]error
 	invocations []string
 }
 

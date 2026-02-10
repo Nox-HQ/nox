@@ -65,10 +65,10 @@ func TestValidateManifest_EmptySafety(t *testing.T) {
 
 func TestValidateManifest_NetworkHosts(t *testing.T) {
 	tests := []struct {
-		name       string
-		requested  []string
-		allowed    []string
-		wantViolN  int
+		name      string
+		requested []string
+		allowed   []string
+		wantViolN int
 	}{
 		{
 			name:      "exact match allowed",

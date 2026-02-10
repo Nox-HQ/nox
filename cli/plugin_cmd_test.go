@@ -30,11 +30,11 @@ func testRegistryIndex() registry.Index {
 						RiskClass:    "active",
 					},
 					{
-						Version:    "1.2.0",
-						APIVersion: "v1",
+						Version:     "1.2.0",
+						APIVersion:  "v1",
 						PublishedAt: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC),
-						Digest:     "sha256:bbb",
-						RiskClass:  "active",
+						Digest:      "sha256:bbb",
+						RiskClass:   "active",
 					},
 				},
 			},
@@ -335,9 +335,9 @@ func TestRunPluginUpdate_SpecificNotInstalled(t *testing.T) {
 
 func TestParseNameVersion(t *testing.T) {
 	tests := []struct {
-		input      string
-		wantName   string
-		wantVer    string
+		input    string
+		wantName string
+		wantVer  string
 	}{
 		{"myplugin", "myplugin", "*"},
 		{"myplugin@1.0.0", "myplugin", "1.0.0"},

@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	nox "github.com/nox-hq/nox/core"
 	"github.com/fsnotify/fsnotify"
+	nox "github.com/nox-hq/nox/core"
 )
 
 func runWatch(args []string) int {

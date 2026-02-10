@@ -34,8 +34,8 @@ func TestProtoSeverityToGo(t *testing.T) {
 
 func TestGoSeverityToProto(t *testing.T) {
 	tests := []struct {
-		go_   findings.Severity
-		want  pluginv1.Severity
+		go_  findings.Severity
+		want pluginv1.Severity
 	}{
 		{findings.SeverityCritical, pluginv1.Severity_SEVERITY_CRITICAL},
 		{findings.SeverityHigh, pluginv1.Severity_SEVERITY_HIGH},
@@ -120,8 +120,8 @@ func TestLocationRoundTrip(t *testing.T) {
 
 func TestFindingRoundTrip(t *testing.T) {
 	original := findings.Finding{
-		ID:     "finding-1",
-		RuleID: "SEC-001",
+		ID:         "finding-1",
+		RuleID:     "SEC-001",
 		Severity:   findings.SeverityHigh,
 		Confidence: findings.ConfidenceMedium,
 		Location: findings.Location{

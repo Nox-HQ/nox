@@ -12,8 +12,8 @@ import (
 type FindingDetail struct {
 	findings.Finding
 	Source  *SourceContext    `json:"source,omitempty"`
-	Rule   *catalog.RuleMeta `json:"rule,omitempty"`
-	Related []RelatedFinding `json:"related,omitempty"`
+	Rule    *catalog.RuleMeta `json:"rule,omitempty"`
+	Related []RelatedFinding  `json:"related,omitempty"`
 }
 
 // RelatedFinding is a summary of a finding related to the detailed one.

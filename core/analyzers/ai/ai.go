@@ -132,8 +132,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"mcp.json", "*.json"},
 			Tags:         []string{"ai", "mcp", "tool-exposure"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
-			Remediation: "Restrict MCP tools to read-only operations. Use an explicit allowlist in your mcp.json configuration and remove write/execute capabilities.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/284.html", "https://modelcontextprotocol.io/docs/concepts/tools"},
+			Remediation:  "Restrict MCP tools to read-only operations. Use an explicit allowlist in your mcp.json configuration and remove write/execute capabilities.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://modelcontextprotocol.io/docs/concepts/tools"},
 		},
 		{
 			ID:           "AI-005",
@@ -146,8 +146,8 @@ func NewAnalyzer() *Analyzer {
 			FilePatterns: []string{"mcp.json", "*.json", "*.yaml", "*.yml"},
 			Tags:         []string{"ai", "mcp", "tool-exposure"},
 			Metadata:     map[string]string{"cwe": "CWE-284"},
-			Remediation: "Replace the wildcard '*' with an explicit list of allowed tool names. Follow the principle of least privilege for agent tool access.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/284.html"},
+			Remediation:  "Replace the wildcard '*' with an explicit list of allowed tool names. Follow the principle of least privilege for agent tool access.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
 		},
 
 		// -----------------------------------------------------------------

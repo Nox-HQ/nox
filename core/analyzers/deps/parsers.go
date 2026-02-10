@@ -349,7 +349,7 @@ type pomXML struct {
 		Dependency []struct {
 			GroupID    string `xml:"groupId"`
 			ArtifactID string `xml:"artifactId"`
-			Version   string `xml:"version"`
+			Version    string `xml:"version"`
 		} `xml:"dependency"`
 	} `xml:"dependencies"`
 	DependencyManagement struct {
@@ -357,7 +357,7 @@ type pomXML struct {
 			Dependency []struct {
 				GroupID    string `xml:"groupId"`
 				ArtifactID string `xml:"artifactId"`
-				Version   string `xml:"version"`
+				Version    string `xml:"version"`
 			} `xml:"dependency"`
 		} `xml:"dependencies"`
 	} `xml:"dependencyManagement"`
@@ -378,7 +378,7 @@ func parsePomXML(content []byte) ([]Package, error) {
 	addDeps := func(deps []struct {
 		GroupID    string `xml:"groupId"`
 		ArtifactID string `xml:"artifactId"`
-		Version   string `xml:"version"`
+		Version    string `xml:"version"`
 	}) {
 		for _, d := range deps {
 			if d.GroupID == "" || d.ArtifactID == "" || d.Version == "" {

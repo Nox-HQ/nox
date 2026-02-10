@@ -127,10 +127,10 @@ func getChangedFilesSet() map[string]struct{} {
 
 func postReviewComments(repo, prNumber string, ff []findings.Finding) error {
 	type reviewComment struct {
-		Path     string `json:"path"`
-		Line     int    `json:"line,omitempty"`
-		Body     string `json:"body"`
-		Side     string `json:"side"`
+		Path string `json:"path"`
+		Line int    `json:"line,omitempty"`
+		Body string `json:"body"`
+		Side string `json:"side"`
 	}
 
 	type reviewPayload struct {

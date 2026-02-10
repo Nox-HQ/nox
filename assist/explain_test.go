@@ -160,7 +160,7 @@ func TestExplain_MultipleBatches(t *testing.T) {
 	if report.Usage.RequestCount != 2 {
 		t.Fatalf("expected 2 request count, got %d", report.Usage.RequestCount)
 	}
-	if report.Usage.TotalTokens != (200+100+150+80) {
+	if report.Usage.TotalTokens != (200 + 100 + 150 + 80) {
 		t.Fatalf("expected %d total tokens, got %d", 200+100+150+80, report.Usage.TotalTokens)
 	}
 }

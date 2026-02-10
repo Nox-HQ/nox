@@ -7,15 +7,15 @@ import (
 
 // PluginTelemetry holds metrics collected during a plugin's lifetime.
 type PluginTelemetry struct {
-	PluginName      string        `json:"plugin_name"`
-	TotalDuration   time.Duration `json:"total_duration_ns"`
-	InvocationCount int           `json:"invocation_count"`
-	FindingsCount   int           `json:"findings_count"`
-	PackagesCount   int           `json:"packages_count"`
-	AIComponentsCount int         `json:"ai_components_count"`
-	DiagnosticsCount int          `json:"diagnostics_count"`
-	ErrorCount      int           `json:"error_count"`
-	PeakMemoryBytes int64         `json:"peak_memory_bytes,omitempty"`
+	PluginName        string        `json:"plugin_name"`
+	TotalDuration     time.Duration `json:"total_duration_ns"`
+	InvocationCount   int           `json:"invocation_count"`
+	FindingsCount     int           `json:"findings_count"`
+	PackagesCount     int           `json:"packages_count"`
+	AIComponentsCount int           `json:"ai_components_count"`
+	DiagnosticsCount  int           `json:"diagnostics_count"`
+	ErrorCount        int           `json:"error_count"`
+	PeakMemoryBytes   int64         `json:"peak_memory_bytes,omitempty"`
 }
 
 // telemetryCollector accumulates per-plugin metrics in a thread-safe manner.

@@ -29,17 +29,17 @@ const (
 // The host validates each plugin's manifest against this policy
 // before allowing registration, and enforces runtime constraints.
 type Policy struct {
-	AllowedNetworkHosts    []string
-	AllowedNetworkCIDRs    []string
-	AllowedFilePaths       []string
-	AllowedEnvVars         []string
-	MaxRiskClass           RiskClass
-	AllowConfirmationReqd  bool
-	MaxArtifactBytes       int64
-	MaxConcurrency         int
-	ToolInvocationTimeout  time.Duration
-	RequestsPerMinute      int   // 0 = unlimited
-	BandwidthBytesPerMin   int64 // 0 = unlimited
+	AllowedNetworkHosts   []string
+	AllowedNetworkCIDRs   []string
+	AllowedFilePaths      []string
+	AllowedEnvVars        []string
+	MaxRiskClass          RiskClass
+	AllowConfirmationReqd bool
+	MaxArtifactBytes      int64
+	MaxConcurrency        int
+	ToolInvocationTimeout time.Duration
+	RequestsPerMinute     int   // 0 = unlimited
+	BandwidthBytesPerMin  int64 // 0 = unlimited
 }
 
 // DefaultPolicy returns a conservative policy suitable for untrusted plugins:

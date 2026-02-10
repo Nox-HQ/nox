@@ -37,9 +37,9 @@ func TestPermissiveTrustPolicy(t *testing.T) {
 
 func TestCheckAPIVersion(t *testing.T) {
 	tests := []struct {
-		name       string
-		policy     TrustPolicy
-		apiVersion string
+		name           string
+		policy         TrustPolicy
+		apiVersion     string
 		wantViolations int
 	}{
 		{

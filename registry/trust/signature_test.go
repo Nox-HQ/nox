@@ -60,7 +60,7 @@ func TestVerifySignature(t *testing.T) {
 			want:    false,
 		},
 		{
-			name: "wrong key",
+			name:    "wrong key",
 			content: content,
 			sig:     sig,
 			keyPEM: func() []byte {
@@ -70,7 +70,7 @@ func TestVerifySignature(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "tampered signature",
+			name:    "tampered signature",
 			content: content,
 			sig: func() []byte {
 				tampered := make([]byte, len(sig))
@@ -137,11 +137,11 @@ func TestParsePublicKeyPKIXPEM(t *testing.T) {
 
 func TestParsePublicKeyErrors(t *testing.T) {
 	tests := []struct {
-		name   string
+		name    string
 		pemData []byte
 	}{
 		{
-			name:   "no PEM block",
+			name:    "no PEM block",
 			pemData: []byte("not a pem block"),
 		},
 		{

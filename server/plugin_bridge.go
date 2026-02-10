@@ -3,17 +3,17 @@ package server
 import (
 	"encoding/json"
 
-	"github.com/nox-hq/nox/plugin"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/plugin"
 )
 
 // JSON serialization types for clean output (not protojson).
 
 type pluginListJSON struct {
-	Name         string               `json:"name"`
-	Version      string               `json:"version"`
-	APIVersion   string               `json:"api_version"`
-	Capabilities []capabilityJSON     `json:"capabilities"`
+	Name         string           `json:"name"`
+	Version      string           `json:"version"`
+	APIVersion   string           `json:"api_version"`
+	Capabilities []capabilityJSON `json:"capabilities"`
 }
 
 type capabilityJSON struct {

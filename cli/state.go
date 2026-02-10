@@ -11,12 +11,12 @@ import (
 
 // InstalledPlugin records metadata for a locally installed plugin.
 type InstalledPlugin struct {
-	Name       string    `json:"name"`
-	Version    string    `json:"version"`
-	Digest     string    `json:"digest"`
-	BinaryPath string    `json:"binary_path"`
-	TrustLevel string    `json:"trust_level"`
-	RiskClass  string    `json:"risk_class"`
+	Name        string    `json:"name"`
+	Version     string    `json:"version"`
+	Digest      string    `json:"digest"`
+	BinaryPath  string    `json:"binary_path"`
+	TrustLevel  string    `json:"trust_level"`
+	RiskClass   string    `json:"risk_class"`
 	InstalledAt time.Time `json:"installed_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

@@ -15,7 +15,7 @@ import (
 // Key represents a trusted public key in the keyring.
 type Key struct {
 	Name         string `json:"name"`
-	Fingerprint  string `json:"fingerprint"`    // SHA-256 of raw public key bytes
+	Fingerprint  string `json:"fingerprint"` // SHA-256 of raw public key bytes
 	PublicKeyPEM string `json:"public_key_pem"`
 }
 

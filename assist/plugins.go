@@ -25,11 +25,11 @@ type PluginSource interface {
 
 // PluginCapability describes a single plugin and its capabilities.
 type PluginCapability struct {
-	PluginName string
-	PluginVer  string
-	Name       string
+	PluginName  string
+	PluginVer   string
+	Name        string
 	Description string
-	Tools      []PluginTool
+	Tools       []PluginTool
 }
 
 // PluginTool describes a single tool declared by a plugin.

@@ -17,14 +17,14 @@ const schemaVersion = "1.0.0"
 
 // Entry represents a single baselined finding.
 type Entry struct {
-	Fingerprint string             `json:"fingerprint"`
-	RuleID      string             `json:"rule_id"`
-	FilePath    string             `json:"file_path"`
-	Severity    findings.Severity  `json:"severity"`
-	Reason      string             `json:"reason,omitempty"`
-	Owner       string             `json:"owner,omitempty"`
-	CreatedAt   time.Time          `json:"created_at"`
-	ExpiresAt   *time.Time         `json:"expires_at,omitempty"`
+	Fingerprint string            `json:"fingerprint"`
+	RuleID      string            `json:"rule_id"`
+	FilePath    string            `json:"file_path"`
+	Severity    findings.Severity `json:"severity"`
+	Reason      string            `json:"reason,omitempty"`
+	Owner       string            `json:"owner,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
 }
 
 // Baseline holds a set of baselined finding entries with fast fingerprint lookup.

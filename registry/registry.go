@@ -6,16 +6,16 @@ import "time"
 type Track string
 
 const (
-	TrackCoreAnalysis       Track = "core-analysis"
-	TrackDynamicRuntime     Track = "dynamic-runtime"
-	TrackAISecurity         Track = "ai-security"
-	TrackThreatModeling     Track = "threat-modeling"
-	TrackSupplyChain        Track = "supply-chain"
-	TrackIntelligence       Track = "intelligence"
-	TrackPolicyGovernance   Track = "policy-governance"
-	TrackIncidentReadiness  Track = "incident-readiness"
+	TrackCoreAnalysis        Track = "core-analysis"
+	TrackDynamicRuntime      Track = "dynamic-runtime"
+	TrackAISecurity          Track = "ai-security"
+	TrackThreatModeling      Track = "threat-modeling"
+	TrackSupplyChain         Track = "supply-chain"
+	TrackIntelligence        Track = "intelligence"
+	TrackPolicyGovernance    Track = "policy-governance"
+	TrackIncidentReadiness   Track = "incident-readiness"
 	TrackDeveloperExperience Track = "developer-experience"
-	TrackAgentAssistance    Track = "agent-assistance"
+	TrackAgentAssistance     Track = "agent-assistance"
 )
 
 // AllTracks returns all defined track values.
@@ -46,10 +46,10 @@ func ValidTrack(t Track) bool {
 
 // TrackCharacteristics describes the operational properties of a track.
 type TrackCharacteristics struct {
-	RiskClass string `json:"risk_class"`          // "passive", "active", or "runtime"
-	CISafe    bool   `json:"ci_safe"`             // safe to run in CI without confirmation
-	Offline   bool   `json:"offline"`             // can run without network
-	ReadOnly  bool   `json:"read_only"`           // never modifies workspace
+	RiskClass string `json:"risk_class"` // "passive", "active", or "runtime"
+	CISafe    bool   `json:"ci_safe"`    // safe to run in CI without confirmation
+	Offline   bool   `json:"offline"`    // can run without network
+	ReadOnly  bool   `json:"read_only"`  // never modifies workspace
 }
 
 // TrackInfo bundles a track with its display metadata and characteristics.

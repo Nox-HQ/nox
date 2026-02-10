@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/nox-hq/nox/cli/tui"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/findings"
-	"github.com/nox-hq/nox/cli/tui"
 
 	"golang.org/x/term"
 )

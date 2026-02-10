@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/nox-hq/nox/plugin"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/plugin"
 )
 
 func TestSerializePluginList_Empty(t *testing.T) {

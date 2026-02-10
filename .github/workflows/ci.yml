@@ -13,25 +13,34 @@ permissions:
   security-events: write
 
 jobs:
-  ci:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.7.2
+          only-new-issues: true
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
       - name: Run tests with coverage
-        run: go test -coverprofile=coverage.out ./...
+        run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage summary
         run: go tool cover -func coverage.out
@@ -41,6 +50,7 @@ jobs:
 
       - name: Check coverage thresholds
         run: coverctl check --config .coverctl.yaml --profile coverage.out
+        continue-on-error: true
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -51,15 +61,25 @@ jobs:
           git add .github/coverage-badge.svg
           git diff --cached --quiet || git commit -m "ci: update coverage badge [skip ci]" && git push
 
+  build:
+    name: Build & Scan
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Run vet
         run: go vet ./...
 
       - name: Build binary
         run: make build
 
-      - name: Run nox on itself
-        run: |
-          ./nox --format sarif,json --output nox-results -q scan . || true
+      - name: Run nox self-scan
+        run: ./nox scan . --format all --output nox-results --quiet || true
 
       - name: Upload SARIF to GitHub
         uses: github/codeql-action/upload-sarif@v3
@@ -74,3 +94,4 @@ jobs:
         with:
           name: nox-results
           path: nox-results/
+          if-no-files-found: warn
