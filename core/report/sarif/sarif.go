@@ -67,8 +67,18 @@ type ReportingDescriptor struct {
 	ID                   string            `json:"id"`
 	Name                 string            `json:"name"`
 	ShortDescription     Message           `json:"shortDescription"`
+	FullDescription      *Message          `json:"fullDescription,omitempty"`
+	Help                 *MultiformatMessage `json:"help,omitempty"`
+	HelpURI              string            `json:"helpUri,omitempty"`
 	DefaultConfiguration Configuration     `json:"defaultConfiguration"`
 	Properties           map[string]string `json:"properties,omitempty"`
+}
+
+// MultiformatMessage is a SARIF message that can carry both plain text and
+// markdown representations.
+type MultiformatMessage struct {
+	Text     string `json:"text"`
+	Markdown string `json:"markdown,omitempty"`
 }
 
 // Configuration holds the default severity level for a rule.
@@ -262,7 +272,8 @@ func (r *Reporter) buildCatalogFromRuleSet() ([]ReportingDescriptor, map[string]
 	catalog := make([]ReportingDescriptor, 0, len(sorted))
 	index := make(map[string]int, len(sorted))
 
-	for _, rule := range sorted {
+	for i := range sorted {
+		rule := &sorted[i]
 		idx := len(catalog)
 		index[rule.ID] = idx
 
@@ -279,6 +290,30 @@ func (r *Reporter) buildCatalogFromRuleSet() ([]ReportingDescriptor, map[string]
 
 		if len(rule.Metadata) > 0 {
 			desc.Properties = rule.Metadata
+		}
+
+		// Populate help text from Remediation for GitHub Code Scanning.
+		if rule.Remediation != "" {
+			helpText := "**Remediation:** " + rule.Remediation
+			helpMarkdown := "**Remediation:** " + rule.Remediation
+			if len(rule.References) > 0 {
+				helpText += "\n\nReferences:\n"
+				helpMarkdown += "\n\n**References:**\n"
+				for _, ref := range rule.References {
+					helpText += "- " + ref + "\n"
+					helpMarkdown += "- [" + ref + "](" + ref + ")\n"
+				}
+			}
+			desc.FullDescription = &Message{Text: rule.Description}
+			desc.Help = &MultiformatMessage{
+				Text:     helpText,
+				Markdown: helpMarkdown,
+			}
+		}
+
+		// Use the first reference as helpUri.
+		if len(rule.References) > 0 {
+			desc.HelpURI = rule.References[0]
 		}
 
 		catalog = append(catalog, desc)

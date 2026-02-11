@@ -68,6 +68,8 @@ func sampleRuleSet() *rules.RuleSet {
 		Pattern:     `(?i)(password|secret|token)\s*=\s*"[^"]{8,}"`,
 		Tags:        []string{"secrets", "security"},
 		Metadata:    map[string]string{"cwe": "CWE-798"},
+		Remediation: "Use environment variables or a secret manager instead of hardcoded credentials.",
+		References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 	})
 
 	rs.Add(rules.Rule{
@@ -80,6 +82,8 @@ func sampleRuleSet() *rules.RuleSet {
 		Pattern:     `==\s*(secret|token|password)`,
 		Tags:        []string{"crypto", "security"},
 		Metadata:    map[string]string{"cwe": "CWE-208"},
+		Remediation: "Use constant-time comparison functions for secret values.",
+		References:  []string{"https://cwe.mitre.org/data/definitions/208.html"},
 	})
 
 	return rs
@@ -335,6 +339,48 @@ func TestRuleCatalogPopulatedFromRuleSet(t *testing.T) {
 	}
 	if driver.Rules[0].Properties["cwe"] != "CWE-798" {
 		t.Errorf("expected rule-001 properties[cwe] = 'CWE-798', got %q", driver.Rules[0].Properties["cwe"])
+	}
+}
+
+func TestRuleCatalogHasHelpAndHelpURI(t *testing.T) {
+	rs := sampleRuleSet()
+	r := NewReporter("0.1.0", rs)
+	fs := sampleFindingSet()
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	report := mustUnmarshal(t, data)
+	driver := report.Runs[0].Tool.Driver
+
+	for _, rule := range driver.Rules {
+		if rule.Help == nil {
+			t.Errorf("rule %s has nil help", rule.ID)
+			continue
+		}
+		if rule.Help.Text == "" {
+			t.Errorf("rule %s has empty help text", rule.ID)
+		}
+		if rule.Help.Markdown == "" {
+			t.Errorf("rule %s has empty help markdown", rule.ID)
+		}
+		if rule.HelpURI == "" {
+			t.Errorf("rule %s has empty helpUri", rule.ID)
+		}
+		if rule.FullDescription == nil {
+			t.Errorf("rule %s has nil fullDescription", rule.ID)
+		}
+	}
+
+	// Verify help content includes remediation text.
+	rule001 := driver.Rules[0]
+	if rule001.Help.Text == "" {
+		t.Fatal("rule-001 help text is empty")
+	}
+	if rule001.HelpURI != "https://cwe.mitre.org/data/definitions/798.html" {
+		t.Errorf("rule-001 helpUri = %q, want CWE-798 URL", rule001.HelpURI)
 	}
 }
 
