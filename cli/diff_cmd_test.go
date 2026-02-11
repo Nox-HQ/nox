@@ -99,7 +99,7 @@ func TestRunDiff_WithChangedFiles(t *testing.T) {
 	}
 
 	// Create a new file with a finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRunDiff_JSONOutput(t *testing.T) {
 	}
 
 	// Add file with finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestRunDiff_DefaultPath(t *testing.T) {
 
 	// Change to the temp dir and run diff without path arg.
 	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
@@ -407,7 +407,7 @@ func TestRunDiff_ViaRunCommand(t *testing.T) {
 	// is not inside the project's own git repo.
 	dir := t.TempDir()
 	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}

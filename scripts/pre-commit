@@ -2,7 +2,6 @@
 # Pre-commit hook for the nox repository.
 # Runs the same checks as CI to catch issues before pushing.
 # Install: make hooks   or   cp scripts/pre-commit .git/hooks/pre-commit
-set -e
 
 failed=0
 
@@ -20,8 +19,9 @@ if [ -n "$gofiles" ]; then
 fi
 
 # 2. Run go vet.
-if ! go vet ./... 2>&1; then
+if ! go vet ./... >/dev/null 2>&1; then
     echo "pre-commit: go vet found issues"
+    go vet ./... 2>&1 || true
     failed=1
 fi
 
@@ -37,24 +37,21 @@ else
 fi
 
 # 4. Run nox security scan on staged files.
+nox_bin=""
 if command -v nox >/dev/null 2>&1; then
-    nox scan --staged --severity-threshold high --quiet .
-    nox_exit=$?
-    if [ $nox_exit -eq 1 ]; then
+    nox_bin="nox"
+elif [ -x ./nox ]; then
+    nox_bin="./nox"
+fi
+
+if [ -n "$nox_bin" ]; then
+    $nox_bin scan --staged --severity-threshold high --quiet . || nox_exit=$?
+    nox_exit=${nox_exit:-0}
+    if [ "$nox_exit" -eq 1 ]; then
         echo ""
         echo "pre-commit: nox found security issues in staged files"
+        echo "  use '// nox:ignore RULE-ID -- reason' to suppress false positives"
         failed=1
-    fi
-else
-    # Try the local binary if available.
-    if [ -x ./nox ]; then
-        ./nox scan --staged --severity-threshold high --quiet .
-        nox_exit=$?
-        if [ $nox_exit -eq 1 ]; then
-            echo ""
-            echo "pre-commit: nox found security issues in staged files"
-            failed=1
-        fi
     fi
 fi
 
