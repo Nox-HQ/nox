@@ -548,6 +548,87 @@ func TestEngine_ScanFile_NoMatches(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Keyword pre-filtering tests
+// ---------------------------------------------------------------------------
+
+func TestEngine_ScanFile_KeywordFiltering(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(Rule{
+		ID:          "KW-001",
+		Description: "Has keywords, should match",
+		Severity:    "high",
+		Confidence:  "high",
+		MatcherType: "regex",
+		Pattern:     `AKIA[0-9A-Z]{16}`,
+		Keywords:    []string{"akia"},
+	})
+	rs.Add(Rule{
+		ID:          "KW-002",
+		Description: "Has keywords, should NOT match",
+		Severity:    "high",
+		Confidence:  "high",
+		MatcherType: "regex",
+		Pattern:     `ghp_[A-Za-z0-9]{36}`,
+		Keywords:    []string{"ghp_"},
+	})
+	rs.Add(Rule{
+		ID:          "KW-003",
+		Description: "No keywords, always runs",
+		Severity:    "low",
+		Confidence:  "low",
+		MatcherType: "regex",
+		Pattern:     `TODO`,
+	})
+
+	engine := NewEngine(rs)
+	content := []byte("secret = AKIAIOSFODNN7EXAMPLE\n// TODO: fix\n")
+
+	results, err := engine.ScanFile("test.go", content)
+	if err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+
+	ruleIDs := map[string]bool{}
+	for _, f := range results {
+		ruleIDs[f.RuleID] = true
+	}
+	if !ruleIDs["KW-001"] {
+		t.Fatal("expected KW-001 (keyword matched)")
+	}
+	if ruleIDs["KW-002"] {
+		t.Fatal("KW-002 should have been skipped (keyword not present)")
+	}
+	if !ruleIDs["KW-003"] {
+		t.Fatal("expected KW-003 (no keywords, always runs)")
+	}
+}
+
+func TestEngine_ScanFile_KeywordCaseInsensitive(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(Rule{
+		ID:          "KW-CI",
+		Description: "Case-insensitive keyword",
+		Severity:    "high",
+		Confidence:  "high",
+		MatcherType: "regex",
+		Pattern:     `AKIA[0-9A-Z]{16}`,
+		Keywords:    []string{"akia"},
+	})
+
+	engine := NewEngine(rs)
+	// Content has uppercase AKIA, keyword is lowercase akia.
+	content := []byte("key = AKIAIOSFODNN7EXAMPLE\n")
+
+	results, err := engine.ScanFile("test.txt", content)
+	if err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 finding (case-insensitive keyword match), got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
 // fileMatchesRule tests
 // ---------------------------------------------------------------------------
 

@@ -99,17 +99,24 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **23 built-in rules** across four analyzer suites:
+Nox ships with **104 built-in rules** across four analyzer suites:
 
-### Secrets (5 rules)
+### Secrets (86 rules)
 
-| Rule | Severity | Description |
-|------|----------|-------------|
-| SEC-001 | High | AWS Access Key ID |
-| SEC-002 | Critical | AWS Secret Access Key |
-| SEC-003 | High | GitHub token |
-| SEC-004 | Critical | Private key header |
-| SEC-005 | Medium | Generic API key assignment |
+Detects hardcoded secrets, API keys, tokens, and credentials across **15 categories**:
+
+| Category | Rules | Examples |
+|----------|-------|---------|
+| Cloud Providers | SEC-001 – SEC-015 | AWS, GCP, Azure, DigitalOcean, Heroku, Alibaba, IBM, Databricks |
+| Source Control | SEC-003, SEC-016 – SEC-022 | GitHub PAT/fine-grained/app tokens, GitLab, Bitbucket |
+| Communication | SEC-023 – SEC-029 | Slack, Discord, Telegram, Microsoft Teams |
+| Payment | SEC-030 – SEC-038 | Stripe, Square, Shopify, PayPal/Braintree |
+| AI/ML Providers | SEC-039 – SEC-044 | OpenAI, Anthropic, HuggingFace, Replicate, Cohere |
+| DevOps & CI/CD | SEC-045 – SEC-056 | NPM, PyPI, Docker Hub, Terraform, Vault, Grafana |
+| SaaS & APIs | SEC-057 – SEC-072 | Twilio, SendGrid, Datadog, PagerDuty, Linear, Okta |
+| Database & Infra | SEC-073 – SEC-076 | Connection strings (Postgres, MongoDB, Redis), Firebase |
+| Crypto & Keys | SEC-004, SEC-077 – SEC-079 | PEM private keys, Age, PGP, PKCS12 |
+| Generic Patterns | SEC-005, SEC-080 – SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
 
 ### AI Security (8 rules)
 

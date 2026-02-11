@@ -3,6 +3,7 @@ package secrets
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/nox-hq/nox/core/discovery"
@@ -187,19 +188,25 @@ func TestDetect_GenericAPIKeyAssignment(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(results) != 1 {
-				t.Fatalf("expected 1 finding for %q, got %d", tt.name, len(results))
+			if len(results) < 1 {
+				t.Fatalf("expected at least 1 finding for %q, got %d", tt.name, len(results))
 			}
 
-			f := results[0]
-			if f.RuleID != "SEC-005" {
-				t.Fatalf("expected RuleID SEC-005, got %s", f.RuleID)
+			// SEC-005 should be among the findings.
+			found := false
+			for _, f := range results {
+				if f.RuleID == "SEC-005" {
+					found = true
+					if f.Severity != findings.SeverityMedium {
+						t.Fatalf("expected severity medium, got %s", f.Severity)
+					}
+					if f.Confidence != findings.ConfidenceMedium {
+						t.Fatalf("expected confidence medium, got %s", f.Confidence)
+					}
+				}
 			}
-			if f.Severity != findings.SeverityMedium {
-				t.Fatalf("expected severity medium, got %s", f.Severity)
-			}
-			if f.Confidence != findings.ConfidenceMedium {
-				t.Fatalf("expected confidence medium, got %s", f.Confidence)
+			if !found {
+				t.Fatalf("expected SEC-005 among findings for %q", tt.name)
 			}
 		})
 	}
@@ -344,5 +351,202 @@ func TestScanArtifacts_UnreadableFile(t *testing.T) {
 	_, err := a.ScanArtifacts(artifacts)
 	if err == nil {
 		t.Fatal("expected error for unreadable file")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Expanded rule coverage
+// ---------------------------------------------------------------------------
+
+// TestAllRules_Compile verifies that every built-in rule's regex pattern
+// compiles without error.
+func TestAllRules_Compile(t *testing.T) {
+	for _, r := range builtinSecretRules() {
+		t.Run(r.ID, func(t *testing.T) {
+			_, err := regexp.Compile(r.Pattern)
+			if err != nil {
+				t.Fatalf("rule %s: pattern does not compile: %v", r.ID, err)
+			}
+		})
+	}
+}
+
+// TestAllRules_PositiveMatch runs a table-driven test with one positive
+// example per rule, ensuring every rule can produce at least one match.
+func TestAllRules_PositiveMatch(t *testing.T) {
+	// Test examples use string concatenation to prevent GitHub Push
+	// Protection from flagging synthetic test values as real secrets.
+	examples := map[string]string{
+		"SEC-001": "aws_access_key_id = " + "AKIA" + "IOSFODNN7EXAMPLE\n",
+		"SEC-002": "AWS_SECRET_ACCESS_KEY = " + "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+		"SEC-003": "token=" + "ghp_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\n",
+		"SEC-004": "-----BEGIN RSA " + "PRIVATE KEY-----\n",
+		"SEC-005": "api_key = \"" + "abcdef1234567890abcdef\"\n",
+		"SEC-006": "amzn" + ".mws." + "12345678-1234-1234-1234-123456789abc\n",
+		"SEC-007": "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\n",
+		"SEC-008": "\"type\": \"" + "service_account\"\n",
+		"SEC-009": "client_secret = \"" + "abcdefghijklmnopqrstuvwxyz1234567890\"\n",
+		"SEC-010": "dop_v1_" + "aabbccddeeff0011223344" + "5566778899aabbccddeeff00112233445566778899\n",
+		"SEC-011": "doo_v1_" + "aabbccddeeff0011223344" + "5566778899aabbccddeeff00112233445566778899\n",
+		"SEC-012": "heroku_api_key= " + "12345678-1234-1234-1234-123456789abc\n",
+		"SEC-013": "LTAI" + "ABCDEFGHIJKLMNOP\n",
+		"SEC-014": "ibm_api_key= " + "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGH\n",
+		"SEC-015": "dapi" + "1234567890abcdef1234567890abcdef\n",
+		"SEC-016": "github_pat_" + "11AAAAAA01234567890123456789" + "01234567890123456789012345678901234567890123456789ABCD\n",
+		"SEC-017": "ghu_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\n",
+		"SEC-018": "glpat-" + "ABCDEF1234567890abcd\n",
+		"SEC-019": "glptt-" + "ABCDEF1234567890abcd\n",
+		"SEC-020": "glrt-" + "ABCDEF1234567890abcde\n",
+		"SEC-021": "bitbucket_client_secret = \"" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\"\n",
+		"SEC-022": "bbdc-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-023": "xoxb-" + "1234567890-1234567890-" + "ABCDEFGHIJKLMNOPQRSTUVWX\n",
+		"SEC-024": "xoxp-" + "1234567890-1234567890-1234567890-" + "abcdef1234567890abcdef1234567890\n",
+		"SEC-025": "https://hooks.slack.com/" + "services/T12345678/B12345678/" + "ABCDEFGHIJKLMNOPQRSTUVWXy\n",
+		"SEC-026": "discord_bot_token = \"" + "MTIzNDU2Nzg5MDEyMzQ1Njc4OQ.ABCDEF." + "abcdefghijklmnopqrstuvwxyz12345678901234567\"\n",
+		"SEC-027": "https://discord.com/api/" + "webhooks/1234567890/" + "ABCDEFghijklMNOP\n",
+		"SEC-028": "telegram bot " + "123456789:" + "ABCDEFghijklmnopqrstuvwxyz123456789\n",
+		"SEC-029": "https://myorg" + ".webhook.office.com/" + "webhookb2/12345678-1234-1234-1234-123456789abc\n",
+		"SEC-030": "sk_live_" + "ABCDEFGHIJKLMNOPQRSTa\n",
+		"SEC-031": "whsec_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg=\n",
+		"SEC-032": "sq0atp-" + "ABCDEFGHIJKLMNOPQRSTUV\n",
+		"SEC-033": "sq0csp-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq\n",
+		"SEC-034": "shpss_" + "aabbccddeeff00112233445566778899\n",
+		"SEC-035": "shpat_" + "aabbccddeeff00112233445566778899\n",
+		"SEC-036": "shpca_" + "aabbccddeeff00112233445566778899\n",
+		"SEC-037": "shppa_" + "aabbccddeeff00112233445566778899\n",
+		"SEC-038": "access_token" + "$production$" + "abcdef1234567890$abcdef1234567890abcdef1234567890\n",
+		"SEC-039": "sk-" + "ABCDEFGHIJKLMNOPQRSt" + "T3BlbkFJ" + "ABCDEFGHIJKLMNOPQRST\n",
+		"SEC-040": "sk-proj-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst" + "uvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234\n",
+		"SEC-041": "sk-ant-api" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst" + "uvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456\n",
+		"SEC-042": "hf_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\n",
+		"SEC-043": "r8_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+		"SEC-044": "cohere_api_key= " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+		"SEC-045": "npm_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl\n",
+		"SEC-046": "pypi-" + "ABCDEFGHIJKLMNOPa\n",
+		"SEC-047": "rubygems_" + "aabbccddeeff00112233445566778899aabbccddeeff0011\n",
+		"SEC-048": "oy2" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr\n",
+		"SEC-049": "dckr_pat_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZa\n",
+		"SEC-050": "ABCDEFghijklmn" + ".atlasv1." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz12345678\n",
+		"SEC-051": "hvs." + "ABCDEFGHIJKLMNOPQRSTUVWXyz\n",
+		"SEC-052": "hvb." + "ABCDEFGHIJKLMNOPQRSTUVWXyz\n",
+		"SEC-053": "fastly_api_key = \"" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\"\n",
+		"SEC-054": "dp.pt." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr\n",
+		"SEC-055": "cio" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl\n",
+		"SEC-056": "glc_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg=\n",
+		"SEC-057": "SK" + "1234567890abcdef1234567890abcdef\n",
+		"SEC-058": "SG." + "ABCDEFghijklmnopqrstuv." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv\n",
+		"SEC-059": "abcdef1234567890abcdef1234567890" + "-us12\n",
+		"SEC-060": "mailgun_api_key = \"" + "key-abcdef1234567890abcdef1234567890\"\n",
+		"SEC-061": "datadog_api_key = \"" + "abcdef1234567890abcdef1234567890\"\n",
+		"SEC-062": "NRAK-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ1\n",
+		"SEC-063": "pagerduty_api_key = \"" + "ABCDEFGHIJKLMNOPQRSTa\"\n",
+		"SEC-064": "airtable_api_key = \"" + "keyABCDEFGHIJKLMN\"\n",
+		"SEC-065": "algolia_api_key = \"" + "abcdef1234567890abcdef1234567890\"\n",
+		"SEC-066": "lin_api_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+		"SEC-067": "PMAK-" + "ABCDEFGHIJKLMNOPQRSTUVWx-" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh\n",
+		"SEC-068": "okta_api_token = \"" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\"\n",
+		"SEC-069": "contentful_delivery_token = \"" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv\"\n",
+		"SEC-070": "live_" + "abcdef1234567890abcdef1234567890\n",
+		"SEC-071": "sbp_" + "aabbccddeeff00112233445566778899aabbccdd\n",
+		"SEC-072": "confluent_api_key = \"" + "ABCDEFGHIJKLMNOP\"\n",
+		"SEC-073": "postgres://" + "admin:s3cret@localhost:5432/db\n",
+		"SEC-074": "mongodb+srv://" + "user:pass@cluster0.example.net/mydb\n",
+		"SEC-075": "firebase_api_key = \"" + "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\"\n",
+		"SEC-076": "redis://" + "default:mypassword@redis.example.com:6379\n",
+		"SEC-077": "AGE-SECRET-KEY-" + "1QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L" + "QPZRY9X8GF2TVDW0S3JN54KHCE6M\n",
+		"SEC-078": "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----\n",
+		"SEC-079": "password = \"mysecret\" " + "cert.p12\n",
+		"SEC-080": "password = \"" + "mysecretpassword\"\n",
+		"SEC-081": "secret = \"" + "ABCDEFGHIJKLMNOP\"\n",
+		"SEC-082": "authorization = \"Bearer " + "eyABCDEFGHIJKLMNOPQRSTUV.WXY=\"\n",
+		"SEC-083": "authorization = \"Basic " + "dXNlcjpwYXNzd29yZA==\"\n",
+		"SEC-084": "eyJhbGciOiJIUzI1NiJ9" + ".eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "ABCDEFGHIJKLmnopqr\n",
+		"SEC-085": "https://" + "admin:s3cret@internal.example.com/api\n",
+		"SEC-086": "db_password = \"" + "mysecretdbpass\"\n",
+	}
+
+	a := NewAnalyzer()
+	for _, r := range builtinSecretRules() {
+		t.Run(r.ID, func(t *testing.T) {
+			example, ok := examples[r.ID]
+			if !ok {
+				t.Fatalf("no positive example for rule %s", r.ID)
+			}
+			results, err := a.ScanFile("test.txt", []byte(example))
+			if err != nil {
+				t.Fatalf("scan error: %v", err)
+			}
+			// Check that this specific rule produced a finding.
+			found := false
+			for _, f := range results {
+				if f.RuleID == r.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("rule %s did not match its positive example", r.ID)
+			}
+		})
+	}
+}
+
+// TestAllRules_Count verifies we have exactly 86 built-in secret rules.
+func TestAllRules_Count(t *testing.T) {
+	rules := builtinSecretRules()
+	if len(rules) != 86 {
+		t.Fatalf("expected 86 built-in secret rules, got %d", len(rules))
+	}
+}
+
+// TestNoFalsePositives_GenericPatterns verifies generic patterns do not
+// match common safe patterns.
+func TestNoFalsePositives_GenericPatterns(t *testing.T) {
+	a := NewAnalyzer()
+
+	safeContent := []string{
+		// Variable declarations without values
+		`var apiKey string`,
+		`password := os.Getenv("DB_PASSWORD")`,
+		// Short values below min length
+		`api_key = "short"`,
+		// Comments mentioning keywords
+		`// Set the api_key in environment variables`,
+		// Config templates with placeholders
+		`api_key = "${API_KEY}"`,
+	}
+
+	for _, content := range safeContent {
+		results, err := a.ScanFile("safe.go", []byte(content+"\n"))
+		if err != nil {
+			t.Fatalf("scan error: %v", err)
+		}
+		// Generic rules (SEC-005, SEC-080, SEC-081) should not match.
+		for _, f := range results {
+			switch f.RuleID {
+			case "SEC-005", "SEC-080", "SEC-081":
+				t.Errorf("false positive: rule %s matched safe content: %q", f.RuleID, content)
+			}
+		}
+	}
+}
+
+// TestDetect_UpgradedSEC001_ASIA verifies the expanded AWS key prefix pattern.
+func TestDetect_UpgradedSEC001_ASIA(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("temp_key = ASIAJEXAMPLEKEYHERE7\n")
+
+	results, err := a.ScanFile("config.env", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, f := range results {
+		if f.RuleID == "SEC-001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected SEC-001 to match ASIA prefix")
 	}
 }

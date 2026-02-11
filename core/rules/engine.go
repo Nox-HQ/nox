@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 
@@ -33,9 +34,20 @@ func (e *Engine) Rules() *RuleSet { return e.rules }
 func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, error) {
 	var out []findings.Finding
 
+	// Pre-compute a lowercase copy of content for keyword filtering.
+	var contentLower []byte
 	for _, rule := range e.rules.Rules() {
 		if !fileMatchesRule(path, rule) {
 			continue
+		}
+
+		if len(rule.Keywords) > 0 {
+			if contentLower == nil {
+				contentLower = bytes.ToLower(content)
+			}
+			if !containsAnyKeyword(contentLower, rule.Keywords) {
+				continue
+			}
 		}
 
 		matcher := e.matchers.Get(rule.MatcherType)
@@ -71,6 +83,17 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 		}
 	}
 	return out, nil
+}
+
+// containsAnyKeyword returns true if content contains at least one of the
+// keywords. Both content and keywords must be lowercase.
+func containsAnyKeyword(contentLower []byte, keywords []string) bool {
+	for _, kw := range keywords {
+		if bytes.Contains(contentLower, []byte(kw)) {
+			return true
+		}
+	}
+	return false
 }
 
 // fileMatchesRule returns true if the file path matches at least one of the

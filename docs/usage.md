@@ -1139,3 +1139,149 @@ Use exit codes in CI to gate deployments:
 ```bash
 nox scan . -q || exit 1
 ```
+
+---
+
+## Built-in Rules Reference
+
+Nox ships with **104 built-in rules** across four analyzer suites: Secrets (86), AI Security (8), and Infrastructure as Code (10).
+
+### Secrets Rules (86 rules)
+
+All secrets rules use the `secrets` tag and CWE-798 (Use of Hard-coded Credentials) unless noted otherwise. Rules with keyword pre-filtering skip expensive regex evaluation on files that lack relevant keywords.
+
+#### Cloud Providers (SEC-001 – SEC-015)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-001 | High | High | AWS Access Key ID (AKIA, ASIA, ABIA, ACCA prefixes) |
+| SEC-002 | Critical | High | AWS Secret Access Key |
+| SEC-006 | High | High | AWS MWS Key |
+| SEC-007 | High | High | GCP API Key |
+| SEC-008 | Critical | High | GCP Service Account JSON |
+| SEC-009 | High | Medium | Azure AD Client Secret |
+| SEC-010 | High | High | DigitalOcean Personal Access Token |
+| SEC-011 | High | High | DigitalOcean OAuth Token |
+| SEC-012 | High | Medium | Heroku API Key |
+| SEC-013 | High | High | Alibaba Cloud Access Key |
+| SEC-014 | High | High | IBM Cloud API Key |
+| SEC-015 | High | High | Databricks API Token |
+
+#### Source Control (SEC-003, SEC-016 – SEC-022)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-003 | High | High | GitHub Personal Access Token (ghp/ghs/gho) |
+| SEC-016 | High | High | GitHub Fine-Grained Personal Access Token |
+| SEC-017 | High | High | GitHub App User-to-Server Token |
+| SEC-018 | High | High | GitLab Personal Access Token |
+| SEC-019 | High | High | GitLab Pipeline Trigger Token |
+| SEC-020 | High | High | GitLab Runner Registration Token |
+| SEC-021 | High | Medium | Bitbucket Client Secret |
+| SEC-022 | High | High | Bitbucket HTTP Access Token |
+
+#### Communication Platforms (SEC-023 – SEC-029)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-023 | High | High | Slack Bot Token |
+| SEC-024 | Critical | High | Slack User Token |
+| SEC-025 | High | High | Slack Webhook URL |
+| SEC-026 | High | Medium | Discord Bot Token |
+| SEC-027 | High | High | Discord Webhook URL |
+| SEC-028 | High | High | Telegram Bot Token |
+| SEC-029 | High | High | Microsoft Teams Webhook URL |
+
+#### Payment Processors (SEC-030 – SEC-038)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-030 | Critical | High | Stripe API Key (sk_test/sk_live/rk_) |
+| SEC-031 | High | High | Stripe Webhook Secret |
+| SEC-032 | High | High | Square Access Token |
+| SEC-033 | High | High | Square OAuth Secret |
+| SEC-034 | High | High | Shopify Shared Secret |
+| SEC-035 | High | High | Shopify Access Token |
+| SEC-036 | High | High | Shopify Custom App Token |
+| SEC-037 | High | High | Shopify Private App Token |
+| SEC-038 | Critical | High | PayPal Braintree Access Token |
+
+#### AI/ML Providers (SEC-039 – SEC-044)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-039 | High | High | OpenAI API Key |
+| SEC-040 | High | High | OpenAI Project API Key |
+| SEC-041 | High | High | Anthropic API Key |
+| SEC-042 | High | High | HuggingFace Token |
+| SEC-043 | High | High | Replicate API Token |
+| SEC-044 | High | Medium | Cohere API Key |
+
+#### DevOps & CI/CD (SEC-045 – SEC-056)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-045 | High | High | NPM Access Token |
+| SEC-046 | High | High | PyPI Upload Token |
+| SEC-047 | High | High | RubyGems API Token |
+| SEC-048 | High | Medium | NuGet API Key |
+| SEC-049 | High | High | Docker Hub Personal Access Token |
+| SEC-050 | High | High | Terraform Cloud/Enterprise API Token |
+| SEC-051 | Critical | High | HashiCorp Vault Service Token |
+| SEC-052 | Critical | High | HashiCorp Vault Batch Token |
+| SEC-053 | High | Medium | Fastly API Key |
+| SEC-054 | High | High | Doppler API Token |
+| SEC-055 | High | High | Cargo Registry Token |
+| SEC-056 | High | High | Grafana Cloud Token |
+
+#### SaaS & APIs (SEC-057 – SEC-072)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-057 | High | High | Twilio API Key |
+| SEC-058 | High | High | SendGrid API Key |
+| SEC-059 | High | High | Mailchimp API Key |
+| SEC-060 | High | Medium | Mailgun API Key |
+| SEC-061 | High | Medium | Datadog API Key |
+| SEC-062 | High | High | New Relic API Key |
+| SEC-063 | High | Medium | PagerDuty API Key |
+| SEC-064 | High | Medium | Airtable API Key |
+| SEC-065 | High | Medium | Algolia API Key |
+| SEC-066 | High | High | Linear API Key |
+| SEC-067 | High | High | Postman API Key |
+| SEC-068 | High | Medium | Okta API Token |
+| SEC-069 | High | Medium | Contentful Delivery Token |
+| SEC-070 | High | Medium | Lob API Key |
+| SEC-071 | High | High | Supabase API Key |
+| SEC-072 | High | Medium | Confluent API Key/Secret |
+
+#### Database & Infrastructure (SEC-073 – SEC-076)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-073 | Critical | Medium | Database Connection String with credentials (MySQL, PostgreSQL, MSSQL, Oracle, MariaDB) |
+| SEC-074 | Critical | High | MongoDB SRV Connection String with credentials |
+| SEC-075 | High | Medium | Firebase API Key |
+| SEC-076 | Critical | High | Redis URL with password |
+
+#### Crypto & Keys (SEC-004, SEC-077 – SEC-079)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| SEC-004 | Critical | High | CWE-321 | Private key header (all PEM types) |
+| SEC-077 | Critical | High | CWE-321 | Age secret key |
+| SEC-078 | Critical | High | CWE-321 | PGP Private Key Block |
+| SEC-079 | Medium | Medium | CWE-321 | PKCS12/PFX file password reference |
+
+#### Generic Patterns (SEC-005, SEC-080 – SEC-086)
+
+| Rule | Severity | Confidence | Description |
+|------|----------|------------|-------------|
+| SEC-005 | Medium | Medium | Generic API key assignment |
+| SEC-080 | Medium | Medium | Generic password assignment |
+| SEC-081 | Medium | Medium | Generic secret assignment |
+| SEC-082 | Medium | Medium | Bearer token |
+| SEC-083 | Medium | Low | Basic auth header |
+| SEC-084 | Medium | Medium | JWT token |
+| SEC-085 | High | Medium | URL with embedded password |
+| SEC-086 | High | Medium | Hardcoded database password |

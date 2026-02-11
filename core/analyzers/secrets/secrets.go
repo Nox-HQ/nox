@@ -22,79 +22,9 @@ type Analyzer struct {
 // programmatically. The rules use regex matching and apply to all file types.
 func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
-
-	builtinRules := []rules.Rule{
-		{
-			ID:          "SEC-001",
-			Version:     "1.0",
-			Description: "AWS Access Key ID detected",
-			Severity:    findings.SeverityHigh,
-			Confidence:  findings.ConfidenceHigh,
-			MatcherType: "regex",
-			Pattern:     `AKIA[0-9A-Z]{16}`,
-			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-798"},
-			Remediation: "Use environment variables or AWS IAM roles instead of hard-coded keys. Rotate the exposed key immediately via the AWS console.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"},
-		},
-		{
-			ID:          "SEC-002",
-			Version:     "1.0",
-			Description: "AWS Secret Access Key detected",
-			Severity:    findings.SeverityCritical,
-			Confidence:  findings.ConfidenceHigh,
-			MatcherType: "regex",
-			Pattern:     `(?i)aws_secret_access_key\s*[=:]\s*[A-Za-z0-9/+=]{40}`,
-			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-798"},
-			Remediation: "Use environment variables or AWS Secrets Manager. Remove the key from source and rotate it immediately via the AWS console.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html"},
-		},
-		{
-			ID:          "SEC-003",
-			Version:     "1.0",
-			Description: "GitHub token detected",
-			Severity:    findings.SeverityHigh,
-			Confidence:  findings.ConfidenceHigh,
-			MatcherType: "regex",
-			Pattern:     `gh[ps]_[A-Za-z0-9_]{36,}`,
-			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-798"},
-			Remediation: "Revoke the token at github.com/settings/tokens and generate a new one. Use GITHUB_TOKEN environment variable or GitHub Actions secrets.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"},
-		},
-		{
-			ID:          "SEC-004",
-			Version:     "1.0",
-			Description: "Private key header detected",
-			Severity:    findings.SeverityCritical,
-			Confidence:  findings.ConfidenceHigh,
-			MatcherType: "regex",
-			Pattern:     `-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----`,
-			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-321"},
-			Remediation: "Remove the private key from source control. Store keys in a secrets manager or use encrypted key storage. Regenerate the key pair if it was committed.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/321.html"},
-		},
-		{
-			ID:          "SEC-005",
-			Version:     "1.0",
-			Description: "Generic API key assignment detected",
-			Severity:    findings.SeverityMedium,
-			Confidence:  findings.ConfidenceMedium,
-			MatcherType: "regex",
-			Pattern:     `(?i)(api[_-]?key|apikey|api[_-]?secret)\s*[=:]\s*['"][A-Za-z0-9]{16,}['"]`,
-			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": "CWE-798"},
-			Remediation: "Move API keys to environment variables or a secrets manager. Avoid committing credentials to version control.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-	}
-
-	for _, r := range builtinRules {
+	for _, r := range builtinSecretRules() {
 		rs.Add(r)
 	}
-
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
 	}

@@ -29,6 +29,7 @@ type Rule struct {
 	MatcherType  string              `yaml:"matcher_type"`
 	Pattern      string              `yaml:"pattern"`
 	FilePatterns []string            `yaml:"file_patterns"`
+	Keywords     []string            `yaml:"keywords"`
 	Tags         []string            `yaml:"tags"`
 	Metadata     map[string]string   `yaml:"metadata"`
 	Remediation  string              `yaml:"remediation"`
