@@ -258,7 +258,7 @@ func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
 
 		case "sarif":
 			path := filepath.Join(outputDir, "results.sarif")
-			r := sarif.NewReporter(version, nil)
+			r := sarif.NewReporter(version, result.Rules)
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2

@@ -15,6 +15,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/policy"
+	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 )
 
@@ -24,6 +25,7 @@ type ScanResult struct {
 	Inventory    *deps.PackageInventory
 	AIInventory  *ai.Inventory
 	PolicyResult *policy.Result
+	Rules        *rules.RuleSet
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -89,6 +91,18 @@ func RunScan(target string) (*ScanResult, error) {
 		allFindings.Add(f)
 	}
 
+	// Merge all analyzer rule sets for SARIF reporting.
+	allRules := rules.NewRuleSet()
+	for i := range secretsAnalyzer.Rules().Rules() {
+		allRules.Add(secretsAnalyzer.Rules().Rules()[i])
+	}
+	for i := range iacAnalyzer.Rules().Rules() {
+		allRules.Add(iacAnalyzer.Rules().Rules()[i])
+	}
+	for i := range aiAnalyzer.Rules().Rules() {
+		allRules.Add(aiAnalyzer.Rules().Rules()[i])
+	}
+
 	// Phase 3: Apply rule config.
 	if len(cfg.Scan.Rules.Disable) > 0 {
 		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
@@ -129,6 +143,7 @@ func RunScan(target string) (*ScanResult, error) {
 		Inventory:    inventory,
 		AIInventory:  aiInventory,
 		PolicyResult: policyResult,
+		Rules:        allRules,
 	}, nil
 }
 
