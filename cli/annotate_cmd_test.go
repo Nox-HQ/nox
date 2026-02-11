@@ -44,8 +44,9 @@ func TestRunAnnotate_MissingRepo(t *testing.T) {
 		t.Fatalf("writing findings file: %v", err)
 	}
 
-	// Set PR number but not repo.
+	// Set PR number but explicitly clear repo (may be set in CI environment).
 	t.Setenv("GITHUB_REF", "refs/pull/123/merge")
+	t.Setenv("GITHUB_REPOSITORY", "")
 
 	code := runAnnotate([]string{"--input", findingsPath})
 	if code != 2 {

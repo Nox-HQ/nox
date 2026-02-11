@@ -210,19 +210,23 @@ func TestRunDiff_DefaultPath(t *testing.T) {
 	dir := t.TempDir()
 
 	// Initialize git repo in temp dir.
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
 	if err := cmd.Run(); err != nil {
 		t.Skipf("git not available: %v", err)
 	}
 
 	// Configure git user.
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
-	cmd.Dir = dir
-	_ = cmd.Run()
-	cmd = exec.Command("git", "config", "user.name", "Test User")
-	cmd.Dir = dir
-	_ = cmd.Run()
+	for _, args := range [][]string{
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test User"},
+	} {
+		cmd = exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
+		_ = cmd.Run()
+	}
 
 	// Create initial commit.
 	clean := "package main\n\nfunc main() {}\n"
@@ -232,12 +236,14 @@ func TestRunDiff_DefaultPath(t *testing.T) {
 
 	cmd = exec.Command("git", "add", ".")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git add: %v", err)
 	}
 
 	cmd = exec.Command("git", "commit", "-m", "initial")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("git commit: %v", err)
 	}
@@ -250,7 +256,9 @@ func TestRunDiff_DefaultPath(t *testing.T) {
 		t.Fatalf("chdir: %v", err)
 	}
 
-	code := runDiff([]string{})
+	// Use explicit --base HEAD to avoid relying on a "main" branch name
+	// (the three-dot diff syntax requires a valid ref that git can resolve).
+	code := runDiff([]string{"--base", "HEAD", "--head", "HEAD"})
 	if code != 0 {
 		t.Fatalf("expected exit code 0 for no changes, got %d", code)
 	}
@@ -301,7 +309,8 @@ func TestRunDiff_CustomRules(t *testing.T) {
 	}
 
 	// Run diff with custom rules.
-	code := runDiff([]string{"--rules", rulesPath, dir})
+	// Use explicit --base HEAD to avoid relying on a "main" branch existing.
+	code := runDiff([]string{"--rules", rulesPath, "--base", "HEAD", "--head", "HEAD", dir})
 	if code != 0 {
 		t.Fatalf("expected exit code 0 for no changes, got %d", code)
 	}
@@ -394,7 +403,16 @@ func TestRunDiff_ScanError(t *testing.T) {
 }
 
 func TestRunDiff_ViaRunCommand(t *testing.T) {
-	// Test that diff command is recognized.
+	// Change to a non-git temp directory so that runDiff's default target "."
+	// is not inside the project's own git repo.
+	dir := t.TempDir()
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// Test that diff command is recognized and fails for non-git directory.
 	code := run([]string{"diff"})
 	if code != 2 {
 		t.Fatalf("expected exit code 2 for diff without git repo, got %d", code)
