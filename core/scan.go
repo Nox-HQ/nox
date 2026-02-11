@@ -37,6 +37,11 @@ type ScanOptions struct {
 	// the built-in analyzer rules. CLI flags take precedence over
 	// .nox.yaml config values.
 	CustomRulesPath string
+
+	// DisableOSV disables OSV.dev vulnerability lookups for dependency
+	// scanning. When true, the scan runs fully offline with no network
+	// calls.
+	DisableOSV bool
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -99,7 +104,11 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	}
 
 	// Dependency scanner.
-	depsAnalyzer := deps.NewAnalyzer()
+	var depsOpts []deps.AnalyzerOption
+	if opts.DisableOSV || cfg.Scan.OSV.Disabled {
+		depsOpts = append(depsOpts, deps.WithOSVDisabled())
+	}
+	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	inventory, depsFindings, err := depsAnalyzer.ScanArtifacts(artifacts)
 	if err != nil {
 		return nil, err
@@ -118,6 +127,9 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	}
 	for i := range aiAnalyzer.Rules().Rules() {
 		allRules.Add(aiAnalyzer.Rules().Rules()[i])
+	}
+	for i := range depsAnalyzer.Rules().Rules() {
+		allRules.Add(depsAnalyzer.Rules().Rules()[i])
 	}
 
 	// Phase 2b: Load and merge custom rules (CLI flag > config > none).

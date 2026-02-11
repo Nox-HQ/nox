@@ -30,6 +30,12 @@ type ScanSettings struct {
 	Exclude  []string    `yaml:"exclude"`
 	RulesDir string      `yaml:"rules_dir"`
 	Rules    RulesConfig `yaml:"rules"`
+	OSV      OSVConfig   `yaml:"osv"`
+}
+
+// OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
+type OSVConfig struct {
+	Disabled bool `yaml:"disabled"`
 }
 
 // RulesConfig allows disabling rules or overriding their severity.

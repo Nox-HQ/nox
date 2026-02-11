@@ -7,9 +7,9 @@ import (
 func TestCatalogContainsAllRules(t *testing.T) {
 	cat := Catalog()
 
-	// We expect 154 built-in rules: 86 SEC + 18 AI + 50 IAC.
-	if got := len(cat); got != 154 {
-		t.Errorf("Catalog() returned %d rules, want 154", got)
+	// We expect 155 built-in rules: 86 SEC + 18 AI + 50 IAC + 1 VULN.
+	if got := len(cat); got != 155 {
+		t.Errorf("Catalog() returned %d rules, want 155", got)
 	}
 }
 

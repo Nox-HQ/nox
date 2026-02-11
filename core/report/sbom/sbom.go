@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -19,12 +20,13 @@ import (
 
 // CDXReport is the top-level CycloneDX BOM structure.
 type CDXReport struct {
-	BOMFormat    string         `json:"bomFormat"`
-	SpecVersion  string         `json:"specVersion"`
-	SerialNumber string         `json:"serialNumber"`
-	Version      int            `json:"version"`
-	Metadata     CDXMetadata    `json:"metadata"`
-	Components   []CDXComponent `json:"components"`
+	BOMFormat       string             `json:"bomFormat"`
+	SpecVersion     string             `json:"specVersion"`
+	SerialNumber    string             `json:"serialNumber"`
+	Version         int                `json:"version"`
+	Metadata        CDXMetadata        `json:"metadata"`
+	Components      []CDXComponent     `json:"components"`
+	Vulnerabilities []CDXVulnerability `json:"vulnerabilities,omitempty"`
 }
 
 // CDXMetadata holds tool and timestamp information.
@@ -43,9 +45,35 @@ type CDXTool struct {
 // CDXComponent represents a single dependency.
 type CDXComponent struct {
 	Type    string `json:"type"`
+	BOMRef  string `json:"bom-ref"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	PURL    string `json:"purl"`
+}
+
+// CDXVulnerability represents a known vulnerability in the CycloneDX format.
+type CDXVulnerability struct {
+	ID          string      `json:"id"`
+	Source      CDXSource   `json:"source"`
+	Ratings     []CDXRating `json:"ratings,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Affects     []CDXAffect `json:"affects"`
+}
+
+// CDXSource identifies the vulnerability database source.
+type CDXSource struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// CDXRating holds a severity rating for a vulnerability.
+type CDXRating struct {
+	Severity string `json:"severity"`
+}
+
+// CDXAffect identifies a component affected by a vulnerability.
+type CDXAffect struct {
+	Ref string `json:"ref"`
 }
 
 // CycloneDXReporter generates CycloneDX 1.5 JSON SBOMs.
@@ -62,25 +90,81 @@ func NewCycloneDXReporter(version string) *CycloneDXReporter {
 func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error) {
 	pkgs := inventory.Packages()
 
+	// Build a map from original index to package for vulnerability lookup.
+	// We need to track original indices through sorting.
+	type indexedPkg struct {
+		pkg     deps.Package
+		origIdx int
+	}
+	indexed := make([]indexedPkg, len(pkgs))
+	for i, p := range pkgs {
+		indexed[i] = indexedPkg{pkg: p, origIdx: i}
+	}
+
 	// Sort deterministically by ecosystem, then name, then version.
-	sort.Slice(pkgs, func(i, j int) bool {
-		if pkgs[i].Ecosystem != pkgs[j].Ecosystem {
-			return pkgs[i].Ecosystem < pkgs[j].Ecosystem
+	sort.Slice(indexed, func(i, j int) bool {
+		a, b := indexed[i].pkg, indexed[j].pkg
+		if a.Ecosystem != b.Ecosystem {
+			return a.Ecosystem < b.Ecosystem
 		}
-		if pkgs[i].Name != pkgs[j].Name {
-			return pkgs[i].Name < pkgs[j].Name
+		if a.Name != b.Name {
+			return a.Name < b.Name
 		}
-		return pkgs[i].Version < pkgs[j].Version
+		return a.Version < b.Version
 	})
 
-	components := make([]CDXComponent, 0, len(pkgs))
-	for _, p := range pkgs {
+	components := make([]CDXComponent, 0, len(indexed))
+	bomRefs := make(map[int]string) // origIdx -> bom-ref
+	for i, ip := range indexed {
+		bomRef := fmt.Sprintf("pkg:%d", i)
+		bomRefs[ip.origIdx] = bomRef
 		components = append(components, CDXComponent{
 			Type:    "library",
-			Name:    p.Name,
-			Version: p.Version,
-			PURL:    buildPURL(p),
+			BOMRef:  bomRef,
+			Name:    ip.pkg.Name,
+			Version: ip.pkg.Version,
+			PURL:    buildPURL(ip.pkg),
 		})
+	}
+
+	// Build vulnerability entries from inventory.
+	allVulns := inventory.AllVulnerabilities()
+	var cdxVulns []CDXVulnerability
+	if allVulns != nil {
+		// Collect and sort for deterministic output.
+		type vulnEntry struct {
+			origIdx int
+			vuln    deps.Vulnerability
+		}
+		var entries []vulnEntry
+		for idx, vulns := range allVulns {
+			for _, v := range vulns {
+				entries = append(entries, vulnEntry{origIdx: idx, vuln: v})
+			}
+		}
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].vuln.ID < entries[j].vuln.ID
+		})
+
+		for _, e := range entries {
+			ref, ok := bomRefs[e.origIdx]
+			if !ok {
+				continue
+			}
+			cdxVuln := CDXVulnerability{
+				ID: e.vuln.ID,
+				Source: CDXSource{
+					Name: "OSV",
+					URL:  "https://osv.dev/vulnerability/" + e.vuln.ID,
+				},
+				Description: e.vuln.Summary,
+				Affects:     []CDXAffect{{Ref: ref}},
+			}
+			if e.vuln.Severity != "" {
+				cdxVuln.Ratings = []CDXRating{{Severity: string(e.vuln.Severity)}}
+			}
+			cdxVulns = append(cdxVulns, cdxVuln)
+		}
 	}
 
 	report := CDXReport{
@@ -98,7 +182,8 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 				},
 			},
 		},
-		Components: components,
+		Components:      components,
+		Vulnerabilities: cdxVulns,
 	}
 
 	return json.MarshalIndent(report, "", "  ")
@@ -173,40 +258,74 @@ func NewSPDXReporter(version string) *SPDXReporter {
 func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error) {
 	pkgs := inventory.Packages()
 
+	// Build a map from original index to package for vulnerability lookup.
+	type indexedPkg struct {
+		pkg     deps.Package
+		origIdx int
+	}
+	indexed := make([]indexedPkg, len(pkgs))
+	for i, p := range pkgs {
+		indexed[i] = indexedPkg{pkg: p, origIdx: i}
+	}
+
 	// Sort deterministically.
-	sort.Slice(pkgs, func(i, j int) bool {
-		if pkgs[i].Ecosystem != pkgs[j].Ecosystem {
-			return pkgs[i].Ecosystem < pkgs[j].Ecosystem
+	sort.Slice(indexed, func(i, j int) bool {
+		a, b := indexed[i].pkg, indexed[j].pkg
+		if a.Ecosystem != b.Ecosystem {
+			return a.Ecosystem < b.Ecosystem
 		}
-		if pkgs[i].Name != pkgs[j].Name {
-			return pkgs[i].Name < pkgs[j].Name
+		if a.Name != b.Name {
+			return a.Name < b.Name
 		}
-		return pkgs[i].Version < pkgs[j].Version
+		return a.Version < b.Version
 	})
 
-	spdxPkgs := make([]SPDXPackage, 0, len(pkgs))
-	relationships := make([]SPDXRelationship, 0, len(pkgs))
+	allVulns := inventory.AllVulnerabilities()
 
-	for i, p := range pkgs {
+	spdxPkgs := make([]SPDXPackage, 0, len(indexed))
+	relationships := make([]SPDXRelationship, 0, len(indexed))
+
+	for i, ip := range indexed {
 		spdxID := fmt.Sprintf("SPDXRef-Package-%d", i)
-		purl := buildPURL(p)
+		purl := buildPURL(ip.pkg)
 
 		pkg := SPDXPackage{
 			SPDXID:           spdxID,
-			Name:             p.Name,
-			VersionInfo:      p.Version,
+			Name:             ip.pkg.Name,
+			VersionInfo:      ip.pkg.Version,
 			DownloadLocation: "NOASSERTION",
 			FilesAnalyzed:    false,
 		}
 
+		var refs []SPDXExternalRef
 		if purl != "" {
-			pkg.ExternalRefs = []SPDXExternalRef{
-				{
-					ReferenceCategory: "PACKAGE-MANAGER",
-					ReferenceType:     "purl",
-					ReferenceLocator:  purl,
-				},
+			refs = append(refs, SPDXExternalRef{
+				ReferenceCategory: "PACKAGE-MANAGER",
+				ReferenceType:     "purl",
+				ReferenceLocator:  purl,
+			})
+		}
+
+		// Add SECURITY external refs for known vulnerabilities.
+		if allVulns != nil {
+			vulns := allVulns[ip.origIdx]
+			// Sort vuln IDs for deterministic output.
+			sortedVulns := make([]deps.Vulnerability, len(vulns))
+			copy(sortedVulns, vulns)
+			sort.Slice(sortedVulns, func(a, b int) bool {
+				return sortedVulns[a].ID < sortedVulns[b].ID
+			})
+			for _, v := range sortedVulns {
+				refs = append(refs, SPDXExternalRef{
+					ReferenceCategory: "SECURITY",
+					ReferenceType:     "advisory",
+					ReferenceLocator:  "https://osv.dev/vulnerability/" + v.ID,
+				})
 			}
+		}
+
+		if len(refs) > 0 {
+			pkg.ExternalRefs = refs
 		}
 
 		spdxPkgs = append(spdxPkgs, pkg)
@@ -255,6 +374,9 @@ var purlEcosystems = map[string]string{
 	"pypi":     "pypi",
 	"rubygems": "gem",
 	"cargo":    "cargo",
+	"maven":    "maven",
+	"gradle":   "maven",
+	"nuget":    "nuget",
 }
 
 // buildPURL constructs a Package URL (purl) for the given package.
@@ -263,6 +385,11 @@ func buildPURL(p deps.Package) string {
 	purlType, ok := purlEcosystems[p.Ecosystem]
 	if !ok {
 		return ""
+	}
+	// Maven PURLs use namespace/name format for groupId:artifactId.
+	if (p.Ecosystem == "maven" || p.Ecosystem == "gradle") && strings.Contains(p.Name, ":") {
+		parts := strings.SplitN(p.Name, ":", 2)
+		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], p.Version)
 	}
 	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, p.Version)
 }

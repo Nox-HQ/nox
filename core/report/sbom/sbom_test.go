@@ -389,6 +389,9 @@ func TestBuildPURL_AllEcosystems(t *testing.T) {
 		{deps.Package{Name: "flask", Version: "3.0.0", Ecosystem: "pypi"}, "pkg:pypi/flask@3.0.0"},
 		{deps.Package{Name: "rails", Version: "7.1.2", Ecosystem: "rubygems"}, "pkg:gem/rails@7.1.2"},
 		{deps.Package{Name: "tokio", Version: "1.35.0", Ecosystem: "cargo"}, "pkg:cargo/tokio@1.35.0"},
+		{deps.Package{Name: "org.springframework:spring-core", Version: "6.1.0", Ecosystem: "maven"}, "pkg:maven/org.springframework/spring-core@6.1.0"},
+		{deps.Package{Name: "io.netty:netty-all", Version: "4.1.100", Ecosystem: "gradle"}, "pkg:maven/io.netty/netty-all@4.1.100"},
+		{deps.Package{Name: "Newtonsoft.Json", Version: "13.0.3", Ecosystem: "nuget"}, "pkg:nuget/Newtonsoft.Json@13.0.3"},
 		{deps.Package{Name: "unknown", Version: "1.0", Ecosystem: "unknown"}, ""},
 	}
 
@@ -399,5 +402,205 @@ func TestBuildPURL_AllEcosystems(t *testing.T) {
 				t.Fatalf("expected %q, got %q", tt.expected, result)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CycloneDX: vulnerability enrichment
+// ---------------------------------------------------------------------------
+
+func testInventoryWithVulns() *deps.PackageInventory {
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.17.1", Ecosystem: "npm"})
+	inv.Add(deps.Package{Name: "lodash", Version: "4.17.20", Ecosystem: "npm"})
+
+	inv.SetVulnerabilities(1, []deps.Vulnerability{
+		{
+			ID:       "GHSA-1234-5678-9012",
+			Summary:  "Prototype pollution in lodash",
+			Severity: "high",
+		},
+		{
+			ID:       "GHSA-abcd-efgh-ijkl",
+			Summary:  "ReDoS in lodash",
+			Severity: "medium",
+		},
+	})
+	return inv
+}
+
+func TestCycloneDX_Vulnerabilities(t *testing.T) {
+	r := NewCycloneDXReporter("0.1.0")
+	data, err := r.Generate(testInventoryWithVulns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report CDXReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("failed to parse CycloneDX JSON: %v", err)
+	}
+
+	if len(report.Vulnerabilities) != 2 {
+		t.Fatalf("expected 2 vulnerabilities, got %d", len(report.Vulnerabilities))
+	}
+
+	// Sorted by ID.
+	if report.Vulnerabilities[0].ID != "GHSA-1234-5678-9012" {
+		t.Errorf("expected first vuln GHSA-1234-5678-9012, got %s", report.Vulnerabilities[0].ID)
+	}
+	if report.Vulnerabilities[1].ID != "GHSA-abcd-efgh-ijkl" {
+		t.Errorf("expected second vuln GHSA-abcd-efgh-ijkl, got %s", report.Vulnerabilities[1].ID)
+	}
+
+	// Check source.
+	if report.Vulnerabilities[0].Source.Name != "OSV" {
+		t.Errorf("expected source name OSV, got %s", report.Vulnerabilities[0].Source.Name)
+	}
+	if report.Vulnerabilities[0].Source.URL != "https://osv.dev/vulnerability/GHSA-1234-5678-9012" {
+		t.Errorf("unexpected source URL: %s", report.Vulnerabilities[0].Source.URL)
+	}
+
+	// Check ratings.
+	if len(report.Vulnerabilities[0].Ratings) != 1 {
+		t.Fatalf("expected 1 rating, got %d", len(report.Vulnerabilities[0].Ratings))
+	}
+	if report.Vulnerabilities[0].Ratings[0].Severity != "high" {
+		t.Errorf("expected severity high, got %s", report.Vulnerabilities[0].Ratings[0].Severity)
+	}
+
+	// Check affects reference.
+	if len(report.Vulnerabilities[0].Affects) != 1 {
+		t.Fatalf("expected 1 affect, got %d", len(report.Vulnerabilities[0].Affects))
+	}
+	// The affect ref should point to lodash's bom-ref.
+	ref := report.Vulnerabilities[0].Affects[0].Ref
+	if ref == "" {
+		t.Error("expected non-empty affect ref")
+	}
+}
+
+func TestCycloneDX_NoVulnerabilities(t *testing.T) {
+	r := NewCycloneDXReporter("0.1.0")
+	data, err := r.Generate(testInventory())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report CDXReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("failed to parse CycloneDX JSON: %v", err)
+	}
+
+	if len(report.Vulnerabilities) != 0 {
+		t.Fatalf("expected 0 vulnerabilities, got %d", len(report.Vulnerabilities))
+	}
+}
+
+func TestCycloneDX_BOMRef(t *testing.T) {
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.18.2", Ecosystem: "npm"})
+
+	r := NewCycloneDXReporter("0.1.0")
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report CDXReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("failed to parse CycloneDX JSON: %v", err)
+	}
+
+	if len(report.Components) != 1 {
+		t.Fatalf("expected 1 component, got %d", len(report.Components))
+	}
+	if report.Components[0].BOMRef == "" {
+		t.Error("expected non-empty bom-ref")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SPDX: vulnerability enrichment
+// ---------------------------------------------------------------------------
+
+func TestSPDX_SecurityExternalRefs(t *testing.T) {
+	r := NewSPDXReporter("0.1.0")
+	data, err := r.Generate(testInventoryWithVulns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var doc SPDXDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("failed to parse SPDX JSON: %v", err)
+	}
+
+	// Find lodash package (sorted: express at 0, lodash at 1).
+	if len(doc.Packages) != 2 {
+		t.Fatalf("expected 2 packages, got %d", len(doc.Packages))
+	}
+
+	var lodashPkg SPDXPackage
+	for _, p := range doc.Packages {
+		if p.Name == "lodash" {
+			lodashPkg = p
+			break
+		}
+	}
+
+	// lodash should have PURL ref + 2 SECURITY refs = 3 total.
+	if len(lodashPkg.ExternalRefs) != 3 {
+		t.Fatalf("expected 3 external refs for lodash (1 purl + 2 security), got %d", len(lodashPkg.ExternalRefs))
+	}
+
+	// Count security refs.
+	var securityRefs int
+	for _, ref := range lodashPkg.ExternalRefs {
+		if ref.ReferenceCategory == "SECURITY" {
+			securityRefs++
+			if ref.ReferenceType != "advisory" {
+				t.Errorf("expected referenceType advisory, got %s", ref.ReferenceType)
+			}
+		}
+	}
+	if securityRefs != 2 {
+		t.Fatalf("expected 2 security refs, got %d", securityRefs)
+	}
+
+	// Express should have only PURL ref (no vulns).
+	var expressPkg SPDXPackage
+	for _, p := range doc.Packages {
+		if p.Name == "express" {
+			expressPkg = p
+			break
+		}
+	}
+	if len(expressPkg.ExternalRefs) != 1 {
+		t.Fatalf("expected 1 external ref for express (purl only), got %d", len(expressPkg.ExternalRefs))
+	}
+}
+
+func TestSPDX_NoVulnerabilities(t *testing.T) {
+	r := NewSPDXReporter("0.1.0")
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.18.2", Ecosystem: "npm"})
+
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var doc SPDXDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("failed to parse SPDX JSON: %v", err)
+	}
+
+	// Only PURL ref, no security refs.
+	if len(doc.Packages[0].ExternalRefs) != 1 {
+		t.Fatalf("expected 1 external ref (purl only), got %d", len(doc.Packages[0].ExternalRefs))
+	}
+	if doc.Packages[0].ExternalRefs[0].ReferenceCategory != "PACKAGE-MANAGER" {
+		t.Errorf("expected PACKAGE-MANAGER, got %s", doc.Packages[0].ExternalRefs[0].ReferenceCategory)
 	}
 }

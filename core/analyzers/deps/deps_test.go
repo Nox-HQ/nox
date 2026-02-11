@@ -241,7 +241,7 @@ func TestParseGemfileLock_EmptyInput(t *testing.T) {
 }
 
 func TestParseLockfile_Dispatch(t *testing.T) {
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 
 	tests := []struct {
 		filename  string
@@ -287,7 +287,7 @@ func TestParseLockfile_Dispatch(t *testing.T) {
 }
 
 func TestParseLockfile_UnknownType(t *testing.T) {
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 
 	_, err := analyzer.ParseLockfile("/project/unknown.lock", []byte("data"))
 	if err == nil {
@@ -366,14 +366,14 @@ func TestScanArtifacts(t *testing.T) {
 	// Write a go.sum file.
 	goSumContent := []byte("golang.org/x/text v0.3.7 h1:abc=\ngolang.org/x/text v0.3.7/go.mod h1:def=\n")
 	goSumPath := filepath.Join(tmpDir, "go.sum")
-	if err := os.WriteFile(goSumPath, goSumContent, 0644); err != nil {
+	if err := os.WriteFile(goSumPath, goSumContent, 0o644); err != nil {
 		t.Fatalf("writing go.sum: %v", err)
 	}
 
 	// Write a requirements.txt file.
 	reqContent := []byte("Django==4.2.1\nrequests==2.28.0\n")
 	reqPath := filepath.Join(tmpDir, "requirements.txt")
-	if err := os.WriteFile(reqPath, reqContent, 0644); err != nil {
+	if err := os.WriteFile(reqPath, reqContent, 0o644); err != nil {
 		t.Fatalf("writing requirements.txt: %v", err)
 	}
 
@@ -398,7 +398,7 @@ func TestScanArtifacts(t *testing.T) {
 		},
 	}
 
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
@@ -432,7 +432,7 @@ func TestScanArtifacts_SkipsUnsupportedLockfiles(t *testing.T) {
 
 	// Write a yarn.lock file (not currently supported by parsers).
 	yarnPath := filepath.Join(tmpDir, "yarn.lock")
-	if err := os.WriteFile(yarnPath, []byte("# yarn lockfile v1\n"), 0644); err != nil {
+	if err := os.WriteFile(yarnPath, []byte("# yarn lockfile v1\n"), 0o644); err != nil {
 		t.Fatalf("writing yarn.lock: %v", err)
 	}
 
@@ -445,7 +445,7 @@ func TestScanArtifacts_SkipsUnsupportedLockfiles(t *testing.T) {
 		},
 	}
 
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 	inventory, _, err := analyzer.ScanArtifacts(artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts should not error on unsupported lockfiles: %v", err)
@@ -458,7 +458,7 @@ func TestScanArtifacts_SkipsUnsupportedLockfiles(t *testing.T) {
 }
 
 func TestScanArtifacts_EmptyInput(t *testing.T) {
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 	inventory, fs, err := analyzer.ScanArtifacts(nil)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error on nil input: %v", err)
@@ -723,7 +723,7 @@ func TestParseNuGetPackagesLock_InvalidJSON(t *testing.T) {
 }
 
 func TestParseLockfile_Dispatch_NewEcosystems(t *testing.T) {
-	analyzer := NewAnalyzer()
+	analyzer := NewAnalyzer(WithOSVDisabled())
 
 	tests := []struct {
 		filename  string

@@ -197,9 +197,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	var (
 		stagedFlag    bool
 		thresholdFlag string
+		noOSVFlag     bool
 	)
 	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
 	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
+	scanFS.BoolVar(&noOSVFlag, "no-osv", false, "disable OSV.dev vulnerability lookups (offline mode)")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -245,6 +247,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	} else {
 		opts := nox.ScanOptions{
 			CustomRulesPath: rulesPath,
+			DisableOSV:      noOSVFlag,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
