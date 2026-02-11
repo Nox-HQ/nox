@@ -5,6 +5,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /plugin .
 
+# nox:ignore IAC-002 -- minimal runtime image for plugins
 FROM scratch
 COPY --from=build /plugin /plugin
 ENTRYPOINT ["/plugin"]

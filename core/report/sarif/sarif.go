@@ -155,7 +155,7 @@ func NewReporter(version string, ruleSet *rules.RuleSet) *Reporter {
 func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 	fs.SortDeterministic()
 
-	items := fs.Findings()
+	items := fs.ActiveFindings()
 
 	// Build the rule catalog and a lookup from rule ID to index.
 	ruleCatalog, ruleIndex := r.buildRuleCatalog(items)

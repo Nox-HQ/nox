@@ -615,7 +615,7 @@ func builtinSecretRules() []rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "SEC-073", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(mysql|postgres(?:ql)?|mssql|sqlserver|oracle|mariadb)://[^:]+:[^@]+@[^\s'"]+`,
+			pattern:     `(?i)(mysql|postgres(?:ql)?|mssql|sqlserver|oracle|mariadb)://[^:\n]+:[^@\n]+@[^\s'"]+`,
 			description: "Database Connection String with credentials detected",
 			cwe:         "CWE-798", keywords: []string{"://"},
 			remediation: "Use environment variables or a secrets manager for database connection strings.",
@@ -623,7 +623,7 @@ func builtinSecretRules() []rules.Rule {
 		},
 		{
 			id: "SEC-074", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `mongodb\+srv://[^:]+:[^@]+@[^\s'"]+`,
+			pattern:     `mongodb\+srv://[^:\n]+:[^@\n]+@[^\s'"]+`,
 			description: "MongoDB SRV Connection String with credentials detected",
 			cwe:         "CWE-798", keywords: []string{"mongodb+srv://"},
 			remediation: "Use environment variables for MongoDB connection strings. Rotate the database password.",
@@ -639,7 +639,7 @@ func builtinSecretRules() []rules.Rule {
 		},
 		{
 			id: "SEC-076", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `rediss?://[^:]+:[^@]+@[^\s'"]+`,
+			pattern:     `rediss?://[^:\n]+:[^@\n]+@[^\s'"]+`,
 			description: "Redis URL with password detected",
 			cwe:         "CWE-798", keywords: []string{"redis://", "rediss://"},
 			remediation: "Use environment variables for Redis connection strings. Rotate the password.",
@@ -667,6 +667,7 @@ func builtinSecretRules() []rules.Rule {
 		},
 		{
 			id: "SEC-078", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
+			// nox:ignore SEC-078 -- rule definition, not a real finding
 			pattern:     `(?i)-----BEGIN PGP PRIVATE KEY BLOCK-----`,
 			description: "PGP Private Key Block detected",
 			cwe:         "CWE-321", keywords: []string{"pgp private key"},
@@ -735,7 +736,7 @@ func builtinSecretRules() []rules.Rule {
 		},
 		{
 			id: "SEC-085", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `https?://[^:]+:[^@]+@[^\s'"]{3,}`,
+			pattern:     `https?://[^:\n]+:[^@\n]+@[^\s'"]{3,}`,
 			description: "URL with embedded password detected",
 			cwe:         "CWE-798", keywords: []string{"://"},
 			remediation: "Remove credentials from URLs. Use environment variables or a credentials provider.",

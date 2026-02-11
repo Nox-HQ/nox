@@ -38,6 +38,7 @@ func builtinAIRules() []rules.Rule {
 		},
 		{
 			id: "AI-002", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			// nox:ignore AI-002 -- rule definition, not a real finding
 			pattern:     `(?i)(f["']|\.format\(|%s).*?(user_input|user_message|user_query|user_prompt)`,
 			description: "Direct string concatenation of user input into prompt template",
 			cwe:         "CWE-77", keywords: []string{"user_input", "user_message", "user_query", "user_prompt"},
@@ -84,6 +85,7 @@ func builtinAIRules() []rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "AI-006", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// nox:ignore AI-006 -- rule definition, not a real finding
 			pattern:     `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
 			description: "Prompt or LLM response logged without redaction",
 			cwe:         "CWE-532", keywords: []string{"prompt", "completion", "response.text", "response.content"},
@@ -93,6 +95,7 @@ func builtinAIRules() []rules.Rule {
 		},
 		{
 			id: "AI-007", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			// nox:ignore AI-007 -- rule definition, not a real finding
 			pattern:     `(?i)(log|logger|print|console\.log|fmt\.Print)\S*\(.*?(openai_api_key|anthropic_api_key|api_key|bearer_token)`,
 			description: "LLM API key or token logged or printed",
 			cwe:         "CWE-532", keywords: []string{"openai_api_key", "anthropic_api_key"},
@@ -119,10 +122,12 @@ func builtinAIRules() []rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "AI-009", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			// nox:ignore AI-009 -- rule definition, not a real finding
 			pattern:     `(?i)(eval|exec)\s*\(.*?(response|completion|output|generated|llm_output|model_output)`,
 			description: "LLM output passed to code execution function",
 			cwe:         "CWE-94", keywords: []string{"eval(", "exec("},
 			tags:        []string{"ai", "output-handling", "code-execution"},
+			// nox:ignore AI-009 -- rule definition, not a real finding
 			remediation: "Never pass LLM output directly to eval(), exec(), or similar code execution functions. Validate and sanitise all generated content before any form of interpretation.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/94.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
@@ -137,6 +142,7 @@ func builtinAIRules() []rules.Rule {
 		},
 		{
 			id: "AI-015", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// nox:ignore AI-015 -- rule definition, not a real finding
 			pattern:     `(?i)(innerHTML|dangerouslySetInnerHTML|v-html|\.html\()\s*[=({]?\s*.*?(response|completion|output|generated|llm|ai_result|message\.content|chat_response)`,
 			description: "LLM output rendered as raw HTML without escaping",
 			cwe:         "CWE-79", keywords: []string{"innerhtml", "dangerouslysetinnerhtml", "v-html"},
@@ -185,6 +191,7 @@ func builtinAIRules() []rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "AI-013", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// nox:ignore AI-013 -- rule definition, not a real finding
 			pattern:     `(?i)(traceback|stack_trace|stacktrace|str\(e\)|e\.message|err\.Error\(\)).*?(return|response|send|json|reply)`,
 			description: "Internal error details or stack traces returned in LLM response",
 			cwe:         "CWE-209", keywords: []string{"traceback", "stack_trace", "stacktrace"},
