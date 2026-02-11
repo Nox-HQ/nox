@@ -1,10 +1,16 @@
-# Nox
+<p align="center">
+  <img src="assets/logo.png" alt="Nox" width="180" />
+</p>
 
-![CI](https://github.com/nox-hq/nox/actions/workflows/ci.yml/badge.svg)
-![Security](.github/nox-badge.svg)
-![Coverage](.github/coverage-badge.svg)
-![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
-![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)
+<h1 align="center">Nox</h1>
+
+<p align="center">
+  <img src="https://github.com/nox-hq/nox/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <img src=".github/nox-badge.svg" alt="Security" />
+  <img src=".github/coverage-badge.svg" alt="Coverage" />
+  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" />
+</p>
 
 **Language-agnostic security scanner with first-class AI application security.**
 

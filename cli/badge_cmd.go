@@ -62,7 +62,11 @@ func runBadge(args []string) int {
 			fmt.Fprintf(os.Stderr, "error: parsing findings JSON: %v\n", err)
 			return 2
 		}
-		findingsList = rep.Findings
+		for _, f := range rep.Findings {
+			if f.Status != findings.StatusSuppressed {
+				findingsList = append(findingsList, f)
+			}
+		}
 	} else {
 		target := "."
 		if len(positionalArgs) > 0 {
