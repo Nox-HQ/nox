@@ -139,6 +139,7 @@ func (r *MatcherRegistry) Get(matcherType string) Matcher {
 func NewDefaultMatcherRegistry() *MatcherRegistry {
 	r := NewMatcherRegistry()
 	r.Register("regex", NewRegexMatcher())
+	r.Register("entropy", &EntropyMatcher{})
 	r.Register("jsonpath", &stubMatcher{})
 	r.Register("yamlpath", &stubMatcher{})
 	r.Register("heuristic", &stubMatcher{})

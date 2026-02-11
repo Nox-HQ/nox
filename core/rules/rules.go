@@ -15,6 +15,7 @@ var ValidMatcherTypes = map[string]bool{
 	"jsonpath":  true,
 	"yamlpath":  true,
 	"heuristic": true,
+	"entropy":   true,
 }
 
 // Rule is a single declarative security rule loaded from YAML. It describes
