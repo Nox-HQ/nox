@@ -105,7 +105,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **154 built-in rules** across four analyzer suites:
+Nox ships with **155 built-in rules** across four analyzer suites:
 
 ### Secrets (86 rules)
 
@@ -123,6 +123,11 @@ Detects hardcoded secrets, API keys, tokens, and credentials across **15 categor
 | Database & Infra | SEC-073 – SEC-076 | Connection strings (Postgres, MongoDB, Redis), Firebase |
 | Crypto & Keys | SEC-004, SEC-077 – SEC-079 | PEM private keys, Age, PGP, PKCS12 |
 | Generic Patterns | SEC-005, SEC-080 – SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
+
+**Secret detection features:**
+- Shannon entropy analysis for high-entropy strings (API keys, tokens)
+- Git history scanning to find secrets in past commits
+- Custom rules via YAML definition files (`--rules path/to/rules/`)
 
 ### AI Security (18 rules)
 
@@ -152,9 +157,19 @@ Detects misconfigurations across **7 IaC categories**:
 | Helm | IAC-046 – IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
 | CI/CD General | IAC-050 | Disabled security checks |
 
-### Dependencies
+### Dependencies & SCA (1 rule)
 
-Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and generates a software bill of materials. Vulnerability enrichment via OSV is planned.
+Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and queries the [OSV.dev](https://osv.dev) database for known vulnerabilities:
+
+| Rule | Description |
+|------|-------------|
+| VULN-001 | Known vulnerability in dependency (severity mapped from CVSS) |
+
+- Batches queries to the OSV.dev API (up to 1000 packages per request)
+- CVSS scores mapped to nox severity levels (Critical/High/Medium/Low/Info)
+- Graceful degradation on network errors (offline-first)
+- Disable with `--no-osv` flag or `scan.osv.disabled: true` in `.nox.yaml`
+- Vulnerability data enriches CycloneDX and SPDX SBOM output
 
 ## Configuration
 
@@ -166,6 +181,8 @@ scan:
     - "vendor/"
     - "testdata/"
     - "*.test.js"
+  osv:
+    disabled: false          # Set true to skip OSV lookups (offline mode)
   rules:
     disable:
       - "AI-008"           # Unpinned model refs OK here
@@ -263,6 +280,30 @@ nox annotate --input findings.json --pr 123 --repo owner/name
 
 Auto-detects PR number and repo from `GITHUB_REF` and `GITHUB_REPOSITORY` environment variables in CI.
 
+### Pre-commit Hooks
+
+Block commits that contain secrets or security issues:
+
+```bash
+# Install the nox pre-commit hook
+nox protect install
+
+# With custom severity threshold
+nox protect install --severity-threshold critical
+
+# Check status
+nox protect status
+
+# Remove
+nox protect uninstall
+```
+
+**For nox contributors**, install the project-level hook that also runs gofmt, go vet, and golangci-lint (including gocritic) -- matching CI:
+
+```bash
+make hooks
+```
+
 CLI flags always take precedence over config file values.
 
 ## CLI Reference
@@ -279,6 +320,7 @@ Commands:
   diff [path]         Show findings in changed files only
   watch [path]        Watch for changes and re-scan automatically
   annotate            Annotate a GitHub PR with inline findings
+  protect <cmd>       Manage git pre-commit hooks (install, uninstall, status)
   completion <shell>  Generate shell completions (bash, zsh, fish, powershell)
   serve               Start MCP server on stdio
   registry            Manage plugin registries
@@ -286,10 +328,13 @@ Commands:
   version             Print version and exit
 
 Scan Flags:
-  --format string   Output formats: json, sarif, cdx, spdx, all (default: json)
-  --output string   Output directory (default: .)
-  --quiet, -q       Suppress output except errors
-  --verbose, -v     Verbose output
+  --format string            Output formats: json, sarif, cdx, spdx, all (default: json)
+  --output string            Output directory (default: .)
+  --staged                   Scan only git-staged files
+  --severity-threshold       Minimum severity to report (critical, high, medium, low)
+  --no-osv                   Disable OSV.dev vulnerability lookups (offline mode)
+  --quiet, -q                Suppress output except errors
+  --verbose, -v              Verbose output
 
 Exit Codes:
   0   No findings (or policy pass)
