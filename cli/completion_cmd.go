@@ -36,7 +36,7 @@ _nox_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="scan show explain badge serve registry plugin version baseline diff watch completion annotate"
+    commands="scan show explain badge serve registry plugin version baseline diff watch protect completion annotate"
 
     case "${prev}" in
         nox)
@@ -49,6 +49,10 @@ _nox_completions() {
             ;;
         baseline)
             COMPREPLY=( $(compgen -W "write update show" -- "${cur}") )
+            return 0
+            ;;
+        protect)
+            COMPREPLY=( $(compgen -W "install uninstall status" -- "${cur}") )
             return 0
             ;;
         completion)
@@ -85,6 +89,7 @@ _nox() {
         'diff:Show findings in changed files'
         'watch:Watch for changes and re-scan'
         'completion:Generate shell completions'
+        'protect:Manage git pre-commit hook'
         'annotate:Annotate a PR with findings'
     )
 
@@ -108,6 +113,9 @@ _nox() {
                     ;;
                 baseline)
                     _values 'subcommand' write update show
+                    ;;
+                protect)
+                    _values 'subcommand' install uninstall status
                     ;;
                 completion)
                     _values 'shell' bash zsh fish powershell
@@ -133,6 +141,7 @@ complete -c nox -n '__fish_use_subcommand' -a 'baseline' -d 'Manage finding base
 complete -c nox -n '__fish_use_subcommand' -a 'diff' -d 'Show findings in changed files'
 complete -c nox -n '__fish_use_subcommand' -a 'watch' -d 'Watch for changes and re-scan'
 complete -c nox -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completions'
+complete -c nox -n '__fish_use_subcommand' -a 'protect' -d 'Manage git pre-commit hook'
 complete -c nox -n '__fish_use_subcommand' -a 'annotate' -d 'Annotate a PR with findings'
 complete -c nox -l format -d 'Output format' -a 'json sarif cdx spdx all'
 complete -c nox -l output -d 'Output directory' -rF
@@ -140,6 +149,7 @@ complete -c nox -s q -l quiet -d 'Suppress output'
 complete -c nox -s v -l verbose -d 'Verbose output'
 complete -c nox -l version -d 'Print version'
 complete -c nox -n '__fish_seen_subcommand_from baseline' -a 'write update show'
+complete -c nox -n '__fish_seen_subcommand_from protect' -a 'install uninstall status'
 complete -c nox -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
 `
 
@@ -147,7 +157,7 @@ const powershellCompletion = `# nox PowerShell completion
 Register-ArgumentCompleter -CommandName nox -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = @('scan', 'show', 'explain', 'badge', 'serve', 'registry', 'plugin', 'version', 'baseline', 'diff', 'watch', 'completion', 'annotate')
+    $commands = @('scan', 'show', 'explain', 'badge', 'serve', 'registry', 'plugin', 'version', 'baseline', 'diff', 'watch', 'protect', 'completion', 'annotate')
 
     $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
         [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)

@@ -27,8 +27,9 @@ type PolicySettings struct {
 
 // ScanSettings controls which files are scanned and how rules behave.
 type ScanSettings struct {
-	Exclude []string    `yaml:"exclude"`
-	Rules   RulesConfig `yaml:"rules"`
+	Exclude  []string    `yaml:"exclude"`
+	RulesDir string      `yaml:"rules_dir"`
+	Rules    RulesConfig `yaml:"rules"`
 }
 
 // RulesConfig allows disabling rules or overriding their severity.

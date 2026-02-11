@@ -53,6 +53,28 @@ func MergeBase(repoRoot, ref1, ref2 string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// StagedFiles returns the list of staged file paths (added, copied, modified,
+// renamed) relative to the repository root. Only files in the git index that
+// differ from HEAD are returned, which is exactly what will be committed.
+func StagedFiles(repoRoot string) ([]string, error) {
+	out, err := runGit(repoRoot, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+	if err != nil {
+		return nil, fmt.Errorf("git diff --cached: %w", err)
+	}
+	return splitLines(out), nil
+}
+
+// StagedContent returns the staged (index) version of a file. This reads from
+// the git index rather than the working tree, ensuring pre-commit hooks scan
+// exactly what will be committed.
+func StagedContent(repoRoot string, path string) ([]byte, error) {
+	out, err := runGit(repoRoot, "show", ":"+path)
+	if err != nil {
+		return nil, fmt.Errorf("git show :%s: %w", path, err)
+	}
+	return []byte(out), nil
+}
+
 func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir

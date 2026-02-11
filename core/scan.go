@@ -14,6 +14,7 @@ import (
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
@@ -28,12 +29,28 @@ type ScanResult struct {
 	Rules        *rules.RuleSet
 }
 
+// ScanOptions holds optional parameters for RunScanWithOptions. The zero
+// value means no additional options are applied.
+type ScanOptions struct {
+	// CustomRulesPath is a path to a YAML file or directory containing
+	// custom security rules. When set, rules are loaded and merged with
+	// the built-in analyzer rules. CLI flags take precedence over
+	// .nox.yaml config values.
+	CustomRulesPath string
+}
+
 // RunScan executes the full scan pipeline against the given target path.
 // It discovers artifacts, runs all analyzers, deduplicates findings,
 // applies inline suppressions, baseline matching, and policy evaluation,
 // and returns the combined results. If a .nox.yaml config file is present
 // in the target directory, its scan settings are applied.
 func RunScan(target string) (*ScanResult, error) {
+	return RunScanWithOptions(target, ScanOptions{})
+}
+
+// RunScanWithOptions executes the full scan pipeline with the given options.
+// See RunScan for a description of the pipeline stages.
+func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	// Load project config.
 	cfg, err := LoadScanConfig(target)
 	if err != nil {
@@ -103,6 +120,46 @@ func RunScan(target string) (*ScanResult, error) {
 		allRules.Add(aiAnalyzer.Rules().Rules()[i])
 	}
 
+	// Phase 2b: Load and merge custom rules (CLI flag > config > none).
+	customPath := opts.CustomRulesPath
+	if customPath == "" {
+		customPath = cfg.Scan.RulesDir
+	}
+	if customPath != "" {
+		if !filepath.IsAbs(customPath) {
+			customPath = filepath.Join(target, customPath)
+		}
+		customRules, err := loadCustomRules(customPath)
+		if err != nil {
+			return nil, fmt.Errorf("loading custom rules: %w", err)
+		}
+		// Check for duplicates before merging.
+		for _, cr := range customRules.Rules() {
+			if allRules.HasID(cr.ID) {
+				return nil, fmt.Errorf("custom rule ID %q conflicts with a built-in rule", cr.ID)
+			}
+		}
+		// Run custom rules against artifacts.
+		customEngine := rules.NewEngine(customRules)
+		for _, artifact := range artifacts {
+			content, readErr := os.ReadFile(artifact.AbsPath)
+			if readErr != nil {
+				return nil, fmt.Errorf("reading artifact %s for custom rules: %w", artifact.Path, readErr)
+			}
+			customFindings, scanErr := customEngine.ScanFile(artifact.Path, content)
+			if scanErr != nil {
+				return nil, fmt.Errorf("scanning %s with custom rules: %w", artifact.Path, scanErr)
+			}
+			for _, f := range customFindings {
+				allFindings.Add(f)
+			}
+		}
+		// Add custom rules to the rule set for SARIF reporting.
+		for _, cr := range customRules.Rules() {
+			allRules.Add(cr)
+		}
+	}
+
 	// Phase 3: Apply rule config.
 	if len(cfg.Scan.Rules.Disable) > 0 {
 		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
@@ -145,6 +202,91 @@ func RunScan(target string) (*ScanResult, error) {
 		PolicyResult: policyResult,
 		Rules:        allRules,
 	}, nil
+}
+
+// loadCustomRules loads rules from a path, which can be a file or directory.
+func loadCustomRules(path string) (*rules.RuleSet, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("custom rules path %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return rules.LoadRulesFromDir(path)
+	}
+	return rules.LoadRulesFromFile(path)
+}
+
+// RunStagedScan executes the scan pipeline against only git-staged files. It
+// reads file content from the git index (not the working tree) so that
+// pre-commit hooks scan exactly what will be committed. A temporary directory
+// is created with the staged content, scanned using the standard pipeline, and
+// finding paths are remapped to their original repository-relative locations.
+func RunStagedScan(repoRoot string) (*ScanResult, error) {
+	stagedPaths, err := git.StagedFiles(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("listing staged files: %w", err)
+	}
+
+	if len(stagedPaths) == 0 {
+		// Nothing staged — return clean result.
+		return &ScanResult{
+			Findings:    findings.NewFindingSet(),
+			Inventory:   &deps.PackageInventory{},
+			AIInventory: &ai.Inventory{},
+			Rules:       rules.NewRuleSet(),
+		}, nil
+	}
+
+	// Write staged content to a temp directory so the existing scan pipeline
+	// can consume it unchanged.
+	tmpDir, err := os.MkdirTemp("", "nox-staged-*")
+	if err != nil {
+		return nil, fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	for _, p := range stagedPaths {
+		content, err := git.StagedContent(repoRoot, p)
+		if err != nil {
+			return nil, fmt.Errorf("reading staged content for %s: %w", p, err)
+		}
+
+		dest := filepath.Join(tmpDir, p)
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return nil, fmt.Errorf("creating dir for %s: %w", p, err)
+		}
+		if err := os.WriteFile(dest, content, 0o644); err != nil {
+			return nil, fmt.Errorf("writing staged file %s: %w", p, err)
+		}
+	}
+
+	// Run the standard scan against the temp directory. Paths in findings
+	// will be relative to tmpDir, which mirrors the repository-relative
+	// structure, so no remapping is needed.
+	result, err := RunScan(tmpDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// SeverityMeetsThreshold returns true if the given severity is at or above the
+// threshold severity. Lower rank = more severe (critical=0, high=1, etc.).
+func SeverityMeetsThreshold(severity, threshold findings.Severity) bool {
+	rank := map[findings.Severity]int{
+		findings.SeverityCritical: 0,
+		findings.SeverityHigh:     1,
+		findings.SeverityMedium:   2,
+		findings.SeverityLow:      3,
+		findings.SeverityInfo:     4,
+	}
+	sr, ok1 := rank[severity]
+	tr, ok2 := rank[threshold]
+	if !ok1 || !ok2 {
+		return false
+	}
+	return sr <= tr
 }
 
 // applySuppressions reads files that have findings and marks suppressed findings.

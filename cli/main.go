@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -86,7 +87,7 @@ func isTopLevelBoolFlag(name string) bool {
 
 func isTopLevelStringFlag(name string) bool {
 	switch name {
-	case "format", "output":
+	case "format", "output", "rules":
 		return true
 	}
 	return false
@@ -101,6 +102,7 @@ func run(args []string) int {
 	var (
 		formatFlag  string
 		outputDir   string
+		rulesFlag   string
 		quietFlag   bool
 		verboseFlag bool
 		versionFlag bool
@@ -108,6 +110,7 @@ func run(args []string) int {
 
 	fs.StringVar(&formatFlag, "format", "json", "output formats: json,sarif,cdx,spdx,all (comma-separated)")
 	fs.StringVar(&outputDir, "output", ".", "output directory for report files")
+	fs.StringVar(&rulesFlag, "rules", "", "path to custom rules YAML file or directory")
 	fs.BoolVar(&quietFlag, "quiet", false, "suppress all output except errors")
 	fs.BoolVar(&quietFlag, "q", false, "suppress all output except errors (shorthand)")
 	fs.BoolVar(&verboseFlag, "verbose", false, "enable verbose output")
@@ -124,6 +127,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
+		fmt.Fprintf(os.Stderr, "  protect <cmd>    Manage git pre-commit hook\n")
 		fmt.Fprintf(os.Stderr, "  annotate         Annotate a PR with findings\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
@@ -152,11 +156,9 @@ func run(args []string) int {
 	command := remaining[0]
 	switch command {
 	case "scan":
-		if len(remaining) < 2 {
-			fmt.Fprintln(os.Stderr, "Usage: nox scan <path> [flags]")
-			return 2
-		}
-		return runScan(remaining[1], formatFlag, outputDir, quietFlag, verboseFlag)
+		return runScan(remaining[1:], formatFlag, outputDir, rulesFlag, quietFlag, verboseFlag)
+	case "protect":
+		return runProtect(remaining[1:])
 	case "show":
 		return runShow(remaining[1:])
 	case "explain":
@@ -189,7 +191,25 @@ func run(args []string) int {
 	}
 }
 
-func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
+func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
+	// Parse scan-specific flags.
+	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
+	var (
+		stagedFlag    bool
+		thresholdFlag string
+	)
+	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
+	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
+	if err := scanFS.Parse(args); err != nil {
+		return 2
+	}
+
+	if scanFS.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: nox scan <path> [flags]")
+		return 2
+	}
+	target := scanFS.Arg(0)
+
 	// Load project config for output defaults.
 	cfg, err := nox.LoadScanConfig(target)
 	if err != nil {
@@ -208,20 +228,45 @@ func runScan(target, formatFlag, outputDir string, quiet, verbose bool) int {
 	formats := parseFormats(formatFlag)
 
 	if !quiet {
-		fmt.Printf("nox %s — scanning %s\n", version, target)
+		if stagedFlag {
+			fmt.Printf("nox %s — scanning staged files in %s\n", version, target)
+		} else {
+			fmt.Printf("nox %s — scanning %s\n", version, target)
+		}
 	}
 
 	if verbose {
 		fmt.Println("[discover] walking directory...")
 	}
 
-	result, err := nox.RunScan(target)
+	var result *nox.ScanResult
+	if stagedFlag {
+		result, err = nox.RunStagedScan(target)
+	} else {
+		opts := nox.ScanOptions{
+			CustomRulesPath: rulesPath,
+		}
+		result, err = nox.RunScanWithOptions(target, opts)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 		return 2
 	}
 
 	activeFindings := result.Findings.ActiveFindings()
+
+	// Apply severity threshold filtering if specified.
+	if thresholdFlag != "" {
+		threshold := findings.Severity(thresholdFlag)
+		var filtered []findings.Finding
+		for _, f := range activeFindings {
+			if nox.SeverityMeetsThreshold(f.Severity, threshold) {
+				filtered = append(filtered, f)
+			}
+		}
+		activeFindings = filtered
+	}
+
 	findingCount := len(activeFindings)
 	totalCount := len(result.Findings.Findings())
 	suppressedCount := totalCount - findingCount

@@ -1,0 +1,6 @@
+- id: nox
+  name: nox security scan
+  entry: nox scan --staged --severity-threshold high --quiet .
+  language: system
+  stages: [pre-commit]
+  pass_filenames: false

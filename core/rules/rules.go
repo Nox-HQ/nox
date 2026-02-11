@@ -77,6 +77,12 @@ func (rs *RuleSet) ByID(id string) (Rule, bool) {
 	return rs.rules[idx], true
 }
 
+// HasID reports whether a rule with the given ID exists in the set.
+func (rs *RuleSet) HasID(id string) bool {
+	_, ok := rs.byID[id]
+	return ok
+}
+
 // ByTag returns all rules that carry the given tag. If no rules match, an
 // empty slice is returned.
 func (rs *RuleSet) ByTag(tag string) []Rule {

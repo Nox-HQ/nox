@@ -13,12 +13,14 @@ import (
 func runDiff(args []string) int {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	var (
-		base     string
-		head     string
-		jsonFlag bool
+		base      string
+		head      string
+		rulesPath string
+		jsonFlag  bool
 	)
 	fs.StringVar(&base, "base", "main", "base ref for comparison")
 	fs.StringVar(&head, "head", "HEAD", "head ref for comparison")
+	fs.StringVar(&rulesPath, "rules", "", "path to custom rules YAML file or directory")
 	fs.BoolVar(&jsonFlag, "json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -56,7 +58,10 @@ func runDiff(args []string) int {
 		changedSet[f] = struct{}{}
 	}
 
-	result, err := nox.RunScan(target)
+	opts := nox.ScanOptions{
+		CustomRulesPath: rulesPath,
+	}
+	result, err := nox.RunScanWithOptions(target, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 		return 2
