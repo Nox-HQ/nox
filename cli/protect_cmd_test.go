@@ -404,7 +404,7 @@ func TestProtect_InstallAllThresholds(t *testing.T) {
 func TestGenerateHookScript(t *testing.T) {
 	t.Parallel()
 
-	script := generateHookScript("high")
+	script := generateHookScript(hookOptions{threshold: "high"})
 
 	if !strings.Contains(script, hookMarker) {
 		t.Error("hook script should contain the hook marker")
@@ -414,6 +414,72 @@ func TestGenerateHookScript(t *testing.T) {
 	}
 	if !strings.HasPrefix(script, "#!/bin/sh") {
 		t.Error("hook script should start with shebang")
+	}
+}
+
+func TestGenerateHookScript_WithChecks(t *testing.T) {
+	t.Parallel()
+
+	script := generateHookScript(hookOptions{
+		threshold: "critical",
+		fmt:       true,
+		vet:       true,
+		lint:      true,
+	})
+
+	if !strings.Contains(script, "gofmt -l") {
+		t.Error("hook script should contain gofmt check when --fmt is set")
+	}
+	if !strings.Contains(script, "go vet") {
+		t.Error("hook script should contain go vet when --vet is set")
+	}
+	if !strings.Contains(script, "golangci-lint run") {
+		t.Error("hook script should contain golangci-lint when --lint is set")
+	}
+	if !strings.Contains(script, "--severity-threshold critical") {
+		t.Error("hook script should contain severity threshold")
+	}
+}
+
+func TestGenerateHookScript_NoExtraChecks(t *testing.T) {
+	t.Parallel()
+
+	script := generateHookScript(hookOptions{threshold: "medium"})
+
+	if strings.Contains(script, "gofmt") {
+		t.Error("hook script should not contain gofmt when --fmt is not set")
+	}
+	if strings.Contains(script, "go vet") {
+		t.Error("hook script should not contain go vet when --vet is not set")
+	}
+	if strings.Contains(script, "golangci-lint") {
+		t.Error("hook script should not contain golangci-lint when --lint is not set")
+	}
+}
+
+func TestProtect_InstallWithChecks(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+
+	code := run([]string{"protect", "install", "--fmt", "--vet", "--lint", dir})
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("reading hook: %v", err)
+	}
+
+	s := string(content)
+	if !strings.Contains(s, "gofmt -l") {
+		t.Error("hook should contain gofmt check")
+	}
+	if !strings.Contains(s, "go vet") {
+		t.Error("hook should contain go vet check")
+	}
+	if !strings.Contains(s, "golangci-lint") {
+		t.Error("hook should contain golangci-lint check")
 	}
 }
 
