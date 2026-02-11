@@ -550,21 +550,21 @@ func builtinIaCRules() []rules.Rule {
 	}
 
 	out := make([]rules.Rule, len(defs))
-	for i, d := range defs {
+	for i := range defs {
 		out[i] = rules.Rule{
-			ID:           d.id,
+			ID:           defs[i].id,
 			Version:      "1.0",
-			Description:  d.description,
-			Severity:     d.severity,
-			Confidence:   d.confidence,
+			Description:  defs[i].description,
+			Severity:     defs[i].severity,
+			Confidence:   defs[i].confidence,
 			MatcherType:  "regex",
-			Pattern:      d.pattern,
-			FilePatterns: d.filePatterns,
-			Keywords:     d.keywords,
-			Tags:         d.tags,
-			Metadata:     map[string]string{"cwe": d.cwe},
-			Remediation:  d.remediation,
-			References:   d.references,
+			Pattern:      defs[i].pattern,
+			FilePatterns: defs[i].filePatterns,
+			Keywords:     defs[i].keywords,
+			Tags:         defs[i].tags,
+			Metadata:     map[string]string{"cwe": defs[i].cwe},
+			Remediation:  defs[i].remediation,
+			References:   defs[i].references,
 		}
 	}
 	return out

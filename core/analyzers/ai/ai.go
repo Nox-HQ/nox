@@ -72,8 +72,9 @@ type Analyzer struct {
 // NewAnalyzer creates an Analyzer with built-in AI security rules.
 func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
-	for _, r := range builtinAIRules() {
-		rs.Add(r)
+	aiRules := builtinAIRules()
+	for i := range aiRules {
+		rs.Add(aiRules[i])
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),

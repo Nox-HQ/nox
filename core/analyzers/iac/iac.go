@@ -21,8 +21,9 @@ type Analyzer struct {
 // programmatically. Rules are scoped to specific file types via FilePatterns.
 func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
-	for _, r := range builtinIaCRules() {
-		rs.Add(r)
+	iacRules := builtinIaCRules()
+	for i := range iacRules {
+		rs.Add(iacRules[i])
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
