@@ -64,14 +64,14 @@ type Driver struct {
 
 // ReportingDescriptor defines a single rule in the SARIF rule catalog.
 type ReportingDescriptor struct {
-	ID                   string            `json:"id"`
-	Name                 string            `json:"name"`
-	ShortDescription     Message           `json:"shortDescription"`
-	FullDescription      *Message          `json:"fullDescription,omitempty"`
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name"`
+	ShortDescription     Message             `json:"shortDescription"`
+	FullDescription      *Message            `json:"fullDescription,omitempty"`
 	Help                 *MultiformatMessage `json:"help,omitempty"`
-	HelpURI              string            `json:"helpUri,omitempty"`
-	DefaultConfiguration Configuration     `json:"defaultConfiguration"`
-	Properties           map[string]string `json:"properties,omitempty"`
+	HelpURI              string              `json:"helpUri,omitempty"`
+	DefaultConfiguration Configuration       `json:"defaultConfiguration"`
+	Properties           map[string]string   `json:"properties,omitempty"`
 }
 
 // MultiformatMessage is a SARIF message that can carry both plain text and
