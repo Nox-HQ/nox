@@ -130,3 +130,27 @@ Signature validation and trust management for plugins. Verifies artifact signatu
 CLI commands for managing registries and plugins. Registry commands: 'nox registry add <url>' (add registry source), 'nox registry list' (show configured registries), 'nox registry remove <name>' (remove registry). Plugin commands: 'nox plugin search <query>' (search registries), 'nox plugin info <name>' (show plugin details and trust status), 'nox plugin install <name>[@version]' (install with verification), 'nox plugin update [name]' (update one or all plugins), 'nox plugin list' (show installed plugins), 'nox plugin remove <name>' (uninstall), 'nox plugin call <name> <tool> [args]' (invoke plugin tool directly from CLI).
 
 ---
+
+## Git History Scanning for Secrets
+
+Scan git commit history for leaked secrets that were committed and later removed. Traverse commits using git rev-list, extract diffs with git diff-tree, run the secrets analyzer against historical content. Support depth limits (--history-depth), branch selection (--branch), and incremental scanning from a bookmark commit. Report findings with commit SHA, author, and date metadata. Critical for detecting secrets that exist in git history but not in the working tree. Integrates with existing secrets analyzer (86 rules) and findings model.
+
+---
+
+## Entropy-Based Secret Detection
+
+Add Shannon entropy calculation as a complementary detection method alongside regex patterns. Implement an entropy matcher type in the rule engine that scores string segments and flags high-entropy values above configurable thresholds. Detect base64-encoded blobs, hex-encoded secrets, and random strings that don't match any known pattern. Integrate as a new matcher type ('entropy') in the MatcherRegistry alongside the existing regex matcher. Combine with assignment context (e.g., variable named 'secret' or 'password' with high-entropy value) to reduce false positives.
+
+---
+
+## Pre-commit Hook (nox protect)
+
+Add a 'nox protect' command that installs a git pre-commit hook to prevent secrets from being committed. The hook scans only staged files (git diff --cached) for speed. Supports install/uninstall subcommands, .pre-commit-hooks.yaml for the pre-commit framework, and direct .git/hooks/pre-commit shell script generation. Fail-fast on any critical/high finding. Configurable severity threshold via .nox.yaml. Exit code 1 blocks the commit with a clear message showing what was found and how to suppress false positives.
+
+---
+
+## Custom Rules CLI Integration
+
+Wire up the existing YAML rule loader (core/rules/loader.go) to the CLI via --rules flag on scan, diff, and protect commands. Load user-defined rules from a file or directory and merge them with built-in rules. Support .nox.yaml configuration for default rules paths. Validate custom rules at load time with clear error messages. This completes the custom rules story — the loader already exists but is unreachable from the CLI.
+
+---

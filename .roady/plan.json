@@ -3,15 +3,84 @@
   "spec_id": "nox",
   "tasks": [
     {
-      "id": "task-23",
-      "title": "Implement trust and verification",
-      "description": "Plugin trust system: validate artifact signatures against configurable trust roots, verify content digests on download and before execution, check API version compatibility, run conformance tests as part of install verification. Implement trust levels (verified: signed by known key, community: signed by unknown key, unverified: unsigned) with configurable minimum trust policy. Enterprise mode: mandate verified-only. Package: registry/trust.",
-      "priority": "medium",
+      "id": "task-26",
+      "title": "Implement git history commit walker",
+      "description": "Add CommitWalker to core/git/ that traverses commit history using git rev-list and git diff-tree. Extract added/modified content per commit as (commitSHA, filePath, content) tuples. Support depth limits, branch selection, and bookmark-based incremental scanning. Return commit metadata (SHA, author, date, message) with each result.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "git-history-scanning-for-secrets"
+    },
+    {
+      "id": "task-27",
+      "title": "Integrate history scanning into secrets analyzer and CLI",
+      "description": "Add HistoryScan mode to the secrets analyzer that consumes CommitWalker output and runs all 86 rules against historical diffs. Enrich findings with commit SHA, author, and date in Metadata. Add --history flag to 'nox scan' CLI with --history-depth and --history-branch options. Add HistoryFinding fields to the findings model. Update SARIF reporter to include commit metadata in result properties.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-26"
+      ],
+      "feature_id": "git-history-scanning-for-secrets"
+    },
+    {
+      "id": "task-28",
+      "title": "Implement Shannon entropy matcher",
+      "description": "Add EntropyMatcher to core/rules/matcher.go implementing the Matcher interface. Calculate Shannon entropy for candidate strings extracted via configurable tokenization (quoted strings, assignment RHS values, base64 blobs, hex sequences). Register as 'entropy' matcher type in MatcherRegistry. Support per-rule entropy thresholds via Rule.Metadata. Include context-aware scoring: boost confidence when variable name suggests a secret (password, key, token, secret).",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "entropy-based-secret-detection"
+    },
+    {
+      "id": "task-29",
+      "title": "Add entropy-based rules and integrate with secrets analyzer",
+      "description": "Define 3-5 entropy rules: high-entropy assignment (SEC-087), high-entropy base64 blob (SEC-088), high-entropy hex string (SEC-089). Add to builtinSecretRules() in core/analyzers/secrets/rules.go. Tune thresholds to minimize false positives (entropy \u003e= 4.5 for assignments, \u003e= 5.0 for standalone strings). Add comprehensive tests with known secrets and known non-secrets (UUIDs, hashes in comments, etc.).",
+      "priority": "high",
       "estimate": "M",
       "depends_on": [
-        "task-21"
+        "task-28"
       ],
-      "feature_id": "plugin-trust-\u0026-verification"
+      "feature_id": "entropy-based-secret-detection"
+    },
+    {
+      "id": "task-30",
+      "title": "Implement nox protect command with hook installer",
+      "description": "Add 'nox protect install' and 'nox protect uninstall' CLI commands. Generate .git/hooks/pre-commit that runs 'nox scan' on staged files only (git diff --cached --name-only). Add .pre-commit-hooks.yaml for pre-commit framework integration. Support --severity-threshold flag (default: high) to control which findings block commits. Clear output showing rule ID, file, line, and how to suppress with nox:ignore.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "pre-commit-hook-(nox-protect)"
+    },
+    {
+      "id": "task-31",
+      "title": "Add staged-files-only scan mode",
+      "description": "Add --staged flag to 'nox scan' that scans only git staged files (git diff --cached --name-only --diff-filter=ACMR). Used by the pre-commit hook for fast scanning. Only reads and scans the staged versions of files. Integrates with existing discovery and analyzer pipeline.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-30"
+      ],
+      "feature_id": "pre-commit-hook-(nox-protect)"
+    },
+    {
+      "id": "task-32",
+      "title": "Wire custom rules loader to CLI",
+      "description": "Add --rules flag to scan, diff, and protect commands that accepts a file or directory path. Load custom YAML rules via existing LoadRulesFromFile/LoadRulesFromDir and merge with built-in rules. Support 'rules_dir' key in .nox.yaml for default custom rules path. Validate rules at load time with clear errors for invalid patterns, missing fields, or duplicate IDs. Add tests for custom rule loading and merging.",
+      "priority": "medium",
+      "estimate": "S",
+      "depends_on": [],
+      "feature_id": "custom-rules-cli-integration"
+    },
+    {
+      "id": "task-11",
+      "title": "Implement CycloneDX and SPDX SBOM generators",
+      "description": "Generate sbom.cdx.json (CycloneDX JSON) and sbom.spdx.json (SPDX JSON) from dependency scanner component inventory. Optional vulnerability enrichment via OSV data. Package: core/report/sbom.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-10"
+      ],
+      "feature_id": "sbom-output-(cyclonedx-\u0026-spdx)"
     },
     {
       "id": "task-22",
@@ -23,18 +92,6 @@
         "task-21"
       ],
       "feature_id": "plugin-registry-\u0026-distribution"
-    },
-    {
-      "id": "task-24",
-      "title": "Implement CLI plugin commands",
-      "description": "Add CLI commands: 'nox registry add/list/remove' for registry management, 'nox plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
-      "priority": "medium",
-      "estimate": "L",
-      "depends_on": [
-        "task-17",
-        "task-21"
-      ],
-      "feature_id": "cli-plugin-commands"
     },
     {
       "id": "task-4",
@@ -71,19 +128,6 @@
       "feature_id": "dependency-scanner"
     },
     {
-      "id": "task-14",
-      "title": "Implement MCP server",
-      "description": "MCP server using mcp-go with stdio transport. Read-only tools: scan, get-findings, get-sbom. Workspace allowlisting configuration. Artifact serving via MCP resources. Output size limits and rate limiting. Package: server.",
-      "priority": "medium",
-      "estimate": "L",
-      "depends_on": [
-        "task-8",
-        "task-9",
-        "task-11"
-      ],
-      "feature_id": "mcp-server"
-    },
-    {
       "id": "task-17",
       "title": "Implement plugin host runtime",
       "description": "Core plugin runtime: discover plugin endpoints (local binary via exec, container via docker, remote gRPC address), call GetManifest on startup, validate manifest against host policy, manage plugin lifecycle (init/invoke/shutdown with graceful timeout), merge plugin-produced findings and SBOM components into Nox's unified ScanResult. Support parallel plugin execution with configurable concurrency. Package: core/plugins/host.",
@@ -106,41 +150,6 @@
       "feature_id": "plugin-safety-engine"
     },
     {
-      "id": "task-20",
-      "title": "Implement MCP plugin bridge",
-      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., nox.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-17",
-        "task-18"
-      ],
-      "feature_id": "mcp-plugin-bridge"
-    },
-    {
-      "id": "task-25",
-      "title": "Agent capability discovery integration",
-      "description": "Integrate plugin capabilities with agent-assist module: advertise available plugin capabilities (dast.passive, cloud.read_only, policy.enforcement, etc.) to agent runtimes, allow agents to discover and invoke plugin tools, summarize plugin results in agent explanations. Agents never influence scan results. Package: ai-assist/plugins.",
-      "priority": "low",
-      "estimate": "M",
-      "depends_on": [
-        "task-20",
-        "task-15"
-      ],
-      "feature_id": "agent-assist-module-(optional)"
-    },
-    {
-      "id": "task-7",
-      "title": "Implement JSON findings output",
-      "description": "Serialize findings to canonical findings.json with deterministic key ordering. Include schema version field. Package: core/report.",
-      "priority": "high",
-      "estimate": "S",
-      "depends_on": [
-        "task-3"
-      ],
-      "feature_id": "json-findings-output"
-    },
-    {
       "id": "task-8",
       "title": "Implement CLI scaffold with scan command",
       "description": "CLI entry point using cobra or similar. 'nox scan \u003cpath\u003e' command wiring discovery -\u003e analyzers -\u003e reporters. Output format flag (--format sarif,cdx,spdx,json,all). Exit codes (0=clean, 1=findings, 2=error). Quiet/verbose flags. Config file loading (.nox.yaml). Package: cli.",
@@ -154,16 +163,51 @@
       "feature_id": "cli-interface"
     },
     {
-      "id": "task-13",
-      "title": "Implement AI security rules and inventory extractor",
-      "description": "YAML rules for prompt/RAG boundary violations, unsafe MCP tool exposure, insecure prompt/response logging, unpinned models. AI inventory extractor that produces ai.inventory.json. Package: core/analyzers/ai, rules/ai/.",
+      "id": "task-3",
+      "title": "Implement canonical findings model",
+      "description": "Define Finding struct with ID, rule ID, severity, confidence, location (file/region/line/column), message. Implement deterministic fingerprinting (SHA-256 hash of rule+location+content). Implement deduplication by fingerprint. Ensure SARIF-compatible location model. Package: core/findings.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-1"
+      ],
+      "feature_id": "canonical-findings-model"
+    },
+    {
+      "id": "task-14",
+      "title": "Implement MCP server",
+      "description": "MCP server using mcp-go with stdio transport. Read-only tools: scan, get-findings, get-sbom. Workspace allowlisting configuration. Artifact serving via MCP resources. Output size limits and rate limiting. Package: server.",
       "priority": "medium",
       "estimate": "L",
       "depends_on": [
-        "task-4",
-        "task-5"
+        "task-8",
+        "task-9",
+        "task-11"
       ],
-      "feature_id": "ai-security-rules"
+      "feature_id": "mcp-server"
+    },
+    {
+      "id": "task-20",
+      "title": "Implement MCP plugin bridge",
+      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., nox.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-17",
+        "task-18"
+      ],
+      "feature_id": "mcp-plugin-bridge"
+    },
+    {
+      "id": "task-7",
+      "title": "Implement JSON findings output",
+      "description": "Serialize findings to canonical findings.json with deterministic key ordering. Include schema version field. Package: core/report.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-3"
+      ],
+      "feature_id": "json-findings-output"
     },
     {
       "id": "task-16",
@@ -177,48 +221,6 @@
       "feature_id": "plugin-grpc-interface"
     },
     {
-      "id": "task-21",
-      "title": "Implement plugin registry client",
-      "description": "Registry client that fetches and parses static registry index files from configured URLs. Support multiple registry sources (official, community, enterprise). Implement version resolution with semver constraints and API compatibility checks. Local metadata caching with TTL-based refresh. Offline-friendly: work from cache when network unavailable. Package: core/plugins/registry.",
-      "priority": "medium",
-      "estimate": "M",
-      "depends_on": [
-        "task-16"
-      ],
-      "feature_id": "plugin-registry-\u0026-distribution"
-    },
-    {
-      "id": "task-1",
-      "title": "Initialize Go module and directory structure",
-      "description": "Create Go module (go.mod), set up /core, /cli, /server, /ai-assist package directories with placeholder files, configure golangci-lint (.golangci.yml), and create Makefile with build/test/lint/run targets.",
-      "priority": "high",
-      "estimate": "S",
-      "depends_on": [],
-      "feature_id": "project-scaffold-\u0026-go-module-setup"
-    },
-    {
-      "id": "task-3",
-      "title": "Implement canonical findings model",
-      "description": "Define Finding struct with ID, rule ID, severity, confidence, location (file/region/line/column), message. Implement deterministic fingerprinting (SHA-256 hash of rule+location+content). Implement deduplication by fingerprint. Ensure SARIF-compatible location model. Package: core/findings.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-1"
-      ],
-      "feature_id": "canonical-findings-model"
-    },
-    {
-      "id": "task-11",
-      "title": "Implement CycloneDX and SPDX SBOM generators",
-      "description": "Generate sbom.cdx.json (CycloneDX JSON) and sbom.spdx.json (SPDX JSON) from dependency scanner component inventory. Optional vulnerability enrichment via OSV data. Package: core/report/sbom.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-10"
-      ],
-      "feature_id": "sbom-output-(cyclonedx-\u0026-spdx)"
-    },
-    {
       "id": "task-12",
       "title": "Implement IaC security rules",
       "description": "YAML rule definitions for Dockerfile best practices (no root user, pinned base images), Terraform security (public access, encryption at rest), Kubernetes manifests (privilege escalation, host network). Package: rules/iac/.",
@@ -228,28 +230,6 @@
         "task-5"
       ],
       "feature_id": "infrastructure-as-code-rules"
-    },
-    {
-      "id": "task-19",
-      "title": "Implement plugin SDK",
-      "description": "Minimal SDK for plugin authors: include versioned protobuf definitions, gRPC server scaffolding (Go), manifest builder helpers, capability declaration utilities, safety envelope parsing, artifact serialization helpers (Finding, SBOM Component, AI Inventory Entry), and a conformance test runner that validates plugin behavior against the contract. Include a 'nox plugin init' template generator. Package: sdk/.",
-      "priority": "medium",
-      "estimate": "L",
-      "depends_on": [
-        "task-16"
-      ],
-      "feature_id": "plugin-sdk"
-    },
-    {
-      "id": "task-2",
-      "title": "Configure GitHub Actions CI workflow",
-      "description": "Set up .github/workflows/ci.yml with Go build, test, lint steps. Trigger on push/PR to main.",
-      "priority": "high",
-      "estimate": "S",
-      "depends_on": [
-        "task-1"
-      ],
-      "feature_id": "project-scaffold-\u0026-go-module-setup"
     },
     {
       "id": "task-6",
@@ -286,9 +266,98 @@
         "task-13"
       ],
       "feature_id": "agent-assist-module-(optional)"
+    },
+    {
+      "id": "task-24",
+      "title": "Implement CLI plugin commands",
+      "description": "Add CLI commands: 'nox registry add/list/remove' for registry management, 'nox plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [
+        "task-17",
+        "task-21"
+      ],
+      "feature_id": "cli-plugin-commands"
+    },
+    {
+      "id": "task-13",
+      "title": "Implement AI security rules and inventory extractor",
+      "description": "YAML rules for prompt/RAG boundary violations, unsafe MCP tool exposure, insecure prompt/response logging, unpinned models. AI inventory extractor that produces ai.inventory.json. Package: core/analyzers/ai, rules/ai/.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [
+        "task-4",
+        "task-5"
+      ],
+      "feature_id": "ai-security-rules"
+    },
+    {
+      "id": "task-21",
+      "title": "Implement plugin registry client",
+      "description": "Registry client that fetches and parses static registry index files from configured URLs. Support multiple registry sources (official, community, enterprise). Implement version resolution with semver constraints and API compatibility checks. Local metadata caching with TTL-based refresh. Offline-friendly: work from cache when network unavailable. Package: core/plugins/registry.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-16"
+      ],
+      "feature_id": "plugin-registry-\u0026-distribution"
+    },
+    {
+      "id": "task-19",
+      "title": "Implement plugin SDK",
+      "description": "Minimal SDK for plugin authors: include versioned protobuf definitions, gRPC server scaffolding (Go), manifest builder helpers, capability declaration utilities, safety envelope parsing, artifact serialization helpers (Finding, SBOM Component, AI Inventory Entry), and a conformance test runner that validates plugin behavior against the contract. Include a 'nox plugin init' template generator. Package: sdk/.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [
+        "task-16"
+      ],
+      "feature_id": "plugin-sdk"
+    },
+    {
+      "id": "task-2",
+      "title": "Configure GitHub Actions CI workflow",
+      "description": "Set up .github/workflows/ci.yml with Go build, test, lint steps. Trigger on push/PR to main.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-1"
+      ],
+      "feature_id": "project-scaffold-\u0026-go-module-setup"
+    },
+    {
+      "id": "task-23",
+      "title": "Implement trust and verification",
+      "description": "Plugin trust system: validate artifact signatures against configurable trust roots, verify content digests on download and before execution, check API version compatibility, run conformance tests as part of install verification. Implement trust levels (verified: signed by known key, community: signed by unknown key, unverified: unsigned) with configurable minimum trust policy. Enterprise mode: mandate verified-only. Package: registry/trust.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-21"
+      ],
+      "feature_id": "plugin-trust-\u0026-verification"
+    },
+    {
+      "id": "task-25",
+      "title": "Agent capability discovery integration",
+      "description": "Integrate plugin capabilities with agent-assist module: advertise available plugin capabilities (dast.passive, cloud.read_only, policy.enforcement, etc.) to agent runtimes, allow agents to discover and invoke plugin tools, summarize plugin results in agent explanations. Agents never influence scan results. Package: ai-assist/plugins.",
+      "priority": "low",
+      "estimate": "M",
+      "depends_on": [
+        "task-20",
+        "task-15"
+      ],
+      "feature_id": "agent-assist-module-(optional)"
+    },
+    {
+      "id": "task-1",
+      "title": "Initialize Go module and directory structure",
+      "description": "Create Go module (go.mod), set up /core, /cli, /server, /ai-assist package directories with placeholder files, configure golangci-lint (.golangci.yml), and create Makefile with build/test/lint/run targets.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [],
+      "feature_id": "project-scaffold-\u0026-go-module-setup"
     }
   ],
-  "approval_status": "pending",
+  "approval_status": "approved",
   "created_at": "2026-02-07T22:13:51.824599+01:00",
-  "updated_at": "2026-02-08T17:13:37.230032+01:00"
+  "updated_at": "2026-02-11T14:48:34.359551+01:00"
 }

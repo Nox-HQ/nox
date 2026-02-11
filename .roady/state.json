@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 45,
+  "version": 49,
   "task_states": {
     "task-1": {
       "status": "done",
@@ -146,6 +146,24 @@
         "commit e262762 — feat: integrate plugin capability discovery into assist module. PluginSource interface, HostAdapter, enrichment tools, CLI --plugin-dir/--enrich flags, 15 new tests all passing."
       ]
     },
+    "task-26": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent"
+    },
+    "task-27": {
+      "status": "pending",
+      "path": ""
+    },
+    "task-28": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent"
+    },
+    "task-29": {
+      "status": "pending",
+      "path": ""
+    },
     "task-3": {
       "status": "done",
       "path": "",
@@ -153,6 +171,19 @@
       "evidence": [
         "Canonical findings model implemented in core/findings/ with Finding, FindingSet, Location types, SHA-256 fingerprinting, deduplication, deterministic sorting. 11 tests all passing."
       ]
+    },
+    "task-30": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent"
+    },
+    "task-31": {
+      "status": "pending",
+      "path": ""
+    },
+    "task-32": {
+      "status": "pending",
+      "path": ""
     },
     "task-4": {
       "status": "done",
@@ -203,5 +234,5 @@
       ]
     }
   },
-  "updated_at": "2026-02-08T21:20:26.333473+01:00"
+  "updated_at": "2026-02-11T14:48:54.529977+01:00"
 }
