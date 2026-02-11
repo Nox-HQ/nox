@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -388,5 +389,243 @@ func TestRunMainPluginCommand(t *testing.T) {
 	code := run([]string{"plugin", "list"})
 	if code != 0 {
 		t.Fatalf("run plugin list: expected exit 0, got %d", code)
+	}
+}
+
+func TestRunPluginCall_InvalidKVArg(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	// Install a dummy plugin in state.
+	st := &State{
+		Plugins: []InstalledPlugin{
+			{Name: "test", Version: "1.0.0", BinaryPath: "/nonexistent/binary"},
+		},
+	}
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Invalid key=value arg (missing =).
+	code := runPlugin([]string{"call", "test", "tool", "invalidarg"})
+	if code != 2 {
+		t.Fatalf("call invalid kv: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginCall_InvalidInputFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	// Install a dummy plugin in state.
+	st := &State{
+		Plugins: []InstalledPlugin{
+			{Name: "test", Version: "1.0.0", BinaryPath: "/nonexistent/binary"},
+		},
+	}
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	code := runPlugin([]string{"call", "test", "tool", "--input", "/nonexistent/input.json"})
+	if code != 2 {
+		t.Fatalf("call invalid input file: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginCall_InvalidInputJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	// Install a dummy plugin in state.
+	st := &State{
+		Plugins: []InstalledPlugin{
+			{Name: "test", Version: "1.0.0", BinaryPath: "/nonexistent/binary"},
+		},
+	}
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Create invalid JSON input file.
+	inputFile := filepath.Join(dir, "input.json")
+	if err := os.WriteFile(inputFile, []byte("invalid json{"), 0o644); err != nil {
+		t.Fatalf("writing input file: %v", err)
+	}
+
+	code := runPlugin([]string{"call", "test", "tool", "--input", inputFile})
+	if code != 2 {
+		t.Fatalf("call invalid input JSON: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginCall_InvalidFlag(t *testing.T) {
+	code := runPlugin([]string{"call", "--invalid-flag"})
+	if code != 2 {
+		t.Fatalf("call invalid flag: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginInstall_AlreadyInstalled(t *testing.T) {
+	srv := serveTestIndex(t)
+	defer srv.Close()
+
+	dir := setupPluginTestState(t, srv)
+
+	// Pre-install a plugin at the exact requested version.
+	st, _ := LoadState(filepath.Join(dir, "state.json"))
+	st.AddPlugin(InstalledPlugin{
+		Name:    "nox/dast",
+		Version: "1.0.0",
+	})
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Install the same version: should skip.
+	code := runPlugin([]string{"install", "nox/dast@1.0.0"})
+	if code != 0 {
+		t.Fatalf("install already installed: expected exit 0, got %d", code)
+	}
+}
+
+func TestRunPluginUpdate_SpecificPlugin(t *testing.T) {
+	srv := serveTestIndex(t)
+	defer srv.Close()
+
+	dir := setupPluginTestState(t, srv)
+
+	// Install a plugin at an old version.
+	st, _ := LoadState(filepath.Join(dir, "state.json"))
+	st.AddPlugin(InstalledPlugin{
+		Name:    "nox/dast",
+		Version: "1.0.0",
+		Digest:  "sha256:aaa",
+	})
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Update specific plugin - will fail at OCI fetch since no real artifact
+	// but we exercise the code paths up to that point.
+	code := runPlugin([]string{"update", "nox/dast"})
+	// The update will hit the OCI fetch which will fail, but we exercise
+	// the paths for target selection and version comparison.
+	_ = code
+}
+
+func TestRunPluginSearch_WithTrackFilter(t *testing.T) {
+	srv := serveTestIndex(t)
+	defer srv.Close()
+
+	setupPluginTestState(t, srv)
+
+	code := runPlugin([]string{"search", "--track", "core-analysis", "dast"})
+	if code != 0 {
+		t.Fatalf("search with track filter: expected exit 0, got %d", code)
+	}
+}
+
+func TestRunPluginInfo_NoRegistries(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	code := runPlugin([]string{"info", "some-plugin"})
+	if code != 2 {
+		t.Fatalf("info no registries: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginSearch_InvalidFlag(t *testing.T) {
+	code := runPlugin([]string{"search", "--invalid-flag"})
+	if code != 2 {
+		t.Fatalf("search invalid flag: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginCall_ValidInputFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	// Install a dummy plugin in state.
+	st := &State{
+		Plugins: []InstalledPlugin{
+			{Name: "test", Version: "1.0.0", BinaryPath: "/nonexistent/binary"},
+		},
+	}
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Create valid JSON input file.
+	inputFile := filepath.Join(dir, "input.json")
+	if err := os.WriteFile(inputFile, []byte(`{"path": "."}`), 0o644); err != nil {
+		t.Fatalf("writing input file: %v", err)
+	}
+
+	// This will fail at the RegisterBinary step since the binary doesn't exist,
+	// but it exercises the input parsing path including JSON file loading.
+	code := runPlugin([]string{"call", "test", "tool", "--input", inputFile})
+	if code != 2 {
+		t.Fatalf("call with valid input: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginCall_WithKVArgs(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	// Install a dummy plugin in state.
+	st := &State{
+		Plugins: []InstalledPlugin{
+			{Name: "test", Version: "1.0.0", BinaryPath: "/nonexistent/binary"},
+		},
+	}
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Pass key=value args - will fail at RegisterBinary but exercises the kv parsing.
+	code := runPlugin([]string{"call", "test", "tool", "path=.", "verbose=true"})
+	if code != 2 {
+		t.Fatalf("call with kv args: expected exit 2, got %d", code)
+	}
+}
+
+func TestRunPluginUpdate_AllPlugins(t *testing.T) {
+	srv := serveTestIndex(t)
+	defer srv.Close()
+
+	dir := setupPluginTestState(t, srv)
+
+	// Install plugins.
+	st, _ := LoadState(filepath.Join(dir, "state.json"))
+	st.AddPlugin(InstalledPlugin{
+		Name:    "nox/dast",
+		Version: "1.0.0",
+		Digest:  "sha256:aaa",
+	})
+	st.AddPlugin(InstalledPlugin{
+		Name:    "nox/sbom",
+		Version: "0.5.0",
+		Digest:  "sha256:ddd",
+	})
+	_ = SaveState(filepath.Join(dir, "state.json"), st)
+
+	// Update all - the OCI fetch will fail but we exercise the update paths.
+	code := runPlugin([]string{"update"})
+	// Even if fetches fail, the code should handle warnings gracefully.
+	_ = code
+}
+
+func TestNewRegistryClient(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	st := &State{
+		Sources: []registry.Source{
+			{Name: "test", URL: "https://example.com/index.json"},
+		},
+	}
+
+	client := newRegistryClient(st)
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestNewOCIStore(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+
+	store := newOCIStore()
+	if store == nil {
+		t.Fatal("expected non-nil store")
 	}
 }

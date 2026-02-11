@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -408,5 +409,221 @@ func TestNewStoreOptions(t *testing.T) {
 	}
 	if store.mirrorBase != "https://mirror.example.com" {
 		t.Errorf("mirrorBase = %q", store.mirrorBase)
+	}
+}
+
+// TestStoreFetch tests the Fetch method which uses runtime platform selection.
+func TestStoreFetch(t *testing.T) {
+	tarGzData := buildTarGz(t, map[string]string{
+		"plugin": "#!/bin/sh\necho hello",
+	})
+	digest := sha256Digest(tarGzData)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(tarGzData)
+	}))
+	defer srv.Close()
+
+	cacheDir := t.TempDir()
+	store := NewStore(
+		WithCacheDir(cacheDir),
+		WithHTTPClient(srv.Client()),
+		WithVerifier(trust.NewVerifier()),
+	)
+
+	ve := registry.VersionEntry{
+		Version:    "2.0.0",
+		APIVersion: "v1",
+		Artifacts: []registry.PlatformArtifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				URL:    srv.URL + "/plugin-current.tar.gz",
+				Size:   int64(len(tarGzData)),
+				Digest: digest,
+			},
+		},
+	}
+
+	ctx := context.Background()
+	installed, err := store.Fetch(ctx, "test/plugin", ve)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	if installed.PluginName != "test/plugin" {
+		t.Errorf("PluginName = %q, want %q", installed.PluginName, "test/plugin")
+	}
+	if installed.Version != "2.0.0" {
+		t.Errorf("Version = %q, want %q", installed.Version, "2.0.0")
+	}
+	if installed.OS != runtime.GOOS {
+		t.Errorf("OS = %q, want %q", installed.OS, runtime.GOOS)
+	}
+	if installed.Arch != runtime.GOARCH {
+		t.Errorf("Arch = %q, want %q", installed.Arch, runtime.GOARCH)
+	}
+}
+
+// TestStoreFetchNoPlatformMatchForFetch tests Fetch when no artifact matches
+// the runtime platform.
+func TestStoreFetchNoPlatformMatchForFetch(t *testing.T) {
+	store := NewStore(WithCacheDir(t.TempDir()))
+
+	ve := registry.VersionEntry{
+		Version:    "1.0.0",
+		APIVersion: "v1",
+		Artifacts: []registry.PlatformArtifact{
+			{OS: "plan9", Arch: "mips"},
+		},
+	}
+
+	_, err := store.Fetch(context.Background(), "test/plugin", ve)
+	if !errors.Is(err, ErrNoPlatformMatch) {
+		t.Errorf("error = %v, want %v", err, ErrNoPlatformMatch)
+	}
+}
+
+// TestDigestHex tests the digestHex function with various inputs.
+func TestDigestHex(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		want   string
+	}{
+		{
+			name:  "standard sha256 prefix",
+			input: "sha256:abcdef0123456789",
+			want:  "abcdef0123456789",
+		},
+		{
+			name:  "no prefix",
+			input: "abcdef0123456789",
+			want:  "abcdef0123456789",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "just the prefix",
+			input: "sha256:",
+			want:  "sha256:",
+		},
+		{
+			name:  "short string",
+			input: "ab",
+			want:  "ab",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := digestHex(tt.input)
+			if got != tt.want {
+				t.Errorf("digestHex(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBlobPathShortDigest tests BlobPath with a digest shorter than 2 hex chars.
+func TestBlobPathShortDigest(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(WithCacheDir(cacheDir))
+
+	// A digest with no prefix and less than 2 characters.
+	got := store.BlobPath("x")
+	want := filepath.Join(cacheDir, "sha256", "x")
+	gotReal, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	wantReal, _ := filepath.EvalSymlinks(filepath.Dir(want))
+	if gotReal != wantReal || filepath.Base(got) != filepath.Base(want) {
+		t.Errorf("BlobPath(\"x\") = %q, want %q", got, want)
+	}
+}
+
+// TestExtractPathShortDigest tests extractPath with a short digest.
+func TestExtractPathShortDigest(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(WithCacheDir(cacheDir))
+
+	got := store.extractPath("y")
+	want := filepath.Join(cacheDir, "extracted", "y")
+	gotReal, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	wantReal, _ := filepath.EvalSymlinks(filepath.Dir(want))
+	if gotReal != wantReal || filepath.Base(got) != filepath.Base(want) {
+		t.Errorf("extractPath(\"y\") = %q, want %q", got, want)
+	}
+}
+
+// TestStoreFetchHTTPError tests fetchArtifact when the HTTP server returns an error.
+func TestStoreFetchHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	store := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithHTTPClient(srv.Client()),
+	)
+
+	ve := registry.VersionEntry{
+		Version:    "1.0.0",
+		APIVersion: "v1",
+		Artifacts: []registry.PlatformArtifact{
+			{OS: "linux", Arch: "amd64", URL: srv.URL + "/plugin.tar.gz", Size: 100, Digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+		},
+	}
+
+	_, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	if err == nil {
+		t.Fatal("expected error for HTTP 503")
+	}
+}
+
+// TestStoreFetchWithMirror tests that Fetch uses the mirror base URL for downloads.
+func TestStoreFetchWithMirror(t *testing.T) {
+	tarGzData := buildTarGz(t, map[string]string{
+		"plugin": "#!/bin/sh\necho mirror",
+	})
+	digest := sha256Digest(tarGzData)
+
+	// The mirror server that will actually receive the request.
+	mirrorSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(tarGzData)
+	}))
+	defer mirrorSrv.Close()
+
+	cacheDir := t.TempDir()
+	store := NewStore(
+		WithCacheDir(cacheDir),
+		WithHTTPClient(mirrorSrv.Client()),
+		WithVerifier(trust.NewVerifier()),
+		WithMirrorBase(mirrorSrv.URL),
+	)
+
+	ve := registry.VersionEntry{
+		Version:    "1.0.0",
+		APIVersion: "v1",
+		Artifacts: []registry.PlatformArtifact{
+			{
+				OS:     "linux",
+				Arch:   "amd64",
+				URL:    "https://original-registry.example.com/plugin.tar.gz",
+				Size:   int64(len(tarGzData)),
+				Digest: digest,
+			},
+		},
+	}
+
+	installed, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	if err != nil {
+		t.Fatalf("Fetch with mirror: %v", err)
+	}
+
+	if installed.PluginName != "test/plugin" {
+		t.Errorf("PluginName = %q, want %q", installed.PluginName, "test/plugin")
 	}
 }

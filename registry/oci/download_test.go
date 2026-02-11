@@ -176,3 +176,80 @@ func TestRewriteURLPreservesPath(t *testing.T) {
 		t.Errorf("rewriteURL = %q, want %q", got, want)
 	}
 }
+
+// TestRewriteURLInvalidOriginal tests rewriteURL with an invalid original URL.
+func TestRewriteURLInvalidOriginal(t *testing.T) {
+	s := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithMirrorBase("https://mirror.example.com"),
+	)
+
+	_, err := s.rewriteURL("://invalid-url")
+	if err == nil {
+		t.Error("expected error for invalid original URL")
+	}
+}
+
+// TestRewriteURLInvalidMirror tests rewriteURL with an invalid mirror base URL.
+func TestRewriteURLInvalidMirror(t *testing.T) {
+	s := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithMirrorBase("://invalid-mirror"),
+	)
+
+	_, err := s.rewriteURL("https://example.com/plugin.tar.gz")
+	if err == nil {
+		t.Error("expected error for invalid mirror base URL")
+	}
+}
+
+// TestDownloadExactMaxSize tests download when content is exactly maxSize.
+func TestDownloadExactMaxSize(t *testing.T) {
+	content := make([]byte, 512)
+	for i := range content {
+		content[i] = byte(i % 256)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(content)
+	}))
+	defer srv.Close()
+
+	s := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithHTTPClient(srv.Client()),
+		WithMaxDownloadSize(512), // exactly content size
+	)
+
+	tmpPath, written, err := s.download(context.Background(), srv.URL+"/exact", int64(len(content)))
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if written != 512 {
+		t.Errorf("written = %d, want 512", written)
+	}
+	if tmpPath == "" {
+		t.Error("tmpPath should not be empty")
+	}
+}
+
+// TestDownloadDeadlineExceeded tests download with an already-expired context.
+func TestDownloadDeadlineExceeded(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("data"))
+	}))
+	defer srv.Close()
+
+	s := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithHTTPClient(srv.Client()),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	time.Sleep(time.Millisecond)
+
+	_, _, err := s.download(ctx, srv.URL+"/timeout", 4)
+	if err == nil {
+		t.Error("expected error for expired context")
+	}
+}

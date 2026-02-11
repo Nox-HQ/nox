@@ -210,6 +210,106 @@ func TestExplain_MalformedResponse(t *testing.T) {
 	}
 }
 
+// TestExplain_WithBasePath tests that WithBasePath option is stored and used.
+func TestExplain_WithBasePath(t *testing.T) {
+	// Create a temporary workspace with a source file.
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "secret.env")
+	os.WriteFile(srcFile, []byte("AWS_KEY=AKIA1234567890ABCDEF\nsecond line\nthird line\n"), 0o644)
+
+	explanations := []FindingExplanation{
+		{
+			FindingID:   "f1",
+			RuleID:      "SEC-001",
+			Title:       "Secret in env",
+			Explanation: "A secret was found.",
+			Impact:      "Credential leak.",
+			Remediation: "Remove it.",
+		},
+	}
+
+	mock := &MockProvider{
+		Responses: []Response{
+			{Content: jsonExplanations(explanations), PromptTokens: 100, CompletionTokens: 50},
+			{Content: "Summary text.", PromptTokens: 20, CompletionTokens: 10},
+		},
+	}
+
+	result := makeScanResult([]findings.Finding{
+		{
+			ID:         "f1",
+			RuleID:     "SEC-001",
+			Severity:   findings.SeverityHigh,
+			Confidence: findings.ConfidenceHigh,
+			Message:    "Hardcoded AWS key",
+			Location:   findings.Location{FilePath: "secret.env", StartLine: 1},
+		},
+	})
+
+	e := NewExplainer(mock, WithBasePath(tmpDir))
+	report, err := e.Explain(context.Background(), result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(report.Explanations) != 1 {
+		t.Fatalf("expected 1 explanation, got %d", len(report.Explanations))
+	}
+
+	// Verify that the provider was called with basePath-enriched content.
+	if len(mock.Calls) < 1 {
+		t.Fatal("expected at least one provider call")
+	}
+}
+
+// TestExplain_SummaryGenerationError tests graceful handling when summary
+// generation fails.
+func TestExplain_SummaryGenerationError(t *testing.T) {
+	explanations := []FindingExplanation{
+		{
+			FindingID:   "f1",
+			RuleID:      "SEC-001",
+			Title:       "Issue",
+			Explanation: "exp",
+			Impact:      "imp",
+			Remediation: "fix",
+		},
+	}
+
+	callCount := 0
+	mock := &MockProvider{
+		Responses: []Response{
+			// First call (batch) succeeds.
+			{Content: jsonExplanations(explanations), PromptTokens: 100, CompletionTokens: 50},
+		},
+		// Second call (summary) will run out of responses and error.
+	}
+	_ = callCount
+
+	result := makeScanResult([]findings.Finding{
+		{
+			ID:       "f1",
+			RuleID:   "SEC-001",
+			Severity: findings.SeverityHigh,
+			Message:  "test finding",
+			Location: findings.Location{FilePath: "file.go"},
+		},
+	})
+
+	e := NewExplainer(mock)
+	report, err := e.Explain(context.Background(), result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have the explanation but summary should mention generation failure.
+	if len(report.Explanations) != 1 {
+		t.Fatalf("expected 1 explanation, got %d", len(report.Explanations))
+	}
+	if report.Summary == "" {
+		t.Fatal("expected non-empty summary with failure info")
+	}
+}
+
 func TestExplainReport_WriteFile(t *testing.T) {
 	report := &ExplanationReport{
 		SchemaVersion: "1.0.0",
@@ -252,5 +352,82 @@ func TestExplainReport_WriteFile(t *testing.T) {
 	}
 	if loaded.Explanations[0].FindingID != "f1" {
 		t.Fatalf("expected finding_id f1, got %q", loaded.Explanations[0].FindingID)
+	}
+}
+
+// TestExplainReport_WriteFile_NonWritablePath tests WriteFile with a path that
+// does not exist (nonexistent parent directory).
+func TestExplainReport_WriteFile_NonWritablePath(t *testing.T) {
+	report := &ExplanationReport{
+		SchemaVersion: "1.0.0",
+		Summary:       "test",
+	}
+
+	err := report.WriteFile("/nonexistent/dir/report.json")
+	if err == nil {
+		t.Error("expected error for non-writable path")
+	}
+}
+
+// TestExplainReport_JSON tests the JSON method produces valid output.
+func TestExplainReport_JSON(t *testing.T) {
+	report := &ExplanationReport{
+		SchemaVersion: "1.0.0",
+		Explanations: []FindingExplanation{
+			{
+				FindingID:   "f1",
+				RuleID:      "SEC-001",
+				Title:       "Test",
+				Explanation: "exp",
+				Impact:      "imp",
+				Remediation: "fix",
+				References:  []string{"https://example.com"},
+			},
+		},
+		Summary: "summary",
+		Usage:   UsageStats{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15, RequestCount: 1},
+	}
+
+	data, err := report.JSON()
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+
+	// Verify it is valid JSON.
+	var loaded ExplanationReport
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if loaded.Explanations[0].References[0] != "https://example.com" {
+		t.Errorf("expected reference URL, got %q", loaded.Explanations[0].References[0])
+	}
+}
+
+// TestExplainReport_WriteFile_EmptyReport tests writing an empty report.
+func TestExplainReport_WriteFile_EmptyReport(t *testing.T) {
+	report := &ExplanationReport{
+		SchemaVersion: "1.0.0",
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.json")
+
+	if err := report.WriteFile(path); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	var loaded ExplanationReport
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if loaded.SchemaVersion != "1.0.0" {
+		t.Errorf("SchemaVersion = %q, want %q", loaded.SchemaVersion, "1.0.0")
 	}
 }

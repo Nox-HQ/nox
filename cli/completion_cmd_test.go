@@ -70,3 +70,38 @@ func TestCompletion_AllShellsContainAllCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletion_BashSuccess(t *testing.T) {
+	code := runCompletion([]string{"bash"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for bash, got %d", code)
+	}
+}
+
+func TestCompletion_ZshSuccess(t *testing.T) {
+	code := runCompletion([]string{"zsh"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for zsh, got %d", code)
+	}
+}
+
+func TestCompletion_FishSuccess(t *testing.T) {
+	code := runCompletion([]string{"fish"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for fish, got %d", code)
+	}
+}
+
+func TestCompletion_PowershellSuccess(t *testing.T) {
+	code := runCompletion([]string{"powershell"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for powershell, got %d", code)
+	}
+}
+
+func TestCompletion_ViaRunCommand(t *testing.T) {
+	code := run([]string{"completion", "bash"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for completion via run, got %d", code)
+	}
+}

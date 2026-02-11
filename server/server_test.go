@@ -765,3 +765,531 @@ func TestHandlePluginReadResource_Stub(t *testing.T) {
 		t.Fatalf("expected 'not yet implemented' message, got: %s", toolResultText(result))
 	}
 }
+
+// --- handleGetFindingDetail tests ---
+
+func TestHandleGetFindingDetail_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "get_finding_detail", map[string]any{"finding_id": "SEC-001:main.go:1"})
+
+	result, err := s.handleGetFindingDetail(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error before any scan")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", text)
+	}
+}
+
+func TestHandleGetFindingDetail_MissingFindingID(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "get_finding_detail", map[string]any{})
+
+	result, err := s.handleGetFindingDetail(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing finding_id")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: finding_id") {
+		t.Fatalf("expected missing argument message, got: %s", text)
+	}
+}
+
+func TestHandleGetFindingDetail_FindingNotFound(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "get_finding_detail", map[string]any{"finding_id": "NONEXISTENT"})
+
+	result, err := s.handleGetFindingDetail(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for nonexistent finding")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "not found") {
+		t.Fatalf("expected not found message, got: %s", text)
+	}
+}
+
+func TestHandleGetFindingDetail_Success(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	// Get a finding ID from the scan results.
+	s.mu.RLock()
+	findings := s.cache.Findings.Findings()
+	s.mu.RUnlock()
+
+	if len(findings) == 0 {
+		t.Fatal("expected at least one finding from scan")
+	}
+
+	findingID := findings[0].ID
+
+	req := makeToolRequest(t, "get_finding_detail", map[string]any{
+		"finding_id":    findingID,
+		"context_lines": float64(3),
+	})
+
+	result, err := s.handleGetFindingDetail(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, findingID) {
+		t.Fatalf("expected finding ID in response, got: %s", text)
+	}
+	if !strings.Contains(text, `"source"`) {
+		t.Fatalf("expected source in response, got: %s", text)
+	}
+}
+
+// --- handleListFindings tests ---
+
+func TestHandleListFindings_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "list_findings", map[string]any{})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error before any scan")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", text)
+	}
+}
+
+func TestHandleListFindings_NoFilters(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "list_findings", map[string]any{})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"RuleID"`) {
+		t.Fatalf("expected RuleID in findings, got: %s", text)
+	}
+}
+
+func TestHandleListFindings_WithSeverityFilter(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "list_findings", map[string]any{
+		"severity": "critical,high",
+	})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	// Should return findings (secrets are typically high severity).
+	text := toolResultText(result)
+	if !strings.Contains(text, `"Severity"`) {
+		t.Fatalf("expected Severity field in findings, got: %s", text)
+	}
+}
+
+func TestHandleListFindings_WithRuleFilter(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "list_findings", map[string]any{
+		"rule": "SEC-*",
+	})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"RuleID"`) {
+		t.Fatalf("expected RuleID in findings, got: %s", text)
+	}
+}
+
+func TestHandleListFindings_WithFileFilter(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "list_findings", map[string]any{
+		"file": "config.env",
+	})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "config.env") {
+		t.Fatalf("expected config.env in findings, got: %s", text)
+	}
+}
+
+func TestHandleListFindings_WithLimit(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "list_findings", map[string]any{
+		"limit": float64(1),
+	})
+
+	result, err := s.handleListFindings(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	// Should work and return at most 1 finding.
+	text := toolResultText(result)
+	if !strings.Contains(text, `"RuleID"`) {
+		t.Fatalf("expected findings in response, got: %s", text)
+	}
+}
+
+// --- handleBaselineStatus tests ---
+
+func TestHandleBaselineStatus_MissingPath(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "baseline_status", map[string]any{})
+
+	result, err := s.handleBaselineStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", text)
+	}
+}
+
+func TestHandleBaselineStatus_DisallowedPath(t *testing.T) {
+	s := New("0.1.0", []string{"/allowed/only"})
+	req := makeToolRequest(t, "baseline_status", map[string]any{"path": "/not/allowed"})
+
+	result, err := s.handleBaselineStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for disallowed path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", text)
+	}
+}
+
+func TestHandleBaselineStatus_NoBaseline(t *testing.T) {
+	dir := t.TempDir()
+	s := New("0.1.0", nil)
+
+	req := makeToolRequest(t, "baseline_status", map[string]any{"path": dir})
+
+	result, err := s.handleBaselineStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success (empty baseline), got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"total":0`) && !strings.Contains(text, `"total": 0`) {
+		t.Fatalf("expected total:0 for empty baseline, got: %s", text)
+	}
+}
+
+func TestHandleBaselineStatus_WithBaseline(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a baseline file.
+	baselineDir := filepath.Join(dir, ".nox")
+	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	baselinePath := filepath.Join(baselineDir, "baseline.json")
+	baselineContent := `{
+		"schema_version": "1.0.0",
+		"entries": [
+			{
+				"fingerprint": "abc123",
+				"rule_id": "SEC-001",
+				"file_path": "main.go",
+				"severity": "high",
+				"created_at": "2025-01-01T00:00:00Z"
+			}
+		]
+	}`
+	if err := os.WriteFile(baselinePath, []byte(baselineContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "baseline_status", map[string]any{"path": dir})
+
+	result, err := s.handleBaselineStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"total":1`) && !strings.Contains(text, `"total": 1`) {
+		t.Fatalf("expected total:1, got: %s", text)
+	}
+	if !strings.Contains(text, `"high"`) {
+		t.Fatalf("expected severity breakdown, got: %s", text)
+	}
+}
+
+// --- handleBaselineAdd tests ---
+
+func TestHandleBaselineAdd_MissingPath(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "baseline_add", map[string]any{"fingerprint": "abc123"})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", text)
+	}
+}
+
+func TestHandleBaselineAdd_MissingFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "baseline_add", map[string]any{"path": dir})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing fingerprint")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: fingerprint") {
+		t.Fatalf("expected missing fingerprint message, got: %s", text)
+	}
+}
+
+func TestHandleBaselineAdd_DisallowedPath(t *testing.T) {
+	s := New("0.1.0", []string{"/allowed/only"})
+	req := makeToolRequest(t, "baseline_add", map[string]any{
+		"path":        "/not/allowed",
+		"fingerprint": "abc123",
+	})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for disallowed path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", text)
+	}
+}
+
+func TestHandleBaselineAdd_NoScanResults(t *testing.T) {
+	dir := t.TempDir()
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "baseline_add", map[string]any{
+		"path":        dir,
+		"fingerprint": "abc123",
+	})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for no scan results")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no scan results message, got: %s", text)
+	}
+}
+
+func TestHandleBaselineAdd_FingerprintNotFound(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "baseline_add", map[string]any{
+		"path":        dir,
+		"fingerprint": "nonexistent",
+	})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for nonexistent fingerprint")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "not found") {
+		t.Fatalf("expected not found message, got: %s", text)
+	}
+}
+
+func TestHandleBaselineAdd_Success(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	// Get a finding fingerprint.
+	s.mu.RLock()
+	findings := s.cache.Findings.Findings()
+	s.mu.RUnlock()
+
+	if len(findings) == 0 {
+		t.Fatal("expected at least one finding from scan")
+	}
+
+	fingerprint := findings[0].Fingerprint
+
+	req := makeToolRequest(t, "baseline_add", map[string]any{
+		"path":        dir,
+		"fingerprint": fingerprint,
+		"reason":      "test baseline",
+	})
+
+	result, err := s.handleBaselineAdd(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "Added finding") {
+		t.Fatalf("expected success message, got: %s", text)
+	}
+
+	// Verify baseline file was created.
+	baselinePath := filepath.Join(dir, ".nox", "baseline.json")
+	if _, err := os.Stat(baselinePath); err != nil {
+		t.Fatalf("expected baseline file to exist: %v", err)
+	}
+}

@@ -2,6 +2,7 @@ package oci
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/nox-hq/nox/registry"
@@ -105,5 +106,48 @@ func TestSelectArtifactForReturnsFirstMatch(t *testing.T) {
 	}
 	if got.URL != "first" {
 		t.Errorf("URL = %q, want %q (first match)", got.URL, "first")
+	}
+}
+
+// TestSelectArtifact tests the runtime-platform-aware SelectArtifact function.
+func TestSelectArtifact(t *testing.T) {
+	// Build an artifact list that includes the current runtime OS/arch.
+	artifacts := []registry.PlatformArtifact{
+		{OS: "freebsd", Arch: "riscv64", URL: "https://example.com/freebsd-riscv64.tar.gz", Digest: "sha256:aaa"},
+		{OS: runtime.GOOS, Arch: runtime.GOARCH, URL: "https://example.com/current-platform.tar.gz", Digest: "sha256:bbb"},
+	}
+
+	got, err := SelectArtifact(artifacts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.URL != "https://example.com/current-platform.tar.gz" {
+		t.Errorf("URL = %q, want current-platform URL", got.URL)
+	}
+	if got.OS != runtime.GOOS {
+		t.Errorf("OS = %q, want %q", got.OS, runtime.GOOS)
+	}
+	if got.Arch != runtime.GOARCH {
+		t.Errorf("Arch = %q, want %q", got.Arch, runtime.GOARCH)
+	}
+}
+
+// TestSelectArtifactNoMatch tests SelectArtifact when no artifact matches.
+func TestSelectArtifactNoMatch(t *testing.T) {
+	artifacts := []registry.PlatformArtifact{
+		{OS: "plan9", Arch: "mips", URL: "https://example.com/plan9-mips.tar.gz", Digest: "sha256:aaa"},
+	}
+
+	_, err := SelectArtifact(artifacts)
+	if !errors.Is(err, ErrNoPlatformMatch) {
+		t.Errorf("error = %v, want %v", err, ErrNoPlatformMatch)
+	}
+}
+
+// TestSelectArtifactEmptyList tests SelectArtifact with an empty artifact list.
+func TestSelectArtifactEmptyList(t *testing.T) {
+	_, err := SelectArtifact(nil)
+	if !errors.Is(err, ErrNoPlatformMatch) {
+		t.Errorf("error = %v, want %v", err, ErrNoPlatformMatch)
 	}
 }

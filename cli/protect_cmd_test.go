@@ -228,3 +228,217 @@ func TestProtect_UnknownSubcommand(t *testing.T) {
 		t.Fatalf("expected exit code 2 for unknown subcommand, got %d", code)
 	}
 }
+
+func TestProtect_UninstallNoHook(t *testing.T) {
+	dir := setupProtectRepo(t)
+
+	// Uninstall without any hook installed.
+	code := run([]string{"protect", "uninstall", dir})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for no hook, got %d", code)
+	}
+}
+
+func TestProtect_Status_NonNoxHook(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+
+	// Write a non-nox hook.
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatalf("creating hooks dir: %v", err)
+	}
+	writeTestFile(t, hookPath, "#!/bin/sh\necho other hook\n")
+
+	code := run([]string{"protect", "status", dir})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for non-nox hook status, got %d", code)
+	}
+}
+
+func TestProtect_InstallCustomHookPath(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, "custom-hooks", "pre-commit")
+
+	code := protectInstall([]string{"--hook-path", hookPath, dir})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 with custom hook path, got %d", code)
+	}
+
+	// Verify hook was written.
+	if _, err := os.Stat(hookPath); err != nil {
+		t.Fatalf("hook not found at custom path: %v", err)
+	}
+}
+
+func TestProtect_UninstallCustomHookPath(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, "custom-hooks", "pre-commit")
+
+	// Install first.
+	code := protectInstall([]string{"--hook-path", hookPath, dir})
+	if code != 0 {
+		t.Fatalf("install failed: %d", code)
+	}
+
+	// Uninstall with custom path.
+	code = protectUninstall([]string{"--hook-path", hookPath, dir})
+	if code != 0 {
+		t.Fatalf("uninstall failed: %d", code)
+	}
+
+	// Verify hook was removed.
+	if _, err := os.Stat(hookPath); !os.IsNotExist(err) {
+		t.Fatal("hook still exists after uninstall")
+	}
+}
+
+func TestProtect_StatusCustomHookPath(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, "custom-hooks", "pre-commit")
+
+	// Install first.
+	code := protectInstall([]string{"--hook-path", hookPath, dir})
+	if code != 0 {
+		t.Fatalf("install failed: %d", code)
+	}
+
+	code = protectStatus([]string{"--hook-path", hookPath, dir})
+	if code != 0 {
+		t.Fatalf("status failed: %d", code)
+	}
+}
+
+func TestProtect_InstallExistingNonNoxHookRequiresForce(t *testing.T) {
+	dir := setupProtectRepo(t)
+	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+
+	// Write a non-nox hook.
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatalf("creating hooks dir: %v", err)
+	}
+	writeTestFile(t, hookPath, "#!/bin/sh\necho other hook\n")
+
+	// Install without --force should fail.
+	code := run([]string{"protect", "install", dir})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for existing non-nox hook, got %d", code)
+	}
+
+	// Install with --force should succeed.
+	code = run([]string{"protect", "install", "--force", dir})
+	if code != 0 {
+		t.Fatalf("expected exit code 0 with --force, got %d", code)
+	}
+}
+
+func TestProtect_InstallNotGitRepo_Direct(t *testing.T) {
+	dir := t.TempDir()
+
+	code := protectInstall([]string{dir})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for non-git dir, got %d", code)
+	}
+}
+
+func TestProtect_UninstallNotGitRepo(t *testing.T) {
+	dir := t.TempDir()
+
+	code := protectUninstall([]string{dir})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for non-git dir, got %d", code)
+	}
+}
+
+func TestProtect_StatusNotGitRepo(t *testing.T) {
+	dir := t.TempDir()
+
+	code := protectStatus([]string{dir})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for non-git dir, got %d", code)
+	}
+}
+
+func TestProtect_InstallInvalidFlag(t *testing.T) {
+	code := protectInstall([]string{"--invalid-flag"})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for invalid flag, got %d", code)
+	}
+}
+
+func TestProtect_UninstallInvalidFlag(t *testing.T) {
+	code := protectUninstall([]string{"--invalid-flag"})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for invalid flag, got %d", code)
+	}
+}
+
+func TestProtect_StatusInvalidFlag(t *testing.T) {
+	code := protectStatus([]string{"--invalid-flag"})
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for invalid flag, got %d", code)
+	}
+}
+
+func TestProtect_InstallAllThresholds(t *testing.T) {
+	for _, threshold := range []string{"critical", "high", "medium", "low"} {
+		t.Run(threshold, func(t *testing.T) {
+			dir := setupProtectRepo(t)
+			hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
+
+			code := protectInstall([]string{"--severity-threshold", threshold, dir})
+			if code != 0 {
+				t.Fatalf("expected exit code 0 for %s threshold, got %d", threshold, code)
+			}
+
+			content, err := os.ReadFile(hookPath)
+			if err != nil {
+				t.Fatalf("reading hook: %v", err)
+			}
+			if !strings.Contains(string(content), "--severity-threshold "+threshold) {
+				t.Fatalf("hook does not contain threshold %s", threshold)
+			}
+		})
+	}
+}
+
+func TestGenerateHookScript(t *testing.T) {
+	t.Parallel()
+
+	script := generateHookScript("high")
+
+	if !strings.Contains(script, hookMarker) {
+		t.Error("hook script should contain the hook marker")
+	}
+	if !strings.Contains(script, "--severity-threshold high") {
+		t.Error("hook script should contain severity threshold")
+	}
+	if !strings.HasPrefix(script, "#!/bin/sh") {
+		t.Error("hook script should start with shebang")
+	}
+}
+
+func TestIsValidThreshold(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"critical", true},
+		{"high", true},
+		{"medium", true},
+		{"low", true},
+		{"info", false},
+		{"", false},
+		{"invalid", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			if got := isValidThreshold(tt.input); got != tt.expected {
+				t.Errorf("isValidThreshold(%q) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}

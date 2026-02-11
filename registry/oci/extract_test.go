@@ -248,3 +248,254 @@ func TestExtractTarGzAtomicity(t *testing.T) {
 		t.Errorf("v2.txt = %q, want %q", got, "version 2")
 	}
 }
+
+// TestSetExecutableNonexistent tests SetExecutable with a path that does not exist.
+func TestSetExecutableNonexistent(t *testing.T) {
+	err := SetExecutable("/nonexistent/path/binary")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+// TestSetExecutableAlreadyExecutable verifies SetExecutable is idempotent.
+func TestSetExecutableAlreadyExecutable(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "already-exec")
+
+	if err := os.WriteFile(path, []byte("binary"), 0o755); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	if err := SetExecutable(path); err != nil {
+		t.Fatalf("SetExecutable: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Error("file should still be executable")
+	}
+}
+
+// TestExtractTarGzWithSymlinkInside tests that valid symlinks within the
+// extraction directory are created correctly.
+func TestExtractTarGzWithSymlinkInside(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "symlink-ok.tar.gz")
+	extractDir := filepath.Join(tmpDir, "extracted")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("creating tar.gz: %v", err)
+	}
+
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	// Write a regular file first.
+	content := "target file content"
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "target.txt",
+		Mode:     0o644,
+		Size:     int64(len(content)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatalf("writing header: %v", err)
+	}
+	if _, err := tw.Write([]byte(content)); err != nil {
+		t.Fatalf("writing content: %v", err)
+	}
+
+	// Write a symlink pointing to the regular file (within the directory).
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "link.txt",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "target.txt",
+	}); err != nil {
+		t.Fatalf("writing symlink header: %v", err)
+	}
+
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	extracted, err := ExtractTarGz(archivePath, extractDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz: %v", err)
+	}
+
+	if len(extracted) != 2 {
+		t.Fatalf("extracted %d files, want 2", len(extracted))
+	}
+
+	// Verify the symlink resolves correctly.
+	linkTarget, err := os.Readlink(filepath.Join(extractDir, "link.txt"))
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+	if linkTarget != "target.txt" {
+		t.Errorf("symlink target = %q, want %q", linkTarget, "target.txt")
+	}
+}
+
+// TestExtractTarGzWithDirectoryEntry tests extraction of directories in the archive.
+func TestExtractTarGzWithDirectoryEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "dirs.tar.gz")
+	extractDir := filepath.Join(tmpDir, "extracted")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("creating tar.gz: %v", err)
+	}
+
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	// Add a directory entry.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "subdir/",
+		Mode:     0o755,
+		Typeflag: tar.TypeDir,
+	}); err != nil {
+		t.Fatalf("writing dir header: %v", err)
+	}
+
+	// Add a file inside the directory.
+	content := "nested file"
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "subdir/file.txt",
+		Mode:     0o644,
+		Size:     int64(len(content)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatalf("writing file header: %v", err)
+	}
+	if _, err := tw.Write([]byte(content)); err != nil {
+		t.Fatalf("writing file content: %v", err)
+	}
+
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	extracted, err := ExtractTarGz(archivePath, extractDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz: %v", err)
+	}
+
+	// Only regular files and symlinks are listed in extracted (not directories).
+	if len(extracted) != 1 {
+		t.Fatalf("extracted %d files, want 1", len(extracted))
+	}
+
+	// Verify the directory was created.
+	info, err := os.Stat(filepath.Join(extractDir, "subdir"))
+	if err != nil {
+		t.Fatalf("stat subdir: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("subdir should be a directory")
+	}
+
+	// Verify the nested file.
+	got, err := os.ReadFile(filepath.Join(extractDir, "subdir", "file.txt"))
+	if err != nil {
+		t.Fatalf("reading file: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("content = %q, want %q", got, content)
+	}
+}
+
+// TestExtractTarGzInvalidArchive tests ExtractTarGz with a file that is not a
+// valid gzip file.
+func TestExtractTarGzInvalidArchive(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "invalid.tar.gz")
+	extractDir := filepath.Join(tmpDir, "extracted")
+
+	// Write a non-gzip file.
+	if err := os.WriteFile(archivePath, []byte("this is not gzip"), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	_, err := ExtractTarGz(archivePath, extractDir)
+	if err == nil {
+		t.Error("expected error for invalid gzip file")
+	}
+}
+
+// TestExtractTarGzNonexistentSource tests ExtractTarGz with a nonexistent
+// source file.
+func TestExtractTarGzNonexistentSource(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := ExtractTarGz(filepath.Join(tmpDir, "missing.tar.gz"), filepath.Join(tmpDir, "out"))
+	if err == nil {
+		t.Error("expected error for nonexistent source")
+	}
+}
+
+// TestExtractTarGzFilePermissions tests that extracted files have the correct
+// permission bits set.
+func TestExtractTarGzFilePermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "perms.tar.gz")
+	extractDir := filepath.Join(tmpDir, "extracted")
+
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("creating tar.gz: %v", err)
+	}
+
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+
+	content := "#!/bin/sh\necho executable"
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "script.sh",
+		Mode:     0o755,
+		Size:     int64(len(content)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatalf("writing header: %v", err)
+	}
+	if _, err := tw.Write([]byte(content)); err != nil {
+		t.Fatalf("writing content: %v", err)
+	}
+
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	_, err = ExtractTarGz(archivePath, extractDir)
+	if err != nil {
+		t.Fatalf("ExtractTarGz: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(extractDir, "script.sh"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	// The extractFile function applies mode&0o777|0o644, so 0o755 should be preserved.
+	if info.Mode()&0o111 == 0 {
+		t.Error("script.sh should have executable bits set")
+	}
+}
+
+// TestDetectFormatEmptyFile tests DetectFormat with an empty file.
+func TestDetectFormatEmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "empty")
+	if err := os.WriteFile(path, []byte{}, 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	_, err := DetectFormat(path)
+	if err == nil {
+		t.Error("expected error for empty file")
+	}
+}

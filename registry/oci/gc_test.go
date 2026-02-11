@@ -163,3 +163,148 @@ func TestGCKeepsAllReferenced(t *testing.T) {
 		t.Errorf("RemovedDirs = %d, want 0 (all referenced)", len(result.RemovedDirs))
 	}
 }
+
+// TestGCRemovesAllUnreferenced tests GC when no digests are referenced.
+func TestGCRemovesAllUnreferenced(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(WithCacheDir(cacheDir))
+
+	hexDigests := []string{
+		"aaaa111100000000000000000000000000000000000000000000000000000000",
+		"bbbb222200000000000000000000000000000000000000000000000000000000",
+	}
+
+	populateCache(t, cacheDir, hexDigests)
+
+	result, err := store.GC(GCOptions{
+		ReferencedDigests: nil, // Nothing referenced
+	})
+	if err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+
+	if len(result.RemovedBlobs) != 2 {
+		t.Errorf("RemovedBlobs = %d, want 2", len(result.RemovedBlobs))
+	}
+	if len(result.RemovedDirs) != 2 {
+		t.Errorf("RemovedDirs = %d, want 2", len(result.RemovedDirs))
+	}
+	if result.BytesReclaimed <= 0 {
+		t.Error("BytesReclaimed should be positive")
+	}
+
+	// Verify all blobs are gone.
+	for _, hex := range hexDigests {
+		blobPath := filepath.Join(cacheDir, "sha256", hex[:2], hex)
+		if _, err := os.Stat(blobPath); !os.IsNotExist(err) {
+			t.Errorf("blob %s should have been removed", hex[:8])
+		}
+	}
+
+	// Verify shard directories were cleaned up.
+	for _, hex := range hexDigests {
+		shardDir := filepath.Join(cacheDir, "sha256", hex[:2])
+		if _, err := os.Stat(shardDir); !os.IsNotExist(err) {
+			t.Errorf("shard dir %s should have been removed", hex[:2])
+		}
+	}
+}
+
+// TestGCWithNonDirectoryInShard tests that GC ignores non-directory entries
+// in the shard root (e.g. stray files).
+func TestGCWithNonDirectoryInShard(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(WithCacheDir(cacheDir))
+
+	// Create the sha256 root and put a stray file in it.
+	blobRoot := filepath.Join(cacheDir, "sha256")
+	if err := os.MkdirAll(blobRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blobRoot, "stray-file"), []byte("stray"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result, err := store.GC(GCOptions{})
+	if err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+
+	// The stray file should be ignored (not a directory shard).
+	if len(result.RemovedBlobs) != 0 {
+		t.Errorf("RemovedBlobs = %d, want 0", len(result.RemovedBlobs))
+	}
+}
+
+// TestDirSize tests the dirSize helper function.
+func TestDirSize(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write a file with known content.
+	content := "hello world, this is a test file for dirSize"
+	if err := os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	size, err := dirSize(tmpDir)
+	if err != nil {
+		t.Fatalf("dirSize: %v", err)
+	}
+	if size != int64(len(content)) {
+		t.Errorf("dirSize = %d, want %d", size, len(content))
+	}
+}
+
+// TestDirSizeNestedDirs tests dirSize with nested directories.
+func TestDirSizeNestedDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sub := filepath.Join(tmpDir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	f1 := "file one"
+	f2 := "file two content"
+	if err := os.WriteFile(filepath.Join(tmpDir, "f1.txt"), []byte(f1), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "f2.txt"), []byte(f2), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	size, err := dirSize(tmpDir)
+	if err != nil {
+		t.Fatalf("dirSize: %v", err)
+	}
+	want := int64(len(f1) + len(f2))
+	if size != want {
+		t.Errorf("dirSize = %d, want %d", size, want)
+	}
+}
+
+// TestDirSizeNonexistent tests dirSize with a nonexistent path.
+func TestDirSizeNonexistent(t *testing.T) {
+	_, err := dirSize("/nonexistent/path")
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
+// TestDirSizeSingleFile tests dirSize on a single file (not a directory).
+func TestDirSizeSingleFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "single.txt")
+	content := "single file"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	size, err := dirSize(path)
+	if err != nil {
+		t.Fatalf("dirSize: %v", err)
+	}
+	if size != int64(len(content)) {
+		t.Errorf("dirSize = %d, want %d", size, len(content))
+	}
+}

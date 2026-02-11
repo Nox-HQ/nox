@@ -437,3 +437,185 @@ func TestFindingSet_Findings_ReturnsEmptySliceOnNew(t *testing.T) {
 		t.Fatalf("expected nil slice for new FindingSet, got length %d", len(findings))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// FindingSet.SetStatus tests
+// ---------------------------------------------------------------------------
+
+func TestFindingSet_SetStatus(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "SEC-003", Location: Location{FilePath: "c.go", StartLine: 3}, Message: "c"})
+
+	fs.SetStatus(0, StatusSuppressed)
+	fs.SetStatus(1, StatusBaselined)
+
+	findings := fs.Findings()
+	if findings[0].Status != StatusSuppressed {
+		t.Errorf("expected findings[0].Status to be %q, got %q", StatusSuppressed, findings[0].Status)
+	}
+	if findings[1].Status != StatusBaselined {
+		t.Errorf("expected findings[1].Status to be %q, got %q", StatusBaselined, findings[1].Status)
+	}
+	if findings[2].Status != "" {
+		t.Errorf("expected findings[2].Status to be empty, got %q", findings[2].Status)
+	}
+}
+
+func TestFindingSet_SetStatus_OutOfBounds(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+
+	// Setting status on out-of-bounds indices should not panic.
+	fs.SetStatus(-1, StatusSuppressed)
+	fs.SetStatus(10, StatusSuppressed)
+
+	// Original finding should be unchanged.
+	if fs.Findings()[0].Status != "" {
+		t.Errorf("expected original finding status to be unchanged, got %q", fs.Findings()[0].Status)
+	}
+}
+
+func TestFindingSet_SetStatus_EmptySet(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+
+	// Should not panic.
+	fs.SetStatus(0, StatusSuppressed)
+}
+
+// ---------------------------------------------------------------------------
+// FindingSet.CountByStatus tests
+// ---------------------------------------------------------------------------
+
+func TestFindingSet_CountByStatus(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a", Status: StatusNew})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b", Status: StatusNew})
+	fs.Add(Finding{RuleID: "SEC-003", Location: Location{FilePath: "c.go", StartLine: 3}, Message: "c", Status: StatusBaselined})
+	fs.Add(Finding{RuleID: "SEC-004", Location: Location{FilePath: "d.go", StartLine: 4}, Message: "d", Status: StatusSuppressed})
+	fs.Add(Finding{RuleID: "SEC-005", Location: Location{FilePath: "e.go", StartLine: 5}, Message: "e", Status: StatusSuppressed})
+
+	counts := fs.CountByStatus()
+
+	if counts[StatusNew] != 2 {
+		t.Errorf("expected 2 new findings, got %d", counts[StatusNew])
+	}
+	if counts[StatusBaselined] != 1 {
+		t.Errorf("expected 1 baselined finding, got %d", counts[StatusBaselined])
+	}
+	if counts[StatusSuppressed] != 2 {
+		t.Errorf("expected 2 suppressed findings, got %d", counts[StatusSuppressed])
+	}
+}
+
+func TestFindingSet_CountByStatus_EmptyStatusDefaultsToNew(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b"})
+
+	counts := fs.CountByStatus()
+
+	if counts[StatusNew] != 2 {
+		t.Errorf("expected 2 new findings (empty status defaults to new), got %d", counts[StatusNew])
+	}
+}
+
+func TestFindingSet_CountByStatus_Empty(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	counts := fs.CountByStatus()
+
+	if len(counts) != 0 {
+		t.Errorf("expected empty counts map, got %d entries", len(counts))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FindingSet.ActiveFindings tests
+// ---------------------------------------------------------------------------
+
+func TestFindingSet_ActiveFindings(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a", Status: StatusNew})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b", Status: StatusBaselined})
+	fs.Add(Finding{RuleID: "SEC-003", Location: Location{FilePath: "c.go", StartLine: 3}, Message: "c", Status: StatusSuppressed})
+	fs.Add(Finding{RuleID: "SEC-004", Location: Location{FilePath: "d.go", StartLine: 4}, Message: "d"})
+
+	active := fs.ActiveFindings()
+
+	if len(active) != 2 {
+		t.Fatalf("expected 2 active findings, got %d", len(active))
+	}
+
+	// Verify the active findings are the new/empty status ones.
+	foundNew := false
+	foundEmpty := false
+	for _, f := range active {
+		if f.RuleID == "SEC-001" && f.Status == StatusNew {
+			foundNew = true
+		}
+		if f.RuleID == "SEC-004" && f.Status == "" {
+			foundEmpty = true
+		}
+	}
+
+	if !foundNew {
+		t.Error("expected SEC-001 (StatusNew) in active findings")
+	}
+	if !foundEmpty {
+		t.Error("expected SEC-004 (empty status) in active findings")
+	}
+}
+
+func TestFindingSet_ActiveFindings_AllSuppressed(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a", Status: StatusSuppressed})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b", Status: StatusBaselined})
+
+	active := fs.ActiveFindings()
+
+	if len(active) != 0 {
+		t.Fatalf("expected 0 active findings, got %d", len(active))
+	}
+}
+
+func TestFindingSet_ActiveFindings_AllActive(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 1}, Message: "a", Status: StatusNew})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "b.go", StartLine: 2}, Message: "b"})
+
+	active := fs.ActiveFindings()
+
+	if len(active) != 2 {
+		t.Fatalf("expected 2 active findings, got %d", len(active))
+	}
+}
+
+func TestFindingSet_ActiveFindings_Empty(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	active := fs.ActiveFindings()
+
+	if active != nil {
+		t.Fatalf("expected nil slice for empty set, got %v", active)
+	}
+}
