@@ -525,3 +525,245 @@ func TestClassifyByPath(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// AI-009: Unsafe LLM output execution
+// ---------------------------------------------------------------------------
+
+func TestDetect_UnsafeOutputExecution(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"eval python", `result = eval(response.text)`},
+		{"exec python", `exec(completion)`},
+		{"eval generated", `eval(generated)`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := NewAnalyzer()
+			results, err := a.ScanFile("app.py", []byte(tt.content))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			f := findingWithRule(results, "AI-009")
+			if f == nil {
+				t.Fatalf("expected AI-009 finding for %q", tt.name)
+			}
+			if f.Severity != findings.SeverityCritical {
+				t.Fatalf("expected severity critical, got %s", f.Severity)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-010: Indirect prompt injection
+// ---------------------------------------------------------------------------
+
+func TestDetect_IndirectPromptInjection(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`fetched_content = get_url(url) + prompt`)
+
+	results, err := a.ScanFile("rag.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-010")
+	if f == nil {
+		t.Fatal("expected AI-010 finding for indirect prompt injection")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-011: Agent unrestricted capability access
+// ---------------------------------------------------------------------------
+
+func TestDetect_AgentUnrestrictedAccess(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`capabilities = ["*"]`)
+
+	results, err := a.ScanFile("agent.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-011")
+	if f == nil {
+		t.Fatal("expected AI-011 finding for unrestricted agent access")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-012: LLM output in SQL query
+// ---------------------------------------------------------------------------
+
+func TestDetect_LLMOutputInSQL(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`cursor.execute("SELECT * FROM " + completion)`)
+
+	results, err := a.ScanFile("db.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-012")
+	if f == nil {
+		t.Fatal("expected AI-012 finding for LLM output in SQL")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-013: Error details leaked
+// ---------------------------------------------------------------------------
+
+func TestDetect_ErrorDetailsLeaked(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`traceback.format_exc() + response`)
+
+	results, err := a.ScanFile("handler.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-013")
+	if f == nil {
+		t.Fatal("expected AI-013 finding for error details leaked")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-014: Model from HTTP
+// ---------------------------------------------------------------------------
+
+func TestDetect_ModelFromHTTP(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`model = AutoModel.from_pretrained("http://example.com/model")`)
+
+	results, err := a.ScanFile("model.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-014")
+	if f == nil {
+		t.Fatal("expected AI-014 finding for model from HTTP")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-015: LLM output as raw HTML
+// ---------------------------------------------------------------------------
+
+func TestDetect_LLMOutputAsHTML(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"innerHTML", `element.innerHTML = response.text`},
+		{"dangerouslySetInnerHTML", `<div dangerouslySetInnerHTML={{__html: completion}} />`},
+		{"v-html", `<div v-html="ai_result"></div>`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := NewAnalyzer()
+			results, err := a.ScanFile("component.jsx", []byte(tt.content))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			f := findingWithRule(results, "AI-015")
+			if f == nil {
+				t.Fatalf("expected AI-015 finding for %q", tt.name)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-016: System prompt exposed
+// ---------------------------------------------------------------------------
+
+func TestDetect_SystemPromptExposed(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`system_prompt = config; return response.json(system_prompt)`)
+
+	results, err := a.ScanFile("api.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-016")
+	if f == nil {
+		t.Fatal("expected AI-016 finding for system prompt exposure")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-017: Excessive token limit
+// ---------------------------------------------------------------------------
+
+func TestDetect_ExcessiveTokenLimit(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"negative one", `max_tokens = -1`},
+		{"very large", `max_tokens = 1000000`},
+		{"maxTokens large", `maxTokens: 999999`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := NewAnalyzer()
+			results, err := a.ScanFile("config.py", []byte(tt.content))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			f := findingWithRule(results, "AI-017")
+			if f == nil {
+				t.Fatalf("expected AI-017 finding for %q", tt.name)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-018: LLM output in file path
+// ---------------------------------------------------------------------------
+
+func TestDetect_LLMOutputInFilePath(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`path = os.path.join("/data", llm_output)`)
+
+	results, err := a.ScanFile("files.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	f := findingWithRule(results, "AI-018")
+	if f == nil {
+		t.Fatal("expected AI-018 finding for LLM output in file path")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Rule count and compilation
+// ---------------------------------------------------------------------------
+
+func TestAllAIRules_Count(t *testing.T) {
+	rules := builtinAIRules()
+	if got := len(rules); got != 18 {
+		t.Errorf("expected 18 AI rules, got %d", got)
+	}
+}
+
+func TestAllAIRules_Compile(t *testing.T) {
+	for _, r := range builtinAIRules() {
+		if r.Pattern == "" {
+			t.Errorf("rule %s has empty pattern", r.ID)
+		}
+	}
+}

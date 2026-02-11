@@ -99,7 +99,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **104 built-in rules** across four analyzer suites:
+Nox ships with **154 built-in rules** across four analyzer suites:
 
 ### Secrets (86 rules)
 
@@ -118,33 +118,33 @@ Detects hardcoded secrets, API keys, tokens, and credentials across **15 categor
 | Crypto & Keys | SEC-004, SEC-077 – SEC-079 | PEM private keys, Age, PGP, PKCS12 |
 | Generic Patterns | SEC-005, SEC-080 – SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
 
-### AI Security (8 rules)
+### AI Security (18 rules)
 
-| Rule | Severity | Description |
-|------|----------|-------------|
-| AI-001 | High | Prompt injection boundary missing or weak |
-| AI-002 | High | User input concatenated into prompt template |
-| AI-003 | Medium | RAG context injected without sanitisation boundary |
-| AI-004 | Critical | MCP server exposes file system write without restrictions |
-| AI-005 | High | MCP config allows all tools without allowlist |
-| AI-006 | Medium | Prompt/response logged without redaction |
-| AI-007 | High | LLM API key logged or printed |
-| AI-008 | Medium | Model reference without version pin |
+Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 
-### Infrastructure as Code (10 rules)
+| Category | Rules | OWASP LLM | Examples |
+|----------|-------|-----------|---------|
+| Prompt Injection | AI-001 – AI-003, AI-010 | LLM01 | Boundary violations, RAG injection, indirect injection |
+| Tool/Agent Safety | AI-004, AI-005, AI-011 | LLM06 | MCP write tools, wildcard allowlists, unrestricted agents |
+| Insecure Logging | AI-006, AI-007 | LLM02 | Prompt/response logging, API key exposure |
+| Output Handling | AI-009, AI-012, AI-015, AI-018 | LLM05 | eval()/exec(), SQL injection, XSS, path traversal |
+| Information Disclosure | AI-013, AI-016 | LLM02, LLM07 | Stack traces in responses, system prompt leakage |
+| Supply Chain | AI-008, AI-014 | LLM03 | Unpinned models, insecure HTTP model downloads |
+| Resource Management | AI-017 | LLM10 | Unlimited token limits |
 
-| Rule | Severity | Description |
-|------|----------|-------------|
-| IAC-001 | High | Dockerfile runs as root |
-| IAC-002 | Medium | Dockerfile uses unpinned base image |
-| IAC-003 | Low | Dockerfile uses ADD instead of COPY |
-| IAC-004 | High | Terraform allows public access (0.0.0.0/0) |
-| IAC-005 | High | S3 bucket missing encryption |
-| IAC-006 | Critical | Security group allows unrestricted SSH |
-| IAC-007 | Critical | Kubernetes pod running as privileged |
-| IAC-008 | High | Kubernetes pod uses host network |
-| IAC-009 | Critical | Kubernetes pod allows privilege escalation |
-| IAC-010 | High | Kubernetes pod running as root |
+### Infrastructure as Code (50 rules)
+
+Detects misconfigurations across **7 IaC categories**:
+
+| Category | Rules | Examples |
+|----------|-------|---------|
+| Dockerfile | IAC-001 – IAC-003, IAC-022 – IAC-025 | Root user, unpinned images, secrets in ARG, curl-pipe-sh |
+| Terraform/Cloud | IAC-004 – IAC-006, IAC-036 – IAC-045 | Public access, disabled encryption, wildcard IAM, public S3 |
+| Kubernetes | IAC-007 – IAC-010, IAC-026 – IAC-035 | Privileged pods, host namespaces, dangerous capabilities, cluster-admin |
+| GitHub Actions | IAC-011 – IAC-018 | pull_request_target, script injection, mutable action tags, write-all |
+| Docker Compose | IAC-019 – IAC-021, IAC-049 | Privileged mode, host networking, Docker socket mount |
+| Helm | IAC-046 – IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
+| CI/CD General | IAC-050 | Disabled security checks |
 
 ### Dependencies
 

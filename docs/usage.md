@@ -1144,7 +1144,7 @@ nox scan . -q || exit 1
 
 ## Built-in Rules Reference
 
-Nox ships with **104 built-in rules** across four analyzer suites: Secrets (86), AI Security (8), and Infrastructure as Code (10).
+Nox ships with **154 built-in rules** across four analyzer suites: Secrets (86), AI Security (18), and Infrastructure as Code (50).
 
 ### Secrets Rules (86 rules)
 
@@ -1285,3 +1285,149 @@ All secrets rules use the `secrets` tag and CWE-798 (Use of Hard-coded Credentia
 | SEC-084 | Medium | Medium | JWT token |
 | SEC-085 | High | Medium | URL with embedded password |
 | SEC-086 | High | Medium | Hardcoded database password |
+
+### AI Security Rules (18 rules)
+
+AI security rules detect risks in LLM-powered applications, aligned with the OWASP Top 10 for LLM Applications. Rules use CWE identifiers specific to each vulnerability class.
+
+#### Prompt Injection (AI-001 – AI-003, AI-010)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-001 | High | Medium | CWE-77 | Prompt injection boundary marker missing or weak |
+| AI-002 | High | High | CWE-77 | Direct string concatenation of user input into prompt template |
+| AI-003 | Medium | Medium | CWE-77 | RAG context injected without sanitisation boundary |
+| AI-010 | High | Medium | CWE-77 | External content concatenated into LLM prompt without sanitisation |
+
+#### Tool / Agent Safety (AI-004, AI-005, AI-011)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-004 | Critical | Medium | CWE-284 | MCP server exposes file system write tool without restrictions |
+| AI-005 | High | Medium | CWE-284 | MCP configuration allows all tools without allowlist |
+| AI-011 | High | Medium | CWE-269 | AI agent configured with unrestricted tool or capability access |
+
+#### Insecure Logging (AI-006, AI-007)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-006 | Medium | Medium | CWE-532 | Prompt or LLM response logged without redaction |
+| AI-007 | High | High | CWE-532 | LLM API key or token logged or printed |
+
+#### Unsafe Output Handling (AI-009, AI-012, AI-015, AI-018)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-009 | Critical | Medium | CWE-94 | LLM output passed to code execution function (eval/exec) |
+| AI-012 | High | Medium | CWE-89 | LLM-generated text used directly in database query |
+| AI-015 | High | Medium | CWE-79 | LLM output rendered as raw HTML without escaping |
+| AI-018 | High | Medium | CWE-22 | LLM output used to construct file system path |
+
+#### Information Disclosure (AI-013, AI-016)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-013 | Medium | Low | CWE-209 | Internal error details or stack traces returned in LLM response |
+| AI-016 | Medium | Low | CWE-200 | System prompt or instructions returned to user |
+
+#### Supply Chain (AI-008, AI-014)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-008 | Medium | Low | CWE-829 | Model reference without version pin or hash |
+| AI-014 | Medium | Medium | CWE-829 | ML model loaded from insecure HTTP source |
+
+#### Resource Management (AI-017)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| AI-017 | Medium | Medium | CWE-770 | LLM API call with excessively high or unlimited token limit |
+
+### Infrastructure as Code Rules (50 rules)
+
+IaC rules detect security misconfigurations in container definitions, cloud infrastructure, CI/CD pipelines, and orchestration manifests.
+
+#### Dockerfile (IAC-001 – IAC-003, IAC-022 – IAC-025)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-001 | High | Medium | CWE-250 | Dockerfile runs as root user |
+| IAC-002 | Medium | Medium | CWE-829 | Dockerfile uses unpinned base image (latest or no tag) |
+| IAC-003 | Low | High | CWE-829 | Dockerfile uses ADD instead of COPY |
+| IAC-022 | High | Medium | CWE-798 | Secret value passed as Docker build argument |
+| IAC-023 | High | High | CWE-94 | Remote script piped directly to shell (curl/wget pipe) |
+| IAC-024 | Medium | Medium | CWE-250 | Dockerfile RUN uses sudo (unnecessary in Docker build) |
+| IAC-025 | Medium | High | CWE-732 | Dockerfile COPY/ADD sets world-writable permissions (chmod=777) |
+
+#### Terraform / Cloud (IAC-004 – IAC-006, IAC-036 – IAC-045)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-004 | High | Medium | CWE-284 | Terraform resource allows public access (0.0.0.0/0) |
+| IAC-005 | High | Low | CWE-311 | Terraform resource has encryption disabled |
+| IAC-006 | Critical | Medium | CWE-284 | Terraform security group allows SSH access (port 22) |
+| IAC-036 | Critical | High | CWE-284 | RDS or database instance is publicly accessible |
+| IAC-037 | High | High | CWE-311 | RDS storage encryption disabled |
+| IAC-038 | High | High | CWE-778 | CloudTrail multi-region logging disabled |
+| IAC-039 | Critical | Medium | CWE-269 | IAM policy with wildcard action (*) |
+| IAC-040 | Critical | High | CWE-284 | S3 bucket with public ACL |
+| IAC-041 | High | Medium | CWE-319 | Load balancer listener uses HTTP instead of HTTPS |
+| IAC-042 | High | High | CWE-319 | Azure storage account allows HTTP traffic |
+| IAC-043 | High | Medium | CWE-284 | Cloud firewall rule allows all protocols |
+| IAC-044 | Medium | Low | CWE-1188 | Terraform resource uses default VPC |
+| IAC-045 | High | Medium | CWE-778 | Cloud resource logging disabled |
+
+#### Kubernetes (IAC-007 – IAC-010, IAC-026 – IAC-035)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-007 | Critical | High | CWE-250 | Kubernetes pod running as privileged |
+| IAC-008 | High | High | CWE-284 | Kubernetes pod uses host network |
+| IAC-009 | Critical | High | CWE-250 | Kubernetes pod allows privilege escalation |
+| IAC-010 | High | High | CWE-250 | Kubernetes pod running as root (runAsUser: 0) |
+| IAC-026 | High | High | CWE-250 | Kubernetes pod uses host PID namespace |
+| IAC-027 | High | High | CWE-250 | Kubernetes pod uses host IPC namespace |
+| IAC-028 | High | High | CWE-250 | Container adds dangerous Linux capability (SYS_ADMIN, NET_RAW, etc.) |
+| IAC-029 | Medium | High | CWE-732 | Container root filesystem is writable |
+| IAC-030 | Medium | Medium | CWE-269 | Service account token automatically mounted |
+| IAC-031 | Medium | Medium | CWE-829 | Container image uses latest tag in Kubernetes manifest |
+| IAC-032 | Critical | Medium | CWE-269 | ClusterRoleBinding references cluster-admin role |
+| IAC-033 | Medium | Medium | CWE-284 | Container specifies hostPort binding |
+| IAC-034 | Medium | Low | CWE-284 | Service type LoadBalancer exposes service externally |
+| IAC-035 | High | High | CWE-250 | Kubernetes pod explicitly allows running as root |
+
+#### GitHub Actions (IAC-011 – IAC-018)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-011 | Critical | Medium | CWE-94 | Workflow uses pull_request_target trigger |
+| IAC-012 | Critical | High | CWE-77 | Workflow uses untrusted event data in expression (script injection) |
+| IAC-013 | High | Medium | CWE-829 | GitHub Action pinned to mutable tag instead of commit SHA |
+| IAC-014 | High | High | CWE-269 | GitHub Actions workflow has write-all permissions |
+| IAC-015 | High | High | CWE-532 | Secret value printed to GitHub Actions workflow logs |
+| IAC-016 | Medium | Medium | CWE-284 | GitHub Actions workflow uses self-hosted runner |
+| IAC-017 | Medium | High | CWE-77 | Workflow uses deprecated set-output command |
+| IAC-018 | Low | Medium | CWE-755 | Workflow step suppresses failures with continue-on-error |
+
+#### Docker Compose (IAC-019 – IAC-021, IAC-049)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-019 | Critical | High | CWE-250 | Docker Compose service runs in privileged mode |
+| IAC-020 | High | High | CWE-284 | Docker Compose service uses host network mode |
+| IAC-021 | Critical | High | CWE-250 | Docker Compose service mounts Docker socket |
+| IAC-049 | High | High | CWE-250 | Docker Compose service shares host PID namespace |
+
+#### Helm (IAC-046 – IAC-048)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-046 | Critical | High | CWE-269 | Tiller (Helm v2) deployment detected |
+| IAC-047 | High | Medium | CWE-798 | Default or hardcoded admin password in Helm values |
+| IAC-048 | High | Medium | CWE-269 | Helm chart disables RBAC |
+
+#### CI/CD General (IAC-050)
+
+| Rule | Severity | Confidence | CWE | Description |
+|------|----------|------------|-----|-------------|
+| IAC-050 | Medium | Medium | CWE-693 | CI/CD configuration disables security checks |

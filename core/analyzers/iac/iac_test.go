@@ -575,3 +575,925 @@ func TestDetect_CustomDockerfileExtension(t *testing.T) {
 		t.Fatal("expected IAC-001 finding for *.dockerfile file")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Rule count and compilation
+// ---------------------------------------------------------------------------
+
+func TestAllIaCRules_Count(t *testing.T) {
+	rules := builtinIaCRules()
+	if got := len(rules); got != 50 {
+		t.Errorf("expected 50 IaC rules, got %d", got)
+	}
+}
+
+func TestAllIaCRules_Compile(t *testing.T) {
+	for _, r := range builtinIaCRules() {
+		if r.Pattern == "" {
+			t.Errorf("rule %s has empty pattern", r.ID)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// New Dockerfile rules (IAC-022 to IAC-025)
+// ---------------------------------------------------------------------------
+
+func TestDetect_DockerSecretInBuildArg(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("FROM node:20\nARG PASSWORD=secret123\nRUN echo $PASSWORD\n")
+
+	results, err := a.ScanFile("Dockerfile", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-022" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-022 finding for secret in build arg")
+	}
+}
+
+func TestDetect_CurlPipedToShell(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("FROM ubuntu:22.04\nRUN curl -fsSL https://example.com/install.sh | bash\n")
+
+	results, err := a.ScanFile("Dockerfile", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-023" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-023 finding for curl piped to shell")
+	}
+}
+
+func TestDetect_DockerfileSudo(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("FROM ubuntu:22.04\nRUN sudo apt-get install -y curl\n")
+
+	results, err := a.ScanFile("Dockerfile", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-024" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-024 finding for sudo in Dockerfile")
+	}
+}
+
+func TestDetect_DockerfileChmod777(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("FROM ubuntu:22.04\nCOPY --chmod=777 app.sh /app/\n")
+
+	results, err := a.ScanFile("Dockerfile", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-025" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-025 finding for chmod 777")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// New Kubernetes rules (IAC-026 to IAC-035)
+// ---------------------------------------------------------------------------
+
+func TestDetect_KubernetesHostPID(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("apiVersion: v1\nkind: Pod\nspec:\n  hostPID: true\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-026" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-026 finding for hostPID")
+	}
+}
+
+func TestDetect_KubernetesHostIPC(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("apiVersion: v1\nkind: Pod\nspec:\n  hostIPC: true\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-027" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-027 finding for hostIPC")
+	}
+}
+
+func TestDetect_KubernetesDangerousCapability(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("securityContext:\n  capabilities:\n    add:\n      - SYS_ADMIN\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-028" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-028 finding for dangerous capability")
+	}
+}
+
+func TestDetect_KubernetesWritableRootFS(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("securityContext:\n  readOnlyRootFilesystem: false\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-029" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-029 finding for writable root filesystem")
+	}
+}
+
+func TestDetect_KubernetesAutoMountSA(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("spec:\n  automountServiceAccountToken: true\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-030" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-030 finding for automount service account token")
+	}
+}
+
+func TestDetect_KubernetesLatestTag(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("containers:\n  - name: app\n    image: nginx:latest\n")
+
+	results, err := a.ScanFile("deploy.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-031" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-031 finding for latest tag in K8s manifest")
+	}
+}
+
+func TestDetect_KubernetesClusterAdmin(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("kind: ClusterRoleBinding\nroleRef:\n  name: cluster-admin\n")
+
+	results, err := a.ScanFile("rbac.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-032" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-032 finding for cluster-admin binding")
+	}
+}
+
+func TestDetect_KubernetesHostPort(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("ports:\n  - containerPort: 8080\n    hostPort: 8080\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-033" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-033 finding for hostPort")
+	}
+}
+
+func TestDetect_KubernetesLoadBalancer(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("kind: Service\nspec:\n  type: LoadBalancer\n")
+
+	results, err := a.ScanFile("svc.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-034" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-034 finding for LoadBalancer service")
+	}
+}
+
+func TestDetect_KubernetesRunAsNonRootFalse(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("securityContext:\n  runAsNonRoot: false\n")
+
+	results, err := a.ScanFile("pod.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-035" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-035 finding for runAsNonRoot: false")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GitHub Actions rules (IAC-011 to IAC-018)
+// ---------------------------------------------------------------------------
+
+func TestDetect_GHAPullRequestTarget(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("on:\n  pull_request_target:\n    branches: [main]\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-011" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-011 finding for pull_request_target")
+	}
+}
+
+func TestDetect_GHAScriptInjection(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("run: echo ${{ github.event.issue.title }}\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-012" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-012 finding for script injection")
+	}
+}
+
+func TestDetect_GHAUnpinnedAction(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("uses: actions/checkout@v4\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-013" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-013 finding for unpinned action")
+	}
+}
+
+func TestDetect_GHAWriteAllPermissions(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("permissions: write-all\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-014" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-014 finding for write-all permissions")
+	}
+}
+
+func TestDetect_GHASecretsInLogs(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("run: echo ${{ secrets.MY_TOKEN }}\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-015" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-015 finding for secrets in logs")
+	}
+}
+
+func TestDetect_GHASelfHostedRunner(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("runs-on: self-hosted\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-016" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-016 finding for self-hosted runner")
+	}
+}
+
+func TestDetect_GHADeprecatedSetOutput(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`run: echo "::set-output name=result::value"` + "\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-017" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-017 finding for deprecated set-output")
+	}
+}
+
+func TestDetect_GHAContinueOnError(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("- name: test\n  continue-on-error: true\n  run: make test\n")
+
+	results, err := a.ScanFile("ci.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-018" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-018 finding for continue-on-error")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Docker Compose rules (IAC-019 to IAC-021, IAC-049)
+// ---------------------------------------------------------------------------
+
+func TestDetect_ComposePrivileged(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("services:\n  app:\n    image: nginx\n    privileged: true\n")
+
+	results, err := a.ScanFile("docker-compose.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-019" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-019 finding for compose privileged")
+	}
+}
+
+func TestDetect_ComposeHostNetwork(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("services:\n  app:\n    network_mode: host\n")
+
+	results, err := a.ScanFile("docker-compose.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-020" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-020 finding for compose host network")
+	}
+}
+
+func TestDetect_ComposeDockerSocket(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("services:\n  app:\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n")
+
+	results, err := a.ScanFile("docker-compose.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-021" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-021 finding for docker socket mount")
+	}
+}
+
+func TestDetect_ComposeHostPID(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("services:\n  app:\n    pid: host\n")
+
+	results, err := a.ScanFile("docker-compose.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-049" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-049 finding for compose host PID")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Terraform / Cloud rules (IAC-036 to IAC-045)
+// ---------------------------------------------------------------------------
+
+func TestDetect_TerraformRDSPubliclyAccessible(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_db_instance" "default" {
+  publicly_accessible = true
+}
+`)
+
+	results, err := a.ScanFile("rds.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-036" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-036 finding for RDS publicly accessible")
+	}
+}
+
+func TestDetect_TerraformRDSStorageNotEncrypted(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_db_instance" "default" {
+  storage_encrypted = false
+}
+`)
+
+	results, err := a.ScanFile("rds.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-037" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-037 finding for RDS storage not encrypted")
+	}
+}
+
+func TestDetect_TerraformCloudTrailDisabled(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_cloudtrail" "main" {
+  is_multi_region_trail = false
+}
+`)
+
+	results, err := a.ScanFile("trail.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-038" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-038 finding for CloudTrail disabled")
+	}
+}
+
+func TestDetect_TerraformIAMWildcard(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`{
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "*",
+    "Resource": "*"
+  }]
+}
+`)
+
+	results, err := a.ScanFile("policy.json", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-039" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-039 finding for IAM wildcard action")
+	}
+}
+
+func TestDetect_TerraformS3PublicACL(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_s3_bucket" "public" {
+  acl = "public-read"
+}
+`)
+
+	results, err := a.ScanFile("s3.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-040" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-040 finding for S3 public ACL")
+	}
+}
+
+func TestDetect_TerraformHTTPProtocol(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_lb_listener" "http" {
+  protocol = "HTTP"
+}
+`)
+
+	results, err := a.ScanFile("alb.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-041" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-041 finding for HTTP protocol")
+	}
+}
+
+func TestDetect_TerraformAzureHTTPEnabled(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "azurerm_storage_account" "main" {
+  enable_https_traffic_only = false
+}
+`)
+
+	results, err := a.ScanFile("storage.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-042" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-042 finding for Azure HTTP enabled")
+	}
+}
+
+func TestDetect_TerraformFirewallAllProtocols(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "google_compute_firewall" "allow_all" {
+  allow {
+    protocol = "all"
+  }
+}
+`)
+
+	results, err := a.ScanFile("firewall.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-043" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-043 finding for all protocols")
+	}
+}
+
+func TestDetect_TerraformDefaultVPC(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "aws_default_vpc" "default" {
+}
+`)
+
+	results, err := a.ScanFile("vpc.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-044" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-044 finding for default VPC")
+	}
+}
+
+func TestDetect_TerraformLoggingDisabled(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`resource "google_container_cluster" "primary" {
+  logging_service = "none"
+}
+`)
+
+	results, err := a.ScanFile("gke.tf", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-045" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-045 finding for logging disabled")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Helm rules (IAC-046 to IAC-048)
+// ---------------------------------------------------------------------------
+
+func TestDetect_HelmTiller(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: tiller-deploy\n")
+
+	results, err := a.ScanFile("tiller.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-046" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-046 finding for Tiller deployment")
+	}
+}
+
+func TestDetect_HelmDefaultPassword(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("admin_password: supersecret123\n")
+
+	results, err := a.ScanFile("values.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-047" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-047 finding for default admin password")
+	}
+}
+
+func TestDetect_HelmRBACDisabled(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("rbac:\n  create: false\n")
+
+	results, err := a.ScanFile("values.yaml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-048" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-048 finding for RBAC disabled")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CI/CD general rule (IAC-050)
+// ---------------------------------------------------------------------------
+
+func TestDetect_SecurityChecksDisabled(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("security_enabled: false\n")
+
+	results, err := a.ScanFile("config.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, f := range results {
+		if f.RuleID == "IAC-050" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected IAC-050 finding for security checks disabled")
+	}
+}
