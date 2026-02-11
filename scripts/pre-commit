@@ -1,0 +1,65 @@
+#!/bin/sh
+# Pre-commit hook for the nox repository.
+# Runs the same checks as CI to catch issues before pushing.
+# Install: make hooks   or   cp scripts/pre-commit .git/hooks/pre-commit
+set -e
+
+failed=0
+
+# 1. Check gofmt on staged Go files.
+gofiles=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+if [ -n "$gofiles" ]; then
+    # shellcheck disable=SC2086
+    unformatted=$(gofmt -l $gofiles)
+    if [ -n "$unformatted" ]; then
+        echo "pre-commit: gofmt check failed:"
+        echo "$unformatted"
+        echo "  run: gofmt -w <file>"
+        failed=1
+    fi
+fi
+
+# 2. Run go vet.
+if ! go vet ./... 2>&1; then
+    echo "pre-commit: go vet found issues"
+    failed=1
+fi
+
+# 3. Run golangci-lint (only new issues vs HEAD) — includes gocritic.
+if command -v golangci-lint >/dev/null 2>&1; then
+    if ! golangci-lint run --new-from-rev=HEAD ./... 2>&1; then
+        echo "pre-commit: golangci-lint found issues (includes gocritic)"
+        failed=1
+    fi
+else
+    echo "pre-commit: golangci-lint not found, skipping lint check"
+    echo "  install: https://golangci-lint.run/welcome/install/"
+fi
+
+# 4. Run nox security scan on staged files.
+if command -v nox >/dev/null 2>&1; then
+    nox scan --staged --severity-threshold high --quiet .
+    nox_exit=$?
+    if [ $nox_exit -eq 1 ]; then
+        echo ""
+        echo "pre-commit: nox found security issues in staged files"
+        failed=1
+    fi
+else
+    # Try the local binary if available.
+    if [ -x ./nox ]; then
+        ./nox scan --staged --severity-threshold high --quiet .
+        nox_exit=$?
+        if [ $nox_exit -eq 1 ]; then
+            echo ""
+            echo "pre-commit: nox found security issues in staged files"
+            failed=1
+        fi
+    fi
+fi
+
+if [ $failed -ne 0 ]; then
+    echo ""
+    echo "pre-commit: checks failed — fix issues above or use 'git commit --no-verify' to skip"
+    exit 1
+fi

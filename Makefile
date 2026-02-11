@@ -1,4 +1,4 @@
-.PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html
+.PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html hooks
 
 BINARY := nox
 CLI_PKG := ./cli
@@ -30,6 +30,11 @@ vet:
 	go vet ./...
 
 check: lint test vet
+
+hooks:
+	cp scripts/pre-commit .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+	@echo "pre-commit hook installed"
 
 cover:
 	go test -coverprofile=coverage.out ./...
