@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
@@ -32,14 +33,16 @@ func runBadge(args []string) int {
 	fs := flag.NewFlagSet("badge", flag.ContinueOnError)
 
 	var (
-		input  string
-		output string
-		label  string
+		input      string
+		output     string
+		label      string
+		bySeverity bool
 	)
 
 	fs.StringVar(&input, "input", "", "path to findings.json (default: run scan)")
 	fs.StringVar(&output, "output", ".github/nox-badge.svg", "output SVG file path")
 	fs.StringVar(&label, "label", "nox", "badge label text")
+	fs.BoolVar(&bySeverity, "by-severity", false, "generate additional badges per severity level")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
@@ -100,6 +103,14 @@ func runBadge(args []string) int {
 	}
 
 	fmt.Printf("[badge] wrote %s (%s: %s)\n", output, label, value)
+
+	// Generate per-severity badges if requested.
+	if bySeverity {
+		if code := writeSeverityBadges(output, label, counts); code != 0 {
+			return code
+		}
+	}
+
 	return 0
 }
 
@@ -197,6 +208,52 @@ func badgeTextWidth(s string) int {
 		}
 	}
 	return int(math.Ceil(w))
+}
+
+// severityBadgeColor returns the badge color for a given severity and count.
+// Zero counts get a green color; non-zero get a severity-appropriate color.
+var severityBadgeColors = map[findings.Severity]string{
+	findings.SeverityCritical: "#b60205",
+	findings.SeverityHigh:     "#e05d44",
+	findings.SeverityMedium:   "#dfb317",
+	findings.SeverityLow:      "#a3c51c",
+}
+
+// severityOrder defines the order in which severity badges are generated.
+var severityOrder = []findings.Severity{
+	findings.SeverityCritical,
+	findings.SeverityHigh,
+	findings.SeverityMedium,
+	findings.SeverityLow,
+}
+
+// writeSeverityBadges generates one SVG badge per severity level, placed in the
+// same directory as the main badge. File names follow the pattern:
+// nox-<severity>.svg (e.g., nox-critical.svg).
+func writeSeverityBadges(mainOutput, label string, counts map[findings.Severity]int) int {
+	dir := dirOf(mainOutput)
+
+	for _, sev := range severityOrder {
+		count := counts[sev]
+		sevName := string(sev)
+		badgeLabel := label + " " + sevName
+		badgeValue := fmt.Sprintf("%d", count)
+
+		color := "#4c1" // green for zero
+		if count > 0 {
+			color = severityBadgeColors[sev]
+		}
+
+		svg := generateBadgeSVG(badgeLabel, badgeValue, color)
+		path := filepath.Join(dir, fmt.Sprintf("nox-%s.svg", sevName))
+
+		if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
+			return 2
+		}
+		fmt.Printf("[badge] wrote %s (%s: %s)\n", path, badgeLabel, badgeValue)
+	}
+	return 0
 }
 
 func generateBadgeSVG(label, value, color string) string {

@@ -30,8 +30,14 @@ func (e *Engine) Rules() *RuleSet { return e.rules }
 // ScanFile runs every applicable rule against the given file content and
 // returns the resulting findings. A rule applies if its FilePatterns list is
 // empty (matches everything) or if at least one of its patterns matches the
-// supplied path using filepath.Match semantics.
+// supplied path using filepath.Match semantics. Binary files (containing null
+// bytes in the first 512 bytes) are skipped to avoid false positives from
+// compiled binaries that embed rule patterns.
 func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, error) {
+	if isBinary(content) {
+		return nil, nil
+	}
+
 	var out []findings.Finding
 
 	// Pre-compute a lowercase copy of content for keyword filtering.
@@ -111,6 +117,23 @@ func fileMatchesRule(path string, rule Rule) bool {
 			return true
 		}
 		if matched, _ := filepath.Match(pattern, base); matched {
+			return true
+		}
+	}
+	return false
+}
+
+// isBinary reports whether content appears to be a binary file by checking for
+// null bytes in the first 512 bytes. Text files (source, config, YAML, JSON)
+// do not contain null bytes, so this is a reliable heuristic that prevents
+// false positives when scanning compiled binaries that embed rule patterns.
+func isBinary(content []byte) bool {
+	limit := 512
+	if len(content) < limit {
+		limit = len(content)
+	}
+	for _, b := range content[:limit] {
+		if b == 0 {
 			return true
 		}
 	}

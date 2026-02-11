@@ -681,3 +681,85 @@ func TestFileMatchesRule(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Binary detection tests
+// ---------------------------------------------------------------------------
+
+func TestIsBinary(t *testing.T) {
+	tests := []struct {
+		name    string
+		content []byte
+		want    bool
+	}{
+		{
+			name:    "text file",
+			content: []byte("package main\nfunc main() {}\n"),
+			want:    false,
+		},
+		{
+			name:    "empty file",
+			content: []byte{},
+			want:    false,
+		},
+		{
+			name:    "ELF binary header",
+			content: append([]byte{0x7f, 'E', 'L', 'F'}, make([]byte, 100)...),
+			want:    true,
+		},
+		{
+			name:    "null byte in middle",
+			content: []byte("text\x00more text"),
+			want:    true,
+		},
+		{
+			name:    "Go compiled binary",
+			content: append([]byte("Go build"), append(make([]byte, 10), []byte("data")...)...),
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isBinary(tt.content)
+			if got != tt.want {
+				t.Errorf("isBinary() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEngine_ScanFile_SkipsBinaryContent(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(Rule{
+		ID:          "BIN-001",
+		Description: "Matches anything",
+		Severity:    "high",
+		Confidence:  "high",
+		MatcherType: "regex",
+		Pattern:     `AKIA[0-9A-Z]{16}`,
+	})
+
+	engine := NewEngine(rs)
+
+	// Embed a secret pattern inside binary content (has null bytes).
+	binary := []byte("header\x00\x00AKIAIOSFODNN7EXAMPLE\x00tail")
+
+	results, err := engine.ScanFile("nox", binary)
+	if err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 findings for binary file, got %d", len(results))
+	}
+
+	// Same content without null bytes should still match.
+	text := []byte("header AKIAIOSFODNN7EXAMPLE tail")
+	results, err = engine.ScanFile("config.txt", text)
+	if err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 finding for text file, got %d", len(results))
+	}
+}

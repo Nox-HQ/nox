@@ -96,8 +96,18 @@ func matchPattern(path, pattern string) bool {
 	// Split path into components to allow matching against any segment.
 	parts := strings.Split(path, "/")
 
-	// If the pattern contains a slash (other than the trailing one we
-	// already trimmed) it must match from the repo root.
+	// Handle root-anchored patterns (leading "/").
+	// In gitignore, "/foo" means "match foo only at the repo root".
+	if strings.HasPrefix(pattern, "/") {
+		pattern = strings.TrimPrefix(pattern, "/")
+		if dirOnly {
+			return strings.HasPrefix(path, pattern+"/") || path == pattern
+		}
+		matched, _ := filepath.Match(pattern, path)
+		return matched
+	}
+
+	// If the pattern contains a slash it must match from the repo root.
 	if strings.Contains(pattern, "/") {
 		if dirOnly {
 			// Must match a prefix of the path.

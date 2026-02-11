@@ -576,6 +576,68 @@ func TestWalker_NonexistentRoot(t *testing.T) {
 	}
 }
 
+func TestIsIgnored_RootAnchored(t *testing.T) {
+	t.Parallel()
+
+	patterns := []string{"/nox", "/build"}
+
+	// Root-anchored pattern should match file at root.
+	if !IsIgnored("nox", patterns) {
+		t.Error("expected 'nox' to be ignored by root-anchored /nox pattern")
+	}
+	if !IsIgnored("build", patterns) {
+		t.Error("expected 'build' to be ignored by root-anchored /build pattern")
+	}
+
+	// Should NOT match in subdirectories.
+	if IsIgnored("src/nox", patterns) {
+		t.Error("expected 'src/nox' to NOT be ignored by root-anchored /nox pattern")
+	}
+	if IsIgnored("out/build", patterns) {
+		t.Error("expected 'out/build' to NOT be ignored by root-anchored /build pattern")
+	}
+}
+
+func TestWalker_GitignoreRootAnchored(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	// Create a binary-like file at root and a file in a subdirectory.
+	for _, f := range []string{"nox", "src/nox"} {
+		abs := filepath.Join(root, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(abs, []byte("binary content"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// .gitignore with root-anchored pattern.
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("/nox\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewWalker(root)
+	artifacts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk() returned unexpected error: %v", err)
+	}
+
+	byPath := make(map[string]bool)
+	for _, a := range artifacts {
+		byPath[a.Path] = true
+	}
+
+	if byPath["nox"] {
+		t.Error("root 'nox' should be ignored by /nox pattern")
+	}
+	if !byPath["src/nox"] {
+		t.Error("src/nox should NOT be ignored by root-anchored /nox pattern")
+	}
+}
+
 func TestWalker_GitignoreWithNegation(t *testing.T) {
 	t.Parallel()
 

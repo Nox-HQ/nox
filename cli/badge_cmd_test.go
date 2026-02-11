@@ -286,6 +286,81 @@ func TestBadgeColor(t *testing.T) {
 	}
 }
 
+func TestBadge_BySeverity(t *testing.T) {
+	dir := t.TempDir()
+	ff := []findings.Finding{
+		{RuleID: "SEC-001", Severity: findings.SeverityCritical, Message: "critical"},
+		{RuleID: "SEC-002", Severity: findings.SeverityHigh, Message: "high 1"},
+		{RuleID: "SEC-003", Severity: findings.SeverityHigh, Message: "high 2"},
+		{RuleID: "IAC-001", Severity: findings.SeverityMedium, Message: "medium"},
+	}
+	input := writeFindingsJSON(t, dir, ff)
+	output := filepath.Join(dir, "nox-badge.svg")
+
+	code := runBadge([]string{"--input", input, "--output", output, "--by-severity"})
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	// Main badge should exist.
+	if _, err := os.Stat(output); os.IsNotExist(err) {
+		t.Fatal("expected main badge to exist")
+	}
+
+	// Per-severity badges should exist.
+	expected := map[string]struct {
+		count string
+		color string // non-zero color
+	}{
+		"nox-critical.svg": {"1", "#b60205"},
+		"nox-high.svg":     {"2", "#e05d44"},
+		"nox-medium.svg":   {"1", "#dfb317"},
+		"nox-low.svg":      {"0", "#4c1"}, // zero → green
+	}
+
+	for file, want := range expected {
+		path := filepath.Join(dir, file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", file, err)
+		}
+		svg := string(data)
+		if !strings.Contains(svg, ">"+want.count+"<") {
+			t.Errorf("%s: expected count %s in SVG", file, want.count)
+		}
+		if !strings.Contains(svg, want.color) {
+			t.Errorf("%s: expected color %s in SVG", file, want.color)
+		}
+	}
+}
+
+func TestBadge_BySeverity_Clean(t *testing.T) {
+	dir := t.TempDir()
+	input := writeFindingsJSON(t, dir, nil)
+	output := filepath.Join(dir, "nox-badge.svg")
+
+	code := runBadge([]string{"--input", input, "--output", output, "--by-severity"})
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	// All severity badges should show 0 with green color.
+	for _, sev := range []string{"critical", "high", "medium", "low"} {
+		path := filepath.Join(dir, "nox-"+sev+".svg")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading nox-%s.svg: %v", sev, err)
+		}
+		svg := string(data)
+		if !strings.Contains(svg, ">0<") {
+			t.Errorf("nox-%s.svg: expected count 0", sev)
+		}
+		if !strings.Contains(svg, "#4c1") {
+			t.Errorf("nox-%s.svg: expected green color for zero count", sev)
+		}
+	}
+}
+
 func TestGenerateBadgeSVG(t *testing.T) {
 	svg := generateBadgeSVG("nox", "A", "#4c1")
 	if !strings.HasPrefix(svg, "<svg") {
