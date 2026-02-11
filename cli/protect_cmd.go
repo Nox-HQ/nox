@@ -39,30 +39,16 @@ func runProtect(args []string) int {
 	}
 }
 
-// hookOptions holds the configuration for the generated pre-commit hook.
-type hookOptions struct {
-	threshold string
-	fmt       bool
-	vet       bool
-	lint      bool
-}
-
 func protectInstall(args []string) int {
 	fs := flag.NewFlagSet("protect install", flag.ContinueOnError)
 	var (
 		threshold string
 		hookPath  string
 		force     bool
-		fmtFlag   bool
-		vetFlag   bool
-		lintFlag  bool
 	)
 	fs.StringVar(&threshold, "severity-threshold", "high", "minimum severity to block commit (critical, high, medium, low)")
 	fs.StringVar(&hookPath, "hook-path", "", "path to pre-commit hook file (default: auto-detect)")
 	fs.BoolVar(&force, "force", false, "overwrite existing hook without prompting")
-	fs.BoolVar(&fmtFlag, "fmt", false, "run gofmt check on staged .go files")
-	fs.BoolVar(&vetFlag, "vet", false, "run go vet on the project")
-	fs.BoolVar(&lintFlag, "lint", false, "run golangci-lint on the project")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -112,12 +98,7 @@ func protectInstall(args []string) int {
 	}
 
 	// Write the hook script.
-	hookContent := generateHookScript(hookOptions{
-		threshold: threshold,
-		fmt:       fmtFlag,
-		vet:       vetFlag,
-		lint:      lintFlag,
-	})
+	hookContent := generateHookScript(threshold)
 
 	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating hooks directory: %v\n", err)
@@ -235,76 +216,22 @@ func protectStatus(args []string) int {
 }
 
 // generateHookScript produces the shell script content for the pre-commit hook.
-func generateHookScript(opts hookOptions) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf(`#!/bin/sh
+func generateHookScript(threshold string) string {
+	return fmt.Sprintf(`#!/bin/sh
 # %s - https://github.com/nox-hq/nox
 # To uninstall: nox protect uninstall
-set -e
 
-failed=0
-`, hookMarker))
-
-	if opts.fmt {
-		b.WriteString(`
-# Check gofmt formatting on staged Go files.
-gofiles=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
-if [ -n "$gofiles" ]; then
-    unformatted=$(gofmt -l $gofiles)
-    if [ -n "$unformatted" ]; then
-        echo "nox: gofmt check failed — the following files need formatting:"
-        echo "$unformatted"
-        echo "nox: run 'gofmt -w' on the listed files and re-stage them"
-        failed=1
-    fi
-fi
-`)
-	}
-
-	if opts.vet {
-		b.WriteString(`
-# Run go vet.
-if command -v go >/dev/null 2>&1; then
-    if ! go vet ./... 2>&1; then
-        echo "nox: go vet found issues"
-        failed=1
-    fi
-fi
-`)
-	}
-
-	if opts.lint {
-		b.WriteString(`
-# Run golangci-lint if available.
-if command -v golangci-lint >/dev/null 2>&1; then
-    if ! golangci-lint run --new-from-rev=HEAD~1 ./... 2>&1; then
-        echo "nox: golangci-lint found issues"
-        failed=1
-    fi
-fi
-`)
-	}
-
-	b.WriteString(fmt.Sprintf(`
-# Run nox security scan on staged files.
 nox scan --staged --severity-threshold %s --quiet .
-nox_exit=$?
-if [ $nox_exit -eq 1 ]; then
+exit_code=$?
+if [ $exit_code -eq 1 ]; then
     echo ""
     echo "nox: commit blocked — secrets or security issues found in staged files"
     echo "nox: use '// nox:ignore RULE-ID -- reason' to suppress false positives"
-    failed=1
-fi
-
-if [ $failed -ne 0 ]; then
-    echo ""
-    echo "nox: use 'git commit --no-verify' to skip these checks (not recommended)"
+    echo "nox: use 'git commit --no-verify' to skip this check (not recommended)"
     exit 1
 fi
 exit 0
-`, opts.threshold))
-
-	return b.String()
+`, hookMarker, threshold)
 }
 
 // isValidThreshold returns true if the given string is a recognized severity
