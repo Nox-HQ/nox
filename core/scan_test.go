@@ -770,7 +770,8 @@ const secretKey = "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKE
 }
 
 func TestRunScan_InlineSuppressionExpired(t *testing.T) {
-	t.Parallel()
+	// NOT parallel: this test mutates the package-level timeNow variable,
+	// which would race with other tests calling RunScanWithOptions.
 
 	// Override timeNow for testing expired suppressions.
 	oldTimeNow := timeNow
