@@ -18,6 +18,7 @@ import (
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
+	"github.com/nox-hq/nox/core/vex"
 )
 
 // ScanResult holds the complete output of a scan pipeline run.
@@ -42,6 +43,14 @@ type ScanOptions struct {
 	// scanning. When true, the scan runs fully offline with no network
 	// calls.
 	DisableOSV bool
+
+	// VEXPath is a path to an OpenVEX document. When set, VEX statements
+	// are applied to VULN-001 findings after baseline matching.
+	VEXPath string
+
+	// TerraformPlanPath is a path to a terraform plan JSON file. When set,
+	// the plan is scanned for security issues in addition to normal scanning.
+	TerraformPlanPath string
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -187,6 +196,21 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	// Phase 5: Apply inline suppressions.
 	applySuppressions(allFindings, target)
 
+	// Phase 5b: Scan Terraform plan if provided.
+	if opts.TerraformPlanPath != "" {
+		tfPlanPath := opts.TerraformPlanPath
+		if !filepath.IsAbs(tfPlanPath) {
+			tfPlanPath = filepath.Join(target, tfPlanPath)
+		}
+		tfFindings, tfErr := iac.ScanTerraformPlan(tfPlanPath)
+		if tfErr == nil && tfFindings != nil {
+			tfItems := tfFindings.Findings()
+			for i := range tfItems {
+				allFindings.Add(tfItems[i])
+			}
+		}
+	}
+
 	// Phase 6: Apply baseline matching.
 	baselinePath := cfg.Policy.BaselinePath
 	if baselinePath == "" {
@@ -195,6 +219,20 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		baselinePath = filepath.Join(target, baselinePath)
 	}
 	applyBaseline(allFindings, baselinePath)
+
+	// Phase 6b: Apply VEX document.
+	vexPath := opts.VEXPath
+	if vexPath == "" {
+		vexPath = cfg.Policy.VEXPath
+	}
+	if vexPath != "" {
+		if !filepath.IsAbs(vexPath) {
+			vexPath = filepath.Join(target, vexPath)
+		}
+		if vexDoc, vexErr := vex.LoadVEX(vexPath); vexErr == nil {
+			vex.ApplyVEX(allFindings, vexDoc)
+		}
+	}
 
 	// Phase 7: Evaluate policy.
 	var policyResult *policy.Result

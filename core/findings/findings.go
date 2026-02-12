@@ -25,10 +25,14 @@ const (
 // inline suppressions.
 type Status string
 
+// Finding status values used by the scan pipeline.
 const (
-	StatusNew        Status = "new"
-	StatusBaselined  Status = "baselined"
-	StatusSuppressed Status = "suppressed"
+	StatusNew                   Status = "new"
+	StatusBaselined             Status = "baselined"
+	StatusSuppressed            Status = "suppressed"
+	StatusVEXNotAffected        Status = "vex_not_affected"
+	StatusVEXUnderInvestigation Status = "vex_under_investigation"
+	StatusVEXFixed              Status = "vex_fixed"
 )
 
 // Confidence expresses how certain the scanner is that the finding is a true
@@ -168,11 +172,12 @@ func (fs *FindingSet) CountByStatus() map[Status]int {
 	return counts
 }
 
-// ActiveFindings returns findings that are not suppressed or baselined.
+// ActiveFindings returns findings that are not suppressed, baselined, or VEX-excluded.
 func (fs *FindingSet) ActiveFindings() []Finding {
 	var active []Finding
 	for _, f := range fs.items {
-		if f.Status == StatusSuppressed || f.Status == StatusBaselined {
+		switch f.Status {
+		case StatusSuppressed, StatusBaselined, StatusVEXNotAffected, StatusVEXFixed:
 			continue
 		}
 		active = append(active, f)

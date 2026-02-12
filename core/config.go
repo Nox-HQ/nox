@@ -19,11 +19,12 @@ type LicensePolicy struct {
 
 // ScanConfig holds project-level configuration loaded from .nox.yaml.
 type ScanConfig struct {
-	Scan    ScanSettings    `yaml:"scan"`
-	Output  OutputSettings  `yaml:"output"`
-	Explain ExplainSettings `yaml:"explain"`
-	Policy  PolicySettings  `yaml:"policy"`
-	License LicensePolicy   `yaml:"license"`
+	Scan       ScanSettings       `yaml:"scan"`
+	Output     OutputSettings     `yaml:"output"`
+	Explain    ExplainSettings    `yaml:"explain"`
+	Policy     PolicySettings     `yaml:"policy"`
+	License    LicensePolicy      `yaml:"license"`
+	Compliance ComplianceSettings `yaml:"compliance"`
 }
 
 // PolicySettings controls pass/fail thresholds and baseline behavior.
@@ -32,6 +33,12 @@ type PolicySettings struct {
 	WarnOn       string `yaml:"warn_on"`
 	BaselineMode string `yaml:"baseline_mode"`
 	BaselinePath string `yaml:"baseline_path"`
+	VEXPath      string `yaml:"vex_path"`
+}
+
+// ComplianceSettings controls compliance framework filtering.
+type ComplianceSettings struct {
+	Framework string `yaml:"framework"`
 }
 
 // ScanSettings controls which files are scanned and how rules behave.

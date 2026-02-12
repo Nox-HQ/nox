@@ -8,29 +8,36 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
+	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/rules"
 )
 
 // RuleMeta provides extended metadata for a built-in rule.
 type RuleMeta struct {
-	ID          string   `json:"id"`
-	Description string   `json:"description"`
-	Severity    string   `json:"severity"`
-	Confidence  string   `json:"confidence"`
-	CWE         string   `json:"cwe,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Remediation string   `json:"remediation,omitempty"`
-	References  []string `json:"references,omitempty"`
+	ID                   string                        `json:"id"`
+	Description          string                        `json:"description"`
+	Severity             string                        `json:"severity"`
+	Confidence           string                        `json:"confidence"`
+	CWE                  string                        `json:"cwe,omitempty"`
+	Tags                 []string                      `json:"tags,omitempty"`
+	Remediation          string                        `json:"remediation,omitempty"`
+	References           []string                      `json:"references,omitempty"`
+	ComplianceFrameworks []compliance.FrameworkControl `json:"compliance_frameworks,omitempty"`
 }
 
 // Catalog returns the complete set of built-in rule metadata keyed by rule ID.
 func Catalog() map[string]RuleMeta {
 	cat := make(map[string]RuleMeta)
+	complianceMappings := compliance.GetMappings()
 
 	// Aggregate rules from all analyzers.
 	for _, rs := range allRuleSets() {
 		for _, r := range rs.Rules() {
-			cat[r.ID] = metaFromRule(r)
+			meta := metaFromRule(r)
+			if controls, ok := complianceMappings[r.ID]; ok {
+				meta.ComplianceFrameworks = controls
+			}
+			cat[r.ID] = meta
 		}
 	}
 
