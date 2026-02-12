@@ -18,6 +18,7 @@ import (
 	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
@@ -25,6 +26,7 @@ import (
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
+	"github.com/nox-hq/nox/core/vex"
 	"github.com/nox-hq/nox/plugin"
 )
 
@@ -280,6 +282,32 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleAnnotate,
+	)
+
+	// vex_status tool — show VEX document summary.
+	srv.AddTool(
+		mcp.NewTool("vex_status",
+			mcp.WithDescription("Load a VEX document and show a summary of vulnerability statuses"),
+			mcp.WithString("path",
+				mcp.Description("Absolute path to the VEX JSON document"),
+				mcp.Required(),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleVEXStatus,
+	)
+
+	// compliance_report tool — generate framework-specific compliance report.
+	srv.AddTool(
+		mcp.NewTool("compliance_report",
+			mcp.WithDescription("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10)"),
+			mcp.WithString("framework",
+				mcp.Description("Compliance framework: CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10"),
+				mcp.Required(),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleComplianceReport,
 	)
 
 	s.registerPluginTools(srv)
@@ -1112,6 +1140,87 @@ func (s *Server) handleResourceDashboard(_ context.Context, request mcp.ReadReso
 			Text:     html,
 		},
 	}, nil
+}
+
+// VEX status handler.
+
+func (s *Server) handleVEXStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: path"), nil
+	}
+
+	if err := s.isPathAllowed(path); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	doc, err := vex.LoadVEX(path)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("loading VEX document: %v", err)), nil
+	}
+
+	type vexStatusResponse struct {
+		Path       string         `json:"path"`
+		Statements int            `json:"statements"`
+		ByStatus   map[string]int `json:"by_status"`
+		Summary    string         `json:"summary"`
+	}
+
+	byStatus := make(map[string]int)
+	for _, stmt := range doc.Statements {
+		byStatus[string(stmt.Status)]++
+	}
+
+	resp := vexStatusResponse{
+		Path:       path,
+		Statements: len(doc.Statements),
+		ByStatus:   byStatus,
+		Summary:    vex.Summary(doc),
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// Compliance report handler.
+
+func (s *Server) handleComplianceReport(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	fw, err := request.RequireString("framework")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: framework"), nil
+	}
+
+	s.mu.RLock()
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	// Collect triggered rule IDs from active findings.
+	triggered := make(map[string]struct{})
+	activeItems := cache.Findings.ActiveFindings()
+	for i := range activeItems {
+		triggered[activeItems[i].RuleID] = struct{}{}
+	}
+	ruleIDs := make([]string, 0, len(triggered))
+	for id := range triggered {
+		ruleIDs = append(ruleIDs, id)
+	}
+
+	compReport := compliance.GenerateReport(compliance.Framework(fw), ruleIDs)
+
+	data, err := json.MarshalIndent(compReport, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling report: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -202,9 +203,17 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		thresholdFlag string
 		noOSVFlag     bool
 	)
+	var (
+		vexFlag        string
+		complianceFlag string
+		tfPlanFlag     string
+	)
 	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
 	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
 	scanFS.BoolVar(&noOSVFlag, "no-osv", false, "disable OSV.dev vulnerability lookups (offline mode)")
+	scanFS.StringVar(&vexFlag, "vex", "", "path to OpenVEX document for vulnerability status overrides")
+	scanFS.StringVar(&complianceFlag, "compliance", "", "filter output by compliance framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10)")
+	scanFS.StringVar(&tfPlanFlag, "tf-plan", "", "path to terraform plan JSON file to scan")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -249,8 +258,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		result, err = nox.RunStagedScan(target)
 	} else {
 		opts := nox.ScanOptions{
-			CustomRulesPath: rulesPath,
-			DisableOSV:      noOSVFlag,
+			CustomRulesPath:   rulesPath,
+			DisableOSV:        noOSVFlag,
+			VEXPath:           vexFlag,
+			TerraformPlanPath: tfPlanFlag,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
@@ -351,6 +362,24 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 		if verbose {
 			fmt.Printf("[report] wrote %s\n", path)
+		}
+	}
+
+	// Compliance report output.
+	if complianceFlag != "" && !quiet {
+		triggered := make(map[string]struct{})
+		for i := range activeFindings {
+			triggered[activeFindings[i].RuleID] = struct{}{}
+		}
+		ruleIDs := make([]string, 0, len(triggered))
+		for id := range triggered {
+			ruleIDs = append(ruleIDs, id)
+		}
+		compReport := compliance.GenerateReport(compliance.Framework(complianceFlag), ruleIDs)
+		fmt.Printf("[compliance] %s: %d controls, %d violations\n",
+			compReport.Framework, compReport.TotalControls, len(compReport.Violations))
+		for _, v := range compReport.Violations {
+			fmt.Printf("  %s: %s (rules: %s)\n", v.ControlID, v.Title, strings.Join(v.RuleIDs, ", "))
 		}
 	}
 
