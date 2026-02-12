@@ -95,6 +95,9 @@ var lockfileNames = map[string]bool{
 	"build.gradle":       true,
 	"build.gradle.kts":   true,
 	"packages.lock.json": true,
+	"composer.lock":      true,
+	"bom.json":           true,
+	"sbom.json":          true,
 }
 
 // containerNames contains exact file names that identify container files.

@@ -500,3 +500,55 @@ func parseNuGetPackagesLock(content []byte) ([]Package, error) {
 
 	return pkgs, nil
 }
+
+// composerLock is the minimal structure for PHP Composer lock files.
+type composerLock struct {
+	Packages []struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"packages"`
+	PackagesDev []struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"packages-dev"`
+}
+
+// parseComposerLock extracts dependencies from a PHP composer.lock file.
+func parseComposerLock(content []byte) ([]Package, error) {
+	var lock composerLock
+	if err := json.Unmarshal(content, &lock); err != nil {
+		return nil, fmt.Errorf("parsing composer.lock: %w", err)
+	}
+
+	type key struct{ name, ver string }
+	seen := make(map[key]struct{})
+	var pkgs []Package
+
+	addPkgs := func(entries []struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}) {
+		for _, p := range entries {
+			if p.Name == "" || p.Version == "" {
+				continue
+			}
+			// Composer versions may have a "v" prefix.
+			ver := strings.TrimPrefix(p.Version, "v")
+			k := key{p.Name, ver}
+			if _, exists := seen[k]; exists {
+				continue
+			}
+			seen[k] = struct{}{}
+			pkgs = append(pkgs, Package{
+				Name:      p.Name,
+				Version:   ver,
+				Ecosystem: "composer",
+			})
+		}
+	}
+
+	addPkgs(lock.Packages)
+	addPkgs(lock.PackagesDev)
+
+	return pkgs, nil
+}

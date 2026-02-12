@@ -259,6 +259,9 @@ var supportedLockfiles = map[string]func([]byte) ([]Package, error){
 	"build.gradle":       parseBuildGradle,
 	"build.gradle.kts":   parseBuildGradle,
 	"packages.lock.json": parseNuGetPackagesLock,
+	"composer.lock":      parseComposerLock,
+	"bom.json":           parseCycloneDXContent,
+	"sbom.json":          parseSPDXContent,
 }
 
 // ParseLockfile detects the lockfile format from its filename and delegates

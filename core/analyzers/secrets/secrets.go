@@ -59,6 +59,12 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 		for _, f := range results {
 			fs.Add(f)
 		}
+
+		// Scan decoded base64/hex content for encoded secrets.
+		decodedResults := DecodeAndScan(content, artifact.Path, a.engine)
+		for i := range decodedResults {
+			fs.Add(decodedResults[i])
+		}
 	}
 
 	fs.Deduplicate()
