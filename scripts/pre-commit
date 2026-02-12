@@ -36,7 +36,18 @@ else
     echo "  install: https://golangci-lint.run/welcome/install/"
 fi
 
-# 4. Run nox security scan on staged files.
+# 4. Run coverctl coverage check.
+if command -v coverctl >/dev/null 2>&1; then
+    if ! coverctl -q check 2>&1; then
+        echo "pre-commit: coverctl coverage thresholds not met"
+        failed=1
+    fi
+else
+    echo "pre-commit: coverctl not found, skipping coverage check"
+    echo "  install: go install github.com/nicholasgasior/coverctl@latest"
+fi
+
+# 5. Run nox security scan on staged files.
 nox_bin=""
 if command -v nox >/dev/null 2>&1; then
     nox_bin="nox"

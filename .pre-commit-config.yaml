@@ -29,3 +29,11 @@ repos:
         entry: gofmt -l -w
         language: system
         types: [go]
+
+      - id: coverctl
+        name: coverctl coverage check
+        entry: coverctl -q check
+        language: system
+        pass_filenames: false
+        types: [go]
+        stages: [pre-commit]
