@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1291,5 +1292,324 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 	baselinePath := filepath.Join(dir, ".nox", "baseline.json")
 	if _, err := os.Stat(baselinePath); err != nil {
 		t.Fatalf("expected baseline file to exist: %v", err)
+	}
+}
+
+// --- handleVersion tests ---
+
+func TestHandleVersion(t *testing.T) {
+	s := New("1.2.3", nil)
+	req := makeToolRequest(t, "version", map[string]any{})
+
+	result, err := s.handleVersion(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "1.2.3") {
+		t.Fatalf("expected version in response, got: %s", text)
+	}
+}
+
+// --- handleRules tests ---
+
+func TestHandleRules(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "rules", map[string]any{})
+
+	result, err := s.handleRules(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	// Should contain at least one known rule ID.
+	if !strings.Contains(text, "SEC-") && !strings.Contains(text, "AI-") && !strings.Contains(text, "IAC-") {
+		t.Fatalf("expected rule IDs in response, got: %s", text[:min(len(text), 200)])
+	}
+}
+
+// --- handleBadge tests ---
+
+func TestHandleBadge_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "badge", map[string]any{})
+
+	result, err := s.handleBadge(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error before any scan")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", text)
+	}
+}
+
+func TestHandleBadge_AfterScan(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "badge", map[string]any{"label": "security"})
+
+	result, err := s.handleBadge(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"grade"`) {
+		t.Fatalf("expected grade in badge response, got: %s", text)
+	}
+	if !strings.Contains(text, `"label"`) {
+		t.Fatalf("expected label in badge response, got: %s", text)
+	}
+}
+
+// --- handleAnnotate tests ---
+
+func TestHandleAnnotate_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "annotate", map[string]any{})
+
+	result, err := s.handleAnnotate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error before any scan")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", text)
+	}
+}
+
+func TestHandleAnnotate_NoFindings(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "annotate", map[string]any{})
+
+	result, err := s.handleAnnotate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no findings to annotate") {
+		t.Fatalf("expected no-findings message, got: %s", text)
+	}
+}
+
+func TestHandleAnnotate_WithFindings(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "annotate", map[string]any{})
+
+	result, err := s.handleAnnotate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"event"`) {
+		t.Fatalf("expected event field in annotate payload, got: %s", text)
+	}
+	if !strings.Contains(text, `"comments"`) {
+		t.Fatalf("expected comments field in annotate payload, got: %s", text)
+	}
+}
+
+// --- handleDiff tests ---
+
+func TestHandleDiff_MissingPath(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "diff", map[string]any{})
+
+	result, err := s.handleDiff(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", text)
+	}
+}
+
+func TestHandleDiff_DisallowedPath(t *testing.T) {
+	s := New("0.1.0", []string{"/allowed/only"})
+	req := makeToolRequest(t, "diff", map[string]any{"path": "/not/allowed"})
+
+	result, err := s.handleDiff(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for disallowed path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", text)
+	}
+}
+
+func TestHandleDiff_NonGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "diff", map[string]any{"path": dir})
+
+	result, err := s.handleDiff(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for non-git directory")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "diff failed") {
+		t.Fatalf("expected diff failed message, got: %s", text)
+	}
+}
+
+// --- handleProtectStatus tests ---
+
+func TestHandleProtectStatus_MissingPath(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "protect_status", map[string]any{})
+
+	result, err := s.handleProtectStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", text)
+	}
+}
+
+func TestHandleProtectStatus_DisallowedPath(t *testing.T) {
+	s := New("0.1.0", []string{"/allowed/only"})
+	req := makeToolRequest(t, "protect_status", map[string]any{"path": "/not/allowed"})
+
+	result, err := s.handleProtectStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for disallowed path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", text)
+	}
+}
+
+func TestHandleProtectStatus_NonGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "protect_status", map[string]any{"path": dir})
+
+	result, err := s.handleProtectStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for non-git directory")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "not a git repository") {
+		t.Fatalf("expected not-a-git-repo message, got: %s", text)
+	}
+}
+
+func TestHandleProtectStatus_NotInstalled(t *testing.T) {
+	dir := t.TempDir()
+
+	// Initialize a git repo so we have .git/hooks.
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
+	if err := cmd.Run(); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
+
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "protect_status", map[string]any{"path": dir})
+
+	result, err := s.handleProtectStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"installed": false`) && !strings.Contains(text, `"installed":false`) {
+		t.Fatalf("expected installed:false, got: %s", text)
+	}
+}
+
+// --- handleResourceRules tests ---
+
+func TestResourceRules(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := mcp.ReadResourceRequest{}
+	req.Params.URI = "nox://rules"
+
+	contents, err := s.handleResourceRules(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(contents) == 0 {
+		t.Fatal("expected non-empty resource contents")
+	}
+
+	tc, ok := contents[0].(mcp.TextResourceContents)
+	if !ok {
+		t.Fatal("expected TextResourceContents")
+	}
+	if tc.URI != "nox://rules" {
+		t.Fatalf("expected URI nox://rules, got %s", tc.URI)
+	}
+	if !strings.Contains(tc.Text, "SEC-") {
+		t.Fatalf("expected rule IDs in resource, got: %s", tc.Text[:min(len(tc.Text), 200)])
 	}
 }

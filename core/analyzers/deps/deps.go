@@ -27,6 +27,7 @@ type Package struct {
 	Name      string
 	Version   string
 	Ecosystem string // "npm", "go", "pypi", "rubygems", "cargo", "maven", "gradle", "nuget"
+	License   string // SPDX identifier (e.g., "MIT", "Apache-2.0", "GPL-3.0")
 }
 
 // Vulnerability describes a known security issue for a package.
@@ -76,6 +77,15 @@ func (pi *PackageInventory) ByEcosystem(eco string) []Package {
 	return result
 }
 
+// SetLicense updates the license for the package at the given index.
+func (pi *PackageInventory) SetLicense(pkgIdx int, license string) {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	if pkgIdx >= 0 && pkgIdx < len(pi.pkgs) && pi.pkgs[pkgIdx].License == "" {
+		pi.pkgs[pkgIdx].License = license
+	}
+}
+
 // SetVulnerabilities stores vulnerability data for the package at the given index.
 func (pi *PackageInventory) SetVulnerabilities(pkgIdx int, vulns []Vulnerability) {
 	pi.mu.Lock()
@@ -110,6 +120,12 @@ func (pi *PackageInventory) AllVulnerabilities() map[int][]Vulnerability {
 	return out
 }
 
+// LicensePolicy defines which dependency licenses are allowed or denied.
+type LicensePolicy struct {
+	Deny  []string
+	Allow []string
+}
+
 // AnalyzerOption configures the dependency Analyzer.
 type AnalyzerOption func(*Analyzer)
 
@@ -129,13 +145,21 @@ func WithOSVBaseURL(url string) AnalyzerOption {
 	return func(a *Analyzer) { a.OSVBaseURL = url }
 }
 
+// WithLicensePolicy sets the license compliance policy for the analyzer.
+// When set, the analyzer will detect licenses from manifest files and
+// evaluate them against the policy, producing findings for violations.
+func WithLicensePolicy(policy LicensePolicy) AnalyzerOption {
+	return func(a *Analyzer) { a.licensePolicy = &policy }
+}
+
 // Analyzer scans lockfile artifacts, extracts dependency information, and
 // queries the OSV database for known vulnerabilities.
 type Analyzer struct {
 	// OSVBaseURL is the base URL for the OSV vulnerability database API.
-	OSVBaseURL string
-	httpClient *http.Client
-	osvEnabled bool
+	OSVBaseURL    string
+	httpClient    *http.Client
+	osvEnabled    bool
+	licensePolicy *LicensePolicy
 }
 
 // NewAnalyzer returns an Analyzer with the default OSV API endpoint.
@@ -164,6 +188,61 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Remediation: "Update the affected dependency to a patched version. Check the advisory for details on which versions contain the fix.",
 		References:  []string{"https://osv.dev"},
 		Metadata:    map[string]string{"cwe": "CWE-1395"},
+	})
+	rs.Add(rules.Rule{
+		ID:          "VULN-002",
+		Version:     "1.0",
+		Description: "Typosquatting: package name suspiciously similar to popular package",
+		Severity:    findings.SeverityCritical,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"dependency", "typosquatting", "supply-chain"},
+		Remediation: "Verify the package name is correct. The name is suspiciously similar to a popular package, which may indicate a typosquatting attack.",
+		References:  []string{"https://snyk.io/blog/typosquatting-attacks/"},
+		Metadata:    map[string]string{"cwe": "CWE-1357"},
+	})
+	rs.Add(rules.Rule{
+		ID:          "VULN-003",
+		Version:     "1.0",
+		Description: "Known malicious package detected",
+		Severity:    findings.SeverityCritical,
+		Confidence:  findings.ConfidenceHigh,
+		Tags:        []string{"dependency", "malicious", "supply-chain"},
+		Remediation: "Remove this package immediately. It has been identified as malicious and may contain backdoors, data exfiltration, or other harmful code.",
+		References:  []string{"https://osv.dev"},
+		Metadata:    map[string]string{"cwe": "CWE-506"},
+	})
+	rs.Add(rules.Rule{
+		ID:          "LIC-001",
+		Version:     "1.0",
+		Description: "Dependency uses a restricted license",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceHigh,
+		Tags:        []string{"dependency", "license", "compliance"},
+		Remediation: "Review the license terms of this dependency. Consider replacing it with an alternative that uses a compatible license.",
+		References:  []string{"https://spdx.org/licenses/"},
+		Metadata:    map[string]string{"cwe": "CWE-1357"},
+	})
+	rs.Add(rules.Rule{
+		ID:          "CONT-001",
+		Version:     "1.0",
+		Description: "Container base image not pinned to specific digest",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceHigh,
+		Tags:        []string{"container", "supply-chain", "pinning"},
+		Remediation: "Pin the base image to a specific digest (e.g., FROM ubuntu@sha256:abc123) to ensure reproducible builds.",
+		References:  []string{"https://docs.docker.com/develop/develop-images/dockerfile_best-practices/"},
+		Metadata:    map[string]string{"cwe": "CWE-829"},
+	})
+	rs.Add(rules.Rule{
+		ID:          "CONT-002",
+		Version:     "1.0",
+		Description: "Container base image uses 'latest' tag or no tag",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceHigh,
+		Tags:        []string{"container", "supply-chain", "pinning"},
+		Remediation: "Specify an explicit version tag for the base image instead of relying on 'latest' (e.g., FROM node:18-alpine).",
+		References:  []string{"https://docs.docker.com/develop/develop-images/dockerfile_best-practices/"},
+		Metadata:    map[string]string{"cwe": "CWE-829"},
 	})
 	return rs
 }
@@ -227,6 +306,147 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*PackageInvent
 		for _, p := range pkgs {
 			inventory.Add(p)
 			sources = append(sources, pkgSource{lockfilePath: art.Path})
+		}
+	}
+
+	// Scan Dockerfiles for base image references and container findings.
+	for _, art := range artifacts {
+		if art.Type != discovery.Container && !isDockerfile(art.Path) {
+			continue
+		}
+		if !isDockerfile(art.Path) {
+			continue
+		}
+
+		content, err := os.ReadFile(art.AbsPath)
+		if err != nil {
+			continue // best-effort: skip unreadable files
+		}
+
+		images, err := ParseDockerfile(content)
+		if err != nil {
+			continue
+		}
+
+		// Determine line numbers for each FROM instruction for precise locations.
+		fromLines := dockerfileFromLines(content)
+
+		for i, img := range images {
+			inventory.Add(img)
+			sources = append(sources, pkgSource{lockfilePath: art.Path})
+
+			line := 1
+			if i < len(fromLines) {
+				line = fromLines[i]
+			}
+
+			// CONT-002: image uses "latest" tag (explicit or implicit).
+			if imageUsesLatestTag(img.Version) {
+				fs.Add(findings.Finding{
+					RuleID:     "CONT-002",
+					Severity:   findings.SeverityHigh,
+					Confidence: findings.ConfidenceHigh,
+					Location: findings.Location{
+						FilePath:  art.Path,
+						StartLine: line,
+					},
+					Message: fmt.Sprintf("Container base image %s uses 'latest' tag or no tag", img.Name),
+					Metadata: map[string]string{
+						"image":     img.Name,
+						"version":   img.Version,
+						"ecosystem": "docker",
+					},
+				})
+			}
+
+			// CONT-001: image not pinned to digest.
+			if !imageIsPinnedToDigest(img.Version) {
+				fs.Add(findings.Finding{
+					RuleID:     "CONT-001",
+					Severity:   findings.SeverityMedium,
+					Confidence: findings.ConfidenceHigh,
+					Location: findings.Location{
+						FilePath:  art.Path,
+						StartLine: line,
+					},
+					Message: fmt.Sprintf("Container base image %s:%s not pinned to specific digest", img.Name, img.Version),
+					Metadata: map[string]string{
+						"image":     img.Name,
+						"version":   img.Version,
+						"ecosystem": "docker",
+					},
+				})
+			}
+		}
+	}
+
+	// Detect licenses from manifest files alongside lockfiles.
+	// This is best-effort: failures are silently ignored.
+	for _, art := range artifacts {
+		if art.Type != discovery.Lockfile {
+			continue
+		}
+		basePath := filepath.Dir(art.AbsPath)
+		DetectLicenses(basePath, inventory)
+	}
+
+	// Evaluate license policy if configured.
+	if a.licensePolicy != nil {
+		licFindings := CheckLicenses(inventory, a.licensePolicy.Deny, a.licensePolicy.Allow)
+		for i := range licFindings {
+			fs.Add(licFindings[i])
+		}
+	}
+
+	// Malicious package detection: check for known malicious packages and
+	// typosquatting before making any network calls. This runs entirely
+	// offline using embedded data.
+	{
+		pkgs := inventory.Packages()
+		for i, pkg := range pkgs {
+			lockfilePath := ""
+			if i < len(sources) {
+				lockfilePath = sources[i].lockfilePath
+			}
+
+			// VULN-003: known malicious package.
+			if IsKnownMalicious(pkg.Name, pkg.Ecosystem) {
+				fs.Add(findings.Finding{
+					RuleID:     "VULN-003",
+					Severity:   findings.SeverityCritical,
+					Confidence: findings.ConfidenceHigh,
+					Location: findings.Location{
+						FilePath:  lockfilePath,
+						StartLine: 1,
+					},
+					Message: fmt.Sprintf("Known malicious package detected: %s@%s (%s)", pkg.Name, pkg.Version, pkg.Ecosystem),
+					Metadata: map[string]string{
+						"package":   pkg.Name,
+						"version":   pkg.Version,
+						"ecosystem": pkg.Ecosystem,
+					},
+				})
+			}
+
+			// VULN-002: typosquatting detection.
+			if popularName, typosquat := DetectTyposquatting(pkg.Name, pkg.Ecosystem, 2); typosquat {
+				fs.Add(findings.Finding{
+					RuleID:     "VULN-002",
+					Severity:   findings.SeverityCritical,
+					Confidence: findings.ConfidenceMedium,
+					Location: findings.Location{
+						FilePath:  lockfilePath,
+						StartLine: 1,
+					},
+					Message: fmt.Sprintf("Possible typosquatting: %s is suspiciously similar to popular package %s", pkg.Name, popularName),
+					Metadata: map[string]string{
+						"package":         pkg.Name,
+						"version":         pkg.Version,
+						"ecosystem":       pkg.Ecosystem,
+						"similar_package": popularName,
+					},
+				})
+			}
 		}
 	}
 

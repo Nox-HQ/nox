@@ -9,12 +9,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// LicensePolicy defines which dependency licenses are allowed or denied.
+// If Deny is specified, any package with a matching license produces a finding.
+// If Allow is specified, any package with a license NOT in the list produces a finding.
+type LicensePolicy struct {
+	Deny  []string `yaml:"deny"`  // License IDs to deny (e.g., ["GPL-3.0", "AGPL-3.0"])
+	Allow []string `yaml:"allow"` // License IDs to allow (e.g., ["MIT", "Apache-2.0", "BSD-*"])
+}
+
 // ScanConfig holds project-level configuration loaded from .nox.yaml.
 type ScanConfig struct {
 	Scan    ScanSettings    `yaml:"scan"`
 	Output  OutputSettings  `yaml:"output"`
 	Explain ExplainSettings `yaml:"explain"`
 	Policy  PolicySettings  `yaml:"policy"`
+	License LicensePolicy   `yaml:"license"`
 }
 
 // PolicySettings controls pass/fail thresholds and baseline behavior.

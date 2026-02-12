@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,10 +14,14 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/annotate"
+	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/detail"
+	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -203,6 +208,80 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 		s.handleBaselineAdd,
 	)
 
+	// diff tool — scan changed files between git refs.
+	srv.AddTool(
+		mcp.NewTool("diff",
+			mcp.WithDescription("Scan only changed files between two git refs and return findings"),
+			mcp.WithString("path",
+				mcp.Description("Absolute path to the git repository"),
+				mcp.Required(),
+			),
+			mcp.WithString("base",
+				mcp.Description("Base git ref for comparison (default: main)"),
+				mcp.DefaultString("main"),
+			),
+			mcp.WithString("head",
+				mcp.Description("Head git ref for comparison (default: HEAD)"),
+				mcp.DefaultString("HEAD"),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleDiff,
+	)
+
+	// badge tool — generate an SVG badge from cached scan results.
+	srv.AddTool(
+		mcp.NewTool("badge",
+			mcp.WithDescription("Generate a security grade SVG badge from the last scan"),
+			mcp.WithString("label",
+				mcp.Description("Badge label text (default: nox)"),
+				mcp.DefaultString("nox"),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleBadge,
+	)
+
+	// version tool — return nox version info.
+	srv.AddTool(
+		mcp.NewTool("version",
+			mcp.WithDescription("Return nox version, commit, and build date"),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleVersion,
+	)
+
+	// rules tool — list all available rules with metadata.
+	srv.AddTool(
+		mcp.NewTool("rules",
+			mcp.WithDescription("List all security rules with ID, description, severity, CWE, and remediation"),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleRules,
+	)
+
+	// protect_status tool — check pre-commit hook installation status.
+	srv.AddTool(
+		mcp.NewTool("protect_status",
+			mcp.WithDescription("Check whether the nox pre-commit hook is installed in a git repository"),
+			mcp.WithString("path",
+				mcp.Description("Absolute path to the git repository"),
+				mcp.Required(),
+			),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleProtectStatus,
+	)
+
+	// annotate tool — build a GitHub PR review payload from cached findings.
+	srv.AddTool(
+		mcp.NewTool("annotate",
+			mcp.WithDescription("Build a GitHub PR review payload from findings for posting via the GitHub API"),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleAnnotate,
+	)
+
 	s.registerPluginTools(srv)
 }
 
@@ -293,6 +372,22 @@ func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 			mcp.WithMIMEType("application/json"),
 		),
 		s.handleResourceAIInventory,
+	)
+
+	srv.AddResource(
+		mcp.NewResource("nox://rules", "Security Rules",
+			mcp.WithResourceDescription("All available security rules with metadata"),
+			mcp.WithMIMEType("application/json"),
+		),
+		s.handleResourceRules,
+	)
+
+	srv.AddResource(
+		mcp.NewResource("nox://dashboard", "Security Dashboard",
+			mcp.WithResourceDescription("Interactive HTML security dashboard with finding summary, rule breakdown, and dependency overview"),
+			mcp.WithMIMEType("text/html"),
+		),
+		s.handleResourceDashboard,
 	)
 }
 
@@ -806,6 +901,217 @@ func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolReques
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Added finding %s to baseline (%d total entries)", fingerprint[:12], bl.Len())), nil
+}
+
+// Diff handler.
+
+func (s *Server) handleDiff(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: path"), nil
+	}
+
+	if err := s.isPathAllowed(path); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	base := request.GetString("base", "main")
+	head := request.GetString("head", "HEAD")
+
+	result, err := diff.Run(path, diff.Options{
+		Base: base,
+		Head: head,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("diff failed: %v", err)), nil
+	}
+
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling diff result: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Badge handler.
+
+func (s *Server) handleBadge(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.RLock()
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	label := request.GetString("label", "nox")
+	ff := cache.Findings.ActiveFindings()
+
+	result := badge.GenerateFromFindings(ff, label)
+
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling badge result: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Version handler.
+
+func (s *Server) handleVersion(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	info := map[string]string{
+		"version": s.version,
+	}
+
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling version: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// Rules handler.
+
+func (s *Server) handleRules(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	cat := catalog.Catalog()
+
+	data, err := json.MarshalIndent(cat, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling rules: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Protect status handler.
+
+const noxHookMarker = "Installed by nox protect"
+
+func (s *Server) handleProtectStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path, err := request.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError("missing required argument: path"), nil
+	}
+
+	if err := s.isPathAllowed(path); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	if !git.IsGitRepo(path) {
+		return mcp.NewToolResultError("not a git repository"), nil
+	}
+
+	repoRoot, err := git.RepoRoot(path)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("resolving repo root: %v", err)), nil
+	}
+
+	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
+
+	type protectStatusResponse struct {
+		Installed bool   `json:"installed"`
+		HookPath  string `json:"hook_path"`
+		Message   string `json:"message"`
+	}
+
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		resp := protectStatusResponse{
+			Installed: false,
+			HookPath:  hookPath,
+			Message:   "not installed",
+		}
+		data, _ := json.MarshalIndent(resp, "", "  ")
+		return mcp.NewToolResultText(string(data)), nil
+	}
+
+	installed := strings.Contains(string(content), noxHookMarker)
+	msg := "not installed (pre-commit hook exists but was not installed by nox)"
+	if installed {
+		msg = "installed"
+	}
+
+	resp := protectStatusResponse{
+		Installed: installed,
+		HookPath:  hookPath,
+		Message:   msg,
+	}
+
+	data, _ := json.MarshalIndent(resp, "", "  ")
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+// Annotate handler.
+
+func (s *Server) handleAnnotate(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.RLock()
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	ff := cache.Findings.ActiveFindings()
+	payload := annotate.BuildReviewPayload(ff)
+	if payload == nil {
+		return mcp.NewToolResultText(`{"message":"no findings to annotate"}`), nil
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling annotate payload: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Rules resource handler.
+
+func (s *Server) handleResourceRules(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	cat := catalog.Catalog()
+
+	data, err := json.MarshalIndent(cat, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshalling rules: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "application/json",
+			Text:     truncate(string(data)),
+		},
+	}, nil
+}
+
+// Dashboard resource handler.
+
+func (s *Server) handleResourceDashboard(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	s.mu.RLock()
+	cache := s.cache
+	basePath := s.scanBasePath
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	html, err := GenerateDashboardHTML(cache, s.version, basePath)
+	if err != nil {
+		return nil, fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      request.Params.URI,
+			MIMEType: "text/html",
+			Text:     html,
+		},
+	}, nil
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nox &mdash; Security Dashboard</title>
+<style>
+:root {
+  --blue: #0055FF;
+  --navy: #1a0066;
+  --purple: #7030A0;
+  --magenta: #FF1493;
+  --bg: #0d0d1a;
+  --surface: #161628;
+  --surface-alt: #1e1e36;
+  --border: #2a2a4a;
+  --text: #e8e8f0;
+  --text-muted: #8888aa;
+  --green: #4caf50;
+  --yellow: #dfb317;
+  --orange: #fe7d37;
+  --red: #e05d44;
+  --critical: #b60205;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--purple) 100%);
+  padding: 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--blue);
+}
+.header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+.header h1 span { color: var(--blue); }
+.header .meta { font-size: 0.85rem; color: var(--text-muted); }
+.container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+.card h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.grade-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.grade-letter {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+.grade-info { flex: 1; }
+.grade-info .score { font-size: 1.25rem; font-weight: 600; }
+.grade-info .label { color: var(--text-muted); font-size: 0.85rem; }
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.stat-row:last-child { border-bottom: none; }
+.stat-row .label { color: var(--text-muted); }
+.stat-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.severity-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+  background: var(--surface-alt);
+}
+.severity-bar .segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  min-width: 0;
+  transition: flex 0.3s ease;
+}
+.severity-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem; }
+.severity-legend .item { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
+.severity-legend .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th { text-align: left; color: var(--text-muted); font-weight: 500; padding: 0.5rem; border-bottom: 1px solid var(--border); }
+td { padding: 0.5rem; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: none; }
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.eco-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.35rem 0;
+}
+.eco-bar .bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.eco-bar .bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.eco-bar .count { font-size: 0.8rem; font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+.eco-bar .name { font-size: 0.8rem; min-width: 80px; }
+.ai-stat { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.5rem 0; }
+.ai-stat .number { font-size: 2rem; font-weight: 700; color: var(--purple); }
+.ai-stat .desc { color: var(--text-muted); font-size: 0.85rem; }
+.empty-state { text-align: center; color: var(--text-muted); padding: 2rem 0; }
+.footer { text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 1rem; border-top: 1px solid var(--border); margin-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><span>nox</span> Security Dashboard</h1>
+  <div class="meta" id="meta">Generated at --</div>
+</div>
+<div class="container">
+  <div class="grid">
+    <div class="card" id="grade-card">
+      <h2>Security Grade</h2>
+      <div class="grade-display">
+        <div class="grade-letter" id="grade-letter">-</div>
+        <div class="grade-info">
+          <div class="score" id="grade-score">Score: --</div>
+          <div class="label" id="grade-findings">-- findings</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Findings by Severity</h2>
+      <div class="severity-bar" id="severity-bar"></div>
+      <div class="severity-legend" id="severity-legend"></div>
+    </div>
+    <div class="card">
+      <h2>Summary</h2>
+      <div id="summary-stats"></div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card" style="grid-column: span 2;">
+      <h2>Top Rules</h2>
+      <table id="rules-table">
+        <thead><tr><th>Rule</th><th>Severity</th><th>Count</th><th>Description</th></tr></thead>
+        <tbody id="rules-body"></tbody>
+      </table>
+      <div class="empty-state" id="rules-empty" style="display:none;">No findings</div>
+    </div>
+    <div class="card">
+      <h2>Dependencies by Ecosystem</h2>
+      <div id="eco-bars"></div>
+      <div class="empty-state" id="eco-empty" style="display:none;">No dependencies found</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>AI Components</h2>
+      <div id="ai-section"></div>
+      <div class="empty-state" id="ai-empty" style="display:none;">No AI components detected</div>
+    </div>
+    <div class="card">
+      <h2>Baseline</h2>
+      <div id="baseline-section"></div>
+    </div>
+  </div>
+</div>
+<div class="footer">nox &mdash; open-source security scanner &mdash; <a href="https://github.com/nox-hq/nox" style="color:var(--blue);">github.com/nox-hq/nox</a></div>
+
+<script>
+const SEV_COLORS = {
+  critical: '#b60205',
+  high: '#e05d44',
+  medium: '#dfb317',
+  low: '#0055FF',
+  info: '#8888aa'
+};
+const SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+const GRADE_COLORS = {
+  A: '#4c1', B: '#a3c51c', C: '#dfb317', D: '#fe7d37', E: '#e05d44', F: '#b60205'
+};
+
+function gradeFromScore(score) {
+  if (score === 0) return { letter: 'A', color: GRADE_COLORS.A };
+  if (score <= 4) return { letter: 'B', color: GRADE_COLORS.B };
+  if (score <= 14) return { letter: 'C', color: GRADE_COLORS.C };
+  if (score <= 29) return { letter: 'D', color: GRADE_COLORS.D };
+  if (score <= 49) return { letter: 'E', color: GRADE_COLORS.E };
+  return { letter: 'F', color: GRADE_COLORS.F };
+}
+
+function securityScore(counts) {
+  const weights = { critical: 10, high: 5, medium: 2, low: 1, info: 0 };
+  let score = 0;
+  for (const [sev, count] of Object.entries(counts)) {
+    score += (weights[sev] || 0) * count;
+  }
+  return score;
+}
+
+function render(data) {
+  // Meta
+  document.getElementById('meta').textContent =
+    'Generated ' + (data.generated_at || new Date().toISOString()) + ' | v' + (data.version || 'dev');
+
+  // Severity counts
+  const counts = {};
+  let total = 0;
+  SEV_ORDER.forEach(s => { counts[s] = 0; });
+  (data.findings || []).forEach(f => {
+    const sev = (f.Severity || f.severity || '').toLowerCase();
+    if (counts[sev] !== undefined) counts[sev]++;
+    total++;
+  });
+
+  // Grade
+  const score = securityScore(counts);
+  const grade = gradeFromScore(score);
+  const gradeEl = document.getElementById('grade-letter');
+  gradeEl.textContent = grade.letter;
+  gradeEl.style.background = grade.color;
+  gradeEl.style.color = '#fff';
+  document.getElementById('grade-score').textContent = 'Score: ' + score;
+  document.getElementById('grade-findings').textContent = total + ' finding' + (total !== 1 ? 's' : '');
+
+  // Severity bar
+  const barEl = document.getElementById('severity-bar');
+  const legendEl = document.getElementById('severity-legend');
+  barEl.innerHTML = '';
+  legendEl.innerHTML = '';
+  if (total === 0) {
+    barEl.innerHTML = '<div class="segment" style="flex:1;background:var(--green);color:#fff;">Clean</div>';
+  } else {
+    SEV_ORDER.forEach(sev => {
+      if (counts[sev] > 0) {
+        const pct = (counts[sev] / total) * 100;
+        barEl.innerHTML += '<div class="segment" style="flex:' + counts[sev] + ';background:' + SEV_COLORS[sev] + ';">' + counts[sev] + '</div>';
+      }
+    });
+  }
+  SEV_ORDER.forEach(sev => {
+    legendEl.innerHTML += '<div class="item"><div class="dot" style="background:' + SEV_COLORS[sev] + ';"></div>' + sev + ': ' + counts[sev] + '</div>';
+  });
+
+  // Summary stats
+  const statsEl = document.getElementById('summary-stats');
+  const suppressed = data.suppressed || 0;
+  const deps = (data.packages || []).length;
+  const aiCount = (data.ai_components || []).length;
+  statsEl.innerHTML =
+    '<div class="stat-row"><span class="label">Total findings</span><span class="value">' + total + '</span></div>' +
+    '<div class="stat-row"><span class="label">Suppressed</span><span class="value">' + suppressed + '</span></div>' +
+    '<div class="stat-row"><span class="label">Dependencies</span><span class="value">' + deps + '</span></div>' +
+    '<div class="stat-row"><span class="label">AI components</span><span class="value">' + aiCount + '</span></div>';
+
+  // Top rules
+  const ruleCounts = {};
+  const ruleInfo = {};
+  (data.findings || []).forEach(f => {
+    const id = f.RuleID || f.rule_id || '';
+    if (!id) return;
+    ruleCounts[id] = (ruleCounts[id] || 0) + 1;
+    if (!ruleInfo[id]) ruleInfo[id] = { severity: f.Severity || f.severity || '', message: f.Message || f.message || '' };
+  });
+  const sorted = Object.entries(ruleCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const tbody = document.getElementById('rules-body');
+  const rulesEmpty = document.getElementById('rules-empty');
+  if (sorted.length === 0) {
+    tbody.innerHTML = '';
+    rulesEmpty.style.display = 'block';
+  } else {
+    rulesEmpty.style.display = 'none';
+    tbody.innerHTML = sorted.map(([id, count]) => {
+      const info = ruleInfo[id] || {};
+      const sev = (info.severity || '').toLowerCase();
+      const color = SEV_COLORS[sev] || '#8888aa';
+      return '<tr><td><code>' + id + '</code></td><td><span class="badge" style="background:' + color + ';color:#fff;">' + sev + '</span></td><td>' + count + '</td><td style="color:var(--text-muted);max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (info.message || '').substring(0, 80) + '</td></tr>';
+    }).join('');
+  }
+
+  // Ecosystem bars
+  const ecoEl = document.getElementById('eco-bars');
+  const ecoEmpty = document.getElementById('eco-empty');
+  const ecoCounts = {};
+  (data.packages || []).forEach(p => {
+    const eco = p.Ecosystem || p.ecosystem || 'unknown';
+    ecoCounts[eco] = (ecoCounts[eco] || 0) + 1;
+  });
+  const ecoEntries = Object.entries(ecoCounts).sort((a, b) => b[1] - a[1]);
+  const maxEco = ecoEntries.length > 0 ? ecoEntries[0][1] : 1;
+  if (ecoEntries.length === 0) {
+    ecoEl.innerHTML = '';
+    ecoEmpty.style.display = 'block';
+  } else {
+    ecoEmpty.style.display = 'none';
+    const colors = ['#0055FF', '#7030A0', '#FF1493', '#4caf50', '#dfb317', '#e05d44'];
+    ecoEl.innerHTML = ecoEntries.map(([eco, count], i) => {
+      const pct = (count / maxEco) * 100;
+      const c = colors[i % colors.length];
+      return '<div class="eco-bar"><span class="name">' + eco + '</span><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + c + ';"></div></div><span class="count">' + count + '</span></div>';
+    }).join('');
+  }
+
+  // AI components
+  const aiEl = document.getElementById('ai-section');
+  const aiEmpty = document.getElementById('ai-empty');
+  const aiComps = data.ai_components || [];
+  if (aiComps.length === 0) {
+    aiEl.innerHTML = '';
+    aiEmpty.style.display = 'block';
+  } else {
+    aiEmpty.style.display = 'none';
+    const byType = {};
+    aiComps.forEach(c => {
+      const t = c.type || c.Type || 'unknown';
+      byType[t] = (byType[t] || 0) + 1;
+    });
+    aiEl.innerHTML = '<div class="ai-stat"><span class="number">' + aiComps.length + '</span><span class="desc">total components</span></div>' +
+      Object.entries(byType).map(([type, count]) =>
+        '<div class="stat-row"><span class="label">' + type + '</span><span class="value">' + count + '</span></div>'
+      ).join('');
+  }
+
+  // Baseline
+  const blEl = document.getElementById('baseline-section');
+  const bl = data.baseline;
+  if (bl && bl.total > 0) {
+    blEl.innerHTML =
+      '<div class="stat-row"><span class="label">Baselined</span><span class="value">' + bl.total + '</span></div>' +
+      '<div class="stat-row"><span class="label">Expired</span><span class="value">' + (bl.expired || 0) + '</span></div>';
+  } else {
+    blEl.innerHTML = '<div class="empty-state">No baseline configured</div>';
+  }
+}
+
+// Data is injected by the server as a JSON object in this script tag.
+// When served via MCP resource or CLI, __NOX_DATA__ is replaced with actual scan data.
+const DATA = typeof __NOX_DATA__ !== 'undefined' ? __NOX_DATA__ : {};
+if (Object.keys(DATA).length > 0) render(DATA);
+</script>
+</body>
+</html>

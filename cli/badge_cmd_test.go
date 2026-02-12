@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 )
@@ -201,9 +202,9 @@ func TestSecurityScore(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := securityScore(tt.counts)
+			got := badge.SecurityScore(tt.counts)
 			if got != tt.want {
-				t.Fatalf("securityScore(%v) = %d, want %d", tt.counts, got, tt.want)
+				t.Fatalf("SecurityScore(%v) = %d, want %d", tt.counts, got, tt.want)
 			}
 		})
 	}
@@ -229,12 +230,12 @@ func TestGradeFromScore(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.letter, func(t *testing.T) {
-			g := gradeFromScore(tt.score)
+			g := badge.GradeFromScore(tt.score)
 			if g.Letter != tt.letter {
-				t.Fatalf("gradeFromScore(%d).Letter = %q, want %q", tt.score, g.Letter, tt.letter)
+				t.Fatalf("GradeFromScore(%d).Letter = %q, want %q", tt.score, g.Letter, tt.letter)
 			}
 			if g.Color != tt.color {
-				t.Fatalf("gradeFromScore(%d).Color = %q, want %q", tt.score, g.Color, tt.color)
+				t.Fatalf("GradeFromScore(%d).Color = %q, want %q", tt.score, g.Color, tt.color)
 			}
 		})
 	}
@@ -255,7 +256,8 @@ func TestBadgeValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := badgeValue(tt.counts)
+			score := badge.SecurityScore(tt.counts)
+			got := badge.GradeFromScore(score).Letter
 			if got != tt.expected {
 				t.Fatalf("expected %q, got %q", tt.expected, got)
 			}
@@ -278,7 +280,8 @@ func TestBadgeColor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := badgeColor(tt.counts)
+			score := badge.SecurityScore(tt.counts)
+			got := badge.GradeFromScore(score).Color
 			if got != tt.expected {
 				t.Fatalf("expected %q, got %q", tt.expected, got)
 			}
@@ -362,7 +365,7 @@ func TestBadge_BySeverity_Clean(t *testing.T) {
 }
 
 func TestGenerateBadgeSVG(t *testing.T) {
-	svg := generateBadgeSVG("nox", "A", "#4c1")
+	svg := badge.GenerateSVG("nox", "A", "#4c1")
 	if !strings.HasPrefix(svg, "<svg") {
 		t.Fatal("expected SVG output")
 	}

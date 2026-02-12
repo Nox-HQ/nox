@@ -13,6 +13,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/badge"
 )
 
 func runWatch(args []string) int {
@@ -107,7 +108,7 @@ func printScanResults(target string, jsonOutput bool) {
 
 	ff := result.Findings.ActiveFindings()
 	suppressed := len(result.Findings.Findings()) - len(ff)
-	counts := countBySeverity(ff)
+	counts := badge.CountBySeverity(ff)
 
 	fmt.Printf("[results] %d finding(s)", len(ff))
 	if suppressed > 0 {

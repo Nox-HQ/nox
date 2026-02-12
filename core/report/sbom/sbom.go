@@ -42,13 +42,25 @@ type CDXTool struct {
 	Version string `json:"version"`
 }
 
+// CDXLicense represents a license in CycloneDX format.
+type CDXLicense struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// CDXLicenseWrapper wraps a CDXLicense for the CycloneDX licenses array.
+type CDXLicenseWrapper struct {
+	License CDXLicense `json:"license"`
+}
+
 // CDXComponent represents a single dependency.
 type CDXComponent struct {
-	Type    string `json:"type"`
-	BOMRef  string `json:"bom-ref"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	PURL    string `json:"purl"`
+	Type     string              `json:"type"`
+	BOMRef   string              `json:"bom-ref"`
+	Name     string              `json:"name"`
+	Version  string              `json:"version"`
+	PURL     string              `json:"purl"`
+	Licenses []CDXLicenseWrapper `json:"licenses,omitempty"`
 }
 
 // CDXVulnerability represents a known vulnerability in the CycloneDX format.
@@ -118,13 +130,19 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 	for i, ip := range indexed {
 		bomRef := fmt.Sprintf("pkg:%d", i)
 		bomRefs[ip.origIdx] = bomRef
-		components = append(components, CDXComponent{
+		comp := CDXComponent{
 			Type:    "library",
 			BOMRef:  bomRef,
 			Name:    ip.pkg.Name,
 			Version: ip.pkg.Version,
 			PURL:    buildPURL(ip.pkg),
-		})
+		}
+		if ip.pkg.License != "" {
+			comp.Licenses = []CDXLicenseWrapper{
+				{License: CDXLicense{ID: ip.pkg.License}},
+			}
+		}
+		components = append(components, comp)
 	}
 
 	// Build vulnerability entries from inventory.
@@ -225,6 +243,7 @@ type SPDXPackage struct {
 	SPDXID           string            `json:"SPDXID"`
 	Name             string            `json:"name"`
 	VersionInfo      string            `json:"versionInfo"`
+	DeclaredLicense  string            `json:"licenseDeclared"`
 	DownloadLocation string            `json:"downloadLocation"`
 	FilesAnalyzed    bool              `json:"filesAnalyzed"`
 	ExternalRefs     []SPDXExternalRef `json:"externalRefs,omitempty"`
@@ -289,10 +308,16 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 		spdxID := fmt.Sprintf("SPDXRef-Package-%d", i)
 		purl := buildPURL(ip.pkg)
 
+		declaredLicense := "NOASSERTION"
+		if ip.pkg.License != "" {
+			declaredLicense = ip.pkg.License
+		}
+
 		pkg := SPDXPackage{
 			SPDXID:           spdxID,
 			Name:             ip.pkg.Name,
 			VersionInfo:      ip.pkg.Version,
+			DeclaredLicense:  declaredLicense,
 			DownloadLocation: "NOASSERTION",
 			FilesAnalyzed:    false,
 		}

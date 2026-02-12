@@ -129,6 +129,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
 		fmt.Fprintf(os.Stderr, "  protect <cmd>    Manage git pre-commit hook\n")
 		fmt.Fprintf(os.Stderr, "  annotate         Annotate a PR with findings\n")
+		fmt.Fprintf(os.Stderr, "  dashboard [path] Generate HTML security dashboard\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -181,6 +182,8 @@ func run(args []string) int {
 		return runCompletion(remaining[1:])
 	case "annotate":
 		return runAnnotate(remaining[1:])
+	case "dashboard":
+		return runDashboard(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0

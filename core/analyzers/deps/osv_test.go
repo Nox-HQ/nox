@@ -590,21 +590,30 @@ func TestScanArtifacts_VulnerabilityMetadata(t *testing.T) {
 func TestAnalyzer_Rules(t *testing.T) {
 	a := NewAnalyzer(WithOSVDisabled())
 	rs := a.Rules()
-	rules := rs.Rules()
+	allRules := rs.Rules()
 
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 rule, got %d", len(rules))
+	if len(allRules) < 3 {
+		t.Fatalf("expected at least 3 rules (VULN-001, VULN-002, VULN-003), got %d", len(allRules))
 	}
 
-	r := rules[0]
-	if r.ID != "VULN-001" {
-		t.Errorf("expected rule ID VULN-001, got %s", r.ID)
+	// Verify VULN-001 is present with expected metadata.
+	r, ok := rs.ByID("VULN-001")
+	if !ok {
+		t.Fatal("expected VULN-001 rule to exist")
 	}
 	if r.Severity != findings.SeverityHigh {
-		t.Errorf("expected default severity high, got %s", r.Severity)
+		t.Errorf("expected VULN-001 severity high, got %s", r.Severity)
 	}
 	if r.Metadata["cwe"] != "CWE-1395" {
-		t.Errorf("expected CWE-1395, got %s", r.Metadata["cwe"])
+		t.Errorf("expected VULN-001 CWE-1395, got %s", r.Metadata["cwe"])
+	}
+
+	// Verify VULN-002 and VULN-003 are present.
+	if !rs.HasID("VULN-002") {
+		t.Error("expected VULN-002 rule to exist")
+	}
+	if !rs.HasID("VULN-003") {
+		t.Error("expected VULN-003 rule to exist")
 	}
 }
 

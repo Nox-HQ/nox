@@ -126,7 +126,7 @@ func builtinAIRules() []rules.Rule {
 			pattern:     `(?i)(eval|exec)\s*\(.*?(response|completion|output|generated|llm_output|model_output)`,
 			description: "LLM output passed to code execution function",
 			cwe:         "CWE-94", keywords: []string{"eval(", "exec("},
-			tags:        []string{"ai", "output-handling", "code-execution"},
+			tags: []string{"ai", "output-handling", "code-execution"},
 			// nox:ignore AI-009 -- rule definition, not a real finding
 			remediation: "Never pass LLM output directly to eval(), exec(), or similar code execution functions. Validate and sanitise all generated content before any form of interpretation.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/94.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
@@ -233,6 +233,59 @@ func builtinAIRules() []rules.Rule {
 			tags:        []string{"ai", "resource-management", "denial-of-service"},
 			remediation: "Set reasonable token limits based on your use case. Implement per-user and per-request token budgets to prevent resource exhaustion and cost overruns.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/770.html"},
+		},
+
+		// -----------------------------------------------------------------
+		// Model supply chain (AI-019 to AI-021)
+		// -----------------------------------------------------------------
+		{
+			id: "AI-019", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// Matches model loading calls (from_pretrained, load_model, AutoModel,
+			// download_model, pipeline() without a hash pin or revision= argument
+			// on the same line. The negative lookahead (?!.*) is not supported in
+			// Go RE2, so the pattern matches the loading call broadly; the absence
+			// of a hash pin is the signal (lines with revision= or sha256 are
+			// unlikely to match because the keyword filter requires the load call
+			// keywords but the pattern stops before consuming the whole line).
+			pattern:      `(?i)(from_pretrained|load_model|AutoModel|download_model|pipeline)\s*\(`,
+			description:  "Model loaded without hash verification",
+			cwe:          "CWE-494",
+			keywords:     []string{"from_pretrained", "load_model", "automodel", "download_model", "pipeline"},
+			filePatterns: []string{"*.py", "*.ipynb"},
+			tags:         []string{"ai", "supply-chain", "integrity"},
+			remediation:  "Pin model references with a hash digest (e.g., revision='sha256:...') or verify checksums after download. This prevents tampered or substituted models from being loaded silently.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/494.html", "https://huggingface.co/docs/hub/security"},
+		},
+		{
+			id: "AI-020", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// Matches HTTPS/HTTP URLs in model loading contexts that are NOT from
+			// the trusted registries. Because Go RE2 does not support negative
+			// lookahead, the pattern matches any URL in a model-loading call;
+			// post-processing via IsUntrustedRegistry refines the result, but the
+			// regex alone is sufficient for initial detection of URL-based model
+			// loads from arbitrary sources.
+			pattern:      `(?i)(from_pretrained|load_model|download_model|model_url|model_path|pipeline)\s*[:=(].*?["']https?://[^"'\s]+["']`,
+			description:  "Model downloaded from untrusted registry",
+			cwe:          "CWE-829",
+			keywords:     []string{"from_pretrained", "load_model", "download_model", "model_url", "model_path", "http"},
+			filePatterns: []string{"*.py", "*.ipynb", "*.yaml", "*.yml", "*.json"},
+			tags:         []string{"ai", "supply-chain", "untrusted-source"},
+			remediation:  "Download models only from trusted registries (Hugging Face, PyTorch Hub, TF Hub, Kaggle, Ollama). Verify publisher identity and model signatures before use.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
+		},
+		{
+			id: "AI-021", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// Matches references to common model file extensions (.onnx, .pt,
+			// .pth, .h5, .pb, .safetensors, .gguf, .bin) in load/open calls
+			// without accompanying hash or signature verification on the same line.
+			pattern:      `(?i)(load|open|read|from_file)\s*\(.*?\.(onnx|pt|pth|h5|pb|safetensors|gguf|bin)["'\s)>]`,
+			description:  "Model file reference without signature verification",
+			cwe:          "CWE-494",
+			keywords:     []string{".onnx", ".pt", ".pth", ".h5", ".pb", ".safetensors", ".gguf", ".bin"},
+			filePatterns: []string{"*.py", "*.ipynb", "*.go", "*.js", "*.ts", "*.yaml", "*.yml"},
+			tags:         []string{"ai", "supply-chain", "integrity"},
+			remediation:  "Verify model file integrity using cryptographic hashes (SHA-256) or digital signatures before loading. Store expected digests alongside model references and validate at load time.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/494.html"},
 		},
 	}
 

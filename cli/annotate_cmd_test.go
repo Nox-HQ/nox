@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nox-hq/nox/core/annotate"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -183,9 +184,9 @@ func TestSeverityBadge_AllLevels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.severity), func(t *testing.T) {
 			t.Parallel()
-			result := severityBadge(tt.severity)
+			result := annotate.SeverityBadge(tt.severity)
 			if result != tt.expected {
-				t.Errorf("severityBadge(%q) = %q, want %q", tt.severity, result, tt.expected)
+				t.Errorf("SeverityBadge(%q) = %q, want %q", tt.severity, result, tt.expected)
 			}
 		})
 	}

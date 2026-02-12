@@ -51,8 +51,8 @@ This produces:
 reports/
   findings.json        # Nox canonical findings
   results.sarif        # SARIF 2.1.0 (GitHub Code Scanning)
-  sbom.cdx.json        # CycloneDX SBOM
-  sbom.spdx.json       # SPDX SBOM
+  sbom.cdx.json        # CycloneDX SBOM with vulnerability enrichment
+  sbom.spdx.json       # SPDX SBOM with security references
   ai.inventory.json    # AI component inventory (if detected)
 ```
 
@@ -77,7 +77,7 @@ reports/
 nox serve --allowed-paths /path/to/project
 ```
 
-This starts an MCP server on stdio with read-only tools (`scan`, `get_findings`, `get_sbom`) and resources (`nox://findings`, `nox://sarif`, `nox://sbom/cdx`).
+This starts an MCP server on stdio with 10 read-only tools and 5 resources. See [MCP Server](#mcp-server) for details.
 
 ## Installation
 
@@ -113,16 +113,16 @@ Detects hardcoded secrets, API keys, tokens, and credentials across **15 categor
 
 | Category | Rules | Examples |
 |----------|-------|---------|
-| Cloud Providers | SEC-001 – SEC-015 | AWS, GCP, Azure, DigitalOcean, Heroku, Alibaba, IBM, Databricks |
-| Source Control | SEC-003, SEC-016 – SEC-022 | GitHub PAT/fine-grained/app tokens, GitLab, Bitbucket |
-| Communication | SEC-023 – SEC-029 | Slack, Discord, Telegram, Microsoft Teams |
-| Payment | SEC-030 – SEC-038 | Stripe, Square, Shopify, PayPal/Braintree |
-| AI/ML Providers | SEC-039 – SEC-044 | OpenAI, Anthropic, HuggingFace, Replicate, Cohere |
-| DevOps & CI/CD | SEC-045 – SEC-056 | NPM, PyPI, Docker Hub, Terraform, Vault, Grafana |
-| SaaS & APIs | SEC-057 – SEC-072 | Twilio, SendGrid, Datadog, PagerDuty, Linear, Okta |
-| Database & Infra | SEC-073 – SEC-076 | Connection strings (Postgres, MongoDB, Redis), Firebase |
-| Crypto & Keys | SEC-004, SEC-077 – SEC-079 | PEM private keys, Age, PGP, PKCS12 |
-| Generic Patterns | SEC-005, SEC-080 – SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
+| Cloud Providers | SEC-001 -- SEC-015 | AWS, GCP, Azure, DigitalOcean, Heroku, Alibaba, IBM, Databricks |
+| Source Control | SEC-003, SEC-016 -- SEC-022 | GitHub PAT/fine-grained/app tokens, GitLab, Bitbucket |
+| Communication | SEC-023 -- SEC-029 | Slack, Discord, Telegram, Microsoft Teams |
+| Payment | SEC-030 -- SEC-038 | Stripe, Square, Shopify, PayPal/Braintree |
+| AI/ML Providers | SEC-039 -- SEC-044 | OpenAI, Anthropic, HuggingFace, Replicate, Cohere |
+| DevOps & CI/CD | SEC-045 -- SEC-056 | NPM, PyPI, Docker Hub, Terraform, Vault, Grafana |
+| SaaS & APIs | SEC-057 -- SEC-072 | Twilio, SendGrid, Datadog, PagerDuty, Linear, Okta |
+| Database & Infra | SEC-073 -- SEC-076 | Connection strings (Postgres, MongoDB, Redis), Firebase |
+| Crypto & Keys | SEC-004, SEC-077 -- SEC-079 | PEM private keys, Age, PGP, PKCS12 |
+| Generic Patterns | SEC-005, SEC-080 -- SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
 
 **Secret detection features:**
 - Shannon entropy analysis for high-entropy strings (API keys, tokens)
@@ -135,7 +135,7 @@ Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 
 | Category | Rules | OWASP LLM | Examples |
 |----------|-------|-----------|---------|
-| Prompt Injection | AI-001 – AI-003, AI-010 | LLM01 | Boundary violations, RAG injection, indirect injection |
+| Prompt Injection | AI-001 -- AI-003, AI-010 | LLM01 | Boundary violations, RAG injection, indirect injection |
 | Tool/Agent Safety | AI-004, AI-005, AI-011 | LLM06 | MCP write tools, wildcard allowlists, unrestricted agents |
 | Insecure Logging | AI-006, AI-007 | LLM02 | Prompt/response logging, API key exposure |
 | Output Handling | AI-009, AI-012, AI-015, AI-018 | LLM05 | eval()/exec(), SQL injection, XSS, path traversal |
@@ -149,12 +149,12 @@ Detects misconfigurations across **7 IaC categories**:
 
 | Category | Rules | Examples |
 |----------|-------|---------|
-| Dockerfile | IAC-001 – IAC-003, IAC-022 – IAC-025 | Root user, unpinned images, secrets in ARG, curl-pipe-sh |
-| Terraform/Cloud | IAC-004 – IAC-006, IAC-036 – IAC-045 | Public access, disabled encryption, wildcard IAM, public S3 |
-| Kubernetes | IAC-007 – IAC-010, IAC-026 – IAC-035 | Privileged pods, host namespaces, dangerous capabilities, cluster-admin |
-| GitHub Actions | IAC-011 – IAC-018 | pull_request_target, script injection, mutable action tags, write-all |
-| Docker Compose | IAC-019 – IAC-021, IAC-049 | Privileged mode, host networking, Docker socket mount |
-| Helm | IAC-046 – IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
+| Dockerfile | IAC-001 -- IAC-003, IAC-022 -- IAC-025 | Root user, unpinned images, secrets in ARG, curl-pipe-sh |
+| Terraform/Cloud | IAC-004 -- IAC-006, IAC-036 -- IAC-045 | Public access, disabled encryption, wildcard IAM, public S3 |
+| Kubernetes | IAC-007 -- IAC-010, IAC-026 -- IAC-035 | Privileged pods, host namespaces, dangerous capabilities, cluster-admin |
+| GitHub Actions | IAC-011 -- IAC-018 | pull_request_target, script injection, mutable action tags, write-all |
+| Docker Compose | IAC-019 -- IAC-021, IAC-049 | Privileged mode, host networking, Docker socket mount |
+| Helm | IAC-046 -- IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
 | CI/CD General | IAC-050 | Disabled security checks |
 
 ### Dependencies & SCA (1 rule)
@@ -193,6 +193,12 @@ output:
   format: sarif             # Default output format
   directory: reports        # Default output directory
 
+policy:
+  fail_on: high             # Only fail on high+ severity (critical, high)
+  warn_on: medium           # Warn on medium findings
+  baseline_mode: warn       # warn | strict | off
+  baseline_path: ""         # Default: .nox/baseline.json
+
 explain:
   api_key_env: OPENAI_API_KEY   # Env var to read API key from
   model: gpt-4o                 # LLM model name
@@ -202,25 +208,22 @@ explain:
   output: explanations.json     # Output file path
 ```
 
-### Policy & Baseline
+CLI flags always take precedence over config file values.
 
-Control CI pass/fail behavior and manage known findings:
+### Baseline Management
 
-```yaml
-# .nox.yaml
-policy:
-  fail_on: high          # Only fail on high+ severity (critical, high)
-  warn_on: medium        # Warn on medium findings
-  baseline_mode: warn    # warn | strict | off
-  baseline_path: ""      # Default: .nox/baseline.json
-```
+Manage known findings to track progress and suppress accepted risks:
 
 ```bash
 # Create a baseline from all current findings
 nox baseline write .
 
+# Write to a specific file
+nox baseline write . --output my-baseline.json
+
 # Update baseline (add new, prune stale)
 nox baseline update .
+nox baseline update . --baseline my-baseline.json
 
 # Show baseline statistics
 nox baseline show .
@@ -246,6 +249,7 @@ Show only findings in changed files:
 ```bash
 nox diff --base main --head HEAD
 nox diff --base main --json
+nox diff . --rules custom-rules.yaml
 ```
 
 ### Watch Mode
@@ -255,6 +259,63 @@ Re-scan automatically on file changes:
 ```bash
 nox watch .
 nox watch . --debounce 1s
+nox watch . --json
+```
+
+### Finding Inspector
+
+Inspect findings interactively with a TUI or as JSON:
+
+```bash
+# Interactive TUI
+nox show .
+
+# Filter by severity, rule, or file
+nox show . --severity critical,high --rule "SEC-*" --file "src/"
+
+# JSON output from a previous scan
+nox show --input findings.json --json
+
+# Control source context lines
+nox show . --context 10
+```
+
+### LLM-Powered Explanations
+
+Generate human-readable explanations of findings using any OpenAI-compatible API:
+
+```bash
+export OPENAI_API_KEY=sk-...
+nox explain . --model gpt-4o --output explanations.json
+
+# With custom endpoint and timeout
+nox explain . --base-url http://localhost:11434/v1 --model llama3 --timeout 5m
+
+# Control batch size for large scans
+nox explain . --batch-size 20
+
+# Enrich with plugin data
+nox explain . --plugin-dir ./plugins --enrich threat-intel.lookup
+```
+
+This produces per-finding explanations with remediation guidance and an executive summary. The explain module is optional and never affects scan results.
+
+### Security Badge
+
+Generate an SVG security grade badge:
+
+```bash
+# Generate from a live scan
+nox badge .
+
+# From existing findings
+nox badge --input findings.json
+
+# Custom output path and label
+nox badge . --output status.svg --label "security"
+
+# Generate per-severity breakdown badges
+nox badge . --by-severity
 ```
 
 ### Shell Completions
@@ -268,6 +329,9 @@ nox completion zsh > "${fpath[1]}/_nox"
 
 # Fish
 nox completion fish | source
+
+# PowerShell
+nox completion powershell | Out-String | Invoke-Expression
 ```
 
 ### PR Annotations
@@ -291,6 +355,12 @@ nox protect install
 # With custom severity threshold
 nox protect install --severity-threshold critical
 
+# Force overwrite existing hook
+nox protect install --force
+
+# Custom hook path
+nox protect install --hook-path /path/to/.git/hooks/pre-commit
+
 # Check status
 nox protect status
 
@@ -304,37 +374,87 @@ nox protect uninstall
 make hooks
 ```
 
-CLI flags always take precedence over config file values.
-
 ## CLI Reference
 
 ```
 nox <command> [flags]
 
 Commands:
-  scan <path>         Scan a directory for security issues
-  show [path]         Inspect findings interactively
-  explain <path>      Explain findings using an LLM
-  badge [path]        Generate an SVG status badge
-  baseline <cmd>      Manage finding baselines (write, update, show)
-  diff [path]         Show findings in changed files only
-  watch [path]        Watch for changes and re-scan automatically
-  annotate            Annotate a GitHub PR with inline findings
-  protect <cmd>       Manage git pre-commit hooks (install, uninstall, status)
-  completion <shell>  Generate shell completions (bash, zsh, fish, powershell)
-  serve               Start MCP server on stdio
-  registry            Manage plugin registries
-  plugin              Manage and invoke plugins
-  version             Print version and exit
+  scan <path>              Scan a directory for security issues
+  show [path]              Inspect findings interactively (TUI or JSON)
+  explain <path>           Explain findings using an LLM
+  badge [path]             Generate an SVG status badge
+  baseline <cmd> [path]    Manage finding baselines (write, update, show)
+  diff [path]              Show findings in changed files only
+  watch [path]             Watch for changes and re-scan automatically
+  annotate                 Annotate a GitHub PR with inline findings
+  protect <cmd> [path]     Manage git pre-commit hooks (install, uninstall, status)
+  completion <shell>       Generate shell completions (bash, zsh, fish, powershell)
+  serve                    Start MCP server on stdio
+  registry <cmd>           Manage plugin registries (add, list, remove)
+  plugin <cmd>             Manage and invoke plugins
+  version                  Print version and exit
+
+Global Flags:
+  --rules string           Path to custom rules YAML file or directory
+  --quiet, -q              Suppress output except errors
+  --verbose, -v            Verbose output
 
 Scan Flags:
-  --format string            Output formats: json, sarif, cdx, spdx, all (default: json)
-  --output string            Output directory (default: .)
-  --staged                   Scan only git-staged files
-  --severity-threshold       Minimum severity to report (critical, high, medium, low)
-  --no-osv                   Disable OSV.dev vulnerability lookups (offline mode)
-  --quiet, -q                Suppress output except errors
-  --verbose, -v              Verbose output
+  --format string          Output formats: json, sarif, cdx, spdx, all (default: json)
+  --output string          Output directory (default: .)
+  --staged                 Scan only git-staged files
+  --severity-threshold     Minimum severity to report (critical, high, medium, low)
+  --no-osv                 Disable OSV.dev vulnerability lookups (offline mode)
+
+Show Flags:
+  --severity string        Filter by severity (comma-separated: critical,high,medium,low,info)
+  --rule string            Filter by rule pattern (e.g., AI-*, SEC-001)
+  --file string            Filter by file pattern (e.g., src/)
+  --input string           Path to findings.json (default: run scan)
+  --json                   Output JSON instead of interactive TUI
+  --context int            Number of source context lines (default: 5)
+
+Explain Flags:
+  --model string           LLM model name (default: gpt-4o)
+  --base-url string        Custom OpenAI-compatible API base URL
+  --batch-size int         Findings per LLM request (default: 10)
+  --output string          Output file path (default: explanations.json)
+  --plugin-dir string      Directory containing plugin binaries for enrichment
+  --enrich string          Comma-separated list of plugin tools to invoke
+  --timeout duration       Timeout per LLM request (default: 2m)
+
+Badge Flags:
+  --input string           Path to findings.json (default: run scan)
+  --output string          Output SVG file path (default: .github/nox-badge.svg)
+  --label string           Badge label text (default: nox)
+  --by-severity            Generate additional badges per severity level
+
+Diff Flags:
+  --base string            Base git ref for comparison (default: main)
+  --head string            Head git ref for comparison (default: HEAD)
+  --json                   Output as JSON
+
+Watch Flags:
+  --debounce duration      Debounce interval for file changes (default: 500ms)
+  --json                   Output as JSON
+
+Protect Flags:
+  --severity-threshold     Minimum severity to block commit (default: high)
+  --hook-path string       Custom path to pre-commit hook file
+  --force                  Overwrite existing hook without prompting
+
+Baseline Flags:
+  --output string          Baseline file path for write (default: .nox/baseline.json)
+  --baseline string        Baseline file path for update (default: .nox/baseline.json)
+
+Annotate Flags:
+  --input string           Path to findings.json (default: findings.json)
+  --pr string              PR number (auto-detected from GITHUB_REF)
+  --repo string            Repository owner/name (auto-detected from GITHUB_REPOSITORY)
+
+Serve Flags:
+  --allowed-paths string   Comma-separated list of allowed workspace paths
 
 Exit Codes:
   0   No findings (or policy pass)
@@ -346,11 +466,11 @@ See [`docs/usage.md`](docs/usage.md) for the full CLI reference.
 
 ## Architecture
 
-Four top-level packages with strict dependency direction (`core` depends on nothing):
+Six top-level packages with strict dependency direction (`core` depends on nothing):
 
 ```
-core/       Scan engine (no CLI, no network)
-cli/        Argument parsing, output handling
+core/       Scan engine, rule catalog, report generation (no CLI, no network)
+cli/        Argument parsing, TUI, output handling
 server/     MCP server (stdio, sandboxed, rate-limited)
 plugin/     gRPC-based plugin host with safety profiles
 sdk/        Plugin authoring SDK with conformance tests
@@ -370,25 +490,27 @@ assist/     Optional LLM-powered explanations (no side effects)
 7. Apply inline suppressions (nox:ignore)
 8. Apply baseline matching
 9. Evaluate policy (pass/fail thresholds)
-10. Emit reports
+10. Emit reports (JSON, SARIF, CycloneDX, SPDX)
 ```
 
 ## Plugin Ecosystem
 
-Nox supports a gRPC-based plugin system organized into **10 security tracks**:
+Nox supports a gRPC-based plugin system organized into **10 security tracks**, enabling extensibility into domains like DAST, CSPM, secret verification, and more -- without bloating the core scanner:
 
-| Track | Purpose |
-|-------|---------|
-| core-analysis | Static analysis, secrets, code patterns |
-| dynamic-runtime | Runtime behavior and dynamic analysis |
-| ai-security | AI/ML-specific security concerns |
-| threat-modeling | Threat identification and modeling |
-| supply-chain | Dependency and supply chain security |
-| intelligence | Threat intelligence integration |
-| policy-governance | Policy enforcement and compliance |
-| incident-readiness | Incident response preparation |
-| developer-experience | Developer tooling and feedback |
-| agent-assistance | AI agent integration and safety |
+| Track | Purpose | Example Capabilities |
+|-------|---------|---------------------|
+| core-analysis | Static analysis, secrets, code patterns | Custom SAST rules, language-specific analysis |
+| dynamic-runtime | Runtime behavior and dynamic analysis | DAST scanning, runtime security monitoring |
+| ai-security | AI/ML-specific security concerns | Model supply chain, prompt fuzzing |
+| threat-modeling | Threat identification and modeling | STRIDE analysis, attack surface mapping |
+| supply-chain | Dependency and supply chain security | Malicious package detection, license compliance |
+| intelligence | Threat intelligence integration | Secret verification, IOC enrichment |
+| policy-governance | Policy enforcement and compliance | CSPM, regulatory compliance checks |
+| incident-readiness | Incident response preparation | Runbook validation, playbook testing |
+| developer-experience | Developer tooling and feedback | Fix suggestions, IDE integrations |
+| agent-assistance | AI agent integration and safety | Agent guardrails, tool safety verification |
+
+Each track has built-in safety profiles that control what plugins can and cannot do (e.g., `passive` plugins are read-only, `active` plugins can write files, `runtime` plugins can execute code).
 
 ### Scaffold a Plugin
 
@@ -398,15 +520,44 @@ cd nox-plugin-my-scanner
 make test
 ```
 
+Additional init flags:
+- `--risk-class <passive|active|runtime>` -- Override the default risk class for the track
+- `--output <dir>` -- Custom output directory
+
 See [`docs/plugin-authoring.md`](docs/plugin-authoring.md) for the full SDK guide.
 
 ### Install and Use Plugins
 
 ```bash
+# Add a registry
 nox registry add https://registry.nox.dev/index.json
+nox registry add https://custom.registry.io/index.json --name custom
+
+# List registries
+nox registry list
+
+# Search and install
 nox plugin search sast
+nox plugin search --track ai-security fuzzing
 nox plugin install nox/sast
+nox plugin install nox/sast@1.2.0
+
+# List installed plugins
+nox plugin list
+
+# Get plugin info
+nox plugin info nox/sast
+
+# Call a plugin tool
 nox plugin call nox/sast scan workspace_root=/path/to/project
+nox plugin call nox/sast analyze --input params.json
+
+# Update and remove
+nox plugin update nox/sast
+nox plugin remove nox/sast
+
+# Remove a registry
+nox registry remove custom
 ```
 
 ## MCP Server
@@ -417,22 +568,32 @@ The built-in MCP server allows AI agents to invoke scans safely:
 nox serve --allowed-paths /path/to/project
 ```
 
-**Tools:** `scan`, `get_findings`, `get_sbom`, `get_finding_detail`, `list_findings`, `baseline_status`, `baseline_add`, `plugin.list`, `plugin.call_tool`, `plugin.read_resource`
+### Tools
 
-**Resources:** `nox://findings`, `nox://sarif`, `nox://sbom/cdx`, `nox://sbom/spdx`, `nox://ai-inventory`
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `scan` | `path` (required) | Run a security scan on a directory |
+| `get_findings` | `format` (json\|sarif) | Get findings from last scan |
+| `get_sbom` | `format` (cdx\|spdx) | Get software bill of materials |
+| `get_finding_detail` | `finding_id`, `context_lines` | Get enriched finding with source context |
+| `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
+| `baseline_status` | `path` | Get baseline statistics |
+| `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `plugin.list` | -- | List registered plugins |
+| `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
+| `plugin.read_resource` | `plugin`, `uri` | Read a plugin resource |
+
+### Resources
+
+| URI | Type | Description |
+|-----|------|-------------|
+| `nox://findings` | application/json | Canonical findings |
+| `nox://sarif` | application/json | SARIF 2.1.0 report |
+| `nox://sbom/cdx` | application/json | CycloneDX SBOM |
+| `nox://sbom/spdx` | application/json | SPDX SBOM |
+| `nox://ai-inventory` | application/json | AI component inventory |
 
 All tools are read-only. Output is truncated at 1 MB. Workspace paths are allowlisted.
-
-## LLM-Powered Explanations
-
-Generate human-readable explanations of findings using any OpenAI-compatible API:
-
-```bash
-export OPENAI_API_KEY=sk-...
-nox explain . --model gpt-4o --output explanations.json
-```
-
-This produces per-finding explanations with remediation guidance and an executive summary. The explain module is optional and never affects scan results.
 
 ## Contributing
 

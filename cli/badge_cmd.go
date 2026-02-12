@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 )
@@ -87,219 +87,37 @@ func runBadge(args []string) int {
 		}
 	}
 
-	counts := countBySeverity(findingsList)
-	value := badgeValue(counts)
-	color := badgeColor(counts)
-
-	svg := generateBadgeSVG(label, value, color)
+	badgeResult := badge.GenerateFromFindings(findingsList, label)
 
 	// Ensure parent directory exists.
-	if dir := dirOf(output); dir != "." && dir != "" {
+	if dir := filepath.Dir(output); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "error: creating directory %s: %v\n", dir, err)
 			return 2
 		}
 	}
 
-	if err := os.WriteFile(output, []byte(svg), 0o644); err != nil {
+	if err := os.WriteFile(output, []byte(badgeResult.SVG), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", output, err)
 		return 2
 	}
 
-	fmt.Printf("[badge] wrote %s (%s: %s)\n", output, label, value)
+	fmt.Printf("[badge] wrote %s (%s: %s)\n", output, label, badgeResult.Value)
 
 	// Generate per-severity badges if requested.
 	if bySeverity {
-		if code := writeSeverityBadges(output, label, counts); code != 0 {
-			return code
+		dir := filepath.Dir(output)
+		sevBadges := badge.SeverityBadges(findingsList, label)
+		for _, sev := range badge.SeverityOrder {
+			b := sevBadges[sev]
+			path := filepath.Join(dir, fmt.Sprintf("nox-%s.svg", sev))
+			if err := os.WriteFile(path, []byte(b.SVG), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
+				return 2
+			}
+			fmt.Printf("[badge] wrote %s (%s: %s)\n", path, b.Label, b.Value)
 		}
 	}
 
 	return 0
-}
-
-func dirOf(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' || path[i] == '\\' {
-			return path[:i]
-		}
-	}
-	return "."
-}
-
-func countBySeverity(ff []findings.Finding) map[findings.Severity]int {
-	counts := make(map[findings.Severity]int)
-	for _, f := range ff {
-		counts[f.Severity]++
-	}
-	return counts
-}
-
-// severityWeight maps severity to a point value for scoring.
-var severityWeight = map[findings.Severity]int{
-	findings.SeverityCritical: 10,
-	findings.SeverityHigh:     5,
-	findings.SeverityMedium:   2,
-	findings.SeverityLow:      1,
-	findings.SeverityInfo:     0,
-}
-
-// securityScore computes a weighted score from finding severity counts.
-func securityScore(counts map[findings.Severity]int) int {
-	score := 0
-	for sev, n := range counts {
-		score += severityWeight[sev] * n
-	}
-	return score
-}
-
-// Grade represents a security letter grade A through F.
-type Grade struct {
-	Letter string
-	Color  string
-}
-
-// gradeThresholds maps score ranges to letter grades and badge colors.
-var gradeThresholds = []struct {
-	maxScore int
-	grade    Grade
-}{
-	{0, Grade{"A", "#4c1"}},     // bright green
-	{4, Grade{"B", "#a3c51c"}},  // yellow-green
-	{14, Grade{"C", "#dfb317"}}, // yellow
-	{29, Grade{"D", "#fe7d37"}}, // orange
-	{49, Grade{"E", "#e05d44"}}, // red
-}
-
-var gradeF = Grade{"F", "#b60205"} // dark red
-
-// gradeFromScore returns the letter grade for a given score.
-func gradeFromScore(score int) Grade {
-	for _, t := range gradeThresholds {
-		if score <= t.maxScore {
-			return t.grade
-		}
-	}
-	return gradeF
-}
-
-func badgeValue(counts map[findings.Severity]int) string {
-	score := securityScore(counts)
-	return gradeFromScore(score).Letter
-}
-
-func badgeColor(counts map[findings.Severity]int) string {
-	score := securityScore(counts)
-	return gradeFromScore(score).Color
-}
-
-// badgeTextWidth estimates the pixel width of a string rendered in Verdana 11px,
-// matching the shields.io flat badge style.
-func badgeTextWidth(s string) int {
-	w := 0.0
-	for _, c := range s {
-		switch {
-		case c >= 'A' && c <= 'Z':
-			w += 7.5
-		case c >= 'a' && c <= 'z':
-			w += 6.1
-		case c >= '0' && c <= '9':
-			w += 6.5
-		case c == ' ':
-			w += 3.3
-		default:
-			w += 6.0
-		}
-	}
-	return int(math.Ceil(w))
-}
-
-// severityBadgeColor returns the badge color for a given severity and count.
-// Zero counts get a green color; non-zero get a severity-appropriate color.
-var severityBadgeColors = map[findings.Severity]string{
-	findings.SeverityCritical: "#b60205",
-	findings.SeverityHigh:     "#e05d44",
-	findings.SeverityMedium:   "#dfb317",
-	findings.SeverityLow:      "#a3c51c",
-}
-
-// severityOrder defines the order in which severity badges are generated.
-var severityOrder = []findings.Severity{
-	findings.SeverityCritical,
-	findings.SeverityHigh,
-	findings.SeverityMedium,
-	findings.SeverityLow,
-}
-
-// writeSeverityBadges generates one SVG badge per severity level, placed in the
-// same directory as the main badge. File names follow the pattern:
-// nox-<severity>.svg (e.g., nox-critical.svg).
-func writeSeverityBadges(mainOutput, label string, counts map[findings.Severity]int) int {
-	dir := dirOf(mainOutput)
-
-	for _, sev := range severityOrder {
-		count := counts[sev]
-		sevName := string(sev)
-		badgeLabel := label + " " + sevName
-		badgeValue := fmt.Sprintf("%d", count)
-
-		color := "#4c1" // green for zero
-		if count > 0 {
-			color = severityBadgeColors[sev]
-		}
-
-		svg := generateBadgeSVG(badgeLabel, badgeValue, color)
-		path := filepath.Join(dir, fmt.Sprintf("nox-%s.svg", sevName))
-
-		if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
-			return 2
-		}
-		fmt.Printf("[badge] wrote %s (%s: %s)\n", path, badgeLabel, badgeValue)
-	}
-	return 0
-}
-
-func generateBadgeSVG(label, value, color string) string {
-	labelW := badgeTextWidth(label) + 10
-	valueW := badgeTextWidth(value) + 10
-	totalW := labelW + valueW
-
-	// Text positions are in tenths of a pixel (SVG uses scale(.1)).
-	labelX := labelW * 10 / 2
-	valueX := (labelW + valueW/2) * 10
-
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="%d" height="20" role="img" aria-label="%s: %s">
-  <title>%s: %s</title>
-  <linearGradient id="s" x2="0" y2="100%%">
-    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-    <stop offset="1" stop-opacity=".1"/>
-  </linearGradient>
-  <clipPath id="r">
-    <rect width="%d" height="20" rx="3" fill="#fff"/>
-  </clipPath>
-  <g clip-path="url(#r)">
-    <rect width="%d" height="20" fill="#555"/>
-    <rect x="%d" width="%d" height="20" fill="%s"/>
-    <rect width="%d" height="20" fill="url(#s)"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
-    <text aria-hidden="true" x="%d" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">%s</text>
-    <text x="%d" y="140" transform="scale(.1)">%s</text>
-    <text aria-hidden="true" x="%d" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">%s</text>
-    <text x="%d" y="140" transform="scale(.1)">%s</text>
-  </g>
-</svg>
-`,
-		totalW, label, value,
-		label, value,
-		totalW,
-		labelW,
-		labelW, valueW, color,
-		totalW,
-		labelX, label,
-		labelX, label,
-		valueX, value,
-		valueX, value,
-	)
 }

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/nox-hq/nox/core/annotate"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/report"
@@ -88,8 +89,15 @@ func runAnnotate(args []string) int {
 		return 0
 	}
 
+	// Build payload using core/annotate.
+	payload := annotate.BuildReviewPayload(ff)
+	if payload == nil {
+		fmt.Println("annotate: no findings to annotate")
+		return 0
+	}
+
 	// Post review comments via gh CLI.
-	if err := postReviewComments(repo, prNumber, ff); err != nil {
+	if err := postReviewComments(repo, prNumber, payload); err != nil {
 		fmt.Fprintf(os.Stderr, "error: posting annotations: %v\n", err)
 		return 2
 	}
@@ -125,42 +133,7 @@ func getChangedFilesSet() map[string]struct{} {
 	return set
 }
 
-func postReviewComments(repo, prNumber string, ff []findings.Finding) error {
-	type reviewComment struct {
-		Path string `json:"path"`
-		Line int    `json:"line,omitempty"`
-		Body string `json:"body"`
-		Side string `json:"side"`
-	}
-
-	type reviewPayload struct {
-		Event    string          `json:"event"`
-		Body     string          `json:"body"`
-		Comments []reviewComment `json:"comments"`
-	}
-
-	var comments []reviewComment
-	for _, f := range ff {
-		badge := severityBadge(f.Severity)
-		body := fmt.Sprintf("%s **%s** `%s`\n\n%s", badge, f.Severity, f.RuleID, f.Message)
-
-		c := reviewComment{
-			Path: f.Location.FilePath,
-			Body: body,
-			Side: "RIGHT",
-		}
-		if f.Location.StartLine > 0 {
-			c.Line = f.Location.StartLine
-		}
-		comments = append(comments, c)
-	}
-
-	payload := reviewPayload{
-		Event:    "COMMENT",
-		Body:     fmt.Sprintf("Nox found **%d finding(s)** in this PR.", len(ff)),
-		Comments: comments,
-	}
-
+func postReviewComments(repo, prNumber string, payload *annotate.ReviewPayload) error {
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshalling payload: %w", err)
@@ -176,19 +149,4 @@ func postReviewComments(repo, prNumber string, ff []findings.Finding) error {
 	}
 
 	return nil
-}
-
-func severityBadge(sev findings.Severity) string {
-	switch sev {
-	case findings.SeverityCritical:
-		return ":red_circle:"
-	case findings.SeverityHigh:
-		return ":orange_circle:"
-	case findings.SeverityMedium:
-		return ":yellow_circle:"
-	case findings.SeverityLow:
-		return ":large_blue_circle:"
-	default:
-		return ":white_circle:"
-	}
 }

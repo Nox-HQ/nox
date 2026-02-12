@@ -272,6 +272,11 @@ func RunStagedScan(repoRoot string) (*ScanResult, error) {
 		}
 	}
 
+	// Copy .nox.yaml config if it exists so exclusion patterns apply.
+	if cfgData, err := os.ReadFile(filepath.Join(repoRoot, ".nox.yaml")); err == nil {
+		_ = os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), cfgData, 0o644)
+	}
+
 	// Run the standard scan against the temp directory. Paths in findings
 	// will be relative to tmpDir, which mirrors the repository-relative
 	// structure, so no remapping is needed.
