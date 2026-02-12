@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
@@ -92,6 +93,17 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		allFindings.Add(f)
 	}
 
+	// Data sensitivity scanner.
+	dataAnalyzer := data.NewAnalyzer()
+	dataFindings, err := dataAnalyzer.ScanArtifacts(artifacts)
+	if err != nil {
+		return nil, err
+	}
+	dataResults := dataFindings.Findings()
+	for i := range dataResults {
+		allFindings.Add(dataResults[i])
+	}
+
 	// IaC scanner.
 	iacAnalyzer := iac.NewAnalyzer()
 	iacFindings, err := iacAnalyzer.ScanArtifacts(artifacts)
@@ -130,6 +142,9 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	allRules := rules.NewRuleSet()
 	for i := range secretsAnalyzer.Rules().Rules() {
 		allRules.Add(secretsAnalyzer.Rules().Rules()[i])
+	}
+	for i := range dataAnalyzer.Rules().Rules() {
+		allRules.Add(dataAnalyzer.Rules().Rules()[i])
 	}
 	for i := range iacAnalyzer.Rules().Rules() {
 		allRules.Add(iacAnalyzer.Rules().Rules()[i])

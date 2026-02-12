@@ -463,6 +463,96 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-084": "eyJhbGciOiJIUzI1NiJ9" + ".eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "ABCDEFGHIJKLmnopqr\n",
 		"SEC-085": "https://" + "admin:s3cret@internal.example.com/api\n",
 		"SEC-086": "db_password = \"" + "mysecretdbpass\"\n",
+
+		// Cloud/Infra (SEC-087 to SEC-100)
+		"SEC-087": "cloudflare_api_token = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+		"SEC-088": "cloudflare_api_key = " + "abcdef1234567890abcdef1234567890abcde\n",
+		"SEC-089": "fo1_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-090": "VERCEL_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWx\n",
+		"SEC-091": "NETLIFY_AUTH_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-092": "pscale_tkn_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-093": "pscale_oauth_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-094": "pul-" + "aabbccddeeff00112233445566778899aabbccdd\n",
+		"SEC-095": "snowflake_password = \"" + "mysecretpass\"\n",
+		"SEC-096": "MONGO_API_KEY = " + "abcdef1234567890abcdef1234567890\n",
+		"SEC-097": "AIVEN_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx\n",
+		"SEC-098": "rnd_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh\n",
+		"SEC-099": "RAILWAY_TOKEN = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+		"SEC-100": "SUPABASE_SERVICE_ROLE_KEY = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst\n",
+
+		// Identity/Auth (SEC-101 to SEC-106)
+		"SEC-101": "AUTH0_TOKEN = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n",
+		"SEC-102": "OKTA_TOKEN = " + "00ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmno\n",
+		"SEC-103": "sk_live_" + "ABCDEFGHIJKLMNOPQRSTUVWx\n",
+		"SEC-104": "\"type\": \"service_account\", " + "\"project_id\": \"my-firebase-project\"\n",
+		"SEC-105": "SUPABASE_ANON_KEY = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst\n",
+		"SEC-106": "KEYCLOAK_SECRET = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+
+		// Observability (SEC-107 to SEC-112)
+		"SEC-107": "DD_API_KEY = " + "abcdef1234567890abcdef1234567890\n",
+		"SEC-108": "DD_APP_KEY = " + "abcdef1234567890abcdef1234567890aabbccdd\n",
+		"SEC-109": "https://" + "abcdef1234567890abcdef1234567890" + "@o123456.ingest.sentry.io/1234567\n",
+		"SEC-110": "ELASTIC_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-111": "SPLUNK_TOKEN = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+		"SEC-112": "GF_API_KEY = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg\n",
+
+		// AI/ML (SEC-113 to SEC-122)
+		"SEC-113": "PINECONE_API_KEY = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+		"SEC-114": "WEAVIATE_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-115": "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\n",
+		"SEC-116": "MISTRAL_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-117": "gsk_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx\n",
+		"SEC-118": "TOGETHER_API_KEY = " + "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd\n",
+		"SEC-119": "pplx-" + "abcdef1234567890abcdef1234567890abcdef1234567890\n",
+		"SEC-120": "VOYAGE_API_KEY = " + "pa-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-121": "ANYSCALE_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-122": "COHERE_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+
+		// Productivity/SaaS (SEC-123 to SEC-135)
+		"SEC-123": "secret_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq\n",
+		"SEC-124": "figd_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-125": "ATLASSIAN_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWx\n",
+		"SEC-126": "circle_token = " + "aabbccddeeff00112233445566778899aabbccdd\n",
+		"SEC-127": "lin_api_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
+		"SEC-128": "BUILDKITE_AGENT_TOKEN = " + "aabbccddeeff00112233445566778899aabbccddee\n",
+		"SEC-129": "ASANA_PAT = " + "0/1234567890123456/ABCDEFGHIJKLMNOPQRSTUVWXYZabcd\n",
+		"SEC-130": "AIRTABLE_API_KEY = " + "keyABCDEFGHIJKLMN\n",
+		"SEC-131": "CONFLUENCE_API_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWx\n",
+		"SEC-132": "glpat-" + "ABCDEFghijklmnopqrst\n",
+		"SEC-133": "BITBUCKET_PASSWORD = " + "ABCDEFGHIJKLMNOPQRa\n",
+		"SEC-134": "TRAVIS_TOKEN = " + "ABCDEFghijklmnopqrstuv\n",
+		"SEC-135": "SNYK_TOKEN = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+
+		// Financial/Crypto (SEC-136 to SEC-145)
+		"SEC-136": "PLAID_SECRET = " + "aabbccddeeff00112233445566778899\n",
+		"SEC-137": "COINBASE_API_KEY = " + "ABCDEFGHIJKLMNOP\n",
+		"SEC-138": "BINANCE_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789AB\n",
+		"SEC-139": "PAYPAL_SECRET = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+		"SEC-140": "ADYEN_API_KEY = " + "AQEabcde." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-141": "RECURLY_API_KEY = " + "abcdef1234567890abcdef1234567890\n",
+		"SEC-142": "access_token" + "$production$" + "abcdef1234567890$abcdef1234567890abcdef1234567890\n",
+		"SEC-143": "sq0atp-" + "ABCDEFGHIJKLMNOPQRSTUV\n",
+		"SEC-144": "ETHERSCAN_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZ12345678\n",
+		"SEC-145": "ALCHEMY_API_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+
+		// Messaging/Email (SEC-146 to SEC-155)
+		"SEC-146": "POSTMARK_TOKEN = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
+		"SEC-147": "re_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh\n",
+		"SEC-148": "PUSHER_SECRET = " + "aabbccddeeff00112233\n",
+		"SEC-149": "ably_key=appid" + ".keyid:" + "ABCDEFGHIJKLMNOPQRSTa\n",
+		"SEC-150": "MESSAGEBIRD_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXy\n",
+		"SEC-151": "VONAGE_SECRET = " + "abcdef1234567890\n",
+		"SEC-152": "abcdef1234567890abcdef1234567890" + "-us12\n",
+		"SEC-153": "SG." + "ABCDEFghijklmnopqrstuv." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst_v\n",
+		"SEC-154": "TWILIO_AUTH_TOKEN = " + "abcdef1234567890abcdef1234567890\n",
+		"SEC-155": "COURIER_AUTH_TOKEN = " + "pk_live_ABCDEFGHIJKLMNOPQRSTa\n",
+
+		// Misc (SEC-156 to SEC-160)
+		"SEC-156": "pk." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678901\n",
+		"SEC-157": "sdk-" + "abcdef12-3456-7890-abcd-ef1234567890\n",
+		"SEC-158": "SEGMENT_WRITE_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
+		"SEC-159": "AMPLITUDE_API_KEY = " + "abcdef1234567890abcdef1234567890\n",
+		"SEC-160": "dp.st." + "my_env." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
 	}
 
 	a := NewAnalyzer()
@@ -491,11 +581,11 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 	}
 }
 
-// TestAllRules_Count verifies we have exactly 86 built-in secret rules.
+// TestAllRules_Count verifies we have exactly 160 built-in secret rules.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 86 {
-		t.Fatalf("expected 86 built-in secret rules, got %d", len(rules))
+	if len(rules) != 160 {
+		t.Fatalf("expected 160 built-in secret rules, got %d", len(rules))
 	}
 }
 

@@ -5,6 +5,7 @@ package catalog
 
 import (
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
@@ -48,6 +49,7 @@ func Catalog() map[string]RuleMeta {
 func allRuleSets() []*rules.RuleSet {
 	return []*rules.RuleSet{
 		secrets.NewAnalyzer().Rules(),
+		data.NewAnalyzer().Rules(),
 		ai.NewAnalyzer().Rules(),
 		iac.NewAnalyzer().Rules(),
 		deps.NewAnalyzer(deps.WithOSVDisabled()).Rules(),

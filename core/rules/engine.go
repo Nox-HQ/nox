@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -92,10 +93,10 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 }
 
 // containsAnyKeyword returns true if content contains at least one of the
-// keywords. Both content and keywords must be lowercase.
+// keywords. Content must be lowercase; keywords are lowered automatically.
 func containsAnyKeyword(contentLower []byte, keywords []string) bool {
 	for _, kw := range keywords {
-		if bytes.Contains(contentLower, []byte(kw)) {
+		if bytes.Contains(contentLower, []byte(strings.ToLower(kw))) {
 			return true
 		}
 	}

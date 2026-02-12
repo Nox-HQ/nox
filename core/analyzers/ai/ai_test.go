@@ -413,8 +413,8 @@ func TestInventory_JSONSerialization(t *testing.T) {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to parse inventory JSON: %v", err)
 	}
-	if parsed.SchemaVersion != "1.0.0" {
-		t.Fatalf("expected schema version 1.0.0, got %q", parsed.SchemaVersion)
+	if parsed.SchemaVersion != "2.0.0" {
+		t.Fatalf("expected schema version 2.0.0, got %q", parsed.SchemaVersion)
 	}
 	if len(parsed.Components) != 1 {
 		t.Fatalf("expected 1 component, got %d", len(parsed.Components))

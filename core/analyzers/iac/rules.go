@@ -21,8 +21,8 @@ type iacRule struct {
 	references   []string
 }
 
-// builtinIaCRules returns all built-in IaC security rules.
-func builtinIaCRules() []rules.Rule {
+// builtinBaseIaCRules returns the original set of IaC security rules (IAC-001 to IAC-185).
+func builtinBaseIaCRules() []rules.Rule {
 	defs := []iacRule{
 		// =================================================================
 		// Dockerfile rules (IAC-001 to IAC-003, IAC-022 to IAC-025)

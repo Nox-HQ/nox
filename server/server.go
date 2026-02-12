@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -300,14 +301,23 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 	// compliance_report tool — generate framework-specific compliance report.
 	srv.AddTool(
 		mcp.NewTool("compliance_report",
-			mcp.WithDescription("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10)"),
+			mcp.WithDescription("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic)"),
 			mcp.WithString("framework",
-				mcp.Description("Compliance framework: CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10"),
+				mcp.Description("Compliance framework: CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic"),
 				mcp.Required(),
 			),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleComplianceReport,
+	)
+
+	// data_sensitivity_report tool — summarize PII/sensitive data findings.
+	srv.AddTool(
+		mcp.NewTool("data_sensitivity_report",
+			mcp.WithDescription("Summarize PII and sensitive data findings from the scan (DATA-* rules)"),
+			mcp.WithReadOnlyHintAnnotation(true),
+		),
+		s.handleDataSensitivityReport,
 	)
 
 	s.registerPluginTools(srv)
@@ -1216,6 +1226,104 @@ func (s *Server) handleComplianceReport(_ context.Context, request mcp.CallToolR
 	compReport := compliance.GenerateReport(compliance.Framework(fw), ruleIDs)
 
 	data, err := json.MarshalIndent(compReport, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshalling report: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(truncate(string(data))), nil
+}
+
+// Data sensitivity report handler.
+
+func (s *Server) handleDataSensitivityReport(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.mu.RLock()
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if cache == nil {
+		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	}
+
+	// Filter DATA-* findings from active findings.
+	type ruleStats struct {
+		RuleID      string   `json:"rule_id"`
+		Description string   `json:"description"`
+		Count       int      `json:"count"`
+		Files       []string `json:"files"`
+	}
+	type report struct {
+		TotalFindings int         `json:"total_findings"`
+		Rules         []ruleStats `json:"rules"`
+		AffectedFiles []string    `json:"affected_files"`
+	}
+
+	ruleMap := make(map[string]*ruleStats)
+	allFiles := make(map[string]struct{})
+	cat := catalog.Catalog()
+
+	activeFindings := cache.Findings.ActiveFindings()
+	for i := range activeFindings {
+		f := &activeFindings[i]
+		if !strings.HasPrefix(f.RuleID, "DATA-") {
+			continue
+		}
+
+		rs, ok := ruleMap[f.RuleID]
+		if !ok {
+			desc := f.RuleID
+			if meta, exists := cat[f.RuleID]; exists {
+				desc = meta.Description
+			}
+			rs = &ruleStats{
+				RuleID:      f.RuleID,
+				Description: desc,
+			}
+			ruleMap[f.RuleID] = rs
+		}
+		rs.Count++
+
+		fp := f.Location.FilePath
+		allFiles[fp] = struct{}{}
+
+		// Track unique files per rule.
+		found := false
+		for _, existing := range rs.Files {
+			if existing == fp {
+				found = true
+				break
+			}
+		}
+		if !found {
+			rs.Files = append(rs.Files, fp)
+		}
+	}
+
+	// Build sorted slices for deterministic output.
+	rules := make([]ruleStats, 0, len(ruleMap))
+	for _, rs := range ruleMap {
+		sort.Strings(rs.Files)
+		rules = append(rules, *rs)
+	}
+	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
+
+	affectedFiles := make([]string, 0, len(allFiles))
+	for fp := range allFiles {
+		affectedFiles = append(affectedFiles, fp)
+	}
+	sort.Strings(affectedFiles)
+
+	total := 0
+	for _, rs := range rules {
+		total += rs.Count
+	}
+
+	rpt := report{
+		TotalFindings: total,
+		Rules:         rules,
+		AffectedFiles: affectedFiles,
+	}
+
+	data, err := json.MarshalIndent(rpt, "", "  ")
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("marshalling report: %v", err)), nil
 	}

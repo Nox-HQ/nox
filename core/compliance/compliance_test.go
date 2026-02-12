@@ -103,7 +103,7 @@ func TestGenerateReport_NoViolations(t *testing.T) {
 }
 
 func TestSupportedFrameworks(t *testing.T) {
-	if len(SupportedFrameworks) != 6 {
-		t.Errorf("expected 6 supported frameworks, got %d", len(SupportedFrameworks))
+	if len(SupportedFrameworks) != 8 {
+		t.Errorf("expected 8 supported frameworks, got %d", len(SupportedFrameworks))
 	}
 }

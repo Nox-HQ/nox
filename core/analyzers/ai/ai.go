@@ -34,12 +34,20 @@ type Inventory struct {
 	SchemaVersion string `json:"schema_version"`
 	// Components is the list of discovered AI components.
 	Components []Component `json:"components"`
+	// ConnectionGraph maps connections between AI components.
+	ConnectionGraph []Connection `json:"connection_graph,omitempty"`
+	// ModelProvenance lists ML model references found in the codebase.
+	ModelProvenance []ModelReference `json:"model_provenance,omitempty"`
+	// PromptTemplates lists prompt templates discovered in the codebase.
+	PromptTemplates []PromptTemplate `json:"prompt_templates,omitempty"`
+	// ToolMatrix lists tool permission sets for agents and MCP servers.
+	ToolMatrix []ToolPermissionSet `json:"tool_permission_matrix,omitempty"`
 }
 
 // NewInventory returns an empty inventory with the current schema version.
 func NewInventory() *Inventory {
 	return &Inventory{
-		SchemaVersion: "1.0.0",
+		SchemaVersion: "2.0.0",
 		Components:    []Component{},
 	}
 }
@@ -118,8 +126,23 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 			for _, c := range components {
 				inv.Add(c)
 			}
+
+			// Extract model references.
+			modelRefs := extractModelReferences(artifact.Path, content)
+			inv.ModelProvenance = append(inv.ModelProvenance, modelRefs...)
+
+			// Extract prompt templates.
+			promptTmpls := extractPromptTemplates(artifact.Path, content)
+			inv.PromptTemplates = append(inv.PromptTemplates, promptTmpls...)
+
+			// Extract tool permissions.
+			toolPerms := extractToolPermissions(artifact.Path, content)
+			inv.ToolMatrix = append(inv.ToolMatrix, toolPerms...)
 		}
 	}
+
+	// Build connection graph from discovered components and tool permissions.
+	inv.ConnectionGraph = extractConnections(inv.Components, inv.ToolMatrix)
 
 	fs.Deduplicate()
 	return fs, inv, nil
