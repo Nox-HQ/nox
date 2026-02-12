@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- needed for badge commits and SARIF upload
   security-events: write
 
 jobs:
@@ -47,11 +47,11 @@ jobs:
 
       - name: Install coverctl
         run: go install github.com/pterm/coverctl@latest
-        continue-on-error: true # nox:ignore IAC-018 -- optional tool, non-blocking
+        continue-on-error: true # nox:ignore IAC-018,IAC-310 -- optional tool, non-blocking
 
       - name: Check coverage thresholds
         run: coverctl check --config .coverctl.yaml --profile coverage.out
-        continue-on-error: true # nox:ignore IAC-018 -- advisory threshold check
+        continue-on-error: true # nox:ignore IAC-018,IAC-310 -- advisory threshold check
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -102,7 +102,7 @@ jobs:
         if: always()
         with:
           sarif_file: nox-results/results.sarif
-        continue-on-error: true # nox:ignore IAC-018 -- best-effort SARIF upload
+        continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload
 
       - name: Upload scan results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

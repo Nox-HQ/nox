@@ -1300,7 +1300,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-1059", keywords: []string{"LABEL", "maintainer"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
 			tags:         []string{"iac", "docker", "best-practice"},
-			remediation:  "Add LABEL maintainer=\"team@example.com\" to identify the image maintainer. This aids in vulnerability response and image lifecycle management.",
+			remediation:  "Add LABEL maintainer=\"team@example.com\" to identify the image maintainer. This aids in vulnerability response and image lifecycle management.", // nox:ignore DATA-001 -- example email in remediation text
 			references:   []string{"https://cwe.mitre.org/data/definitions/1059.html"},
 		},
 		{

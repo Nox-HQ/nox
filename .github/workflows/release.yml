@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- needed for creating GitHub releases
 
 jobs:
   release:
