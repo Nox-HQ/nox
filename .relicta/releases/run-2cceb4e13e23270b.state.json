@@ -1,0 +1,81 @@
+{
+  "run_id": "run-2cceb4e13e23270b",
+  "state": "published",
+  "head_sha": "b52efd4a985defd40cc44c5f1a356f736f5cd83a",
+  "plan_hash": "f2779545b801cca7376d421d04110031e22259864b0b7d6f8505980af34224e3",
+  "version_next": "0.1.0",
+  "steps": {
+    "create-tag": {
+      "State": "done",
+      "Attempts": 1,
+      "LastError": "",
+      "StartedAt": "2026-02-11T21:28:12.312791+01:00",
+      "CompletedAt": "2026-02-11T21:28:14.522479+01:00",
+      "Output": "Created and pushed tag v0.1.0"
+    }
+  },
+  "history": [
+    {
+      "At": "2026-02-11T21:25:35.082311+01:00",
+      "From": "draft",
+      "To": "planned",
+      "Event": "PLAN",
+      "Actor": "mcp-agent",
+      "Reason": "Release planned",
+      "Metadata": null
+    },
+    {
+      "At": "2026-02-11T21:25:40.384838+01:00",
+      "From": "planned",
+      "To": "versioned",
+      "Event": "BUMP",
+      "Actor": "mcp-agent",
+      "Reason": "Version applied",
+      "Metadata": {
+        "tag_name": "v0.1.0",
+        "version": "0.1.0"
+      }
+    },
+    {
+      "At": "2026-02-11T21:26:35.74065+01:00",
+      "From": "versioned",
+      "To": "notes_ready",
+      "Event": "GENERATE_NOTES",
+      "Actor": "mcp-agent",
+      "Reason": "Notes generated",
+      "Metadata": null
+    },
+    {
+      "At": "2026-02-11T21:28:05.558991+01:00",
+      "From": "notes_ready",
+      "To": "approved",
+      "Event": "APPROVE",
+      "Actor": "mcp-agent",
+      "Reason": "Release approved",
+      "Metadata": {
+        "auto_approved": "true",
+        "plan_hash": "f2779545b801cca7376d421d04110031e22259864b0b7d6f8505980af34224e3",
+        "risk_score": "0.00"
+      }
+    },
+    {
+      "At": "2026-02-11T21:28:12.311694+01:00",
+      "From": "approved",
+      "To": "publishing",
+      "Event": "START_PUBLISH",
+      "Actor": "mcp-agent",
+      "Reason": "Publishing started",
+      "Metadata": null
+    },
+    {
+      "At": "2026-02-11T21:28:14.523747+01:00",
+      "From": "publishing",
+      "To": "published",
+      "Event": "PUBLISH_COMPLETE",
+      "Actor": "mcp-agent",
+      "Reason": "Release published",
+      "Metadata": null
+    }
+  ],
+  "updated_at": "2026-02-11T21:28:14+01:00"
+}

@@ -1,0 +1,102 @@
+{
+  "id": "release-run",
+  "initial": "draft",
+  "states": {
+    "approved": {
+      "on": {
+        "CANCEL": {
+          "target": "canceled"
+        },
+        "START_PUBLISH": {
+          "target": "publishing",
+          "cond": "headMatches"
+        }
+      }
+    },
+    "canceled": {
+      "type": "final"
+    },
+    "draft": {
+      "on": {
+        "CANCEL": {
+          "target": "canceled"
+        },
+        "PLAN": {
+          "target": "planned"
+        }
+      }
+    },
+    "failed": {
+      "on": {
+        "CANCEL": {
+          "target": "canceled"
+        },
+        "RETRY_PUBLISH": {
+          "target": "publishing"
+        }
+      }
+    },
+    "notes_ready": {
+      "on": {
+        "APPROVE": {
+          "target": "approved",
+          "cond": "headMatches"
+        },
+        "BUMP": {
+          "target": "versioned",
+          "cond": "headMatches"
+        },
+        "CANCEL": {
+          "target": "canceled"
+        },
+        "GENERATE_NOTES": {
+          "target": "notes_ready",
+          "cond": "headMatches"
+        }
+      }
+    },
+    "planned": {
+      "on": {
+        "BUMP": {
+          "target": "versioned",
+          "cond": "headMatches"
+        },
+        "CANCEL": {
+          "target": "canceled"
+        }
+      }
+    },
+    "published": {
+      "type": "final"
+    },
+    "publishing": {
+      "on": {
+        "PUBLISH_COMPLETE": {
+          "target": "published",
+          "cond": "allStepsSucceeded"
+        },
+        "STEP_FAIL": {
+          "target": "failed"
+        },
+        "STEP_OK": {
+          "target": "publishing"
+        }
+      }
+    },
+    "versioned": {
+      "on": {
+        "CANCEL": {
+          "target": "canceled"
+        },
+        "GENERATE_NOTES": {
+          "target": "notes_ready",
+          "cond": "headMatches"
+        },
+        "PLAN": {
+          "target": "planned",
+          "cond": "headMatches"
+        }
+      }
+    }
+  }
+}

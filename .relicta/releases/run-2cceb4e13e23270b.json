@@ -1,0 +1,751 @@
+{
+  "id": "run-2cceb4e13e23270b",
+  "plan_hash": "f2779545b801cca7376d421d04110031e22259864b0b7d6f8505980af34224e3",
+  "repo_id": ".",
+  "repo_root": ".",
+  "base_ref": "v0.0.0",
+  "head_sha": "b52efd4a985defd40cc44c5f1a356f736f5cd83a",
+  "commits": [
+    "b52efd4a985defd40cc44c5f1a356f736f5cd83a",
+    "e1cd815f8d1836a058de2fee844639f7b2802d95",
+    "45d7314d94d8ac04473e58f7e82e0c61571cfd49",
+    "72ce0ab6c3779e01c666a0cfad236d01ff309e36",
+    "0d02f1093fd9e1217aaf2ee8be8af669da3dbbd2",
+    "36c91f4061e5cd92bdda9b5eb94921c1f14b6b68",
+    "0a7735ea66b695e4cfbf9351e3ec0a7136c55e03",
+    "a4f64d22d9f7873379c6d7fbc03314cf282612f1",
+    "370d4211c9334381c5f3c1c1e83792b5f1f876c9",
+    "ef581ac96e342353773a3c02908ed84ab78d63c5",
+    "c44742468e5849c2b189d7feb3c81ddb90c2be51",
+    "9ab9f273c0a0d8769ce92c653c22906876bc0853",
+    "ddf1386be30bed0c2f55852e475f8f50ddd22a3f",
+    "0168b1cab211fc3ebc8f579f7bedb317ed1b1de2",
+    "60f8ff85edafc505b9fd08777ea92bd803acf587",
+    "8077442ed9c7445c04f6c23f07d73ce0f2a06c03",
+    "6e2e1e1df3fa31e89c32dd2793d236aea6d76026",
+    "ac7c6164738adb4b067225dadd59bce1f2ff1137",
+    "60ac85a17d51285b2e208c9d46dbe2cf55032617",
+    "9b05ce8cc368b59f1d7f6b6371513ff8bcc37ec0",
+    "6ecbce7c131374ec30225e9e23dc47084eaa2b10",
+    "874d99594bb095c8a513835640dacd19b6d3a8a9",
+    "7d76b69d3249e6d2d0fc1748f27ed1c4859ea658",
+    "66f7357d96f848215784a04a61b40aa540becfa1",
+    "8e1efe1f955b1f4e7496d02830912c6deb72a493",
+    "2c674eb14a287aa7e2ea611ca6c5eb91015ce6d1",
+    "189dec4edda539fe32be6234ec647cddaf57f1cf",
+    "504f6c915bdd708c6f540a23de8809eafa57c2c2",
+    "e19fb41da9c945fe68f473cce3d6cbfd0d4ae274",
+    "245897b8e0efd9cd169c5b3a98c6a71f33d5de6b",
+    "7bbbbb61944c5f2ea4c680dffddc5aa7a8688cee",
+    "243cd5068442c7afeff25aa5f8ee46d511f0a936",
+    "f0fc2860885d5b56bd666c1cb6883f09c32fa78a",
+    "0c186ef92aabe158fca29861411f6ec23f645499",
+    "f13984c36a7fd8082b1d655677586ba90c035bae",
+    "50f265d340fe2e5c3361c168310331e515d72a4d",
+    "33e7a88f0df56ca162c52e26ac180623f85856f1",
+    "534ba906403dfac3fe907866e04c9748835e720c",
+    "cb6e93002d50fae03f827e81f67fd255ee8f883a",
+    "f4693dfbb64f929bf97879c601f81fbde0d4952f",
+    "b15be5d25b25cc546496f7c3fed4af70fb64e93b",
+    "e008335375985a04f5b785c2160e86c82d19406a",
+    "28a32b811858c93bb83bd7db8ef5f54b50bc407d",
+    "3d72dcb146eb7df2d3d46d7e1883722a7b1e63c6",
+    "1d23a7a1794d66cd7e2bd8618f45d1e5e73104c8",
+    "b133cd0b5073e1a0b18592dc35b1d91393a59169",
+    "ec3e260296ae26969add41d4b68eb0289604a135",
+    "1bc74ca60b74e556e0afca3ff193312f1604630a",
+    "eaa38b012aeaffb7536c86cf33a32d50f2333965",
+    "e262762480250525dbb73babad483a39c242cf4c",
+    "d1cf1bb241ee27e54f5c631ff6c6a3c103324838",
+    "14fe7d97903e37f81cda4bdd3e9c369191ae6289",
+    "aa559667c514515f2911e6c8ebcf5a6e06817717",
+    "046d62c3cbab4bf67c667f748d37227d03e8a06b",
+    "d5c5ece501e858f80f4c8713570cfe5dbfc04096",
+    "a411fda802a69571ea5a11e9675aa7ae7cbceb9c",
+    "c794f4310d0e3185b585519edde20cc03caf7e94",
+    "d9be4b653797f63c113e23768a84fe504cde290e",
+    "efe1319fed7a7e76647419428b50c73b35033133",
+    "ca7e84b1d477cc3f22fe9a5d22eaac14765ebde0",
+    "80085c529e6e29500cc478054f9b9ca7018f6552",
+    "d9ed482b3176007705bca8aee6e3f03beb2a4eb0",
+    "45c238d234b8e34b5d576968d3210d1b2f85b567"
+  ],
+  "config_hash": "",
+  "plugin_plan_hash": "",
+  "version_current": "0.0.0",
+  "version_next": "0.1.0",
+  "bump_kind": "minor",
+  "confidence": 0,
+  "risk_score": 0,
+  "reasons": null,
+  "actor_type": "agent",
+  "actor_id": "mcp-agent",
+  "thresholds": {
+    "auto_approve_risk_threshold": 0,
+    "require_approval_above": 0,
+    "block_release_above": 0
+  },
+  "tag_name": "v0.1.0",
+  "notes": {
+    "text": "# Release Notes\n\n## Version 0.1.0\n\nWe are extremely pleased to announce the release of version 0.1.0 of our software. This version comes with a host of new features, improvements, and fixes. We have significantly expanded our AI security rules, dependency scanning capabilities, and secrets detection to bolster security. We have also integrated a new plugin system and made several enhancements in the configuration and management of plugins. Furthermore, we have improved test coverage and stabilized several features.\n\n### New Features\n\n- **Pre-Commit Hook and CI Checks:** We have included a project-level pre-commit hook with CI-matching checks for rigorous code review prior to commits.\n- **Command Flags:** We introduced `--fmt`, `--vet`, `--lint` flags to the `nox protect install` command to provide more control over its operation.\n- **Dependency Scanning:** OSV vulnerability enrichment has been added to enhance dependency scanning.\n- **Secrets Detection:** The Shannon entropy matcher for high-entropy secret detection is a new feature that improves the identification of potential security threats. We also expanded our secrets detection rules from 5 to 86 with keyword pre-filtering.\n- **Git History Scanning:** The git history commit walker allows for scanning past commits, providing a comprehensive view of the project's history.\n- **Plugin System:** We implemented a robust plugin ecosystem with tracks, profiles, telemetry, scaffolding, and CI workflows. This includes a plugin SDK with gRPC scaffolding and conformance tests, a plugin safety engine for runtime enforcement, and commands for plugin and registry management.\n\n### Improvements\n\n- **Test Coverage:** We improved our test coverage from 67.6% to 83.1% to ensure reliability.\n- **Configuration:** The `.nox.yaml` scan configuration has been unified for easier management.\n- **Badge Text:** We replaced the badge text with an A-F security grade for a more intuitive understanding of security status.\n\n### Fixes\n\n- **Pre-Commit Hook and Test Fixtures:** We stabilized the pre-commit hook and suppressed test fixture findings to ensure smooth operation.\n- **Annotation and Diff Tests:** We stabilized the annotate and diff tests for the CI environment.\n- **Badge Count:** The badge now counts only active findings to provide a more accurate security status.\n\n### Documentation\n\n- **README:** We updated the README with information on the new OSV enrichment, pre-commit hooks, and other new features. We also included a quick demo and comprehensive usage guide.\n\nThis release is the result of comprehensive efforts and dedicated work of our team to bring more efficiency, security, and control to your projects. We invite you to upgrade to version 0.1.0 and experience the new enhancements.\n\n## Changelog\n\n# Changelog\n\n## [0.1.0] - 2022-XX-XX\n\n### Added\n- Project-level pre-commit hook with CI-matching checks.\n- `--fmt`, `--vet`, `--lint` flags to nox protect install.\n- OSV vulnerability enrichment for dependency scanning.\n- Pre-commit hook installer and custom rules CLI.\n- Shannon entropy matcher for high-entropy secret detection.\n- Git history commit walker for scanning past commits.\n- Expanded AI security rules to 18 and IaC rules to 50.\n- Expanded secrets detection from 5 to 86 rules with keyword pre-filtering.\n- Replaced badge text with A-F security grade.\n- Baseline, policy, suppressions, diff, watch, completions, badge, and PR annotations.\n- Test coverage tracking with coverctl and badge.\n- GitHub Action with checksum verification and fix interspersed scan flags.\n- `explain` section to `.nox.yaml` config.\n- `nox show` finding inspector with TUI, MCP tools, and enriched context.\n- Plugin ecosystem with tracks, profiles, telemetry, scaffolding, and CI workflows.\n- Unified `.nox.yaml` scan configuration.\n- Release infrastructure with GoReleaser, Relicta, and Homebrew tap.\n- Open-source community infrastructure.\n- Project name change from Hardline to Nox.\n- Integration of plugin capability discovery into assist module.\n- Agent-assist module with LLM-powered finding explanations.\n- Plugin SDK with gRPC scaffolding and conformance tests.\n- Plugin safety engine runtime enforcement.\n- CLI plugin and registry management commands.\n- OCI artifact distribution with content-addressed cache.\n- Plugin trust and verification layer.\n- Plugin registry client with semver resolution and caching.\n- Bridging of MCP server to plugin host for agent-accessible plugin tools.\n- Plugin host runtime with safety policy and type conversion.\n- Protobuf plugin interface with gRPC service contract.\n\n### Changed\n- Improved test coverage from 67.6% to 83.1%.\n\n### Fixed\n- Stabilized pre-commit hook and suppressed test fixture findings.\n- Stabilized annotate and diff tests for CI environment.\n- Fixed index-based range to avoid rangeValCopy lint error.\n- Badge now counts only active findings and logo restored in README.\n- Eliminated false positives in self-scan and pinned GitHub Actions.\n- Binary files are now skipped in the scanner and added per-severity badges.\n- RuleSet is now passed to SARIF reporter so help text appears in Code Scanning.\n- Applied gofmt to SARIF struct alignment.\n- Added help, fullDescription, and helpUri to SARIF rule catalog.\n- Fixed index-based range loops to avoid rangeValCopy lint errors.\n- Applied gofmt to badge grade thresholds.\n- Resolved CI lint errors and made coverctl install non-blocking.\n- Security badge added to README and fixed plugin-release workflow.\n- Suppressed findings are now excluded from badge, diff, and watch counts.\n- Extraction now only for known top-level flags in interspersed arg parser.\n- Added timeout to `nox explain` to prevent indefinite hangs.\n- Interspersed flags and positional args are now allowed in `nox show`.\n\n### Deprecated\n- None.\n\n### Removed\n- None.\n\n### Security\n- None.\n\n### Documentation\n- Updated README with OSV enrichment, pre-commit hooks, and new features.\n- Rewritten README with quick demo and added comprehensive usage guide.\n- Added plugin system backlog items and extension architecture guide.\n\n### Other\n- Updated security badges [skip ci].\n- Updated roady plan and backlog with new features.\n- Fixed golangci-lint config, applied gofmt, and improved CI workflow.\n- Added explanations.json to .gitignore.\n- Updated roady state for completed tasks.",
+    "audience_preset": "",
+    "tone_preset": "",
+    "provider": "",
+    "model": "",
+    "generated_at": "2026-02-11T21:26:35.740621+01:00"
+  },
+  "approval": {
+    "approved_by": "mcp-agent",
+    "approved_at": "2026-02-11T21:28:05.558974+01:00",
+    "auto_approved": true,
+    "plan_hash": "f2779545b801cca7376d421d04110031e22259864b0b7d6f8505980af34224e3",
+    "risk_score": 0,
+    "approver_type": "agent"
+  },
+  "steps": [
+    {
+      "name": "create-tag",
+      "type": "tag",
+      "config_hash": "",
+      "idempotency_key": ""
+    }
+  ],
+  "step_status": {
+    "create-tag": {
+      "state": "done",
+      "attempts": 1,
+      "started_at": "2026-02-11T21:28:12.312791+01:00",
+      "completed_at": "2026-02-11T21:28:14.522479+01:00",
+      "output": "Created and pushed tag v0.1.0"
+    }
+  },
+  "state": "published",
+  "history": [
+    {
+      "at": "2026-02-11T21:25:35.082311+01:00",
+      "from": "draft",
+      "to": "planned",
+      "event": "PLAN",
+      "actor": "mcp-agent",
+      "reason": "Release planned"
+    },
+    {
+      "at": "2026-02-11T21:25:40.384838+01:00",
+      "from": "planned",
+      "to": "versioned",
+      "event": "BUMP",
+      "actor": "mcp-agent",
+      "reason": "Version applied",
+      "metadata": {
+        "tag_name": "v0.1.0",
+        "version": "0.1.0"
+      }
+    },
+    {
+      "at": "2026-02-11T21:26:35.74065+01:00",
+      "from": "versioned",
+      "to": "notes_ready",
+      "event": "GENERATE_NOTES",
+      "actor": "mcp-agent",
+      "reason": "Notes generated"
+    },
+    {
+      "at": "2026-02-11T21:28:05.558991+01:00",
+      "from": "notes_ready",
+      "to": "approved",
+      "event": "APPROVE",
+      "actor": "mcp-agent",
+      "reason": "Release approved",
+      "metadata": {
+        "auto_approved": "true",
+        "plan_hash": "f2779545b801cca7376d421d04110031e22259864b0b7d6f8505980af34224e3",
+        "risk_score": "0.00"
+      }
+    },
+    {
+      "at": "2026-02-11T21:28:12.311694+01:00",
+      "from": "approved",
+      "to": "publishing",
+      "event": "START_PUBLISH",
+      "actor": "mcp-agent",
+      "reason": "Publishing started"
+    },
+    {
+      "at": "2026-02-11T21:28:14.523747+01:00",
+      "from": "publishing",
+      "to": "published",
+      "event": "PUBLISH_COMPLETE",
+      "actor": "mcp-agent",
+      "reason": "Release published"
+    }
+  ],
+  "changeset_id": "cs-1770841534805473000",
+  "changeset": {
+    "id": "cs-1770841534805473000",
+    "from_ref": "v0.0.0",
+    "to_ref": "",
+    "commits": [
+      {
+        "hash": "b52efd4a985defd40cc44c5f1a356f736f5cd83a",
+        "type": "docs",
+        "subject": "docs: update README with OSV enrichment, pre-commit hooks, and new features",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T20:11:14+01:00",
+        "raw_message": "docs: update README with OSV enrichment, pre-commit hooks, and new features\n\n- Update rule count to 155 (added VULN-001)\n- Add Dependencies \u0026 SCA section with OSV.dev integration details\n- Document --no-osv, --staged, --severity-threshold scan flags\n- Add pre-commit hooks section (nox protect + make hooks)\n- Document osv.disabled config option\n- Add entropy analysis, git history scanning, custom rules features\n- Add protect command to CLI reference\n"
+      },
+      {
+        "hash": "e1cd815f8d1836a058de2fee844639f7b2802d95",
+        "type": "ci",
+        "subject": "ci: update security badges [skip ci]",
+        "author": "github-actions[bot]",
+        "author_email": "github-actions[bot]@users.noreply.github.com",
+        "date": "2026-02-11T19:07:51Z",
+        "raw_message": "ci: update security badges [skip ci]\n"
+      },
+      {
+        "hash": "45d7314d94d8ac04473e58f7e82e0c61571cfd49",
+        "type": "fix",
+        "subject": "fix: stabilize pre-commit hook and suppress test fixture findings",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T20:05:57+01:00",
+        "raw_message": "fix: stabilize pre-commit hook and suppress test fixture findings\n\n- Remove set -e from hook script to properly track failures via\n  the failed variable instead of early script termination\n- Capture nox exit code with || to prevent premature exit\n- Add nox:ignore comments to test fixture AWS key strings in\n  diff_cmd_test.go\n- Fix errcheck on os.Chdir in diff tests\n"
+      },
+      {
+        "hash": "72ce0ab6c3779e01c666a0cfad236d01ff309e36",
+        "type": "fix",
+        "subject": "fix: stabilize annotate and diff tests for CI environment",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T20:00:41+01:00",
+        "raw_message": "fix: stabilize annotate and diff tests for CI environment\n\n- Clear GITHUB_REPOSITORY in TestRunAnnotate_MissingRepo to isolate\n  from CI environment variables\n- Use explicit --base HEAD --head HEAD in diff tests to avoid\n  dependency on branch naming\n- Change cwd to temp dir in TestRunDiff_ViaRunCommand so IsGitRepo\n  correctly returns false\n"
+      },
+      {
+        "hash": "0d02f1093fd9e1217aaf2ee8be8af669da3dbbd2",
+        "type": "feat",
+        "subject": "feat: add project-level pre-commit hook with CI-matching checks",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T19:55:50+01:00",
+        "raw_message": "feat: add project-level pre-commit hook with CI-matching checks\n\nAdds scripts/pre-commit that runs gofmt, go vet, golangci-lint\n(including gocritic), and nox scan on staged files — the same checks\nas the CI pipeline. Install with 'make hooks'.\n"
+      },
+      {
+        "hash": "0a7735ea66b695e4cfbf9351e3ec0a7136c55e03",
+        "type": "feat",
+        "subject": "feat: add --fmt, --vet, --lint flags to nox protect install",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T19:54:23+01:00",
+        "raw_message": "feat: add --fmt, --vet, --lint flags to nox protect install\n\nThe pre-commit hook can now optionally run gofmt, go vet, and\ngolangci-lint checks before the nox security scan, matching the\nCI pipeline checks for a consistent local development experience.\n"
+      },
+      {
+        "hash": "a4f64d22d9f7873379c6d7fbc03314cf282612f1",
+        "type": "feat",
+        "subject": "feat: add OSV vulnerability enrichment for dependency scanning",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T19:52:24+01:00",
+        "raw_message": "feat: add OSV vulnerability enrichment for dependency scanning\n\nIntegrate OSV.dev batch API to detect known vulnerabilities in parsed\nlockfile dependencies. Findings are emitted as VULN-001 with CVSS-mapped\nseverity, and vulnerability data enriches both CycloneDX and SPDX SBOM\noutput. Adds --no-osv flag and .nox.yaml config for offline mode.\n"
+      },
+      {
+        "hash": "370d4211c9334381c5f3c1c1e83792b5f1f876c9",
+        "type": "test",
+        "subject": "test: boost overall test coverage from 67.6% to 83.1%",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T19:09:37+01:00",
+        "raw_message": "test: boost overall test coverage from 67.6% to 83.1%\n\nAdd comprehensive tests across all major packages to exceed 80%\ncoverage target. Key improvements: core/scan 5.8%→80.6%,\ncli 43.9%→79.8%, cli/tui 51.2%→91.5%, server 56.4%→85.3%,\nassist 73.4%→88.6%, registry/oci 79.5%→87.1%, findings 70.6%→100%.\n"
+      },
+      {
+        "hash": "ef581ac96e342353773a3c02908ed84ab78d63c5",
+        "type": "chore",
+        "subject": "chore: update roady plan and backlog with new features",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T15:02:04+01:00",
+        "raw_message": "chore: update roady plan and backlog with new features\n"
+      },
+      {
+        "hash": "c44742468e5849c2b189d7feb3c81ddb90c2be51",
+        "type": "feat",
+        "subject": "feat: add pre-commit hook installer and custom rules CLI",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T15:01:59+01:00",
+        "raw_message": "feat: add pre-commit hook installer and custom rules CLI\n\nAdd two new features:\n\n1. nox protect install/uninstall/status — manages a git pre-commit hook\n   that scans staged files for secrets before commit. Includes --severity-\n   threshold flag, .pre-commit-hooks.yaml for framework integration, and\n   staged file scanning via git index (StagedFiles, StagedContent, RunStagedScan).\n\n2. --rules flag on scan/diff commands — loads custom YAML rules from a\n   file or directory, merges with built-in rules, and detects duplicate\n   IDs. Supports rules_dir in .nox.yaml config. Adds RunScanWithOptions()\n   and ScanOptions to core, HasID() to RuleSet.\n"
+      },
+      {
+        "hash": "9ab9f273c0a0d8769ce92c653c22906876bc0853",
+        "type": "feat",
+        "subject": "feat: add Shannon entropy matcher for high-entropy secret detection",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T15:01:46+01:00",
+        "raw_message": "feat: add Shannon entropy matcher for high-entropy secret detection\n\nImplement EntropyMatcher in core/rules/entropy.go that calculates Shannon\nentropy of candidate strings extracted via 4 tokenizers (quoted strings,\nassignment RHS, base64 blobs, hex sequences). Features configurable\nthreshold (default 4.5), context-aware boosting when secret-suggestive\nkeywords appear on the same line, and comprehensive false positive\nfiltering. Register \"entropy\" as a valid matcher type.\n"
+      },
+      {
+        "hash": "ddf1386be30bed0c2f55852e475f8f50ddd22a3f",
+        "type": "feat",
+        "subject": "feat: add git history commit walker for scanning past commits",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T15:00:53+01:00",
+        "raw_message": "feat: add git history commit walker for scanning past commits\n\nImplement WalkHistory() in core/git/history.go that traverses git commit\nhistory and invokes a callback with each file's content at each commit.\nSupports MaxDepth, branch selection, and incremental scanning via bookmark\ncommit SHA. Skips binary files and uses record separator (\\x1e) for safe\nparsing of commit metadata.\n"
+      },
+      {
+        "hash": "0168b1cab211fc3ebc8f579f7bedb317ed1b1de2",
+        "type": "ci",
+        "subject": "ci: update security badges [skip ci]",
+        "author": "github-actions[bot]",
+        "author_email": "github-actions[bot]@users.noreply.github.com",
+        "date": "2026-02-11T12:43:47Z",
+        "raw_message": "ci: update security badges [skip ci]\n"
+      },
+      {
+        "hash": "60f8ff85edafc505b9fd08777ea92bd803acf587",
+        "type": "fix",
+        "subject": "fix: use index-based range to avoid rangeValCopy lint error",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T13:42:19+01:00",
+        "raw_message": "fix: use index-based range to avoid rangeValCopy lint error\n"
+      },
+      {
+        "hash": "8077442ed9c7445c04f6c23f07d73ce0f2a06c03",
+        "type": "fix",
+        "subject": "fix: badge counts only active findings and restore logo in README",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T13:40:19+01:00",
+        "raw_message": "fix: badge counts only active findings and restore logo in README\n\n- Filter suppressed findings when badge reads from --input findings.json\n  (was counting all findings including suppressed, causing grade F)\n- Add centered Nox logo from assets/logo.png to README header\n- Convert badge images to HTML for consistent centered layout\n"
+      },
+      {
+        "hash": "6e2e1e1df3fa31e89c32dd2793d236aea6d76026",
+        "type": "ci",
+        "subject": "ci: update security badges [skip ci]",
+        "author": "github-actions[bot]",
+        "author_email": "github-actions[bot]@users.noreply.github.com",
+        "date": "2026-02-11T12:33:09Z",
+        "raw_message": "ci: update security badges [skip ci]\n"
+      },
+      {
+        "hash": "ac7c6164738adb4b067225dadd59bce1f2ff1137",
+        "type": "fix",
+        "subject": "fix: eliminate false positives in self-scan and pin GitHub Actions",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T13:30:49+01:00",
+        "raw_message": "fix: eliminate false positives in self-scan and pin GitHub Actions\n\n- Fix cross-line regex matching in SEC-073/074/076/085 by adding \\n to\n  negated character classes (Go regex [^:] matches newlines by default)\n- Add nox:ignore suppressions for AI/SEC rule definitions that trigger\n  their own patterns (self-match false positives)\n- Change SARIF reporter to use ActiveFindings() so inline suppressions\n  are reflected in GitHub Code Scanning uploads\n- Pin all GitHub Actions to full commit SHAs (IAC-013 supply chain fix)\n- Add IAC-002 suppression for intentional FROM scratch in plugin template\n\nSelf-scan now reports 0 active findings (19 suppressed).\n"
+      },
+      {
+        "hash": "60ac85a17d51285b2e208c9d46dbe2cf55032617",
+        "type": "ci",
+        "subject": "ci: update security badges [skip ci]",
+        "author": "github-actions[bot]",
+        "author_email": "github-actions[bot]@users.noreply.github.com",
+        "date": "2026-02-11T12:10:17Z",
+        "raw_message": "ci: update security badges [skip ci]\n"
+      },
+      {
+        "hash": "9b05ce8cc368b59f1d7f6b6371513ff8bcc37ec0",
+        "type": "fix",
+        "subject": "fix: skip binary files in scanner and add per-severity badges",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T13:08:42+01:00",
+        "raw_message": "fix: skip binary files in scanner and add per-severity badges\n\n- Fix gitignore root-anchored pattern matching (leading / was not\n  stripped, so /nox in .gitignore was not matching the compiled binary)\n- Add binary file detection in rules engine (null byte check in first\n  512 bytes) to prevent false positives from scanning compiled binaries\n- Add --by-severity flag to badge command generating per-severity SVG\n  badges (critical, high, medium, low) alongside the main grade badge\n- Update CI to generate and commit security badges on main branch\n"
+      },
+      {
+        "hash": "6ecbce7c131374ec30225e9e23dc47084eaa2b10",
+        "type": "fix",
+        "subject": "fix: pass RuleSet to SARIF reporter so help text appears in Code Scanning",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T12:47:42+01:00",
+        "raw_message": "fix: pass RuleSet to SARIF reporter so help text appears in Code Scanning\n\nThe CLI was passing nil for the RuleSet, causing buildCatalogFromFindings\nto be used which has no access to Remediation/References. Now ScanResult\ncarries a merged RuleSet from all analyzers, and the CLI passes it to\nsarif.NewReporter so all 154 rules emit help, helpUri, and fullDescription.\n"
+      },
+      {
+        "hash": "874d99594bb095c8a513835640dacd19b6d3a8a9",
+        "type": "fix",
+        "subject": "fix: apply gofmt to SARIF struct alignment",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T12:36:12+01:00",
+        "raw_message": "fix: apply gofmt to SARIF struct alignment\n"
+      },
+      {
+        "hash": "7d76b69d3249e6d2d0fc1748f27ed1c4859ea658",
+        "type": "fix",
+        "subject": "fix: add help, fullDescription, and helpUri to SARIF rule catalog",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T12:32:19+01:00",
+        "raw_message": "fix: add help, fullDescription, and helpUri to SARIF rule catalog\n\nGitHub Code Scanning was showing \"No rule help available\" because the SARIF\nReportingDescriptor was missing help, fullDescription, and helpUri fields.\n\nPopulate these from the Rule's Remediation and References fields:\n- fullDescription: rule description\n- help.text/markdown: remediation text + reference links\n- helpUri: first reference URL (typically CWE link)\n"
+      },
+      {
+        "hash": "66f7357d96f848215784a04a61b40aa540becfa1",
+        "type": "refactor",
+        "subject": "refactor: move plugin workflows to nox-hq/.github org repo",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T12:30:17+01:00",
+        "raw_message": "refactor: move plugin workflows to nox-hq/.github org repo\n\nRemove plugin-ci.yml and plugin-release.yml from the nox repo — they are\nreusable workflow_call workflows that belong in the org-wide .github repo,\nnot in the scanner itself. Update scaffold templates to reference the new\nlocation at nox-hq/.github.\n"
+      },
+      {
+        "hash": "8e1efe1f955b1f4e7496d02830912c6deb72a493",
+        "type": "fix",
+        "subject": "fix: use index-based range loops to avoid rangeValCopy lint errors",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T10:00:24+01:00",
+        "raw_message": "fix: use index-based range loops to avoid rangeValCopy lint errors\n"
+      },
+      {
+        "hash": "2c674eb14a287aa7e2ea611ca6c5eb91015ce6d1",
+        "type": "feat",
+        "subject": "feat: expand AI security rules to 18 and IaC rules to 50",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T09:53:41+01:00",
+        "raw_message": "feat: expand AI security rules to 18 and IaC rules to 50\n\nAdd 10 new AI security rules (AI-009 to AI-018) covering OWASP LLM Top 10:\nunsafe code execution, indirect prompt injection, excessive agency, SQL\ninjection via LLM output, error leakage, system prompt exposure, insecure\nmodel downloads, XSS, path traversal, and unbounded token limits.\n\nAdd 40 new IaC rules covering GitHub Actions (8), Docker Compose (4),\nexpanded Dockerfile/Kubernetes/Terraform, Helm (3), and CI/CD general.\n\nRefactor both analyzers to use dedicated rules.go files with compact table\ndefinitions. Total built-in rules: 86 SEC + 18 AI + 50 IAC = 154.\n"
+      },
+      {
+        "hash": "189dec4edda539fe32be6234ec647cddaf57f1cf",
+        "type": "feat",
+        "subject": "feat: expand secrets detection from 5 to 86 rules with keyword pre-filtering",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-11T09:24:11+01:00",
+        "raw_message": "feat: expand secrets detection from 5 to 86 rules with keyword pre-filtering\n\nAdd 81 new secret detection rules covering cloud providers (AWS, GCP,\nAzure, DigitalOcean, Heroku, Alibaba, IBM, Databricks), source control\n(GitHub, GitLab, Bitbucket), communication platforms (Slack, Discord,\nTelegram, Teams), payment processors (Stripe, Square, Shopify, Braintree),\nAI/ML providers (OpenAI, Anthropic, HuggingFace, Replicate, Cohere),\nDevOps/CI tools (NPM, PyPI, Docker Hub, Terraform, Vault, Grafana),\nSaaS APIs (Twilio, SendGrid, Datadog, PagerDuty, Linear, Okta),\ndatabase connection strings, and generic credential patterns.\n\nAdd Keywords field to rules.Rule for fast pre-filtering via\nbytes.Contains before expensive regex evaluation. Upgrade SEC-001\nto catch ASIA/ABIA/ACCA temporary STS key prefixes and SEC-004\nto match all PEM private key types.\n"
+      },
+      {
+        "hash": "504f6c915bdd708c6f540a23de8809eafa57c2c2",
+        "type": "fix",
+        "subject": "fix: apply gofmt to badge grade thresholds",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T23:06:55+01:00",
+        "raw_message": "fix: apply gofmt to badge grade thresholds\n"
+      },
+      {
+        "hash": "e19fb41da9c945fe68f473cce3d6cbfd0d4ae274",
+        "type": "feat",
+        "subject": "feat: replace badge text with A-F security grade",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:59:57+01:00",
+        "raw_message": "feat: replace badge text with A-F security grade\n\nUse a weighted scoring system (critical=10, high=5, medium=2, low=1)\nto compute a letter grade instead of showing raw finding counts.\nGrade thresholds: A (0), B (1-4), C (5-14), D (15-29), E (30-49), F (50+).\n"
+      },
+      {
+        "hash": "245897b8e0efd9cd169c5b3a98c6a71f33d5de6b",
+        "type": "fix",
+        "subject": "fix: resolve CI lint errors and make coverctl install non-blocking",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:49:25+01:00",
+        "raw_message": "fix: resolve CI lint errors and make coverctl install non-blocking\n\nAdd comment to exported Track const block (revive), rename go_ field\nto goSev in convert_test.go (var-naming), and add continue-on-error\nto coverctl install step since the module may not be publicly available.\n"
+      },
+      {
+        "hash": "7bbbbb61944c5f2ea4c680dffddc5aa7a8688cee",
+        "type": "chore",
+        "subject": "chore: fix golangci-lint config, apply gofmt, and improve CI workflow",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:46:40+01:00",
+        "raw_message": "chore: fix golangci-lint config, apply gofmt, and improve CI workflow\n\nMove linter settings under linters.settings (golangci-lint v2 schema).\nAuto-format 27 Go files with gofmt. Restructure CI into parallel lint,\ntest, and build jobs with go-version-file, only-new-issues, and race\ndetection.\n"
+      },
+      {
+        "hash": "243cd5068442c7afeff25aa5f8ee46d511f0a936",
+        "type": "fix",
+        "subject": "fix: add security badge to README and fix plugin-release workflow",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:37:56+01:00",
+        "raw_message": "fix: add security badge to README and fix plugin-release workflow\n\nAdd nox security scan badge (.github/nox-badge.svg) to README badges.\nMake NOX_SIGNING_KEY secret optional in plugin-release reusable workflow\nto prevent phantom failures on push events.\n"
+      },
+      {
+        "hash": "f0fc2860885d5b56bd666c1cb6883f09c32fa78a",
+        "type": "fix",
+        "subject": "fix: exclude suppressed findings from badge, diff, and watch counts",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:33:05+01:00",
+        "raw_message": "fix: exclude suppressed findings from badge, diff, and watch counts\n\nAll CLI commands now consistently use ActiveFindings() to count only\nnon-suppressed, non-baselined findings. Badge shows \"clean\" when all\nfindings are suppressed.\n"
+      },
+      {
+        "hash": "0c186ef92aabe158fca29861411f6ec23f645499",
+        "type": "feat",
+        "subject": "feat: add baseline, policy, suppressions, diff, watch, completions, badge, and PR annotations",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T22:03:47+01:00",
+        "raw_message": "feat: add baseline, policy, suppressions, diff, watch, completions, badge, and PR annotations\n\nImplement 8 features for production adoption:\n\n- Baseline management (core/baseline): fingerprint-based finding baselining\n  with atomic save, expiration, and prune support\n- Policy evaluation (core/policy): fail_on/warn_on severity thresholds with\n  baseline mode (strict/warn/off) and policy-aware exit codes\n- Inline suppressions (core/suppress): nox:ignore comment directives in all\n  comment styles with multi-rule, expiration, and next-line targeting\n- Git diff mode (cli/diff_cmd): show only findings in changed files\n- Watch mode (cli/watch_cmd): fsnotify-based re-scan on file changes\n- Shell completions (cli/completion_cmd): bash, zsh, fish, powershell\n- Badge generation (cli/badge_cmd): SVG status badge from scan results\n- PR annotations (cli/annotate_cmd): inline GitHub PR review comments via gh\n\nAlso adds ActiveFindings() to exclude suppressed/baselined findings from\ncounts, MCP baseline_status/baseline_add tools, and self-scan suppressions.\n"
+      },
+      {
+        "hash": "f13984c36a7fd8082b1d655677586ba90c035bae",
+        "type": "feat",
+        "subject": "feat: add test coverage tracking with coverctl and badge",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T12:27:25+01:00",
+        "raw_message": "feat: add test coverage tracking with coverctl and badge\n\n- Add .coverctl.yaml with domain-based coverage policies:\n  core (80%), analyzers (85%), cli (45%), server (65%),\n  plugin (70%), registry (70%), assist (60%)\n- Add coverage badge (76.3%) to README\n- Update CI to install coverctl, enforce thresholds, and\n  auto-update badge on main pushes\n- Add .cover/ to .gitignore for local history files\n"
+      },
+      {
+        "hash": "50f265d340fe2e5c3361c168310331e515d72a4d",
+        "type": "chore",
+        "subject": "chore: add explanations.json to .gitignore",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T12:02:04+01:00",
+        "raw_message": "chore: add explanations.json to .gitignore\n"
+      },
+      {
+        "hash": "33e7a88f0df56ca162c52e26ac180623f85856f1",
+        "type": "fix",
+        "subject": "fix: only extract known top-level flags in interspersed arg parser",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T11:58:04+01:00",
+        "raw_message": "fix: only extract known top-level flags in interspersed arg parser\n\nThe initial extractInterspersedArgs moved ALL flags to the front,\nwhich broke subcommand flags like --severity and --json for `nox show`.\nNow it only moves known top-level flags (--format, --output, -q, -v,\n--version) and leaves subcommand-specific flags in place.\n"
+      },
+      {
+        "hash": "534ba906403dfac3fe907866e04c9748835e720c",
+        "type": "feat",
+        "subject": "feat: add GitHub Action with checksum verification and fix interspersed scan flags",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T10:50:24+01:00",
+        "raw_message": "feat: add GitHub Action with checksum verification and fix interspersed scan flags\n\n- Add `action.yml` and `action.sh` for `nox-hq/nox@v1` composite action\n  with SHA-256 checksum verification, quiet mode, and improved job summary\n- Fix top-level flag parsing so `nox scan . --format sarif` works\n  (flags after the subcommand were silently ignored)\n- Enhance CI workflow with nox dogfood step, SARIF upload, and artifact upload\n"
+      },
+      {
+        "hash": "cb6e93002d50fae03f827e81f67fd255ee8f883a",
+        "type": "feat",
+        "subject": "feat: add `explain` section to `.nox.yaml` config",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-10T10:15:58+01:00",
+        "raw_message": "feat: add `explain` section to `.nox.yaml` config\n\nAllow configuring explain defaults (model, api_key_env, base_url,\ntimeout, batch_size, output, enrich, plugin_dir) in .nox.yaml so\nteams can standardize LLM provider settings per project. CLI flags\nstill override config values.\n\nAlso fix interspersed flag/positional arg parsing in explain command.\n"
+      },
+      {
+        "hash": "f4693dfbb64f929bf97879c601f81fbde0d4952f",
+        "type": "fix",
+        "subject": "fix: add timeout to `nox explain` to prevent indefinite hangs",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T23:46:47+01:00",
+        "raw_message": "fix: add timeout to `nox explain` to prevent indefinite hangs\n\nAdd --timeout flag (default 2m) and wire it into both the OpenAI SDK\nclient (option.WithRequestTimeout) and a context.WithTimeout wrapping\nthe explain call. Previously, an unreachable API endpoint would hang\nforever.\n"
+      },
+      {
+        "hash": "b15be5d25b25cc546496f7c3fed4af70fb64e93b",
+        "type": "fix",
+        "subject": "fix: allow interspersed flags and positional args in `nox show`",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T23:01:47+01:00",
+        "raw_message": "fix: allow interspersed flags and positional args in `nox show`\n\nGo's flag package stops parsing at the first non-flag argument, so\n`nox show . --severity critical` silently ignored the filter. Pre-extract\npositional args before flag.Parse so flags work in any position.\n"
+      },
+      {
+        "hash": "e008335375985a04f5b785c2160e86c82d19406a",
+        "type": "feat",
+        "subject": "feat: add `nox show` finding inspector with TUI, MCP tools, and enriched context",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T22:44:56+01:00",
+        "raw_message": "feat: add `nox show` finding inspector with TUI, MCP tools, and enriched context\n\nAdd interactive finding inspection via a Bubble Tea TUI (default) and\nstructured JSON output for MCP agents and the explain module.\n\nCore changes:\n- Add Remediation and References fields to all 23 built-in rules\n- Create core/catalog package aggregating rule metadata from all analyzers\n- Create core/detail package with source context reader, FindingDetail\n  enrichment, and filterable finding store\n- Add Rules() accessor to Engine and all analyzer types\n\nCLI:\n- Add `nox show` command with --severity, --rule, --file, --input,\n  --json, and --context flags\n- TUI with list/detail views, severity cycling, fuzzy search, and\n  vim-style navigation (j/k, n/p)\n- Non-interactive JSON mode when stdout is not a TTY or --json is passed\n\nMCP server:\n- Add get_finding_detail tool returning enriched JSON with source context\n  and remediation\n- Add list_findings tool with severity, rule, file, and limit filters\n\nAssist module:\n- Enrich LLM prompts with source snippets, CWE identifiers, and known\n  remediation text from the rule catalog\n"
+      },
+      {
+        "hash": "28a32b811858c93bb83bd7db8ef5f54b50bc407d",
+        "type": "docs",
+        "subject": "docs: rewrite README with quick demo and add comprehensive usage guide",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T19:23:20+01:00",
+        "raw_message": "docs: rewrite README with quick demo and add comprehensive usage guide\n\nRewrite README with installation options, quick demo, CI snippet, full\nrule catalog, configuration reference, and architecture overview. Add\ndocs/usage.md with complete CLI reference, output format schemas, CI/CD\nintegration examples, MCP server documentation, and plugin management\nguide. Also add scan output artifacts to .gitignore.\n"
+      },
+      {
+        "hash": "3d72dcb146eb7df2d3d46d7e1883722a7b1e63c6",
+        "type": "feat",
+        "subject": "feat: add plugin ecosystem with tracks, profiles, telemetry, scaffolding, and CI workflows",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T18:58:58+01:00",
+        "raw_message": "feat: add plugin ecosystem with tracks, profiles, telemetry, scaffolding, and CI workflows\n\nIntroduces the complete plugin authoring and distribution infrastructure:\n- Plugin tracks (10 categories) with safety profile presets and conformance testing\n- Plugin telemetry collection for runtime metrics\n- CLI scaffolding (nox plugin init/test) with embedded Go templates\n- Reusable GitHub Actions workflows for plugin CI and release\n- Registry schema v2 with track, tags, maintainers, license fields\n- Extended dependency parsers (Cargo.toml, NuGet, Composer, Cocoapods, Pub)\n- Plugin authoring and track catalog documentation\n- Registry scaffold for nox-hq/nox-registry bootstrap\n"
+      },
+      {
+        "hash": "1d23a7a1794d66cd7e2bd8618f45d1e5e73104c8",
+        "type": "feat",
+        "subject": "feat: add unified .nox.yaml scan configuration",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T18:54:14+01:00",
+        "raw_message": "feat: add unified .nox.yaml scan configuration\n\nAllow projects to control scan behavior independently of .gitignore via\na .nox.yaml config file. Supports path exclusions, rule disabling,\nseverity overrides, and output format/directory defaults.\n"
+      },
+      {
+        "hash": "b133cd0b5073e1a0b18592dc35b1d91393a59169",
+        "type": "feat",
+        "subject": "feat: add release infrastructure with GoReleaser, Relicta, and Homebrew tap",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T18:19:01+01:00",
+        "raw_message": "feat: add release infrastructure with GoReleaser, Relicta, and Homebrew tap\n\n- Make version injectable via ldflags (const → var) with commit/date metadata\n- Add .goreleaser.yaml for multi-platform builds (linux/darwin x amd64/arm64)\n- Add release workflow triggered on v* tags\n- Initialize Relicta for semantic version management\n- Add dist/ to .gitignore for GoReleaser build artifacts\n"
+      },
+      {
+        "hash": "ec3e260296ae26969add41d4b68eb0289604a135",
+        "type": "feat",
+        "subject": "feat: add open-source community infrastructure",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-09T17:42:29+01:00",
+        "raw_message": "feat: add open-source community infrastructure\n\nAdd essential open-source project files:\n- README.md with project overview, quickstart, and architecture\n- LICENSE (Apache 2.0)\n- CONTRIBUTING.md with dev setup and PR process\n- SECURITY.md with responsible disclosure policy\n- CODE_OF_CONDUCT.md (Contributor Covenant v2.1)\n- .editorconfig for consistent formatting\n- .pre-commit-config.yaml with lint and format hooks\n\nAdd GitHub configuration:\n- dependabot.yml for automated dependency updates\n- Issue templates (bug report, feature request)\n- Pull request template\n\nUpdate CI and Makefile:\n- Add code coverage to CI workflow\n- Add cover and cover-html Makefile targets\n"
+      },
+      {
+        "hash": "1bc74ca60b74e556e0afca3ff193312f1604630a",
+        "type": "feat",
+        "subject": "feat: rename project from Hardline to Nox",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T22:09:50+01:00",
+        "raw_message": "feat: rename project from Hardline to Nox\n\nRebrand the entire project: module path github.com/felixgeelhaar/hardline\n→ github.com/nox-hq/nox, proto package hardline.plugin.v1 → nox.plugin.v1,\nenv vars HARDLINE_HOME/HARDLINE_PLUGIN_ADDR → NOX_HOME/NOX_PLUGIN_ADDR,\nconfig .hardline.yaml → .nox.yaml, resource URIs hardline:// → nox://,\nbinary name hardline → nox. Regenerated protobuf code via buf. Added logo\nasset. All tests pass.\n"
+      },
+      {
+        "hash": "eaa38b012aeaffb7536c86cf33a32d50f2333965",
+        "type": "chore",
+        "subject": "chore: update roady state for completed task 25",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T21:44:02+01:00",
+        "raw_message": "chore: update roady state for completed task 25\n"
+      },
+      {
+        "hash": "e262762480250525dbb73babad483a39c242cf4c",
+        "type": "feat",
+        "subject": "feat: integrate plugin capability discovery into assist module",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T21:41:44+01:00",
+        "raw_message": "feat: integrate plugin capability discovery into assist module\n\nBridge the assist and plugin packages by introducing a PluginSource\ninterface that lets the Explainer discover plugin capabilities and\ninvoke read-only tools for enrichment context in LLM explanations.\n\n- Add PluginSource interface, types, and prompt formatting (assist/plugins.go)\n- Add HostAdapter wrapping plugin.Host (assist/host_adapter.go)\n- Add PluginContextInfo to ExplanationReport (assist/types.go)\n- Wire WithPluginSource/WithEnrichmentTools options into Explainer\n- Add --plugin-dir and --enrich flags to CLI explain command\n- Add comprehensive tests for all new functionality\n"
+      },
+      {
+        "hash": "d1cf1bb241ee27e54f5c631ff6c6a3c103324838",
+        "type": "chore",
+        "subject": "chore: update roady state for completed tasks 15 and 24",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T21:24:44+01:00",
+        "raw_message": "chore: update roady state for completed tasks 15 and 24\n"
+      },
+      {
+        "hash": "14fe7d97903e37f81cda4bdd3e9c369191ae6289",
+        "type": "feat",
+        "subject": "feat: implement agent-assist module with LLM-powered finding explanations",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T21:17:57+01:00",
+        "raw_message": "feat: implement agent-assist module with LLM-powered finding explanations\n\nAdd the assist/ package that consumes core.ScanResult and produces\nper-finding explanations via a provider-agnostic LLM interface. Includes\nan OpenAI provider implementation using the official openai-go/v3 SDK,\nbatched processing with configurable batch size, graceful degradation on\nprovider errors, and a CLI \"explain\" command for interactive use.\n"
+      },
+      {
+        "hash": "aa559667c514515f2911e6c8ebcf5a6e06817717",
+        "type": "chore",
+        "subject": "chore: add .claude/ to gitignore and track .roady/ config",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:52:29+01:00",
+        "raw_message": "chore: add .claude/ to gitignore and track .roady/ config\n"
+      },
+      {
+        "hash": "046d62c3cbab4bf67c667f748d37227d03e8a06b",
+        "type": "docs",
+        "subject": "docs: add plugin system backlog items and extension architecture guide",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:50:29+01:00",
+        "raw_message": "docs: add plugin system backlog items and extension architecture guide\n\nUpdate backlog with plugin gRPC interface, host runtime, safety engine,\nSDK, MCP bridge, registry, trust, and CLI commands. Add extension.md\ndocumenting the plugin architecture design.\n"
+      },
+      {
+        "hash": "d5c5ece501e858f80f4c8713570cfe5dbfc04096",
+        "type": "feat",
+        "subject": "feat: implement plugin SDK with gRPC scaffolding and conformance tests",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:49:47+01:00",
+        "raw_message": "feat: implement plugin SDK with gRPC scaffolding and conformance tests\n\nMinimal SDK for plugin authors: manifest/capability declaration helpers,\ngRPC server scaffolding with graceful shutdown, response builders for\nfindings/packages/AI components, and a conformance test runner that\nvalidates plugin behavior against the host contract.\n"
+      },
+      {
+        "hash": "a411fda802a69571ea5a11e9675aa7ae7cbceb9c",
+        "type": "feat",
+        "subject": "feat: add plugin safety engine runtime enforcement",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:49:33+01:00",
+        "raw_message": "feat: add plugin safety engine runtime enforcement\n\nAdd runtime violation handling, token-bucket rate limiting (requests and\nbandwidth), secret redaction from plugin outputs, and .hardline.yaml\nconfig loading. Host now enforces read-only policy, rate limits, and\nbandwidth caps at invocation time, terminating violating plugins.\n"
+      },
+      {
+        "hash": "c794f4310d0e3185b585519edde20cc03caf7e94",
+        "type": "feat",
+        "subject": "feat: implement CLI plugin and registry management commands",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:47:22+01:00",
+        "raw_message": "feat: implement CLI plugin and registry management commands\n\nAdd `hardline registry {add,list,remove}` and `hardline plugin\n{search,info,install,update,list,remove,call}` commands with persistent\nstate at ~/.hardline/state.json (HARDLINE_HOME overridable). Atomic\nstate writes via temp+rename, no new dependencies.\n"
+      },
+      {
+        "hash": "d9be4b653797f63c113e23768a84fe504cde290e",
+        "type": "feat",
+        "subject": "feat: implement OCI artifact distribution with content-addressed cache",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:33:32+01:00",
+        "raw_message": "feat: implement OCI artifact distribution with content-addressed cache\n\nAdd registry/oci/ subpackage that downloads plugin artifacts, verifies\ndigests via the trust layer, and stores them in a sharded content-addressed\nlocal cache. Extends VersionEntry with optional Signature/SignerKeyPEM\nfields for trust verification (backwards-compatible via omitempty).\n\nKey capabilities: platform matching (OS/arch), atomic downloads with size\nlimits, tar.gz extraction with path traversal protection, mirror URL\nrewriting for air-gapped environments, and garbage collection with\ndry-run support.\n"
+      },
+      {
+        "hash": "efe1319fed7a7e76647419428b50c73b35033133",
+        "type": "feat",
+        "subject": "feat: implement plugin trust and verification layer",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T17:19:58+01:00",
+        "raw_message": "feat: implement plugin trust and verification layer\n\nAdd registry/trust/ subpackage with Ed25519 signature validation,\nSHA-256 digest verification, JSON keyring management, trust level\nclassification (unverified/community/verified), and configurable\ntrust policy enforcement. Zero new dependencies (stdlib only).\n"
+      },
+      {
+        "hash": "ca7e84b1d477cc3f22fe9a5d22eaac14765ebde0",
+        "type": "feat",
+        "subject": "feat: implement plugin registry client with semver resolution and caching",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T16:58:56+01:00",
+        "raw_message": "feat: implement plugin registry client with semver resolution and caching\n\nAdd read-only registry client that fetches static JSON indexes over HTTP,\ncaches them locally with TTL, and resolves semver constraints to find\nmatching plugin versions. Zero new dependencies (stdlib only).\n"
+      },
+      {
+        "hash": "80085c529e6e29500cc478054f9b9ca7018f6552",
+        "type": "feat",
+        "subject": "feat: bridge MCP server to plugin host for agent-accessible plugin tools",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T16:35:43+01:00",
+        "raw_message": "feat: bridge MCP server to plugin host for agent-accessible plugin tools\n\nConnect the MCP server to the Plugin Host so AI agents can discover\nand invoke plugin tools through the MCP interface. Adds plugin.list,\nplugin.call_tool, and plugin.read_resource (stubbed) tools with\nworkspace allowlisting, output truncation, alias resolution, and\nclean JSON serialization of proto enums.\n"
+      },
+      {
+        "hash": "d9ed482b3176007705bca8aee6e3f03beb2a4eb0",
+        "type": "feat",
+        "subject": "feat: implement plugin host runtime with safety policy and type conversion",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T13:29:43+01:00",
+        "raw_message": "feat: implement plugin host runtime with safety policy and type conversion\n\nAdd the plugin/ package that manages plugin lifecycle (discover, connect,\nhandshake, invoke, shutdown), validates safety constraints against a\nconfigurable policy, converts between proto and domain types, and merges\nplugin results into ScanResult.\n\nKey components:\n- safety.go: Policy value objects, manifest validation with wildcard host\n  matching and filepath containment checks\n- convert.go: Anti-corruption layer for bidirectional Proto ↔ Go domain\n  type conversion (Finding, Location, Severity, Package, AIComponent)\n- plugin.go: Plugin entity with gRPC connection, subprocess lifecycle,\n  handshake state machine, and tool invocation\n- host.go: Host aggregate root with multi-plugin orchestration, qualified\n  tool routing, concurrent InvokeAll via errgroup, and sequential result\n  merging respecting thread-safety constraints\n"
+      },
+      {
+        "hash": "45c238d234b8e34b5d576968d3210d1b2f85b567",
+        "type": "feat",
+        "subject": "feat: define protobuf plugin interface with gRPC service contract",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-02-08T12:56:56+01:00",
+        "raw_message": "feat: define protobuf plugin interface with gRPC service contract\n\nAdd versioned protobuf definitions for the Hardline plugin system using\nbuf for proto management and code generation. Defines PluginService with\nGetManifest, InvokeTool, and StreamArtifacts RPCs, along with domain\ntypes (Finding, Artifact, Package, AIComponent) and safety/capability\nmessages. Includes generated Go code and round-trip tests for all\nmessage types.\n"
+      }
+    ]
+  },
+  "created_at": "2026-02-11T21:25:35.081621+01:00",
+  "updated_at": "2026-02-11T21:28:14.523749+01:00",
+  "published_at": "2026-02-11T21:28:14.523742+01:00"
+}
