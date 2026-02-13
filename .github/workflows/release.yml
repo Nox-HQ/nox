@@ -20,6 +20,10 @@ jobs:
         with:
           go-version: '1.25'
 
+      - uses: anchore/sbom-action/download-syft@28d71544de8eaf1b958d335707167c5f783590ad # v0.22.2
+        with:
+          syft-version: v1.22.0
+
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: '~> v2'

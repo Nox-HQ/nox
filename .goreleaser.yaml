@@ -96,8 +96,10 @@ release:
   footer: |
     **Full Changelog**: https://github.com/nox-hq/nox/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-brews:
+homebrew_casks:
   - name: nox
+    binaries:
+      - nox
     repository:
       owner: felixgeelhaar
       name: homebrew-tap
@@ -105,15 +107,10 @@ brews:
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com # nox:ignore DATA-001 -- goreleaser bot email
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/nox-hq/nox"
     description: "Language-agnostic security scanner with first-class AI application security"
-    license: "Apache-2.0"
     skip_upload: auto
-    install: |
-      bin.install "nox"
-    test: |
-      system "#{bin}/nox", "--version"
 
 sboms:
   - artifacts: archive
