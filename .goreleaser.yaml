@@ -96,7 +96,7 @@ release:
   footer: |
     **Full Changelog**: https://github.com/nox-hq/nox/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-homebrew_casks:
+brews:
   - name: nox
     repository:
       owner: felixgeelhaar
@@ -108,7 +108,12 @@ homebrew_casks:
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/nox-hq/nox"
     description: "Language-agnostic security scanner with first-class AI application security"
+    license: "Apache-2.0"
     skip_upload: auto
+    install: |
+      bin.install "nox"
+    test: |
+      system "#{bin}/nox", "--version"
 
 sboms:
   - artifacts: archive
