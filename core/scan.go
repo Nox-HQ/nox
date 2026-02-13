@@ -287,6 +287,11 @@ func loadCustomRules(path string) (*rules.RuleSet, error) {
 // is created with the staged content, scanned using the standard pipeline, and
 // finding paths are remapped to their original repository-relative locations.
 func RunStagedScan(repoRoot string) (*ScanResult, error) {
+	return RunStagedScanWithOptions(repoRoot, ScanOptions{})
+}
+
+// RunStagedScanWithOptions executes a staged-files scan with the given options.
+func RunStagedScanWithOptions(repoRoot string, opts ScanOptions) (*ScanResult, error) {
 	stagedPaths, err := git.StagedFiles(repoRoot)
 	if err != nil {
 		return nil, fmt.Errorf("listing staged files: %w", err)
@@ -339,6 +344,80 @@ func RunStagedScan(repoRoot string) (*ScanResult, error) {
 	}
 
 	return result, nil
+}
+
+// HistoryScanOptions configures git history scanning.
+type HistoryScanOptions struct {
+	// MaxDepth limits the number of commits to traverse. 0 means unlimited.
+	MaxDepth int
+
+	// Branch is the branch to scan. Defaults to HEAD.
+	Branch string
+
+	// Since is a bookmark commit SHA. When set, only commits after this
+	// SHA are scanned (for incremental history scanning).
+	Since string
+
+	// ScanOptions are passed through to the secrets analyzer.
+	ScanOptions ScanOptions
+}
+
+// RunHistoryScan traverses git history and scans each changed file for
+// secrets. It uses the git history walker to enumerate commits and feeds
+// file content through the secrets analyzer. Findings include commit
+// metadata (SHA, author, date) in their Metadata map.
+func RunHistoryScan(repoRoot string, opts *HistoryScanOptions) (*ScanResult, error) {
+	allFindings := findings.NewFindingSet()
+	allRules := rules.NewRuleSet()
+
+	secretsAnalyzer := secrets.NewAnalyzer()
+	rulesList := secretsAnalyzer.Rules().Rules()
+	for i := range rulesList {
+		allRules.Add(rulesList[i])
+	}
+
+	engine := rules.NewEngine(secretsAnalyzer.Rules())
+
+	walkOpts := git.WalkHistoryOptions{
+		MaxDepth: opts.MaxDepth,
+		Branch:   opts.Branch,
+		Since:    opts.Since,
+	}
+
+	err := git.WalkHistory(repoRoot, walkOpts, func(diff git.HistoryDiff) error {
+		matches, scanErr := engine.ScanFile(diff.FilePath, diff.Content)
+		if scanErr != nil {
+			return nil // skip files that fail to scan
+		}
+
+		for i := range matches {
+			// Attach commit metadata.
+			if matches[i].Metadata == nil {
+				matches[i].Metadata = make(map[string]string)
+			}
+			matches[i].Metadata["commit_sha"] = diff.Commit.SHA
+			matches[i].Metadata["commit_author"] = diff.Commit.Author
+			matches[i].Metadata["commit_date"] = diff.Commit.Date.Format("2006-01-02T15:04:05Z")
+			matches[i].Metadata["commit_message"] = diff.Commit.Message
+
+			allFindings.Add(matches[i])
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("history scan: %w", err)
+	}
+
+	allFindings.Deduplicate()
+	allFindings.SortDeterministic()
+
+	return &ScanResult{
+		Findings:    allFindings,
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: &ai.Inventory{},
+		Rules:       allRules,
+	}, nil
 }
 
 // SeverityMeetsThreshold returns true if the given severity is at or above the

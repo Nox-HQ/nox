@@ -214,6 +214,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&vexFlag, "vex", "", "path to OpenVEX document for vulnerability status overrides")
 	scanFS.StringVar(&complianceFlag, "compliance", "", "filter output by compliance framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10)")
 	scanFS.StringVar(&tfPlanFlag, "tf-plan", "", "path to terraform plan JSON file to scan")
+	var (
+		historyFlag      bool
+		historyDepthFlag int
+	)
+	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
+	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -244,6 +250,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if !quiet {
 		if stagedFlag {
 			fmt.Printf("nox %s — scanning staged files in %s\n", version, target)
+		} else if historyFlag {
+			if historyDepthFlag > 0 {
+				fmt.Printf("nox %s — scanning git history (%d commits) in %s\n", version, historyDepthFlag, target)
+			} else {
+				fmt.Printf("nox %s — scanning git history in %s\n", version, target)
+			}
 		} else {
 			fmt.Printf("nox %s — scanning %s\n", version, target)
 		}
@@ -256,6 +268,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	var result *nox.ScanResult
 	if stagedFlag {
 		result, err = nox.RunStagedScan(target)
+	} else if historyFlag {
+		historyOpts := nox.HistoryScanOptions{
+			MaxDepth:    historyDepthFlag,
+			ScanOptions: nox.ScanOptions{CustomRulesPath: rulesPath},
+		}
+		result, err = nox.RunHistoryScan(target, &historyOpts)
 	} else {
 		opts := nox.ScanOptions{
 			CustomRulesPath:   rulesPath,

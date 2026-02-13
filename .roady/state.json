@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 49,
+  "version": 60,
   "task_states": {
     "task-1": {
       "status": "done",
@@ -147,22 +147,36 @@
       ]
     },
     "task-26": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
-      "owner": "ai-agent"
+      "owner": "ai-agent",
+      "evidence": [
+        "All 19 git tests pass including 8 WalkHistory tests (BasicTraversal, MaxDepth, SinceBookmark, EmptyRepo, DeletedFiles, BinaryFilesSkipped, CallbackError, ModifiedFiles)"
+      ]
     },
     "task-27": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "RunHistoryScan implemented in core/scan.go with 7 tests (DetectsSecretInHistory, EmptyRepo, MaxDepth, CleanHistory, MultipleCommitsAccumulate, NotAGitRepo, ResultHasRules). CLI flags --history and --history-depth added. All 30+ test suites pass."
+      ]
     },
     "task-28": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
-      "owner": "ai-agent"
+      "owner": "ai-agent",
+      "evidence": [
+        "EntropyMatcher fully implemented in core/rules/entropy.go with 16+ tests. Registered in matcher registry."
+      ]
     },
     "task-29": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3 entropy-based rules (SEC-161/162/163) added to builtinEntropyRules() in core/analyzers/secrets/rules.go. Integrated end-to-end: engine dispatches to EntropyMatcher via matcher registry. Tests updated: rule count (163), positive match examples, compile test skips entropy rules. All 14 secrets tests pass."
+      ]
     },
     "task-3": {
       "status": "done",
@@ -173,17 +187,28 @@
       ]
     },
     "task-30": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
-      "owner": "ai-agent"
+      "owner": "ai-agent",
+      "evidence": [
+        "Fully implemented: install/uninstall/status subcommands, hook script generation, --severity-threshold flag, .pre-commit-hooks.yaml, staged scan mode via --staged flag and RunStagedScan(). 21 passing tests."
+      ]
     },
     "task-31": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "--staged flag in scan command (cli/main.go:211), RunStagedScan (core/scan.go:289), RunStagedScanWithOptions (core/scan.go:294), tests for no-git-repo error, protect command integration. All passing."
+      ]
     },
     "task-32": {
-      "status": "pending",
-      "path": ""
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "--rules flag in scan (cli/main.go:114), diff (cli/diff_cmd.go:22). rules_dir in .nox.yaml (core/config.go:47). loadCustomRules in core/scan.go handles file/dir. Validation: duplicate IDs, invalid YAML, missing fields all tested. 15+ tests in cli/custom_rules_test.go, 7 tests in core/scan_test.go for custom rules."
+      ]
     },
     "task-4": {
       "status": "done",
@@ -234,5 +259,5 @@
       ]
     }
   },
-  "updated_at": "2026-02-11T14:48:54.529977+01:00"
+  "updated_at": "2026-02-13T22:21:34.33382+01:00"
 }

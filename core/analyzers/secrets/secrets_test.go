@@ -37,13 +37,20 @@ func TestDetect_AWSAccessKeyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(results))
+	if len(results) < 1 {
+		t.Fatalf("expected at least 1 finding, got %d", len(results))
 	}
 
-	f := results[0]
-	if f.RuleID != "SEC-001" {
-		t.Fatalf("expected RuleID SEC-001, got %s", f.RuleID)
+	// Verify SEC-001 is among the findings.
+	var f *findings.Finding
+	for i := range results {
+		if results[i].RuleID == "SEC-001" {
+			f = &results[i]
+			break
+		}
+	}
+	if f == nil {
+		t.Fatal("expected finding with RuleID SEC-001")
 	}
 	if f.Severity != findings.SeverityHigh {
 		t.Fatalf("expected severity high, got %s", f.Severity)
@@ -65,13 +72,19 @@ func TestDetect_AWSSecretAccessKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(results))
+	if len(results) < 1 {
+		t.Fatalf("expected at least 1 finding, got %d", len(results))
 	}
 
-	f := results[0]
-	if f.RuleID != "SEC-002" {
-		t.Fatalf("expected RuleID SEC-002, got %s", f.RuleID)
+	var f *findings.Finding
+	for i := range results {
+		if results[i].RuleID == "SEC-002" {
+			f = &results[i]
+			break
+		}
+	}
+	if f == nil {
+		t.Fatal("expected finding with RuleID SEC-002")
 	}
 	if f.Severity != findings.SeverityCritical {
 		t.Fatalf("expected severity critical, got %s", f.Severity)
@@ -94,16 +107,22 @@ func TestDetect_GitHubToken_PersonalAccessToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(results))
+	if len(results) < 1 {
+		t.Fatalf("expected at least 1 finding, got %d", len(results))
 	}
 
-	f := results[0]
-	if f.RuleID != "SEC-003" {
-		t.Fatalf("expected RuleID SEC-003, got %s", f.RuleID)
+	found := false
+	for _, f := range results {
+		if f.RuleID == "SEC-003" {
+			found = true
+			if f.Severity != findings.SeverityHigh {
+				t.Fatalf("expected severity high, got %s", f.Severity)
+			}
+			break
+		}
 	}
-	if f.Severity != findings.SeverityHigh {
-		t.Fatalf("expected severity high, got %s", f.Severity)
+	if !found {
+		t.Fatal("expected finding with RuleID SEC-003")
 	}
 }
 
@@ -116,13 +135,19 @@ func TestDetect_GitHubToken_ServerToServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(results))
+	if len(results) < 1 {
+		t.Fatalf("expected at least 1 finding, got %d", len(results))
 	}
 
-	f := results[0]
-	if f.RuleID != "SEC-003" {
-		t.Fatalf("expected RuleID SEC-003, got %s", f.RuleID)
+	found := false
+	for _, f := range results {
+		if f.RuleID == "SEC-003" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected finding with RuleID SEC-003")
 	}
 }
 
@@ -317,8 +342,8 @@ func TestScanArtifacts_Deduplicates(t *testing.T) {
 	// Two files with identical content should produce findings that are
 	// deduplicated by the FindingSet because they have different file paths,
 	// so they should NOT be deduplicated (different fingerprints).
-	file1 := writeFile(t, dir, "a.env", "KEY=AKIAIOSFODNN7EXAMPLE\n")
-	file2 := writeFile(t, dir, "b.env", "KEY=AKIAIOSFODNN7EXAMPLE\n")
+	file1 := writeFile(t, dir, "a.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	file2 := writeFile(t, dir, "b.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	artifacts := []discovery.Artifact{
 		{Path: "a.env", AbsPath: file1, Type: discovery.Config, Size: 30},
@@ -331,10 +356,18 @@ func TestScanArtifacts_Deduplicates(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Same secret in two different files should produce 2 distinct findings.
+	// Same secret in two different files should produce matching SEC-001
+	// findings for both files. Additional entropy-based findings may also
+	// appear.
 	allFindings := fs.Findings()
-	if len(allFindings) != 2 {
-		t.Fatalf("expected 2 findings from 2 different files, got %d", len(allFindings))
+	sec001Count := 0
+	for _, f := range allFindings {
+		if f.RuleID == "SEC-001" {
+			sec001Count++
+		}
+	}
+	if sec001Count != 2 {
+		t.Fatalf("expected 2 SEC-001 findings from 2 different files, got %d", sec001Count)
 	}
 }
 
@@ -359,10 +392,14 @@ func TestScanArtifacts_UnreadableFile(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestAllRules_Compile verifies that every built-in rule's regex pattern
-// compiles without error.
+// compiles without error. Entropy-based rules have no pattern and are skipped.
 func TestAllRules_Compile(t *testing.T) {
 	for _, r := range builtinSecretRules() {
 		t.Run(r.ID, func(t *testing.T) {
+			if r.MatcherType == "entropy" {
+				t.Skipf("rule %s uses entropy matcher, no regex pattern to compile", r.ID)
+				return
+			}
 			_, err := regexp.Compile(r.Pattern)
 			if err != nil {
 				t.Fatalf("rule %s: pattern does not compile: %v", r.ID, err)
@@ -553,6 +590,11 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-158": "SEGMENT_WRITE_KEY = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef\n",
 		"SEC-159": "AMPLITUDE_API_KEY = " + "abcdef1234567890abcdef1234567890\n",
 		"SEC-160": "dp.st." + "my_env." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
+
+		// Entropy rules (SEC-161 to SEC-163)
+		"SEC-161": "secret_key = " + "aB3$xK9#mN2pQ7wZ" + "vL5jR8fY1cD4hT6g\n",
+		"SEC-162": "data = " + "Kj7xR2mD3nG9pQ5wZ8vL4jY1cH6bT0fAsXeWuIoP+q=\n",
+		"SEC-163": "hex_key = " + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6\n",
 	}
 
 	a := NewAnalyzer()
@@ -581,11 +623,12 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 	}
 }
 
-// TestAllRules_Count verifies we have exactly 160 built-in secret rules.
+// TestAllRules_Count verifies we have exactly 163 built-in secret rules
+// (160 regex + 3 entropy).
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 160 {
-		t.Fatalf("expected 160 built-in secret rules, got %d", len(rules))
+	if len(rules) != 163 {
+		t.Fatalf("expected 163 built-in secret rules, got %d", len(rules))
 	}
 }
 

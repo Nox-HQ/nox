@@ -1376,7 +1376,7 @@ func builtinSecretRules() []rules.Rule {
 		},
 	}
 
-	out := make([]rules.Rule, 0, len(defs))
+	out := make([]rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
 	for _, d := range defs {
 		out = append(out, rules.Rule{
 			ID:          d.id,
@@ -1393,5 +1393,54 @@ func builtinSecretRules() []rules.Rule {
 			References:  d.references,
 		})
 	}
+	out = append(out, builtinEntropyRules()...)
 	return out
+}
+
+// builtinEntropyRules returns entropy-based secret detection rules. These
+// use the "entropy" matcher type and do not require a regex pattern.
+// Instead, they rely on Shannon entropy analysis with context-aware
+// thresholds to detect high-randomness strings that look like secrets.
+func builtinEntropyRules() []rules.Rule {
+	return []rules.Rule{
+		{
+			ID:          "SEC-161",
+			Version:     "1.0",
+			Description: "High-entropy string in assignment (possible secret)",
+			Severity:    findings.SeverityMedium,
+			Confidence:  findings.ConfidenceMedium,
+			MatcherType: "entropy",
+			Keywords:    []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
+			Tags:        []string{"secrets", "entropy"},
+			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5"},
+			Remediation: "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+		},
+		{
+			ID:          "SEC-162",
+			Version:     "1.0",
+			Description: "High-entropy base64 blob detected (possible encoded secret)",
+			Severity:    findings.SeverityMedium,
+			Confidence:  findings.ConfidenceLow,
+			MatcherType: "entropy",
+			Keywords:    []string{"+", "/", "="},
+			Tags:        []string{"secrets", "entropy"},
+			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.8"},
+			Remediation: "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+		},
+		{
+			ID:          "SEC-163",
+			Version:     "1.0",
+			Description: "High-entropy hex string detected (possible secret key)",
+			Severity:    findings.SeverityMedium,
+			Confidence:  findings.ConfidenceLow,
+			MatcherType: "entropy",
+			Keywords:    []string{"key", "secret", "token", "password", "hash", "hex", "0x", "credential"},
+			Tags:        []string{"secrets", "entropy"},
+			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.0"},
+			Remediation: "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+		},
+	}
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -1354,5 +1355,283 @@ const apiKey = "AKIAIOSFODNN7EXAMPLE"
 			}
 			return
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// RunHistoryScan tests
+// ---------------------------------------------------------------------------
+
+// initGitRepo creates a git repo with an initial commit containing the given
+// files. Each key in files is a relative path and each value is the content.
+func initGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	// git init
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	// Configure git user (required for commits).
+	for _, args := range [][]string{
+		{"config", "user.email", "test@nox.dev"},
+		{"config", "user.name", "Nox Test"},
+	} {
+		cmd = exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git config: %v\n%s", err, out)
+		}
+	}
+
+	// Write files.
+	for path, content := range files {
+		full := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+
+	// Stage and commit.
+	cmd = exec.Command("git", "add", "-A")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", "initial commit")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	return dir
+}
+
+// addCommit stages and commits files with the given message. Each key in
+// files is a relative path and each value is the content.
+func addCommit(t *testing.T, dir, message string, files map[string]string) {
+	t.Helper()
+
+	for path, content := range files {
+		full := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+	}
+
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+
+	cmd = exec.Command("git", "commit", "-m", message)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+}
+
+func TestRunHistoryScan_DetectsSecretInHistory(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"config.go": `package main
+
+const apiKey = "AKIAIOSFODNN7EXAMPLE"
+`,
+	})
+
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// Should find at least one SEC-001 finding.
+	found := false
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID != "SEC-001" {
+			continue
+		}
+		found = true
+
+		// Verify commit metadata is attached.
+		if f.Metadata["commit_sha"] == "" {
+			t.Error("expected commit_sha in metadata")
+		}
+		if f.Metadata["commit_author"] == "" {
+			t.Error("expected non-empty commit_author in metadata")
+		}
+		if f.Metadata["commit_date"] == "" {
+			t.Error("expected commit_date in metadata")
+		}
+		if f.Metadata["commit_message"] != "initial commit" {
+			t.Errorf("expected commit_message 'initial commit', got %q", f.Metadata["commit_message"])
+		}
+		break
+	}
+	if !found {
+		t.Error("expected SEC-001 finding for AWS key in history")
+	}
+}
+
+func TestRunHistoryScan_EmptyRepo(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Init an empty repo with no commits.
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error for empty repo, got: %v", err)
+	}
+
+	if len(result.Findings.Findings()) != 0 {
+		t.Errorf("expected 0 findings, got %d", len(result.Findings.Findings()))
+	}
+}
+
+func TestRunHistoryScan_MaxDepth(t *testing.T) {
+	t.Parallel()
+
+	// Create repo with 3 commits, each introducing a secret.
+	dir := initGitRepo(t, map[string]string{
+		"file1.go": `const k1 = "AKIAIOSFODNN7EXAMPLE"`,
+	})
+
+	addCommit(t, dir, "second commit", map[string]string{
+		"file2.go": `const k2 = "AKIAIOSFODNN7EXAMPL2"`,
+	})
+
+	addCommit(t, dir, "third commit", map[string]string{
+		"file3.go": `const k3 = "AKIAIOSFODNN7EXAMPL3"`,
+	})
+
+	// Scan only the first commit.
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{
+		MaxDepth: 1,
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Should only have findings from the first commit (file1.go).
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "SEC-001" && f.Location.FilePath != "file1.go" {
+			t.Errorf("expected findings only from file1.go with MaxDepth=1, got %s", f.Location.FilePath)
+		}
+	}
+}
+
+func TestRunHistoryScan_CleanHistory(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"clean.go": `package main
+
+func main() {
+    println("hello")
+}
+`,
+	})
+
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(result.Findings.Findings()) != 0 {
+		t.Errorf("expected 0 findings for clean history, got %d", len(result.Findings.Findings()))
+	}
+}
+
+func TestRunHistoryScan_MultipleCommitsAccumulate(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"file1.go": `const k1 = "AKIAIOSFODNN7EXAMPLE"`,
+	})
+
+	addCommit(t, dir, "add second secret", map[string]string{
+		"file2.go": `const k2 = "AKIAIOSFODNN7EXAMPL2"`,
+	})
+
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Should find secrets from both commits.
+	files := make(map[string]bool)
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "SEC-001" {
+			files[f.Location.FilePath] = true
+		}
+	}
+
+	if !files["file1.go"] {
+		t.Error("expected finding from file1.go")
+	}
+	if !files["file2.go"] {
+		t.Error("expected finding from file2.go")
+	}
+}
+
+func TestRunHistoryScan_NotAGitRepo(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	_, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestRunHistoryScan_ResultHasRules(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"clean.go": `package main`,
+	})
+
+	result, err := RunHistoryScan(dir, &HistoryScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Even with no findings, the result should have the secrets rules loaded.
+	if result.Rules == nil {
+		t.Fatal("expected non-nil rules")
+	}
+	if len(result.Rules.Rules()) == 0 {
+		t.Error("expected rules to be populated")
+	}
+	if result.Inventory == nil {
+		t.Fatal("expected non-nil inventory")
+	}
+	if result.AIInventory == nil {
+		t.Fatal("expected non-nil AI inventory")
 	}
 }
