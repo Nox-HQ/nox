@@ -41,3 +41,6 @@ explanations.json
 
 # Claude Code
 .claude/
+
+# Relicta
+.relicta/
