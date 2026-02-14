@@ -225,7 +225,7 @@ nox scan --staged --severity-threshold %s --quiet .
 exit_code=$?
 if [ $exit_code -eq 1 ]; then
     echo ""
-    echo "nox: commit blocked — secrets or security issues found in staged files"
+    echo "nox: commit blocked — secrets or security issues found in staged files" # nox:ignore SEC-163 -- em dash in string not hex
     echo "nox: use '// nox:ignore RULE-ID -- reason' to suppress false positives"
     echo "nox: use 'git commit --no-verify' to skip this check (not recommended)"
     exit 1

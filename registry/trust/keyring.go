@@ -66,7 +66,7 @@ func (kr *Keyring) Remove(fingerprint string) error {
 func NewKey(name string, publicKeyPEM []byte) (Key, error) {
 	pub, err := ParsePublicKey(publicKeyPEM)
 	if err != nil {
-		return Key{}, fmt.Errorf("parsing public key: %w", err)
+		return Key{}, fmt.Errorf("parsing public key: %w", err) // nox:ignore SEC-163 -- error message not a secret
 	}
 	return Key{
 		Name:         name,

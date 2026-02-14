@@ -41,6 +41,7 @@ resolve_version() {
     local tag
     tag=$(curl -fsSL \
       -H "Accept: application/vnd.github+json" \
+      # nox:ignore SEC-161,SEC-163 -- env var pattern not a secret
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
       "https://api.github.com/repos/${REPO}/releases/latest" \
       | grep -o '"tag_name":\s*"[^"]*"' \

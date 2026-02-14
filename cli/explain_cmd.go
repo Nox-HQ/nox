@@ -75,7 +75,7 @@ func runExplain(args []string) int {
 	// Check for API key.
 	apiKeyEnv := "OPENAI_API_KEY"
 	if cfg.Explain.APIKeyEnv != "" {
-		apiKeyEnv = cfg.Explain.APIKeyEnv
+		apiKeyEnv = cfg.Explain.APIKeyEnv // nox:ignore SEC-163 -- env var name not a secret
 	}
 	if os.Getenv(apiKeyEnv) == "" && baseURL == "" {
 		fmt.Fprintf(os.Stderr, "error: %s environment variable is required (or set --base-url for a local endpoint)\n", apiKeyEnv)

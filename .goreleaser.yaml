@@ -101,7 +101,7 @@ brews:
     repository:
       owner: felixgeelhaar
       name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}" # nox:ignore SEC-163 -- Go template using env var
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com # nox:ignore DATA-001 -- goreleaser bot email

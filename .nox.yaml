@@ -6,3 +6,11 @@ scan:
     - "*_test.go"
     - ".relicta/"
     - ".cover/"
+    - ".roady/"
+    # Rule definition files contain high-entropy regex patterns (expected false positives)
+    - "core/analyzers/secrets/rules.go"
+    - "core/analyzers/iac/rules*.go"
+    - "core/analyzers/ai/rules.go"
+    - "core/compliance/data.go"
+    - "registry/trust/signature.go"
+    - "cli/plugin_cmd.go"

@@ -22,6 +22,9 @@ type Filter struct {
 	Severities  []findings.Severity
 	RulePattern string
 	FilePattern string
+	// IncludeSuppressed when true includes findings with StatusSuppressed, StatusBaselined,
+	// StatusVEXNotAffected, and StatusVEXFixed. Defaults to false.
+	IncludeSuppressed bool
 }
 
 // LoadFromFile loads findings from a findings.json file.
@@ -65,6 +68,9 @@ func (s *Store) Filter(f Filter) []findings.Finding {
 			continue
 		}
 		if !matchesPattern(finding.Location.FilePath, f.FilePattern) {
+			continue
+		}
+		if !f.IncludeSuppressed && !finding.Status.IsActive() {
 			continue
 		}
 		result = append(result, finding)

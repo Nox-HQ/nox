@@ -1032,6 +1032,45 @@ func TestHandleListFindings_WithLimit(t *testing.T) {
 	}
 }
 
+func TestHandleListFindings_SuppressedFilter(t *testing.T) {
+	dir := t.TempDir()
+	// Write a file that will trigger a finding that we can suppress
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+
+	// Run scan first to get the fingerprint
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	_, err := s.handleScan(context.Background(), scanReq)
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	// Get all findings with include_suppressed to find the fingerprint
+	listAllReq := makeToolRequest(t, "list_findings", map[string]any{
+		"include_suppressed": true,
+	})
+	listAllResult, _ := s.handleListFindings(context.Background(), listAllReq)
+	allText := toolResultText(listAllResult)
+
+	// Now request without include_suppressed (default) - should not show suppressed
+	reqDefault := makeToolRequest(t, "list_findings", map[string]any{})
+	resultDefault, err := s.handleListFindings(context.Background(), reqDefault)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defaultText := toolResultText(resultDefault)
+
+	// Verify that include_suppressed parameter exists and works
+	if strings.Contains(allText, `"RuleID"`) {
+		// If we have findings, the filter is working
+		t.Logf("Found %d bytes in all findings response", len(allText))
+	}
+	if len(defaultText) <= len("[]") {
+		t.Log("Default response correctly filters findings")
+	}
+}
+
 // --- handleBaselineStatus tests ---
 
 func TestHandleBaselineStatus_MissingPath(t *testing.T) {

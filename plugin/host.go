@@ -241,7 +241,7 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 		v := RuntimeViolation{
 			Type:       ViolationSecretLeaked,
 			PluginName: pluginName,
-			Message:    "plugin output contained secrets (redacted before delivery)",
+			Message:    "plugin output contained secrets (redacted before delivery)", // nox:ignore SEC-163 -- error message not a secret
 			Timestamp:  time.Now(),
 		}
 		h.mu.Lock()
@@ -384,7 +384,7 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 				v := RuntimeViolation{
 					Type:       ViolationSecretLeaked,
 					PluginName: pluginName,
-					Message:    "plugin output contained secrets (redacted before delivery)",
+					Message:    "plugin output contained secrets (redacted before delivery)", // nox:ignore SEC-163 -- error message not a secret
 					Timestamp:  time.Now(),
 				}
 				h.mu.Lock()

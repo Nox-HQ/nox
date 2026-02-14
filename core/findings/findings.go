@@ -35,6 +35,16 @@ const (
 	StatusVEXFixed              Status = "vex_fixed"
 )
 
+// IsActive returns true if the finding should be reported (not suppressed,
+// baselined, or marked not affected/fixed via VEX).
+func (s Status) IsActive() bool {
+	switch s {
+	case StatusSuppressed, StatusBaselined, StatusVEXNotAffected, StatusVEXFixed:
+		return false
+	}
+	return true
+}
+
 // Confidence expresses how certain the scanner is that the finding is a true
 // positive rather than a false positive.
 type Confidence string
@@ -182,8 +192,7 @@ func (fs *FindingSet) ActiveFindings() []Finding {
 	var active []Finding
 	for i := range fs.items {
 		finding := fs.items[i]
-		switch finding.Status {
-		case StatusSuppressed, StatusBaselined, StatusVEXNotAffected, StatusVEXFixed:
+		if !finding.Status.IsActive() {
 			continue
 		}
 		active = append(active, finding)

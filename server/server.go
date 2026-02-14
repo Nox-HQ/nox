@@ -174,6 +174,9 @@ func (s *Server) registerTools(srv *mcpserver.MCPServer) {
 			mcp.WithNumber("limit",
 				mcp.Description("Max findings to return (default: 50)"),
 			),
+			mcp.WithBoolean("include_suppressed",
+				mcp.Description("Include suppressed/baselined findings (default: false)"),
+			),
 			mcp.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleListFindings,
@@ -682,6 +685,8 @@ func (s *Server) handleListFindings(_ context.Context, request mcp.CallToolReque
 	}
 	filter.RulePattern = request.GetString("rule", "")
 	filter.FilePattern = request.GetString("file", "")
+	// Only include suppressed findings if explicitly requested.
+	filter.IncludeSuppressed = request.GetBool("include_suppressed", false)
 
 	filtered := store.Filter(filter)
 

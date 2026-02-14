@@ -686,7 +686,7 @@ Suppress specific findings directly in source code using `nox:ignore` comments. 
 
 ```go
 // nox:ignore SEC-001 -- false positive in test data
-var testKey = "AKIAIOSFODNN7EXAMPLE"
+var testKey = "AKIAEXAMPLEFAKEKEY"
 ```
 
 ```python

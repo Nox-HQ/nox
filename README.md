@@ -269,7 +269,7 @@ Suppress specific findings directly in source code:
 
 ```go
 // nox:ignore SEC-001 -- false positive in test
-var testKey = "AKIAIOSFODNN7EXAMPLE"
+var testKey = "AKIAEXAMPLEFAKEKEY"
 
 var apiKey = "test" // nox:ignore SEC-005
 ```
