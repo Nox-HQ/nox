@@ -25,11 +25,10 @@ def parse_gitleaks(content):
         description = desc_match.group(1) if desc_match else ""
 
         # Handle triple-quoted regex - try both ''' and """
-        regex_match = re.search(r'regex\s*=\s*"""([^"]+)"""', block)
+        # Triple single quotes are most common in Gitleaks
+        regex_match = re.search(r"regex\s*=\s*'''(.+?)'''", block)
         if not regex_match:
-            regex_match = re.search(
-                r'regex\s*=\s*"""([^"]+)"""', block.replace("'''", '"""')
-            )
+            regex_match = re.search(r'regex\s*=\s*"""(.+?)"""', block)
         if not regex_match:
             regex_match = re.search(r'regex\s*=\s*"([^"]+)"', block)
         regex_pattern = regex_match.group(1) if regex_match else ""
