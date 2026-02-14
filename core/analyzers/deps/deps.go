@@ -178,7 +178,7 @@ func NewAnalyzer(opts ...AnalyzerOption) *Analyzer {
 // Rules returns the rule set for the dependency vulnerability analyzer.
 func (a *Analyzer) Rules() *rules.RuleSet {
 	rs := rules.NewRuleSet()
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "VULN-001",
 		Version:     "1.0",
 		Description: "Known vulnerability in dependency",
@@ -189,7 +189,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		References:  []string{"https://osv.dev"},
 		Metadata:    map[string]string{"cwe": "CWE-1395"},
 	})
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "VULN-002",
 		Version:     "1.0",
 		Description: "Typosquatting: package name suspiciously similar to popular package",
@@ -200,7 +200,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		References:  []string{"https://snyk.io/blog/typosquatting-attacks/"},
 		Metadata:    map[string]string{"cwe": "CWE-1357"},
 	})
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "VULN-003",
 		Version:     "1.0",
 		Description: "Known malicious package detected",
@@ -211,7 +211,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		References:  []string{"https://osv.dev"},
 		Metadata:    map[string]string{"cwe": "CWE-506"},
 	})
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "LIC-001",
 		Version:     "1.0",
 		Description: "Dependency uses a restricted license",
@@ -222,7 +222,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		References:  []string{"https://spdx.org/licenses/"},
 		Metadata:    map[string]string{"cwe": "CWE-1357"},
 	})
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "CONT-001",
 		Version:     "1.0",
 		Description: "Container base image not pinned to specific digest",
@@ -233,7 +233,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		References:  []string{"https://docs.docker.com/develop/develop-images/dockerfile_best-practices/"},
 		Metadata:    map[string]string{"cwe": "CWE-829"},
 	})
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "CONT-002",
 		Version:     "1.0",
 		Description: "Container base image uses 'latest' tag or no tag",

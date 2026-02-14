@@ -85,12 +85,24 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 
 	// Secrets scanner.
 	secretsAnalyzer := secrets.NewAnalyzer()
+
+	// Apply entropy config overrides from .nox.yaml.
+	if ec := cfg.Scan.Entropy; ec.Threshold > 0 || ec.HexThreshold > 0 || ec.Base64Threshold > 0 || ec.RequireContext != nil {
+		secretsAnalyzer.ApplyEntropyOverrides(secrets.EntropyOverrides{
+			Threshold:       ec.Threshold,
+			HexThreshold:    ec.HexThreshold,
+			Base64Threshold: ec.Base64Threshold,
+			RequireContext:  ec.RequireContext,
+		})
+	}
+
 	secretsFindings, err := secretsAnalyzer.ScanArtifacts(artifacts)
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range secretsFindings.Findings() {
-		allFindings.Add(f)
+	secretsItems := secretsFindings.Findings()
+	for i := range secretsItems {
+		allFindings.Add(secretsItems[i])
 	}
 
 	// Data sensitivity scanner.
@@ -110,8 +122,9 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range iacFindings.Findings() {
-		allFindings.Add(f)
+	iacItems := iacFindings.Findings()
+	for i := range iacItems {
+		allFindings.Add(iacItems[i])
 	}
 
 	// AI security scanner.
@@ -120,8 +133,9 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range aiFindings.Findings() {
-		allFindings.Add(f)
+	aiItems := aiFindings.Findings()
+	for i := range aiItems {
+		allFindings.Add(aiItems[i])
 	}
 
 	// Dependency scanner.
@@ -134,26 +148,27 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, f := range depsFindings.Findings() {
-		allFindings.Add(f)
+	depsItems := depsFindings.Findings()
+	for i := range depsItems {
+		allFindings.Add(depsItems[i])
 	}
 
 	// Merge all analyzer rule sets for SARIF reporting.
 	allRules := rules.NewRuleSet()
-	for i := range secretsAnalyzer.Rules().Rules() {
-		allRules.Add(secretsAnalyzer.Rules().Rules()[i])
+	for _, r := range secretsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
-	for i := range dataAnalyzer.Rules().Rules() {
-		allRules.Add(dataAnalyzer.Rules().Rules()[i])
+	for _, r := range dataAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
-	for i := range iacAnalyzer.Rules().Rules() {
-		allRules.Add(iacAnalyzer.Rules().Rules()[i])
+	for _, r := range iacAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
-	for i := range aiAnalyzer.Rules().Rules() {
-		allRules.Add(aiAnalyzer.Rules().Rules()[i])
+	for _, r := range aiAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
-	for i := range depsAnalyzer.Rules().Rules() {
-		allRules.Add(depsAnalyzer.Rules().Rules()[i])
+	for _, r := range depsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
 
 	// Phase 2b: Load and merge custom rules (CLI flag > config > none).
@@ -186,8 +201,8 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 			if scanErr != nil {
 				return nil, fmt.Errorf("scanning %s with custom rules: %w", artifact.Path, scanErr)
 			}
-			for _, f := range customFindings {
-				allFindings.Add(f)
+			for i := range customFindings {
+				allFindings.Add(customFindings[i])
 			}
 		}
 		// Add custom rules to the rule set for SARIF reporting.
@@ -313,7 +328,11 @@ func RunStagedScanWithOptions(repoRoot string, opts ScanOptions) (*ScanResult, e
 	if err != nil {
 		return nil, fmt.Errorf("creating temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			return
+		}
+	}()
 
 	for _, p := range stagedPaths {
 		content, err := git.StagedContent(repoRoot, p)
@@ -371,9 +390,8 @@ func RunHistoryScan(repoRoot string, opts *HistoryScanOptions) (*ScanResult, err
 	allRules := rules.NewRuleSet()
 
 	secretsAnalyzer := secrets.NewAnalyzer()
-	rulesList := secretsAnalyzer.Rules().Rules()
-	for i := range rulesList {
-		allRules.Add(rulesList[i])
+	for _, r := range secretsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
 	}
 
 	engine := rules.NewEngine(secretsAnalyzer.Rules())
@@ -442,8 +460,9 @@ func SeverityMeetsThreshold(severity, threshold findings.Severity) bool {
 func applySuppressions(fs *findings.FindingSet, target string) {
 	// Group findings by file.
 	byFile := make(map[string][]int)
-	for i, f := range fs.Findings() {
-		byFile[f.Location.FilePath] = append(byFile[f.Location.FilePath], i)
+	items := fs.Findings()
+	for i := range items {
+		byFile[items[i].Location.FilePath] = append(byFile[items[i].Location.FilePath], i)
 	}
 
 	for filePath, indices := range byFile {
@@ -482,11 +501,13 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string) {
 		return
 	}
 
-	for i, f := range fs.Findings() {
+	items := fs.Findings()
+	for i := range items {
+		f := items[i]
 		if f.Status != "" && f.Status != findings.StatusNew {
 			continue // already suppressed
 		}
-		if bl.Match(f) != nil {
+		if bl.Match(&f) != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
 		}
 	}

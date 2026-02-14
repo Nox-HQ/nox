@@ -164,18 +164,20 @@ func parseRequirementsTxt(content []byte) ([]Package, error) {
 		var name, version string
 		found := false
 		for _, op := range operators {
-			if idx := strings.Index(line, op); idx != -1 {
-				name = strings.TrimSpace(line[:idx])
-				// Take only the first version (before any comma for
-				// compound specifiers like >=1.0,<2.0).
-				ver := strings.TrimSpace(line[idx+len(op):])
-				if comma := strings.Index(ver, ","); comma != -1 {
-					ver = strings.TrimSpace(ver[:comma])
-				}
-				version = ver
-				found = true
-				break
+			idx := strings.Index(line, op)
+			if idx == -1 {
+				continue
 			}
+			name = strings.TrimSpace(line[:idx])
+			// Take only the first version (before any comma for
+			// compound specifiers like >=1.0,<2.0).
+			ver := strings.TrimSpace(line[idx+len(op):])
+			if comma := strings.Index(ver, ","); comma != -1 {
+				ver = strings.TrimSpace(ver[:comma])
+			}
+			version = ver
+			found = true
+			break
 		}
 
 		if !found || name == "" || version == "" {
@@ -227,7 +229,7 @@ func parseGemfileLock(content []byte) ([]Package, error) {
 		}
 
 		// A new top-level section resets the GEM context.
-		if len(line) > 0 && line[0] != ' ' && trimmed != "" {
+		if line != "" && line[0] != ' ' && trimmed != "" {
 			inGEM = false
 			inSpecs = false
 			continue

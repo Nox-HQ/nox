@@ -36,9 +36,13 @@ else
     echo "  install: https://golangci-lint.run/welcome/install/"
 fi
 
-# 4. Run coverctl coverage check.
+# 4. Run coverctl coverage check (CI-style profile).
 if command -v coverctl >/dev/null 2>&1; then
-    if ! coverctl -q check 2>&1; then
+    if ! go test -coverprofile=coverage.out ./... >/dev/null 2>&1; then
+        echo "pre-commit: go test coverage run failed"
+        go test -coverprofile=coverage.out ./... 2>&1 || true
+        failed=1
+    elif ! coverctl -q check --config .coverctl.yaml --profile coverage.out 2>&1; then
         echo "pre-commit: coverctl coverage thresholds not met"
         failed=1
     fi

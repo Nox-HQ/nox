@@ -7,6 +7,7 @@ package secrets
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -27,6 +28,55 @@ func NewAnalyzer() *Analyzer {
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
+	}
+}
+
+// EntropyOverrides holds optional overrides for entropy-based rule thresholds.
+// Zero values mean "keep rule defaults".
+type EntropyOverrides struct {
+	// Threshold overrides SEC-161 entropy_threshold.
+	Threshold float64
+	// HexThreshold overrides SEC-163 entropy_threshold.
+	HexThreshold float64
+	// Base64Threshold overrides SEC-162 entropy_threshold.
+	Base64Threshold float64
+	// RequireContext overrides the require_context metadata on SEC-162/163.
+	// nil means keep rule defaults.
+	RequireContext *bool
+}
+
+// ApplyEntropyOverrides updates entropy rule metadata based on config
+// overrides. This must be called before scanning.
+func (a *Analyzer) ApplyEntropyOverrides(o EntropyOverrides) {
+	rulesList := a.engine.Rules().Rules()
+	for i := range rulesList {
+		r := rulesList[i]
+		if r.MatcherType != "entropy" {
+			continue
+		}
+		if r.Metadata == nil {
+			r.Metadata = make(map[string]string)
+		}
+		switch r.ID {
+		case "SEC-161":
+			if o.Threshold > 0 {
+				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.Threshold, 'f', -1, 64)
+			}
+		case "SEC-162":
+			if o.Base64Threshold > 0 {
+				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.Base64Threshold, 'f', -1, 64)
+			}
+			if o.RequireContext != nil {
+				r.Metadata["require_context"] = strconv.FormatBool(*o.RequireContext)
+			}
+		case "SEC-163":
+			if o.HexThreshold > 0 {
+				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.HexThreshold, 'f', -1, 64)
+			}
+			if o.RequireContext != nil {
+				r.Metadata["require_context"] = strconv.FormatBool(*o.RequireContext)
+			}
+		}
 	}
 }
 
@@ -56,8 +106,8 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
-		for _, f := range results {
-			fs.Add(f)
+		for i := range results {
+			fs.Add(results[i])
 		}
 
 		// Scan decoded base64/hex content for encoded secrets.

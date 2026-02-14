@@ -1587,6 +1587,167 @@ func TestHandleProtectStatus_NotInstalled(t *testing.T) {
 	}
 }
 
+// --- handleVEXStatus tests ---
+
+func TestHandleVEXStatus_MissingPath(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "vex_status", map[string]any{})
+
+	result, err := s.handleVEXStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing path")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", text)
+	}
+}
+
+func TestHandleVEXStatus_Success(t *testing.T) {
+	dir := t.TempDir()
+	vexPath := filepath.Join(dir, "vex.json")
+	content := `{
+  "statements": [
+    {"vulnerability": "CVE-2024-0001", "status": "not_affected"},
+    {"vulnerability": "CVE-2024-0002", "status": "fixed"}
+  ]
+}`
+	if err := os.WriteFile(vexPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write VEX file: %v", err)
+	}
+
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "vex_status", map[string]any{"path": vexPath})
+
+	result, err := s.handleVEXStatus(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"statements": 2`) && !strings.Contains(text, `"statements":2`) {
+		t.Fatalf("expected statements count, got: %s", text)
+	}
+	if !strings.Contains(text, "not_affected") || !strings.Contains(text, "fixed") {
+		t.Fatalf("expected status breakdown, got: %s", text)
+	}
+	if !strings.Contains(text, "VEX: 2 statements") {
+		t.Fatalf("expected summary, got: %s", text)
+	}
+}
+
+// --- handleComplianceReport tests ---
+
+func TestHandleComplianceReport_MissingFramework(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "compliance_report", map[string]any{})
+
+	result, err := s.handleComplianceReport(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error for missing framework")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "missing required argument: framework") {
+		t.Fatalf("expected missing framework message, got: %s", text)
+	}
+}
+
+func TestHandleComplianceReport_Success(t *testing.T) {
+	s := scanCleanDir(t)
+	req := makeToolRequest(t, "compliance_report", map[string]any{"framework": "CIS"})
+
+	result, err := s.handleComplianceReport(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, `"framework"`) || !strings.Contains(text, "CIS") {
+		t.Fatalf("expected framework in report, got: %s", text)
+	}
+}
+
+// --- handleDataSensitivityReport tests ---
+
+func TestHandleDataSensitivityReport_NoScanResults(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := makeToolRequest(t, "data_sensitivity_report", map[string]any{})
+
+	result, err := s.handleDataSensitivityReport(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error before any scan")
+	}
+
+	text := toolResultText(result)
+	if !strings.Contains(text, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", text)
+	}
+}
+
+func TestHandleDataSensitivityReport_WithFindings(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "data.txt", "email = user@example.com\nssn = 123-45-6789\n")
+
+	s := New("0.1.0", nil)
+	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
+	scanResult, err := s.handleScan(context.Background(), scanReq)
+	if err != nil || scanResult.IsError {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	req := makeToolRequest(t, "data_sensitivity_report", map[string]any{})
+	result, err := s.handleDataSensitivityReport(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	}
+
+	var report struct {
+		TotalFindings int `json:"total_findings"`
+		Rules         []struct {
+			RuleID string   `json:"rule_id"`
+			Count  int      `json:"count"`
+			Files  []string `json:"files"`
+		} `json:"rules"`
+		AffectedFiles []string `json:"affected_files"`
+	}
+
+	text := toolResultText(result)
+	if err := json.Unmarshal([]byte(text), &report); err != nil {
+		t.Fatalf("failed to parse report JSON: %v", err)
+	}
+	if report.TotalFindings == 0 {
+		t.Fatal("expected data sensitivity findings")
+	}
+
+	seen := make(map[string]bool)
+	for _, rule := range report.Rules {
+		seen[rule.RuleID] = true
+	}
+	if !seen["DATA-001"] && !seen["DATA-002"] {
+		t.Fatalf("expected DATA-* rules in report, got: %+v", report.Rules)
+	}
+}
+
 // --- handleResourceRules tests ---
 
 func TestResourceRules(t *testing.T) {

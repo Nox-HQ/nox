@@ -604,3 +604,153 @@ func TestSPDX_NoVulnerabilities(t *testing.T) {
 		t.Errorf("expected PACKAGE-MANAGER, got %s", doc.Packages[0].ExternalRefs[0].ReferenceCategory)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CycloneDX: license field on component
+// ---------------------------------------------------------------------------
+
+func TestCycloneDX_LicenseField(t *testing.T) {
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.18.2", Ecosystem: "npm", License: "MIT"})
+	inv.Add(deps.Package{Name: "lodash", Version: "4.17.21", Ecosystem: "npm"}) // no license
+
+	r := NewCycloneDXReporter("0.1.0")
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report CDXReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("failed to parse CycloneDX JSON: %v", err)
+	}
+
+	if len(report.Components) != 2 {
+		t.Fatalf("expected 2 components, got %d", len(report.Components))
+	}
+
+	// Find by name since sorting is deterministic.
+	var expressComp, lodashComp CDXComponent
+	for _, c := range report.Components {
+		switch c.Name {
+		case "express":
+			expressComp = c
+		case "lodash":
+			lodashComp = c
+		}
+	}
+
+	if len(expressComp.Licenses) != 1 {
+		t.Fatalf("expected 1 license for express, got %d", len(expressComp.Licenses))
+	}
+	if expressComp.Licenses[0].License.ID != "MIT" {
+		t.Errorf("expected license MIT, got %s", expressComp.Licenses[0].License.ID)
+	}
+
+	if len(lodashComp.Licenses) != 0 {
+		t.Errorf("expected 0 licenses for lodash (no license), got %d", len(lodashComp.Licenses))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CycloneDX: vulnerability with empty severity → no Ratings
+// ---------------------------------------------------------------------------
+
+func TestCycloneDX_VulnerabilityEmptySeverity(t *testing.T) {
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.17.1", Ecosystem: "npm"})
+
+	inv.SetVulnerabilities(0, []deps.Vulnerability{
+		{
+			ID:       "GHSA-empty-sev",
+			Summary:  "Some vulnerability with no severity",
+			Severity: "", // empty severity
+		},
+	})
+
+	r := NewCycloneDXReporter("0.1.0")
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report CDXReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("failed to parse CycloneDX JSON: %v", err)
+	}
+
+	if len(report.Vulnerabilities) != 1 {
+		t.Fatalf("expected 1 vulnerability, got %d", len(report.Vulnerabilities))
+	}
+
+	// Empty severity → Ratings should be nil/empty.
+	if len(report.Vulnerabilities[0].Ratings) != 0 {
+		t.Errorf("expected 0 ratings for empty severity, got %d", len(report.Vulnerabilities[0].Ratings))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SPDX: declaredLicense field
+// ---------------------------------------------------------------------------
+
+func TestSPDX_DeclaredLicense(t *testing.T) {
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "express", Version: "4.18.2", Ecosystem: "npm", License: "MIT"})
+	inv.Add(deps.Package{Name: "lodash", Version: "4.17.21", Ecosystem: "npm"}) // no license
+
+	r := NewSPDXReporter("0.1.0")
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var doc SPDXDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("failed to parse SPDX JSON: %v", err)
+	}
+
+	if len(doc.Packages) != 2 {
+		t.Fatalf("expected 2 packages, got %d", len(doc.Packages))
+	}
+
+	var expressPkg, lodashPkg SPDXPackage
+	for _, p := range doc.Packages {
+		switch p.Name {
+		case "express":
+			expressPkg = p
+		case "lodash":
+			lodashPkg = p
+		}
+	}
+
+	if expressPkg.DeclaredLicense != "MIT" {
+		t.Errorf("expected declaredLicense MIT for express, got %q", expressPkg.DeclaredLicense)
+	}
+	if lodashPkg.DeclaredLicense != "NOASSERTION" {
+		t.Errorf("expected declaredLicense NOASSERTION for lodash, got %q", lodashPkg.DeclaredLicense)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CycloneDX & SPDX: WriteToFile error path
+// ---------------------------------------------------------------------------
+
+func TestCycloneDX_WriteToFile_ErrorOnInvalidPath(t *testing.T) {
+	r := NewCycloneDXReporter("0.1.0")
+	inv := testInventory()
+
+	err := r.WriteToFile(inv, "/nonexistent/dir/sbom.cdx.json")
+	if err == nil {
+		t.Fatal("expected error writing to invalid path, got nil")
+	}
+}
+
+func TestSPDX_WriteToFile_ErrorOnInvalidPath(t *testing.T) {
+	r := NewSPDXReporter("0.1.0")
+	inv := testInventory()
+
+	err := r.WriteToFile(inv, "/nonexistent/dir/sbom.spdx.json")
+	if err == nil {
+		t.Fatal("expected error writing to invalid path, got nil")
+	}
+}

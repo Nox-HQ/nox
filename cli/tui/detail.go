@@ -14,7 +14,7 @@ func renderDetail(m *Model) string {
 	}
 
 	f := m.filtered[m.cursor]
-	d := coredetail.Enrich(f, m.store.BasePath(), m.store.All(), m.catalog, m.contextLines)
+	d := coredetail.Enrich(&f, m.store.BasePath(), m.store.All(), m.catalog, m.contextLines)
 
 	var b strings.Builder
 

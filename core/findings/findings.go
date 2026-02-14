@@ -85,6 +85,8 @@ func NewFindingSet() *FindingSet {
 // Add appends a finding to the set. If the finding has an empty Fingerprint,
 // one is computed automatically from RuleID, Location, and Message so that
 // every finding in the set is always fingerprintable.
+//
+//nolint:gocritic // Findings are passed by value throughout the pipeline for simplicity.
 func (fs *FindingSet) Add(f Finding) {
 	if f.Fingerprint == "" {
 		f.Fingerprint = ComputeFingerprint(f.RuleID, f.Location, f.Message)
@@ -98,12 +100,13 @@ func (fs *FindingSet) Add(f Finding) {
 func (fs *FindingSet) Deduplicate() {
 	seen := make(map[string]struct{}, len(fs.items))
 	unique := make([]Finding, 0, len(fs.items))
-	for _, f := range fs.items {
-		if _, exists := seen[f.Fingerprint]; exists {
+	for i := range fs.items {
+		finding := fs.items[i]
+		if _, exists := seen[finding.Fingerprint]; exists {
 			continue
 		}
-		seen[f.Fingerprint] = struct{}{}
-		unique = append(unique, f)
+		seen[finding.Fingerprint] = struct{}{}
+		unique = append(unique, finding)
 	}
 	fs.items = unique
 }
@@ -134,9 +137,10 @@ func (fs *FindingSet) RemoveByRuleIDs(ids []string) {
 		disabled[id] = struct{}{}
 	}
 	kept := make([]Finding, 0, len(fs.items))
-	for _, f := range fs.items {
-		if _, skip := disabled[f.RuleID]; !skip {
-			kept = append(kept, f)
+	for i := range fs.items {
+		finding := fs.items[i]
+		if _, skip := disabled[finding.RuleID]; !skip {
+			kept = append(kept, finding)
 		}
 	}
 	fs.items = kept
@@ -162,8 +166,9 @@ func (fs *FindingSet) SetStatus(i int, s Status) {
 // Findings with an empty status are counted under StatusNew.
 func (fs *FindingSet) CountByStatus() map[Status]int {
 	counts := make(map[Status]int)
-	for _, f := range fs.items {
-		s := f.Status
+	for i := range fs.items {
+		finding := fs.items[i]
+		s := finding.Status
 		if s == "" {
 			s = StatusNew
 		}
@@ -175,12 +180,13 @@ func (fs *FindingSet) CountByStatus() map[Status]int {
 // ActiveFindings returns findings that are not suppressed, baselined, or VEX-excluded.
 func (fs *FindingSet) ActiveFindings() []Finding {
 	var active []Finding
-	for _, f := range fs.items {
-		switch f.Status {
+	for i := range fs.items {
+		finding := fs.items[i]
+		switch finding.Status {
 		case StatusSuppressed, StatusBaselined, StatusVEXNotAffected, StatusVEXFixed:
 			continue
 		}
-		active = append(active, f)
+		active = append(active, finding)
 	}
 	return active
 }

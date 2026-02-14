@@ -20,7 +20,7 @@ type dataRule struct {
 }
 
 // builtinDataRules returns all built-in data sensitivity detection rules.
-func builtinDataRules() []rules.Rule {
+func builtinDataRules() []*rules.Rule {
 	defs := []dataRule{
 		// -----------------------------------------------------------------
 		// Personal Identifiable Information (DATA-001 to DATA-012)
@@ -123,9 +123,9 @@ func builtinDataRules() []rules.Rule {
 		},
 	}
 
-	out := make([]rules.Rule, len(defs))
+	out := make([]*rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
+		out[i] = &rules.Rule{
 			ID:          defs[i].id,
 			Version:     "1.0",
 			Description: defs[i].description,

@@ -647,7 +647,7 @@ func (s *Server) handleGetFindingDetail(_ context.Context, request mcp.CallToolR
 	}
 
 	cat := catalog.Catalog()
-	enriched := detail.Enrich(f, basePath, store.All(), cat, contextLines)
+	enriched := detail.Enrich(&f, basePath, store.All(), cat, contextLines)
 
 	data, err := json.MarshalIndent(enriched, "", "  ")
 	if err != nil {
@@ -908,9 +908,10 @@ func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolReques
 	}
 
 	var matched *findings.Finding
-	for _, f := range cache.Findings.Findings() {
-		if f.Fingerprint == fingerprint {
-			matched = &f
+	items := cache.Findings.Findings()
+	for i := range items {
+		if items[i].Fingerprint == fingerprint {
+			matched = &items[i]
 			break
 		}
 	}
@@ -925,7 +926,7 @@ func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolReques
 		return mcp.NewToolResultError(fmt.Sprintf("loading baseline: %v", err)), nil
 	}
 
-	bl.Add(baseline.Entry{
+	bl.Add(&baseline.Entry{
 		Fingerprint: matched.Fingerprint,
 		RuleID:      matched.RuleID,
 		FilePath:    matched.Location.FilePath,

@@ -106,7 +106,7 @@ func containsAnyKeyword(contentLower []byte, keywords []string) bool {
 // fileMatchesRule returns true if the file path matches at least one of the
 // rule's FilePatterns, or if the rule has no file patterns (applies to all
 // files).
-func fileMatchesRule(path string, rule Rule) bool {
+func fileMatchesRule(path string, rule *Rule) bool {
 	if len(rule.FilePatterns) == 0 {
 		return true
 	}

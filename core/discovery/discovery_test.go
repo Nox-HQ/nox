@@ -682,3 +682,75 @@ func TestWalker_GitignoreWithNegation(t *testing.T) {
 		t.Error("important.log should NOT be ignored (negation pattern)")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Gitignore edge cases: non-ENOENT errors, root-anchored dir patterns
+// ---------------------------------------------------------------------------
+
+func TestLoadGitignore_DirectoryInsteadOfFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// Create .gitignore as a directory — Open should fail with a non-ENOENT
+	// error (on most systems, read of a directory fails).
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	if err := os.Mkdir(gitignorePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadGitignore(dir)
+	if err == nil {
+		t.Fatal("expected error when .gitignore is a directory, got nil")
+	}
+}
+
+func TestMatchPattern_RootAnchoredDirPattern(t *testing.T) {
+	t.Parallel()
+
+	// Pattern "/build/" should match "build/output.js" (root-anchored dir).
+	tests := []struct {
+		name    string
+		path    string
+		pattern string
+		want    bool
+	}{
+		{"root-anchored dir prefix match", "build/output.js", "/build/", true},
+		{"root-anchored dir exact match", "build", "/build/", true},
+		{"root-anchored dir no match nested", "src/build/output.js", "/build/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchPattern(tt.path, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchPattern(%q, %q) = %v, want %v", tt.path, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchPattern_SlashContainingDirOnly(t *testing.T) {
+	t.Parallel()
+
+	// Pattern "sub/vendor/" (contains slash, trailing /) should match
+	// paths like "sub/vendor/lib.go" but not "other/sub/vendor/lib.go".
+	tests := []struct {
+		name    string
+		path    string
+		pattern string
+		want    bool
+	}{
+		{"prefix match", "sub/vendor/lib.go", "sub/vendor/", true},
+		{"exact match", "sub/vendor", "sub/vendor/", true},
+		{"no match different root", "other/sub/vendor/lib.go", "sub/vendor/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchPattern(tt.path, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchPattern(%q, %q) = %v, want %v", tt.path, tt.pattern, got, tt.want)
+			}
+		})
+	}
+}

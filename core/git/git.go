@@ -67,7 +67,7 @@ func StagedFiles(repoRoot string) ([]string, error) {
 // StagedContent returns the staged (index) version of a file. This reads from
 // the git index rather than the working tree, ensuring pre-commit hooks scan
 // exactly what will be committed.
-func StagedContent(repoRoot string, path string) ([]byte, error) {
+func StagedContent(repoRoot, path string) ([]byte, error) {
 	out, err := runGit(repoRoot, "show", ":"+path)
 	if err != nil {
 		return nil, fmt.Errorf("git show :%s: %w", path, err)

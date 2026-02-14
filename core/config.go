@@ -43,10 +43,26 @@ type ComplianceSettings struct {
 
 // ScanSettings controls which files are scanned and how rules behave.
 type ScanSettings struct {
-	Exclude  []string    `yaml:"exclude"`
-	RulesDir string      `yaml:"rules_dir"`
-	Rules    RulesConfig `yaml:"rules"`
-	OSV      OSVConfig   `yaml:"osv"`
+	Exclude  []string      `yaml:"exclude"`
+	RulesDir string        `yaml:"rules_dir"`
+	Rules    RulesConfig   `yaml:"rules"`
+	OSV      OSVConfig     `yaml:"osv"`
+	Entropy  EntropyConfig `yaml:"entropy"`
+}
+
+// EntropyConfig allows overriding entropy-based secret detection thresholds
+// from .nox.yaml. Zero values mean "use the rule defaults".
+type EntropyConfig struct {
+	// Threshold overrides the default entropy threshold for SEC-161.
+	Threshold float64 `yaml:"threshold"`
+	// HexThreshold overrides the entropy threshold for SEC-163 (hex detection).
+	HexThreshold float64 `yaml:"hex_threshold"`
+	// Base64Threshold overrides the entropy threshold for SEC-162 (base64 detection).
+	Base64Threshold float64 `yaml:"base64_threshold"`
+	// RequireContext when true forces SEC-162/SEC-163 to only fire when a
+	// secret-suggestive keyword appears on the same line. Default is true
+	// (set in rule metadata); setting this to false disables that check.
+	RequireContext *bool `yaml:"require_context"`
 }
 
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.

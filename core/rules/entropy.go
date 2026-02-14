@@ -12,7 +12,7 @@ import (
 // defaultEntropyThreshold is the minimum Shannon entropy for a candidate
 // string to be flagged as a potential secret. This value is used when the
 // rule does not specify an "entropy_threshold" metadata key.
-const defaultEntropyThreshold = 4.5
+const defaultEntropyThreshold = 5.0
 
 // contextBoostReduction is subtracted from the entropy threshold when the
 // line containing a candidate includes a secret-suggestive variable name.
@@ -20,7 +20,7 @@ const contextBoostReduction = 0.5
 
 // minCandidateLen is the minimum length for any candidate string. Strings
 // shorter than this are ignored to avoid false positives on short tokens.
-const minCandidateLen = 8
+const minCandidateLen = 12
 
 // secretHints are lowercase substrings that, when present in the same line
 // as a candidate, lower the entropy threshold to increase detection
@@ -35,11 +35,11 @@ var secretHints = []string{
 	"private",
 }
 
-// base64Re matches base64-encoded sequences of at least 20 characters.
-var base64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{20,}`)
+// base64Re matches base64-encoded sequences of at least 30 characters.
+var base64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{30,}`)
 
-// hexRe matches hexadecimal sequences of at least 16 characters.
-var hexRe = regexp.MustCompile(`[0-9a-fA-F]{16,}`)
+// hexRe matches hexadecimal sequences of at least 32 characters.
+var hexRe = regexp.MustCompile(`[0-9a-fA-F]{32,}`)
 
 // EntropyMatcher implements the Matcher interface using Shannon entropy
 // analysis. It extracts candidate strings from file content using multiple
@@ -51,14 +51,18 @@ type EntropyMatcher struct{}
 // Match scans content line by line, extracts candidate strings using
 // multiple tokenizers, calculates Shannon entropy for each candidate, and
 // returns matches that exceed the threshold. The threshold can be
-// customised via rule.Metadata["entropy_threshold"].
-func (m *EntropyMatcher) Match(content []byte, rule Rule) []MatchResult {
+// customised via rule.Metadata["entropy_threshold"]. When
+// rule.Metadata["require_context"] is "true", candidates are only
+// reported if the line also contains a secret-suggestive keyword.
+func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	threshold := defaultEntropyThreshold
 	if v, ok := rule.Metadata["entropy_threshold"]; ok {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
 			threshold = parsed
 		}
 	}
+
+	requireContext := rule.Metadata["require_context"] == "true"
 
 	lines := bytes.Split(content, []byte("\n"))
 	var results []MatchResult
@@ -69,6 +73,13 @@ func (m *EntropyMatcher) Match(content []byte, rule Rule) []MatchResult {
 
 		// Determine whether this line has secret-suggestive context.
 		boost := hasSecretContext(lineLower)
+
+		// When require_context is set, skip lines without secret context
+		// entirely. This prevents low-confidence rules from firing on
+		// lines that contain no secret-suggestive keywords.
+		if requireContext && !boost {
+			continue
+		}
 
 		effective := threshold
 		if boost {
@@ -94,17 +105,17 @@ func (m *EntropyMatcher) Match(content []byte, rule Rule) []MatchResult {
 			candidates = append(candidates, candidate{col: col, text: text})
 		}
 
-		// Tokenizer 1: quoted strings (single and double quoted, >= 8 chars).
+		// Tokenizer 1: quoted strings (single and double quoted, >= minCandidateLen chars).
 		extractQuoted(lineStr, addCandidate)
 
 		// Tokenizer 2: assignment RHS values.
 		extractAssignmentRHS(lineStr, addCandidate)
 
-		// Tokenizer 3: base64 blobs.
-		extractRegexCandidates(lineStr, base64Re, 20, addCandidate)
+		// Tokenizer 3: base64 blobs (30+ chars).
+		extractRegexCandidates(lineStr, base64Re, 30, addCandidate)
 
-		// Tokenizer 4: hex strings.
-		extractRegexCandidates(lineStr, hexRe, 16, addCandidate)
+		// Tokenizer 4: hex strings (32+ chars).
+		extractRegexCandidates(lineStr, hexRe, 32, addCandidate)
 
 		for _, c := range candidates {
 			if len(c.text) < minCandidateLen {
@@ -130,7 +141,7 @@ func (m *EntropyMatcher) Match(content []byte, rule Rule) []MatchResult {
 // ShannonEntropy calculates the Shannon entropy of a string in bits per
 // character. Higher values indicate more randomness. Exported for testing.
 func ShannonEntropy(s string) float64 {
-	if len(s) == 0 {
+	if s == "" {
 		return 0.0
 	}
 	freq := make(map[rune]float64)
@@ -260,7 +271,8 @@ func extractRegexCandidates(line string, re *regexp.Regexp, minLen int, addFn fu
 
 // isLikelyNotSecret returns true for strings that look like common
 // non-secret values: URLs, all-lowercase dictionary-like words, UUIDs,
-// and other patterns that would cause false positives.
+// git SHAs, Go import paths, file paths, camelCase identifiers, version
+// strings, and other patterns that would cause false positives.
 func isLikelyNotSecret(s string) bool {
 	// URLs starting with http:// or https://.
 	lower := strings.ToLower(s)
@@ -284,5 +296,141 @@ func isLikelyNotSecret(s string) bool {
 		return true
 	}
 
+	// File paths and Go import paths (contains / or \ but not base64
+	// special chars like + or =).
+	if strings.ContainsAny(s, "/\\") && !strings.ContainsAny(s, "+=") {
+		return true
+	}
+
+	// Git commit SHAs: exactly 40 hex characters.
+	if len(s) == 40 && isAllHex(s) {
+		return true
+	}
+
+	// Abbreviated git SHAs pinned in GitHub Actions: exactly 40 hex chars
+	// is handled above; also skip longer hex-only strings that look like
+	// checksums (e.g. SHA-256 = 64 hex chars, SHA-512 = 128 hex chars).
+	if (len(s) == 64 || len(s) == 128) && isAllHex(s) {
+		return true
+	}
+
+	// Version strings (e.g., "v1.2.3", "1.0.0-beta.1").
+	if isVersionString(s) {
+		return true
+	}
+
+	// camelCase or PascalCase identifiers: letters and digits only, with
+	// at least one uppercase letter following a lowercase letter.
+	if isCamelOrPascalCase(s) {
+		return true
+	}
+
+	// Strings that are mostly digits (>70%) — likely numeric IDs, not secrets.
+	if isMostlyDigits(s) {
+		return true
+	}
+
+	// All uppercase letters only (likely a constant name like PRODUCTION).
+	if isAllUpperAlpha(s) {
+		return true
+	}
+
 	return false
+}
+
+// isAllHex returns true if every character in s is a hexadecimal digit.
+func isAllHex(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// isVersionString returns true if s looks like a semver or version string.
+func isVersionString(s string) bool {
+	if s == "" {
+		return false
+	}
+	start := s
+	if s[0] == 'v' || s[0] == 'V' {
+		start = s[1:]
+	}
+	if start == "" {
+		return false
+	}
+	// Must start with a digit and contain at least one dot.
+	if start[0] < '0' || start[0] > '9' {
+		return false
+	}
+	return strings.Contains(start, ".")
+}
+
+// isCamelOrPascalCase returns true if s is a camelCase or PascalCase
+// identifier: only letters and digits, with at least one transition from
+// lowercase to uppercase, and at most 20% digits (to distinguish real
+// identifiers from random-looking secret tokens).
+func isCamelOrPascalCase(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	hasTransition := false
+	prevLower := false
+	letters := 0
+	digits := 0
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false // non-alphanumeric chars disqualify
+		}
+		if unicode.IsDigit(r) {
+			digits++
+		} else {
+			letters++
+		}
+		if prevLower && unicode.IsUpper(r) {
+			hasTransition = true
+		}
+		prevLower = unicode.IsLower(r)
+	}
+	if !hasTransition {
+		return false
+	}
+	// Real identifiers are mostly letters. Random tokens have lots of digits.
+	total := letters + digits
+	if total == 0 {
+		return false
+	}
+	return float64(digits)/float64(total) <= 0.2
+}
+
+// isMostlyDigits returns true if more than 70% of the characters in s are
+// digits.
+func isMostlyDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	digits := 0
+	total := 0
+	for _, r := range s {
+		total++
+		if r >= '0' && r <= '9' {
+			digits++
+		}
+	}
+	return float64(digits)/float64(total) > 0.7
+}
+
+// isAllUpperAlpha returns true if every character in s is an uppercase ASCII
+// letter.
+func isAllUpperAlpha(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsUpper(r) || !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
 }

@@ -20,7 +20,7 @@ type secretRule struct {
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
-func builtinSecretRules() []rules.Rule {
+func builtinSecretRules() []*rules.Rule {
 	defs := []secretRule{
 		// -----------------------------------------------------------------
 		// Cloud Providers (SEC-001 to SEC-015)
@@ -1376,9 +1376,10 @@ func builtinSecretRules() []rules.Rule {
 		},
 	}
 
-	out := make([]rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
-	for _, d := range defs {
-		out = append(out, rules.Rule{
+	out := make([]*rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
+	for i := range defs {
+		d := &defs[i]
+		out = append(out, &rules.Rule{
 			ID:          d.id,
 			Version:     "1.0",
 			Description: d.description,
@@ -1397,50 +1398,67 @@ func builtinSecretRules() []rules.Rule {
 	return out
 }
 
+// entropySourceFilePatterns restricts entropy rules to source-like files,
+// excluding lockfiles, checksums, and generated files that produce massive
+// numbers of false positives.
+var entropySourceFilePatterns = []string{
+	"*.go", "*.py", "*.js", "*.ts", "*.jsx", "*.tsx",
+	"*.java", "*.kt", "*.rb", "*.php", "*.rs", "*.c", "*.cpp", "*.h",
+	"*.cs", "*.swift", "*.sh", "*.bash", "*.zsh",
+	"*.yaml", "*.yml", "*.json", "*.toml", "*.ini", "*.cfg", "*.conf",
+	"*.env", "*.env.*", ".env", ".env.*",
+	"*.xml", "*.properties", "*.gradle",
+	"Dockerfile", "docker-compose.yml", "docker-compose.yaml",
+	"Makefile", "*.mk",
+}
+
 // builtinEntropyRules returns entropy-based secret detection rules. These
 // use the "entropy" matcher type and do not require a regex pattern.
 // Instead, they rely on Shannon entropy analysis with context-aware
 // thresholds to detect high-randomness strings that look like secrets.
-func builtinEntropyRules() []rules.Rule {
-	return []rules.Rule{
+func builtinEntropyRules() []*rules.Rule {
+	return []*rules.Rule{
 		{
-			ID:          "SEC-161",
-			Version:     "1.0",
-			Description: "High-entropy string in assignment (possible secret)",
-			Severity:    findings.SeverityMedium,
-			Confidence:  findings.ConfidenceMedium,
-			MatcherType: "entropy",
-			Keywords:    []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
-			Tags:        []string{"secrets", "entropy"},
-			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5"},
-			Remediation: "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:           "SEC-161",
+			Version:      "1.1",
+			Description:  "High-entropy string in assignment (possible secret)",
+			Severity:     findings.SeverityMedium,
+			Confidence:   findings.ConfidenceMedium,
+			MatcherType:  "entropy",
+			Keywords:     []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
+			FilePatterns: entropySourceFilePatterns,
+			Tags:         []string{"secrets", "entropy"},
+			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0"},
+			Remediation:  "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			ID:          "SEC-162",
-			Version:     "1.0",
-			Description: "High-entropy base64 blob detected (possible encoded secret)",
-			Severity:    findings.SeverityMedium,
-			Confidence:  findings.ConfidenceLow,
-			MatcherType: "entropy",
-			Keywords:    []string{"+", "/", "="},
-			Tags:        []string{"secrets", "entropy"},
-			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.8"},
-			Remediation: "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:           "SEC-162",
+			Version:      "1.1",
+			Description:  "High-entropy base64 blob detected (possible encoded secret)",
+			Severity:     findings.SeverityMedium,
+			Confidence:   findings.ConfidenceLow,
+			MatcherType:  "entropy",
+			Keywords:     []string{"password", "secret", "key", "token", "credential", "api_key", "private", "auth"},
+			FilePatterns: entropySourceFilePatterns,
+			Tags:         []string{"secrets", "entropy"},
+			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2", "require_context": "true"},
+			Remediation:  "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			ID:          "SEC-163",
-			Version:     "1.0",
-			Description: "High-entropy hex string detected (possible secret key)",
-			Severity:    findings.SeverityMedium,
-			Confidence:  findings.ConfidenceLow,
-			MatcherType: "entropy",
-			Keywords:    []string{"key", "secret", "token", "password", "hash", "hex", "0x", "credential"},
-			Tags:        []string{"secrets", "entropy"},
-			Metadata:    map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.0"},
-			Remediation: "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:           "SEC-163",
+			Version:      "1.1",
+			Description:  "High-entropy hex string detected (possible secret key)",
+			Severity:     findings.SeverityMedium,
+			Confidence:   findings.ConfidenceLow,
+			MatcherType:  "entropy",
+			Keywords:     []string{"key", "secret", "token", "password", "credential", "private", "auth"},
+			FilePatterns: entropySourceFilePatterns,
+			Tags:         []string{"secrets", "entropy"},
+			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5", "require_context": "true"},
+			Remediation:  "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
+			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 	}
 }

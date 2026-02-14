@@ -194,3 +194,89 @@ func TestLoadScanConfig_Invalid(t *testing.T) {
 		t.Fatal("expected error for invalid YAML, got nil")
 	}
 }
+
+func TestLoadScanConfig_EntropyConfig(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `scan:
+  entropy:
+    threshold: 5.5
+    hex_threshold: 5.0
+    base64_threshold: 5.8
+    require_context: false
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Scan.Entropy.Threshold != 5.5 {
+		t.Errorf("threshold = %f, want 5.5", cfg.Scan.Entropy.Threshold)
+	}
+	if cfg.Scan.Entropy.HexThreshold != 5.0 {
+		t.Errorf("hex_threshold = %f, want 5.0", cfg.Scan.Entropy.HexThreshold)
+	}
+	if cfg.Scan.Entropy.Base64Threshold != 5.8 {
+		t.Errorf("base64_threshold = %f, want 5.8", cfg.Scan.Entropy.Base64Threshold)
+	}
+	if cfg.Scan.Entropy.RequireContext == nil {
+		t.Fatal("require_context should not be nil")
+	}
+	if *cfg.Scan.Entropy.RequireContext != false {
+		t.Errorf("require_context = %v, want false", *cfg.Scan.Entropy.RequireContext)
+	}
+}
+
+func TestLoadScanConfig_ReadFileError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	noxPath := filepath.Join(dir, ".nox.yaml")
+
+	// Create .nox.yaml as a directory so ReadFile returns a non-ENOENT error.
+	if err := os.Mkdir(noxPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadScanConfig(dir)
+	if err == nil {
+		t.Fatal("expected error when .nox.yaml is a directory, got nil")
+	}
+}
+
+func TestLoadScanConfig_EntropyConfig_Defaults(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `scan:
+  exclude:
+    - "vendor/"
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// When not specified, zero values should be returned.
+	if cfg.Scan.Entropy.Threshold != 0 {
+		t.Errorf("threshold = %f, want 0 (unset)", cfg.Scan.Entropy.Threshold)
+	}
+	if cfg.Scan.Entropy.HexThreshold != 0 {
+		t.Errorf("hex_threshold = %f, want 0 (unset)", cfg.Scan.Entropy.HexThreshold)
+	}
+	if cfg.Scan.Entropy.Base64Threshold != 0 {
+		t.Errorf("base64_threshold = %f, want 0 (unset)", cfg.Scan.Entropy.Base64Threshold)
+	}
+	if cfg.Scan.Entropy.RequireContext != nil {
+		t.Errorf("require_context = %v, want nil (unset)", cfg.Scan.Entropy.RequireContext)
+	}
+}

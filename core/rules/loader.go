@@ -37,11 +37,11 @@ func LoadRulesFromFile(path string) (*RuleSet, error) {
 	}
 
 	rs := NewRuleSet()
-	for i, r := range rf.Rules {
-		if err := validateRule(r); err != nil {
+	for i := range rf.Rules {
+		if err := validateRule(&rf.Rules[i]); err != nil {
 			return nil, fmt.Errorf("rule %d in %s: %w", i, path, err)
 		}
-		rs.Add(r)
+		rs.Add(&rf.Rules[i])
 	}
 	return rs, nil
 }
@@ -76,7 +76,7 @@ func LoadRulesFromDir(dir string) (*RuleSet, error) {
 }
 
 // validateRule checks that a rule satisfies all mandatory constraints.
-func validateRule(r Rule) error {
+func validateRule(r *Rule) error {
 	if r.ID == "" {
 		return fmt.Errorf("rule ID must not be empty")
 	}

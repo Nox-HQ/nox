@@ -28,9 +28,9 @@ func writeFile(t *testing.T, dir, name, content string) string {
 }
 
 func findingWithRule(results []findings.Finding, ruleID string) *findings.Finding {
-	for _, f := range results {
-		if f.RuleID == ruleID {
-			return &f
+	for i := range results {
+		if results[i].RuleID == ruleID {
+			return &results[i]
 		}
 	}
 	return nil

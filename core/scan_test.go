@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -534,10 +535,286 @@ func TestRunStagedScan_NoGitRepo(t *testing.T) {
 func TestRunStagedScan_NoStagedFiles(t *testing.T) {
 	t.Parallel()
 
-	// This test needs a git repo, but we can't easily create one in tests.
-	// For now, we test the error case above. A real integration test would
-	// require git commands.
-	t.Skip("requires git repository initialization")
+	dir := initGitRepo(t, map[string]string{
+		"clean.go": "package main\n",
+	})
+
+	result, err := RunStagedScan(dir)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.Findings.Findings()) != 0 {
+		t.Errorf("expected 0 findings for no staged files, got %d", len(result.Findings.Findings()))
+	}
+	if result.Inventory == nil {
+		t.Fatal("expected non-nil inventory")
+	}
+	if result.AIInventory == nil {
+		t.Fatal("expected non-nil AI inventory")
+	}
+	if result.Rules == nil {
+		t.Fatal("expected non-nil rules")
+	}
+}
+
+func TestRunStagedScanWithOptions_DetectsSecret(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"clean.go": "package main\n",
+	})
+
+	// Write a new file with a secret and stage it (but don't commit).
+	secretFile := filepath.Join(dir, "secret.go")
+	if err := os.WriteFile(secretFile, []byte("package main\nconst key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+		t.Fatalf("writing secret file: %v", err)
+	}
+	cmd := exec.Command("git", "add", "secret.go")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+
+	result, err := RunStagedScanWithOptions(dir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// Should detect the AWS key in the staged file.
+	found := false
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "SEC-001" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected SEC-001 finding in staged file")
+	}
+}
+
+func TestRunStagedScanWithOptions_CopiesNoxYaml(t *testing.T) {
+	t.Parallel()
+
+	dir := initGitRepo(t, map[string]string{
+		"clean.go": "package main\n",
+	})
+
+	// Write .nox.yaml that excludes "vendor/**".
+	noxYaml := filepath.Join(dir, ".nox.yaml")
+	if err := os.WriteFile(noxYaml, []byte("scan:\n  exclude:\n    - \"vendor/**\"\n"), 0o644); err != nil {
+		t.Fatalf("writing .nox.yaml: %v", err)
+	}
+
+	// Write a secret file in vendor/ and stage it.
+	vendorDir := filepath.Join(dir, "vendor")
+	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
+		t.Fatalf("creating vendor dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(vendorDir, "dep.go"), []byte("const key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+		t.Fatalf("writing vendor file: %v", err)
+	}
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+
+	result, err := RunStagedScanWithOptions(dir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Vendor files should be excluded thanks to .nox.yaml being copied.
+	for _, f := range result.Findings.Findings() {
+		if f.Location.FilePath == "vendor/dep.go" {
+			t.Error("expected vendor/dep.go to be excluded via .nox.yaml")
+		}
+	}
+}
+
+func TestRunScanWithOptions_DisableOSV(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a go.mod file to exercise dependency scanning.
+	goMod := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goMod, []byte("module example.com/test\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{DisableOSV: true})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestRunScanWithOptions_TerraformPlanPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a minimal terraform plan JSON file.
+	planContent := `{
+		"format_version": "1.0",
+		"resource_changes": [
+			{
+				"address": "aws_s3_bucket.example",
+				"type": "aws_s3_bucket",
+				"change": {
+					"actions": ["create"],
+					"after": {
+						"bucket": "my-bucket",
+						"acl": "public-read"
+					}
+				}
+			}
+		]
+	}`
+	planPath := filepath.Join(tmpDir, "plan.json")
+	if err := os.WriteFile(planPath, []byte(planContent), 0o644); err != nil {
+		t.Fatalf("writing plan file: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{
+		TerraformPlanPath: planPath,
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestRunScanWithOptions_VEXPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a minimal VEX document.
+	vexContent := `{
+		"@context": "https://openvex.dev/ns/v0.2.0",
+		"@id": "https://example.com/vex/test",
+		"author": "test",
+		"timestamp": "2024-01-01T00:00:00Z",
+		"statements": []
+	}`
+	vexPath := filepath.Join(tmpDir, "vex.json")
+	if err := os.WriteFile(vexPath, []byte(vexContent), 0o644); err != nil {
+		t.Fatalf("writing vex file: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{
+		VEXPath: vexPath,
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestRunScanWithOptions_EntropyConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Write .nox.yaml with entropy overrides.
+	noxYaml := filepath.Join(tmpDir, ".nox.yaml")
+	configContent := `scan:
+  entropy:
+    threshold: 6.0
+    hex_threshold: 5.5
+    base64_threshold: 6.5
+    require_context: true
+`
+	if err := os.WriteFile(noxYaml, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("writing .nox.yaml: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestRunScanWithOptions_PolicyBaselineMode(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Write .nox.yaml with policy settings.
+	noxYaml := filepath.Join(tmpDir, ".nox.yaml")
+	configContent := `policy:
+  fail_on: "high"
+  baseline_mode: "strict"
+`
+	if err := os.WriteFile(noxYaml, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("writing .nox.yaml: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	// Policy result should be non-nil when fail_on is set.
+	if result.PolicyResult == nil {
+		t.Fatal("expected non-nil policy result when fail_on is configured")
+	}
+}
+
+func TestRunScanWithOptions_VEXPathFromConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create a VEX file.
+	vexContent := `{
+		"@context": "https://openvex.dev/ns/v0.2.0",
+		"@id": "https://example.com/vex/test",
+		"author": "test",
+		"timestamp": "2024-01-01T00:00:00Z",
+		"statements": []
+	}`
+	vexPath := filepath.Join(tmpDir, "my-vex.json")
+	if err := os.WriteFile(vexPath, []byte(vexContent), 0o644); err != nil {
+		t.Fatalf("writing vex file: %v", err)
+	}
+
+	// Write .nox.yaml with VEX path.
+	noxYaml := filepath.Join(tmpDir, ".nox.yaml")
+	configContent := `policy:
+  vex_path: "my-vex.json"
+`
+	if err := os.WriteFile(noxYaml, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("writing .nox.yaml: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1167,13 +1444,64 @@ func TestRunScanWithOptions_CustomRulesFileReadError(t *testing.T) {
 	if err := os.Chmod(testFile, 0o000); err != nil {
 		t.Fatalf("failed to chmod test file: %v", err)
 	}
-	defer os.Chmod(testFile, 0o644)
+	defer func() {
+		if err := os.Chmod(testFile, 0o644); err != nil {
+			t.Errorf("failed to restore permissions: %v", err)
+		}
+	}()
 
 	_, err := RunScanWithOptions(tmpDir, ScanOptions{
 		CustomRulesPath: customRulesFile,
 	})
 	if err == nil {
 		t.Fatal("expected error for unreadable file, got nil")
+	}
+}
+
+func TestRunScanWithOptions_ConfigReadError(t *testing.T) {
+	// Not parallel: relies on filesystem permission errors.
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod and permission errors are unreliable on Windows")
+	}
+
+	tmpDir := t.TempDir()
+	noxPath := filepath.Join(tmpDir, ".nox.yaml")
+
+	if err := os.Mkdir(noxPath, 0o755); err != nil {
+		t.Fatalf("failed to create .nox.yaml dir: %v", err)
+	}
+
+	_, err := RunScanWithOptions(tmpDir, ScanOptions{})
+	if err == nil {
+		t.Fatal("expected error when .nox.yaml is a directory, got nil")
+	}
+}
+
+func TestRunScanWithOptions_SecretsReadError(t *testing.T) {
+	// Not parallel: relies on filesystem permission errors.
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod and permission errors are unreliable on Windows")
+	}
+
+	tmpDir := t.TempDir()
+
+	secretFile := filepath.Join(tmpDir, "secret.go")
+	if err := os.WriteFile(secretFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+		t.Fatalf("failed to write secret file: %v", err)
+	}
+
+	if err := os.Chmod(secretFile, 0o000); err != nil {
+		t.Fatalf("failed to chmod secret file: %v", err)
+	}
+	defer func() {
+		if err := os.Chmod(secretFile, 0o644); err != nil {
+			t.Errorf("failed to restore permissions: %v", err)
+		}
+	}()
+
+	_, err := RunScanWithOptions(tmpDir, ScanOptions{})
+	if err == nil {
+		t.Fatal("expected error when secret file is unreadable, got nil")
 	}
 }
 

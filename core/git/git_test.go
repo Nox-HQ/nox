@@ -205,3 +205,83 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatalf("writing %s: %v", path, err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Error path tests
+// ---------------------------------------------------------------------------
+
+func TestChangedFiles_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ChangedFiles(dir, "main", "HEAD")
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestRepoRoot_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := RepoRoot(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestCurrentBranch_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := CurrentBranch(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestMergeBase_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := MergeBase(dir, "a", "b")
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestStagedFiles_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := StagedFiles(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
+func TestStagedContent_NonexistentFile(t *testing.T) {
+	dir := setupGitRepo(t)
+	_, err := StagedContent(dir, "nonexistent.txt")
+	if err == nil {
+		t.Fatal("expected error for nonexistent staged file, got nil")
+	}
+}
+
+func TestSplitLines_Empty(t *testing.T) {
+	result := splitLines("")
+	if result != nil {
+		t.Errorf("expected nil for empty string, got %v", result)
+	}
+}
+
+func TestSplitLines_Whitespace(t *testing.T) {
+	result := splitLines("   \n  ")
+	if result != nil {
+		t.Errorf("expected nil for whitespace-only string, got %v", result)
+	}
+}
+
+func TestSplitLines_SingleLine(t *testing.T) {
+	result := splitLines("hello\n")
+	if len(result) != 1 || result[0] != "hello" {
+		t.Errorf("expected [hello], got %v", result)
+	}
+}
+
+func TestSplitLines_MultipleLines(t *testing.T) {
+	result := splitLines("a\nb\nc\n")
+	if len(result) != 3 {
+		t.Errorf("expected 3 lines, got %d: %v", len(result), result)
+	}
+}

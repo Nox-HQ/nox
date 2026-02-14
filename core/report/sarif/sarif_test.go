@@ -1,6 +1,7 @@
 package sarif
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -58,7 +59,7 @@ func sampleFindingSet() *findings.FindingSet {
 func sampleRuleSet() *rules.RuleSet {
 	rs := rules.NewRuleSet()
 
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "rule-001",
 		Version:     "1.0.0",
 		Description: "Detects hardcoded credentials in source files",
@@ -72,7 +73,7 @@ func sampleRuleSet() *rules.RuleSet {
 		References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 	})
 
-	rs.Add(rules.Rule{
+	rs.Add(&rules.Rule{
 		ID:          "rule-002",
 		Version:     "1.0.0",
 		Description: "Detects insecure comparison of secret values",
@@ -384,6 +385,48 @@ func TestRuleCatalogHasHelpAndHelpURI(t *testing.T) {
 	}
 }
 
+func TestRuleCatalogOmitsHelpWhenNoRemediation(t *testing.T) {
+	rs := rules.NewRuleSet()
+	rs.Add(&rules.Rule{
+		ID:          "rule-003",
+		Version:     "1.0.0",
+		Description: "Minimal rule without remediation",
+		Severity:    findings.SeverityLow,
+		Confidence:  findings.ConfidenceLow,
+		MatcherType: "regex",
+		Pattern:     "TODO",
+	})
+
+	r := NewReporter("0.1.0", rs)
+	fs := findings.NewFindingSet()
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	report := mustUnmarshal(t, data)
+	driver := report.Runs[0].Tool.Driver
+
+	if len(driver.Rules) != 1 {
+		t.Fatalf("expected 1 rule in catalog, got %d", len(driver.Rules))
+	}
+
+	entry := driver.Rules[0]
+	if entry.Help != nil {
+		t.Fatalf("expected nil help for rule without remediation, got %+v", entry.Help)
+	}
+	if entry.FullDescription != nil {
+		t.Fatal("expected nil fullDescription when no remediation is provided")
+	}
+	if entry.HelpURI != "" {
+		t.Fatalf("expected empty helpUri, got %q", entry.HelpURI)
+	}
+	if entry.Properties != nil {
+		t.Fatalf("expected nil properties for empty metadata, got %+v", entry.Properties)
+	}
+}
+
 func TestRuleCatalogFromFindingsWhenNoRuleSet(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
 	fs := sampleFindingSet()
@@ -406,6 +449,41 @@ func TestRuleCatalogFromFindingsWhenNoRuleSet(t *testing.T) {
 	}
 	if driver.Rules[1].ID != "rule-002" {
 		t.Errorf("expected second rule 'rule-002', got %q", driver.Rules[1].ID)
+	}
+}
+
+func TestRuleCatalogFromFindings_DedupesRuleIDs(t *testing.T) {
+	r := NewReporter("0.1.0", nil)
+	fs := findings.NewFindingSet()
+
+	fs.Add(findings.Finding{
+		ID:       "f-1",
+		RuleID:   "rule-dup",
+		Severity: findings.SeverityHigh,
+		Message:  "first message",
+		Location: findings.Location{FilePath: "a.go", StartLine: 1, EndLine: 1},
+	})
+	fs.Add(findings.Finding{
+		ID:       "f-2",
+		RuleID:   "rule-dup",
+		Severity: findings.SeverityLow,
+		Message:  "second message",
+		Location: findings.Location{FilePath: "b.go", StartLine: 2, EndLine: 2},
+	})
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	report := mustUnmarshal(t, data)
+	driver := report.Runs[0].Tool.Driver
+
+	if len(driver.Rules) != 1 {
+		t.Fatalf("expected 1 unique rule in catalog, got %d", len(driver.Rules))
+	}
+	if driver.Rules[0].ID != "rule-dup" {
+		t.Fatalf("expected rule ID 'rule-dup', got %q", driver.Rules[0].ID)
 	}
 }
 
@@ -472,9 +550,9 @@ func TestEmptyFindingSetProducesValidSARIF(t *testing.T) {
 		t.Errorf("expected 0 results, got %d", len(results))
 	}
 
-	rules := report.Runs[0].Tool.Driver.Rules
-	if len(rules) != 0 {
-		t.Errorf("expected 0 rules for empty findings, got %d", len(rules))
+	ruleCatalog := report.Runs[0].Tool.Driver.Rules
+	if len(ruleCatalog) != 0 {
+		t.Errorf("expected 0 rules for empty findings, got %d", len(ruleCatalog))
 	}
 }
 
@@ -494,7 +572,7 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	}
 
 	// SARIF output has no timestamp, so byte-level comparison is valid.
-	if string(data1) != string(data2) {
+	if !bytes.Equal(data1, data2) {
 		t.Errorf("outputs are not deterministic:\n  first:  %s\n  second: %s", data1, data2)
 	}
 }
@@ -556,7 +634,7 @@ func TestWriteToFileCreatesValidSARIFFile(t *testing.T) {
 		t.Fatalf("could not stat written file: %v", err)
 	}
 	perm := info.Mode().Perm()
-	if perm != 0644 {
+	if perm != 0o644 {
 		t.Errorf("expected file permissions 0644, got %04o", perm)
 	}
 }
@@ -607,5 +685,51 @@ func TestResultMessageMatchesFindingMessage(t *testing.T) {
 
 	if messageByRule["rule-002"] != "Insecure comparison of secret token" {
 		t.Errorf("unexpected message for rule-002: %q", messageByRule["rule-002"])
+	}
+}
+
+func TestGenerate_MissingRuleInCatalog(t *testing.T) {
+	// Create a RuleSet that does NOT contain rule-002, but the FindingSet
+	// has a finding for rule-002. This tests the defensive fallback at line 170.
+	rs := rules.NewRuleSet()
+	rs.Add(&rules.Rule{
+		ID:          "rule-001",
+		Version:     "1.0.0",
+		Description: "Detects hardcoded credentials",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceMedium,
+		MatcherType: "regex",
+		Pattern:     `password`,
+	})
+	// Deliberately NOT adding rule-002 to the RuleSet.
+
+	r := NewReporter("0.1.0", rs)
+	fs := sampleFindingSet() // contains findings for both rule-001 and rule-002
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	// Should produce valid JSON without panicking.
+	if !json.Valid(data) {
+		t.Fatal("Generate produced invalid JSON")
+	}
+
+	report := mustUnmarshal(t, data)
+	results := report.Runs[0].Results
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+}
+
+func TestWriteToFile_ErrorOnInvalidPath(t *testing.T) {
+	r := NewReporter("0.1.0", nil)
+	fs := sampleFindingSet()
+
+	// Writing to a nonexistent directory should return an error.
+	err := r.WriteToFile(fs, "/nonexistent/dir/results.sarif")
+	if err == nil {
+		t.Fatal("expected error writing to invalid path, got nil")
 	}
 }

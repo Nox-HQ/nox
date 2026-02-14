@@ -99,13 +99,13 @@ func TestShannonEntropy_KnownValues(t *testing.T) {
 func TestEntropyMatcher_QuotedStrings(t *testing.T) {
 	m := &EntropyMatcher{}
 
-	// High-entropy double-quoted value on a single line.
-	content := []byte(`config_val = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"`)
+	// High-entropy double-quoted value on a line with secret context.
+	content := []byte(`secret_key = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"`)
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
-		t.Fatal("expected at least 1 match for high-entropy quoted string")
+		t.Fatal("expected at least 1 match for high-entropy quoted string with secret context")
 	}
 
 	found := false
@@ -128,7 +128,7 @@ func TestEntropyMatcher_SingleQuotedStrings(t *testing.T) {
 	content := []byte(`token = 'xK9mR2pL5nW7vB4yD1sF6hT0cQ3jZ8a'`)
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match for high-entropy single-quoted string")
 	}
@@ -155,7 +155,7 @@ func TestEntropyMatcher_AssignmentRHS(t *testing.T) {
 	content := []byte("SECRET_KEY = aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match for high-entropy assignment RHS")
 	}
@@ -178,7 +178,7 @@ func TestEntropyMatcher_ColonAssignment(t *testing.T) {
 	content := []byte("api_key: aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match for colon-assigned high-entropy value")
 	}
@@ -191,7 +191,7 @@ func TestEntropyMatcher_FatArrowAssignment(t *testing.T) {
 	content := []byte("secret => aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match for fat-arrow assigned high-entropy value")
 	}
@@ -204,13 +204,14 @@ func TestEntropyMatcher_FatArrowAssignment(t *testing.T) {
 func TestEntropyMatcher_Base64Blob(t *testing.T) {
 	m := &EntropyMatcher{}
 
-	// A base64-encoded high-entropy blob (entropy ~4.81).
-	content := []byte("data = R2x5cE9mN3hLajJiWXQ5d1F6TnZIc0E=\n")
+	// A base64-encoded high-entropy blob with secret context to trigger
+	// the context boost (threshold lowered by 0.5, entropy ~4.81 > 4.5).
+	content := []byte("secret_key = R2x5cE9mN3hLajJiWXQ5d1F6TnZIc0E=\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
-		t.Fatal("expected at least 1 match for base64 blob")
+		t.Fatal("expected at least 1 match for base64 blob with secret context")
 	}
 
 	found := false
@@ -240,7 +241,7 @@ func TestEntropyMatcher_HexString(t *testing.T) {
 		Metadata:    map[string]string{"entropy_threshold": "3.5"},
 	}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match for hex string")
 	}
@@ -263,13 +264,13 @@ func TestEntropyMatcher_HexString(t *testing.T) {
 func TestEntropyMatcher_ContextBoost(t *testing.T) {
 	m := &EntropyMatcher{}
 
-	// A string with entropy between 4.0 and 4.5 — would NOT match at
-	// default threshold (4.5), but SHOULD match when "password" is in the
-	// line (threshold drops to 4.0).
+	// A string with entropy between 4.5 and 5.0 — would NOT match at
+	// default threshold (5.0), but SHOULD match when "password" is in the
+	// line (threshold drops to 4.5).
 	//
-	// We'll use a carefully crafted string with known entropy.
-	// "aAbBcCdDeEfFgGhH" has moderate entropy (~4.0).
-	candidate := "aAbBcCdDeEfFgGhH"
+	// We use a carefully crafted string with known entropy ~4.585.
+	// It has enough digits (>20%) to not be classified as camelCase.
+	candidate := "aB3cD5eF7gH9iJ1kL2mN4oP6"
 	entropy := ShannonEntropy(candidate)
 
 	if entropy >= defaultEntropyThreshold {
@@ -285,7 +286,7 @@ func TestEntropyMatcher_ContextBoost(t *testing.T) {
 	contentNoContext := []byte(`config = "` + candidate + `"` + "\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(contentNoContext, rule)
+	results := m.Match(contentNoContext, &rule)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches without secret context, got %d (entropy=%f)",
 			len(results), entropy)
@@ -293,7 +294,7 @@ func TestEntropyMatcher_ContextBoost(t *testing.T) {
 
 	// With context ("password" on the line): should match.
 	contentWithContext := []byte(`password = "` + candidate + `"` + "\n")
-	results = m.Match(contentWithContext, rule)
+	results = m.Match(contentWithContext, &rule)
 	if len(results) == 0 {
 		t.Fatalf("expected match with secret context boost (entropy=%f, boosted threshold=%f)",
 			entropy, defaultEntropyThreshold-contextBoostReduction)
@@ -304,8 +305,8 @@ func TestEntropyMatcher_ContextBoostKeywords(t *testing.T) {
 	// Verify all secret hint keywords trigger the boost.
 	m := &EntropyMatcher{}
 
-	// Candidate with entropy between 4.0 and 4.5.
-	candidate := "aAbBcCdDeEfFgGhH"
+	// Candidate with entropy between 4.5 and 5.0.
+	candidate := "aB3cD5eF7gH9iJ1kL2mN4oP6"
 	entropy := ShannonEntropy(candidate)
 
 	if entropy >= defaultEntropyThreshold || entropy < defaultEntropyThreshold-contextBoostReduction {
@@ -316,7 +317,7 @@ func TestEntropyMatcher_ContextBoostKeywords(t *testing.T) {
 		t.Run(keyword, func(t *testing.T) {
 			content := []byte(keyword + ` = "` + candidate + `"` + "\n")
 			rule := Rule{MatcherType: "entropy"}
-			results := m.Match(content, rule)
+			results := m.Match(content, &rule)
 			if len(results) == 0 {
 				t.Fatalf("expected match with keyword %q on line (entropy=%f)", keyword, entropy)
 			}
@@ -368,7 +369,7 @@ func TestEntropyMatcher_NoFalsePositives(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results := m.Match([]byte(tt.content), rule)
+			results := m.Match([]byte(tt.content), &rule)
 			if len(results) != 0 {
 				t.Fatalf("expected 0 matches for %q, got %d (text=%q)",
 					tt.name, len(results), results[0].MatchText)
@@ -384,15 +385,16 @@ func TestEntropyMatcher_NoFalsePositives(t *testing.T) {
 func TestEntropyMatcher_ThresholdFromMetadata(t *testing.T) {
 	m := &EntropyMatcher{}
 
-	// Use a candidate string with known entropy ~4.0 (above 3.0, below 4.5).
-	candidate := "aAbBcCdDeEfFgGhH"
+	// Use a candidate string with known entropy ~4.585 (above 3.0, below 5.0).
+	// Has enough digits to not be filtered as camelCase.
+	candidate := "aB3cD5eF7gH9iJ1kL2mN4oP6"
 	entropy := ShannonEntropy(candidate)
 
 	content := []byte(`config = "` + candidate + `"` + "\n")
 
 	t.Run("default threshold should not match", func(t *testing.T) {
 		rule := Rule{MatcherType: "entropy"}
-		results := m.Match(content, rule)
+		results := m.Match(content, &rule)
 		if entropy < defaultEntropyThreshold && len(results) != 0 {
 			t.Fatalf("expected no match at default threshold %f for entropy %f",
 				defaultEntropyThreshold, entropy)
@@ -404,7 +406,7 @@ func TestEntropyMatcher_ThresholdFromMetadata(t *testing.T) {
 			MatcherType: "entropy",
 			Metadata:    map[string]string{"entropy_threshold": "3.0"},
 		}
-		results := m.Match(content, rule)
+		results := m.Match(content, &rule)
 		if entropy >= 3.0 && len(results) == 0 {
 			t.Fatalf("expected match at threshold 3.0 for entropy %f", entropy)
 		}
@@ -415,7 +417,7 @@ func TestEntropyMatcher_ThresholdFromMetadata(t *testing.T) {
 			MatcherType: "entropy",
 			Metadata:    map[string]string{"entropy_threshold": "6.0"},
 		}
-		results := m.Match(content, rule)
+		results := m.Match(content, &rule)
 		if len(results) != 0 {
 			t.Fatalf("expected no match at threshold 6.0 for entropy %f", entropy)
 		}
@@ -426,7 +428,7 @@ func TestEntropyMatcher_ThresholdFromMetadata(t *testing.T) {
 			MatcherType: "entropy",
 			Metadata:    map[string]string{"entropy_threshold": "not-a-number"},
 		}
-		results := m.Match(content, rule)
+		results := m.Match(content, &rule)
 		if entropy < defaultEntropyThreshold && len(results) != 0 {
 			t.Fatal("invalid metadata should fall back to default threshold")
 		}
@@ -443,7 +445,7 @@ func TestEntropyMatcher_LineAndColumn(t *testing.T) {
 	content := []byte("line one\nsecret = \"aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c\"\nline three\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 match")
 	}
@@ -483,7 +485,7 @@ func TestEntropyMatcher_MultipleLines(t *testing.T) {
 	}, "\n"))
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 
 	// Should find at least 2 high-entropy secrets.
 	if len(results) < 2 {
@@ -514,7 +516,7 @@ func TestEntropyMatcher_ShortStringsIgnored(t *testing.T) {
 	content := []byte(`key = "aB3$"` + "\n")
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches for short string, got %d", len(results))
 	}
@@ -546,7 +548,19 @@ func TestIsLikelyNotSecret(t *testing.T) {
 		{"all lowercase letters", "implementation", true},
 		{"mixed case token", "aK3jR8mZ2pL5nW9x", false},
 		{"hex with digits", "deadbeef12345678", false},
-		{"base64 with symbols", "dGhpcyBpcyBhIHRl", false},
+		{"base64 with special chars", "R2x5cE9m+N3hLaj/JiWX=", false},
+		// New false-positive filters:
+		{"git SHA (40 hex)", "abc123def456abc123def456abc123def456abc1", true},
+		{"SHA-256 checksum (64 hex)", "abc123def456abc123def456abc123def456abc123def456abc123def456abc1", true},
+		{"file path with slash", "src/components/Button.tsx", true},
+		{"Go import path", "github.com/user/repo/pkg", true},
+		{"Windows file path", "src\\components\\Button.tsx", true},
+		{"version string", "v1.2.3-beta.1", true},
+		{"version no prefix", "1.0.0", true},
+		{"camelCase identifier", "calculateTotalAmount", true},
+		{"PascalCase identifier", "CalculateTotalAmount", true},
+		{"mostly digits", "12345678901234567890", true},
+		{"all uppercase", "PRODUCTION", true},
 	}
 
 	for _, tt := range tests {
@@ -597,13 +611,401 @@ func TestEntropyMatcher_EmptyContent(t *testing.T) {
 	m := &EntropyMatcher{}
 	rule := Rule{MatcherType: "entropy"}
 
-	results := m.Match([]byte{}, rule)
+	results := m.Match([]byte{}, &rule)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches for empty content, got %d", len(results))
 	}
 
-	results = m.Match(nil, rule)
+	results = m.Match(nil, &rule)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches for nil content, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// EntropyMatcher: require_context
+// ---------------------------------------------------------------------------
+
+func TestEntropyMatcher_RequireContext_SkipsWithoutHint(t *testing.T) {
+	m := &EntropyMatcher{}
+
+	// High-entropy string on a line WITHOUT any secret hint keyword.
+	// With require_context=true, this should NOT fire.
+	content := []byte(`config = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"` + "\n")
+	rule := Rule{
+		MatcherType: "entropy",
+		Metadata:    map[string]string{"entropy_threshold": "4.0", "require_context": "true"},
+	}
+
+	results := m.Match(content, &rule)
+	if len(results) != 0 {
+		t.Fatalf("expected 0 matches with require_context=true and no hint, got %d", len(results))
+	}
+}
+
+func TestEntropyMatcher_RequireContext_MatchesWithHint(t *testing.T) {
+	m := &EntropyMatcher{}
+
+	// High-entropy string on a line WITH a secret hint keyword.
+	content := []byte(`password = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"` + "\n")
+	rule := Rule{
+		MatcherType: "entropy",
+		Metadata:    map[string]string{"entropy_threshold": "4.0", "require_context": "true"},
+	}
+
+	results := m.Match(content, &rule)
+	if len(results) == 0 {
+		t.Fatal("expected match with require_context=true when hint keyword is present")
+	}
+}
+
+func TestEntropyMatcher_RequireContext_DefaultFalse(t *testing.T) {
+	m := &EntropyMatcher{}
+
+	// Without require_context metadata, the rule should match without hints.
+	content := []byte(`config = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"` + "\n")
+	rule := Rule{
+		MatcherType: "entropy",
+		Metadata:    map[string]string{"entropy_threshold": "4.0"},
+	}
+
+	results := m.Match(content, &rule)
+	if len(results) == 0 {
+		t.Fatal("expected match without require_context (defaults to false)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isLikelyNotSecret: new helper function tests
+// ---------------------------------------------------------------------------
+
+func TestIsAllHex(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want bool
+	}{
+		{"hex lowercase", "deadbeef", true},
+		{"hex uppercase", "DEADBEEF", true},
+		{"hex mixed", "DeAdBeEf01234567", true},
+		{"not hex", "ghijklmn", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isAllHex(tt.s); got != tt.want {
+				t.Fatalf("isAllHex(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsVersionString(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"v1.2.3", true},
+		{"1.0.0", true},
+		{"v1.2.3-beta.1", true},
+		{"V2.0.0", true},
+		{"abc", false},
+		{"v", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := isVersionString(tt.s); got != tt.want {
+				t.Fatalf("isVersionString(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsCamelOrPascalCase(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"calculateTotal", true},
+		{"CalculateTotal", true},
+		{"myVariableName", true},
+		{"ALLCAPS", false},
+		{"alllower", false},
+		{"ab", false},
+		{"a1B2c3D4", false}, // too many digits (>20%)
+		{"has-dashes", false},
+		{"aK3jR8mZ2pL5nW9x", false}, // random token with many digits
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := isCamelOrPascalCase(tt.s); got != tt.want {
+				t.Fatalf("isCamelOrPascalCase(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsMostlyDigits(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"12345678901234567890", true},
+		{"12345ab", true},  // 5/7 = 71.4% > 70%
+		{"1234abc", false}, // 4/7 = 57% < 70%
+		{"abcdefgh", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := isMostlyDigits(tt.s); got != tt.want {
+				t.Fatalf("isMostlyDigits(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// EntropyMatcher: false positive regression tests for common patterns
+// ---------------------------------------------------------------------------
+
+func TestEntropyMatcher_FalsePositiveRegression(t *testing.T) {
+	m := &EntropyMatcher{}
+	rule := Rule{MatcherType: "entropy"}
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "git SHA in action pinning",
+			content: `uses: actions/checkout@abc123def456abc123def456abc123def456abc1`,
+		},
+		{
+			name:    "Go import path",
+			content: `import "github.com/nox-hq/nox/core/rules"`,
+		},
+		{
+			name:    "camelCase Go function name in string",
+			content: `name = "calculateTotalAmountForUser"`,
+		},
+		{
+			name:    "file path reference",
+			content: `path = "src/components/UserProfile/index.tsx"`,
+		},
+		{
+			name:    "version string",
+			content: `version = "v1.2.3-beta.1+build.456"`,
+		},
+		{
+			name:    "SHA-256 checksum",
+			content: `sha256: abc123def456abc123def456abc123def456abc123def456abc123def456abc1`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := m.Match([]byte(tt.content), &rule)
+			if len(results) != 0 {
+				t.Fatalf("expected 0 matches for %q, got %d (text=%q)",
+					tt.name, len(results), results[0].MatchText)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Edge-case coverage: short candidates, empty camelCase input, short upper
+// ---------------------------------------------------------------------------
+
+func TestEntropyMatcher_ShortCandidateSkipped(t *testing.T) {
+	t.Parallel()
+
+	// A candidate shorter than minCandidateLen (8) should be skipped
+	// even if it has high entropy.
+	m := &EntropyMatcher{}
+	rule := Rule{
+		ID:          "TEST-ENT-SHORT",
+		MatcherType: "entropy",
+		Severity:    "high",
+	}
+	// "aB3xZ!" is only 6 chars — below minCandidateLen.
+	content := `SECRET=aB3xZ!`
+	results := m.Match([]byte(content), &rule)
+	if len(results) != 0 {
+		t.Errorf("expected 0 matches for short candidate, got %d", len(results))
+	}
+}
+
+func Test_isCamelOrPascalCase_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	// When total (letters+digits) is 0, the function should return false.
+	got := isCamelOrPascalCase("")
+	if got {
+		t.Error("expected false for empty string")
+	}
+}
+
+func Test_isCamelOrPascalCase_PunctuationOnly(t *testing.T) {
+	t.Parallel()
+
+	// Only punctuation — letters=0, digits=0 → total=0 → should return false.
+	got := isCamelOrPascalCase("---!!!")
+	if got {
+		t.Error("expected false for punctuation-only string")
+	}
+}
+
+func Test_isAllUpperAlpha_ShortStrings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty", "", false},
+		{"one char", "A", false},
+		{"two chars", "AB", false},
+		{"three chars", "ABC", false},
+		{"four chars upper", "ABCD", true},
+		{"four chars mixed", "ABcD", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isAllUpperAlpha(tt.input)
+			if got != tt.want {
+				t.Errorf("isAllUpperAlpha(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Assignment tokenization edge cases
+// ---------------------------------------------------------------------------
+
+type assignmentCandidate struct {
+	col  int
+	text string
+}
+
+func collectAssignmentCandidates(line string) []assignmentCandidate {
+	var out []assignmentCandidate
+	extractAssignmentRHS(line, func(col int, text string) {
+		out = append(out, assignmentCandidate{col: col, text: text})
+	})
+	return out
+}
+
+func TestExtractAssignmentRHS_SkipsComparisonsAndQuotes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		line string
+	}{
+		{
+			name: "double equals",
+			line: "value == other",
+		},
+		{
+			name: "not equals",
+			line: "value != other",
+		},
+		{
+			name: "greater equals",
+			line: "value >= other",
+		},
+		{
+			name: "less equals",
+			line: "value <= other",
+		},
+		{
+			name: "double colon",
+			line: "namespace::value",
+		},
+		{
+			name: "quoted rhs",
+			line: "token = \"quoted-value-should-skip\"",
+		},
+		{
+			name: "short token",
+			line: "token = short",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collectAssignmentCandidates(tt.line)
+			if len(got) != 0 {
+				t.Fatalf("expected no candidates for %q, got %v", tt.line, got)
+			}
+		})
+	}
+}
+
+func TestExtractAssignmentRHS_ExtractsValidTokens(t *testing.T) {
+	t.Parallel()
+
+	line := "api_key = aB3cD5eF7gH9iJ1kL2mN4oP6"
+	got := collectAssignmentCandidates(line)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(got))
+	}
+	if got[0].text != "aB3cD5eF7gH9iJ1kL2mN4oP6" {
+		t.Fatalf("unexpected token: %q", got[0].text)
+	}
+	if got[0].col <= 1 {
+		t.Fatalf("expected positive column, got %d", got[0].col)
+	}
+
+	line = "secret=>aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"
+	got = collectAssignmentCandidates(line)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 candidate for fat arrow, got %d", len(got))
+	}
+	if got[0].text != "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c" {
+		t.Fatalf("unexpected fat-arrow token: %q", got[0].text)
+	}
+
+	line = "token: aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"
+	got = collectAssignmentCandidates(line)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 candidate for colon assignment, got %d", len(got))
+	}
+}
+
+func TestIsTokenChar(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ch   byte
+		want bool
+	}{
+		{"lowercase", 'a', true},
+		{"uppercase", 'Z', true},
+		{"digit", '7', true},
+		{"plus", '+', true},
+		{"slash", '/', true},
+		{"equals", '=', true},
+		{"dash", '-', true},
+		{"underscore", '_', true},
+		{"dot", '.', true},
+		{"at", '@', false},
+		{"space", ' ', false},
+		{"colon", ':', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTokenChar(tt.ch); got != tt.want {
+				t.Fatalf("isTokenChar(%q) = %v, want %v", tt.ch, got, tt.want)
+			}
+		})
 	}
 }

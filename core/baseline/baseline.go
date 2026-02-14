@@ -79,17 +79,29 @@ func (b *Baseline) Save(path string) error {
 	tmpName := tmp.Name()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		closeErr := tmp.Close()
+		removeErr := os.Remove(tmpName)
+		if closeErr != nil {
+			return fmt.Errorf("writing temp file: %w (close error: %v)", err, closeErr)
+		}
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return fmt.Errorf("writing temp file: %w (remove error: %v)", err, removeErr)
+		}
 		return fmt.Errorf("writing temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		removeErr := os.Remove(tmpName)
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return fmt.Errorf("closing temp file: %w (remove error: %v)", err, removeErr)
+		}
 		return fmt.Errorf("closing temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		removeErr := os.Remove(tmpName)
+		if removeErr != nil && !os.IsNotExist(removeErr) {
+			return fmt.Errorf("renaming baseline file: %w (remove error: %v)", err, removeErr)
+		}
 		return fmt.Errorf("renaming baseline file: %w", err)
 	}
 
@@ -98,7 +110,10 @@ func (b *Baseline) Save(path string) error {
 
 // Match returns the matching baseline entry for a finding, or nil if none.
 // Expired entries are not matched.
-func (b *Baseline) Match(f findings.Finding) *Entry {
+func (b *Baseline) Match(f *findings.Finding) *Entry {
+	if f == nil {
+		return nil
+	}
 	e, ok := b.index[f.Fingerprint]
 	if !ok {
 		return nil
@@ -110,8 +125,11 @@ func (b *Baseline) Match(f findings.Finding) *Entry {
 }
 
 // Add appends an entry to the baseline and updates the index.
-func (b *Baseline) Add(e Entry) {
-	b.Entries = append(b.Entries, e)
+func (b *Baseline) Add(e *Entry) {
+	if e == nil {
+		return
+	}
+	b.Entries = append(b.Entries, *e)
 	if b.index == nil {
 		b.index = make(map[string]*Entry)
 	}
@@ -122,15 +140,16 @@ func (b *Baseline) Add(e Entry) {
 // findings slice. Returns the number of entries removed.
 func (b *Baseline) Prune(current []findings.Finding) int {
 	active := make(map[string]struct{}, len(current))
-	for _, f := range current {
-		active[f.Fingerprint] = struct{}{}
+	for i := range current {
+		active[current[i].Fingerprint] = struct{}{}
 	}
 
 	kept := make([]Entry, 0, len(b.Entries))
 	removed := 0
-	for _, e := range b.Entries {
-		if _, ok := active[e.Fingerprint]; ok {
-			kept = append(kept, e)
+	for i := range b.Entries {
+		entry := b.Entries[i]
+		if _, ok := active[entry.Fingerprint]; ok {
+			kept = append(kept, entry)
 		} else {
 			removed++
 		}
@@ -150,8 +169,9 @@ func (b *Baseline) Len() int {
 func (b *Baseline) ExpiredCount() int {
 	now := time.Now()
 	count := 0
-	for _, e := range b.Entries {
-		if e.ExpiresAt != nil && now.After(*e.ExpiresAt) {
+	for i := range b.Entries {
+		entry := b.Entries[i]
+		if entry.ExpiresAt != nil && now.After(*entry.ExpiresAt) {
 			count++
 		}
 	}
@@ -167,12 +187,13 @@ func DefaultPath(root string) string {
 func FromFindings(ff []findings.Finding) []Entry {
 	entries := make([]Entry, 0, len(ff))
 	now := time.Now().UTC()
-	for _, f := range ff {
+	for i := range ff {
+		finding := ff[i]
 		entries = append(entries, Entry{
-			Fingerprint: f.Fingerprint,
-			RuleID:      f.RuleID,
-			FilePath:    f.Location.FilePath,
-			Severity:    f.Severity,
+			Fingerprint: finding.Fingerprint,
+			RuleID:      finding.RuleID,
+			FilePath:    finding.Location.FilePath,
+			Severity:    finding.Severity,
 			CreatedAt:   now,
 		})
 	}

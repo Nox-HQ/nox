@@ -15,10 +15,10 @@ type MatchResult struct {
 }
 
 // Matcher is the interface that all pattern-matching strategies must satisfy.
-// Implementations receive raw file content and the triggering rule, and return
-// zero or more match results.
+// Implementations receive raw file content and a pointer to the triggering
+// rule, and return zero or more match results.
 type Matcher interface {
-	Match(content []byte, rule Rule) []MatchResult
+	Match(content []byte, rule *Rule) []MatchResult
 }
 
 // RegexMatcher implements Matcher using compiled regular expressions. It
@@ -54,7 +54,7 @@ func (m *RegexMatcher) compile(pattern string) (*regexp.Regexp, error) {
 
 // Match finds all occurrences of the rule pattern in content and returns
 // their positions as MatchResult values with 1-based line and column numbers.
-func (m *RegexMatcher) Match(content []byte, rule Rule) []MatchResult {
+func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	re, err := m.compile(rule.Pattern)
 	if err != nil {
 		return nil
@@ -106,7 +106,9 @@ func findLine(lineStarts []int, offset int) int {
 // (jsonpath, yamlpath, heuristic). It always returns nil.
 type stubMatcher struct{}
 
-func (s *stubMatcher) Match(_ []byte, _ Rule) []MatchResult {
+// Match is a no-op implementation that always returns nil for unimplemented
+// matcher types (jsonpath, yamlpath, heuristic).
+func (s *stubMatcher) Match(_ []byte, _ *Rule) []MatchResult {
 	return nil
 }
 

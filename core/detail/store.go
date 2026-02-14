@@ -56,7 +56,8 @@ func LoadFromSet(fs *findings.FindingSet, basePath string) *Store {
 // Filter returns findings matching the given criteria.
 func (s *Store) Filter(f Filter) []findings.Finding {
 	var result []findings.Finding
-	for _, finding := range s.findings {
+	for i := range s.findings {
+		finding := s.findings[i]
 		if !matchesSeverity(finding.Severity, f.Severities) {
 			continue
 		}
@@ -73,9 +74,10 @@ func (s *Store) Filter(f Filter) []findings.Finding {
 
 // ByID looks up a finding by its ID.
 func (s *Store) ByID(id string) (findings.Finding, bool) {
-	for _, f := range s.findings {
-		if f.ID == id {
-			return f, true
+	for i := range s.findings {
+		finding := s.findings[i]
+		if finding.ID == id {
+			return finding, true
 		}
 	}
 	return findings.Finding{}, false
@@ -100,8 +102,8 @@ func matchesSeverity(sev findings.Severity, allowed []findings.Severity) bool {
 	if len(allowed) == 0 {
 		return true
 	}
-	for _, s := range allowed {
-		if s == sev {
+	for i := range allowed {
+		if allowed[i] == sev {
 			return true
 		}
 	}

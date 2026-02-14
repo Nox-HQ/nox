@@ -81,8 +81,8 @@ type Analyzer struct {
 func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
 	aiRules := builtinAIRules()
-	for i := range aiRules {
-		rs.Add(aiRules[i])
+	for _, r := range aiRules {
+		rs.Add(r)
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
@@ -116,8 +116,8 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 		if err != nil {
 			return nil, nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
-		for _, f := range results {
-			fs.Add(f)
+		for i := range results {
+			fs.Add(results[i])
 		}
 
 		// Extract inventory entries from AI component artifacts.

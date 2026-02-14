@@ -25,8 +25,8 @@ type Analyzer struct {
 func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
 	builtins := builtinDataRules()
-	for i := range builtins {
-		rs.Add(builtins[i])
+	for _, r := range builtins {
+		rs.Add(r)
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),

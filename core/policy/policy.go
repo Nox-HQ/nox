@@ -13,9 +13,12 @@ import (
 type BaselineMode string
 
 const (
-	BaselineModeStrict BaselineMode = "strict" // baselined findings count toward failure
-	BaselineModeWarn   BaselineMode = "warn"   // baselined findings produce warnings only
-	BaselineModeOff    BaselineMode = "off"    // baseline not applied
+	// BaselineModeStrict counts baselined findings toward failure.
+	BaselineModeStrict BaselineMode = "strict"
+	// BaselineModeWarn treats baselined findings as warnings only.
+	BaselineModeWarn BaselineMode = "warn"
+	// BaselineModeOff disables baseline handling in policy evaluation.
+	BaselineModeOff BaselineMode = "off"
 )
 
 // Config defines the policy evaluation parameters.
@@ -49,12 +52,13 @@ var severityRank = map[findings.Severity]int{
 func Evaluate(cfg Config, all []findings.Finding) *Result {
 	r := &Result{Pass: true, ExitCode: 0}
 
-	for _, f := range all {
-		switch f.Status {
+	for i := range all {
+		finding := all[i]
+		switch finding.Status {
 		case findings.StatusBaselined:
-			r.Baselined = append(r.Baselined, f)
+			r.Baselined = append(r.Baselined, finding)
 		default:
-			r.New = append(r.New, f)
+			r.New = append(r.New, finding)
 		}
 	}
 
@@ -92,10 +96,11 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 
 	// Check warnings threshold.
 	if cfg.WarnOn != "" {
-		for _, f := range r.New {
-			if meetsThreshold(f.Severity, cfg.WarnOn) && !meetsThreshold(f.Severity, cfg.FailOn) {
+		for i := range r.New {
+			finding := r.New[i]
+			if meetsThreshold(finding.Severity, cfg.WarnOn) && !meetsThreshold(finding.Severity, cfg.FailOn) {
 				r.Warnings = append(r.Warnings, fmt.Sprintf("warning: %s finding %s in %s",
-					f.Severity, f.RuleID, f.Location.FilePath))
+					finding.Severity, finding.RuleID, finding.Location.FilePath))
 			}
 		}
 	}
@@ -129,11 +134,12 @@ func meetsThreshold(severity, threshold findings.Severity) bool {
 func maxSeverity(ff []findings.Finding) findings.Severity {
 	best := findings.Severity("")
 	bestRank := 999
-	for _, f := range ff {
-		r, ok := severityRank[f.Severity]
+	for i := range ff {
+		finding := ff[i]
+		r, ok := severityRank[finding.Severity]
 		if ok && r < bestRank {
 			bestRank = r
-			best = f.Severity
+			best = finding.Severity
 		}
 	}
 	return best

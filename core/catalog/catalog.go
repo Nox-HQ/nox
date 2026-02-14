@@ -56,7 +56,7 @@ func allRuleSets() []*rules.RuleSet {
 	}
 }
 
-func metaFromRule(r rules.Rule) RuleMeta {
+func metaFromRule(r *rules.Rule) RuleMeta {
 	return RuleMeta{
 		ID:          r.ID,
 		Description: r.Description,

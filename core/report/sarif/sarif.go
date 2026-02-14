@@ -162,7 +162,8 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 
 	// Map findings to SARIF results.
 	results := make([]Result, 0, len(items))
-	for _, f := range items {
+	for i := range items {
+		f := items[i]
 		idx, ok := ruleIndex[f.RuleID]
 		if !ok {
 			// This should not happen if buildRuleCatalog is correct, but
@@ -223,7 +224,7 @@ func (r *Reporter) WriteToFile(fs *findings.FindingSet, path string) error {
 	if err != nil {
 		return fmt.Errorf("sarif: generate report: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +251,7 @@ func severityToLevel(s findings.Severity) string {
 // its index within that array. When the reporter has a RuleSet, the catalog is
 // populated from it. Otherwise the catalog is derived from the unique rule IDs
 // found in the given findings slice.
-func (r *Reporter) buildRuleCatalog(items []findings.Finding) ([]ReportingDescriptor, map[string]int) {
+func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
 	if r.Rules != nil {
 		return r.buildCatalogFromRuleSet()
 	}
@@ -259,21 +260,20 @@ func (r *Reporter) buildRuleCatalog(items []findings.Finding) ([]ReportingDescri
 
 // buildCatalogFromRuleSet creates catalog entries for every rule in the
 // RuleSet, sorted by rule ID for deterministic output.
-func (r *Reporter) buildCatalogFromRuleSet() ([]ReportingDescriptor, map[string]int) {
+func (r *Reporter) buildCatalogFromRuleSet() (catalog []ReportingDescriptor, index map[string]int) {
 	allRules := r.Rules.Rules()
 
 	// Sort rules by ID for deterministic ordering.
-	sorted := make([]rules.Rule, len(allRules))
+	sorted := make([]*rules.Rule, len(allRules))
 	copy(sorted, allRules)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].ID < sorted[j].ID
 	})
 
-	catalog := make([]ReportingDescriptor, 0, len(sorted))
-	index := make(map[string]int, len(sorted))
+	catalog = make([]ReportingDescriptor, 0, len(sorted))
+	index = make(map[string]int, len(sorted))
 
-	for i := range sorted {
-		rule := &sorted[i]
+	for _, rule := range sorted {
 		idx := len(catalog)
 		index[rule.ID] = idx
 
@@ -324,7 +324,7 @@ func (r *Reporter) buildCatalogFromRuleSet() ([]ReportingDescriptor, map[string]
 
 // buildCatalogFromFindings creates minimal catalog entries derived from the
 // unique rule IDs in the findings. The entries are sorted by rule ID.
-func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) ([]ReportingDescriptor, map[string]int) {
+func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
 	// Collect unique rule IDs preserving the first finding's data for each.
 	type ruleInfo struct {
 		id       string
@@ -335,7 +335,8 @@ func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) ([]Reporti
 	seen := make(map[string]struct{})
 	var unique []ruleInfo
 
-	for _, f := range items {
+	for i := range items {
+		f := items[i]
 		if _, exists := seen[f.RuleID]; exists {
 			continue
 		}
@@ -352,8 +353,8 @@ func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) ([]Reporti
 		return unique[i].id < unique[j].id
 	})
 
-	catalog := make([]ReportingDescriptor, 0, len(unique))
-	index := make(map[string]int, len(unique))
+	catalog = make([]ReportingDescriptor, 0, len(unique))
+	index = make(map[string]int, len(unique))
 
 	for _, ri := range unique {
 		idx := len(catalog)

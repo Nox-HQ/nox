@@ -22,7 +22,7 @@ type aiRule struct {
 }
 
 // builtinAIRules returns all built-in AI security rules.
-func builtinAIRules() []rules.Rule {
+func builtinAIRules() []*rules.Rule {
 	defs := []aiRule{
 		// -----------------------------------------------------------------
 		// Prompt / RAG boundary rules (AI-001 to AI-003)
@@ -289,9 +289,9 @@ func builtinAIRules() []rules.Rule {
 		},
 	}
 
-	out := make([]rules.Rule, len(defs))
+	out := make([]*rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
+		out[i] = &rules.Rule{
 			ID:           defs[i].id,
 			Version:      "1.0",
 			Description:  defs[i].description,

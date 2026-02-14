@@ -1,12 +1,14 @@
 package detail
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 )
 
 func TestReadSourceContext(t *testing.T) {
@@ -65,6 +67,25 @@ func TestReadSourceContextMissingFile(t *testing.T) {
 	}
 }
 
+func TestReadSourceContext_BinaryFile(t *testing.T) {
+	dir := t.TempDir()
+	// Write a file with null bytes to trigger binary detection.
+	binaryContent := []byte("line1\nline2\x00binary\nline4\n")
+	if err := os.WriteFile(filepath.Join(dir, "binary.dat"), binaryContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loc := findings.Location{
+		FilePath:  "binary.dat",
+		StartLine: 1,
+		EndLine:   1,
+	}
+	ctx := ReadSourceContext(dir, loc, 2)
+	if ctx != nil {
+		t.Error("expected nil for binary file, got non-nil")
+	}
+}
+
 func TestReadSourceContextEmptyLocation(t *testing.T) {
 	ctx := ReadSourceContext(t.TempDir(), findings.Location{}, 3)
 	if ctx != nil {
@@ -104,7 +125,7 @@ func TestEnrich(t *testing.T) {
 	}
 
 	cat := catalog.Catalog()
-	detail := Enrich(f, dir, []findings.Finding{f, other}, cat, 2)
+	detail := Enrich(&f, dir, []findings.Finding{f, other}, cat, 2)
 
 	if detail.Source == nil {
 		t.Error("expected non-nil Source")
@@ -193,5 +214,171 @@ func TestStoreByID(t *testing.T) {
 	_, ok = store.ByID("nonexistent")
 	if ok {
 		t.Error("ByID found nonexistent finding")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LoadFromFile tests (0% → covered)
+// ---------------------------------------------------------------------------
+
+func TestLoadFromFile_Valid(t *testing.T) {
+	dir := t.TempDir()
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		ID: "SEC-001:a.go:1", RuleID: "SEC-001",
+		Severity: findings.SeverityHigh,
+		Location: findings.Location{FilePath: "a.go", StartLine: 1},
+		Message:  "test finding",
+	})
+
+	// Write a valid findings.json using the JSONReporter.
+	rep := report.NewJSONReporter("test")
+	data, err := rep.Generate(fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "findings.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if store.Count() != 1 {
+		t.Fatalf("expected 1 finding, got %d", store.Count())
+	}
+	if store.BasePath() != dir {
+		t.Errorf("BasePath = %q, want %q", store.BasePath(), dir)
+	}
+}
+
+func TestLoadFromFile_NonexistentPath(t *testing.T) {
+	_, err := LoadFromFile("/nonexistent/findings.json")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestLoadFromFile_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(path, []byte("not json at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadFromFile(path)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// All, Count, BasePath tests (0% → covered)
+// ---------------------------------------------------------------------------
+
+func TestStoreAllCountBasePath(t *testing.T) {
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		ID: "A:f:1", RuleID: "A",
+		Severity: findings.SeverityLow,
+		Location: findings.Location{FilePath: "f", StartLine: 1},
+		Message:  "m",
+	})
+	fs.Add(findings.Finding{
+		ID: "B:g:2", RuleID: "B",
+		Severity: findings.SeverityMedium,
+		Location: findings.Location{FilePath: "g", StartLine: 2},
+		Message:  "m2",
+	})
+
+	store := LoadFromSet(fs, "/my/base")
+
+	all := store.All()
+	if len(all) != 2 {
+		t.Fatalf("All() returned %d findings, want 2", len(all))
+	}
+	if store.Count() != 2 {
+		t.Fatalf("Count() = %d, want 2", store.Count())
+	}
+	if store.BasePath() != "/my/base" {
+		t.Errorf("BasePath() = %q, want %q", store.BasePath(), "/my/base")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// matchesPattern edge cases
+// ---------------------------------------------------------------------------
+
+func TestMatchesPattern_GlobError(t *testing.T) {
+	// filepath.Match returns an error for invalid patterns like "[".
+	// matchesPattern should fall back to substring matching.
+	got := matchesPattern("abc[def", "[")
+	if !got {
+		t.Error("expected substring fallback to match")
+	}
+}
+
+func TestMatchesPattern_NoMatch(t *testing.T) {
+	got := matchesPattern("hello.go", "*.py")
+	if got {
+		t.Error("expected no match for *.py against hello.go")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LoadFromFile round-trip with real JSON structure
+// ---------------------------------------------------------------------------
+
+func TestLoadFromFile_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	original := []findings.Finding{
+		{
+			ID: "SEC-001:test.go:5", RuleID: "SEC-001",
+			Severity: findings.SeverityHigh,
+			Location: findings.Location{FilePath: "test.go", StartLine: 5},
+			Message:  "secret detected",
+		},
+		{
+			ID: "IAC-001:Dockerfile:10", RuleID: "IAC-001",
+			Severity: findings.SeverityMedium,
+			Location: findings.Location{FilePath: "Dockerfile", StartLine: 10},
+			Message:  "unpinned base image",
+		},
+	}
+
+	// Write findings manually in the report.JSONReport format.
+	rep := report.JSONReport{
+		Meta: report.Meta{
+			SchemaVersion: "1.0.0",
+			ToolName:      "nox",
+			ToolVersion:   "test",
+		},
+		Findings: original,
+	}
+	data, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "findings.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if store.Count() != 2 {
+		t.Fatalf("Count = %d, want 2", store.Count())
+	}
+
+	// Verify we can look up by ID.
+	f, ok := store.ByID("SEC-001:test.go:5")
+	if !ok {
+		t.Fatal("expected to find SEC-001:test.go:5")
+	}
+	if f.Message != "secret detected" {
+		t.Errorf("message = %q, want %q", f.Message, "secret detected")
 	}
 }

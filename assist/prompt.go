@@ -51,7 +51,7 @@ func formatFindings(ff []findings.Finding, basePath string, allFindings []findin
 		}
 
 		// Enrich with source context and rule metadata.
-		d := detail.Enrich(f, basePath, allFindings, cat, 3)
+		d := detail.Enrich(&f, basePath, allFindings, cat, 3)
 		if d.Source != nil && len(d.Source.Lines) > 0 {
 			b.WriteString("Source:\n")
 			for _, line := range d.Source.Lines {

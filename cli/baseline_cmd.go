@@ -57,8 +57,9 @@ func baselineWrite(args []string) int {
 
 	ff := result.Findings.Findings()
 	bl := &baseline.Baseline{}
-	for _, e := range baseline.FromFindings(ff) {
-		bl.Add(e)
+	entries := baseline.FromFindings(ff)
+	for i := range entries {
+		bl.Add(&entries[i])
 	}
 
 	if err := bl.Save(outputPath); err != nil {
@@ -107,10 +108,11 @@ func baselineUpdate(args []string) int {
 	for _, e := range bl.Entries {
 		existing[e.Fingerprint] = struct{}{}
 	}
-	for _, e := range baseline.FromFindings(ff) {
-		if _, ok := existing[e.Fingerprint]; !ok {
-			bl.Add(e)
-			existing[e.Fingerprint] = struct{}{}
+	entries := baseline.FromFindings(ff)
+	for i := range entries {
+		if _, ok := existing[entries[i].Fingerprint]; !ok {
+			bl.Add(&entries[i])
+			existing[entries[i].Fingerprint] = struct{}{}
 			added++
 		}
 	}

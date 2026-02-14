@@ -23,7 +23,7 @@ func NewAnalyzer() *Analyzer {
 	rs := rules.NewRuleSet()
 	iacRules := builtinIaCRules()
 	for i := range iacRules {
-		rs.Add(iacRules[i])
+		rs.Add(&iacRules[i])
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
@@ -55,8 +55,8 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
-		for _, f := range results {
-			fs.Add(f)
+		for i := range results {
+			fs.Add(results[i])
 		}
 	}
 

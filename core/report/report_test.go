@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -162,7 +163,7 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		t.Fatalf("re-marshal r2: %v", err)
 	}
 
-	if string(norm1) != string(norm2) {
+	if !bytes.Equal(norm1, norm2) {
 		t.Errorf("outputs are not deterministic:\n  first:  %s\n  second: %s", norm1, norm2)
 	}
 }
@@ -198,7 +199,7 @@ func TestWriteToFileCreatesValidFile(t *testing.T) {
 	}
 	// Verify file permissions (masking with 0777 to ignore OS-specific bits).
 	perm := info.Mode().Perm()
-	if perm != 0644 {
+	if perm != 0o644 {
 		t.Errorf("expected file permissions 0644, got %04o", perm)
 	}
 }
@@ -222,5 +223,16 @@ func TestEmptyFindingSetProducesValidJSON(t *testing.T) {
 	}
 	if len(report.Findings) != 0 {
 		t.Errorf("expected 0 findings, got %d", len(report.Findings))
+	}
+}
+
+func TestWriteToFile_ErrorOnInvalidPath(t *testing.T) {
+	r := NewJSONReporter("0.1.0")
+	fs := sampleFindingSet()
+
+	// Writing to a path inside a nonexistent directory should fail.
+	err := r.WriteToFile(fs, "/nonexistent/dir/report.json")
+	if err == nil {
+		t.Fatal("expected error writing to invalid path, got nil")
 	}
 }

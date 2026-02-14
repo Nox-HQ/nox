@@ -105,9 +105,9 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **155 built-in rules** across four analyzer suites:
+Nox ships with **567 built-in rules** across five analyzer suites:
 
-### Secrets (86 rules)
+### Secrets (163 rules)
 
 Detects hardcoded secrets, API keys, tokens, and credentials across **15 categories**:
 
@@ -125,11 +125,15 @@ Detects hardcoded secrets, API keys, tokens, and credentials across **15 categor
 | Generic Patterns | SEC-005, SEC-080 -- SEC-086 | Passwords, secrets, Bearer/Basic auth, JWT, URLs with credentials |
 
 **Secret detection features:**
-- Shannon entropy analysis for high-entropy strings (API keys, tokens)
+- **Shannon entropy analysis** for high-entropy strings (API keys, tokens) with configurable thresholds
+- **Context-aware detection** -- lowers entropy threshold when secret-suggestive keywords (`password`, `secret`, `token`, `key`, etc.) appear on the same line
+- **False-positive hardening** -- automatically filters git SHAs, version strings, file paths, camelCase identifiers, hex checksums, and other non-secret patterns
+- **File-pattern scoping** -- entropy rules only scan source-like files (not lockfiles, checksums, or vendored code)
+- **Configurable via `.nox.yaml`** -- override entropy thresholds per rule (see [Entropy Configuration](#entropy-configuration))
 - Git history scanning to find secrets in past commits
 - Custom rules via YAML definition files (`--rules path/to/rules/`)
 
-### AI Security (18 rules)
+### AI Security (21 rules)
 
 Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 
@@ -143,7 +147,7 @@ Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 | Supply Chain | AI-008, AI-014 | LLM03 | Unpinned models, insecure HTTP model downloads |
 | Resource Management | AI-017 | LLM10 | Unlimited token limits |
 
-### Infrastructure as Code (50 rules)
+### Infrastructure as Code (365 rules)
 
 Detects misconfigurations across **7 IaC categories**:
 
@@ -157,7 +161,7 @@ Detects misconfigurations across **7 IaC categories**:
 | Helm | IAC-046 -- IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
 | CI/CD General | IAC-050 | Disabled security checks |
 
-### Dependencies & SCA (1 rule)
+### Dependencies & SCA (6 rules)
 
 Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and queries the [OSV.dev](https://osv.dev) database for known vulnerabilities:
 
@@ -170,6 +174,19 @@ Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, G
 - Graceful degradation on network errors (offline-first)
 - Disable with `--no-osv` flag or `scan.osv.disabled: true` in `.nox.yaml`
 - Vulnerability data enriches CycloneDX and SPDX SBOM output
+
+### Data Protection (12 rules)
+
+Detects personally identifiable information (PII) and sensitive data patterns in code and configuration:
+
+| Category | Rules | Examples |
+|----------|-------|---------|
+| Contact Info | DATA-001, DATA-004 | Email addresses, US phone numbers |
+| Financial | DATA-003, DATA-007 | Credit card numbers (Visa/MC/Amex/Discover), IBAN |
+| Government IDs | DATA-002, DATA-008 -- DATA-012 | SSN, UK National Insurance, Tax IDs, driver's license, passport |
+| Health | DATA-010 | Health record identifiers (MRN, patient_id) |
+| Infrastructure | DATA-005 | Hardcoded public IP addresses |
+| Personal | DATA-006 | Date of birth fields |
 
 ## Configuration
 
@@ -209,6 +226,23 @@ explain:
 ```
 
 CLI flags always take precedence over config file values.
+
+### Entropy Configuration
+
+Fine-tune entropy-based secret detection thresholds via `.nox.yaml`:
+
+```yaml
+scan:
+  entropy:
+    threshold: 5.0           # General entropy threshold (default: 5.0)
+    hex_threshold: 4.5       # Threshold for hex strings (default: rule-specific)
+    base64_threshold: 5.2    # Threshold for base64 strings (default: rule-specific)
+    require_context: true    # Only flag when secret keyword is present (default: false)
+```
+
+- **`threshold`** -- Minimum Shannon entropy (bits per character) to flag a candidate string. Higher values reduce false positives; lower values catch more secrets.
+- **`require_context`** -- When `true`, only flag high-entropy strings on lines that contain secret-suggestive keywords (`password`, `secret`, `key`, `token`, `credential`, `api_key`, `private`). Useful for reducing noise in codebases with many random-looking constants.
+- **Context boost** -- When a secret keyword is present on the same line, the effective threshold is automatically reduced by 0.5 bits, increasing sensitivity where it matters.
 
 ### Baseline Management
 

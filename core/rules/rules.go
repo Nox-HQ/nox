@@ -39,7 +39,7 @@ type Rule struct {
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
 type RuleSet struct {
-	rules []Rule
+	rules []*Rule
 	byID  map[string]int
 	byTag map[string][]int
 }
@@ -53,7 +53,7 @@ func NewRuleSet() *RuleSet {
 }
 
 // Add appends a rule to the set and updates the lookup indexes.
-func (rs *RuleSet) Add(r Rule) {
+func (rs *RuleSet) Add(r *Rule) {
 	idx := len(rs.rules)
 	rs.rules = append(rs.rules, r)
 	rs.byID[r.ID] = idx
@@ -63,16 +63,16 @@ func (rs *RuleSet) Add(r Rule) {
 }
 
 // Rules returns all rules in insertion order.
-func (rs *RuleSet) Rules() []Rule {
+func (rs *RuleSet) Rules() []*Rule {
 	return rs.rules
 }
 
 // ByID looks up a rule by its unique identifier. The boolean return indicates
 // whether a rule with the given ID exists in the set.
-func (rs *RuleSet) ByID(id string) (Rule, bool) {
+func (rs *RuleSet) ByID(id string) (*Rule, bool) {
 	idx, ok := rs.byID[id]
 	if !ok {
-		return Rule{}, false
+		return nil, false
 	}
 	return rs.rules[idx], true
 }
@@ -85,12 +85,12 @@ func (rs *RuleSet) HasID(id string) bool {
 
 // ByTag returns all rules that carry the given tag. If no rules match, an
 // empty slice is returned.
-func (rs *RuleSet) ByTag(tag string) []Rule {
+func (rs *RuleSet) ByTag(tag string) []*Rule {
 	idxs, ok := rs.byTag[tag]
 	if !ok {
 		return nil
 	}
-	out := make([]Rule, 0, len(idxs))
+	out := make([]*Rule, 0, len(idxs))
 	for _, idx := range idxs {
 		out = append(out, rs.rules[idx])
 	}

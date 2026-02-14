@@ -32,7 +32,7 @@ repos:
 
       - id: coverctl
         name: coverctl coverage check
-        entry: coverctl -q check
+        entry: bash -c 'go test -coverprofile=coverage.out ./... && coverctl -q check --config .coverctl.yaml --profile coverage.out'
         language: system
         pass_filenames: false
         types: [go]

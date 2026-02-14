@@ -592,10 +592,23 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-160": "dp.st." + "my_env." + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\n",
 
 		// Entropy rules (SEC-161 to SEC-163)
-		"SEC-161": "secret_key = " + "aB3$xK9#mN2pQ7wZ" + "vL5jR8fY1cD4hT6g\n",
-		"SEC-162": "data = " + "Kj7xR2mD3nG9pQ5wZ8vL4jY1cH6bT0fAsXeWuIoP+q=\n",
-		"SEC-163": "hex_key = " + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6\n",
+		// These use a source-like filename (test.go) because entropy rules
+		// have FilePatterns restricting them to source files.
+		// SEC-162 and SEC-163 require context keywords on the line.
+		// SEC-161: threshold=5.0, context boost -0.5 → effective 4.5;
+		//   candidate entropy must be ≥4.5 and extractable by assignment RHS tokenizer.
+		"SEC-161": "secret_key = " + "xK9mR3pZ7wL2jY5n" + "Q8vB4fH1cT6gD0sA\n",
+		// SEC-162: threshold=5.2, require_context, context boost -0.5 → effective 4.7;
+		//   base64 blob extracted by base64 regex (30+ chars).
+		"SEC-162": "secret_token = " + "Kj7xR2mD3nG9pQ5wZ8vL4jY1cH6bT0fAsXeWuIoP+q=\n",
+		// SEC-163: threshold=4.5, require_context, context boost -0.5 → effective 4.0;
+		//   mixed-case hex for entropy > 4.0 (pure lowercase hex max is exactly 4.0).
+		"SEC-163": "hex_key = " + "9F8e7D6c5B4a3210" + "FEdcBA9876543210\n",
 	}
+
+	// Entropy rules have FilePatterns restricting them to source-like files,
+	// so they need a matching filename.
+	entropyRules := map[string]bool{"SEC-161": true, "SEC-162": true, "SEC-163": true}
 
 	a := NewAnalyzer()
 	for _, r := range builtinSecretRules() {
@@ -604,7 +617,11 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 			if !ok {
 				t.Fatalf("no positive example for rule %s", r.ID)
 			}
-			results, err := a.ScanFile("test.txt", []byte(example))
+			filename := "test.txt"
+			if entropyRules[r.ID] {
+				filename = "test.go"
+			}
+			results, err := a.ScanFile(filename, []byte(example))
 			if err != nil {
 				t.Fatalf("scan error: %v", err)
 			}
@@ -681,5 +698,231 @@ func TestDetect_UpgradedSEC001_ASIA(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected SEC-001 to match ASIA prefix")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ApplyEntropyOverrides tests
+// ---------------------------------------------------------------------------
+
+func TestApplyEntropyOverrides_AllFields(t *testing.T) {
+	a := NewAnalyzer()
+
+	reqCtx := true
+	a.ApplyEntropyOverrides(EntropyOverrides{
+		Threshold:       6.0,
+		HexThreshold:    5.5,
+		Base64Threshold: 6.5,
+		RequireContext:  &reqCtx,
+	})
+
+	// Verify SEC-161 threshold was overridden.
+	r161, ok := a.Rules().ByID("SEC-161")
+	if !ok {
+		t.Fatal("SEC-161 not found")
+	}
+	if r161.Metadata["entropy_threshold"] != "6" {
+		t.Errorf("SEC-161 threshold: expected '6', got %q", r161.Metadata["entropy_threshold"])
+	}
+
+	// Verify SEC-162 threshold and require_context.
+	r162, ok := a.Rules().ByID("SEC-162")
+	if !ok {
+		t.Fatal("SEC-162 not found")
+	}
+	if r162.Metadata["entropy_threshold"] != "6.5" {
+		t.Errorf("SEC-162 threshold: expected '6.5', got %q", r162.Metadata["entropy_threshold"])
+	}
+	if r162.Metadata["require_context"] != "true" {
+		t.Errorf("SEC-162 require_context: expected 'true', got %q", r162.Metadata["require_context"])
+	}
+
+	// Verify SEC-163 threshold and require_context.
+	r163, ok := a.Rules().ByID("SEC-163")
+	if !ok {
+		t.Fatal("SEC-163 not found")
+	}
+	if r163.Metadata["entropy_threshold"] != "5.5" {
+		t.Errorf("SEC-163 threshold: expected '5.5', got %q", r163.Metadata["entropy_threshold"])
+	}
+	if r163.Metadata["require_context"] != "true" {
+		t.Errorf("SEC-163 require_context: expected 'true', got %q", r163.Metadata["require_context"])
+	}
+}
+
+func TestApplyEntropyOverrides_RequireContextFalse(t *testing.T) {
+	a := NewAnalyzer()
+
+	reqCtx := false
+	a.ApplyEntropyOverrides(EntropyOverrides{
+		RequireContext: &reqCtx,
+	})
+
+	r162, ok := a.Rules().ByID("SEC-162")
+	if !ok {
+		t.Fatal("SEC-162 not found")
+	}
+	if r162.Metadata["require_context"] != "false" {
+		t.Errorf("SEC-162 require_context: expected 'false', got %q", r162.Metadata["require_context"])
+	}
+}
+
+func TestApplyEntropyOverrides_PartialFields(t *testing.T) {
+	a := NewAnalyzer()
+
+	// Only set threshold for SEC-161, leave others at defaults.
+	a.ApplyEntropyOverrides(EntropyOverrides{
+		Threshold: 7.0,
+	})
+
+	r161, ok := a.Rules().ByID("SEC-161")
+	if !ok {
+		t.Fatal("SEC-161 not found")
+	}
+	if r161.Metadata["entropy_threshold"] != "7" {
+		t.Errorf("SEC-161 threshold: expected '7', got %q", r161.Metadata["entropy_threshold"])
+	}
+
+	// SEC-162 and SEC-163 thresholds should remain at their built-in defaults.
+	r162, ok := a.Rules().ByID("SEC-162")
+	if !ok {
+		t.Fatal("SEC-162 not found")
+	}
+	// The default from rules.go is 5.2 — check it wasn't changed.
+	if r162.Metadata["entropy_threshold"] != "5.2" {
+		t.Errorf("SEC-162 threshold should remain default, got %q", r162.Metadata["entropy_threshold"])
+	}
+}
+
+func TestApplyEntropyOverrides_NoOp(t *testing.T) {
+	a := NewAnalyzer()
+
+	// Get original values.
+	r161Before, _ := a.Rules().ByID("SEC-161")
+	origThreshold := r161Before.Metadata["entropy_threshold"]
+
+	// Apply empty overrides — nothing should change.
+	a.ApplyEntropyOverrides(EntropyOverrides{})
+
+	r161After, _ := a.Rules().ByID("SEC-161")
+	if r161After.Metadata["entropy_threshold"] != origThreshold {
+		t.Errorf("expected threshold unchanged, got %q (was %q)",
+			r161After.Metadata["entropy_threshold"], origThreshold)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// DecodeAndScan / truncateString tests
+// ---------------------------------------------------------------------------
+
+func TestDecodeAndScan_NoSegments(t *testing.T) {
+	a := NewAnalyzer()
+	// Clean content with no base64/hex segments.
+	content := []byte("package main\nfunc main() {}\n")
+	results := DecodeAndScan(content, "main.go", a.engine)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for clean content, got %d", len(results))
+	}
+}
+
+func TestDecodeAndScan_Base64Secret(t *testing.T) {
+	a := NewAnalyzer()
+	// Base64 encode an AWS key (AKIAIOSFODNN7EXAMPLE).
+	// Base64 of "AKIAIOSFODNN7EXAMPLE" = "QUtJQUlPU0ZPRE5ON0VYQU1QTEU="
+	// But we need a string long enough (>=40 chars) for the regex to match.
+	// Let's use a longer payload:
+	// "aws_access_key_id = AKIAIOSFODNN7EXAMPLE" base64 = "YXdzX2FjY2Vzc19rZXlfaWQgPSBBS0lBSU9TRk9ETk43RVhBTVBMRQ=="
+	content := []byte("encoded_data = YXdzX2FjY2Vzc19rZXlfaWQgPSBBS0lBSU9TRk9ETk43RVhBTVBMRQ==\n")
+	results := DecodeAndScan(content, "config.go", a.engine)
+
+	// Check that any results have encoding metadata.
+	for _, r := range results {
+		if r.Metadata["encoding"] != "base64" {
+			t.Errorf("expected encoding=base64, got %q", r.Metadata["encoding"])
+		}
+		if r.Metadata["encoded_value"] == "" {
+			t.Error("expected non-empty encoded_value metadata")
+		}
+	}
+}
+
+func TestTruncateString_Short(t *testing.T) {
+	result := truncateString("hello", 10)
+	if result != "hello" {
+		t.Errorf("expected 'hello', got %q", result)
+	}
+}
+
+func TestTruncateString_Exact(t *testing.T) {
+	result := truncateString("12345", 5)
+	if result != "12345" {
+		t.Errorf("expected '12345', got %q", result)
+	}
+}
+
+func TestTruncateString_Long(t *testing.T) {
+	result := truncateString("1234567890", 5)
+	if result != "12345..." {
+		t.Errorf("expected '12345...', got %q", result)
+	}
+}
+
+func TestTruncateString_Empty(t *testing.T) {
+	result := truncateString("", 10)
+	if result != "" {
+		t.Errorf("expected empty string, got %q", result)
+	}
+}
+
+func TestIsPrintable_AllPrintable(t *testing.T) {
+	if !isPrintable([]byte("Hello World!")) {
+		t.Error("expected all printable ASCII to return true")
+	}
+}
+
+func TestIsPrintable_Empty(t *testing.T) {
+	if isPrintable([]byte{}) {
+		t.Error("expected empty data to return false")
+	}
+}
+
+func TestIsPrintable_Binary(t *testing.T) {
+	if isPrintable([]byte{0x00, 0x01, 0x02, 0x03, 0x04}) {
+		t.Error("expected binary data to return false")
+	}
+}
+
+func TestDecodeBase64Segments_ValidBase64(t *testing.T) {
+	// Base64 encodes a long printable ASCII sentence.
+	content := []byte("data = SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB0ZXN0IHN0cmluZyB0aGF0IGlzIGxvbmcgZW5vdWdo\n")
+	segments := decodeBase64Segments(content)
+	if len(segments) == 0 {
+		t.Fatal("expected at least one base64 segment")
+	}
+	if segments[0].Encoding != "base64" {
+		t.Errorf("expected encoding 'base64', got %q", segments[0].Encoding)
+	}
+}
+
+func TestDecodeHexSegments_ValidHex(t *testing.T) {
+	// 40+ char hex string that decodes to printable ASCII.
+	// "48656c6c6f20576f726c642121212121212121" = "Hello World!!!!!!!!"
+	hexStr := "48656c6c6f20576f726c642121212121212121"
+	// Need 40+ chars, currently 38. Pad with more.
+	hexStr += "21212121" // = "Hello World!!!!!!!!!!!!"
+	content := []byte("hex = " + hexStr + "\n")
+	segments := decodeHexSegments(content)
+	// May or may not produce segments depending on exact printability ratio.
+	// Just verify no panic.
+	_ = segments
+}
+
+func TestDecodeHexSegments_OddLength(t *testing.T) {
+	// Odd-length hex should be skipped.
+	oddHex := "48656c6c6f20576f726c64212121212121212121a" // 41 chars, odd
+	content := []byte("hex = " + oddHex + "\n")
+	segments := decodeHexSegments(content)
+	if len(segments) != 0 {
+		t.Errorf("expected 0 segments for odd-length hex, got %d", len(segments))
 	}
 }

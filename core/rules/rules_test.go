@@ -15,7 +15,7 @@ import (
 func TestRuleSet_Add_and_Rules(t *testing.T) {
 	rs := NewRuleSet()
 	r := Rule{ID: "TEST-001", MatcherType: "regex", Severity: "high"}
-	rs.Add(r)
+	rs.Add(&r)
 
 	if got := len(rs.Rules()); got != 1 {
 		t.Fatalf("expected 1 rule, got %d", got)
@@ -27,8 +27,8 @@ func TestRuleSet_Add_and_Rules(t *testing.T) {
 
 func TestRuleSet_ByID(t *testing.T) {
 	rs := NewRuleSet()
-	rs.Add(Rule{ID: "A", MatcherType: "regex", Severity: "low"})
-	rs.Add(Rule{ID: "B", MatcherType: "regex", Severity: "high"})
+	rs.Add(&Rule{ID: "A", MatcherType: "regex", Severity: "low"})
+	rs.Add(&Rule{ID: "B", MatcherType: "regex", Severity: "high"})
 
 	t.Run("existing", func(t *testing.T) {
 		r, ok := rs.ByID("B")
@@ -50,9 +50,9 @@ func TestRuleSet_ByID(t *testing.T) {
 
 func TestRuleSet_ByTag(t *testing.T) {
 	rs := NewRuleSet()
-	rs.Add(Rule{ID: "A", MatcherType: "regex", Severity: "low", Tags: []string{"secret", "aws"}})
-	rs.Add(Rule{ID: "B", MatcherType: "regex", Severity: "high", Tags: []string{"secret"}})
-	rs.Add(Rule{ID: "C", MatcherType: "regex", Severity: "medium", Tags: []string{"sql"}})
+	rs.Add(&Rule{ID: "A", MatcherType: "regex", Severity: "low", Tags: []string{"secret", "aws"}})
+	rs.Add(&Rule{ID: "B", MatcherType: "regex", Severity: "high", Tags: []string{"secret"}})
+	rs.Add(&Rule{ID: "C", MatcherType: "regex", Severity: "medium", Tags: []string{"sql"}})
 
 	t.Run("tag with multiple rules", func(t *testing.T) {
 		got := rs.ByTag("secret")
@@ -262,7 +262,7 @@ func TestRegexMatcher_BasicMatch(t *testing.T) {
 	content := []byte("line one\npassword = \"secret123\"\nline three\n")
 	rule := Rule{Pattern: `password\s*=\s*"[^"]+"`}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
 	}
@@ -282,7 +282,7 @@ func TestRegexMatcher_MultipleMatches(t *testing.T) {
 	content := []byte("TODO: fix this\nsome code\nTODO: and this\n")
 	rule := Rule{Pattern: `TODO`}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 matches, got %d", len(results))
 	}
@@ -299,7 +299,7 @@ func TestRegexMatcher_NoMatch(t *testing.T) {
 	content := []byte("nothing interesting here\n")
 	rule := Rule{Pattern: `AKIA[0-9A-Z]{16}`}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) != 0 {
 		t.Fatalf("expected 0 matches, got %d", len(results))
 	}
@@ -310,7 +310,7 @@ func TestRegexMatcher_InvalidPattern(t *testing.T) {
 	content := []byte("test content\n")
 	rule := Rule{Pattern: `[invalid`}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if results != nil {
 		t.Fatalf("expected nil for invalid pattern, got %v", results)
 	}
@@ -321,7 +321,7 @@ func TestRegexMatcher_ColumnPosition(t *testing.T) {
 	content := []byte("    secret_key = AKIA1234567890ABCDEF\n")
 	rule := Rule{Pattern: `AKIA[0-9A-Z]{16}`}
 
-	results := m.Match(content, rule)
+	results := m.Match(content, &rule)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 match, got %d", len(results))
 	}
@@ -553,7 +553,7 @@ func TestEngine_ScanFile_NoMatches(t *testing.T) {
 
 func TestEngine_ScanFile_KeywordFiltering(t *testing.T) {
 	rs := NewRuleSet()
-	rs.Add(Rule{
+	rs.Add(&Rule{
 		ID:          "KW-001",
 		Description: "Has keywords, should match",
 		Severity:    "high",
@@ -562,7 +562,7 @@ func TestEngine_ScanFile_KeywordFiltering(t *testing.T) {
 		Pattern:     `AKIA[0-9A-Z]{16}`,
 		Keywords:    []string{"akia"},
 	})
-	rs.Add(Rule{
+	rs.Add(&Rule{
 		ID:          "KW-002",
 		Description: "Has keywords, should NOT match",
 		Severity:    "high",
@@ -571,7 +571,7 @@ func TestEngine_ScanFile_KeywordFiltering(t *testing.T) {
 		Pattern:     `ghp_[A-Za-z0-9]{36}`,
 		Keywords:    []string{"ghp_"},
 	})
-	rs.Add(Rule{
+	rs.Add(&Rule{
 		ID:          "KW-003",
 		Description: "No keywords, always runs",
 		Severity:    "low",
@@ -605,7 +605,7 @@ func TestEngine_ScanFile_KeywordFiltering(t *testing.T) {
 
 func TestEngine_ScanFile_KeywordCaseInsensitive(t *testing.T) {
 	rs := NewRuleSet()
-	rs.Add(Rule{
+	rs.Add(&Rule{
 		ID:          "KW-CI",
 		Description: "Case-insensitive keyword",
 		Severity:    "high",
@@ -674,7 +674,7 @@ func TestFileMatchesRule(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rule := Rule{FilePatterns: tt.filePatterns}
-			got := fileMatchesRule(tt.path, rule)
+			got := fileMatchesRule(tt.path, &rule)
 			if got != tt.want {
 				t.Fatalf("fileMatchesRule(%q, %v) = %v, want %v", tt.path, tt.filePatterns, got, tt.want)
 			}
@@ -731,7 +731,7 @@ func TestIsBinary(t *testing.T) {
 
 func TestEngine_ScanFile_SkipsBinaryContent(t *testing.T) {
 	rs := NewRuleSet()
-	rs.Add(Rule{
+	rs.Add(&Rule{
 		ID:          "BIN-001",
 		Description: "Matches anything",
 		Severity:    "high",
@@ -761,5 +761,171 @@ func TestEngine_ScanFile_SkipsBinaryContent(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("expected 1 finding for text file, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// HasID tests (0% → covered)
+// ---------------------------------------------------------------------------
+
+func TestRuleSet_HasID(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(&Rule{ID: "EXISTS-001", MatcherType: "regex", Severity: "high"})
+
+	if !rs.HasID("EXISTS-001") {
+		t.Fatal("HasID returned false for existing rule")
+	}
+	if rs.HasID("NOPE-999") {
+		t.Fatal("HasID returned true for nonexistent rule")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Engine.Rules() tests (0% → covered)
+// ---------------------------------------------------------------------------
+
+func TestEngine_Rules(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(&Rule{ID: "R-001", MatcherType: "regex", Severity: "low"})
+	rs.Add(&Rule{ID: "R-002", MatcherType: "regex", Severity: "high"})
+
+	engine := NewEngine(rs)
+
+	got := engine.Rules()
+	if got == nil {
+		t.Fatal("Engine.Rules() returned nil")
+	}
+	if len(got.Rules()) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(got.Rules()))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// stubMatcher tests (0% → covered)
+// ---------------------------------------------------------------------------
+
+func TestStubMatcher_Match(t *testing.T) {
+	stub := &stubMatcher{}
+	rule := &Rule{ID: "STUB-001", MatcherType: "jsonpath", Pattern: "$.password"}
+	results := stub.Match([]byte(`{"password": "secret"}`), rule)
+	if results != nil {
+		t.Fatalf("stubMatcher should return nil, got %v", results)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// findLine edge cases
+// ---------------------------------------------------------------------------
+
+func TestFindLine_SingleLine(t *testing.T) {
+	lineStarts := []int{0}
+	if got := findLine(lineStarts, 5); got != 0 {
+		t.Fatalf("findLine(%v, 5) = %d, want 0", lineStarts, got)
+	}
+}
+
+func TestFindLine_OffsetZero(t *testing.T) {
+	lineStarts := []int{0, 10, 20}
+	if got := findLine(lineStarts, 0); got != 0 {
+		t.Fatalf("findLine(%v, 0) = %d, want 0", lineStarts, got)
+	}
+}
+
+func TestFindLine_LastLine(t *testing.T) {
+	lineStarts := []int{0, 10, 20}
+	if got := findLine(lineStarts, 25); got != 2 {
+		t.Fatalf("findLine(%v, 25) = %d, want 2", lineStarts, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MatcherRegistry edge cases
+// ---------------------------------------------------------------------------
+
+func TestMatcherRegistry_OverwriteRegistration(t *testing.T) {
+	reg := NewMatcherRegistry()
+	m1 := NewRegexMatcher()
+	m2 := NewRegexMatcher()
+	reg.Register("regex", m1)
+	reg.Register("regex", m2)
+
+	if got := reg.Get("regex"); got != m2 {
+		t.Fatal("expected second registration to overwrite first")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LoadRulesFromDir: directory entries and error propagation
+// ---------------------------------------------------------------------------
+
+func TestLoadRulesFromDir_SkipsSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a subdirectory with a .yaml extension — it must be skipped.
+	subdir := filepath.Join(dir, "nested.yaml")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Also place a valid rules file alongside it.
+	validYAML := `rules:
+  - id: "SUB-001"
+    matcher_type: "regex"
+    severity: "low"
+    pattern: "TODO"
+`
+	writeTemp(t, dir, "valid.yaml", validYAML)
+
+	rs, err := LoadRulesFromDir(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rs.Rules()) != 1 {
+		t.Fatalf("expected 1 rule (subdir skipped), got %d", len(rs.Rules()))
+	}
+}
+
+func TestLoadRulesFromDir_InvalidYAMLFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a .yaml file with an invalid rule (empty ID).
+	badYAML := `rules:
+  - id: ""
+    matcher_type: "regex"
+    severity: "high"
+    pattern: "test"
+`
+	writeTemp(t, dir, "bad.yaml", badYAML)
+
+	_, err := LoadRulesFromDir(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML file in directory, got nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Engine.ScanFile: unknown matcher_type error
+// ---------------------------------------------------------------------------
+
+func TestEngine_ScanFile_UnknownMatcherType(t *testing.T) {
+	rs := NewRuleSet()
+	rs.Add(&Rule{
+		ID:          "UNK-001",
+		Description: "Rule with unknown matcher type",
+		Severity:    "high",
+		Confidence:  "high",
+		MatcherType: "nonexistent_matcher",
+		Pattern:     "test",
+	})
+
+	// Use an empty matcher registry so no matchers are registered.
+	engine := &Engine{
+		rules:    rs,
+		matchers: NewMatcherRegistry(),
+	}
+
+	_, err := engine.ScanFile("test.go", []byte("test content"))
+	if err == nil {
+		t.Fatal("expected error for unknown matcher type, got nil")
 	}
 }

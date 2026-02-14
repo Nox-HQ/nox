@@ -26,9 +26,12 @@ type RelatedFinding struct {
 }
 
 // Enrich produces a FindingDetail for the given finding.
-func Enrich(f findings.Finding, basePath string, allFindings []findings.Finding, cat map[string]catalog.RuleMeta, contextLines int) *FindingDetail {
+func Enrich(f *findings.Finding, basePath string, allFindings []findings.Finding, cat map[string]catalog.RuleMeta, contextLines int) *FindingDetail {
+	if f == nil {
+		return nil
+	}
 	detail := &FindingDetail{
-		Finding: f,
+		Finding: *f,
 	}
 
 	// Attach source context.
@@ -40,7 +43,8 @@ func Enrich(f findings.Finding, basePath string, allFindings []findings.Finding,
 	}
 
 	// Find related findings (same file or same rule, excluding self).
-	for _, other := range allFindings {
+	for i := range allFindings {
+		other := allFindings[i]
 		if other.ID == f.ID {
 			continue
 		}
