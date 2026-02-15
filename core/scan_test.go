@@ -8,8 +8,58 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 )
+
+// ---------------------------------------------------------------------------
+// filterArtifactsByType tests
+// ---------------------------------------------------------------------------
+
+func TestFilterArtifactsByType_Empty(t *testing.T) {
+	t.Parallel()
+
+	artifacts := []discovery.Artifact{
+		{Path: "a.go", Type: discovery.Source},
+		{Path: "b.yaml", Type: discovery.Config},
+	}
+
+	result := filterArtifactsByType(artifacts, nil)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 artifacts, got %d", len(result))
+	}
+}
+
+func TestFilterArtifactsByType_ExcludeSome(t *testing.T) {
+	t.Parallel()
+
+	artifacts := []discovery.Artifact{
+		{Path: "a.go", Type: discovery.Source},
+		{Path: "b.yaml", Type: discovery.Config},
+		{Path: "c.lock", Type: discovery.Lockfile},
+	}
+
+	result := filterArtifactsByType(artifacts, []string{"config", "lockfile"})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(result))
+	}
+	if result[0].Type != discovery.Source {
+		t.Errorf("expected source artifact, got %s", result[0].Type)
+	}
+}
+
+func TestFilterArtifactsByType_ExcludeAll(t *testing.T) {
+	t.Parallel()
+
+	artifacts := []discovery.Artifact{
+		{Path: "a.go", Type: discovery.Source},
+	}
+
+	result := filterArtifactsByType(artifacts, []string{"source"})
+	if len(result) != 0 {
+		t.Fatalf("expected 0 artifacts, got %d", len(result))
+	}
+}
 
 // ---------------------------------------------------------------------------
 // RunScan tests

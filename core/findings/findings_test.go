@@ -674,6 +674,105 @@ func TestFindingSet_OverrideSeverityByRulePatternsAndPaths(t *testing.T) {
 	}
 }
 
+func TestFindingSet_OverrideSeverityByRuleIDAndPath(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "src/main.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "vendor/lib.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "SEC-002", Severity: SeverityCritical, Location: Location{FilePath: "src/main.go", StartLine: 3}, Message: "c"})
+
+	fs.OverrideSeverityByRuleIDAndPath("SEC-001", "vendor/*", SeverityLow)
+
+	for _, f := range fs.Findings() {
+		switch {
+		case f.RuleID == "SEC-001" && f.Location.FilePath == "vendor/lib.go":
+			if f.Severity != SeverityLow {
+				t.Errorf("SEC-001 in vendor should be low, got %s", f.Severity)
+			}
+		case f.RuleID == "SEC-001" && f.Location.FilePath == "src/main.go":
+			if f.Severity != SeverityHigh {
+				t.Errorf("SEC-001 in src should remain high, got %s", f.Severity)
+			}
+		case f.RuleID == "SEC-002":
+			if f.Severity != SeverityCritical {
+				t.Errorf("SEC-002 should remain critical, got %s", f.Severity)
+			}
+		}
+	}
+}
+
+func TestFindingSet_OverrideSeverityByRuleIDAndPath_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityHigh, Location: Location{FilePath: "src/main.go", StartLine: 1}, Message: "a"})
+
+	fs.OverrideSeverityByRuleIDAndPath("SEC-999", "src/*", SeverityLow)
+	fs.OverrideSeverityByRuleIDAndPath("SEC-001", "vendor/*", SeverityLow)
+
+	if fs.Findings()[0].Severity != SeverityHigh {
+		t.Errorf("severity should be unchanged, got %s", fs.Findings()[0].Severity)
+	}
+}
+
+func TestMatchAnyPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path     string
+		patterns []string
+		want     bool
+	}{
+		// filepath.Match on full path
+		{"src/main.go", []string{"src/main.go"}, true},
+		{"src/main.go", []string{"src/*.go"}, true},
+		// filepath.Match on base name
+		{"deeply/nested/file.js", []string{"*.js"}, true},
+		// wildcard prefix suffix matching
+		{"config/database.yml", []string{"*database.yml"}, true},
+		// matchPathPattern with ** glob
+		{"a/b/c.go", []string{"a/**/c.go"}, true},
+		// no match
+		{"src/main.go", []string{"vendor/*"}, false},
+		// empty patterns
+		{"src/main.go", nil, false},
+	}
+
+	for _, tt := range tests {
+		got := matchAnyPattern(tt.path, tt.patterns)
+		if got != tt.want {
+			t.Errorf("matchAnyPattern(%q, %v) = %v, want %v", tt.path, tt.patterns, got, tt.want)
+		}
+	}
+}
+
+func TestMatchPathPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path    string
+		pattern string
+		want    bool
+	}{
+		{"a/b/c.go", "a/b/c.go", true},
+		{"a/b/c.go", "a/*/c.go", true},
+		{"a/b/c.go", "a/**/c.go", true},
+		{"a/b/c.go", "x/y/z.go", false},
+		// pattern longer than path
+		{"a/b", "a/b/c/d", false},
+		// part index exceeds path length
+		{"a", "a/b", false},
+	}
+
+	for _, tt := range tests {
+		got := matchPathPattern(tt.path, tt.pattern)
+		if got != tt.want {
+			t.Errorf("matchPathPattern(%q, %q) = %v, want %v", tt.path, tt.pattern, got, tt.want)
+		}
+	}
+}
+
 func TestMatchRulePatterns(t *testing.T) {
 	t.Parallel()
 
