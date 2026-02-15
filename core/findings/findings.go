@@ -293,11 +293,9 @@ func (fs *FindingSet) OverrideSeverityByRuleIDAndPath(ruleID, pathPattern string
 	}
 }
 
-// nox:ignore SEC-659 -- false positive: "Split" in function name is not an API key
 // OverrideSeverityByRulePatternsAndPaths changes the severity of findings that match
 // any of the given rule patterns (with wildcard support) AND any of the given path patterns.
-// This enables conditional severity overrides (e.g., downgrade all VULN-* findings in node_modules to info).
-// nox:ignore SEC-659 -- false positive: "Split" in function name is not an API key
+// This enables conditional severity overrides (e.g., downgrade all VULN-* findings in node_modules to info). // nox:ignore SEC-659 -- false positive: "Split" in function name
 func (fs *FindingSet) OverrideSeverityByRulePatternsAndPaths(rulePatterns, pathPatterns []string, severity Severity) {
 	for i := range fs.items {
 		finding := &fs.items[i]
