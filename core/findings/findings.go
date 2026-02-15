@@ -294,6 +294,8 @@ func (fs *FindingSet) OverrideSeverityByRuleIDAndPath(ruleID, pathPattern string
 	}
 }
 
+// nox:ignore SEC-659 -- false positive: function name triggers Split API Key detector
+
 // OverrideSeverityByRulePatternsAndPaths changes the severity of findings that match
 // any of the given rule patterns (with wildcard support) AND any of the given path patterns.
 // This enables conditional severity overrides (e.g., downgrade all VULN-* findings in node_modules to info).
