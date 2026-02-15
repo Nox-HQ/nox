@@ -613,7 +613,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 
 	// Imported rules from Gitleaks don't have test examples yet
 	importedRules := make(map[string]bool)
-	for i := 164; i <= 549; i++ {
+	for i := 164; i <= 911; i++ {
 		importedRules[fmt.Sprintf("SEC-%03d", i)] = true
 	}
 
@@ -655,8 +655,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // (160 original regex + 3 entropy + 319 imported = 482).
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 538 {
-		t.Fatalf("expected 538 built-in secret rules, got %d", len(rules))
+	if len(rules) != 899 {
+		t.Fatalf("expected 899 built-in secret rules, got %d", len(rules))
 	}
 }
 
