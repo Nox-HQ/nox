@@ -12,8 +12,8 @@ import (
 
 func TestExpandedRules_Count(t *testing.T) {
 	rules := builtinExpandedIaCRules()
-	if got := len(rules); got != 100 {
-		t.Errorf("expected 100 expanded rules, got %d", got)
+	if got := len(rules); got != 235 {
+		t.Errorf("expected 235 expanded rules, got %d", got)
 	}
 }
 

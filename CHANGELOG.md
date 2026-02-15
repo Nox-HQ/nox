@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Major rule expansion**: Now 1506 built-in rules
+  - Secrets: 938 rules (competitive with TruffleHog)
+  - AI Security: 50 rules (comprehensive AI/ML security coverage)
+  - IaC: 500 rules (Terraform, K8s, Docker, GitHub Actions, Azure, GCP)
+  - Data Protection: 12 rules
+  - Dependencies: 6 rules
+- Added 135 new IAC rules (IAC-366 to IAC-500) covering Kubernetes HPA, VPA, Cluster Autoscaler, Resource Quotas, Limit Ranges, and pod lifecycle management
+- Added 11 new AI security rules (AI-040 to AI-050) covering shell injection, model configuration, RAG security, agent safety, and caching
+
 ## [0.1.0] - 2026-02-11
 
 ### Added

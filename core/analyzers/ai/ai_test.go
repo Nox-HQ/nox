@@ -755,8 +755,8 @@ func TestDetect_LLMOutputInFilePath(t *testing.T) {
 
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 39 {
-		t.Errorf("expected 39 AI rules, got %d", got)
+	if got := len(rules); got != 50 {
+		t.Errorf("expected 50 AI rules, got %d", got)
 	}
 }
 

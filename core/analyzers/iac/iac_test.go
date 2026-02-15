@@ -582,8 +582,8 @@ func TestDetect_CustomDockerfileExtension(t *testing.T) {
 
 func TestAllIaCRules_Count(t *testing.T) {
 	rules := builtinIaCRules()
-	if got := len(rules); got != 365 {
-		t.Errorf("expected 365 IaC rules, got %d", got)
+	if got := len(rules); got != 500 {
+		t.Errorf("expected 500 IaC rules, got %d", got)
 	}
 }
 

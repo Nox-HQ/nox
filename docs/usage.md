@@ -1144,7 +1144,7 @@ nox scan . -q || exit 1
 
 ## Built-in Rules Reference
 
-Nox ships with **1360 built-in rules** across five analyzer suites: Secrets (938), AI Security (39), IAC (365), Data Protection (12), and Dependencies (6).
+Nox ships with **1506 built-in rules** across five analyzer suites: Secrets (938), AI Security (50), IAC (500), Data Protection (12), and Dependencies (6).
 
 ### Secrets Rules (938 rules)
 
