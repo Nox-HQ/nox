@@ -619,3 +619,82 @@ func TestFindingSet_ActiveFindings_Empty(t *testing.T) {
 		t.Fatalf("expected nil slice for empty set, got %v", active)
 	}
 }
+
+func TestFindingSet_RemoveByRuleIDsAndPaths(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "test/foo.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "test/bar.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "prod/foo.go", StartLine: 3}, Message: "c"})
+	fs.Add(Finding{RuleID: "SEC-003", Location: Location{FilePath: "test/foo.go", StartLine: 4}, Message: "d"})
+
+	fs.RemoveByRuleIDsAndPaths([]string{"SEC-001"}, []string{"test/*"})
+
+	findings := fs.Findings()
+	if len(findings) != 3 {
+		t.Fatalf("expected 3 findings after removal, got %d", len(findings))
+	}
+	for _, f := range findings {
+		if f.RuleID == "SEC-001" && f.Location.FilePath == "test/foo.go" {
+			t.Error("expected SEC-001 in test/foo.go to be removed")
+		}
+		if f.RuleID == "SEC-001" && f.Location.FilePath == "prod/foo.go" {
+			if len(findings) == 2 {
+				t.Error("SEC-001 in prod/foo.go should remain (path doesn't match)")
+			}
+		}
+	}
+}
+
+func TestFindingSet_OverrideSeverityByRulePatternsAndPaths(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "test/foo.go", StartLine: 1}, Message: "a", Severity: SeverityHigh})
+	fs.Add(Finding{RuleID: "SEC-002", Location: Location{FilePath: "test/bar.go", StartLine: 2}, Message: "b", Severity: SeverityHigh})
+	fs.Add(Finding{RuleID: "VULN-001", Location: Location{FilePath: "prod/foo.go", StartLine: 3}, Message: "c", Severity: SeverityCritical})
+	fs.Add(Finding{RuleID: "VULN-002", Location: Location{FilePath: "node_modules/foo.js", StartLine: 4}, Message: "d", Severity: SeverityCritical})
+
+	fs.OverrideSeverityByRulePatternsAndPaths([]string{"SEC-*"}, []string{"test/*"}, SeverityLow)
+	fs.OverrideSeverityByRulePatternsAndPaths([]string{"VULN-*"}, []string{"node_modules/*"}, SeverityInfo)
+
+	findings := fs.Findings()
+	for _, f := range findings {
+		if f.RuleID == "SEC-001" && f.Location.FilePath == "test/foo.go" {
+			if f.Severity != SeverityLow {
+				t.Errorf("expected SEC-001 in test/foo.go to have SeverityLow, got %s", f.Severity)
+			}
+		}
+		if f.RuleID == "VULN-002" && f.Location.FilePath == "node_modules/foo.js" {
+			if f.Severity != SeverityInfo {
+				t.Errorf("expected VULN-002 in node_modules/foo.js to have SeverityInfo, got %s", f.Severity)
+			}
+		}
+	}
+}
+
+func TestMatchRulePatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ruleID   string
+		patterns []string
+		want     bool
+	}{
+		{"SEC-001", []string{"SEC-001"}, true},
+		{"SEC-001", []string{"SEC-002"}, false},
+		{"SEC-001", []string{"SEC-*"}, true},
+		{"VULN-001", []string{"VULN-*"}, true},
+		{"VULN-001", []string{"*VULN*"}, true},
+		{"SEC-001", []string{"*SEC*"}, true},
+		{"SEC-001", []string{"TEST-001"}, false},
+	}
+
+	for _, tt := range tests {
+		got := matchRulePatterns(tt.ruleID, tt.patterns)
+		if got != tt.want {
+			t.Errorf("matchRulePatterns(%q, %v) = %v, want %v", tt.ruleID, tt.patterns, got, tt.want)
+		}
+	}
+}

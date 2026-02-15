@@ -280,3 +280,119 @@ func TestLoadScanConfig_EntropyConfig_Defaults(t *testing.T) {
 		t.Errorf("require_context = %v, want nil (unset)", cfg.Scan.Entropy.RequireContext)
 	}
 }
+
+func TestLoadScanConfig_ExcludeArtifactTypes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `scan:
+  exclude_artifact_types:
+    - artifact_types:
+        - lockfile
+        - container
+      paths:
+        - "vendor/"
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Scan.ExcludeArtifactTypes) != 1 {
+		t.Fatalf("expected 1 exclude_artifact_types entry, got %d", len(cfg.Scan.ExcludeArtifactTypes))
+	}
+	if len(cfg.Scan.ExcludeArtifactTypes[0].ArtifactTypes) != 2 {
+		t.Fatalf("expected 2 artifact types, got %d", len(cfg.Scan.ExcludeArtifactTypes[0].ArtifactTypes))
+	}
+	if cfg.Scan.ExcludeArtifactTypes[0].ArtifactTypes[0] != "lockfile" {
+		t.Errorf("artifact_types[0] = %q, want %q", cfg.Scan.ExcludeArtifactTypes[0].ArtifactTypes[0], "lockfile")
+	}
+}
+
+func TestLoadScanConfig_AnalyzerRules(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `scan:
+  analyzer_rules:
+    - analyzer: deps
+      rules:
+        - "VULN-001"
+        - "VULN-002"
+      paths:
+        - "**/node_modules/**"
+        - "**/test/**"
+      action: disable
+    - analyzer: secrets
+      paths:
+        - "**/*.test.js"
+      action: skip_analyzer
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Scan.AnalyzerRules) != 2 {
+		t.Fatalf("expected 2 analyzer_rules, got %d", len(cfg.Scan.AnalyzerRules))
+	}
+	if cfg.Scan.AnalyzerRules[0].Analyzer != "deps" {
+		t.Errorf("analyzer_rules[0].analyzer = %q, want %q", cfg.Scan.AnalyzerRules[0].Analyzer, "deps")
+	}
+	if cfg.Scan.AnalyzerRules[0].Action != "disable" {
+		t.Errorf("analyzer_rules[0].action = %q, want %q", cfg.Scan.AnalyzerRules[0].Action, "disable")
+	}
+	if len(cfg.Scan.AnalyzerRules[0].Rules) != 2 {
+		t.Errorf("expected 2 rules, got %d", len(cfg.Scan.AnalyzerRules[0].Rules))
+	}
+}
+
+func TestLoadScanConfig_ConditionalSeverity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `scan:
+  conditional_severity:
+    - rules:
+        - "SEC-005"
+        - "SEC-006"
+      paths:
+        - "**/config/**"
+        - "**/*.config.js"
+      severity: low
+    - rules:
+        - "VULN-*"
+      paths:
+        - "**/node_modules/**"
+      severity: info
+`
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Scan.ConditionalSeverity) != 2 {
+		t.Fatalf("expected 2 conditional_severity entries, got %d", len(cfg.Scan.ConditionalSeverity))
+	}
+	if cfg.Scan.ConditionalSeverity[0].Severity != "low" {
+		t.Errorf("severity = %q, want %q", cfg.Scan.ConditionalSeverity[0].Severity, "low")
+	}
+	if len(cfg.Scan.ConditionalSeverity[1].Rules) != 1 {
+		t.Errorf("expected 1 rule pattern, got %d", len(cfg.Scan.ConditionalSeverity[1].Rules))
+	}
+	if cfg.Scan.ConditionalSeverity[1].Rules[0] != "VULN-*" {
+		t.Errorf("rule[0] = %q, want %q", cfg.Scan.ConditionalSeverity[1].Rules[0], "VULN-*")
+	}
+}

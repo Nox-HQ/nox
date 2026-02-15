@@ -22,6 +22,25 @@ import (
 	"github.com/nox-hq/nox/core/vex"
 )
 
+func filterArtifactsByType(artifacts []discovery.Artifact, excludeTypes []string) []discovery.Artifact {
+	if len(excludeTypes) == 0 {
+		return artifacts
+	}
+
+	typeSet := make(map[discovery.ArtifactType]bool)
+	for _, t := range excludeTypes {
+		typeSet[discovery.ArtifactType(t)] = true
+	}
+
+	var filtered []discovery.Artifact
+	for _, a := range artifacts {
+		if !typeSet[a.Type] {
+			filtered = append(filtered, a)
+		}
+	}
+	return filtered
+}
+
 // ScanResult holds the complete output of a scan pipeline run.
 type ScanResult struct {
 	Findings     *findings.FindingSet
@@ -79,6 +98,13 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Phase 1b: Filter artifacts by excluded artifact types.
+	var excludeArtifactTypes []string
+	for _, et := range cfg.Scan.ExcludeArtifactTypes {
+		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
+	}
+	artifacts = filterArtifactsByType(artifacts, excludeArtifactTypes)
 
 	// Phase 2: Run analyzers.
 	allFindings := findings.NewFindingSet()
@@ -217,6 +243,23 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	}
 	for ruleID, sev := range cfg.Scan.Rules.SeverityOverride {
 		allFindings.OverrideSeverity(ruleID, findings.Severity(sev))
+	}
+
+	// Phase 3b: Apply analyzer_rules (disable rules for specific paths).
+	for _, ar := range cfg.Scan.AnalyzerRules {
+		if ar.Action != "disable" {
+			continue
+		}
+		if len(ar.Rules) > 0 && len(ar.Paths) > 0 {
+			allFindings.RemoveByRuleIDsAndPaths(ar.Rules, ar.Paths)
+		}
+	}
+
+	// Phase 3c: Apply conditional_severity (override severity based on rule + path).
+	for _, cs := range cfg.Scan.ConditionalSeverity {
+		if len(cs.Rules) > 0 && len(cs.Paths) > 0 {
+			allFindings.OverrideSeverityByRulePatternsAndPaths(cs.Rules, cs.Paths, findings.Severity(cs.Severity))
+		}
 	}
 
 	// Phase 4: Deduplicate and sort.

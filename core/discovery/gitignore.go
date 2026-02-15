@@ -12,7 +12,23 @@ import (
 func LoadGitignore(root string) ([]string, error) {
 	p := filepath.Join(root, ".gitignore")
 
-	f, err := os.Open(p)
+	patterns, err := loadIgnoreFile(p)
+	if err != nil {
+		return nil, err
+	}
+
+	noxignorePath := filepath.Join(root, ".noxignore")
+	noxPatterns, err := loadIgnoreFile(noxignorePath)
+	if err != nil {
+		return nil, err
+	}
+
+	patterns = append(patterns, noxPatterns...)
+	return patterns, nil
+}
+
+func loadIgnoreFile(path string) ([]string, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

@@ -41,13 +41,38 @@ type ComplianceSettings struct {
 	Framework string `yaml:"framework"`
 }
 
+// ArtifactTypeExclusion defines exclusions by artifact type.
+type ArtifactTypeExclusion struct {
+	ArtifactTypes []string `yaml:"artifact_types"` // e.g., ["lockfile", "container"]
+	Paths         []string `yaml:"paths"`          // optional: limit to specific paths
+}
+
+// AnalyzerRuleConfig defines rules that apply to specific analyzers and paths.
+type AnalyzerRuleConfig struct {
+	Analyzer string   `yaml:"analyzer"` // analyzer name (deps, secrets, iac, ai, data)
+	Rules    []string `yaml:"rules"`    // rule IDs or wildcards (e.g., ["VULN-*", "SEC-001"])
+	Paths    []string `yaml:"paths"`    // glob patterns to match
+	Action   string   `yaml:"action"`   // "disable" or "skip_analyzer"
+}
+
+// ConditionalSeverity defines severity overrides based on path patterns.
+type ConditionalSeverity struct {
+	Rules    []string `yaml:"rules"`    // rule IDs or wildcards
+	Paths    []string `yaml:"paths"`    // glob patterns
+	Severity string   `yaml:"severity"` // critical, high, medium, low, info
+}
+
 // ScanSettings controls which files are scanned and how rules behave.
 type ScanSettings struct {
-	Exclude  []string      `yaml:"exclude"`
-	RulesDir string        `yaml:"rules_dir"`
-	Rules    RulesConfig   `yaml:"rules"`
-	OSV      OSVConfig     `yaml:"osv"`
-	Entropy  EntropyConfig `yaml:"entropy"`
+	Exclude              []string                `yaml:"exclude"`
+	ExcludeArtifactTypes []ArtifactTypeExclusion `yaml:"exclude_artifact_types"`
+	Include              []string                `yaml:"include"`
+	RulesDir             string                  `yaml:"rules_dir"`
+	Rules                RulesConfig             `yaml:"rules"`
+	AnalyzerRules        []AnalyzerRuleConfig    `yaml:"analyzer_rules"`
+	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
+	OSV                  OSVConfig               `yaml:"osv"`
+	Entropy              EntropyConfig           `yaml:"entropy"`
 }
 
 // EntropyConfig allows overriding entropy-based secret detection thresholds

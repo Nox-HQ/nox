@@ -5,7 +5,9 @@
 package findings
 
 import (
+	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Severity indicates how critical a finding is. The values are ordered from
@@ -204,4 +206,122 @@ func (fs *FindingSet) ActiveFindings() []Finding {
 // the returned slice.
 func (fs *FindingSet) Findings() []Finding {
 	return fs.items
+}
+
+// RemoveByRuleIDsAndPaths removes findings that match both the given rule IDs
+// AND any of the given path patterns. This enables granular exclusion based on
+// rule + path combinations (e.g., disable VULN rules only for node_modules).
+func (fs *FindingSet) RemoveByRuleIDsAndPaths(ruleIDs []string, paths []string) {
+	if len(ruleIDs) == 0 && len(paths) == 0 {
+		return
+	}
+	ruleSet := make(map[string]struct{}, len(ruleIDs))
+	for _, id := range ruleIDs {
+		ruleSet[id] = struct{}{}
+	}
+	kept := make([]Finding, 0, len(fs.items))
+	for i := range fs.items {
+		finding := fs.items[i]
+		skipRule := false
+		if len(ruleIDs) > 0 {
+			_, skipRule = ruleSet[finding.RuleID]
+		}
+		skipPath := false
+		if len(paths) > 0 {
+			skipPath = matchAnyPattern(finding.Location.FilePath, paths)
+		}
+		// Keep if EITHER rule or path doesn't match the exclusion criteria.
+		// Skip only if BOTH rule and path match (both are true).
+		if !skipRule || !skipPath {
+			kept = append(kept, finding)
+		}
+	}
+	fs.items = kept
+}
+
+func matchAnyPattern(path string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
+			return true
+		}
+		if strings.HasPrefix(pattern, "*") {
+			rest := strings.TrimPrefix(pattern, "*")
+			if strings.HasSuffix(path, rest) || strings.HasSuffix(filepath.Base(path), rest) {
+				return true
+			}
+		}
+		if matchPathPattern(path, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchPathPattern(path, pattern string) bool {
+	pathParts := strings.Split(path, "/")
+	patternParts := strings.Split(pattern, "/")
+
+	if len(patternParts) > len(pathParts) {
+		return false
+	}
+
+	for i, part := range patternParts {
+		if part == "*" || part == "**" {
+			continue
+		}
+		if i >= len(pathParts) {
+			return false
+		}
+		if matched, _ := filepath.Match(part, pathParts[i]); !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// OverrideSeverityByRuleIDAndPath changes the severity of findings that match
+// both the given rule ID and path pattern.
+func (fs *FindingSet) OverrideSeverityByRuleIDAndPath(ruleID string, pathPattern string, severity Severity) {
+	for i := range fs.items {
+		finding := &fs.items[i]
+		if finding.RuleID == ruleID && matchAnyPattern(finding.Location.FilePath, []string{pathPattern}) {
+			finding.Severity = severity
+		}
+	}
+}
+
+// OverrideSeverityByRulePatternsAndPaths changes the severity of findings that match
+// any of the given rule patterns (with wildcard support) AND any of the given path patterns.
+// This enables conditional severity overrides (e.g., downgrade all VULN-* findings in node_modules to info).
+func (fs *FindingSet) OverrideSeverityByRulePatternsAndPaths(rulePatterns []string, pathPatterns []string, severity Severity) {
+	for i := range fs.items {
+		finding := &fs.items[i]
+		if matchRulePatterns(finding.RuleID, rulePatterns) && matchAnyPattern(finding.Location.FilePath, pathPatterns) {
+			finding.Severity = severity
+		}
+	}
+}
+
+func matchRulePatterns(ruleID string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if ruleID == pattern {
+			return true
+		}
+		if strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*") {
+			mid := strings.TrimSuffix(strings.TrimPrefix(pattern, "*"), "*")
+			if strings.Contains(ruleID, mid) {
+				return true
+			}
+		}
+		if strings.HasSuffix(pattern, "*") {
+			prefix := strings.TrimSuffix(pattern, "*")
+			if strings.HasPrefix(ruleID, prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }

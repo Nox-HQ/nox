@@ -588,6 +588,82 @@ Exclude patterns follow gitignore syntax:
 
 Exclude patterns from `.nox.yaml` are combined with `.gitignore` patterns. Both are applied during file discovery.
 
+### Exclude Artifact Types
+
+Skip entire artifact categories from scanning:
+
+```yaml
+scan:
+  exclude_artifact_types:
+    - artifact_types:
+        - lockfile    # Skip all lockfile dependency scanning
+        - container   # Skip container file scanning
+      paths: []      # Optional: limit to specific paths
+```
+
+### Analyzer Rules
+
+Disable specific rules for specific paths:
+
+```yaml
+scan:
+  analyzer_rules:
+    - analyzer: deps
+      rules:
+        - "VULN-001"     # Known vulnerability
+        - "VULN-002"     # Typosquatting
+      paths:
+        - "**/node_modules/**"
+        - "**/test/**"
+      action: disable   # "disable" or "skip_analyzer"
+```
+
+This is useful for reducing noise from dependencies in `node_modules/` or test fixtures.
+
+### Conditional Severity
+
+Override severity based on rule patterns and paths:
+
+```yaml
+scan:
+  conditional_severity:
+    - rules:
+        - "SEC-005"     # Generic API key
+        - "SEC-006"     # Generic password
+      paths:
+        - "**/config/**"
+        - "**/*.config.js"
+      severity: low     # Downgrade to low severity
+    
+    - rules:
+        - "VULN-*"      # All vulnerability rules
+      paths:
+        - "**/node_modules/**"
+      severity: info    # Only show as informational
+```
+
+### .noxignore
+
+Create a `.noxignore` file (similar to `.gitignore`) for additional exclusions:
+
+```
+# Skip lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Skip test directories
+test/
+__tests__/
+*.test.js
+*.spec.js
+
+# Skip node_modules
+node_modules/
+```
+
+The `.noxignore` patterns are combined with `.gitignore` and `.nox.yaml exclude` patterns.
+
 ### Rule Overrides
 
 **Disabling rules:** Add rule IDs to `scan.rules.disable`. Disabled rules produce no findings.
