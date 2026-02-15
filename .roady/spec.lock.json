@@ -164,6 +164,12 @@
       "title": "Custom Rules CLI Integration",
       "description": "Wire up the existing YAML rule loader (core/rules/loader.go) to the CLI via --rules flag on scan, diff, and protect commands. Load user-defined rules from a file or directory and merge them with built-in rules. Support .nox.yaml configuration for default rules paths. Validate custom rules at load time with clear error messages. This completes the custom rules story — the loader already exists but is unreachable from the CLI.",
       "requirements": []
+    },
+    {
+      "id": "expand-secrets-rule-library-to-900+-detectors",
+      "title": "Expand secrets rule library to 900+ detectors",
+      "description": "Expand secrets rule library to 900+ detectors matching TruffleHog coverage. This includes: (1) Import existing Gitleaks/Checkov rule definitions, (2) Add AWS, GCP, Azure, GitHub, GitLab, Slack, Jira, Docker, JWT, and other cloud/service-specific patterns, (3) Add generic high-entropy patterns with configurable thresholds, (4) Add API key formats for 200+ services, (5) Add private key formats (RSA, EC, PGP, SSH), (6) Add database connection string patterns, (7) Implement heuristic context scoring to reduce false positives, (8) Add comprehensive tests with known secrets and non-secrets.",
+      "requirements": null
     }
   ],
   "constraints": [],

@@ -7,10 +7,10 @@ import (
 func TestCatalogContainsAllRules(t *testing.T) {
 	cat := Catalog()
 
-	// We expect 813 built-in rules across all analyzers (SEC + DATA + AI + IAC + VULN).
-	// SEC: 160 regex + 3 entropy + 246 imported = 409, DATA, AI, IAC, VULN make up the rest.
-	if got := len(cat); got != 813 {
-		t.Errorf("Catalog() returned %d rules, want 813", got)
+	// We expect 843 built-in rules across all analyzers (SEC + DATA + AI + IAC + VULN).
+	// SEC: 160 regex + 3 entropy + 276 imported = 439, DATA, AI, IAC, VULN make up the rest.
+	if got := len(cat); got != 843 {
+		t.Errorf("Catalog() returned %d rules, want 843", got)
 	}
 }
 
