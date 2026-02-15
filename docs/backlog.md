@@ -133,7 +133,7 @@ CLI commands for managing registries and plugins. Registry commands: 'nox regist
 
 ## Git History Scanning for Secrets
 
-Scan git commit history for leaked secrets that were committed and later removed. Traverse commits using git rev-list, extract diffs with git diff-tree, run the secrets analyzer against historical content. Support depth limits (--history-depth), branch selection (--branch), and incremental scanning from a bookmark commit. Report findings with commit SHA, author, and date metadata. Critical for detecting secrets that exist in git history but not in the working tree. Integrates with existing secrets analyzer (86 rules) and findings model.
+Scan git commit history for leaked secrets that were committed and later removed. Traverse commits using git rev-list, extract diffs with git diff-tree, run the secrets analyzer against historical content. Support depth limits (--history-depth), branch selection (--branch), and incremental scanning from a bookmark commit. Report findings with commit SHA, author, and date metadata. Critical for detecting secrets that exist in git history but not in the working tree. Integrates with existing secrets analyzer (938 rules) and findings model.
 
 ---
 
@@ -155,8 +155,8 @@ Wire up the existing YAML rule loader (core/rules/loader.go) to the CLI via --ru
 
 ---
 
-## Expand secrets rule library to 900+ detectors
+## Expand secrets rule library to 900+ detectors ✅ COMPLETED
 
-Expand secrets rule library to 900+ detectors matching TruffleHog coverage. This includes: (1) Import existing Gitleaks/Checkov rule definitions, (2) Add AWS, GCP, Azure, GitHub, GitLab, Slack, Jira, Docker, JWT, and other cloud/service-specific patterns, (3) Add generic high-entropy patterns with configurable thresholds, (4) Add API key formats for 200+ services, (5) Add private key formats (RSA, EC, PGP, SSH), (6) Add database connection string patterns, (7) Implement heuristic context scoring to reduce false positives, (8) Add comprehensive tests with known secrets and non-secrets.
+Expand secrets rule library to 900+ detectors matching TruffleHog coverage (ACHIEVED: 938 rules). This includes: (1) Import existing Gitleaks/Checkov rule definitions, (2) Add AWS, GCP, Azure, GitHub, GitLab, Slack, Jira, Docker, JWT, and other cloud/service-specific patterns, (3) Add generic high-entropy patterns with configurable thresholds, (4) Add API key formats for 200+ services, (5) Add private key formats (RSA, EC, PGP, SSH), (6) Add database connection string patterns, (7) Implement heuristic context scoring to reduce false positives, (8) Add comprehensive tests with known secrets and non-secrets.
 
 ---

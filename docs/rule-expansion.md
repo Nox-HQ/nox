@@ -1,26 +1,15 @@
 # Secrets Rule Expansion Tasks
 
+## Completed ✅
+- **Nox: 938 secrets rules** (target achieved!)
+- Gitleaks: 200+ secret patterns imported
+- TruffleHog: competitive coverage (~900)
+
 ## Current State
-- Nox: 160 secrets rules
-- Gitleaks: 200+ secret patterns (ready to import)
+- SEC rules: 938 (was 160)
+- AI rules: 39 (was 18)
+- Total rules: 1360
 
-## Import Priority
-
-### P0: High-Impact Secrets (import first)
-- AWS keys (already have SEC-001, SEC-002)
-- GitHub tokens  
-- GCP keys
-- Azure secrets
-- Private keys (RSA, EC, PGP)
-
-### P1: Cloud & SaaS Providers
-- Stripe, Twilio, SendGrid
-- Slack, Discord, Atlassian
-- Database connections (Redis, PostgreSQL, MySQL)
-
-### P2: Import All Gitleaks Rules
-- Remaining 100+ patterns from gitleaks.toml
-
-## Target
-- Reach 500+ secrets rules (match TruffleHog at ~900 detectors is long-term)
-- Current 160 → Target: 500+
+## Future Enhancements
+- Add more IaC rules if needed
+- Add more AI security rules

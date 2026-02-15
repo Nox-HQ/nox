@@ -1144,9 +1144,9 @@ nox scan . -q || exit 1
 
 ## Built-in Rules Reference
 
-Nox ships with **154 built-in rules** across four analyzer suites: Secrets (86), AI Security (18), and Infrastructure as Code (50).
+Nox ships with **1360 built-in rules** across five analyzer suites: Secrets (938), AI Security (39), IAC (365), Data Protection (12), and Dependencies (6).
 
-### Secrets Rules (86 rules)
+### Secrets Rules (938 rules)
 
 All secrets rules use the `secrets` tag and CWE-798 (Use of Hard-coded Credentials) unless noted otherwise. Rules with keyword pre-filtering skip expensive regex evaluation on files that lack relevant keywords.
 
@@ -1286,7 +1286,7 @@ All secrets rules use the `secrets` tag and CWE-798 (Use of Hard-coded Credentia
 | SEC-085 | High | Medium | URL with embedded password |
 | SEC-086 | High | Medium | Hardcoded database password |
 
-### AI Security Rules (18 rules)
+### AI Security Rules (39 rules)
 
 AI security rules detect risks in LLM-powered applications, aligned with the OWASP Top 10 for LLM Applications. Rules use CWE identifiers specific to each vulnerability class.
 
