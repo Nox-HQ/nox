@@ -3684,6 +3684,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-909", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `aqua[_-]?security`, description: "Detected Aqua Security Key", cwe: "CWE-798", keywords: []string{"aqua"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-910", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `twistlock[_-]?api`, description: "Detected Twistlock API Key", cwe: "CWE-798", keywords: []string{"twistlock"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-911", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `snyk[_-]?api[_-]?key`, description: "Detected Snyk API Key", cwe: "CWE-798", keywords: []string{"snyk"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-912", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `checkmarx[_-]?api[_-]?key`, description: "Detected Checkmarx API Key", cwe: "CWE-798", keywords: []string{"checkmarx"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 	}
 
 	out := make([]*rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
