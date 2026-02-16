@@ -312,7 +312,6 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 	g.SetLimit(concurrency)
 
 	for i, p := range targets {
-		i, p := i, p
 		g.Go(func() error {
 			pluginName := p.Info().Name
 
@@ -413,9 +412,17 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 		return nil, err
 	}
 
-	responses := make([]*pluginv1.InvokeToolResponse, len(results))
-	for i, r := range results {
-		responses[i] = r.resp
+	// Place responses at their original index to preserve ordering.
+	ordered := make([]*pluginv1.InvokeToolResponse, len(targets))
+	for _, r := range results {
+		ordered[r.index] = r.resp
+	}
+	// Compact: remove nil entries from skipped plugins (violations, errors).
+	responses := ordered[:0]
+	for _, r := range ordered {
+		if r != nil {
+			responses = append(responses, r)
+		}
 	}
 	return responses, nil
 }

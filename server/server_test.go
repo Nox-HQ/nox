@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/plugin"
 	"google.golang.org/grpc"
@@ -88,6 +89,41 @@ func TestIsPathAllowed_TraversalBlocked(t *testing.T) {
 	traversal := filepath.Join(dir, "..", "escape")
 	if err := s.isPathAllowed(traversal); err == nil {
 		t.Fatal("expected path traversal to be blocked")
+	}
+}
+
+func TestIsPathAllowed_SymlinkTraversalBlocked(t *testing.T) {
+	// Create an allowed workspace and a directory outside it.
+	workspace := t.TempDir()
+	outside := t.TempDir()
+
+	// Resolve symlinks for both (handles macOS /var -> /private/var).
+	workspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside, err = filepath.EvalSymlinks(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a file outside the workspace.
+	outsideFile := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink inside the workspace pointing outside.
+	link := filepath.Join(workspace, "escape")
+	if err := os.Symlink(outsideFile, link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	s := New("0.1.0", []string{workspace})
+
+	// The symlink target is outside the workspace — must be blocked.
+	if err := s.isPathAllowed(link); err == nil {
+		t.Fatal("expected symlink traversal to be blocked")
 	}
 }
 
@@ -1784,6 +1820,87 @@ func TestHandleDataSensitivityReport_WithFindings(t *testing.T) {
 	}
 	if !seen["DATA-001"] && !seen["DATA-002"] {
 		t.Fatalf("expected DATA-* rules in report, got: %+v", report.Rules)
+	}
+}
+
+// --- registration tests ---
+
+func newTestMCPServer() *mcpserver.MCPServer {
+	return mcpserver.NewMCPServer("nox", "test",
+		mcpserver.WithRecovery(),
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithResourceCapabilities(false, false),
+	)
+}
+
+func TestRegisterTools(t *testing.T) {
+	srv := newTestMCPServer()
+	s := New("test", nil)
+
+	// Should not panic; exercises all AddTool calls.
+	s.registerTools(srv)
+}
+
+func TestRegisterPluginTools_NoHost(t *testing.T) {
+	srv := newTestMCPServer()
+	s := New("test", nil) // no plugin host
+
+	// Should return immediately without registering plugin tools.
+	s.registerPluginTools(srv)
+}
+
+func TestRegisterPluginTools_WithHost(t *testing.T) {
+	srv := newTestMCPServer()
+	h := createHostWithMockPlugin(t)
+	s := New("test", nil, WithPluginHost(h))
+
+	// Should register plugin.list, plugin.call_tool, plugin.read_resource.
+	s.registerPluginTools(srv)
+}
+
+func TestRegisterResources(t *testing.T) {
+	srv := newTestMCPServer()
+	s := New("test", nil)
+
+	// Should not panic; exercises all AddResource calls.
+	s.registerResources(srv)
+}
+
+// --- handleResourceDashboard tests ---
+
+func TestResourceDashboard_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	req := mcp.ReadResourceRequest{}
+	req.Params.URI = "nox://dashboard"
+
+	_, err := s.handleResourceDashboard(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error for resource before scan")
+	}
+}
+
+func TestResourceDashboard_AfterScan(t *testing.T) {
+	s := scanCleanDir(t)
+	req := mcp.ReadResourceRequest{}
+	req.Params.URI = "nox://dashboard"
+
+	contents, err := s.handleResourceDashboard(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(contents) == 0 {
+		t.Fatal("expected non-empty resource contents")
+	}
+
+	tc, ok := contents[0].(mcp.TextResourceContents)
+	if !ok {
+		t.Fatal("expected TextResourceContents")
+	}
+	if tc.MIMEType != "text/html" {
+		t.Fatalf("expected text/html MIME type, got %s", tc.MIMEType)
+	}
+	if !strings.Contains(tc.Text, "<html") {
+		t.Fatalf("expected HTML content, got: %s", tc.Text[:min(len(tc.Text), 200)])
 	}
 }
 

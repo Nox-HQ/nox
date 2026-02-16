@@ -433,6 +433,7 @@ func (s *Server) registerResources(srv *mcpserver.MCPServer) {
 }
 
 // isPathAllowed checks if the given path is under one of the allowed workspace roots.
+// Symlinks are resolved to prevent symlink-based traversal out of allowed directories.
 func (s *Server) isPathAllowed(path string) error {
 	if len(s.allowedPaths) == 0 {
 		return nil
@@ -443,9 +444,29 @@ func (s *Server) isPathAllowed(path string) error {
 		return fmt.Errorf("cannot resolve path: %w", err)
 	}
 
+	// Resolve symlinks to prevent traversal via symlinks pointing outside
+	// the allowed workspace. Fall back to the absolute path if the target
+	// does not exist yet (EvalSymlinks requires the path to exist).
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	} else {
+		// Path may not exist yet; resolve the parent directory to handle
+		// symlinks in ancestor components (e.g., /var → /private/var on macOS).
+		parent := filepath.Dir(abs)
+		if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
+			abs = filepath.Join(resolvedParent, filepath.Base(abs))
+		}
+	}
+
 	for _, allowed := range s.allowedPaths {
+		// Resolve symlinks in the allowed root as well.
+		allowedResolved := allowed
+		if resolved, err := filepath.EvalSymlinks(allowed); err == nil {
+			allowedResolved = resolved
+		}
+
 		// Use filepath.Rel to check containment properly.
-		rel, err := filepath.Rel(allowed, abs)
+		rel, err := filepath.Rel(allowedResolved, abs)
 		if err != nil {
 			continue
 		}
