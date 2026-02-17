@@ -1,9 +1,11 @@
 package plugin
 
 import (
+	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/graph"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
@@ -198,4 +200,236 @@ func GoAIComponentToProto(c ai.Component) *pluginv1.AIComponent {
 		}
 	}
 	return pac
+}
+
+// --- Graph conversion ---
+
+// ProtoNodeKindToGo maps a protobuf NodeKind to the domain NodeKind string.
+func ProtoNodeKindToGo(pk pluginv1.NodeKind) graph.NodeKind {
+	switch pk {
+	case pluginv1.NodeKind_NODE_KIND_RESOURCE:
+		return graph.NodeKindResource
+	case pluginv1.NodeKind_NODE_KIND_FUNCTION:
+		return graph.NodeKindFunction
+	case pluginv1.NodeKind_NODE_KIND_DATA:
+		return graph.NodeKindData
+	case pluginv1.NodeKind_NODE_KIND_SERVICE:
+		return graph.NodeKindService
+	case pluginv1.NodeKind_NODE_KIND_POLICY:
+		return graph.NodeKindPolicy
+	default:
+		return graph.NodeKindUnspecified
+	}
+}
+
+// GoNodeKindToProto maps a domain NodeKind to the protobuf NodeKind enum.
+func GoNodeKindToProto(k graph.NodeKind) pluginv1.NodeKind {
+	switch k {
+	case graph.NodeKindResource:
+		return pluginv1.NodeKind_NODE_KIND_RESOURCE
+	case graph.NodeKindFunction:
+		return pluginv1.NodeKind_NODE_KIND_FUNCTION
+	case graph.NodeKindData:
+		return pluginv1.NodeKind_NODE_KIND_DATA
+	case graph.NodeKindService:
+		return pluginv1.NodeKind_NODE_KIND_SERVICE
+	case graph.NodeKindPolicy:
+		return pluginv1.NodeKind_NODE_KIND_POLICY
+	default:
+		return pluginv1.NodeKind_NODE_KIND_UNSPECIFIED
+	}
+}
+
+// ProtoEdgeKindToGo maps a protobuf EdgeKind to the domain EdgeKind string.
+func ProtoEdgeKindToGo(pk pluginv1.EdgeKind) graph.EdgeKind {
+	switch pk {
+	case pluginv1.EdgeKind_EDGE_KIND_DEPENDS_ON:
+		return graph.EdgeKindDependsOn
+	case pluginv1.EdgeKind_EDGE_KIND_CALLS:
+		return graph.EdgeKindCalls
+	case pluginv1.EdgeKind_EDGE_KIND_FLOWS_TO:
+		return graph.EdgeKindFlowsTo
+	case pluginv1.EdgeKind_EDGE_KIND_EXPOSES:
+		return graph.EdgeKindExposes
+	case pluginv1.EdgeKind_EDGE_KIND_REFERENCES:
+		return graph.EdgeKindReferences
+	default:
+		return graph.EdgeKindUnspecified
+	}
+}
+
+// GoEdgeKindToProto maps a domain EdgeKind to the protobuf EdgeKind enum.
+func GoEdgeKindToProto(k graph.EdgeKind) pluginv1.EdgeKind {
+	switch k {
+	case graph.EdgeKindDependsOn:
+		return pluginv1.EdgeKind_EDGE_KIND_DEPENDS_ON
+	case graph.EdgeKindCalls:
+		return pluginv1.EdgeKind_EDGE_KIND_CALLS
+	case graph.EdgeKindFlowsTo:
+		return pluginv1.EdgeKind_EDGE_KIND_FLOWS_TO
+	case graph.EdgeKindExposes:
+		return pluginv1.EdgeKind_EDGE_KIND_EXPOSES
+	case graph.EdgeKindReferences:
+		return pluginv1.EdgeKind_EDGE_KIND_REFERENCES
+	default:
+		return pluginv1.EdgeKind_EDGE_KIND_UNSPECIFIED
+	}
+}
+
+// ProtoGraphToGo converts a protobuf Graph to the domain Graph type.
+func ProtoGraphToGo(pg *pluginv1.Graph) graph.Graph {
+	if pg == nil {
+		return graph.Graph{}
+	}
+	g := graph.Graph{
+		Name:        pg.GetName(),
+		Description: pg.GetDescription(),
+	}
+	for _, pn := range pg.GetNodes() {
+		n := graph.Node{
+			ID:       pn.GetId(),
+			Kind:     ProtoNodeKindToGo(pn.GetKind()),
+			Label:    pn.GetLabel(),
+			FilePath: pn.GetFilePath(),
+		}
+		if p := pn.GetProperties(); len(p) > 0 {
+			n.Properties = make(map[string]string, len(p))
+			for k, v := range p {
+				n.Properties[k] = v
+			}
+		}
+		g.Nodes = append(g.Nodes, n)
+	}
+	for _, pe := range pg.GetEdges() {
+		e := graph.Edge{
+			Source: pe.GetSource(),
+			Target: pe.GetTarget(),
+			Kind:   ProtoEdgeKindToGo(pe.GetKind()),
+			Label:  pe.GetLabel(),
+		}
+		if p := pe.GetProperties(); len(p) > 0 {
+			e.Properties = make(map[string]string, len(p))
+			for k, v := range p {
+				e.Properties[k] = v
+			}
+		}
+		g.Edges = append(g.Edges, e)
+	}
+	return g
+}
+
+// GoGraphToProto converts a domain Graph to its protobuf representation.
+func GoGraphToProto(g *graph.Graph) *pluginv1.Graph {
+	if g == nil {
+		return nil
+	}
+	pg := &pluginv1.Graph{
+		Name:        g.Name,
+		Description: g.Description,
+	}
+	for _, n := range g.Nodes {
+		pn := &pluginv1.GraphNode{
+			Id:       n.ID,
+			Kind:     GoNodeKindToProto(n.Kind),
+			Label:    n.Label,
+			FilePath: n.FilePath,
+		}
+		if len(n.Properties) > 0 {
+			pn.Properties = make(map[string]string, len(n.Properties))
+			for k, v := range n.Properties {
+				pn.Properties[k] = v
+			}
+		}
+		pg.Nodes = append(pg.Nodes, pn)
+	}
+	for _, e := range g.Edges {
+		pe := &pluginv1.GraphEdge{
+			Source: e.Source,
+			Target: e.Target,
+			Kind:   GoEdgeKindToProto(e.Kind),
+			Label:  e.Label,
+		}
+		if len(e.Properties) > 0 {
+			pe.Properties = make(map[string]string, len(e.Properties))
+			for k, v := range e.Properties {
+				pe.Properties[k] = v
+			}
+		}
+		pg.Edges = append(pg.Edges, pe)
+	}
+	return pg
+}
+
+// --- Enrichment conversion ---
+
+// ProtoEnrichmentToGo converts a protobuf Enrichment to the domain Enrichment type.
+func ProtoEnrichmentToGo(pe *pluginv1.Enrichment) findings.Enrichment {
+	if pe == nil {
+		return findings.Enrichment{}
+	}
+	e := findings.Enrichment{
+		FindingFingerprint: pe.GetFindingFingerprint(),
+		Kind:               pe.GetKind(),
+		Title:              pe.GetTitle(),
+		Body:               pe.GetBody(),
+		Confidence:         ProtoConfidenceToGo(pe.GetConfidence()),
+		Source:             pe.GetSource(),
+	}
+	if m := pe.GetMetadata(); len(m) > 0 {
+		e.Metadata = make(map[string]string, len(m))
+		for k, v := range m {
+			e.Metadata[k] = v
+		}
+	}
+	return e
+}
+
+// GoEnrichmentToProto converts a domain Enrichment to its protobuf representation.
+func GoEnrichmentToProto(e *findings.Enrichment) *pluginv1.Enrichment {
+	if e == nil {
+		return nil
+	}
+	pe := &pluginv1.Enrichment{
+		FindingFingerprint: e.FindingFingerprint,
+		Kind:               e.Kind,
+		Title:              e.Title,
+		Body:               e.Body,
+		Confidence:         GoConfidenceToProto(e.Confidence),
+		Source:             e.Source,
+	}
+	if len(e.Metadata) > 0 {
+		pe.Metadata = make(map[string]string, len(e.Metadata))
+		for k, v := range e.Metadata {
+			pe.Metadata[k] = v
+		}
+	}
+	return pe
+}
+
+// --- ScanContext conversion ---
+
+// GoScanResultToProtoContext converts core scan results into a proto ScanContext
+// for post-scan plugin invocation.
+func GoScanResultToProtoContext(r *core.ScanResult) *pluginv1.ScanContext {
+	if r == nil {
+		return nil
+	}
+	sc := &pluginv1.ScanContext{}
+	if r.Findings != nil {
+		ff := r.Findings.Findings()
+		for i := range ff {
+			sc.Findings = append(sc.Findings, GoFindingToProto(ff[i]))
+		}
+	}
+	if r.Inventory != nil {
+		for _, p := range r.Inventory.Packages() {
+			sc.Packages = append(sc.Packages, GoPackageToProto(p))
+		}
+	}
+	if r.AIInventory != nil {
+		for _, c := range r.AIInventory.Components {
+			sc.AiComponents = append(sc.AiComponents, GoAIComponentToProto(c))
+		}
+	}
+	return sc
 }

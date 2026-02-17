@@ -140,3 +140,78 @@ func TestRunForTrack_PolicyGovernance(t *testing.T) {
 
 	RunForTrack(t, srv, registry.TrackPolicyGovernance)
 }
+
+func TestConformance_PluginWithGraphsAndEnrichments(t *testing.T) {
+	manifest := NewManifest("graph-plugin", "1.0.0").
+		Capability("analysis", "Cross-resource analysis").
+		Tool("analyze", "Analyze resources", true).
+		ToolWithContext("triage", "Triage findings", true).
+		Done().
+		Build()
+
+	srv := NewPluginServer(manifest).
+		HandleTool("analyze", func(ctx context.Context, req ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return NewResponse().
+				Graph("resource-deps", "IaC resource dependencies").
+				Node("vpc-1", NodeKindResource, "aws_vpc").
+				NodeAt("subnet-1", NodeKindResource, "aws_subnet", "main.tf").
+				Edge("subnet-1", "vpc-1", EdgeKindDependsOn).
+				Done().
+				Build(), nil
+		}).
+		HandleTool("triage", func(ctx context.Context, req ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return NewResponse().
+				Enrichment("fp-123", "triage", "False positive").
+				Body("This finding is a **false positive** because...").
+				WithMetadata("reason", "test_key").
+				WithConfidence(ConfidenceHigh).
+				Source("graph-plugin").
+				Done().
+				Build(), nil
+		})
+
+	RunConformance(t, srv)
+}
+
+func TestRunForTrack_SupplyChain(t *testing.T) {
+	manifest := NewManifest("supply-chain-scanner", "1.0.0").
+		Capability("sbom", "SBOM generation").
+		Tool("scan-deps", "Scan dependencies", true).
+		Done().
+		Safety(WithRiskClass(RiskPassive)).
+		Build()
+
+	srv := NewPluginServer(manifest).
+		HandleTool("scan-deps", func(ctx context.Context, req ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return NewResponse().
+				Package("express", "4.18.2", "npm").
+				Finding("VULN-001", SeverityHigh, ConfidenceHigh, "Known vulnerability").
+				At("package-lock.json", 100, 105).
+				Done().
+				Build(), nil
+		})
+
+	RunForTrack(t, srv, registry.TrackSupplyChain)
+}
+
+func TestRunForTrack_ThreatModeling(t *testing.T) {
+	manifest := NewManifest("threat-modeler", "1.0.0").
+		Capability("threat-model", "Threat modeling").
+		Tool("model", "Generate threat model", true).
+		Done().
+		Safety(WithRiskClass(RiskPassive)).
+		Build()
+
+	srv := NewPluginServer(manifest).
+		HandleTool("model", func(ctx context.Context, req ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return NewResponse().
+				Graph("threat-model", "Application threat model").
+				Node("app", NodeKindService, "Application").
+				Node("db", NodeKindData, "Database").
+				Edge("app", "db", EdgeKindFlowsTo).
+				Done().
+				Build(), nil
+		})
+
+	RunForTrack(t, srv, registry.TrackThreatModeling)
+}

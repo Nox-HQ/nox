@@ -893,3 +893,346 @@ func TestHost_InvokeAll_RateLimitedPlugin(t *testing.T) {
 		t.Error("rate limit violation should produce a diagnostic")
 	}
 }
+
+func TestHost_MergeResults_Graphs(t *testing.T) {
+	h := newTestHost()
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	resp := &pluginv1.InvokeToolResponse{
+		Graphs: []*pluginv1.Graph{
+			{
+				Name:        "resource-deps",
+				Description: "IaC dependencies",
+				Nodes: []*pluginv1.GraphNode{
+					{Id: "vpc-1", Kind: pluginv1.NodeKind_NODE_KIND_RESOURCE, Label: "aws_vpc"},
+					{Id: "subnet-1", Kind: pluginv1.NodeKind_NODE_KIND_RESOURCE, Label: "aws_subnet"},
+				},
+				Edges: []*pluginv1.GraphEdge{
+					{Source: "subnet-1", Target: "vpc-1", Kind: pluginv1.EdgeKind_EDGE_KIND_DEPENDS_ON},
+				},
+			},
+		},
+	}
+
+	h.MergeResults(resp, result)
+
+	if len(result.Graphs) != 1 {
+		t.Fatalf("expected 1 graph, got %d", len(result.Graphs))
+	}
+	if result.Graphs[0].Name != "resource-deps" {
+		t.Errorf("graph name = %q", result.Graphs[0].Name)
+	}
+	if len(result.Graphs[0].Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(result.Graphs[0].Nodes))
+	}
+	if len(result.Graphs[0].Edges) != 1 {
+		t.Errorf("expected 1 edge, got %d", len(result.Graphs[0].Edges))
+	}
+}
+
+func TestHost_MergeResults_Enrichments(t *testing.T) {
+	h := newTestHost()
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	resp := &pluginv1.InvokeToolResponse{
+		Enrichments: []*pluginv1.Enrichment{
+			{
+				FindingFingerprint: "fp-abc",
+				Kind:               "triage",
+				Title:              "False positive",
+				Body:               "Test key detected",
+				Source:             "triage-plugin",
+				Confidence:         pluginv1.Confidence_CONFIDENCE_HIGH,
+			},
+		},
+	}
+
+	h.MergeResults(resp, result)
+
+	if len(result.Enrichments) != 1 {
+		t.Fatalf("expected 1 enrichment, got %d", len(result.Enrichments))
+	}
+	e := result.Enrichments[0]
+	if e.FindingFingerprint != "fp-abc" {
+		t.Errorf("FindingFingerprint = %q", e.FindingFingerprint)
+	}
+	if e.Kind != "triage" {
+		t.Errorf("Kind = %q", e.Kind)
+	}
+	if e.Source != "triage-plugin" {
+		t.Errorf("Source = %q", e.Source)
+	}
+}
+
+func TestHost_MergeResults_GraphsAndEnrichments_Empty(t *testing.T) {
+	h := newTestHost()
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	h.MergeResults(&pluginv1.InvokeToolResponse{}, result)
+
+	if len(result.Graphs) != 0 {
+		t.Error("empty response should not add graphs")
+	}
+	if len(result.Enrichments) != 0 {
+		t.Error("empty response should not add enrichments")
+	}
+}
+
+// manifestWithPostScanTool returns a manifest with a tool that requires scan context.
+func manifestWithPostScanTool() *pluginv1.GetManifestResponse {
+	return &pluginv1.GetManifestResponse{
+		Name:       "post-scan-plugin",
+		Version:    "1.0.0",
+		ApiVersion: "v1",
+		Capabilities: []*pluginv1.Capability{
+			{
+				Name: "triage",
+				Tools: []*pluginv1.ToolDef{
+					{
+						Name:                "ai-triage",
+						Description:         "Triage findings using AI",
+						ReadOnly:            true,
+						RequiresScanContext: true,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestHost_InvokePostScan_Success(t *testing.T) {
+	var capturedCtx *pluginv1.ScanContext
+	mock := &mockPluginServer{
+		manifest: manifestWithPostScanTool(),
+		invokeFunc: func(_ context.Context, req *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			capturedCtx = req.GetScanContext()
+			return &pluginv1.InvokeToolResponse{
+				Enrichments: []*pluginv1.Enrichment{
+					{
+						FindingFingerprint: "fp-123",
+						Kind:               "triage",
+						Title:              "False positive",
+						Source:             "post-scan-plugin",
+						Confidence:         pluginv1.Confidence_CONFIDENCE_HIGH,
+					},
+				},
+				Graphs: []*pluginv1.Graph{
+					{
+						Name: "call-graph",
+						Nodes: []*pluginv1.GraphNode{
+							{Id: "fn-a", Kind: pluginv1.NodeKind_NODE_KIND_FUNCTION, Label: "funcA"},
+							{Id: "fn-b", Kind: pluginv1.NodeKind_NODE_KIND_FUNCTION, Label: "funcB"},
+						},
+						Edges: []*pluginv1.GraphEdge{
+							{Source: "fn-a", Target: "fn-b", Kind: pluginv1.EdgeKind_EDGE_KIND_CALLS},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	// Build initial scan result with a finding.
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+	result.Findings.Add(findings.Finding{
+		ID:          "f-1",
+		RuleID:      "SEC-001",
+		Severity:    findings.SeverityHigh,
+		Message:     "test finding",
+		Fingerprint: "fp-123",
+	})
+
+	err := h.InvokePostScan(context.Background(), result, "/workspace")
+	if err != nil {
+		t.Fatalf("InvokePostScan: %v", err)
+	}
+
+	// ScanContext should have been populated with findings.
+	if capturedCtx == nil {
+		t.Fatal("ScanContext was not passed to post-scan tool")
+	}
+	if len(capturedCtx.GetFindings()) != 1 {
+		t.Errorf("expected 1 finding in context, got %d", len(capturedCtx.GetFindings()))
+	}
+
+	// Enrichments from post-scan should be merged.
+	if len(result.Enrichments) != 1 {
+		t.Fatalf("expected 1 enrichment, got %d", len(result.Enrichments))
+	}
+	if result.Enrichments[0].FindingFingerprint != "fp-123" {
+		t.Errorf("enrichment fingerprint = %q", result.Enrichments[0].FindingFingerprint)
+	}
+
+	// Graphs from post-scan should be merged.
+	if len(result.Graphs) != 1 {
+		t.Fatalf("expected 1 graph, got %d", len(result.Graphs))
+	}
+	if result.Graphs[0].Name != "call-graph" {
+		t.Errorf("graph name = %q", result.Graphs[0].Name)
+	}
+	if len(result.Graphs[0].Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(result.Graphs[0].Nodes))
+	}
+}
+
+func TestHost_InvokePostScan_NoPostScanTools(t *testing.T) {
+	// Register a normal plugin with no post-scan tools.
+	mock := &mockPluginServer{
+		manifest: validManifest(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			t.Error("InvokeTool should not be called when no post-scan tools exist")
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	err := h.InvokePostScan(context.Background(), result, "/workspace")
+	if err != nil {
+		t.Fatalf("InvokePostScan: %v", err)
+	}
+
+	if len(result.Enrichments) != 0 {
+		t.Error("no enrichments expected when no post-scan tools")
+	}
+}
+
+func TestHost_InvokePostScan_ToolError(t *testing.T) {
+	mock := &mockPluginServer{
+		manifest: manifestWithPostScanTool(),
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	// Should not return error; tool failures become diagnostics.
+	err := h.InvokePostScan(context.Background(), result, "/workspace")
+	if err != nil {
+		t.Fatalf("InvokePostScan should not return error for tool failure: %v", err)
+	}
+
+	diags := h.Diagnostics()
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic for failed tool, got %d", len(diags))
+	}
+	if !strings.Contains(diags[0].Message, "post-scan tool") {
+		t.Errorf("diagnostic message = %q, expected post-scan failure message", diags[0].Message)
+	}
+}
+
+func TestEstimateResponseSize_WithGraphsAndEnrichments(t *testing.T) {
+	resp := &pluginv1.InvokeToolResponse{
+		Graphs: []*pluginv1.Graph{
+			{
+				Name:        "dep-graph",
+				Description: "Dependencies",
+				Nodes: []*pluginv1.GraphNode{
+					{Id: "a", Label: "nodeA", FilePath: "/path/a.go", Properties: map[string]string{"k": "v"}},
+					{Id: "b", Label: "nodeB"},
+				},
+				Edges: []*pluginv1.GraphEdge{
+					{Source: "a", Target: "b", Label: "uses", Properties: map[string]string{"weight": "1"}},
+				},
+			},
+		},
+		Enrichments: []*pluginv1.Enrichment{
+			{
+				FindingFingerprint: "fp-abc",
+				Kind:               "triage",
+				Title:              "Test enrichment",
+				Body:               "This is the body",
+				Source:             "test",
+				Metadata:           map[string]string{"key": "value"},
+			},
+		},
+	}
+
+	size := estimateResponseSize(resp)
+	if size <= 0 {
+		t.Errorf("expected positive size, got %d", size)
+	}
+
+	// Verify specific contributions.
+	emptySize := estimateResponseSize(&pluginv1.InvokeToolResponse{})
+	if emptySize != 0 {
+		t.Errorf("empty response size = %d, want 0", emptySize)
+	}
+}
+
+func TestHost_MergeAllResults_WithGraphsAndEnrichments(t *testing.T) {
+	h := newTestHost()
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	responses := []*pluginv1.InvokeToolResponse{
+		{
+			Graphs: []*pluginv1.Graph{
+				{Name: "g1"},
+			},
+			Enrichments: []*pluginv1.Enrichment{
+				{FindingFingerprint: "fp-1", Kind: "triage"},
+			},
+		},
+		{
+			Graphs: []*pluginv1.Graph{
+				{Name: "g2"},
+			},
+		},
+	}
+
+	h.MergeAllResults(responses, result)
+
+	if len(result.Graphs) != 2 {
+		t.Errorf("expected 2 graphs, got %d", len(result.Graphs))
+	}
+	if len(result.Enrichments) != 1 {
+		t.Errorf("expected 1 enrichment, got %d", len(result.Enrichments))
+	}
+}

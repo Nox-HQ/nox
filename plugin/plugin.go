@@ -57,9 +57,10 @@ type CapabilityInfo struct {
 
 // ToolInfo describes a single invocable tool.
 type ToolInfo struct {
-	Name        string
-	Description string
-	ReadOnly    bool
+	Name                string
+	Description         string
+	ReadOnly            bool
+	RequiresScanContext bool
 }
 
 // ResourceInfo describes a resource a plugin can serve.
@@ -285,9 +286,10 @@ func parseManifest(resp *pluginv1.GetManifestResponse) PluginInfo {
 		}
 		for _, tool := range cap.GetTools() {
 			ci.Tools = append(ci.Tools, ToolInfo{
-				Name:        tool.GetName(),
-				Description: tool.GetDescription(),
-				ReadOnly:    tool.GetReadOnly(),
+				Name:                tool.GetName(),
+				Description:         tool.GetDescription(),
+				ReadOnly:            tool.GetReadOnly(),
+				RequiresScanContext: tool.GetRequiresScanContext(),
 			})
 		}
 		for _, res := range cap.GetResources() {

@@ -47,6 +47,7 @@ message ToolDef {
   string description = 2;
   google.protobuf.Struct input_schema = 3;
   bool read_only = 4;
+  bool requires_scan_context = 5;  // tool needs ScanContext as input
 }
 
 // ResourceDef describes a resource that a plugin can serve.
@@ -73,6 +74,7 @@ message InvokeToolRequest {
   string tool_name = 1;
   google.protobuf.Struct input = 2;
   string workspace_root = 3;
+  ScanContext scan_context = 4;    // populated for post-scan tools
 }
 
 // InvokeToolResponse contains the results of a tool invocation.
@@ -81,6 +83,8 @@ message InvokeToolResponse {
   repeated Package packages = 2;
   repeated AIComponent ai_components = 3;
   repeated Diagnostic diagnostics = 4;
+  repeated Graph graphs = 5;            // relationship graphs
+  repeated Enrichment enrichments = 6;  // finding annotations
 }
 
 // DiagnosticSeverity indicates the severity of a diagnostic message.

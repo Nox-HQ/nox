@@ -78,3 +78,69 @@ message AIComponent {
   string path = 3;
   map<string, string> details = 4;
 }
+
+// NodeKind classifies graph nodes.
+enum NodeKind {
+  NODE_KIND_UNSPECIFIED = 0;
+  NODE_KIND_RESOURCE = 1;     // IaC/cloud resource
+  NODE_KIND_FUNCTION = 2;     // Code function/method
+  NODE_KIND_DATA = 3;         // Data source/sink
+  NODE_KIND_SERVICE = 4;      // Service/endpoint
+  NODE_KIND_POLICY = 5;       // Policy/rule
+}
+
+// EdgeKind classifies graph edges.
+enum EdgeKind {
+  EDGE_KIND_UNSPECIFIED = 0;
+  EDGE_KIND_DEPENDS_ON = 1;    // Structural dependency
+  EDGE_KIND_CALLS = 2;         // Function call
+  EDGE_KIND_FLOWS_TO = 3;      // Data flow
+  EDGE_KIND_EXPOSES = 4;       // Network exposure
+  EDGE_KIND_REFERENCES = 5;    // Generic reference
+}
+
+// GraphNode represents a vertex in a relationship graph.
+message GraphNode {
+  string id = 1;
+  NodeKind kind = 2;
+  string label = 3;
+  string file_path = 4;
+  map<string, string> properties = 5;
+}
+
+// GraphEdge represents a directed edge between two graph nodes.
+message GraphEdge {
+  string source = 1;     // source node id
+  string target = 2;     // target node id
+  EdgeKind kind = 3;
+  string label = 4;
+  map<string, string> properties = 5;
+}
+
+// Graph is a labeled collection of nodes and edges.
+message Graph {
+  string name = 1;
+  string description = 2;
+  repeated GraphNode nodes = 3;
+  repeated GraphEdge edges = 4;
+}
+
+// Enrichment annotates an existing finding with additional context
+// without modifying the original finding fields. This preserves
+// determinism of the core scan engine.
+message Enrichment {
+  string finding_fingerprint = 1;  // links to Finding.fingerprint
+  string kind = 2;                 // e.g. "triage", "reachability", "explanation"
+  string title = 3;
+  string body = 4;                 // markdown content
+  map<string, string> metadata = 5;
+  Confidence confidence = 6;
+  string source = 7;              // plugin name that produced it
+}
+
+// ScanContext carries core scan results to post-scan plugins.
+message ScanContext {
+  repeated Finding findings = 1;
+  repeated Package packages = 2;
+  repeated AIComponent ai_components = 3;
+}

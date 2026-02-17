@@ -144,6 +144,36 @@ func TestManifest_SafetyOptions(t *testing.T) {
 	}
 }
 
+func TestManifest_ToolWithContext(t *testing.T) {
+	m := NewManifest("post-scan", "1.0.0").
+		Capability("triage", "AI triage").
+		ToolWithContext("ai-triage", "Triage findings using AI", true).
+		Tool("explain", "Explain a finding", true).
+		Done().
+		Build()
+
+	capability := m.Capabilities[0]
+	if len(capability.Tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(capability.Tools))
+	}
+
+	triage := capability.Tools[0]
+	if triage.Name != "ai-triage" {
+		t.Errorf("tool.Name = %q", triage.Name)
+	}
+	if !triage.RequiresScanContext {
+		t.Error("ai-triage should require scan context")
+	}
+	if !triage.ReadOnly {
+		t.Error("ai-triage should be read-only")
+	}
+
+	explain := capability.Tools[1]
+	if explain.RequiresScanContext {
+		t.Error("explain should not require scan context")
+	}
+}
+
 func TestManifest_BuildIdempotent(t *testing.T) {
 	b := NewManifest("idem", "1.0.0").
 		Capability("cap", "A capability").

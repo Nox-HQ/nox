@@ -128,3 +128,123 @@ func (ab *AIComponentBuilder) Done() *ResponseBuilder {
 	ab.parent.resp.AiComponents = append(ab.parent.resp.AiComponents, ab.comp)
 	return ab.parent
 }
+
+// Graph begins constructing a graph. Call methods on GraphBuilder, then Done().
+func (b *ResponseBuilder) Graph(name, description string) *GraphBuilder {
+	g := &pluginv1.Graph{Name: name, Description: description}
+	return &GraphBuilder{parent: b, graph: g}
+}
+
+// Enrichment begins constructing an enrichment annotation.
+func (b *ResponseBuilder) Enrichment(fingerprint, kind, title string) *EnrichmentBuilder {
+	e := &pluginv1.Enrichment{
+		FindingFingerprint: fingerprint,
+		Kind:               kind,
+		Title:              title,
+	}
+	return &EnrichmentBuilder{parent: b, enrichment: e}
+}
+
+// GraphBuilder provides a fluent API for constructing a single Graph.
+type GraphBuilder struct {
+	parent *ResponseBuilder
+	graph  *pluginv1.Graph
+}
+
+// Node adds a node to the graph.
+func (gb *GraphBuilder) Node(id string, kind pluginv1.NodeKind, label string) *GraphBuilder {
+	gb.graph.Nodes = append(gb.graph.Nodes, &pluginv1.GraphNode{
+		Id:    id,
+		Kind:  kind,
+		Label: label,
+	})
+	return gb
+}
+
+// NodeAt adds a node with a file path to the graph.
+func (gb *GraphBuilder) NodeAt(id string, kind pluginv1.NodeKind, label, filePath string) *GraphBuilder {
+	gb.graph.Nodes = append(gb.graph.Nodes, &pluginv1.GraphNode{
+		Id:       id,
+		Kind:     kind,
+		Label:    label,
+		FilePath: filePath,
+	})
+	return gb
+}
+
+// NodeWithProps adds a node with properties to the graph.
+func (gb *GraphBuilder) NodeWithProps(id string, kind pluginv1.NodeKind, label string, props map[string]string) *GraphBuilder {
+	gb.graph.Nodes = append(gb.graph.Nodes, &pluginv1.GraphNode{
+		Id:         id,
+		Kind:       kind,
+		Label:      label,
+		Properties: props,
+	})
+	return gb
+}
+
+// Edge adds a directed edge between two nodes.
+func (gb *GraphBuilder) Edge(source, target string, kind pluginv1.EdgeKind) *GraphBuilder {
+	gb.graph.Edges = append(gb.graph.Edges, &pluginv1.GraphEdge{
+		Source: source,
+		Target: target,
+		Kind:   kind,
+	})
+	return gb
+}
+
+// EdgeLabeled adds a labeled directed edge between two nodes.
+func (gb *GraphBuilder) EdgeLabeled(source, target string, kind pluginv1.EdgeKind, label string) *GraphBuilder {
+	gb.graph.Edges = append(gb.graph.Edges, &pluginv1.GraphEdge{
+		Source: source,
+		Target: target,
+		Kind:   kind,
+		Label:  label,
+	})
+	return gb
+}
+
+// Done appends the graph to the parent response and returns the ResponseBuilder.
+func (gb *GraphBuilder) Done() *ResponseBuilder {
+	gb.parent.resp.Graphs = append(gb.parent.resp.Graphs, gb.graph)
+	return gb.parent
+}
+
+// EnrichmentBuilder provides a fluent API for constructing a single Enrichment.
+type EnrichmentBuilder struct {
+	parent     *ResponseBuilder
+	enrichment *pluginv1.Enrichment
+}
+
+// Body sets the markdown body of the enrichment.
+func (eb *EnrichmentBuilder) Body(md string) *EnrichmentBuilder {
+	eb.enrichment.Body = md
+	return eb
+}
+
+// WithMetadata adds a key-value metadata pair to the enrichment.
+func (eb *EnrichmentBuilder) WithMetadata(key, value string) *EnrichmentBuilder {
+	if eb.enrichment.Metadata == nil {
+		eb.enrichment.Metadata = make(map[string]string)
+	}
+	eb.enrichment.Metadata[key] = value
+	return eb
+}
+
+// WithConfidence sets the confidence level of the enrichment.
+func (eb *EnrichmentBuilder) WithConfidence(c pluginv1.Confidence) *EnrichmentBuilder {
+	eb.enrichment.Confidence = c
+	return eb
+}
+
+// Source sets the plugin name that produced this enrichment.
+func (eb *EnrichmentBuilder) Source(s string) *EnrichmentBuilder {
+	eb.enrichment.Source = s
+	return eb
+}
+
+// Done appends the enrichment to the parent response and returns the ResponseBuilder.
+func (eb *EnrichmentBuilder) Done() *ResponseBuilder {
+	eb.parent.resp.Enrichments = append(eb.parent.resp.Enrichments, eb.enrichment)
+	return eb.parent
+}

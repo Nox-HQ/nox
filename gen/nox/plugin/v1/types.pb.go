@@ -195,6 +195,124 @@ func (ArtifactType) EnumDescriptor() ([]byte, []int) {
 	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
+// NodeKind classifies graph nodes.
+type NodeKind int32
+
+const (
+	NodeKind_NODE_KIND_UNSPECIFIED NodeKind = 0
+	NodeKind_NODE_KIND_RESOURCE    NodeKind = 1 // IaC/cloud resource
+	NodeKind_NODE_KIND_FUNCTION    NodeKind = 2 // Code function/method
+	NodeKind_NODE_KIND_DATA        NodeKind = 3 // Data source/sink
+	NodeKind_NODE_KIND_SERVICE     NodeKind = 4 // Service/endpoint
+	NodeKind_NODE_KIND_POLICY      NodeKind = 5 // Policy/rule
+)
+
+// Enum value maps for NodeKind.
+var (
+	NodeKind_name = map[int32]string{
+		0: "NODE_KIND_UNSPECIFIED",
+		1: "NODE_KIND_RESOURCE",
+		2: "NODE_KIND_FUNCTION",
+		3: "NODE_KIND_DATA",
+		4: "NODE_KIND_SERVICE",
+		5: "NODE_KIND_POLICY",
+	}
+	NodeKind_value = map[string]int32{
+		"NODE_KIND_UNSPECIFIED": 0,
+		"NODE_KIND_RESOURCE":    1,
+		"NODE_KIND_FUNCTION":    2,
+		"NODE_KIND_DATA":        3,
+		"NODE_KIND_SERVICE":     4,
+		"NODE_KIND_POLICY":      5,
+	}
+)
+
+func (x NodeKind) Enum() *NodeKind {
+	p := new(NodeKind)
+	*p = x
+	return p
+}
+
+func (x NodeKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NodeKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_nox_plugin_v1_types_proto_enumTypes[3].Descriptor()
+}
+
+func (NodeKind) Type() protoreflect.EnumType {
+	return &file_nox_plugin_v1_types_proto_enumTypes[3]
+}
+
+func (x NodeKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NodeKind.Descriptor instead.
+func (NodeKind) EnumDescriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{3}
+}
+
+// EdgeKind classifies graph edges.
+type EdgeKind int32
+
+const (
+	EdgeKind_EDGE_KIND_UNSPECIFIED EdgeKind = 0
+	EdgeKind_EDGE_KIND_DEPENDS_ON  EdgeKind = 1 // Structural dependency
+	EdgeKind_EDGE_KIND_CALLS       EdgeKind = 2 // Function call
+	EdgeKind_EDGE_KIND_FLOWS_TO    EdgeKind = 3 // Data flow
+	EdgeKind_EDGE_KIND_EXPOSES     EdgeKind = 4 // Network exposure
+	EdgeKind_EDGE_KIND_REFERENCES  EdgeKind = 5 // Generic reference
+)
+
+// Enum value maps for EdgeKind.
+var (
+	EdgeKind_name = map[int32]string{
+		0: "EDGE_KIND_UNSPECIFIED",
+		1: "EDGE_KIND_DEPENDS_ON",
+		2: "EDGE_KIND_CALLS",
+		3: "EDGE_KIND_FLOWS_TO",
+		4: "EDGE_KIND_EXPOSES",
+		5: "EDGE_KIND_REFERENCES",
+	}
+	EdgeKind_value = map[string]int32{
+		"EDGE_KIND_UNSPECIFIED": 0,
+		"EDGE_KIND_DEPENDS_ON":  1,
+		"EDGE_KIND_CALLS":       2,
+		"EDGE_KIND_FLOWS_TO":    3,
+		"EDGE_KIND_EXPOSES":     4,
+		"EDGE_KIND_REFERENCES":  5,
+	}
+)
+
+func (x EdgeKind) Enum() *EdgeKind {
+	p := new(EdgeKind)
+	*p = x
+	return p
+}
+
+func (x EdgeKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EdgeKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_nox_plugin_v1_types_proto_enumTypes[4].Descriptor()
+}
+
+func (EdgeKind) Type() protoreflect.EnumType {
+	return &file_nox_plugin_v1_types_proto_enumTypes[4]
+}
+
+func (x EdgeKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EdgeKind.Descriptor instead.
+func (EdgeKind) EnumDescriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{4}
+}
+
 // Location identifies a region within a source file.
 type Location struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -588,6 +706,385 @@ func (x *AIComponent) GetDetails() map[string]string {
 	return nil
 }
 
+// GraphNode represents a vertex in a relationship graph.
+type GraphNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          NodeKind               `protobuf:"varint,2,opt,name=kind,proto3,enum=nox.plugin.v1.NodeKind" json:"kind,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	FilePath      string                 `protobuf:"bytes,4,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
+	Properties    map[string]string      `protobuf:"bytes,5,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GraphNode) Reset() {
+	*x = GraphNode{}
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GraphNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GraphNode) ProtoMessage() {}
+
+func (x *GraphNode) ProtoReflect() protoreflect.Message {
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GraphNode.ProtoReflect.Descriptor instead.
+func (*GraphNode) Descriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GraphNode) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GraphNode) GetKind() NodeKind {
+	if x != nil {
+		return x.Kind
+	}
+	return NodeKind_NODE_KIND_UNSPECIFIED
+}
+
+func (x *GraphNode) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *GraphNode) GetFilePath() string {
+	if x != nil {
+		return x.FilePath
+	}
+	return ""
+}
+
+func (x *GraphNode) GetProperties() map[string]string {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+// GraphEdge represents a directed edge between two graph nodes.
+type GraphEdge struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"` // source node id
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // target node id
+	Kind          EdgeKind               `protobuf:"varint,3,opt,name=kind,proto3,enum=nox.plugin.v1.EdgeKind" json:"kind,omitempty"`
+	Label         string                 `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	Properties    map[string]string      `protobuf:"bytes,5,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GraphEdge) Reset() {
+	*x = GraphEdge{}
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GraphEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GraphEdge) ProtoMessage() {}
+
+func (x *GraphEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GraphEdge.ProtoReflect.Descriptor instead.
+func (*GraphEdge) Descriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GraphEdge) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *GraphEdge) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *GraphEdge) GetKind() EdgeKind {
+	if x != nil {
+		return x.Kind
+	}
+	return EdgeKind_EDGE_KIND_UNSPECIFIED
+}
+
+func (x *GraphEdge) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *GraphEdge) GetProperties() map[string]string {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+// Graph is a labeled collection of nodes and edges.
+type Graph struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Nodes         []*GraphNode           `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Edges         []*GraphEdge           `protobuf:"bytes,4,rep,name=edges,proto3" json:"edges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Graph) Reset() {
+	*x = Graph{}
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Graph) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Graph) ProtoMessage() {}
+
+func (x *Graph) ProtoReflect() protoreflect.Message {
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Graph.ProtoReflect.Descriptor instead.
+func (*Graph) Descriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Graph) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Graph) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Graph) GetNodes() []*GraphNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *Graph) GetEdges() []*GraphEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+// Enrichment annotates an existing finding with additional context
+// without modifying the original finding fields. This preserves
+// determinism of the core scan engine.
+type Enrichment struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	FindingFingerprint string                 `protobuf:"bytes,1,opt,name=finding_fingerprint,json=findingFingerprint,proto3" json:"finding_fingerprint,omitempty"` // links to Finding.fingerprint
+	Kind               string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                                       // e.g. "triage", "reachability", "explanation"
+	Title              string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Body               string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"` // markdown content
+	Metadata           map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Confidence         Confidence             `protobuf:"varint,6,opt,name=confidence,proto3,enum=nox.plugin.v1.Confidence" json:"confidence,omitempty"`
+	Source             string                 `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"` // plugin name that produced it
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *Enrichment) Reset() {
+	*x = Enrichment{}
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Enrichment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Enrichment) ProtoMessage() {}
+
+func (x *Enrichment) ProtoReflect() protoreflect.Message {
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Enrichment.ProtoReflect.Descriptor instead.
+func (*Enrichment) Descriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Enrichment) GetFindingFingerprint() string {
+	if x != nil {
+		return x.FindingFingerprint
+	}
+	return ""
+}
+
+func (x *Enrichment) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Enrichment) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Enrichment) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *Enrichment) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *Enrichment) GetConfidence() Confidence {
+	if x != nil {
+		return x.Confidence
+	}
+	return Confidence_CONFIDENCE_UNSPECIFIED
+}
+
+func (x *Enrichment) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+// ScanContext carries core scan results to post-scan plugins.
+type ScanContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Findings      []*Finding             `protobuf:"bytes,1,rep,name=findings,proto3" json:"findings,omitempty"`
+	Packages      []*Package             `protobuf:"bytes,2,rep,name=packages,proto3" json:"packages,omitempty"`
+	AiComponents  []*AIComponent         `protobuf:"bytes,3,rep,name=ai_components,json=aiComponents,proto3" json:"ai_components,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScanContext) Reset() {
+	*x = ScanContext{}
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScanContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScanContext) ProtoMessage() {}
+
+func (x *ScanContext) ProtoReflect() protoreflect.Message {
+	mi := &file_nox_plugin_v1_types_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScanContext.ProtoReflect.Descriptor instead.
+func (*ScanContext) Descriptor() ([]byte, []int) {
+	return file_nox_plugin_v1_types_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ScanContext) GetFindings() []*Finding {
+	if x != nil {
+		return x.Findings
+	}
+	return nil
+}
+
+func (x *ScanContext) GetPackages() []*Package {
+	if x != nil {
+		return x.Packages
+	}
+	return nil
+}
+
+func (x *ScanContext) GetAiComponents() []*AIComponent {
+	if x != nil {
+		return x.AiComponents
+	}
+	return nil
+}
+
 var File_nox_plugin_v1_types_proto protoreflect.FileDescriptor
 
 const file_nox_plugin_v1_types_proto_rawDesc = "" +
@@ -633,7 +1130,52 @@ const file_nox_plugin_v1_types_proto_rawDesc = "" +
 	"\adetails\x18\x04 \x03(\v2'.nox.plugin.v1.AIComponent.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x88\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x84\x02\n" +
+	"\tGraphNode\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x17.nox.plugin.v1.NodeKindR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1b\n" +
+	"\tfile_path\x18\x04 \x01(\tR\bfilePath\x12H\n" +
+	"\n" +
+	"properties\x18\x05 \x03(\v2(.nox.plugin.v1.GraphNode.PropertiesEntryR\n" +
+	"properties\x1a=\n" +
+	"\x0fPropertiesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x87\x02\n" +
+	"\tGraphEdge\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12+\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x17.nox.plugin.v1.EdgeKindR\x04kind\x12\x14\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label\x12H\n" +
+	"\n" +
+	"properties\x18\x05 \x03(\v2(.nox.plugin.v1.GraphEdge.PropertiesEntryR\n" +
+	"properties\x1a=\n" +
+	"\x0fPropertiesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9d\x01\n" +
+	"\x05Graph\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12.\n" +
+	"\x05nodes\x18\x03 \x03(\v2\x18.nox.plugin.v1.GraphNodeR\x05nodes\x12.\n" +
+	"\x05edges\x18\x04 \x03(\v2\x18.nox.plugin.v1.GraphEdgeR\x05edges\"\xd0\x02\n" +
+	"\n" +
+	"Enrichment\x12/\n" +
+	"\x13finding_fingerprint\x18\x01 \x01(\tR\x12findingFingerprint\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x12\n" +
+	"\x04body\x18\x04 \x01(\tR\x04body\x12C\n" +
+	"\bmetadata\x18\x05 \x03(\v2'.nox.plugin.v1.Enrichment.MetadataEntryR\bmetadata\x129\n" +
+	"\n" +
+	"confidence\x18\x06 \x01(\x0e2\x19.nox.plugin.v1.ConfidenceR\n" +
+	"confidence\x12\x16\n" +
+	"\x06source\x18\a \x01(\tR\x06source\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x01\n" +
+	"\vScanContext\x122\n" +
+	"\bfindings\x18\x01 \x03(\v2\x16.nox.plugin.v1.FindingR\bfindings\x122\n" +
+	"\bpackages\x18\x02 \x03(\v2\x16.nox.plugin.v1.PackageR\bpackages\x12?\n" +
+	"\rai_components\x18\x03 \x03(\v2\x1a.nox.plugin.v1.AIComponentR\faiComponents*\x88\x01\n" +
 	"\bSeverity\x12\x18\n" +
 	"\x14SEVERITY_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11SEVERITY_CRITICAL\x10\x01\x12\x11\n" +
@@ -654,7 +1196,21 @@ const file_nox_plugin_v1_types_proto_rawDesc = "" +
 	"\x16ARTIFACT_TYPE_LOCKFILE\x10\x03\x12\x1b\n" +
 	"\x17ARTIFACT_TYPE_CONTAINER\x10\x04\x12\x1e\n" +
 	"\x1aARTIFACT_TYPE_AI_COMPONENT\x10\x05\x12\x19\n" +
-	"\x15ARTIFACT_TYPE_UNKNOWN\x10\x06B2Z0github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1b\x06proto3"
+	"\x15ARTIFACT_TYPE_UNKNOWN\x10\x06*\x96\x01\n" +
+	"\bNodeKind\x12\x19\n" +
+	"\x15NODE_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12NODE_KIND_RESOURCE\x10\x01\x12\x16\n" +
+	"\x12NODE_KIND_FUNCTION\x10\x02\x12\x12\n" +
+	"\x0eNODE_KIND_DATA\x10\x03\x12\x15\n" +
+	"\x11NODE_KIND_SERVICE\x10\x04\x12\x14\n" +
+	"\x10NODE_KIND_POLICY\x10\x05*\x9d\x01\n" +
+	"\bEdgeKind\x12\x19\n" +
+	"\x15EDGE_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14EDGE_KIND_DEPENDS_ON\x10\x01\x12\x13\n" +
+	"\x0fEDGE_KIND_CALLS\x10\x02\x12\x16\n" +
+	"\x12EDGE_KIND_FLOWS_TO\x10\x03\x12\x15\n" +
+	"\x11EDGE_KIND_EXPOSES\x10\x04\x12\x18\n" +
+	"\x14EDGE_KIND_REFERENCES\x10\x05B2Z0github.com/nox-hq/nox/gen/nox/plugin/v1;pluginv1b\x06proto3"
 
 var (
 	file_nox_plugin_v1_types_proto_rawDescOnce sync.Once
@@ -668,32 +1224,53 @@ func file_nox_plugin_v1_types_proto_rawDescGZIP() []byte {
 	return file_nox_plugin_v1_types_proto_rawDescData
 }
 
-var file_nox_plugin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_nox_plugin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_nox_plugin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_nox_plugin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_nox_plugin_v1_types_proto_goTypes = []any{
 	(Severity)(0),       // 0: nox.plugin.v1.Severity
 	(Confidence)(0),     // 1: nox.plugin.v1.Confidence
 	(ArtifactType)(0),   // 2: nox.plugin.v1.ArtifactType
-	(*Location)(nil),    // 3: nox.plugin.v1.Location
-	(*Finding)(nil),     // 4: nox.plugin.v1.Finding
-	(*Artifact)(nil),    // 5: nox.plugin.v1.Artifact
-	(*Package)(nil),     // 6: nox.plugin.v1.Package
-	(*AIComponent)(nil), // 7: nox.plugin.v1.AIComponent
-	nil,                 // 8: nox.plugin.v1.Finding.MetadataEntry
-	nil,                 // 9: nox.plugin.v1.AIComponent.DetailsEntry
+	(NodeKind)(0),       // 3: nox.plugin.v1.NodeKind
+	(EdgeKind)(0),       // 4: nox.plugin.v1.EdgeKind
+	(*Location)(nil),    // 5: nox.plugin.v1.Location
+	(*Finding)(nil),     // 6: nox.plugin.v1.Finding
+	(*Artifact)(nil),    // 7: nox.plugin.v1.Artifact
+	(*Package)(nil),     // 8: nox.plugin.v1.Package
+	(*AIComponent)(nil), // 9: nox.plugin.v1.AIComponent
+	(*GraphNode)(nil),   // 10: nox.plugin.v1.GraphNode
+	(*GraphEdge)(nil),   // 11: nox.plugin.v1.GraphEdge
+	(*Graph)(nil),       // 12: nox.plugin.v1.Graph
+	(*Enrichment)(nil),  // 13: nox.plugin.v1.Enrichment
+	(*ScanContext)(nil), // 14: nox.plugin.v1.ScanContext
+	nil,                 // 15: nox.plugin.v1.Finding.MetadataEntry
+	nil,                 // 16: nox.plugin.v1.AIComponent.DetailsEntry
+	nil,                 // 17: nox.plugin.v1.GraphNode.PropertiesEntry
+	nil,                 // 18: nox.plugin.v1.GraphEdge.PropertiesEntry
+	nil,                 // 19: nox.plugin.v1.Enrichment.MetadataEntry
 }
 var file_nox_plugin_v1_types_proto_depIdxs = []int32{
-	0, // 0: nox.plugin.v1.Finding.severity:type_name -> nox.plugin.v1.Severity
-	1, // 1: nox.plugin.v1.Finding.confidence:type_name -> nox.plugin.v1.Confidence
-	3, // 2: nox.plugin.v1.Finding.location:type_name -> nox.plugin.v1.Location
-	8, // 3: nox.plugin.v1.Finding.metadata:type_name -> nox.plugin.v1.Finding.MetadataEntry
-	2, // 4: nox.plugin.v1.Artifact.type:type_name -> nox.plugin.v1.ArtifactType
-	9, // 5: nox.plugin.v1.AIComponent.details:type_name -> nox.plugin.v1.AIComponent.DetailsEntry
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: nox.plugin.v1.Finding.severity:type_name -> nox.plugin.v1.Severity
+	1,  // 1: nox.plugin.v1.Finding.confidence:type_name -> nox.plugin.v1.Confidence
+	5,  // 2: nox.plugin.v1.Finding.location:type_name -> nox.plugin.v1.Location
+	15, // 3: nox.plugin.v1.Finding.metadata:type_name -> nox.plugin.v1.Finding.MetadataEntry
+	2,  // 4: nox.plugin.v1.Artifact.type:type_name -> nox.plugin.v1.ArtifactType
+	16, // 5: nox.plugin.v1.AIComponent.details:type_name -> nox.plugin.v1.AIComponent.DetailsEntry
+	3,  // 6: nox.plugin.v1.GraphNode.kind:type_name -> nox.plugin.v1.NodeKind
+	17, // 7: nox.plugin.v1.GraphNode.properties:type_name -> nox.plugin.v1.GraphNode.PropertiesEntry
+	4,  // 8: nox.plugin.v1.GraphEdge.kind:type_name -> nox.plugin.v1.EdgeKind
+	18, // 9: nox.plugin.v1.GraphEdge.properties:type_name -> nox.plugin.v1.GraphEdge.PropertiesEntry
+	10, // 10: nox.plugin.v1.Graph.nodes:type_name -> nox.plugin.v1.GraphNode
+	11, // 11: nox.plugin.v1.Graph.edges:type_name -> nox.plugin.v1.GraphEdge
+	19, // 12: nox.plugin.v1.Enrichment.metadata:type_name -> nox.plugin.v1.Enrichment.MetadataEntry
+	1,  // 13: nox.plugin.v1.Enrichment.confidence:type_name -> nox.plugin.v1.Confidence
+	6,  // 14: nox.plugin.v1.ScanContext.findings:type_name -> nox.plugin.v1.Finding
+	8,  // 15: nox.plugin.v1.ScanContext.packages:type_name -> nox.plugin.v1.Package
+	9,  // 16: nox.plugin.v1.ScanContext.ai_components:type_name -> nox.plugin.v1.AIComponent
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_nox_plugin_v1_types_proto_init() }
@@ -706,8 +1283,8 @@ func file_nox_plugin_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nox_plugin_v1_types_proto_rawDesc), len(file_nox_plugin_v1_types_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   7,
+			NumEnums:      5,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

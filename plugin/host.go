@@ -446,6 +446,13 @@ func (h *Host) MergeResults(resp *pluginv1.InvokeToolResponse, result *core.Scan
 	for _, pac := range resp.GetAiComponents() {
 		result.AIInventory.Add(ProtoAIComponentToGo(pac))
 	}
+
+	for _, pg := range resp.GetGraphs() {
+		result.Graphs = append(result.Graphs, ProtoGraphToGo(pg))
+	}
+	for _, pe := range resp.GetEnrichments() {
+		result.Enrichments = append(result.Enrichments, ProtoEnrichmentToGo(pe))
+	}
 }
 
 // MergeAllResults merges multiple plugin responses sequentially.
@@ -453,6 +460,58 @@ func (h *Host) MergeAllResults(responses []*pluginv1.InvokeToolResponse, result 
 	for _, resp := range responses {
 		h.MergeResults(resp, result)
 	}
+}
+
+// InvokePostScan invokes tools that require scan context. It builds a
+// ScanContext from the current ScanResult and passes it to each tool
+// that declares requires_scan_context=true.
+func (h *Host) InvokePostScan(ctx context.Context, result *core.ScanResult, workspaceRoot string) error {
+	scanCtx := GoScanResultToProtoContext(result)
+
+	h.mu.RLock()
+	type postScanEntry struct {
+		plugin *Plugin
+		tool   string
+	}
+	var postScanTools []postScanEntry
+	for _, p := range h.plugins {
+		for _, cap := range p.Info().Capabilities {
+			for _, t := range cap.Tools {
+				if t.RequiresScanContext {
+					postScanTools = append(postScanTools, postScanEntry{p, t.Name})
+				}
+			}
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, pt := range postScanTools {
+		req := &pluginv1.InvokeToolRequest{
+			ToolName:      pt.tool,
+			WorkspaceRoot: workspaceRoot,
+			ScanContext:   scanCtx,
+		}
+
+		resp, err := pt.plugin.client.InvokeTool(ctx, req)
+		if err != nil {
+			h.mu.Lock()
+			h.diagnostics = append(h.diagnostics, Diagnostic{
+				Severity: "error",
+				Message:  fmt.Sprintf("post-scan tool %q failed: %v", pt.tool, err),
+				Source:   pt.plugin.Info().Name,
+			})
+			h.mu.Unlock()
+			continue
+		}
+
+		h.MergeResults(resp, result)
+
+		h.mu.Lock()
+		h.collectDiagnostics(pt.plugin.Info().Name, resp)
+		h.mu.Unlock()
+	}
+
+	return nil
 }
 
 // Diagnostics returns all collected diagnostics.
@@ -532,6 +591,27 @@ func estimateResponseSize(resp *pluginv1.InvokeToolResponse) int64 {
 	}
 	for _, p := range resp.GetPackages() {
 		size += int64(len(p.GetName()) + len(p.GetVersion()) + len(p.GetEcosystem()))
+	}
+	for _, g := range resp.GetGraphs() {
+		size += int64(len(g.GetName()) + len(g.GetDescription()))
+		for _, n := range g.GetNodes() {
+			size += int64(len(n.GetId()) + len(n.GetLabel()) + len(n.GetFilePath()))
+			for k, v := range n.GetProperties() {
+				size += int64(len(k) + len(v))
+			}
+		}
+		for _, e := range g.GetEdges() {
+			size += int64(len(e.GetSource()) + len(e.GetTarget()) + len(e.GetLabel()))
+			for k, v := range e.GetProperties() {
+				size += int64(len(k) + len(v))
+			}
+		}
+	}
+	for _, e := range resp.GetEnrichments() {
+		size += int64(len(e.GetFindingFingerprint()) + len(e.GetKind()) + len(e.GetTitle()) + len(e.GetBody()) + len(e.GetSource()))
+		for k, v := range e.GetMetadata() {
+			size += int64(len(k) + len(v))
+		}
 	}
 	return size
 }
@@ -643,9 +723,10 @@ func infoToProtoCapabilities(info PluginInfo) []*pluginv1.Capability {
 		}
 		for _, t := range c.Tools {
 			cap.Tools = append(cap.Tools, &pluginv1.ToolDef{
-				Name:        t.Name,
-				Description: t.Description,
-				ReadOnly:    t.ReadOnly,
+				Name:                t.Name,
+				Description:         t.Description,
+				ReadOnly:            t.ReadOnly,
+				RequiresScanContext: t.RequiresScanContext,
 			})
 		}
 		for _, r := range c.Resources {

@@ -16,6 +16,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
+	"github.com/nox-hq/nox/core/graph"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
@@ -48,6 +49,8 @@ type ScanResult struct {
 	AIInventory  *ai.Inventory
 	PolicyResult *policy.Result
 	Rules        *rules.RuleSet
+	Graphs       []graph.Graph         // relationship graphs from plugins
+	Enrichments  []findings.Enrichment // finding annotations from plugins
 }
 
 // ScanOptions holds optional parameters for RunScanWithOptions. The zero

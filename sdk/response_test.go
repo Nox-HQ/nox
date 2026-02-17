@@ -203,3 +203,163 @@ func TestResponse_Full(t *testing.T) {
 		t.Errorf("expected 1 diagnostic, got %d", len(r.Diagnostics))
 	}
 }
+
+func TestResponse_Graph(t *testing.T) {
+	r := NewResponse().
+		Graph("resource-deps", "IaC dependency graph").
+		Node("vpc-1", NodeKindResource, "aws_vpc.main").
+		NodeAt("subnet-1", NodeKindResource, "aws_subnet.pub", "network.tf").
+		Edge("subnet-1", "vpc-1", EdgeKindDependsOn).
+		Done().
+		Build()
+
+	if len(r.Graphs) != 1 {
+		t.Fatalf("expected 1 graph, got %d", len(r.Graphs))
+	}
+	g := r.Graphs[0]
+	if g.Name != "resource-deps" {
+		t.Errorf("Name = %q", g.Name)
+	}
+	if g.Description != "IaC dependency graph" {
+		t.Errorf("Description = %q", g.Description)
+	}
+	if len(g.Nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d", len(g.Nodes))
+	}
+	if g.Nodes[0].Id != "vpc-1" {
+		t.Errorf("Node[0].Id = %q", g.Nodes[0].Id)
+	}
+	if g.Nodes[1].FilePath != "network.tf" {
+		t.Errorf("Node[1].FilePath = %q", g.Nodes[1].FilePath)
+	}
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "subnet-1" || g.Edges[0].Target != "vpc-1" {
+		t.Errorf("Edge source=%q target=%q", g.Edges[0].Source, g.Edges[0].Target)
+	}
+}
+
+func TestResponse_Graph_EdgeLabeled(t *testing.T) {
+	r := NewResponse().
+		Graph("call-graph", "Function call graph").
+		Node("main", NodeKindFunction, "main()").
+		Node("auth", NodeKindFunction, "authenticate()").
+		EdgeLabeled("main", "auth", EdgeKindCalls, "direct").
+		Done().
+		Build()
+
+	g := r.Graphs[0]
+	if g.Edges[0].Label != "direct" {
+		t.Errorf("Edge.Label = %q, want %q", g.Edges[0].Label, "direct")
+	}
+}
+
+func TestResponse_Graph_NodeWithProps(t *testing.T) {
+	r := NewResponse().
+		Graph("test", "test graph").
+		NodeWithProps("n1", NodeKindData, "user-input", map[string]string{"tainted": "true"}).
+		Done().
+		Build()
+
+	g := r.Graphs[0]
+	if g.Nodes[0].Properties["tainted"] != "true" {
+		t.Errorf("Node properties = %v", g.Nodes[0].Properties)
+	}
+}
+
+func TestResponse_Enrichment(t *testing.T) {
+	r := NewResponse().
+		Enrichment("fp-abc123", "triage", "False positive").
+		Body("This is a **false positive** because the key is a test fixture.").
+		WithMetadata("reason", "test_file").
+		WithConfidence(ConfidenceHigh).
+		Source("ai-triage").
+		Done().
+		Build()
+
+	if len(r.Enrichments) != 1 {
+		t.Fatalf("expected 1 enrichment, got %d", len(r.Enrichments))
+	}
+	e := r.Enrichments[0]
+	if e.FindingFingerprint != "fp-abc123" {
+		t.Errorf("FindingFingerprint = %q", e.FindingFingerprint)
+	}
+	if e.Kind != "triage" {
+		t.Errorf("Kind = %q", e.Kind)
+	}
+	if e.Title != "False positive" {
+		t.Errorf("Title = %q", e.Title)
+	}
+	if e.Body != "This is a **false positive** because the key is a test fixture." {
+		t.Errorf("Body = %q", e.Body)
+	}
+	if e.Metadata["reason"] != "test_file" {
+		t.Errorf("Metadata[reason] = %q", e.Metadata["reason"])
+	}
+	if e.Confidence != pluginv1.Confidence_CONFIDENCE_HIGH {
+		t.Errorf("Confidence = %v", e.Confidence)
+	}
+	if e.Source != "ai-triage" {
+		t.Errorf("Source = %q", e.Source)
+	}
+}
+
+func TestResponse_MultipleEnrichments(t *testing.T) {
+	r := NewResponse().
+		Enrichment("fp-1", "triage", "FP").
+		Body("false positive").
+		Done().
+		Enrichment("fp-2", "reachability", "Unreachable").
+		Body("code path not reachable").
+		Done().
+		Build()
+
+	if len(r.Enrichments) != 2 {
+		t.Fatalf("expected 2 enrichments, got %d", len(r.Enrichments))
+	}
+	if r.Enrichments[0].FindingFingerprint != "fp-1" {
+		t.Errorf("first enrichment fingerprint = %q", r.Enrichments[0].FindingFingerprint)
+	}
+	if r.Enrichments[1].Kind != "reachability" {
+		t.Errorf("second enrichment kind = %q", r.Enrichments[1].Kind)
+	}
+}
+
+func TestResponse_FullWithGraphsAndEnrichments(t *testing.T) {
+	r := NewResponse().
+		Finding("SEC-001", SeverityHigh, ConfidenceHigh, "Secret found").
+		At("config.yaml", 10, 10).
+		WithFingerprint("fp-1").
+		Done().
+		Graph("deps", "dependency graph").
+		Node("a", NodeKindResource, "vpc").
+		Node("b", NodeKindResource, "subnet").
+		Edge("b", "a", EdgeKindDependsOn).
+		Done().
+		Enrichment("fp-1", "triage", "False positive").
+		Body("test key").
+		Source("triage-plugin").
+		Done().
+		Build()
+
+	if len(r.Findings) != 1 {
+		t.Errorf("expected 1 finding, got %d", len(r.Findings))
+	}
+	if len(r.Graphs) != 1 {
+		t.Errorf("expected 1 graph, got %d", len(r.Graphs))
+	}
+	if len(r.Enrichments) != 1 {
+		t.Errorf("expected 1 enrichment, got %d", len(r.Enrichments))
+	}
+}
+
+func TestResponse_Empty_NewFields(t *testing.T) {
+	r := NewResponse().Build()
+	if len(r.Graphs) != 0 {
+		t.Errorf("expected 0 graphs, got %d", len(r.Graphs))
+	}
+	if len(r.Enrichments) != 0 {
+		t.Errorf("expected 0 enrichments, got %d", len(r.Enrichments))
+	}
+}

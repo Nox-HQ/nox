@@ -268,13 +268,14 @@ func (x *Capability) GetResources() []*ResourceDef {
 
 // ToolDef describes a single invocable tool provided by a plugin.
 type ToolDef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	InputSchema   *structpb.Struct       `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
-	ReadOnly      bool                   `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description         string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	InputSchema         *structpb.Struct       `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	ReadOnly            bool                   `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	RequiresScanContext bool                   `protobuf:"varint,5,opt,name=requires_scan_context,json=requiresScanContext,proto3" json:"requires_scan_context,omitempty"` // tool needs ScanContext as input
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ToolDef) Reset() {
@@ -331,6 +332,13 @@ func (x *ToolDef) GetInputSchema() *structpb.Struct {
 func (x *ToolDef) GetReadOnly() bool {
 	if x != nil {
 		return x.ReadOnly
+	}
+	return false
+}
+
+func (x *ToolDef) GetRequiresScanContext() bool {
+	if x != nil {
+		return x.RequiresScanContext
 	}
 	return false
 }
@@ -503,6 +511,7 @@ type InvokeToolRequest struct {
 	ToolName      string                 `protobuf:"bytes,1,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
 	Input         *structpb.Struct       `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
 	WorkspaceRoot string                 `protobuf:"bytes,3,opt,name=workspace_root,json=workspaceRoot,proto3" json:"workspace_root,omitempty"`
+	ScanContext   *ScanContext           `protobuf:"bytes,4,opt,name=scan_context,json=scanContext,proto3" json:"scan_context,omitempty"` // populated for post-scan tools
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -558,6 +567,13 @@ func (x *InvokeToolRequest) GetWorkspaceRoot() string {
 	return ""
 }
 
+func (x *InvokeToolRequest) GetScanContext() *ScanContext {
+	if x != nil {
+		return x.ScanContext
+	}
+	return nil
+}
+
 // InvokeToolResponse contains the results of a tool invocation.
 type InvokeToolResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -565,6 +581,8 @@ type InvokeToolResponse struct {
 	Packages      []*Package             `protobuf:"bytes,2,rep,name=packages,proto3" json:"packages,omitempty"`
 	AiComponents  []*AIComponent         `protobuf:"bytes,3,rep,name=ai_components,json=aiComponents,proto3" json:"ai_components,omitempty"`
 	Diagnostics   []*Diagnostic          `protobuf:"bytes,4,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	Graphs        []*Graph               `protobuf:"bytes,5,rep,name=graphs,proto3" json:"graphs,omitempty"`           // relationship graphs
+	Enrichments   []*Enrichment          `protobuf:"bytes,6,rep,name=enrichments,proto3" json:"enrichments,omitempty"` // finding annotations
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -623,6 +641,20 @@ func (x *InvokeToolResponse) GetAiComponents() []*AIComponent {
 func (x *InvokeToolResponse) GetDiagnostics() []*Diagnostic {
 	if x != nil {
 		return x.Diagnostics
+	}
+	return nil
+}
+
+func (x *InvokeToolResponse) GetGraphs() []*Graph {
+	if x != nil {
+		return x.Graphs
+	}
+	return nil
+}
+
+func (x *InvokeToolResponse) GetEnrichments() []*Enrichment {
+	if x != nil {
+		return x.Enrichments
 	}
 	return nil
 }
@@ -806,12 +838,13 @@ const file_nox_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12,\n" +
 	"\x05tools\x18\x03 \x03(\v2\x16.nox.plugin.v1.ToolDefR\x05tools\x128\n" +
-	"\tresources\x18\x04 \x03(\v2\x1a.nox.plugin.v1.ResourceDefR\tresources\"\x98\x01\n" +
+	"\tresources\x18\x04 \x03(\v2\x1a.nox.plugin.v1.ResourceDefR\tresources\"\xcc\x01\n" +
 	"\aToolDef\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"\x83\x01\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\x122\n" +
+	"\x15requires_scan_context\x18\x05 \x01(\bR\x13requiresScanContext\"\x83\x01\n" +
 	"\vResourceDef\x12!\n" +
 	"\furi_template\x18\x01 \x01(\tR\vuriTemplate\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -826,16 +859,19 @@ const file_nox_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"risk_class\x18\x05 \x01(\tR\triskClass\x12-\n" +
 	"\x12needs_confirmation\x18\x06 \x01(\bR\x11needsConfirmation\x12,\n" +
-	"\x12max_artifact_bytes\x18\a \x01(\x03R\x10maxArtifactBytes\"\x86\x01\n" +
+	"\x12max_artifact_bytes\x18\a \x01(\x03R\x10maxArtifactBytes\"\xc5\x01\n" +
 	"\x11InvokeToolRequest\x12\x1b\n" +
 	"\ttool_name\x18\x01 \x01(\tR\btoolName\x12-\n" +
 	"\x05input\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05input\x12%\n" +
-	"\x0eworkspace_root\x18\x03 \x01(\tR\rworkspaceRoot\"\xfa\x01\n" +
+	"\x0eworkspace_root\x18\x03 \x01(\tR\rworkspaceRoot\x12=\n" +
+	"\fscan_context\x18\x04 \x01(\v2\x1a.nox.plugin.v1.ScanContextR\vscanContext\"\xe5\x02\n" +
 	"\x12InvokeToolResponse\x122\n" +
 	"\bfindings\x18\x01 \x03(\v2\x16.nox.plugin.v1.FindingR\bfindings\x122\n" +
 	"\bpackages\x18\x02 \x03(\v2\x16.nox.plugin.v1.PackageR\bpackages\x12?\n" +
 	"\rai_components\x18\x03 \x03(\v2\x1a.nox.plugin.v1.AIComponentR\faiComponents\x12;\n" +
-	"\vdiagnostics\x18\x04 \x03(\v2\x19.nox.plugin.v1.DiagnosticR\vdiagnostics\"}\n" +
+	"\vdiagnostics\x18\x04 \x03(\v2\x19.nox.plugin.v1.DiagnosticR\vdiagnostics\x12,\n" +
+	"\x06graphs\x18\x05 \x03(\v2\x14.nox.plugin.v1.GraphR\x06graphs\x12;\n" +
+	"\venrichments\x18\x06 \x03(\v2\x19.nox.plugin.v1.EnrichmentR\venrichments\"}\n" +
 	"\n" +
 	"Diagnostic\x12=\n" +
 	"\bseverity\x18\x01 \x01(\x0e2!.nox.plugin.v1.DiagnosticSeverityR\bseverity\x12\x18\n" +
@@ -885,11 +921,14 @@ var file_nox_plugin_v1_plugin_proto_goTypes = []any{
 	(*StreamArtifactsRequest)(nil),  // 10: nox.plugin.v1.StreamArtifactsRequest
 	(*StreamArtifactsResponse)(nil), // 11: nox.plugin.v1.StreamArtifactsResponse
 	(*structpb.Struct)(nil),         // 12: google.protobuf.Struct
-	(*Finding)(nil),                 // 13: nox.plugin.v1.Finding
-	(*Package)(nil),                 // 14: nox.plugin.v1.Package
-	(*AIComponent)(nil),             // 15: nox.plugin.v1.AIComponent
-	(ArtifactType)(0),               // 16: nox.plugin.v1.ArtifactType
-	(*Artifact)(nil),                // 17: nox.plugin.v1.Artifact
+	(*ScanContext)(nil),             // 13: nox.plugin.v1.ScanContext
+	(*Finding)(nil),                 // 14: nox.plugin.v1.Finding
+	(*Package)(nil),                 // 15: nox.plugin.v1.Package
+	(*AIComponent)(nil),             // 16: nox.plugin.v1.AIComponent
+	(*Graph)(nil),                   // 17: nox.plugin.v1.Graph
+	(*Enrichment)(nil),              // 18: nox.plugin.v1.Enrichment
+	(ArtifactType)(0),               // 19: nox.plugin.v1.ArtifactType
+	(*Artifact)(nil),                // 20: nox.plugin.v1.Artifact
 }
 var file_nox_plugin_v1_plugin_proto_depIdxs = []int32{
 	3,  // 0: nox.plugin.v1.GetManifestResponse.capabilities:type_name -> nox.plugin.v1.Capability
@@ -898,24 +937,27 @@ var file_nox_plugin_v1_plugin_proto_depIdxs = []int32{
 	5,  // 3: nox.plugin.v1.Capability.resources:type_name -> nox.plugin.v1.ResourceDef
 	12, // 4: nox.plugin.v1.ToolDef.input_schema:type_name -> google.protobuf.Struct
 	12, // 5: nox.plugin.v1.InvokeToolRequest.input:type_name -> google.protobuf.Struct
-	13, // 6: nox.plugin.v1.InvokeToolResponse.findings:type_name -> nox.plugin.v1.Finding
-	14, // 7: nox.plugin.v1.InvokeToolResponse.packages:type_name -> nox.plugin.v1.Package
-	15, // 8: nox.plugin.v1.InvokeToolResponse.ai_components:type_name -> nox.plugin.v1.AIComponent
-	9,  // 9: nox.plugin.v1.InvokeToolResponse.diagnostics:type_name -> nox.plugin.v1.Diagnostic
-	0,  // 10: nox.plugin.v1.Diagnostic.severity:type_name -> nox.plugin.v1.DiagnosticSeverity
-	16, // 11: nox.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> nox.plugin.v1.ArtifactType
-	17, // 12: nox.plugin.v1.StreamArtifactsResponse.artifact:type_name -> nox.plugin.v1.Artifact
-	1,  // 13: nox.plugin.v1.PluginService.GetManifest:input_type -> nox.plugin.v1.GetManifestRequest
-	7,  // 14: nox.plugin.v1.PluginService.InvokeTool:input_type -> nox.plugin.v1.InvokeToolRequest
-	10, // 15: nox.plugin.v1.PluginService.StreamArtifacts:input_type -> nox.plugin.v1.StreamArtifactsRequest
-	2,  // 16: nox.plugin.v1.PluginService.GetManifest:output_type -> nox.plugin.v1.GetManifestResponse
-	8,  // 17: nox.plugin.v1.PluginService.InvokeTool:output_type -> nox.plugin.v1.InvokeToolResponse
-	11, // 18: nox.plugin.v1.PluginService.StreamArtifacts:output_type -> nox.plugin.v1.StreamArtifactsResponse
-	16, // [16:19] is the sub-list for method output_type
-	13, // [13:16] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	13, // 6: nox.plugin.v1.InvokeToolRequest.scan_context:type_name -> nox.plugin.v1.ScanContext
+	14, // 7: nox.plugin.v1.InvokeToolResponse.findings:type_name -> nox.plugin.v1.Finding
+	15, // 8: nox.plugin.v1.InvokeToolResponse.packages:type_name -> nox.plugin.v1.Package
+	16, // 9: nox.plugin.v1.InvokeToolResponse.ai_components:type_name -> nox.plugin.v1.AIComponent
+	9,  // 10: nox.plugin.v1.InvokeToolResponse.diagnostics:type_name -> nox.plugin.v1.Diagnostic
+	17, // 11: nox.plugin.v1.InvokeToolResponse.graphs:type_name -> nox.plugin.v1.Graph
+	18, // 12: nox.plugin.v1.InvokeToolResponse.enrichments:type_name -> nox.plugin.v1.Enrichment
+	0,  // 13: nox.plugin.v1.Diagnostic.severity:type_name -> nox.plugin.v1.DiagnosticSeverity
+	19, // 14: nox.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> nox.plugin.v1.ArtifactType
+	20, // 15: nox.plugin.v1.StreamArtifactsResponse.artifact:type_name -> nox.plugin.v1.Artifact
+	1,  // 16: nox.plugin.v1.PluginService.GetManifest:input_type -> nox.plugin.v1.GetManifestRequest
+	7,  // 17: nox.plugin.v1.PluginService.InvokeTool:input_type -> nox.plugin.v1.InvokeToolRequest
+	10, // 18: nox.plugin.v1.PluginService.StreamArtifacts:input_type -> nox.plugin.v1.StreamArtifactsRequest
+	2,  // 19: nox.plugin.v1.PluginService.GetManifest:output_type -> nox.plugin.v1.GetManifestResponse
+	8,  // 20: nox.plugin.v1.PluginService.InvokeTool:output_type -> nox.plugin.v1.InvokeToolResponse
+	11, // 21: nox.plugin.v1.PluginService.StreamArtifacts:output_type -> nox.plugin.v1.StreamArtifactsResponse
+	19, // [19:22] is the sub-list for method output_type
+	16, // [16:19] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_nox_plugin_v1_plugin_proto_init() }

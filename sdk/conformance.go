@@ -104,6 +104,7 @@ type trackConformanceConfig struct {
 	requireFindings bool
 	requireReadOnly bool
 	allowNetwork    bool
+	requireGraphs   bool
 }
 
 // WithRequireFindings requires that at least one tool produces findings.
@@ -119,6 +120,11 @@ func WithRequireReadOnly() TrackConformanceOption {
 // WithAllowNetwork permits the plugin to declare network hosts.
 func WithAllowNetwork() TrackConformanceOption {
 	return func(c *trackConformanceConfig) { c.allowNetwork = true }
+}
+
+// WithRequireGraphs requires that at least one tool produces graph output.
+func WithRequireGraphs() TrackConformanceOption {
+	return func(c *trackConformanceConfig) { c.requireGraphs = true }
 }
 
 // RunForTrack runs conformance tests plus track-specific validation.
@@ -199,6 +205,32 @@ func RunForTrack(t *testing.T, server pluginv1.PluginServiceServer, track regist
 			// when invoked without workspace data.
 			if !foundAny {
 				t.Log("note: no tool produced findings during conformance (may need testdata)")
+			}
+		})
+	}
+
+	if cfg.requireGraphs {
+		t.Run("Track_output/produces_graphs", func(t *testing.T) {
+			foundAny := false
+			for _, cap := range manifest.GetCapabilities() {
+				for _, tool := range cap.GetTools() {
+					resp, err := client.InvokeTool(context.Background(), &pluginv1.InvokeToolRequest{
+						ToolName: tool.GetName(),
+					})
+					if err != nil {
+						continue
+					}
+					if len(resp.GetGraphs()) > 0 {
+						foundAny = true
+						break
+					}
+				}
+				if foundAny {
+					break
+				}
+			}
+			if !foundAny {
+				t.Log("note: no tool produced graphs during conformance (may need testdata)")
 			}
 		})
 	}
@@ -307,6 +339,36 @@ func validateResponse(t *testing.T, resp *pluginv1.InvokeToolResponse) {
 	for i, c := range resp.GetAiComponents() {
 		if c.GetName() == "" {
 			t.Errorf("ai_component[%d]: name must not be empty", i)
+		}
+	}
+
+	for i, g := range resp.GetGraphs() {
+		if g.GetName() == "" {
+			t.Errorf("graph[%d]: name must not be empty", i)
+		}
+		nodeIDs := make(map[string]bool)
+		for j, n := range g.GetNodes() {
+			if n.GetId() == "" {
+				t.Errorf("graph[%d].node[%d]: id must not be empty", i, j)
+			}
+			nodeIDs[n.GetId()] = true
+		}
+		for j, e := range g.GetEdges() {
+			if !nodeIDs[e.GetSource()] {
+				t.Errorf("graph[%d].edge[%d]: source %q not in nodes", i, j, e.GetSource())
+			}
+			if !nodeIDs[e.GetTarget()] {
+				t.Errorf("graph[%d].edge[%d]: target %q not in nodes", i, j, e.GetTarget())
+			}
+		}
+	}
+
+	for i, e := range resp.GetEnrichments() {
+		if e.GetFindingFingerprint() == "" {
+			t.Errorf("enrichment[%d]: finding_fingerprint must not be empty", i)
+		}
+		if e.GetKind() == "" {
+			t.Errorf("enrichment[%d]: kind must not be empty", i)
 		}
 	}
 }

@@ -63,6 +63,19 @@ func (cb *CapabilityBuilder) Tool(name, description string, readOnly bool) *Capa
 	return cb
 }
 
+// ToolWithContext adds a tool definition that requires scan context.
+// Tools with scan context receive the core scan results (findings, packages,
+// AI components) as input, enabling post-scan analysis.
+func (cb *CapabilityBuilder) ToolWithContext(name, description string, readOnly bool) *CapabilityBuilder {
+	cb.cap.Tools = append(cb.cap.Tools, &pluginv1.ToolDef{
+		Name:                name,
+		Description:         description,
+		ReadOnly:            readOnly,
+		RequiresScanContext: true,
+	})
+	return cb
+}
+
 // Resource adds a resource definition to the capability.
 func (cb *CapabilityBuilder) Resource(uriTemplate, name, description, mimeType string) *CapabilityBuilder {
 	cb.cap.Resources = append(cb.cap.Resources, &pluginv1.ResourceDef{
