@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 92,
+  "version": 112,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -8,7 +8,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Go module initialized, directory structure created, golangci-lint configured, Makefile with build/test/lint/run/clean/check targets, .gitignore added. Build/test/vet all pass."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-10": {
       "status": "verified",
@@ -16,7 +17,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Dependency scanner fully implemented in core/analyzers/deps/ with 4 lockfile parsers (Go, npm, Python, Ruby), PackageInventory, ScanArtifacts integration, and 21 passing tests. OSV API calls deferred as follow-up."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-11": {
       "status": "verified",
@@ -24,7 +26,8 @@
       "owner": "ai-agent",
       "evidence": [
         "CycloneDX 1.5 and SPDX 2.3 SBOM generators implemented in core/report/sbom/ with PURL generation for all ecosystems, deterministic output, WriteToFile support, and 17 passing tests"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-12": {
       "status": "verified",
@@ -32,7 +35,8 @@
       "owner": "ai-agent",
       "evidence": [
         "IaC analyzer implemented in core/analyzers/iac/ with 10 rules (3 Docker, 3 Terraform, 4 Kubernetes) and 20 passing tests including false positive prevention and file pattern filtering"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-13": {
       "status": "verified",
@@ -40,7 +44,8 @@
       "owner": "ai-agent",
       "evidence": [
         "AI security analyzer implemented in core/analyzers/ai/ with 8 rules (prompt injection, MCP tool exposure, insecure logging, unpinned models) plus AI inventory extractor with MCP config parsing, prompt/agent detection, JSON serialization. 25 passing tests."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-14": {
       "status": "verified",
@@ -48,7 +53,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit f51779f - feat: implement MCP server with scan tools and artifact resources"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-15": {
       "status": "verified",
@@ -56,7 +62,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit 14fe7d9 — feat: implement agent-assist module with LLM-powered finding explanations. assist/ package with Provider interface, OpenAI provider, Explainer orchestrator with batching, CLI explain command, 16 new tests all passing."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-16": {
       "status": "verified",
@@ -64,7 +71,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit 45c238d: feat: define protobuf plugin interface with gRPC service contract"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-17": {
       "status": "verified",
@@ -72,7 +80,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit d9ed482: feat: implement plugin host runtime with safety policy and type conversion"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-18": {
       "status": "verified",
@@ -80,7 +89,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit d9ed482: safety engine is part of plugin host runtime (rate limiting, redaction, read-only enforcement, bandwidth limits)"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-19": {
       "status": "verified",
@@ -88,7 +98,8 @@
       "owner": "ai-agent",
       "evidence": [
         "sdk/ package complete: types.go, manifest.go, response.go, server.go, conformance.go with full test coverage. Not yet committed."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-2": {
       "status": "verified",
@@ -96,7 +107,8 @@
       "owner": "ai-agent",
       "evidence": [
         "GitHub Actions CI workflow created at .github/workflows/ci.yml with Go 1.23, golangci-lint, make check, make build"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-20": {
       "status": "verified",
@@ -104,7 +116,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit 80085c5: feat: bridge MCP server to plugin host for agent-accessible plugin tools"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-21": {
       "status": "verified",
@@ -112,7 +125,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit ca7e84b — registry client with semver resolution and file caching"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-22": {
       "status": "verified",
@@ -120,7 +134,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit d9be4b6: registry/oci/ subpackage with Store, Fetch, GC, platform matching, tar.gz extraction with path traversal protection, mirror support, content-addressed sharded cache, and 30 passing tests."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-23": {
       "status": "verified",
@@ -128,7 +143,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Implemented registry/trust/ subpackage: trust.go (TrustLevel, TrustViolation, VerifyResult), digest.go (SHA-256 parsing/verification), signature.go (Ed25519 verification with raw+PKIX PEM), keyring.go (JSON keyring with atomic writes), policy.go (Default/Enterprise/Permissive presets), verify.go (Verifier orchestrator with functional options). 45 tests passing, stdlib-only, zero new dependencies."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-24": {
       "status": "verified",
@@ -136,7 +152,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit c794f43 — feat: implement CLI plugin and registry management commands. cli/plugin_cmd.go (search, info, install, update, list, remove, call) and cli/registry_cmd.go (add, list, remove) with full test coverage."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-25": {
       "status": "verified",
@@ -144,7 +161,8 @@
       "owner": "ai-agent",
       "evidence": [
         "commit e262762 — feat: integrate plugin capability discovery into assist module. PluginSource interface, HostAdapter, enrichment tools, CLI --plugin-dir/--enrich flags, 15 new tests all passing."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-26": {
       "status": "verified",
@@ -152,7 +170,8 @@
       "owner": "ai-agent",
       "evidence": [
         "All 19 git tests pass including 8 WalkHistory tests (BasicTraversal, MaxDepth, SinceBookmark, EmptyRepo, DeletedFiles, BinaryFilesSkipped, CallbackError, ModifiedFiles)"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-27": {
       "status": "verified",
@@ -160,7 +179,8 @@
       "owner": "ai-agent",
       "evidence": [
         "RunHistoryScan implemented in core/scan.go with 7 tests (DetectsSecretInHistory, EmptyRepo, MaxDepth, CleanHistory, MultipleCommitsAccumulate, NotAGitRepo, ResultHasRules). CLI flags --history and --history-depth added. All 30+ test suites pass."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-28": {
       "status": "verified",
@@ -168,7 +188,8 @@
       "owner": "ai-agent",
       "evidence": [
         "EntropyMatcher fully implemented in core/rules/entropy.go with 16+ tests. Registered in matcher registry."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-29": {
       "status": "verified",
@@ -176,7 +197,8 @@
       "owner": "ai-agent",
       "evidence": [
         "3 entropy-based rules (SEC-161/162/163) added to builtinEntropyRules() in core/analyzers/secrets/rules.go. Integrated end-to-end: engine dispatches to EntropyMatcher via matcher registry. Tests updated: rule count (163), positive match examples, compile test skips entropy rules. All 14 secrets tests pass."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-3": {
       "status": "verified",
@@ -184,7 +206,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Canonical findings model implemented in core/findings/ with Finding, FindingSet, Location types, SHA-256 fingerprinting, deduplication, deterministic sorting. 11 tests all passing."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-30": {
       "status": "verified",
@@ -192,7 +215,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Fully implemented: install/uninstall/status subcommands, hook script generation, --severity-threshold flag, .pre-commit-hooks.yaml, staged scan mode via --staged flag and RunStagedScan(). 21 passing tests."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-31": {
       "status": "verified",
@@ -200,7 +224,8 @@
       "owner": "ai-agent",
       "evidence": [
         "--staged flag in scan command (cli/main.go:211), RunStagedScan (core/scan.go:289), RunStagedScanWithOptions (core/scan.go:294), tests for no-git-repo error, protect command integration. All passing."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-32": {
       "status": "verified",
@@ -208,7 +233,79 @@
       "owner": "ai-agent",
       "evidence": [
         "--rules flag in scan (cli/main.go:114), diff (cli/diff_cmd.go:22). rules_dir in .nox.yaml (core/config.go:47). loadCustomRules in core/scan.go handles file/dir. Validation: duplicate IDs, invalid YAML, missing fields all tested. 15+ tests in cli/custom_rules_test.go, 7 tests in core/scan_test.go for custom rules."
-      ]
+      ],
+      "elapsed_minutes": 0
+    },
+    "task-33": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — proto schema: Graph, Enrichment, ScanContext messages in types.proto/plugin.proto"
+      ],
+      "started_at": "2026-02-17T21:48:04.000449+01:00",
+      "completed_at": "2026-02-17T21:48:10.337916+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-34": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — core/graph/graph.go, core/findings/enrichment.go, core/scan.go with tests"
+      ],
+      "started_at": "2026-02-17T21:48:17.723291+01:00",
+      "completed_at": "2026-02-17T21:48:22.428858+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-35": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — plugin/convert.go with roundtrip and nil-safety tests in convert_test.go"
+      ],
+      "started_at": "2026-02-17T21:48:31.657752+01:00",
+      "completed_at": "2026-02-17T21:48:37.290128+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-36": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — plugin/host.go InvokePostScan, MergeResults, estimateResponseSize with tests in host_test.go"
+      ],
+      "started_at": "2026-02-17T21:48:46.505486+01:00",
+      "completed_at": "2026-02-17T21:48:51.246439+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-37": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — sdk/response.go (GraphBuilder, EnrichmentBuilder), sdk/manifest.go (ToolWithContext), sdk/types.go, sdk/request.go with tests"
+      ],
+      "started_at": "2026-02-17T21:48:18.058975+01:00",
+      "completed_at": "2026-02-17T21:48:23.445073+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-38": {
+      "status": "verified",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "3e3c7a4 — sdk/conformance.go graph/enrichment validation, conformance_test.go with graph and enrichment tests"
+      ],
+      "started_at": "2026-02-17T21:48:32.133353+01:00",
+      "completed_at": "2026-02-17T21:48:38.428283+01:00",
+      "elapsed_minutes": 0
+    },
+    "task-39": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
     },
     "task-4": {
       "status": "verified",
@@ -216,7 +313,58 @@
       "owner": "ai-agent",
       "evidence": [
         "File discovery engine implemented in core/discovery/ with Walker, ClassifierRegistry, DefaultClassifier, gitignore support. 24 tests all passing."
-      ]
+      ],
+      "elapsed_minutes": 0
+    },
+    "task-40": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-41": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-42": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-43": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-44": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-45": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-46": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-47": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-48": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-49": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
     },
     "task-5": {
       "status": "verified",
@@ -224,7 +372,43 @@
       "owner": "ai-agent",
       "evidence": [
         "YAML rule engine implemented in core/rules/ with Rule, RuleSet, loader (YAML), RegexMatcher, Engine.ScanFile. 23 tests all passing. Uses gopkg.in/yaml.v3."
-      ]
+      ],
+      "elapsed_minutes": 0
+    },
+    "task-50": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-51": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-52": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-53": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-54": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-55": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-56": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
     },
     "task-6": {
       "status": "verified",
@@ -232,7 +416,8 @@
       "owner": "ai-agent",
       "evidence": [
         "Secrets scanner fully implemented in core/analyzers/secrets/ with 5 built-in rules (AWS keys, GitHub tokens, private keys, API keys), rule engine integration, and 14 passing tests"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-7": {
       "status": "verified",
@@ -240,7 +425,8 @@
       "owner": "ai-agent",
       "evidence": [
         "JSON findings output implemented in core/report/ with Reporter interface, JSONReporter, ReportMeta, WriteToFile. 6 tests all passing. Standard library only."
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-8": {
       "status": "verified",
@@ -248,7 +434,8 @@
       "owner": "ai-agent",
       "evidence": [
         "CLI scaffold implemented with scan command, --format (json,sarif,cdx,spdx,all), --output, --quiet, --verbose flags, proper exit codes (0=clean, 1=findings, 2=error), and 10 passing tests including end-to-end scan verification"
-      ]
+      ],
+      "elapsed_minutes": 0
     },
     "task-9": {
       "status": "verified",
@@ -256,8 +443,9 @@
       "owner": "ai-agent",
       "evidence": [
         "SARIF 2.1.0 reporter fully implemented in core/report/sarif/ with GitHub Code Scanning compatibility, rule catalog generation, deterministic output, fingerprint preservation, and 24 passing tests"
-      ]
+      ],
+      "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-02-14T16:26:46.362686+01:00"
+  "updated_at": "2026-02-17T21:48:54.896191+01:00"
 }

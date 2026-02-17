@@ -160,3 +160,53 @@ Wire up the existing YAML rule loader (core/rules/loader.go) to the CLI via --ru
 Expand secrets rule library to 900+ detectors matching TruffleHog coverage (ACHIEVED: 938 rules). This includes: (1) Import existing Gitleaks/Checkov rule definitions, (2) Add AWS, GCP, Azure, GitHub, GitLab, Slack, Jira, Docker, JWT, and other cloud/service-specific patterns, (3) Add generic high-entropy patterns with configurable thresholds, (4) Add API key formats for 200+ services, (5) Add private key formats (RSA, EC, PGP, SSH), (6) Add database connection string patterns, (7) Implement heuristic context scoring to reduce false positives, (8) Add comprehensive tests with known secrets and non-secrets.
 
 ---
+
+## Plugin Protocol Enhancement — Graph, Enrichment & Scan Context Primitives
+
+Extend the plugin protocol with three new backward-compatible primitives required by Phase 7 features (AI triage, IaC cross-resource analysis, reachability analysis, K8s policy, taint tracking). All proto changes are additive (new fields/messages only) — old plugins and hosts remain fully compatible.
+
+**Graph type**: Nodes + directed edges for relationship modeling. Supports NodeKind (resource, function, data, service, policy) and EdgeKind (depends_on, calls, flows_to, exposes, references). Domain types in core/graph/, proto messages in types.proto, fluent GraphBuilder in SDK.
+
+**Enrichment type**: Annotates existing findings without modifying them, preserving determinism of the core scan engine. Links to findings via fingerprint, carries kind (triage, reachability, explanation), markdown body, metadata, confidence, and source plugin name. Domain type in core/findings/enrichment.go, fluent EnrichmentBuilder in SDK.
+
+**ScanContext**: Carries core scan results (findings, packages, AI components) to post-scan plugins via InvokeToolRequest. Enabled by requires_scan_context=true on ToolDef. Host implements InvokePostScan() to orchestrate post-scan plugin invocation and merge results back.
+
+**SDK extensions**: GraphBuilder and EnrichmentBuilder fluent APIs in sdk/response.go, ToolWithContext() in sdk/manifest.go for declaring post-scan tools, NodeKind/EdgeKind/Confidence constants in sdk/types.go, ToolRequest helper in sdk/request.go for accessing scan context.
+
+**Conformance**: Extended validateResponse() in sdk/conformance.go to validate graph structure (node IDs, edge endpoint references) and enrichment fields. Track-specific options (WithRequireGraphs, WithRequireEnrichments) for track conformance testing.
+
+**Bidirectional conversion**: Full proto↔domain conversion for Graph, Enrichment, ScanContext, NodeKind, EdgeKind in plugin/convert.go with roundtrip tests.
+
+**Host extensions**: MergeResults() handles graphs and enrichments, estimateResponseSize() accounts for new types, InvokePostScan() orchestrates post-scan plugin lifecycle.
+
+---
+
+## Reachability Analysis Plugin
+
+Language-specific call graph construction for Go, Python, and JavaScript/TypeScript to determine whether vulnerable dependency functions are actually called. Reduces false positives in dependency scanning by filtering unreachable code paths. Implemented as a plugin on the core-analysis track using the new Graph and Enrichment primitives. The plugin emits a call graph (function→function edges with EdgeKindCalls) and produces Enrichment annotations on dependency findings marking them as reachable or unreachable. Uses Go's go/callgraph for Go, tree-sitter for Python/JS/TS AST parsing. Requires scan context (findings + packages) from the core scan to know which dependency findings to evaluate.
+
+---
+
+## Graph-Based IaC Cross-Resource Analysis Plugin
+
+Build a resource dependency graph from Terraform state/plan files and detect misconfigurations that span multiple resources (e.g., public subnet + no NACL + open security group, S3 bucket + no encryption + public ACL, RDS instance + public subnet + no encryption at rest). Implemented as a plugin on the core-analysis track. Emits Graph output with NodeKindResource nodes and EdgeKindDependsOn/EdgeKindReferences edges. Cross-resource rules are defined declaratively as graph patterns (subgraph matching). Extends existing tfplan.go resource parsing with a relationship model. Produces findings with precise multi-resource locations.
+
+---
+
+## Cross-File Taint Analysis Plugin
+
+Dataflow tracking across function and file boundaries to detect untrusted input flowing to sensitive sinks (SQL queries, shell commands, eval, file operations, HTTP responses). Language-specific AST parsing for Go, Python, and JavaScript/TypeScript using tree-sitter grammars. Implemented as a plugin on the core-analysis track. Emits Graph output with NodeKindFunction/NodeKindData nodes and EdgeKindFlowsTo edges representing taint propagation paths. Produces findings with full taint path in the finding metadata (source→intermediate→sink). Taint sources: HTTP request params, environment variables, file reads, user input. Taint sinks: SQL, shell exec, eval, file write, HTTP response body.
+
+---
+
+## AI-Powered Triage Plugin
+
+LLM-assisted severity adjustment and false-positive classification based on code context. Implemented as a post-scan plugin that consumes ScanContext (all findings from core scan) and produces Enrichment annotations with kind=triage. Each enrichment carries a verdict (true_positive, false_positive, needs_review), adjusted severity, confidence score, and markdown explanation. Integrates with the assist/ module's LLM provider abstraction. Opt-in only — never modifies original findings, only adds enrichments. Supports configurable LLM backends (OpenAI, Anthropic, Ollama for offline use). Includes historical pattern learning from user-confirmed triage decisions stored in .nox/triage-history.json. Planned on the agent-assistance track.
+
+---
+
+## Kubernetes Runtime Scanning Plugin
+
+Live cluster scanning via kubectl/Kubernetes API access. Compares running workloads against IaC definitions for drift detection. Runtime-specific checks: containers running as root, mounted secrets in environment variables, missing network policies, privileged containers, host namespace sharing, missing resource limits, outdated images. Implemented as a plugin on the dynamic-runtime track with RiskActive safety class and needs_confirmation=true (since it accesses live infrastructure). Emits Graph output with NodeKindService/NodeKindResource nodes representing cluster topology. Produces findings for runtime misconfigurations and Enrichments linking runtime state to existing IaC findings (drift detection). Clearly marked as optional — breaks the offline-first constraint. Requires KUBECONFIG or in-cluster auth.
+
+---
