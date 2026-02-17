@@ -917,16 +917,16 @@ jobs:
     permissions:
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run Nox security scan
-        uses: nox-hq/nox@v1
+        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
         with:
           path: '.'
           format: sarif
 
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
         if: always()
         with:
           sarif_file: nox-results/results.sarif
@@ -956,19 +956,19 @@ jobs:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@v1
+        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
         with:
           format: all
           output: reports
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
         if: always()
         with:
           sarif_file: reports/results.sarif
 
       - name: Upload reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: nox-reports
@@ -979,7 +979,7 @@ jobs:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@v1
+        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
         with:
           fail-on-findings: 'false'
 ```
@@ -996,8 +996,8 @@ jobs:
   nox:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: '1.25'
 
@@ -1008,13 +1008,13 @@ jobs:
         run: nox scan . --format sarif,json --output results/
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
         if: always()
         with:
           sarif_file: results/results.sarif
 
       - name: Upload findings artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: nox-findings

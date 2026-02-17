@@ -60,12 +60,12 @@ reports/
 
 ```yaml
 # .github/workflows/security.yml
-- uses: nox-hq/nox@v1
+- uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
   with:
     path: '.'
     format: sarif
     annotate: 'true'    # Post inline PR comments (default: true)
-- uses: github/codeql-action/upload-sarif@v3
+- uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
   if: always()
   with:
     sarif_file: nox-results/results.sarif

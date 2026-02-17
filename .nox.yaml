@@ -15,3 +15,6 @@ scan:
     - "core/compliance/data.go"
     - "registry/trust/signature.go"
     - "cli/plugin_cmd.go"
+    # Documentation files contain example code snippets with token references
+    - "docs/*.md"
+    - "README.md"
