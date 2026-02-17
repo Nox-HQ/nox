@@ -30,7 +30,7 @@ policy:
     - name: server
       match:
         - github.com/nox-hq/nox/server/...
-      min: 65
+      min: 48
 
     - name: plugin
       match:

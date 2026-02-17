@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,8 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
+	mcp "github.com/felixgeelhaar/mcp-go"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/annotate"
 	"github.com/nox-hq/nox/core/badge"
@@ -36,14 +36,82 @@ const (
 	maxOutputBytes = 1 << 20
 )
 
+// --- Input structs for typed tool handlers ---
+
+type scanInput struct {
+	Path string `json:"path"`
+}
+type getFindingsInput struct {
+	Format string `json:"format,omitempty"`
+}
+type getSBOMInput struct {
+	Format string `json:"format,omitempty"`
+}
+type getFindingDetailInput struct {
+	FindingID    string  `json:"finding_id"`
+	ContextLines float64 `json:"context_lines,omitempty"`
+}
+type listFindingsInput struct {
+	Severity          string  `json:"severity,omitempty"`
+	Rule              string  `json:"rule,omitempty"`
+	File              string  `json:"file,omitempty"`
+	Limit             float64 `json:"limit,omitempty"`
+	IncludeSuppressed bool    `json:"include_suppressed,omitempty"`
+}
+type baselineStatusInput struct {
+	Path string `json:"path"`
+}
+type baselineAddInput struct {
+	Path        string `json:"path"`
+	Fingerprint string `json:"fingerprint"`
+	Reason      string `json:"reason,omitempty"`
+}
+type diffInput struct {
+	Path string `json:"path"`
+	Base string `json:"base,omitempty"`
+	Head string `json:"head,omitempty"`
+}
+type badgeInput struct {
+	Label string `json:"label,omitempty"`
+}
+type emptyInput struct{}
+type protectStatusInput struct {
+	Path string `json:"path"`
+}
+type vexStatusInput struct {
+	Path string `json:"path"`
+}
+type complianceReportInput struct {
+	Framework string `json:"framework"`
+}
+type dashboardInput struct {
+	Path string `json:"path,omitempty"`
+}
+type pluginCallToolInput struct {
+	Tool          string         `json:"tool"`
+	Input         map[string]any `json:"input,omitempty"`
+	WorkspaceRoot string         `json:"workspace_root,omitempty"`
+}
+type pluginReadResourceInput struct {
+	Plugin string `json:"plugin"`
+	URI    string `json:"uri"`
+}
+
+// --- Multi-project cache ---
+
+type projectCache struct {
+	result   *nox.ScanResult
+	basePath string
+}
+
 // Server is the nox MCP server.
 type Server struct {
 	version      string
 	allowedPaths []string
 
-	mu           sync.RWMutex
-	cache        *nox.ScanResult
-	scanBasePath string // base path of last scan for source context
+	mu       sync.RWMutex
+	projects map[string]*projectCache // key: absolute path
+	lastPath string                   // most recently scanned project
 
 	host    *plugin.Host      // optional plugin host
 	aliases map[string]string // tool name aliases
@@ -77,6 +145,7 @@ func New(version string, allowedPaths []string, opts ...ServerOption) *Server {
 	s := &Server{
 		version:      version,
 		allowedPaths: resolved,
+		projects:     make(map[string]*projectCache),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -84,352 +153,240 @@ func New(version string, allowedPaths []string, opts ...ServerOption) *Server {
 	return s
 }
 
+// getCache returns the project cache for the given path.
+// If path is empty, returns the most recently scanned project's cache.
+func (s *Server) getCache(path string) *projectCache {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if path == "" {
+		path = s.lastPath
+	}
+	if path == "" {
+		return nil
+	}
+	return s.projects[path]
+}
+
+// setCache stores a scan result under the given project path.
+func (s *Server) setCache(path string, result *nox.ScanResult) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.projects[abs] = &projectCache{
+		result:   result,
+		basePath: abs,
+	}
+	s.lastPath = abs
+}
+
 // Serve starts the MCP server on stdio and blocks until the client disconnects.
 func (s *Server) Serve() error {
-	srv := mcpserver.NewMCPServer(
-		"nox",
-		s.version,
-		mcpserver.WithRecovery(),
-		mcpserver.WithToolCapabilities(false),
-		mcpserver.WithResourceCapabilities(false, false),
-	)
+	srv := mcp.NewServer(mcp.ServerInfo{
+		Name:    "nox",
+		Version: s.version,
+	})
 
 	s.registerTools(srv)
 	s.registerResources(srv)
 
-	return mcpserver.ServeStdio(srv)
+	return mcp.ServeStdio(context.Background(), srv)
 }
 
-func (s *Server) registerTools(srv *mcpserver.MCPServer) {
-	// scan tool — runs the full scan pipeline.
-	srv.AddTool(
-		mcp.NewTool("scan",
-			mcp.WithDescription("Scan a directory for security findings, dependencies, and AI components"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the directory to scan"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleScan,
-	)
+func (s *Server) registerTools(srv *mcp.Server) {
+	srv.Tool("scan").
+		Description("Scan a directory for security findings, dependencies, and AI components").
+		ReadOnly().
+		Handler(s.handleScan)
 
-	// get_findings tool — returns findings from the last scan.
-	srv.AddTool(
-		mcp.NewTool("get_findings",
-			mcp.WithDescription("Get security findings from the last scan"),
-			mcp.WithString("format",
-				mcp.Description("Output format: json or sarif"),
-				mcp.Enum("json", "sarif"),
-				mcp.DefaultString("json"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleGetFindings,
-	)
+	srv.Tool("get_findings").
+		Description("Get security findings from the last scan").
+		ReadOnly().
+		Handler(s.handleGetFindings)
 
-	// get_sbom tool — returns SBOM from the last scan.
-	srv.AddTool(
-		mcp.NewTool("get_sbom",
-			mcp.WithDescription("Get software bill of materials from the last scan"),
-			mcp.WithString("format",
-				mcp.Description("Output format: cdx or spdx"),
-				mcp.Enum("cdx", "spdx"),
-				mcp.DefaultString("cdx"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleGetSBOM,
-	)
+	srv.Tool("get_sbom").
+		Description("Get software bill of materials from the last scan").
+		ReadOnly().
+		Handler(s.handleGetSBOM)
 
-	// get_finding_detail tool — returns enriched detail for a single finding.
-	srv.AddTool(
-		mcp.NewTool("get_finding_detail",
-			mcp.WithDescription("Get detailed information about a finding including source context and remediation"),
-			mcp.WithString("finding_id",
-				mcp.Description("Finding ID (e.g., SEC-002:config.env:8)"),
-				mcp.Required(),
-			),
-			mcp.WithNumber("context_lines",
-				mcp.Description("Number of context lines around the finding"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleGetFindingDetail,
-	)
+	srv.Tool("get_finding_detail").
+		Description("Get detailed information about a finding including source context and remediation").
+		ReadOnly().
+		Handler(s.handleGetFindingDetail)
 
-	// list_findings tool — returns filtered findings with rule metadata.
-	srv.AddTool(
-		mcp.NewTool("list_findings",
-			mcp.WithDescription("List findings with optional severity, rule, and file filters"),
-			mcp.WithString("severity",
-				mcp.Description("Comma-separated severities: critical,high,medium,low,info"),
-			),
-			mcp.WithString("rule",
-				mcp.Description("Rule ID pattern (e.g., AI-*, SEC-001)"),
-			),
-			mcp.WithString("file",
-				mcp.Description("File path pattern"),
-			),
-			mcp.WithNumber("limit",
-				mcp.Description("Max findings to return (default: 50)"),
-			),
-			mcp.WithBoolean("include_suppressed",
-				mcp.Description("Include suppressed/baselined findings (default: false)"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleListFindings,
-	)
+	srv.Tool("list_findings").
+		Description("List findings with optional severity, rule, and file filters").
+		ReadOnly().
+		Handler(s.handleListFindings)
 
-	// baseline_status tool — returns baseline statistics.
-	srv.AddTool(
-		mcp.NewTool("baseline_status",
-			mcp.WithDescription("Show baseline statistics: total entries, expired count, per-severity breakdown"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the project root"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleBaselineStatus,
-	)
+	srv.Tool("baseline_status").
+		Description("Show baseline statistics: total entries, expired count, per-severity breakdown").
+		ReadOnly().
+		Handler(s.handleBaselineStatus)
 
-	// baseline_add tool — add a finding to the baseline by fingerprint.
-	srv.AddTool(
-		mcp.NewTool("baseline_add",
-			mcp.WithDescription("Add a finding to the baseline by fingerprint"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the project root"),
-				mcp.Required(),
-			),
-			mcp.WithString("fingerprint",
-				mcp.Description("Finding fingerprint to baseline"),
-				mcp.Required(),
-			),
-			mcp.WithString("reason",
-				mcp.Description("Reason for baselining this finding"),
-			),
-		),
-		s.handleBaselineAdd,
-	)
+	srv.Tool("baseline_add").
+		Description("Add a finding to the baseline by fingerprint").
+		Handler(s.handleBaselineAdd)
 
-	// diff tool — scan changed files between git refs.
-	srv.AddTool(
-		mcp.NewTool("diff",
-			mcp.WithDescription("Scan only changed files between two git refs and return findings"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the git repository"),
-				mcp.Required(),
-			),
-			mcp.WithString("base",
-				mcp.Description("Base git ref for comparison (default: main)"),
-				mcp.DefaultString("main"),
-			),
-			mcp.WithString("head",
-				mcp.Description("Head git ref for comparison (default: HEAD)"),
-				mcp.DefaultString("HEAD"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleDiff,
-	)
+	srv.Tool("diff").
+		Description("Scan only changed files between two git refs and return findings").
+		ReadOnly().
+		Handler(s.handleDiff)
 
-	// badge tool — generate an SVG badge from cached scan results.
-	srv.AddTool(
-		mcp.NewTool("badge",
-			mcp.WithDescription("Generate a security grade SVG badge from the last scan"),
-			mcp.WithString("label",
-				mcp.Description("Badge label text (default: nox)"),
-				mcp.DefaultString("nox"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleBadge,
-	)
+	srv.Tool("badge").
+		Description("Generate a security grade SVG badge from the last scan").
+		ReadOnly().
+		Handler(s.handleBadge)
 
-	// version tool — return nox version info.
-	srv.AddTool(
-		mcp.NewTool("version",
-			mcp.WithDescription("Return nox version, commit, and build date"),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleVersion,
-	)
+	srv.Tool("version").
+		Description("Return nox version, commit, and build date").
+		ReadOnly().
+		Handler(s.handleVersion)
 
-	// rules tool — list all available rules with metadata.
-	srv.AddTool(
-		mcp.NewTool("rules",
-			mcp.WithDescription("List all security rules with ID, description, severity, CWE, and remediation"),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleRules,
-	)
+	srv.Tool("rules").
+		Description("List all security rules with ID, description, severity, CWE, and remediation").
+		ReadOnly().
+		Handler(s.handleRules)
 
-	// protect_status tool — check pre-commit hook installation status.
-	srv.AddTool(
-		mcp.NewTool("protect_status",
-			mcp.WithDescription("Check whether the nox pre-commit hook is installed in a git repository"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the git repository"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleProtectStatus,
-	)
+	srv.Tool("protect_status").
+		Description("Check whether the nox pre-commit hook is installed in a git repository").
+		ReadOnly().
+		Handler(s.handleProtectStatus)
 
-	// annotate tool — build a GitHub PR review payload from cached findings.
-	srv.AddTool(
-		mcp.NewTool("annotate",
-			mcp.WithDescription("Build a GitHub PR review payload from findings for posting via the GitHub API"),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleAnnotate,
-	)
+	srv.Tool("annotate").
+		Description("Build a GitHub PR review payload from findings for posting via the GitHub API").
+		ReadOnly().
+		Handler(s.handleAnnotate)
 
-	// vex_status tool — show VEX document summary.
-	srv.AddTool(
-		mcp.NewTool("vex_status",
-			mcp.WithDescription("Load a VEX document and show a summary of vulnerability statuses"),
-			mcp.WithString("path",
-				mcp.Description("Absolute path to the VEX JSON document"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleVEXStatus,
-	)
+	srv.Tool("vex_status").
+		Description("Load a VEX document and show a summary of vulnerability statuses").
+		ReadOnly().
+		Handler(s.handleVEXStatus)
 
-	// compliance_report tool — generate framework-specific compliance report.
-	srv.AddTool(
-		mcp.NewTool("compliance_report",
-			mcp.WithDescription("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic)"),
-			mcp.WithString("framework",
-				mcp.Description("Compliance framework: CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleComplianceReport,
-	)
+	srv.Tool("compliance_report").
+		Description("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic)").
+		ReadOnly().
+		Handler(s.handleComplianceReport)
 
-	// data_sensitivity_report tool — summarize PII/sensitive data findings.
-	srv.AddTool(
-		mcp.NewTool("data_sensitivity_report",
-			mcp.WithDescription("Summarize PII and sensitive data findings from the scan (DATA-* rules)"),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handleDataSensitivityReport,
-	)
+	srv.Tool("data_sensitivity_report").
+		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
+		ReadOnly().
+		Handler(s.handleDataSensitivityReport)
+
+	srv.Tool("dashboard").
+		Description("Generate an interactive HTML security dashboard from scan results").
+		ReadOnly().
+		Handler(s.handleDashboard)
 
 	s.registerPluginTools(srv)
 }
 
-func (s *Server) registerPluginTools(srv *mcpserver.MCPServer) {
+func (s *Server) registerPluginTools(srv *mcp.Server) {
 	if s.host == nil {
 		return
 	}
 
-	srv.AddTool(
-		mcp.NewTool("plugin.list",
-			mcp.WithDescription("List registered plugins and their capabilities"),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handlePluginList,
-	)
+	srv.Tool("plugin.list").
+		Description("List registered plugins and their capabilities").
+		ReadOnly().
+		Handler(s.handlePluginList)
 
-	srv.AddTool(
-		mcp.NewTool("plugin.call_tool",
-			mcp.WithDescription("Invoke a tool provided by a registered plugin"),
-			mcp.WithString("tool",
-				mcp.Description("Qualified (plugin.tool) or unqualified tool name"),
-				mcp.Required(),
-			),
-			mcp.WithObject("input",
-				mcp.Description("Input parameters for the tool"),
-			),
-			mcp.WithString("workspace_root",
-				mcp.Description("Absolute path to the workspace root"),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handlePluginCallTool,
-	)
+	srv.Tool("plugin.call_tool").
+		Description("Invoke a tool provided by a registered plugin").
+		ReadOnly().
+		Handler(s.handlePluginCallTool)
 
-	srv.AddTool(
-		mcp.NewTool("plugin.read_resource",
-			mcp.WithDescription("Read a resource from a plugin"),
-			mcp.WithString("plugin",
-				mcp.Description("Plugin name"),
-				mcp.Required(),
-			),
-			mcp.WithString("uri",
-				mcp.Description("Resource URI"),
-				mcp.Required(),
-			),
-			mcp.WithReadOnlyHintAnnotation(true),
-		),
-		s.handlePluginReadResource,
-	)
+	srv.Tool("plugin.read_resource").
+		Description("Read a resource from a plugin").
+		ReadOnly().
+		Handler(s.handlePluginReadResource)
 }
 
-func (s *Server) registerResources(srv *mcpserver.MCPServer) {
-	srv.AddResource(
-		mcp.NewResource("nox://findings", "Findings JSON",
-			mcp.WithResourceDescription("Security findings in nox JSON format"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceFindings,
-	)
+func (s *Server) registerResources(srv *mcp.Server) {
+	// Static resources (use last scan)
+	srv.Resource("nox://findings").
+		Name("Findings JSON").
+		Description("Security findings in nox JSON format").
+		MimeType("application/json").
+		Handler(s.handleResourceFindings)
 
-	srv.AddResource(
-		mcp.NewResource("nox://sarif", "SARIF Report",
-			mcp.WithResourceDescription("Security findings in SARIF 2.1.0 format"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceSARIF,
-	)
+	srv.Resource("nox://sarif").
+		Name("SARIF Report").
+		Description("Security findings in SARIF 2.1.0 format").
+		MimeType("application/json").
+		Handler(s.handleResourceSARIF)
 
-	srv.AddResource(
-		mcp.NewResource("nox://sbom/cdx", "CycloneDX SBOM",
-			mcp.WithResourceDescription("Software bill of materials in CycloneDX format"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceCDX,
-	)
+	srv.Resource("nox://sbom/cdx").
+		Name("CycloneDX SBOM").
+		Description("Software bill of materials in CycloneDX format").
+		MimeType("application/json").
+		Handler(s.handleResourceCDX)
 
-	srv.AddResource(
-		mcp.NewResource("nox://sbom/spdx", "SPDX SBOM",
-			mcp.WithResourceDescription("Software bill of materials in SPDX format"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceSPDX,
-	)
+	srv.Resource("nox://sbom/spdx").
+		Name("SPDX SBOM").
+		Description("Software bill of materials in SPDX format").
+		MimeType("application/json").
+		Handler(s.handleResourceSPDX)
 
-	srv.AddResource(
-		mcp.NewResource("nox://ai-inventory", "AI Inventory",
-			mcp.WithResourceDescription("Inventory of AI components discovered during scan"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceAIInventory,
-	)
+	srv.Resource("nox://ai-inventory").
+		Name("AI Inventory").
+		Description("Inventory of AI components discovered during scan").
+		MimeType("application/json").
+		Handler(s.handleResourceAIInventory)
 
-	srv.AddResource(
-		mcp.NewResource("nox://rules", "Security Rules",
-			mcp.WithResourceDescription("All available security rules with metadata"),
-			mcp.WithMIMEType("application/json"),
-		),
-		s.handleResourceRules,
-	)
+	srv.Resource("nox://rules").
+		Name("Security Rules").
+		Description("All available security rules with metadata").
+		MimeType("application/json").
+		Handler(s.handleResourceRules)
 
-	srv.AddResource(
-		mcp.NewResource("nox://dashboard", "Security Dashboard",
-			mcp.WithResourceDescription("Interactive HTML security dashboard with finding summary, rule breakdown, and dependency overview"),
-			mcp.WithMIMEType("text/html"),
-		),
-		s.handleResourceDashboard,
-	)
+	srv.Resource("nox://dashboard").
+		Name("Security Dashboard").
+		Description("Interactive HTML security dashboard with finding summary, rule breakdown, and dependency overview").
+		MimeType("text/html").
+		Handler(s.handleResourceDashboard)
+
+	// Templated resources (per-project, URL-encoded path)
+	srv.Resource("nox://project/{project}/findings").
+		Name("Project Findings").
+		Description("Security findings for a specific project (project = URL-encoded abs path)").
+		MimeType("application/json").
+		Handler(s.handleProjectResourceFindings)
+
+	srv.Resource("nox://project/{project}/sarif").
+		Name("Project SARIF Report").
+		Description("SARIF report for a specific project").
+		MimeType("application/json").
+		Handler(s.handleProjectResourceSARIF)
+
+	srv.Resource("nox://project/{project}/sbom/cdx").
+		Name("Project CycloneDX SBOM").
+		Description("CycloneDX SBOM for a specific project").
+		MimeType("application/json").
+		Handler(s.handleProjectResourceCDX)
+
+	srv.Resource("nox://project/{project}/sbom/spdx").
+		Name("Project SPDX SBOM").
+		Description("SPDX SBOM for a specific project").
+		MimeType("application/json").
+		Handler(s.handleProjectResourceSPDX)
+
+	srv.Resource("nox://project/{project}/ai-inventory").
+		Name("Project AI Inventory").
+		Description("AI inventory for a specific project").
+		MimeType("application/json").
+		Handler(s.handleProjectResourceAIInventory)
+
+	srv.Resource("nox://project/{project}/dashboard").
+		Name("Project Dashboard").
+		Description("HTML dashboard for a specific project").
+		MimeType("text/html").
+		Handler(s.handleProjectResourceDashboard)
 }
 
 // isPathAllowed checks if the given path is under one of the allowed workspace roots.
@@ -479,47 +436,42 @@ func (s *Server) isPathAllowed(path string) error {
 	return fmt.Errorf("path %q is outside allowed workspaces", path)
 }
 
-func (s *Server) handleScan(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
+// --- Tool handlers ---
+
+func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
+	}
+
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
+	}
+
+	result, err := nox.RunScan(input.Path)
 	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
+		return "Error: scan failed: " + err.Error(), nil
 	}
 
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	result, err := nox.RunScan(path)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("scan failed: %v", err)), nil
-	}
-
-	// Cache the result for subsequent tool/resource calls.
-	s.mu.Lock()
-	s.cache = result
-	s.scanBasePath = path
-	s.mu.Unlock()
+	s.setCache(input.Path, result)
 
 	findingCount := len(result.Findings.Findings())
 	pkgCount := len(result.Inventory.Packages())
 	aiCount := len(result.AIInventory.Components)
 
-	summary := fmt.Sprintf("Scan complete: %d findings, %d dependencies, %d AI components",
-		findingCount, pkgCount, aiCount)
-
-	return mcp.NewToolResultText(summary), nil
+	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %d AI components",
+		findingCount, pkgCount, aiCount), nil
 }
 
-func (s *Server) handleGetFindings(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	format := request.GetString("format", "json")
+	format := input.Format
+	if format == "" {
+		format = "json"
+	}
 
 	var data []byte
 	var err error
@@ -527,29 +479,29 @@ func (s *Server) handleGetFindings(_ context.Context, request mcp.CallToolReques
 	switch format {
 	case "sarif":
 		r := sarif.NewReporter(s.version, nil)
-		data, err = r.Generate(cache.Findings)
+		data, err = r.Generate(pc.result.Findings)
 	default:
 		r := report.NewJSONReporter(s.version)
-		data, err = r.Generate(cache.Findings)
+		data, err = r.Generate(pc.result.Findings)
 	}
 
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("report generation failed: %v", err)), nil
+		return "Error: report generation failed: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
-func (s *Server) handleGetSBOM(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	format := request.GetString("format", "cdx")
+	format := input.Format
+	if format == "" {
+		format = "cdx"
+	}
 
 	var data []byte
 	var err error
@@ -557,164 +509,80 @@ func (s *Server) handleGetSBOM(_ context.Context, request mcp.CallToolRequest) (
 	switch format {
 	case "spdx":
 		r := sbom.NewSPDXReporter(s.version)
-		data, err = r.Generate(cache.Inventory)
+		data, err = r.Generate(pc.result.Inventory)
 	default:
 		r := sbom.NewCycloneDXReporter(s.version)
-		data, err = r.Generate(cache.Inventory)
+		data, err = r.Generate(pc.result.Inventory)
 	}
 
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("SBOM generation failed: %v", err)), nil
+		return "Error: SBOM generation failed: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
-// Plugin bridge handlers.
-
-func (s *Server) handlePluginList(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if s.host == nil {
-		return mcp.NewToolResultError("no plugin host configured"), nil
+func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetailInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	data, err := serializePluginList(s.host.Plugins())
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("serializing plugin list: %v", err)), nil
-	}
-
-	return mcp.NewToolResultText(truncate(string(data))), nil
-}
-
-func (s *Server) handlePluginCallTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if s.host == nil {
-		return mcp.NewToolResultError("no plugin host configured"), nil
-	}
-
-	toolName, err := request.RequireString("tool")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: tool"), nil
-	}
-
-	toolName = s.resolveToolName(toolName)
-
-	var input map[string]any
-	if raw := request.GetArguments()["input"]; raw != nil {
-		if m, ok := raw.(map[string]any); ok {
-			input = m
-		}
-	}
-
-	workspaceRoot := request.GetString("workspace_root", "")
-	if workspaceRoot != "" {
-		if err := s.isPathAllowed(workspaceRoot); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-	}
-
-	resp, err := s.host.InvokeTool(ctx, toolName, input, workspaceRoot)
-	if err != nil {
-		if _, ok := err.(plugin.RuntimeViolation); ok {
-			return mcp.NewToolResultError(fmt.Sprintf("plugin violation: %v", err)), nil
-		}
-		return mcp.NewToolResultError(fmt.Sprintf("plugin tool invocation failed: %v", err)), nil
-	}
-
-	data, err := serializeInvokeResult(resp)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("serializing plugin response: %v", err)), nil
-	}
-
-	return mcp.NewToolResultText(truncate(string(data))), nil
-}
-
-func (s *Server) handlePluginReadResource(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return mcp.NewToolResultError("plugin.read_resource is not yet implemented"), nil
-}
-
-// resolveToolName resolves tool name aliases.
-func (s *Server) resolveToolName(name string) string {
-	if s.aliases == nil {
-		return name
-	}
-	if resolved, ok := s.aliases[name]; ok {
-		return resolved
-	}
-	return name
-}
-
-// Finding detail handlers.
-
-func (s *Server) handleGetFindingDetail(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	basePath := s.scanBasePath
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
-	}
-
-	findingID, err := request.RequireString("finding_id")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: finding_id"), nil
+	if input.FindingID == "" {
+		return "Error: missing required argument: finding_id", nil
 	}
 
 	contextLines := 5
-	if cl, ok := request.GetArguments()["context_lines"].(float64); ok && cl > 0 {
-		contextLines = int(cl)
+	if input.ContextLines > 0 {
+		contextLines = int(input.ContextLines)
 	}
 
-	store := detail.LoadFromSet(cache.Findings, basePath)
-	f, ok := store.ByID(findingID)
+	store := detail.LoadFromSet(pc.result.Findings, pc.basePath)
+	f, ok := store.ByID(input.FindingID)
 	if !ok {
-		return mcp.NewToolResultError(fmt.Sprintf("finding %q not found", findingID)), nil
+		return fmt.Sprintf("Error: finding %q not found", input.FindingID), nil
 	}
 
 	cat := catalog.Catalog()
-	enriched := detail.Enrich(&f, basePath, store.All(), cat, contextLines)
+	enriched := detail.Enrich(&f, pc.basePath, store.All(), cat, contextLines)
 
 	data, err := json.MarshalIndent(enriched, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling detail: %v", err)), nil
+		return "Error: marshalling detail: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
-func (s *Server) handleListFindings(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	basePath := s.scanBasePath
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	store := detail.LoadFromSet(cache.Findings, basePath)
+	store := detail.LoadFromSet(pc.result.Findings, pc.basePath)
 	cat := catalog.Catalog()
 
 	// Build filter.
 	var filter detail.Filter
-	if sev := request.GetString("severity", ""); sev != "" {
-		for _, s := range strings.Split(sev, ",") {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				filter.Severities = append(filter.Severities, findings.Severity(s))
+	if input.Severity != "" {
+		for _, sv := range strings.Split(input.Severity, ",") {
+			sv = strings.TrimSpace(sv)
+			if sv != "" {
+				filter.Severities = append(filter.Severities, findings.Severity(sv))
 			}
 		}
 	}
-	filter.RulePattern = request.GetString("rule", "")
-	filter.FilePattern = request.GetString("file", "")
-	// Only include suppressed findings if explicitly requested.
-	filter.IncludeSuppressed = request.GetBool("include_suppressed", false)
+	filter.RulePattern = input.Rule
+	filter.FilePattern = input.File
+	filter.IncludeSuppressed = input.IncludeSuppressed
 
 	filtered := store.Filter(filter)
 
 	// Apply limit.
 	limit := 50
-	if l, ok := request.GetArguments()["limit"].(float64); ok && l > 0 {
-		limit = int(l)
+	if input.Limit > 0 {
+		limit = int(input.Limit)
 	}
 	if len(filtered) > limit {
 		filtered = filtered[:limit]
@@ -736,148 +604,26 @@ func (s *Server) handleListFindings(_ context.Context, request mcp.CallToolReque
 
 	data, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling findings: %v", err)), nil
+		return "Error: marshalling findings: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
-}
-
-// Resource handlers.
-
-func (s *Server) handleResourceFindings(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	r := report.NewJSONReporter(s.version)
-	data, err := r.Generate(cache.Findings)
-	if err != nil {
-		return nil, fmt.Errorf("generating findings JSON: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
-}
-
-func (s *Server) handleResourceSARIF(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	r := sarif.NewReporter(s.version, nil)
-	data, err := r.Generate(cache.Findings)
-	if err != nil {
-		return nil, fmt.Errorf("generating SARIF: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
-}
-
-func (s *Server) handleResourceCDX(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	r := sbom.NewCycloneDXReporter(s.version)
-	data, err := r.Generate(cache.Inventory)
-	if err != nil {
-		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
-}
-
-func (s *Server) handleResourceSPDX(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	r := sbom.NewSPDXReporter(s.version)
-	data, err := r.Generate(cache.Inventory)
-	if err != nil {
-		return nil, fmt.Errorf("generating SPDX SBOM: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
-}
-
-func (s *Server) handleResourceAIInventory(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	data, err := cache.AIInventory.JSON()
-	if err != nil {
-		return nil, fmt.Errorf("generating AI inventory JSON: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
+	return truncate(string(data)), nil
 }
 
 // Baseline handlers.
 
-func (s *Server) handleBaselineStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
+func (s *Server) handleBaselineStatus(_ context.Context, input baselineStatusInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
 	}
 
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	bl, err := baseline.Load(baseline.DefaultPath(path))
+	bl, err := baseline.Load(baseline.DefaultPath(input.Path))
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("loading baseline: %v", err)), nil
+		return "Error: loading baseline: " + err.Error(), nil
 	}
 
 	type statusResponse struct {
@@ -896,60 +642,53 @@ func (s *Server) handleBaselineStatus(_ context.Context, request mcp.CallToolReq
 		Total:   bl.Len(),
 		Expired: bl.ExpiredCount(),
 		BySev:   bySev,
-		Path:    baseline.DefaultPath(path),
+		Path:    baseline.DefaultPath(input.Path),
 	}
 
 	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling response: %v", err)), nil
+		return "Error: marshalling response: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(string(data)), nil
+	return string(data), nil
 }
 
-func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
+func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
 	}
 
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	fingerprint, err := request.RequireString("fingerprint")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: fingerprint"), nil
+	if input.Fingerprint == "" {
+		return "Error: missing required argument: fingerprint", nil
 	}
-
-	reason := request.GetString("reason", "")
 
 	// Find the finding in cached scan results.
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
 	var matched *findings.Finding
-	items := cache.Findings.Findings()
+	items := pc.result.Findings.Findings()
 	for i := range items {
-		if items[i].Fingerprint == fingerprint {
+		if items[i].Fingerprint == input.Fingerprint {
 			matched = &items[i]
 			break
 		}
 	}
 
 	if matched == nil {
-		return mcp.NewToolResultError(fmt.Sprintf("finding with fingerprint %q not found in scan results", fingerprint)), nil
+		return fmt.Sprintf("Error: finding with fingerprint %q not found in scan results", input.Fingerprint), nil
 	}
 
-	blPath := baseline.DefaultPath(path)
+	blPath := baseline.DefaultPath(input.Path)
 	bl, err := baseline.Load(blPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("loading baseline: %v", err)), nil
+		return "Error: loading baseline: " + err.Error(), nil
 	}
 
 	bl.Add(&baseline.Entry{
@@ -957,121 +696,125 @@ func (s *Server) handleBaselineAdd(_ context.Context, request mcp.CallToolReques
 		RuleID:      matched.RuleID,
 		FilePath:    matched.Location.FilePath,
 		Severity:    matched.Severity,
-		Reason:      reason,
+		Reason:      input.Reason,
 		CreatedAt:   time.Now().UTC(),
 	})
 
 	if err := bl.Save(blPath); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("saving baseline: %v", err)), nil
+		return "Error: saving baseline: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Added finding %s to baseline (%d total entries)", fingerprint[:12], bl.Len())), nil
+	return fmt.Sprintf("Added finding %s to baseline (%d total entries)", input.Fingerprint[:12], bl.Len()), nil
 }
 
 // Diff handler.
 
-func (s *Server) handleDiff(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
+func (s *Server) handleDiff(_ context.Context, input diffInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
 	}
 
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	base := request.GetString("base", "main")
-	head := request.GetString("head", "HEAD")
+	base := input.Base
+	if base == "" {
+		base = "main"
+	}
+	head := input.Head
+	if head == "" {
+		head = "HEAD"
+	}
 
-	result, err := diff.Run(path, diff.Options{
+	result, err := diff.Run(input.Path, diff.Options{
 		Base: base,
 		Head: head,
 	})
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("diff failed: %v", err)), nil
+		return "Error: diff failed: " + err.Error(), nil
 	}
 
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling diff result: %v", err)), nil
+		return "Error: marshalling diff result: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
 // Badge handler.
 
-func (s *Server) handleBadge(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleBadge(_ context.Context, input badgeInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	label := request.GetString("label", "nox")
-	ff := cache.Findings.ActiveFindings()
+	label := input.Label
+	if label == "" {
+		label = "nox"
+	}
+	ff := pc.result.Findings.ActiveFindings()
 
 	result := badge.GenerateFromFindings(ff, label)
 
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling badge result: %v", err)), nil
+		return "Error: marshalling badge result: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
 // Version handler.
 
-func (s *Server) handleVersion(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleVersion(_ context.Context, _ emptyInput) (string, error) {
 	info := map[string]string{
 		"version": s.version,
 	}
 
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling version: %v", err)), nil
+		return "", fmt.Errorf("marshalling version: %w", err)
 	}
 
-	return mcp.NewToolResultText(string(data)), nil
+	return string(data), nil
 }
 
 // Rules handler.
 
-func (s *Server) handleRules(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleRules(_ context.Context, _ emptyInput) (string, error) {
 	cat := catalog.Catalog()
 
 	data, err := json.MarshalIndent(cat, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling rules: %v", err)), nil
+		return "", fmt.Errorf("marshalling rules: %w", err)
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
 // Protect status handler.
 
 const noxHookMarker = "Installed by nox protect"
 
-func (s *Server) handleProtectStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
+func (s *Server) handleProtectStatus(_ context.Context, input protectStatusInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
+	}
+
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
+	}
+
+	if !git.IsGitRepo(input.Path) {
+		return "Error: not a git repository", nil
+	}
+
+	repoRoot, err := git.RepoRoot(input.Path)
 	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
-	}
-
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	if !git.IsGitRepo(path) {
-		return mcp.NewToolResultError("not a git repository"), nil
-	}
-
-	repoRoot, err := git.RepoRoot(path)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("resolving repo root: %v", err)), nil
+		return "Error: resolving repo root: " + err.Error(), nil
 	}
 
 	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
@@ -1090,7 +833,7 @@ func (s *Server) handleProtectStatus(_ context.Context, request mcp.CallToolRequ
 			Message:   "not installed",
 		}
 		data, _ := json.MarshalIndent(resp, "", "  ")
-		return mcp.NewToolResultText(string(data)), nil
+		return string(data), nil
 	}
 
 	installed := strings.Contains(string(content), noxHookMarker)
@@ -1106,94 +849,45 @@ func (s *Server) handleProtectStatus(_ context.Context, request mcp.CallToolRequ
 	}
 
 	data, _ := json.MarshalIndent(resp, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	return string(data), nil
 }
 
 // Annotate handler.
 
-func (s *Server) handleAnnotate(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleAnnotate(_ context.Context, _ emptyInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	ff := cache.Findings.ActiveFindings()
+	ff := pc.result.Findings.ActiveFindings()
 	payload := annotate.BuildReviewPayload(ff)
 	if payload == nil {
-		return mcp.NewToolResultText(`{"message":"no findings to annotate"}`), nil
+		return `{"message":"no findings to annotate"}`, nil
 	}
 
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling annotate payload: %v", err)), nil
+		return "Error: marshalling annotate payload: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
-}
-
-// Rules resource handler.
-
-func (s *Server) handleResourceRules(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	cat := catalog.Catalog()
-
-	data, err := json.MarshalIndent(cat, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshalling rules: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "application/json",
-			Text:     truncate(string(data)),
-		},
-	}, nil
-}
-
-// Dashboard resource handler.
-
-func (s *Server) handleResourceDashboard(_ context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	s.mu.RLock()
-	cache := s.cache
-	basePath := s.scanBasePath
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return nil, fmt.Errorf("no scan results available")
-	}
-
-	html, err := GenerateDashboardHTML(cache, s.version, basePath)
-	if err != nil {
-		return nil, fmt.Errorf("generating dashboard: %w", err)
-	}
-
-	return []mcp.ResourceContents{
-		mcp.TextResourceContents{
-			URI:      request.Params.URI,
-			MIMEType: "text/html",
-			Text:     html,
-		},
-	}, nil
+	return truncate(string(data)), nil
 }
 
 // VEX status handler.
 
-func (s *Server) handleVEXStatus(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	path, err := request.RequireString("path")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: path"), nil
+func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
 	}
 
-	if err := s.isPathAllowed(path); err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	doc, err := vex.LoadVEX(path)
+	doc, err := vex.LoadVEX(input.Path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("loading VEX document: %v", err)), nil
+		return "Error: loading VEX document: " + err.Error(), nil
 	}
 
 	type vexStatusResponse struct {
@@ -1209,7 +903,7 @@ func (s *Server) handleVEXStatus(_ context.Context, request mcp.CallToolRequest)
 	}
 
 	resp := vexStatusResponse{
-		Path:       path,
+		Path:       input.Path,
 		Statements: len(doc.Statements),
 		ByStatus:   byStatus,
 		Summary:    vex.Summary(doc),
@@ -1217,31 +911,27 @@ func (s *Server) handleVEXStatus(_ context.Context, request mcp.CallToolRequest)
 
 	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling response: %v", err)), nil
+		return "Error: marshalling response: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(string(data)), nil
+	return string(data), nil
 }
 
 // Compliance report handler.
 
-func (s *Server) handleComplianceReport(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	fw, err := request.RequireString("framework")
-	if err != nil {
-		return mcp.NewToolResultError("missing required argument: framework"), nil
+func (s *Server) handleComplianceReport(_ context.Context, input complianceReportInput) (string, error) {
+	if input.Framework == "" {
+		return "Error: missing required argument: framework", nil
 	}
 
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
 	// Collect triggered rule IDs from active findings.
 	triggered := make(map[string]struct{})
-	activeItems := cache.Findings.ActiveFindings()
+	activeItems := pc.result.Findings.ActiveFindings()
 	for i := range activeItems {
 		triggered[activeItems[i].RuleID] = struct{}{}
 	}
@@ -1250,25 +940,22 @@ func (s *Server) handleComplianceReport(_ context.Context, request mcp.CallToolR
 		ruleIDs = append(ruleIDs, id)
 	}
 
-	compReport := compliance.GenerateReport(compliance.Framework(fw), ruleIDs)
+	compReport := compliance.GenerateReport(compliance.Framework(input.Framework), ruleIDs)
 
 	data, err := json.MarshalIndent(compReport, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling report: %v", err)), nil
+		return "Error: marshalling report: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
 }
 
 // Data sensitivity report handler.
 
-func (s *Server) handleDataSensitivityReport(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	s.mu.RLock()
-	cache := s.cache
-	s.mu.RUnlock()
-
-	if cache == nil {
-		return mcp.NewToolResultError("no scan results available — run the scan tool first"), nil
+func (s *Server) handleDataSensitivityReport(_ context.Context, _ emptyInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
 	}
 
 	// Filter DATA-* findings from active findings.
@@ -1278,7 +965,7 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ mcp.CallToolRe
 		Count       int      `json:"count"`
 		Files       []string `json:"files"`
 	}
-	type report struct {
+	type rpt struct {
 		TotalFindings int         `json:"total_findings"`
 		Rules         []ruleStats `json:"rules"`
 		AffectedFiles []string    `json:"affected_files"`
@@ -1288,7 +975,7 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ mcp.CallToolRe
 	allFiles := make(map[string]struct{})
 	cat := catalog.Catalog()
 
-	activeFindings := cache.Findings.ActiveFindings()
+	activeFindings := pc.result.Findings.ActiveFindings()
 	for i := range activeFindings {
 		f := &activeFindings[i]
 		if !strings.HasPrefix(f.RuleID, "DATA-") {
@@ -1344,18 +1031,376 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ mcp.CallToolRe
 		total += rs.Count
 	}
 
-	rpt := report{
+	r := rpt{
 		TotalFindings: total,
 		Rules:         rules,
 		AffectedFiles: affectedFiles,
 	}
 
-	data, err := json.MarshalIndent(rpt, "", "  ")
+	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("marshalling report: %v", err)), nil
+		return "Error: marshalling report: " + err.Error(), nil
 	}
 
-	return mcp.NewToolResultText(truncate(string(data))), nil
+	return truncate(string(data)), nil
+}
+
+// Dashboard tool handler.
+
+func (s *Server) handleDashboard(_ context.Context, input dashboardInput) (string, error) {
+	pc := s.getCache(input.Path)
+	if pc == nil {
+		return "Error: no scan results available", nil
+	}
+
+	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	if err != nil {
+		return "", fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	return html, nil
+}
+
+// Plugin bridge handlers.
+
+func (s *Server) handlePluginList(_ context.Context, _ emptyInput) (string, error) {
+	if s.host == nil {
+		return "Error: no plugin host configured", nil
+	}
+
+	data, err := serializePluginList(s.host.Plugins())
+	if err != nil {
+		return "Error: serializing plugin list: " + err.Error(), nil
+	}
+
+	return truncate(string(data)), nil
+}
+
+func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolInput) (string, error) {
+	if s.host == nil {
+		return "Error: no plugin host configured", nil
+	}
+
+	if input.Tool == "" {
+		return "Error: missing required argument: tool", nil
+	}
+
+	toolName := s.resolveToolName(input.Tool)
+
+	if input.WorkspaceRoot != "" {
+		if err := s.isPathAllowed(input.WorkspaceRoot); err != nil {
+			return "Error: " + err.Error(), nil
+		}
+	}
+
+	resp, err := s.host.InvokeTool(ctx, toolName, input.Input, input.WorkspaceRoot)
+	if err != nil {
+		if _, ok := err.(plugin.RuntimeViolation); ok {
+			return "Error: plugin violation: " + err.Error(), nil
+		}
+		return "Error: plugin tool invocation failed: " + err.Error(), nil
+	}
+
+	data, err := serializeInvokeResult(resp)
+	if err != nil {
+		return "Error: serializing plugin response: " + err.Error(), nil
+	}
+
+	return truncate(string(data)), nil
+}
+
+func (s *Server) handlePluginReadResource(_ context.Context, _ pluginReadResourceInput) (string, error) {
+	return "Error: plugin.read_resource is not yet implemented", nil
+}
+
+// resolveToolName resolves tool name aliases.
+func (s *Server) resolveToolName(name string) string {
+	if s.aliases == nil {
+		return name
+	}
+	if resolved, ok := s.aliases[name]; ok {
+		return resolved
+	}
+	return name
+}
+
+// --- Resource handlers ---
+
+func (s *Server) handleResourceFindings(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	r := report.NewJSONReporter(s.version)
+	data, err := r.Generate(pc.result.Findings)
+	if err != nil {
+		return nil, fmt.Errorf("generating findings JSON: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceSARIF(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	r := sarif.NewReporter(s.version, nil)
+	data, err := r.Generate(pc.result.Findings)
+	if err != nil {
+		return nil, fmt.Errorf("generating SARIF: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceCDX(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	r := sbom.NewCycloneDXReporter(s.version)
+	data, err := r.Generate(pc.result.Inventory)
+	if err != nil {
+		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceSPDX(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	r := sbom.NewSPDXReporter(s.version)
+	data, err := r.Generate(pc.result.Inventory)
+	if err != nil {
+		return nil, fmt.Errorf("generating SPDX SBOM: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceAIInventory(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	data, err := pc.result.AIInventory.JSON()
+	if err != nil {
+		return nil, fmt.Errorf("generating AI inventory JSON: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceRules(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	cat := catalog.Catalog()
+
+	data, err := json.MarshalIndent(cat, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshalling rules: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleResourceDashboard(_ context.Context, uri string, _ map[string]string) (*mcp.ResourceContent, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results available")
+	}
+
+	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	if err != nil {
+		return nil, fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "text/html",
+		Text:     html,
+	}, nil
+}
+
+// --- Per-project resource handlers ---
+
+func (s *Server) resolveProjectPath(params map[string]string) (string, error) {
+	project, ok := params["project"]
+	if !ok || project == "" {
+		return "", fmt.Errorf("missing project parameter")
+	}
+	path, err := url.PathUnescape(project)
+	if err != nil {
+		return "", fmt.Errorf("invalid project path: %w", err)
+	}
+	return path, nil
+}
+
+func (s *Server) handleProjectResourceFindings(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	r := report.NewJSONReporter(s.version)
+	data, err := r.Generate(pc.result.Findings)
+	if err != nil {
+		return nil, fmt.Errorf("generating findings JSON: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleProjectResourceSARIF(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	r := sarif.NewReporter(s.version, nil)
+	data, err := r.Generate(pc.result.Findings)
+	if err != nil {
+		return nil, fmt.Errorf("generating SARIF: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleProjectResourceCDX(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	r := sbom.NewCycloneDXReporter(s.version)
+	data, err := r.Generate(pc.result.Inventory)
+	if err != nil {
+		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleProjectResourceSPDX(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	r := sbom.NewSPDXReporter(s.version)
+	data, err := r.Generate(pc.result.Inventory)
+	if err != nil {
+		return nil, fmt.Errorf("generating SPDX SBOM: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	data, err := pc.result.AIInventory.JSON()
+	if err != nil {
+		return nil, fmt.Errorf("generating AI inventory JSON: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "application/json",
+		Text:     truncate(string(data)),
+	}, nil
+}
+
+func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+	path, err := s.resolveProjectPath(params)
+	if err != nil {
+		return nil, err
+	}
+	pc := s.getCache(path)
+	if pc == nil {
+		return nil, fmt.Errorf("no scan results for project %q", path)
+	}
+
+	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	if err != nil {
+		return nil, fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	return &mcp.ResourceContent{
+		URI:      uri,
+		MimeType: "text/html",
+		Text:     html,
+	}, nil
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.

@@ -4,19 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestGenerateDashboardHTML_CleanScan(t *testing.T) {
 	s := scanCleanDir(t)
 
-	s.mu.RLock()
-	cache := s.cache
-	basePath := s.scanBasePath
-	s.mu.RUnlock()
+	pc := s.getCache("")
 
-	html, err := GenerateDashboardHTML(cache, "0.1.0", basePath)
+	html, err := GenerateDashboardHTML(pc.result, "0.1.0", pc.basePath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,18 +36,14 @@ func TestGenerateDashboardHTML_WithFindings(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	s.mu.RLock()
-	cache := s.cache
-	basePath := s.scanBasePath
-	s.mu.RUnlock()
+	pc := s.getCache("")
 
-	html, err := GenerateDashboardHTML(cache, "0.1.0", basePath)
+	html, err := GenerateDashboardHTML(pc.result, "0.1.0", pc.basePath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,41 +53,27 @@ func TestGenerateDashboardHTML_WithFindings(t *testing.T) {
 	}
 }
 
-func TestHandleResourceDashboard_BeforeScan(t *testing.T) {
+func TestHandleResourceDashboard_BeforeScan_Dashboard(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://dashboard"
-
-	_, err := s.handleResourceDashboard(context.Background(), req)
+	_, err := s.handleResourceDashboard(context.Background(), "nox://dashboard", nil)
 	if err == nil {
 		t.Fatal("expected error for resource before scan")
 	}
 }
 
-func TestHandleResourceDashboard_AfterScan(t *testing.T) {
+func TestHandleResourceDashboard_AfterScan_Dashboard(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://dashboard"
-
-	contents, err := s.handleResourceDashboard(context.Background(), req)
+	content, err := s.handleResourceDashboard(context.Background(), "nox://dashboard", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
+	if content.URI != "nox://dashboard" {
+		t.Fatalf("expected URI nox://dashboard, got %s", content.URI)
 	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
+	if content.MimeType != "text/html" {
+		t.Fatalf("expected text/html MIME type, got %s", content.MimeType)
 	}
-	if tc.URI != "nox://dashboard" {
-		t.Fatalf("expected URI nox://dashboard, got %s", tc.URI)
-	}
-	if tc.MIMEType != "text/html" {
-		t.Fatalf("expected text/html MIME type, got %s", tc.MIMEType)
-	}
-	if !strings.Contains(tc.Text, "<html") {
+	if !strings.Contains(content.Text, "<html") {
 		t.Fatal("expected HTML content")
 	}
 }

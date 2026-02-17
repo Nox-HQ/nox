@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
+	mcp "github.com/felixgeelhaar/mcp-go"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/plugin"
 	"google.golang.org/grpc"
@@ -132,19 +132,15 @@ func TestHandleScan_CleanDirectory(t *testing.T) {
 	writeFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "scan", map[string]any{"path": dir})
-
-	result, err := s.handleScan(context.Background(), req)
+	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "0 findings") {
-		t.Fatalf("expected 0 findings in summary, got: %s", text)
+	if !strings.Contains(result, "0 findings") {
+		t.Fatalf("expected 0 findings in summary, got: %s", result)
 	}
 }
 
@@ -153,19 +149,15 @@ func TestHandleScan_WithFindings(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "scan", map[string]any{"path": dir})
-
-	result, err := s.handleScan(context.Background(), req)
+	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if strings.Contains(text, "0 findings") {
-		t.Fatalf("expected findings in summary, got: %s", text)
+	if strings.Contains(result, "0 findings") {
+		t.Fatalf("expected findings in summary, got: %s", result)
 	}
 }
 
@@ -173,144 +165,113 @@ func TestHandleScan_DisallowedPath(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", []string{"/allowed/only"})
 
-	req := makeToolRequest(t, "scan", map[string]any{"path": dir})
-
-	result, err := s.handleScan(context.Background(), req)
+	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", text)
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
 func TestHandleScan_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "scan", map[string]any{})
-
-	result, err := s.handleScan(context.Background(), req)
+	result, err := s.handleScan(context.Background(), scanInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path argument")
 	}
 }
 
 func TestHandleGetFindings_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "get_findings", map[string]any{})
-
-	result, err := s.handleGetFindings(context.Background(), req)
+	result, err := s.handleGetFindings(context.Background(), getFindingsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
 func TestHandleGetFindings_JSON(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_findings", map[string]any{"format": "json"})
-
-	result, err := s.handleGetFindings(context.Background(), req)
+	result, err := s.handleGetFindings(context.Background(), getFindingsInput{Format: "json"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"findings"`) {
-		t.Fatalf("expected JSON findings output, got: %s", text)
+	if !strings.Contains(result, `"findings"`) {
+		t.Fatalf("expected JSON findings output, got: %s", result)
 	}
 }
 
 func TestHandleGetFindings_SARIF(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_findings", map[string]any{"format": "sarif"})
-
-	result, err := s.handleGetFindings(context.Background(), req)
+	result, err := s.handleGetFindings(context.Background(), getFindingsInput{Format: "sarif"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"$schema"`) {
-		t.Fatalf("expected SARIF output, got: %s", text)
+	if !strings.Contains(result, `"$schema"`) {
+		t.Fatalf("expected SARIF output, got: %s", result)
 	}
 }
 
 func TestHandleGetSBOM_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "get_sbom", map[string]any{})
-
-	result, err := s.handleGetSBOM(context.Background(), req)
+	result, err := s.handleGetSBOM(context.Background(), getSBOMInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
 }
 
 func TestHandleGetSBOM_CDX(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_sbom", map[string]any{"format": "cdx"})
-
-	result, err := s.handleGetSBOM(context.Background(), req)
+	result, err := s.handleGetSBOM(context.Background(), getSBOMInput{Format: "cdx"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "CycloneDX") {
-		t.Fatalf("expected CycloneDX output, got: %s", text)
+	if !strings.Contains(result, "CycloneDX") {
+		t.Fatalf("expected CycloneDX output, got: %s", result)
 	}
 }
 
 func TestHandleGetSBOM_SPDX(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_sbom", map[string]any{"format": "spdx"})
-
-	result, err := s.handleGetSBOM(context.Background(), req)
+	result, err := s.handleGetSBOM(context.Background(), getSBOMInput{Format: "spdx"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "SPDX") {
-		t.Fatalf("expected SPDX output, got: %s", text)
+	if !strings.Contains(result, "SPDX") {
+		t.Fatalf("expected SPDX output, got: %s", result)
 	}
 }
 
 func TestResourceFindings_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://findings"
-
-	_, err := s.handleResourceFindings(context.Background(), req)
+	_, err := s.handleResourceFindings(context.Background(), "nox://findings", nil)
 	if err == nil {
 		t.Fatal("expected error for resource before scan")
 	}
@@ -318,114 +279,62 @@ func TestResourceFindings_BeforeScan(t *testing.T) {
 
 func TestResourceFindings_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://findings"
-
-	contents, err := s.handleResourceFindings(context.Background(), req)
+	content, err := s.handleResourceFindings(context.Background(), "nox://findings", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
+	if content.URI != "nox://findings" {
+		t.Fatalf("expected URI nox://findings, got %s", content.URI)
 	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
+	if content.MimeType != "application/json" {
+		t.Fatalf("expected application/json, got %s", content.MimeType)
 	}
-	if tc.URI != "nox://findings" {
-		t.Fatalf("expected URI nox://findings, got %s", tc.URI)
-	}
-	if !strings.Contains(tc.Text, `"findings"`) {
-		t.Fatalf("expected findings JSON, got: %s", tc.Text)
+	if !strings.Contains(content.Text, `"findings"`) {
+		t.Fatalf("expected findings JSON, got: %s", content.Text)
 	}
 }
 
 func TestResourceSARIF_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://sarif"
-
-	contents, err := s.handleResourceSARIF(context.Background(), req)
+	content, err := s.handleResourceSARIF(context.Background(), "nox://sarif", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
-	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if !strings.Contains(tc.Text, `"$schema"`) {
-		t.Fatalf("expected SARIF content, got: %s", tc.Text)
+	if !strings.Contains(content.Text, `"$schema"`) {
+		t.Fatalf("expected SARIF content, got: %s", content.Text)
 	}
 }
 
 func TestResourceCDX_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://sbom/cdx"
-
-	contents, err := s.handleResourceCDX(context.Background(), req)
+	content, err := s.handleResourceCDX(context.Background(), "nox://sbom/cdx", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
-	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if !strings.Contains(tc.Text, "CycloneDX") {
-		t.Fatalf("expected CycloneDX content, got: %s", tc.Text)
+	if !strings.Contains(content.Text, "CycloneDX") {
+		t.Fatalf("expected CycloneDX content, got: %s", content.Text)
 	}
 }
 
 func TestResourceSPDX_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://sbom/spdx"
-
-	contents, err := s.handleResourceSPDX(context.Background(), req)
+	content, err := s.handleResourceSPDX(context.Background(), "nox://sbom/spdx", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
-	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if !strings.Contains(tc.Text, "SPDX") {
-		t.Fatalf("expected SPDX content, got: %s", tc.Text)
+	if !strings.Contains(content.Text, "SPDX") {
+		t.Fatalf("expected SPDX content, got: %s", content.Text)
 	}
 }
 
 func TestResourceAIInventory_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://ai-inventory"
-
-	contents, err := s.handleResourceAIInventory(context.Background(), req)
+	content, err := s.handleResourceAIInventory(context.Background(), "nox://ai-inventory", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
-	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if !strings.Contains(tc.Text, "schema_version") {
-		t.Fatalf("expected AI inventory JSON, got: %s", tc.Text)
+	if !strings.Contains(content.Text, "schema_version") {
+		t.Fatalf("expected AI inventory JSON, got: %s", content.Text)
 	}
 }
 
@@ -462,33 +371,6 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-func makeToolRequest(t *testing.T, name string, args map[string]any) mcp.CallToolRequest {
-	t.Helper()
-	argsJSON, err := json.Marshal(args)
-	if err != nil {
-		t.Fatalf("marshaling args: %v", err)
-	}
-	var raw any
-	if err := json.Unmarshal(argsJSON, &raw); err != nil {
-		t.Fatalf("unmarshaling args: %v", err)
-	}
-	return mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      name,
-			Arguments: raw,
-		},
-	}
-}
-
-func toolResultText(result *mcp.CallToolResult) string {
-	for _, c := range result.Content {
-		if tc, ok := c.(mcp.TextContent); ok {
-			return tc.Text
-		}
-	}
-	return ""
-}
-
 // scanCleanDir creates a temporary directory with a clean Go file and
 // runs a scan against it, returning the server with cached results.
 func scanCleanDir(t *testing.T) *Server {
@@ -497,14 +379,12 @@ func scanCleanDir(t *testing.T) *Server {
 	writeFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "scan", map[string]any{"path": dir})
-
-	result, err := s.handleScan(context.Background(), req)
+	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("scan returned error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("scan returned error: %s", result)
 	}
 	return s
 }
@@ -607,154 +487,132 @@ func createHostWithMockPlugin(t *testing.T) *plugin.Host {
 
 func TestHandlePluginList_NoHost(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "plugin.list", map[string]any{})
-
-	result, err := s.handlePluginList(context.Background(), req)
+	result, err := s.handlePluginList(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for nil host")
 	}
-	if !strings.Contains(toolResultText(result), "no plugin host") {
-		t.Fatalf("expected 'no plugin host' message, got: %s", toolResultText(result))
+	if !strings.Contains(result, "no plugin host") {
+		t.Fatalf("expected 'no plugin host' message, got: %s", result)
 	}
 }
 
 func TestHandlePluginList_EmptyHost(t *testing.T) {
 	h := plugin.NewHost()
 	s := New("0.1.0", nil, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.list", map[string]any{})
-
-	result, err := s.handlePluginList(context.Background(), req)
+	result, err := s.handlePluginList(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if text != "[]" {
-		t.Fatalf("expected empty array, got: %s", text)
+	if result != "[]" {
+		t.Fatalf("expected empty array, got: %s", result)
 	}
 }
 
 func TestHandlePluginList_WithPlugins(t *testing.T) {
 	h := createHostWithMockPlugin(t)
 	s := New("0.1.0", nil, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.list", map[string]any{})
-
-	result, err := s.handlePluginList(context.Background(), req)
+	result, err := s.handlePluginList(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "test-scanner") {
-		t.Fatalf("expected 'test-scanner' in output, got: %s", text)
+	if !strings.Contains(result, "test-scanner") {
+		t.Fatalf("expected 'test-scanner' in output, got: %s", result)
 	}
-	if !strings.Contains(text, `"scan"`) {
-		t.Fatalf("expected 'scan' tool in output, got: %s", text)
+	if !strings.Contains(result, `"scan"`) {
+		t.Fatalf("expected 'scan' tool in output, got: %s", result)
 	}
 }
 
 func TestHandlePluginCallTool_NoHost(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{"tool": "scan"})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{Tool: "scan"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for nil host")
 	}
-	if !strings.Contains(toolResultText(result), "no plugin host") {
-		t.Fatalf("expected 'no plugin host' message, got: %s", toolResultText(result))
+	if !strings.Contains(result, "no plugin host") {
+		t.Fatalf("expected 'no plugin host' message, got: %s", result)
 	}
 }
 
 func TestHandlePluginCallTool_MissingToolArg(t *testing.T) {
 	h := createHostWithMockPlugin(t)
 	s := New("0.1.0", nil, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing tool argument")
 	}
-	if !strings.Contains(toolResultText(result), "missing required argument: tool") {
-		t.Fatalf("expected missing tool message, got: %s", toolResultText(result))
+	if !strings.Contains(result, "missing required argument: tool") {
+		t.Fatalf("expected missing tool message, got: %s", result)
 	}
 }
 
 func TestHandlePluginCallTool_Success(t *testing.T) {
 	h := createHostWithMockPlugin(t)
 	s := New("0.1.0", nil, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
-		"tool": "test-scanner.scan",
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{
+		Tool: "test-scanner.scan",
 	})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "f-1") {
-		t.Fatalf("expected finding ID in output, got: %s", text)
+	if !strings.Contains(result, "f-1") {
+		t.Fatalf("expected finding ID in output, got: %s", result)
 	}
-	if !strings.Contains(text, `"severity":"high"`) {
-		t.Fatalf("expected severity as string, got: %s", text)
+	if !strings.Contains(result, `"severity":"high"`) {
+		t.Fatalf("expected severity as string, got: %s", result)
 	}
 }
 
 func TestHandlePluginCallTool_UnknownTool(t *testing.T) {
 	h := createHostWithMockPlugin(t)
 	s := New("0.1.0", nil, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
-		"tool": "nonexistent",
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{
+		Tool: "nonexistent",
 	})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for unknown tool")
 	}
-	if !strings.Contains(toolResultText(result), "no plugin provides tool") {
-		t.Fatalf("expected 'no plugin provides tool' message, got: %s", toolResultText(result))
+	if !strings.Contains(result, "no plugin provides tool") {
+		t.Fatalf("expected 'no plugin provides tool' message, got: %s", result)
 	}
 }
 
 func TestHandlePluginCallTool_WorkspaceBlocked(t *testing.T) {
 	h := createHostWithMockPlugin(t)
 	s := New("0.1.0", []string{"/allowed/only"}, WithPluginHost(h))
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
-		"tool":           "test-scanner.scan",
-		"workspace_root": "/not/allowed",
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{
+		Tool:          "test-scanner.scan",
+		WorkspaceRoot: "/not/allowed",
 	})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for blocked workspace")
 	}
-	if !strings.Contains(toolResultText(result), "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", toolResultText(result))
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
@@ -766,40 +624,34 @@ func TestHandlePluginCallTool_Alias(t *testing.T) {
 			"quick-scan": "test-scanner.scan",
 		}),
 	)
-	req := makeToolRequest(t, "plugin.call_tool", map[string]any{
-		"tool": "quick-scan",
+	result, err := s.handlePluginCallTool(context.Background(), pluginCallToolInput{
+		Tool: "quick-scan",
 	})
-
-	result, err := s.handlePluginCallTool(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "f-1") {
-		t.Fatalf("expected finding from aliased tool, got: %s", text)
+	if !strings.Contains(result, "f-1") {
+		t.Fatalf("expected finding from aliased tool, got: %s", result)
 	}
 }
 
 func TestHandlePluginReadResource_Stub(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "plugin.read_resource", map[string]any{
-		"plugin": "test",
-		"uri":    "nox://test/results",
+	result, err := s.handlePluginReadResource(context.Background(), pluginReadResourceInput{
+		Plugin: "test",
+		URI:    "nox://test/results",
 	})
-
-	result, err := s.handlePluginReadResource(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for stub")
 	}
-	if !strings.Contains(toolResultText(result), "not yet implemented") {
-		t.Fatalf("expected 'not yet implemented' message, got: %s", toolResultText(result))
+	if !strings.Contains(result, "not yet implemented") {
+		t.Fatalf("expected 'not yet implemented' message, got: %s", result)
 	}
 }
 
@@ -807,55 +659,43 @@ func TestHandlePluginReadResource_Stub(t *testing.T) {
 
 func TestHandleGetFindingDetail_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "get_finding_detail", map[string]any{"finding_id": "SEC-001:main.go:1"})
-
-	result, err := s.handleGetFindingDetail(context.Background(), req)
+	result, err := s.handleGetFindingDetail(context.Background(), getFindingDetailInput{FindingID: "SEC-001:main.go:1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
 func TestHandleGetFindingDetail_MissingFindingID(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_finding_detail", map[string]any{})
-
-	result, err := s.handleGetFindingDetail(context.Background(), req)
+	result, err := s.handleGetFindingDetail(context.Background(), getFindingDetailInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing finding_id")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: finding_id") {
-		t.Fatalf("expected missing argument message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: finding_id") {
+		t.Fatalf("expected missing argument message, got: %s", result)
 	}
 }
 
 func TestHandleGetFindingDetail_FindingNotFound(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "get_finding_detail", map[string]any{"finding_id": "NONEXISTENT"})
-
-	result, err := s.handleGetFindingDetail(context.Background(), req)
+	result, err := s.handleGetFindingDetail(context.Background(), getFindingDetailInput{FindingID: "NONEXISTENT"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for nonexistent finding")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "not found") {
-		t.Fatalf("expected not found message, got: %s", text)
+	if !strings.Contains(result, "not found") {
+		t.Fatalf("expected not found message, got: %s", result)
 	}
 }
 
@@ -864,16 +704,14 @@ func TestHandleGetFindingDetail_Success(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
 	// Get a finding ID from the scan results.
-	s.mu.RLock()
-	findings := s.cache.Findings.Findings()
-	s.mu.RUnlock()
+	pc := s.getCache("")
+	findings := pc.result.Findings.Findings()
 
 	if len(findings) == 0 {
 		t.Fatal("expected at least one finding from scan")
@@ -881,25 +719,21 @@ func TestHandleGetFindingDetail_Success(t *testing.T) {
 
 	findingID := findings[0].ID
 
-	req := makeToolRequest(t, "get_finding_detail", map[string]any{
-		"finding_id":    findingID,
-		"context_lines": float64(3),
+	result, err := s.handleGetFindingDetail(context.Background(), getFindingDetailInput{
+		FindingID:    findingID,
+		ContextLines: 3,
 	})
-
-	result, err := s.handleGetFindingDetail(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, findingID) {
-		t.Fatalf("expected finding ID in response, got: %s", text)
+	if !strings.Contains(result, findingID) {
+		t.Fatalf("expected finding ID in response, got: %s", result)
 	}
-	if !strings.Contains(text, `"source"`) {
-		t.Fatalf("expected source in response, got: %s", text)
+	if !strings.Contains(result, `"source"`) {
+		t.Fatalf("expected source in response, got: %s", result)
 	}
 }
 
@@ -907,19 +741,15 @@ func TestHandleGetFindingDetail_Success(t *testing.T) {
 
 func TestHandleListFindings_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "list_findings", map[string]any{})
-
-	result, err := s.handleListFindings(context.Background(), req)
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
@@ -928,25 +758,20 @@ func TestHandleListFindings_NoFilters(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "list_findings", map[string]any{})
-
-	result, err := s.handleListFindings(context.Background(), req)
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"RuleID"`) {
-		t.Fatalf("expected RuleID in findings, got: %s", text)
+	if !strings.Contains(result, `"RuleID"`) {
+		t.Fatalf("expected RuleID in findings, got: %s", result)
 	}
 }
 
@@ -955,28 +780,22 @@ func TestHandleListFindings_WithSeverityFilter(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "list_findings", map[string]any{
-		"severity": "critical,high",
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{
+		Severity: "critical,high",
 	})
-
-	result, err := s.handleListFindings(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	// Should return findings (secrets are typically high severity).
-	text := toolResultText(result)
-	if !strings.Contains(text, `"Severity"`) {
-		t.Fatalf("expected Severity field in findings, got: %s", text)
+	if !strings.Contains(result, `"Severity"`) {
+		t.Fatalf("expected Severity field in findings, got: %s", result)
 	}
 }
 
@@ -985,27 +804,22 @@ func TestHandleListFindings_WithRuleFilter(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "list_findings", map[string]any{
-		"rule": "SEC-*",
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{
+		Rule: "SEC-*",
 	})
-
-	result, err := s.handleListFindings(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"RuleID"`) {
-		t.Fatalf("expected RuleID in findings, got: %s", text)
+	if !strings.Contains(result, `"RuleID"`) {
+		t.Fatalf("expected RuleID in findings, got: %s", result)
 	}
 }
 
@@ -1014,27 +828,22 @@ func TestHandleListFindings_WithFileFilter(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "list_findings", map[string]any{
-		"file": "config.env",
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{
+		File: "config.env",
 	})
-
-	result, err := s.handleListFindings(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "config.env") {
-		t.Fatalf("expected config.env in findings, got: %s", text)
+	if !strings.Contains(result, "config.env") {
+		t.Fatalf("expected config.env in findings, got: %s", result)
 	}
 }
 
@@ -1043,66 +852,51 @@ func TestHandleListFindings_WithLimit(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "list_findings", map[string]any{
-		"limit": float64(1),
+	result, err := s.handleListFindings(context.Background(), listFindingsInput{
+		Limit: 1,
 	})
-
-	result, err := s.handleListFindings(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	// Should work and return at most 1 finding.
-	text := toolResultText(result)
-	if !strings.Contains(text, `"RuleID"`) {
-		t.Fatalf("expected findings in response, got: %s", text)
+	if !strings.Contains(result, `"RuleID"`) {
+		t.Fatalf("expected findings in response, got: %s", result)
 	}
 }
 
 func TestHandleListFindings_SuppressedFilter(t *testing.T) {
 	dir := t.TempDir()
-	// Write a file that will trigger a finding that we can suppress
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-
-	// Run scan first to get the fingerprint
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	_, err := s.handleScan(context.Background(), scanReq)
+	_, err := s.handleScan(context.Background(), scanInput{Path: dir})
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
 
-	// Get all findings with include_suppressed to find the fingerprint
-	listAllReq := makeToolRequest(t, "list_findings", map[string]any{
-		"include_suppressed": true,
+	// Get all findings with include_suppressed to find the fingerprint.
+	allResult, _ := s.handleListFindings(context.Background(), listFindingsInput{
+		IncludeSuppressed: true,
 	})
-	listAllResult, _ := s.handleListFindings(context.Background(), listAllReq)
-	allText := toolResultText(listAllResult)
 
-	// Now request without include_suppressed (default) - should not show suppressed
-	reqDefault := makeToolRequest(t, "list_findings", map[string]any{})
-	resultDefault, err := s.handleListFindings(context.Background(), reqDefault)
+	// Request without include_suppressed (default).
+	defaultResult, err := s.handleListFindings(context.Background(), listFindingsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defaultText := toolResultText(resultDefault)
 
-	// Verify that include_suppressed parameter exists and works
-	if strings.Contains(allText, `"RuleID"`) {
-		// If we have findings, the filter is working
-		t.Logf("Found %d bytes in all findings response", len(allText))
+	// Verify that include_suppressed parameter exists and works.
+	if strings.Contains(allResult, `"RuleID"`) {
+		t.Logf("Found %d bytes in all findings response", len(allResult))
 	}
-	if len(defaultText) <= len("[]") {
+	if len(defaultResult) <= len("[]") {
 		t.Log("Default response correctly filters findings")
 	}
 }
@@ -1111,57 +905,44 @@ func TestHandleListFindings_SuppressedFilter(t *testing.T) {
 
 func TestHandleBaselineStatus_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "baseline_status", map[string]any{})
-
-	result, err := s.handleBaselineStatus(context.Background(), req)
+	result, err := s.handleBaselineStatus(context.Background(), baselineStatusInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", result)
 	}
 }
 
 func TestHandleBaselineStatus_DisallowedPath(t *testing.T) {
 	s := New("0.1.0", []string{"/allowed/only"})
-	req := makeToolRequest(t, "baseline_status", map[string]any{"path": "/not/allowed"})
-
-	result, err := s.handleBaselineStatus(context.Background(), req)
+	result, err := s.handleBaselineStatus(context.Background(), baselineStatusInput{Path: "/not/allowed"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", text)
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
 func TestHandleBaselineStatus_NoBaseline(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", nil)
-
-	req := makeToolRequest(t, "baseline_status", map[string]any{"path": dir})
-
-	result, err := s.handleBaselineStatus(context.Background(), req)
+	result, err := s.handleBaselineStatus(context.Background(), baselineStatusInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success (empty baseline), got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success (empty baseline), got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"total":0`) && !strings.Contains(text, `"total": 0`) {
-		t.Fatalf("expected total:0 for empty baseline, got: %s", text)
+	if !strings.Contains(result, `"total":0`) && !strings.Contains(result, `"total": 0`) {
+		t.Fatalf("expected total:0 for empty baseline, got: %s", result)
 	}
 }
 
@@ -1191,22 +972,18 @@ func TestHandleBaselineStatus_WithBaseline(t *testing.T) {
 	}
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "baseline_status", map[string]any{"path": dir})
-
-	result, err := s.handleBaselineStatus(context.Background(), req)
+	result, err := s.handleBaselineStatus(context.Background(), baselineStatusInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"total":1`) && !strings.Contains(text, `"total": 1`) {
-		t.Fatalf("expected total:1, got: %s", text)
+	if !strings.Contains(result, `"total":1`) && !strings.Contains(result, `"total": 1`) {
+		t.Fatalf("expected total:1, got: %s", result)
 	}
-	if !strings.Contains(text, `"high"`) {
-		t.Fatalf("expected severity breakdown, got: %s", text)
+	if !strings.Contains(result, `"high"`) {
+		t.Fatalf("expected severity breakdown, got: %s", result)
 	}
 }
 
@@ -1214,81 +991,65 @@ func TestHandleBaselineStatus_WithBaseline(t *testing.T) {
 
 func TestHandleBaselineAdd_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "baseline_add", map[string]any{"fingerprint": "abc123"})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{Fingerprint: "abc123"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", result)
 	}
 }
 
 func TestHandleBaselineAdd_MissingFingerprint(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "baseline_add", map[string]any{"path": dir})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing fingerprint")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: fingerprint") {
-		t.Fatalf("expected missing fingerprint message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: fingerprint") {
+		t.Fatalf("expected missing fingerprint message, got: %s", result)
 	}
 }
 
 func TestHandleBaselineAdd_DisallowedPath(t *testing.T) {
 	s := New("0.1.0", []string{"/allowed/only"})
-	req := makeToolRequest(t, "baseline_add", map[string]any{
-		"path":        "/not/allowed",
-		"fingerprint": "abc123",
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
+		Path:        "/not/allowed",
+		Fingerprint: "abc123",
 	})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", text)
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
 func TestHandleBaselineAdd_NoScanResults(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "baseline_add", map[string]any{
-		"path":        dir,
-		"fingerprint": "abc123",
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
+		Path:        dir,
+		Fingerprint: "abc123",
 	})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for no scan results")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no scan results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no scan results message, got: %s", result)
 	}
 }
 
@@ -1297,28 +1058,23 @@ func TestHandleBaselineAdd_FingerprintNotFound(t *testing.T) {
 	writeFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "baseline_add", map[string]any{
-		"path":        dir,
-		"fingerprint": "nonexistent",
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
+		Path:        dir,
+		Fingerprint: "nonexistent",
 	})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for nonexistent fingerprint")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "not found") {
-		t.Fatalf("expected not found message, got: %s", text)
+	if !strings.Contains(result, "not found") {
+		t.Fatalf("expected not found message, got: %s", result)
 	}
 }
 
@@ -1327,16 +1083,14 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
 	// Get a finding fingerprint.
-	s.mu.RLock()
-	findings := s.cache.Findings.Findings()
-	s.mu.RUnlock()
+	pc := s.getCache("")
+	findings := pc.result.Findings.Findings()
 
 	if len(findings) == 0 {
 		t.Fatal("expected at least one finding from scan")
@@ -1344,23 +1098,19 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 
 	fingerprint := findings[0].Fingerprint
 
-	req := makeToolRequest(t, "baseline_add", map[string]any{
-		"path":        dir,
-		"fingerprint": fingerprint,
-		"reason":      "test baseline",
+	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
+		Path:        dir,
+		Fingerprint: fingerprint,
+		Reason:      "test baseline",
 	})
-
-	result, err := s.handleBaselineAdd(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "Added finding") {
-		t.Fatalf("expected success message, got: %s", text)
+	if !strings.Contains(result, "Added finding") {
+		t.Fatalf("expected success message, got: %s", result)
 	}
 
 	// Verify baseline file was created.
@@ -1374,19 +1124,15 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 
 func TestHandleVersion(t *testing.T) {
 	s := New("1.2.3", nil)
-	req := makeToolRequest(t, "version", map[string]any{})
-
-	result, err := s.handleVersion(context.Background(), req)
+	result, err := s.handleVersion(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "1.2.3") {
-		t.Fatalf("expected version in response, got: %s", text)
+	if !strings.Contains(result, "1.2.3") {
+		t.Fatalf("expected version in response, got: %s", result)
 	}
 }
 
@@ -1394,20 +1140,16 @@ func TestHandleVersion(t *testing.T) {
 
 func TestHandleRules(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "rules", map[string]any{})
-
-	result, err := s.handleRules(context.Background(), req)
+	result, err := s.handleRules(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
 	// Should contain at least one known rule ID.
-	if !strings.Contains(text, "SEC-") && !strings.Contains(text, "AI-") && !strings.Contains(text, "IAC-") {
-		t.Fatalf("expected rule IDs in response, got: %s", text[:min(len(text), 200)])
+	if !strings.Contains(result, "SEC-") && !strings.Contains(result, "AI-") && !strings.Contains(result, "IAC-") {
+		t.Fatalf("expected rule IDs in response, got: %s", result[:min(len(result), 200)])
 	}
 }
 
@@ -1415,40 +1157,32 @@ func TestHandleRules(t *testing.T) {
 
 func TestHandleBadge_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "badge", map[string]any{})
-
-	result, err := s.handleBadge(context.Background(), req)
+	result, err := s.handleBadge(context.Background(), badgeInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
 func TestHandleBadge_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "badge", map[string]any{"label": "security"})
-
-	result, err := s.handleBadge(context.Background(), req)
+	result, err := s.handleBadge(context.Background(), badgeInput{Label: "security"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"grade"`) {
-		t.Fatalf("expected grade in badge response, got: %s", text)
+	if !strings.Contains(result, `"grade"`) {
+		t.Fatalf("expected grade in badge response, got: %s", result)
 	}
-	if !strings.Contains(text, `"label"`) {
-		t.Fatalf("expected label in badge response, got: %s", text)
+	if !strings.Contains(result, `"label"`) {
+		t.Fatalf("expected label in badge response, got: %s", result)
 	}
 }
 
@@ -1456,37 +1190,29 @@ func TestHandleBadge_AfterScan(t *testing.T) {
 
 func TestHandleAnnotate_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "annotate", map[string]any{})
-
-	result, err := s.handleAnnotate(context.Background(), req)
+	result, err := s.handleAnnotate(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
 func TestHandleAnnotate_NoFindings(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "annotate", map[string]any{})
-
-	result, err := s.handleAnnotate(context.Background(), req)
+	result, err := s.handleAnnotate(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no findings to annotate") {
-		t.Fatalf("expected no-findings message, got: %s", text)
+	if !strings.Contains(result, "no findings to annotate") {
+		t.Fatalf("expected no-findings message, got: %s", result)
 	}
 }
 
@@ -1495,28 +1221,23 @@ func TestHandleAnnotate_WithFindings(t *testing.T) {
 	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "annotate", map[string]any{})
-
-	result, err := s.handleAnnotate(context.Background(), req)
+	result, err := s.handleAnnotate(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"event"`) {
-		t.Fatalf("expected event field in annotate payload, got: %s", text)
+	if !strings.Contains(result, `"event"`) {
+		t.Fatalf("expected event field in annotate payload, got: %s", result)
 	}
-	if !strings.Contains(text, `"comments"`) {
-		t.Fatalf("expected comments field in annotate payload, got: %s", text)
+	if !strings.Contains(result, `"comments"`) {
+		t.Fatalf("expected comments field in annotate payload, got: %s", result)
 	}
 }
 
@@ -1524,56 +1245,44 @@ func TestHandleAnnotate_WithFindings(t *testing.T) {
 
 func TestHandleDiff_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "diff", map[string]any{})
-
-	result, err := s.handleDiff(context.Background(), req)
+	result, err := s.handleDiff(context.Background(), diffInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", result)
 	}
 }
 
 func TestHandleDiff_DisallowedPath(t *testing.T) {
 	s := New("0.1.0", []string{"/allowed/only"})
-	req := makeToolRequest(t, "diff", map[string]any{"path": "/not/allowed"})
-
-	result, err := s.handleDiff(context.Background(), req)
+	result, err := s.handleDiff(context.Background(), diffInput{Path: "/not/allowed"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", text)
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
 func TestHandleDiff_NonGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "diff", map[string]any{"path": dir})
-
-	result, err := s.handleDiff(context.Background(), req)
+	result, err := s.handleDiff(context.Background(), diffInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for non-git directory")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "diff failed") {
-		t.Fatalf("expected diff failed message, got: %s", text)
+	if !strings.Contains(result, "diff failed") {
+		t.Fatalf("expected diff failed message, got: %s", result)
 	}
 }
 
@@ -1581,56 +1290,44 @@ func TestHandleDiff_NonGitRepo(t *testing.T) {
 
 func TestHandleProtectStatus_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "protect_status", map[string]any{})
-
-	result, err := s.handleProtectStatus(context.Background(), req)
+	result, err := s.handleProtectStatus(context.Background(), protectStatusInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", result)
 	}
 }
 
 func TestHandleProtectStatus_DisallowedPath(t *testing.T) {
 	s := New("0.1.0", []string{"/allowed/only"})
-	req := makeToolRequest(t, "protect_status", map[string]any{"path": "/not/allowed"})
-
-	result, err := s.handleProtectStatus(context.Background(), req)
+	result, err := s.handleProtectStatus(context.Background(), protectStatusInput{Path: "/not/allowed"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", text)
+	if !strings.Contains(result, "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", result)
 	}
 }
 
 func TestHandleProtectStatus_NonGitRepo(t *testing.T) {
 	dir := t.TempDir()
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "protect_status", map[string]any{"path": dir})
-
-	result, err := s.handleProtectStatus(context.Background(), req)
+	result, err := s.handleProtectStatus(context.Background(), protectStatusInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for non-git directory")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "not a git repository") {
-		t.Fatalf("expected not-a-git-repo message, got: %s", text)
+	if !strings.Contains(result, "not a git repository") {
+		t.Fatalf("expected not-a-git-repo message, got: %s", result)
 	}
 }
 
@@ -1646,19 +1343,15 @@ func TestHandleProtectStatus_NotInstalled(t *testing.T) {
 	}
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "protect_status", map[string]any{"path": dir})
-
-	result, err := s.handleProtectStatus(context.Background(), req)
+	result, err := s.handleProtectStatus(context.Background(), protectStatusInput{Path: dir})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"installed": false`) && !strings.Contains(text, `"installed":false`) {
-		t.Fatalf("expected installed:false, got: %s", text)
+	if !strings.Contains(result, `"installed": false`) && !strings.Contains(result, `"installed":false`) {
+		t.Fatalf("expected installed:false, got: %s", result)
 	}
 }
 
@@ -1666,19 +1359,15 @@ func TestHandleProtectStatus_NotInstalled(t *testing.T) {
 
 func TestHandleVEXStatus_MissingPath(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "vex_status", map[string]any{})
-
-	result, err := s.handleVEXStatus(context.Background(), req)
+	result, err := s.handleVEXStatus(context.Background(), vexStatusInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", result)
 	}
 }
 
@@ -1696,25 +1385,21 @@ func TestHandleVEXStatus_Success(t *testing.T) {
 	}
 
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "vex_status", map[string]any{"path": vexPath})
-
-	result, err := s.handleVEXStatus(context.Background(), req)
+	result, err := s.handleVEXStatus(context.Background(), vexStatusInput{Path: vexPath})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"statements": 2`) && !strings.Contains(text, `"statements":2`) {
-		t.Fatalf("expected statements count, got: %s", text)
+	if !strings.Contains(result, `"statements": 2`) && !strings.Contains(result, `"statements":2`) {
+		t.Fatalf("expected statements count, got: %s", result)
 	}
-	if !strings.Contains(text, "not_affected") || !strings.Contains(text, "fixed") {
-		t.Fatalf("expected status breakdown, got: %s", text)
+	if !strings.Contains(result, "not_affected") || !strings.Contains(result, "fixed") {
+		t.Fatalf("expected status breakdown, got: %s", result)
 	}
-	if !strings.Contains(text, "VEX: 2 statements") {
-		t.Fatalf("expected summary, got: %s", text)
+	if !strings.Contains(result, "VEX: 2 statements") {
+		t.Fatalf("expected summary, got: %s", result)
 	}
 }
 
@@ -1722,37 +1407,29 @@ func TestHandleVEXStatus_Success(t *testing.T) {
 
 func TestHandleComplianceReport_MissingFramework(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "compliance_report", map[string]any{})
-
-	result, err := s.handleComplianceReport(context.Background(), req)
+	result, err := s.handleComplianceReport(context.Background(), complianceReportInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error for missing framework")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "missing required argument: framework") {
-		t.Fatalf("expected missing framework message, got: %s", text)
+	if !strings.Contains(result, "missing required argument: framework") {
+		t.Fatalf("expected missing framework message, got: %s", result)
 	}
 }
 
 func TestHandleComplianceReport_Success(t *testing.T) {
 	s := scanCleanDir(t)
-	req := makeToolRequest(t, "compliance_report", map[string]any{"framework": "CIS"})
-
-	result, err := s.handleComplianceReport(context.Background(), req)
+	result, err := s.handleComplianceReport(context.Background(), complianceReportInput{Framework: "CIS"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, `"framework"`) || !strings.Contains(text, "CIS") {
-		t.Fatalf("expected framework in report, got: %s", text)
+	if !strings.Contains(result, `"framework"`) || !strings.Contains(result, "CIS") {
+		t.Fatalf("expected framework in report, got: %s", result)
 	}
 }
 
@@ -1760,19 +1437,15 @@ func TestHandleComplianceReport_Success(t *testing.T) {
 
 func TestHandleDataSensitivityReport_NoScanResults(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := makeToolRequest(t, "data_sensitivity_report", map[string]any{})
-
-	result, err := s.handleDataSensitivityReport(context.Background(), req)
+	result, err := s.handleDataSensitivityReport(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.IsError {
+	if !strings.HasPrefix(result, "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-
-	text := toolResultText(result)
-	if !strings.Contains(text, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", text)
+	if !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", result)
 	}
 }
 
@@ -1781,19 +1454,17 @@ func TestHandleDataSensitivityReport_WithFindings(t *testing.T) {
 	writeFile(t, dir, "data.txt", "email = user@example.com\nssn = 123-45-6789\n")
 
 	s := New("0.1.0", nil)
-	scanReq := makeToolRequest(t, "scan", map[string]any{"path": dir})
-	scanResult, err := s.handleScan(context.Background(), scanReq)
-	if err != nil || scanResult.IsError {
-		t.Fatalf("scan failed: %v", err)
+	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil || strings.HasPrefix(scanResult, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, scanResult)
 	}
 
-	req := makeToolRequest(t, "data_sensitivity_report", map[string]any{})
-	result, err := s.handleDataSensitivityReport(context.Background(), req)
+	result, err := s.handleDataSensitivityReport(context.Background(), emptyInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("expected success, got error: %s", toolResultText(result))
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
 	}
 
 	var report struct {
@@ -1806,8 +1477,7 @@ func TestHandleDataSensitivityReport_WithFindings(t *testing.T) {
 		AffectedFiles []string `json:"affected_files"`
 	}
 
-	text := toolResultText(result)
-	if err := json.Unmarshal([]byte(text), &report); err != nil {
+	if err := json.Unmarshal([]byte(result), &report); err != nil {
 		t.Fatalf("failed to parse report JSON: %v", err)
 	}
 	if report.TotalFindings == 0 {
@@ -1825,24 +1495,16 @@ func TestHandleDataSensitivityReport_WithFindings(t *testing.T) {
 
 // --- registration tests ---
 
-func newTestMCPServer() *mcpserver.MCPServer {
-	return mcpserver.NewMCPServer("nox", "test",
-		mcpserver.WithRecovery(),
-		mcpserver.WithToolCapabilities(false),
-		mcpserver.WithResourceCapabilities(false, false),
-	)
-}
-
 func TestRegisterTools(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := mcp.NewServer(mcp.ServerInfo{Name: "nox", Version: "test"})
 	s := New("test", nil)
 
-	// Should not panic; exercises all AddTool calls.
+	// Should not panic; exercises all tool registrations.
 	s.registerTools(srv)
 }
 
 func TestRegisterPluginTools_NoHost(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := mcp.NewServer(mcp.ServerInfo{Name: "nox", Version: "test"})
 	s := New("test", nil) // no plugin host
 
 	// Should return immediately without registering plugin tools.
@@ -1850,7 +1512,7 @@ func TestRegisterPluginTools_NoHost(t *testing.T) {
 }
 
 func TestRegisterPluginTools_WithHost(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := mcp.NewServer(mcp.ServerInfo{Name: "nox", Version: "test"})
 	h := createHostWithMockPlugin(t)
 	s := New("test", nil, WithPluginHost(h))
 
@@ -1859,10 +1521,10 @@ func TestRegisterPluginTools_WithHost(t *testing.T) {
 }
 
 func TestRegisterResources(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := mcp.NewServer(mcp.ServerInfo{Name: "nox", Version: "test"})
 	s := New("test", nil)
 
-	// Should not panic; exercises all AddResource calls.
+	// Should not panic; exercises all resource registrations.
 	s.registerResources(srv)
 }
 
@@ -1870,10 +1532,7 @@ func TestRegisterResources(t *testing.T) {
 
 func TestResourceDashboard_BeforeScan(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://dashboard"
-
-	_, err := s.handleResourceDashboard(context.Background(), req)
+	_, err := s.handleResourceDashboard(context.Background(), "nox://dashboard", nil)
 	if err == nil {
 		t.Fatal("expected error for resource before scan")
 	}
@@ -1881,26 +1540,15 @@ func TestResourceDashboard_BeforeScan(t *testing.T) {
 
 func TestResourceDashboard_AfterScan(t *testing.T) {
 	s := scanCleanDir(t)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://dashboard"
-
-	contents, err := s.handleResourceDashboard(context.Background(), req)
+	content, err := s.handleResourceDashboard(context.Background(), "nox://dashboard", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
+	if content.MimeType != "text/html" {
+		t.Fatalf("expected text/html MIME type, got %s", content.MimeType)
 	}
-
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
-	}
-	if tc.MIMEType != "text/html" {
-		t.Fatalf("expected text/html MIME type, got %s", tc.MIMEType)
-	}
-	if !strings.Contains(tc.Text, "<html") {
-		t.Fatalf("expected HTML content, got: %s", tc.Text[:min(len(tc.Text), 200)])
+	if !strings.Contains(content.Text, "<html") {
+		t.Fatalf("expected HTML content, got: %s", content.Text[:min(len(content.Text), 200)])
 	}
 }
 
@@ -1908,25 +1556,176 @@ func TestResourceDashboard_AfterScan(t *testing.T) {
 
 func TestResourceRules(t *testing.T) {
 	s := New("0.1.0", nil)
-	req := mcp.ReadResourceRequest{}
-	req.Params.URI = "nox://rules"
-
-	contents, err := s.handleResourceRules(context.Background(), req)
+	content, err := s.handleResourceRules(context.Background(), "nox://rules", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(contents) == 0 {
-		t.Fatal("expected non-empty resource contents")
+	if content.URI != "nox://rules" {
+		t.Fatalf("expected URI nox://rules, got %s", content.URI)
+	}
+	if !strings.Contains(content.Text, "SEC-") {
+		t.Fatalf("expected rule IDs in resource, got: %s", content.Text[:min(len(content.Text), 200)])
+	}
+}
+
+// --- handleDashboard tool tests ---
+
+func TestHandleDashboard_BeforeScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	result, err := s.handleDashboard(context.Background(), dashboardInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(result, "Error:") {
+		t.Fatal("expected error before any scan")
+	}
+}
+
+func TestHandleDashboard_AfterScan(t *testing.T) {
+	s := scanCleanDir(t)
+	result, err := s.handleDashboard(context.Background(), dashboardInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result[:min(len(result), 200)])
+	}
+	if !strings.Contains(result, "<html") {
+		t.Fatalf("expected HTML content in dashboard")
+	}
+}
+
+// --- resolveProjectPath tests ---
+
+func TestResolveProjectPath_Missing(t *testing.T) {
+	s := New("0.1.0", nil)
+	_, err := s.resolveProjectPath(nil)
+	if err == nil {
+		t.Fatal("expected error for nil params")
+	}
+}
+
+func TestResolveProjectPath_Empty(t *testing.T) {
+	s := New("0.1.0", nil)
+	_, err := s.resolveProjectPath(map[string]string{"project": ""})
+	if err == nil {
+		t.Fatal("expected error for empty project")
+	}
+}
+
+func TestResolveProjectPath_Valid(t *testing.T) {
+	s := New("0.1.0", nil)
+	path, err := s.resolveProjectPath(map[string]string{"project": "%2Ftmp%2Ftest"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "/tmp/test" {
+		t.Fatalf("expected /tmp/test, got %s", path)
+	}
+}
+
+// --- per-project resource handler tests ---
+
+// scanDirWithPath creates a temp dir, scans it, and returns the server
+// and the resolved absolute path of the scan directory.
+func scanDirWithPath(t *testing.T) (srv *Server, absPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	writeFile(t, dir, "main.go", "package main\n\nfunc main() {}\n")
+
+	s := New("0.1.0", nil)
+	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("scan returned error: %s", result)
 	}
 
-	tc, ok := contents[0].(mcp.TextResourceContents)
-	if !ok {
-		t.Fatal("expected TextResourceContents")
+	// Get the resolved absolute path used as cache key.
+	pc := s.getCache("")
+	return s, pc.basePath
+}
+
+func TestProjectResourceFindings_NoScan(t *testing.T) {
+	s := New("0.1.0", nil)
+	_, err := s.handleProjectResourceFindings(context.Background(), "nox://project/test/findings", map[string]string{"project": "%2Ftmp%2Fmissing"})
+	if err == nil {
+		t.Fatal("expected error for project with no scan")
 	}
-	if tc.URI != "nox://rules" {
-		t.Fatalf("expected URI nox://rules, got %s", tc.URI)
+}
+
+func TestProjectResourceFindings_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceFindings(context.Background(), "nox://project/"+encoded+"/findings", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(tc.Text, "SEC-") {
-		t.Fatalf("expected rule IDs in resource, got: %s", tc.Text[:min(len(tc.Text), 200)])
+	if !strings.Contains(content.Text, `"findings"`) {
+		t.Fatalf("expected findings JSON, got: %s", content.Text[:min(len(content.Text), 200)])
+	}
+}
+
+func TestProjectResourceSARIF_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceSARIF(context.Background(), "nox://project/"+encoded+"/sarif", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(content.Text, `"$schema"`) {
+		t.Fatalf("expected SARIF content")
+	}
+}
+
+func TestProjectResourceCDX_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceCDX(context.Background(), "nox://project/"+encoded+"/sbom/cdx", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(content.Text, "CycloneDX") {
+		t.Fatalf("expected CycloneDX content")
+	}
+}
+
+func TestProjectResourceSPDX_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceSPDX(context.Background(), "nox://project/"+encoded+"/sbom/spdx", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(content.Text, "SPDX") {
+		t.Fatalf("expected SPDX content")
+	}
+}
+
+func TestProjectResourceAIInventory_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceAIInventory(context.Background(), "nox://project/"+encoded+"/ai-inventory", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(content.Text, "schema_version") {
+		t.Fatalf("expected AI inventory JSON")
+	}
+}
+
+func TestProjectResourceDashboard_AfterScan(t *testing.T) {
+	s, absPath := scanDirWithPath(t)
+	encoded := url.PathEscape(absPath)
+	content, err := s.handleProjectResourceDashboard(context.Background(), "nox://project/"+encoded+"/dashboard", map[string]string{"project": encoded})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if content.MimeType != "text/html" {
+		t.Fatalf("expected text/html, got %s", content.MimeType)
+	}
+	if !strings.Contains(content.Text, "<html") {
+		t.Fatalf("expected HTML content")
 	}
 }
