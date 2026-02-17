@@ -59,8 +59,9 @@ plugins:
       path: ""
       config:
         draft: false
-      hooks: []
-      timeout: 0s
+      hooks:
+        - post_publish
+      timeout: 30s
       continueonerror: false
       capabilities: null
 versioning:
