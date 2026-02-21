@@ -185,7 +185,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Severity:    findings.SeverityHigh,
 		Confidence:  findings.ConfidenceHigh,
 		Tags:        []string{"dependency", "vulnerability", "sca"},
-		Remediation: "Update the affected dependency to a patched version. Check the advisory for details on which versions contain the fix.",
+		Remediation: "Check the advisory for the minimum fixed version. Update the dependency in your package manager (Go: go get -u <module>@<fixed-version>, npm: npm install <package>@<fixed-version>, pip: pip install <package>>=<fixed-version>). Run your test suite to verify compatibility. If a major version bump is required, review the changelog for breaking changes. Update lockfiles (go mod tidy / npm install / pip freeze).",
 		References:  []string{"https://osv.dev"},
 		Metadata:    map[string]string{"cwe": "CWE-1395"},
 	})
@@ -218,7 +218,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Severity:    findings.SeverityHigh,
 		Confidence:  findings.ConfidenceHigh,
 		Tags:        []string{"dependency", "license", "compliance"},
-		Remediation: "Review the license terms of this dependency. Consider replacing it with an alternative that uses a compatible license.",
+		Remediation: "Identify the exact license restriction (copyleft, non-commercial, etc.). Search for alternative packages with permissive licenses (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC). If no alternative exists, consult legal counsel for compliance. Document the decision in your project's NOTICE or LICENSE-THIRD-PARTY file. Use license-checker or go-licenses to audit transitive dependencies.",
 		References:  []string{"https://spdx.org/licenses/"},
 		Metadata:    map[string]string{"cwe": "CWE-1357"},
 	})

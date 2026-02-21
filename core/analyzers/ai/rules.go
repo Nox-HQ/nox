@@ -43,7 +43,7 @@ func builtinAIRules() []*rules.Rule {
 			description: "Direct string concatenation of user input into prompt template",
 			cwe:         "CWE-77", keywords: []string{"user_input", "user_message", "user_query", "user_prompt"},
 			tags:        []string{"ai", "prompt-injection"},
-			remediation: "Use parameterised prompt templates or structured message arrays. Never concatenate untrusted input directly into prompt strings.",
+			remediation: "Replace string concatenation with parameterised prompt templates or structured message arrays. Validate and sanitise user input before template interpolation. Use system prompts to establish behavioural boundaries. Implement output filtering to detect and block injection attempts. Consider using a prompt template library with built-in injection guards.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/77.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
 		{

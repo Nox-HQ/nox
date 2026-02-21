@@ -44,7 +44,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-829", keywords: []string{"from"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
 			tags:         []string{"iac", "docker", "supply-chain"},
-			remediation:  "Pin base images to a specific version and digest (e.g., 'node:20-alpine@sha256:abc...'). This ensures reproducible builds and protects against supply chain attacks.",
+			remediation:  "Pin base images to a specific version and digest. Get the digest with: docker inspect --format='{{index .RepoDigests 0}}' <image:tag>. Replace tag references (e.g., FROM nginx:1.25) with digest references (e.g., FROM nginx@sha256:abc123...). Document the source tag in a comment for maintainability. Consider tools like crane or skopeo for automated digest pinning.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
 		{
@@ -242,7 +242,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-250", keywords: []string{"privileged"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "privilege"},
-			remediation:  "Set privileged: false in the pod security context. Use specific capabilities (add/drop) instead of full privilege. Apply Pod Security Standards.",
+			remediation:  "Set privileged: false in the pod security context. If specific capabilities are needed, use securityContext.capabilities.add with only what is required and drop ALL others. Enable readOnlyRootFilesystem: true where possible. Set runAsNonRoot: true and specify a non-root runAsUser. Apply Pod Security Standards.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://kubernetes.io/docs/concepts/security/pod-security-standards/"},
 		},
 		{
