@@ -50,7 +50,16 @@
 - Plugin registry with OCI distribution and trust verification
 - SDK with conformance testing and 10 plugin tracks
 - Plugin scaffolding (`nox plugin init`)
-- Reference plugins: risk-score, secret-verify, fix-suggest, lsp
+- 23 plugins across 9 tracks (92 plugin rules, 213 tests):
+  - core-analysis: arch-lint, container, sast
+  - dynamic-runtime: api-abuse, attack-surface, dast
+  - supply-chain: artifact-integrity, depconfusion, provenance
+  - policy-governance: baseline-mgmt, policy-gate, risk-register
+  - threat-modeling: threat-explain, threat-model
+  - intelligence: risk-score, threat-enrich
+  - incident-readiness: detect-ready, playbook
+  - developer-experience: lsp, orchestrator, report-composer
+  - agent-assistance: case-bundle, triage-agent
 - Interactive TUI finding inspector (`nox show`)
 - Finding detail enrichment with source context
 - VEX support (OpenVEX format)
@@ -70,35 +79,80 @@
 
 ## Phase 7 — Advanced Analysis (planned)
 
-### Reachability Analysis
+Pipeline: SAST → IaC Graph (core) → Reachability → Taint → Risk-Score → AI-Triage → K8s Runtime
+
+### 7a. Graph-Based IaC Cross-Resource Analysis — core enhancement
+
+Extends the existing `core/analyzers/iac/tfplan.go` with a resource relationship model.
+Not a separate plugin — this is a natural extension of the core IaC analyzer.
+
+- Build a resource dependency graph from Terraform state/plan
+- Detect misconfigurations that span multiple resources (e.g., public subnet + no NACL + open security group)
+- Add `core/analyzers/iac/tfgraph.go` with `buildResourceGraph()` and cross-resource pattern rules
+- Estimated scope: ~200–300 LOC
+
+### 7b. Reachability Analysis — new plugin `nox-plugin-reachability`
+
+Separate plugin on the `core-analysis` track. Cannot merge into `sast` because SAST is
+line-based regex matching while reachability requires AST parsing and call graph construction —
+fundamentally different data model and dependencies (go/ast, tree-sitter).
+
 - Language-specific call graph construction (Go, Python, JavaScript/TypeScript)
 - Determine whether vulnerable dependency functions are actually called
 - Reduce false positives in dependency scanning by filtering unreachable code paths
-- Planned as a plugin on the `core-analysis` track
+- Runs as a post-processor: consumes VULN findings, filters by reachability
+- Estimated scope: ~500–800 LOC
 
-### Graph-Based IaC Cross-Resource Analysis
-- Build a resource dependency graph from Terraform state/plan
-- Detect misconfigurations that span multiple resources (e.g., public subnet + no NACL + open security group)
-- Requires extending `tfplan.go` with a resource relationship model
+### 7c. Cross-File Taint Analysis — new plugin `nox-plugin-taint-analysis`
 
-### Cross-File Taint Analysis
+Separate plugin on the `core-analysis` track. Cannot merge into `sast` because taint analysis
+requires interprocedural SSA/CFG dataflow tracking — 10x more complex than pattern matching
+and requires entirely different dependencies and data structures.
+
 - Dataflow tracking across function and file boundaries
 - Detect untrusted input flowing to sensitive sinks (SQL, shell, eval)
 - Language-specific AST parsing for Go, Python, JavaScript
-- Planned as a plugin on the `core-analysis` track
+- Complements `sast` by confirming actual dataflow paths for pattern-matched findings
+- Estimated scope: ~1000–1500 LOC
 
-### AI-Powered Triage
+### 7d. AI-Powered Triage — merge into existing `nox-plugin-triage-agent`
+
+Merges into the existing triage-agent plugin rather than creating a new one. The triage-agent
+already classifies findings by priority (immediate/scheduled/backlog/informational) — LLM-based
+severity adjustment is the same domain concern, just a better tool. Adding ~150–200 LOC behind
+an opt-in flag keeps it lightweight and gated.
+
 - LLM-assisted severity adjustment based on code context
 - Auto-classification of true vs. false positives using historical data
-- Integrates with the `assist/` module
-- Opt-in only, never affects deterministic scan results
+- Integrates with the `assist/` module via agent-go
+- Opt-in only (`--ai-triage` flag), never affects deterministic scan results
+- Default behavior remains deterministic pattern-based prioritization
 
-### Kubernetes Runtime Scanning
+### 7e. Kubernetes Runtime Scanning — new plugin `nox-plugin-k8s-runtime`
+
+Separate plugin on the `dynamic-runtime` track. Cannot merge into `container` (which scans
+static Dockerfiles) or `dast` (which probes HTTP endpoints) — live cluster inspection is a
+fundamentally different concern with different dependencies (client-go), credentials (kubeconfig),
+and risk class (active).
+
 - Live cluster scanning via kubectl/API access
 - Compare running workloads against IaC definitions for drift detection
 - Runtime-specific checks (running as root, mounted secrets, network policies)
-- Planned as a plugin on the `dynamic-runtime` track
 - Breaks the offline-first constraint — clearly marked as optional
+- Requires cluster credentials and namespace allow-listing in safety manifest
+- Estimated scope: ~600–800 LOC
+
+### Phase 7 Summary
+
+| Feature | Location | Type | Track | Estimated LOC |
+|---|---|---|---|---|
+| IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement | — | ~200–300 |
+| Reachability | `nox-plugin-reachability` | New plugin | core-analysis | ~500–800 |
+| Taint Analysis | `nox-plugin-taint-analysis` | New plugin | core-analysis | ~1000–1500 |
+| AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update | agent-assistance | ~150–200 |
+| K8s Runtime | `nox-plugin-k8s-runtime` | New plugin | dynamic-runtime | ~600–800 |
+
+Post-Phase 7 plugin count: 23 → 26 (3 new plugins, 1 core enhancement, 1 plugin update).
 
 ## Explicitly Out of Scope
 
