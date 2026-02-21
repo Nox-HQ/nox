@@ -66,30 +66,37 @@
 - Terraform plan scanning
 - SBOM input scanning
 - Encoded secret detection
-- 564 built-in rules:
+- 568 built-in rules:
   - 160 secret detectors (SEC-001–SEC-160)
   - 12 data sensitivity / PII rules (DATA-001–DATA-012)
   - 21 AI security rules (AI-001–AI-021)
-  - 365 IaC rules (IAC-001–IAC-365): Terraform, Kubernetes, GitHub Actions, CloudFormation, Docker, Helm, Compose, Ansible, Kustomize, Serverless Framework, Azure, GCP, CI/CD
+  - 369 IaC rules (IAC-001–IAC-369): Terraform, Kubernetes, GitHub Actions, CloudFormation, Docker, Helm, Compose, Ansible, Kustomize, Serverless Framework, Azure, GCP, CI/CD, cross-resource graph analysis
   - 6 dependency/container/license rules (VULN/CONT/LIC)
 - Compliance framework mapping (~94% rule coverage):
   - CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP Top 10, OWASP LLM Top 10, OWASP Agentic
 - AI-BOM v2.0.0: model provenance, prompt templates, tool permission matrix, connection graph
 - MCP tools: data_sensitivity_report, compliance_report (8 frameworks)
 
-## Phase 7 — Advanced Analysis (planned)
+## Phase 7 — Advanced Analysis (in progress)
 
 Pipeline: SAST → IaC Graph (core) → Reachability → Taint → Risk-Score → AI-Triage → K8s Runtime
 
-### 7a. Graph-Based IaC Cross-Resource Analysis — core enhancement
+### 7a. Graph-Based IaC Cross-Resource Analysis — core enhancement ✓
 
-Extends the existing `core/analyzers/iac/tfplan.go` with a resource relationship model.
-Not a separate plugin — this is a natural extension of the core IaC analyzer.
+Extends `core/analyzers/iac/tfplan.go` with a resource relationship model.
+Not a separate plugin — natural extension of the core IaC analyzer.
 
-- Build a resource dependency graph from Terraform state/plan
-- Detect misconfigurations that span multiple resources (e.g., public subnet + no NACL + open security group)
-- Add `core/analyzers/iac/tfgraph.go` with `buildResourceGraph()` and cross-resource pattern rules
-- Estimated scope: ~200–300 LOC
+- Resource dependency graph from Terraform plan (HCL configuration references)
+- 4 cross-resource pattern detectors:
+  - IAC-366: Public subnet + unrestricted security group in same VPC
+  - IAC-367: Internet-facing load balancer with HTTP listener (no TLS)
+  - IAC-368: Public S3 bucket without server-side encryption config
+  - IAC-369: Unrestricted security group attached to database instance
+- `core/analyzers/iac/tfgraph.go`: `BuildResourceGraph()`, resource indexing, cross-resource checks
+- Separate `aws_security_group_rule` and IPv6 (`::/0`) detection
+- Compliance mapped: CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP Top 10
+- 23 tests (19 cross-resource pattern tests + 4 graph/helper tests)
+- ~270 LOC implementation + ~500 LOC tests
 
 ### 7b. Reachability Analysis — new plugin `nox-plugin-reachability`
 
@@ -146,7 +153,7 @@ and risk class (active).
 
 | Feature | Location | Type | Track | Estimated LOC |
 |---|---|---|---|---|
-| IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement | — | ~200–300 |
+| IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement ✓ | — | ~270 (impl) + ~500 (tests) |
 | Reachability | `nox-plugin-reachability` | New plugin | core-analysis | ~500–800 |
 | Taint Analysis | `nox-plugin-taint-analysis` | New plugin | core-analysis | ~1000–1500 |
 | AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update | agent-assistance | ~150–200 |

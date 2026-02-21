@@ -2978,5 +2978,42 @@ func complianceData() map[string][]FrameworkControl {
 			{NIST80053, "NIST SC-28", "Protection of information at rest"},
 			{OWASPTop, "OWASP A04:2021", "Insecure Design"},
 		},
+
+		// =================================================================
+		// Cross-Resource Graph Analysis Rules (IAC-366 through IAC-369)
+		// =================================================================
+
+		"IAC-366": { // Public subnet + unrestricted security group in same VPC
+			{CIS, "CIS 9.2", "Ensure VPC flow logging is enabled in all VPCs"},
+			{PCIDSS, "PCI-DSS 1.2.1", "Restrict inbound and outbound traffic"},
+			{SOC2, "SOC2 CC6.1", "Logical and physical access controls"},
+			{NIST80053, "NIST AC-4", "Information flow enforcement"},
+			{NIST80053, "NIST SC-7", "Boundary protection"},
+			{OWASPTop, "OWASP A01:2021", "Broken Access Control"},
+		},
+		"IAC-367": { // Internet-facing load balancer with HTTP listener
+			{PCIDSS, "PCI-DSS 4.1", "Use strong cryptography to safeguard cardholder data during transmission"},
+			{SOC2, "SOC2 CC6.7", "Restrict transmission of data to authorized parties"},
+			{NIST80053, "NIST SC-8", "Transmission confidentiality and integrity"},
+			{HIPAA, "HIPAA 164.312(e)(1)", "Transmission security"},
+			{OWASPTop, "OWASP A02:2021", "Cryptographic Failures"},
+		},
+		"IAC-368": { // Public S3 bucket without encryption configuration
+			{CIS, "CIS 2.1.1", "Ensure S3 Bucket Policy is set to deny HTTP requests"},
+			{PCIDSS, "PCI-DSS 3.4", "Render PAN unreadable anywhere it is stored"},
+			{SOC2, "SOC2 CC6.1", "Logical and physical access controls"},
+			{NIST80053, "NIST SC-28", "Protection of information at rest"},
+			{HIPAA, "HIPAA 164.312(a)(2)(iv)", "Encryption and decryption"},
+			{OWASPTop, "OWASP A02:2021", "Cryptographic Failures"},
+		},
+		"IAC-369": { // Unrestricted security group attached to database
+			{CIS, "CIS 4.1", "Ensure no security groups allow ingress from 0.0.0.0/0"},
+			{PCIDSS, "PCI-DSS 1.3.6", "Place system components that store cardholder data in an internal network zone"},
+			{SOC2, "SOC2 CC6.1", "Logical and physical access controls"},
+			{NIST80053, "NIST AC-4", "Information flow enforcement"},
+			{NIST80053, "NIST SC-7", "Boundary protection"},
+			{HIPAA, "HIPAA 164.312(a)(1)", "Access control"},
+			{OWASPTop, "OWASP A01:2021", "Broken Access Control"},
+		},
 	}
 }

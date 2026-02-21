@@ -10,7 +10,9 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 )
 
-// tfPlan is the minimal structure for terraform show -json output.
+// tfPlan is the structure for terraform show -json output. It covers
+// planned_values, resource_changes, and the configuration section which
+// contains HCL expression references used for cross-resource analysis.
 type tfPlan struct {
 	PlannedValues struct {
 		RootModule struct {
@@ -18,6 +20,33 @@ type tfPlan struct {
 		} `json:"root_module"`
 	} `json:"planned_values"`
 	ResourceChanges []tfResourceChange `json:"resource_changes"`
+	Configuration   tfConfiguration    `json:"configuration"`
+}
+
+// tfConfiguration represents the HCL configuration section of a plan,
+// containing expression references between resources.
+type tfConfiguration struct {
+	RootModule tfConfigModule `json:"root_module"`
+}
+
+// tfConfigModule holds the resources within a configuration module.
+type tfConfigModule struct {
+	Resources []tfConfigResource `json:"resources"`
+}
+
+// tfConfigResource represents a resource's HCL expressions (references to
+// other resources) in the configuration section of a Terraform plan.
+type tfConfigResource struct {
+	Address     string                        `json:"address"`
+	Type        string                        `json:"type"`
+	Name        string                        `json:"name"`
+	Expressions map[string]tfConfigExpression `json:"expressions"`
+}
+
+// tfConfigExpression captures the references within a single HCL expression.
+type tfConfigExpression struct {
+	References    []string    `json:"references"`
+	ConstantValue interface{} `json:"constant_value,omitempty"`
 }
 
 // tfPlanResource represents a resource in the planned state.
@@ -73,6 +102,11 @@ func scanTerraformPlanContent(content []byte, path string) (*findings.FindingSet
 		}
 		checkTfResourceValues(fs, res.Address, res.Type, res.Values, path)
 	}
+
+	// Cross-resource graph analysis detects misconfigurations that span
+	// multiple resources (e.g., public subnet + open security group).
+	idx := newResourceIndex(&plan)
+	checkCrossResourcePatterns(idx, fs, path)
 
 	fs.Deduplicate()
 	return fs, nil
