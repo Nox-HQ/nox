@@ -74,8 +74,9 @@
   - 6 dependency/container/license rules (VULN/CONT/LIC)
 - Compliance framework mapping (~94% rule coverage):
   - CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP Top 10, OWASP LLM Top 10, OWASP Agentic
+  - FedRAMP Low / Moderate / High (mapped from NIST 800-53 controls, cumulative baselines)
 - AI-BOM v2.0.0: model provenance, prompt templates, tool permission matrix, connection graph
-- MCP tools: data_sensitivity_report, compliance_report (8 frameworks)
+- MCP tools: data_sensitivity_report, compliance_report (11 frameworks)
 
 ## Phase 7 — Advanced Analysis ✓
 
@@ -239,6 +240,24 @@ exploit validation with two tools: passive analysis and active validation.
 | Red Team | `nox-plugin-red-team` | New plugin ✓ | dynamic-runtime | 33 |
 
 Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules.
+
+### 8e. FedRAMP Compliance Baselines — core enhancement ✓
+
+Adds FedRAMP Low, Moderate, and High as three independent compliance frameworks in the core
+compliance system. Mapped from existing NIST 800-53 controls using official FedRAMP baseline
+control lists.
+
+- 3 new framework constants: `FedRAMP-Low`, `FedRAMP-Moderate`, `FedRAMP-High`
+- Baselines are cumulative: High ⊇ Moderate ⊇ Low
+- 1,517 FedRAMP control mappings across all rules with NIST 800-53 controls:
+  - FedRAMP-Low: 309 entries (controls like SC-12, IA-5, CM-7, SC-5, AU-2)
+  - FedRAMP-Moderate: 557 entries (adds AC-6, SC-8, SC-28, SI-10, CM-3)
+  - FedRAMP-High: 651 entries (adds SA-12, CA-8, SI-6, SC-6)
+- Control ID format: `FedRAMP-L SC-12`, `FedRAMP-M AC-6`, `FedRAMP-H CA-8`
+- 41 unique NIST 800-53 controls mapped to FedRAMP baselines
+- Supported frameworks: 8 → 11
+- `core/compliance/compliance.go`, `core/compliance/data.go`, `core/compliance/compliance_test.go`
+- Tests: baseline inclusion verification (High ⊇ Moderate ⊇ Low), per-tier filtering
 
 ## Explicitly Out of Scope
 
