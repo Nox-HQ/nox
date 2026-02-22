@@ -98,17 +98,18 @@ Not a separate plugin — natural extension of the core IaC analyzer.
 - 23 tests (19 cross-resource pattern tests + 4 graph/helper tests)
 - ~270 LOC implementation + ~500 LOC tests
 
-### 7b. Reachability Analysis — new plugin `nox-plugin-reachability`
+### 7b. Reachability Analysis — new plugin `nox-plugin-reachability` ✓
 
-Separate plugin on the `core-analysis` track. Cannot merge into `sast` because SAST is
-line-based regex matching while reachability requires AST parsing and call graph construction —
-fundamentally different data model and dependencies (go/ast, tree-sitter).
+Separate plugin on the `core-analysis` track. Post-processes VULN findings to classify
+vulnerable packages as reachable, unreachable, or undetermined based on import analysis.
 
-- Language-specific call graph construction (Go, Python, JavaScript/TypeScript)
-- Determine whether vulnerable dependency functions are actually called
-- Reduce false positives in dependency scanning by filtering unreachable code paths
-- Runs as a post-processor: consumes VULN findings, filters by reachability
-- Estimated scope: ~500–800 LOC
+- Import extraction for Go (`go/parser`), Python (regex), JS/TS (regex)
+- Cross-references VULN finding metadata (`package`, `ecosystem`) against workspace imports
+- 3 rules: REACH-001 (unreachable/info), REACH-002 (reachable/high), REACH-003 (undetermined/low)
+- PyPI name mapping (~15 common divergences: Pillow→PIL, scikit-learn→sklearn, etc.)
+- Enriches original VULN findings with reachability status
+- `ToolWithContext("analyze_reachability")` on core-analysis track
+- ~550 LOC implementation + ~450 LOC tests, 19 tests all passing
 
 ### 7c. Cross-File Taint Analysis — new plugin `nox-plugin-taint-analysis`
 
@@ -154,7 +155,7 @@ and risk class (active).
 | Feature | Location | Type | Track | Estimated LOC |
 |---|---|---|---|---|
 | IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement ✓ | — | ~270 (impl) + ~500 (tests) |
-| Reachability | `nox-plugin-reachability` | New plugin | core-analysis | ~500–800 |
+| Reachability | `nox-plugin-reachability` | New plugin ✓ | core-analysis | ~550 (impl) + ~450 (tests) |
 | Taint Analysis | `nox-plugin-taint-analysis` | New plugin | core-analysis | ~1000–1500 |
 | AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update | agent-assistance | ~150–200 |
 | K8s Runtime | `nox-plugin-k8s-runtime` | New plugin | dynamic-runtime | ~600–800 |
