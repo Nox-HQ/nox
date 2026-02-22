@@ -1,0 +1,7 @@
+name: nox-plugin-taint-analysis
+version: 0.1.0
+track: core-analysis
+description: Intraprocedural taint analysis tracking data flow from untrusted sources to dangerous sinks
+tools:
+  - name: scan
+    description: Scan source files for tainted data flows from untrusted input to dangerous sinks
