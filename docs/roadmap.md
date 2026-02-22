@@ -170,6 +170,76 @@ and risk class (active).
 
 Post-Phase 7 plugin count: 23 → 26 (3 new plugins, 1 core enhancement, 1 plugin update).
 
+## Phase 8 — AI-Enhanced Security Intelligence ✓
+
+Pipeline: SAST → IaC Graph → Reachability → Taint → Risk-Score → AI-Triage → K8s Runtime → **AI-Explain → AI-Threat-Model → GRC → Red-Team**
+
+### 8a. AI Threat-Explain — enhance `nox-plugin-threat-explain` ✓
+
+Adds opt-in LLM-powered explanation generation to the existing threat-explain plugin.
+Enhances static explanations with contextual, audience-targeted guidance.
+
+- Opt-in via `ai_explain: true` input parameter
+- LLM receives: finding rule_id, severity, CWE, file, matched line, static explanation/impact/audience
+- LLM returns: enhanced explanation, contextual impact, specific remediation guidance
+- Metadata enrichment: `ai_explained`, `ai_explanation`, `ai_impact`, `ai_remediation`, `original_explanation`, `original_impact`
+- Graceful degradation: LLM failure → static explanations preserved + `ai_explain_error`
+- 7-provider LLM support via `plannerllm.Provider` (OpenAI, Anthropic, Gemini, Ollama, Cohere, Bedrock, Copilot)
+- `provider.go`, `ai_explain.go`, `ai_explain_test.go` (9 AI tests)
+- 18 tests total, all passing
+
+### 8b. AI Threat-Model Agent — enhance `nox-plugin-threat-model` ✓
+
+Adds AI-powered comprehensive STRIDE threat modeling to the existing threat-model plugin.
+Two modes: deterministic regex (default) and AI-enhanced analysis (opt-in).
+
+- Opt-in via `ai_model: true` input parameter
+- LLM receives: deterministic findings + file inventory with detected STRIDE categories
+- LLM returns: threat_id, stride_category, title, description, severity, affected_component, attack_scenario, mitigation, likelihood
+- AI-generated threats use rule IDs `THREAT-AI-001+` to distinguish from deterministic rules
+- Metadata: `ai_modeled`, `attack_scenario`, `mitigation`, `likelihood`, `affected_component`
+- `provider.go`, `ai_threat_model.go`, `ai_threat_model_test.go` (10 AI tests)
+- 19 tests total, all passing
+
+### 8c. GRC Compliance — new plugin `nox-plugin-grc` ✓
+
+New plugin on the `policy-governance` track. Governance, Risk & Compliance with 10 framework
+coverage, gap analysis, evidence collection, and AI-powered control mapping.
+
+- 10 compliance frameworks: SOC2, ISO 27001, GDPR, FedRAMP, HIPAA, PCI-DSS, NIST 800-53, NIST CSF, CIS Controls v8, CMMC
+- 3 tools: `assess` (compliance assessment), `gap_report` (gap analysis), `evidence` (evidence collection)
+- 10 rules: GRC-001 (critical control gap), GRC-002 (coverage below threshold), GRC-003 (stale evidence), GRC-004 (conflicting controls), GRC-005 (GDPR data protection), GRC-006 (SOC2 access control), GRC-007 (FedRAMP encryption), GRC-008 (incident response), GRC-009 (NIST CSF monitoring), GRC-010 (CMMC maturity)
+- Gap analysis with coverage percentage and priority remediation
+- Evidence collection mapped to framework controls
+- Opt-in AI-powered gap analysis via `ai_assess: true`
+- `frameworks.go`, `gap_analysis.go`, `evidence.go`, `ai_gap.go`, `provider.go`
+- 27 tests total, all passing
+
+### 8d. Red Team — new plugin `nox-plugin-red-team` ✓
+
+New plugin on the `dynamic-runtime` track. AI-powered attack path analysis and
+exploit validation with two tools: passive analysis and active validation.
+
+- 2 tools: `analyze` (passive, read-only), `validate` (active, needs confirmation)
+- 7 attack chain detection patterns: auth bypass→data exposure, privilege escalation, SQL injection→exfiltration, container escape, command injection, weak auth+rate limit, XSS+data exposure
+- HTTP validation: security headers, TLS configuration, rate limit testing
+- 10 rules: REDTEAM-001–005 (attack chains), REDTEAM-006–010 (validation findings)
+- Opt-in AI-powered attack path reasoning via `ai_analyze: true`
+- Safety: `RiskActive` + `WithNeedsConfirmation()` + `WithNetworkHosts("*")`
+- `attack_paths.go`, `validate.go`, `ai_analysis.go`, `provider.go`
+- 33 tests total, all passing
+
+### Phase 8 Summary
+
+| Feature | Location | Type | Track | Tests |
+|---|---|---|---|---|
+| AI Threat-Explain | `nox-plugin-threat-explain` | Plugin update ✓ | threat-modeling | 18 |
+| AI Threat-Model | `nox-plugin-threat-model` | Plugin update ✓ | threat-modeling | 19 |
+| GRC Compliance | `nox-plugin-grc` | New plugin ✓ | policy-governance | 27 |
+| Red Team | `nox-plugin-red-team` | New plugin ✓ | dynamic-runtime | 33 |
+
+Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules.
+
 ## Explicitly Out of Scope
 
 - SaaS dashboards

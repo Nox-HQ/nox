@@ -1,0 +1,12 @@
+version: 1
+language: go
+
+policy:
+  default:
+    min: 70
+
+  domains:
+    - name: plugin
+      match:
+        - github.com/nox-hq/nox-plugin-grc/...
+      min: 70

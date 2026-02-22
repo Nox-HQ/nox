@@ -1,0 +1,47 @@
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.7.2
+    hooks:
+      - id: golangci-lint
+
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        pass_filenames: false
+        types: [go]
+
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -w
+        language: system
+        types: [go]
+
+      - id: nox-scan
+        name: nox security scan
+        entry: nox scan .
+        language: system
+        pass_filenames: false
+        types: [go]
+        stages: [pre-commit]
+
+      - id: coverctl
+        name: coverctl coverage check
+        entry: bash -c 'go test -coverprofile=coverage.out ./... && coverctl -q check --config .coverctl.yaml --profile coverage.out'
+        language: system
+        pass_filenames: false
+        types: [go]
+        stages: [pre-commit]

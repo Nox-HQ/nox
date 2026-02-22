@@ -1,0 +1,11 @@
+name: nox-plugin-grc
+version: 0.1.0
+track: policy-governance
+description: Governance, Risk & Compliance assessment with 10 framework coverage, gap analysis, and evidence collection
+tools:
+  - name: assess
+    description: Run compliance assessment against specified frameworks
+  - name: gap_report
+    description: Generate comprehensive gap analysis for a framework
+  - name: evidence
+    description: Collect compliance evidence for framework controls
