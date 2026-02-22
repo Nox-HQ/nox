@@ -3015,5 +3015,64 @@ func complianceData() map[string][]FrameworkControl {
 			{HIPAA, "HIPAA 164.312(a)(1)", "Access control"},
 			{OWASPTop, "OWASP A01:2021", "Broken Access Control"},
 		},
+
+		// =================================================================
+		// Kubernetes Runtime Rules (KRUNT-*)
+		// =================================================================
+
+		"KRUNT-001": { // Container running as root
+			{CIS, "CIS 5.2.6", "Minimize the admission of root containers"},
+			{NIST80053, "NIST AC-6", "Least privilege"},
+			{NIST80053, "NIST CM-7", "Least functionality"},
+			{PCIDSS, "PCI-DSS 7.1", "Limit access to system components"},
+			{OWASPTop, "OWASP A05:2021", "Security Misconfiguration"},
+		},
+		"KRUNT-002": { // Privileged container
+			{CIS, "CIS 5.2.1", "Minimize the admission of privileged containers"},
+			{NIST80053, "NIST AC-6", "Least privilege"},
+			{NIST80053, "NIST CM-7", "Least functionality"},
+			{PCIDSS, "PCI-DSS 7.1", "Limit access to system components"},
+			{OWASPTop, "OWASP A05:2021", "Security Misconfiguration"},
+		},
+		"KRUNT-003": { // Host namespace sharing
+			{CIS, "CIS 5.2.2", "Minimize the admission of containers with hostPID"},
+			{NIST80053, "NIST AC-6", "Least privilege"},
+			{NIST80053, "NIST SC-7", "Boundary protection"},
+			{PCIDSS, "PCI-DSS 1.3", "Prohibit direct public access between the Internet and any system component"},
+			{OWASPTop, "OWASP A05:2021", "Security Misconfiguration"},
+		},
+		"KRUNT-004": { // No network policy
+			{CIS, "CIS 5.3.2", "Ensure that all namespaces have network policies defined"},
+			{NIST80053, "NIST SC-7", "Boundary protection"},
+			{NIST80053, "NIST AC-4", "Information flow enforcement"},
+			{PCIDSS, "PCI-DSS 1.2", "Build firewall and router configurations that restrict connections"},
+			{OWASPTop, "OWASP A01:2021", "Broken Access Control"},
+		},
+		"KRUNT-005": { // No resource limits
+			{CIS, "CIS 5.4.1", "Ensure that each container has a CPU and memory limit"},
+			{NIST80053, "NIST SC-6", "Resource availability"},
+			{PCIDSS, "PCI-DSS 6.5.10", "Broken authentication and session management"},
+			{OWASPTop, "OWASP A05:2021", "Security Misconfiguration"},
+		},
+		"KRUNT-006": { // Unpinned container image
+			{CIS, "CIS 5.5.1", "Ensure that the latest tag is not used in container images"},
+			{NIST80053, "NIST CM-3", "Configuration change control"},
+			{NIST80053, "NIST SI-7", "Software, firmware, and information integrity"},
+			{PCIDSS, "PCI-DSS 6.3.2", "Review custom code prior to release"},
+			{OWASPTop, "OWASP A08:2021", "Software and Data Integrity Failures"},
+		},
+		"KRUNT-007": { // SA token auto-mounted
+			{CIS, "CIS 5.1.6", "Ensure that service account tokens are not automatically mounted"},
+			{NIST80053, "NIST AC-6", "Least privilege"},
+			{PCIDSS, "PCI-DSS 7.1", "Limit access to system components"},
+			{OWASPTop, "OWASP A01:2021", "Broken Access Control"},
+		},
+		"KRUNT-008": { // Dangerous capabilities
+			{CIS, "CIS 5.2.7", "Minimize the admission of containers with added capabilities"},
+			{NIST80053, "NIST AC-6", "Least privilege"},
+			{NIST80053, "NIST CM-7", "Least functionality"},
+			{PCIDSS, "PCI-DSS 7.1", "Limit access to system components"},
+			{OWASPTop, "OWASP A05:2021", "Security Misconfiguration"},
+		},
 	}
 }

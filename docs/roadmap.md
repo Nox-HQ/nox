@@ -77,7 +77,7 @@
 - AI-BOM v2.0.0: model provenance, prompt templates, tool permission matrix, connection graph
 - MCP tools: data_sensitivity_report, compliance_report (8 frameworks)
 
-## Phase 7 — Advanced Analysis (in progress)
+## Phase 7 — Advanced Analysis ✓
 
 Pipeline: SAST → IaC Graph (core) → Reachability → Taint → Risk-Score → AI-Triage → K8s Runtime
 
@@ -141,19 +141,22 @@ severity adjustment is the same domain concern, just a better tool.
 - OpenAI provider implementation in agent-go (~80 LOC) — supports OpenAI, Azure, Ollama (compat mode)
 - 20 tests total (9 new AI triage + 11 existing), all passing
 
-### 7e. Kubernetes Runtime Scanning — new plugin `nox-plugin-k8s-runtime`
+### 7e. Kubernetes Runtime Scanning — new plugin `nox-plugin-k8s-runtime` ✓
 
 Separate plugin on the `dynamic-runtime` track. Cannot merge into `container` (which scans
 static Dockerfiles) or `dast` (which probes HTTP endpoints) — live cluster inspection is a
 fundamentally different concern with different dependencies (client-go), credentials (kubeconfig),
 and risk class (active).
 
-- Live cluster scanning via kubectl/API access
-- Compare running workloads against IaC definitions for drift detection
-- Runtime-specific checks (running as root, mounted secrets, network policies)
-- Breaks the offline-first constraint — clearly marked as optional
-- Requires cluster credentials and namespace allow-listing in safety manifest
-- Estimated scope: ~600–800 LOC
+- Live cluster scanning via Kubernetes API (in-cluster config + kubeconfig fallback)
+- 8 rules: KRUNT-001 (root), KRUNT-002 (privileged), KRUNT-003 (host namespace), KRUNT-004 (no network policy), KRUNT-005 (no resource limits), KRUNT-006 (unpinned image), KRUNT-007 (SA token automount), KRUNT-008 (dangerous capabilities)
+- Container-level checks with `effectiveSecurityContext` merging (pod → container override)
+- Init container scanning (both `.Spec.InitContainers` and `.Spec.Containers`)
+- Registry port detection in `isUnpinnedImage` (distinguishes `registry:5000/app` from `image:latest`)
+- Graceful degradation: cluster unreachable → diagnostic error, no crash
+- `Tool("scan")` on dynamic-runtime track, active risk, needs confirmation, network hosts `*`
+- Compliance mapped: CIS 5.x, NIST-800-53, PCI-DSS, OWASP Top 10
+- ~310 LOC implementation + ~400 LOC tests, all passing
 
 ### Phase 7 Summary
 
@@ -163,7 +166,7 @@ and risk class (active).
 | Reachability | `nox-plugin-reachability` | New plugin ✓ | core-analysis | ~550 (impl) + ~450 (tests) |
 | Taint Analysis | `nox-plugin-taint-analysis` | New plugin ✓ | core-analysis | ~1,090 (impl) + ~740 (tests) |
 | AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update ✓ | agent-assistance | ~290 (impl) + ~190 (tests) |
-| K8s Runtime | `nox-plugin-k8s-runtime` | New plugin | dynamic-runtime | ~600–800 |
+| K8s Runtime | `nox-plugin-k8s-runtime` | New plugin ✓ | dynamic-runtime | ~310 (impl) + ~400 (tests) |
 
 Post-Phase 7 plugin count: 23 → 26 (3 new plugins, 1 core enhancement, 1 plugin update).
 
