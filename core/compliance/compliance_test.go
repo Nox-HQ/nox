@@ -103,7 +103,56 @@ func TestGenerateReport_NoViolations(t *testing.T) {
 }
 
 func TestSupportedFrameworks(t *testing.T) {
-	if len(SupportedFrameworks) != 8 {
-		t.Errorf("expected 8 supported frameworks, got %d", len(SupportedFrameworks))
+	if len(SupportedFrameworks) != 11 {
+		t.Errorf("expected 11 supported frameworks, got %d", len(SupportedFrameworks))
+	}
+}
+
+func TestFilterByFramework_FedRAMP(t *testing.T) {
+	mappings := GetMappings()
+
+	for _, fw := range []Framework{FedRAMPLow, FedRAMPModerate, FedRAMPHigh} {
+		filtered := FilterByFramework(fw, mappings)
+		if len(filtered) == 0 {
+			t.Errorf("expected %s mappings, got none", fw)
+		}
+
+		for ruleID, controls := range filtered {
+			for _, c := range controls {
+				if c.Framework != fw {
+					t.Errorf("rule %s: expected %s, got %s", ruleID, fw, c.Framework)
+				}
+			}
+		}
+	}
+}
+
+func TestFedRAMPBaselineInclusion(t *testing.T) {
+	mappings := GetMappings()
+
+	lowRules := FilterByFramework(FedRAMPLow, mappings)
+	modRules := FilterByFramework(FedRAMPModerate, mappings)
+	highRules := FilterByFramework(FedRAMPHigh, mappings)
+
+	// High must cover all Moderate rules.
+	for ruleID := range modRules {
+		if _, ok := highRules[ruleID]; !ok {
+			t.Errorf("FedRAMP-High missing rule %s that is in FedRAMP-Moderate", ruleID)
+		}
+	}
+
+	// Moderate must cover all Low rules.
+	for ruleID := range lowRules {
+		if _, ok := modRules[ruleID]; !ok {
+			t.Errorf("FedRAMP-Moderate missing rule %s that is in FedRAMP-Low", ruleID)
+		}
+	}
+
+	// Verify progressive sizing: High >= Moderate >= Low.
+	if len(highRules) < len(modRules) {
+		t.Errorf("FedRAMP-High (%d rules) should have >= rules than FedRAMP-Moderate (%d)", len(highRules), len(modRules))
+	}
+	if len(modRules) < len(lowRules) {
+		t.Errorf("FedRAMP-Moderate (%d rules) should have >= rules than FedRAMP-Low (%d)", len(modRules), len(lowRules))
 	}
 }
