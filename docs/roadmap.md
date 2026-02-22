@@ -111,17 +111,18 @@ vulnerable packages as reachable, unreachable, or undetermined based on import a
 - `ToolWithContext("analyze_reachability")` on core-analysis track
 - ~550 LOC implementation + ~450 LOC tests, 19 tests all passing
 
-### 7c. Cross-File Taint Analysis — new plugin `nox-plugin-taint-analysis`
+### 7c. Intraprocedural Taint Analysis — new plugin `nox-plugin-taint-analysis` ✓
 
-Separate plugin on the `core-analysis` track. Cannot merge into `sast` because taint analysis
-requires interprocedural SSA/CFG dataflow tracking — 10x more complex than pattern matching
-and requires entirely different dependencies and data structures.
+Separate plugin on the `core-analysis` track. Tracks data flow from untrusted sources to
+dangerous sinks within function bodies — catches multi-line flows that single-line regex misses.
 
-- Dataflow tracking across function and file boundaries
-- Detect untrusted input flowing to sensitive sinks (SQL, shell, eval)
-- Language-specific AST parsing for Go, Python, JavaScript
-- Complements `sast` by confirming actual dataflow paths for pattern-matched findings
-- Estimated scope: ~1000–1500 LOC
+- Go AST-based analysis (`go/ast` + `go/parser`) for Go files
+- Regex-based analysis with variable tracking for Python, JavaScript, TypeScript
+- 5 taint flow rules: TAINT-001 (SQL injection), TAINT-002 (command injection), TAINT-003 (XSS), TAINT-004 (path traversal), TAINT-005 (code injection)
+- Sanitizer detection (strconv.Atoi, parseInt, html.EscapeString, etc.) to reduce false positives
+- Taint propagation through variable assignments within function scope
+- `Tool("scan")` on core-analysis track, passive risk, read-only
+- ~1,090 LOC implementation + ~740 LOC tests + ~100 LOC testdata, 33 tests all passing
 
 ### 7d. AI-Powered Triage — merge into existing `nox-plugin-triage-agent`
 
@@ -156,7 +157,7 @@ and risk class (active).
 |---|---|---|---|---|
 | IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement ✓ | — | ~270 (impl) + ~500 (tests) |
 | Reachability | `nox-plugin-reachability` | New plugin ✓ | core-analysis | ~550 (impl) + ~450 (tests) |
-| Taint Analysis | `nox-plugin-taint-analysis` | New plugin | core-analysis | ~1000–1500 |
+| Taint Analysis | `nox-plugin-taint-analysis` | New plugin ✓ | core-analysis | ~1,090 (impl) + ~740 (tests) |
 | AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update | agent-assistance | ~150–200 |
 | K8s Runtime | `nox-plugin-k8s-runtime` | New plugin | dynamic-runtime | ~600–800 |
 
