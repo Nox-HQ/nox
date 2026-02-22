@@ -124,18 +124,22 @@ dangerous sinks within function bodies — catches multi-line flows that single-
 - `Tool("scan")` on core-analysis track, passive risk, read-only
 - ~1,090 LOC implementation + ~740 LOC tests + ~100 LOC testdata, 33 tests all passing
 
-### 7d. AI-Powered Triage — merge into existing `nox-plugin-triage-agent`
+### 7d. AI-Powered Triage — merge into existing `nox-plugin-triage-agent` ✓
 
 Merges into the existing triage-agent plugin rather than creating a new one. The triage-agent
 already classifies findings by priority (immediate/scheduled/backlog/informational) — LLM-based
-severity adjustment is the same domain concern, just a better tool. Adding ~150–200 LOC behind
-an opt-in flag keeps it lightweight and gated.
+severity adjustment is the same domain concern, just a better tool.
 
-- LLM-assisted severity adjustment based on code context
-- Auto-classification of true vs. false positives using historical data
-- Integrates with the `assist/` module via agent-go
-- Opt-in only (`--ai-triage` flag), never affects deterministic scan results
+- LLM-assisted severity adjustment via agent-go `plannerllm.Provider` interface
+- Multi-provider support: OpenAI (implemented), Anthropic, Gemini, Ollama, Cohere (stubs ready)
+- Opt-in only (`ai_triage: true` input parameter), never affects deterministic scan results
 - Default behavior remains deterministic pattern-based prioritization
+- Graceful degradation: returns original findings unchanged on LLM failure
+- Auto-classification of true/false positives with structured JSON response parsing
+- Environment-based provider config: `NOX_AI_PROVIDER`, `NOX_AI_API_KEY`, `NOX_AI_MODEL`, `NOX_AI_BASE_URL`
+- `provider.go` (~90 LOC), `ai_triage.go` (~120 LOC), `ai_triage_test.go` (~190 LOC)
+- OpenAI provider implementation in agent-go (~80 LOC) — supports OpenAI, Azure, Ollama (compat mode)
+- 20 tests total (9 new AI triage + 11 existing), all passing
 
 ### 7e. Kubernetes Runtime Scanning — new plugin `nox-plugin-k8s-runtime`
 
@@ -158,7 +162,7 @@ and risk class (active).
 | IaC Graph Analysis | `core/analyzers/iac/tfgraph.go` | Core enhancement ✓ | — | ~270 (impl) + ~500 (tests) |
 | Reachability | `nox-plugin-reachability` | New plugin ✓ | core-analysis | ~550 (impl) + ~450 (tests) |
 | Taint Analysis | `nox-plugin-taint-analysis` | New plugin ✓ | core-analysis | ~1,090 (impl) + ~740 (tests) |
-| AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update | agent-assistance | ~150–200 |
+| AI-Powered Triage | `nox-plugin-triage-agent` | Plugin update ✓ | agent-assistance | ~290 (impl) + ~190 (tests) |
 | K8s Runtime | `nox-plugin-k8s-runtime` | New plugin | dynamic-runtime | ~600–800 |
 
 Post-Phase 7 plugin count: 23 → 26 (3 new plugins, 1 core enhancement, 1 plugin update).
