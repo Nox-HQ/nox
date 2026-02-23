@@ -238,8 +238,9 @@ exploit validation with two tools: passive analysis and active validation.
 | AI Threat-Model | `nox-plugin-threat-model` | Plugin update ✓ | threat-modeling | 19 |
 | GRC Compliance | `nox-plugin-grc` | New plugin ✓ | policy-governance | 27 |
 | Red Team | `nox-plugin-red-team` | New plugin ✓ | dynamic-runtime | 33 |
+| FedRAMP Baselines | `core/compliance/data.go` | Core enhancement ✓ | — | — |
 
-Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules.
+Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules, 1,517 FedRAMP mappings (11 compliance frameworks).
 
 ### 8e. FedRAMP Compliance Baselines — core enhancement ✓
 
