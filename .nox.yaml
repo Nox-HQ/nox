@@ -1,6 +1,6 @@
 scan:
   exclude:
-    - "plugin-repos/"
+    - "plugins/"
     - "dist/"
     - "registry-scaffold/"
     - "*_test.go"
