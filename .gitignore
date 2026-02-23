@@ -42,5 +42,8 @@ explanations.json
 # Claude Code
 .claude/
 
+# Plugin local clones
+plugins/
+
 # Relicta
 .relicta/
