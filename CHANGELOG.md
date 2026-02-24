@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core supported frameworks reduced from 11 to 8 (FedRAMP now in GRC plugin).
 - Remove 1,517 FedRAMP mapping lines from `core/compliance/data.go`.
 
+## [0.5.0] - 2026-02-17
+
+### Added
+- Graph, enrichment, and scan context SDK primitives for plugin ecosystem.
+
+## [0.4.3] - 2026-02-17
+
+### Fixed
+- Pin GitHub Action references to commit SHAs and restore Grade A.
+
 ## [0.4.2] - 2026-02-17
 
 ### Changed
@@ -127,7 +137,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nox-hq/nox/compare/v0.4.3...v0.5.0
+[0.4.3]: https://github.com/nox-hq/nox/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/nox-hq/nox/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/nox-hq/nox/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/nox-hq/nox/compare/v0.3.1...v0.4.0
