@@ -98,6 +98,7 @@ release:
 
 brews:
   - name: nox
+    directory: Formula
     repository:
       owner: felixgeelhaar
       name: homebrew-tap
