@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-24
+
+### Added
+- FedRAMP Low, Moderate, and High compliance baselines (`fedramp.go`)
+- 25/38/42 NIST 800-53 controls per baseline with full rule mappings
+- 302/523/595 unique nox rules covered per baseline
+- `TestFedRAMPBaselineInclusion` — verifies High ⊇ Moderate ⊇ Low
+- `TestFedRAMPControlCounts` — verifies expected control counts per baseline
+
+### Changed
+- Frameworks increased from 10 to 12 (replaced single `fedramp` with 3 baselines)
+- `assessFrameworkSpecific` SC-28 encryption check scoped to Moderate/High only
+- `TestFrameworksByName` updated for 12 frameworks
+
 ## [0.1.0] - 2026-02-22
 
 ### Added
