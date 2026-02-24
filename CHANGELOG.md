@@ -7,10 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-24
+
+### Added
+- Graph-based cross-resource IaC analysis with 4 pattern detectors (Phase 7a).
+- Reachability analysis plugin for import-based vulnerability reachability (Phase 7b).
+- Intraprocedural taint analysis plugin with source-to-sink tracking (Phase 7c).
+- Kubernetes runtime security scanner for live cluster scanning (Phase 7e).
+- Phase 8 AI-enhanced security intelligence plugins: threat-explain, threat-model, GRC compliance, red team, and triage agent.
+- FedRAMP Low/Moderate/High compliance frameworks.
+- Detailed fix guidance for rule remediation.
+
 ### Changed
 - Move FedRAMP Low/Moderate/High compliance baselines from core to GRC plugin.
 - Core supported frameworks reduced from 11 to 8 (FedRAMP now in GRC plugin).
 - Remove 1,517 FedRAMP mapping lines from `core/compliance/data.go`.
+
+### Fixed
+- Correct stale exclude path for plugin repos.
 
 ## [0.5.0] - 2026-02-17
 
@@ -137,7 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/nox-hq/nox/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nox-hq/nox/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/nox-hq/nox/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/nox-hq/nox/compare/v0.4.1...v0.4.2
