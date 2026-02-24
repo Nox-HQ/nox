@@ -5,10 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- fix: pin GitHub Action references to commit SHAs and restore Grade A
-
-
 ## [Unreleased]
+
+### Changed
+- Move FedRAMP Low/Moderate/High compliance baselines from core to GRC plugin.
+- Core supported frameworks reduced from 11 to 8 (FedRAMP now in GRC plugin).
+- Remove 1,517 FedRAMP mapping lines from `core/compliance/data.go`.
 
 ## [0.4.2] - 2026-02-17
 
