@@ -74,9 +74,9 @@
   - 6 dependency/container/license rules (VULN/CONT/LIC)
 - Compliance framework mapping (~94% rule coverage):
   - CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP Top 10, OWASP LLM Top 10, OWASP Agentic
-  - FedRAMP Low / Moderate / High (mapped from NIST 800-53 controls, cumulative baselines)
+  - FedRAMP Low / Moderate / High (in GRC plugin, mapped from NIST 800-53 controls)
 - AI-BOM v2.0.0: model provenance, prompt templates, tool permission matrix, connection graph
-- MCP tools: data_sensitivity_report, compliance_report (11 frameworks)
+- MCP tools: data_sensitivity_report, compliance_report (8 core frameworks)
 
 ## Phase 7 — Advanced Analysis ✓
 
@@ -204,10 +204,10 @@ Two modes: deterministic regex (default) and AI-enhanced analysis (opt-in).
 
 ### 8c. GRC Compliance — new plugin `nox-plugin-grc` ✓
 
-New plugin on the `policy-governance` track. Governance, Risk & Compliance with 10 framework
+New plugin on the `policy-governance` track. Governance, Risk & Compliance with 12 framework
 coverage, gap analysis, evidence collection, and AI-powered control mapping.
 
-- 10 compliance frameworks: SOC2, ISO 27001, GDPR, FedRAMP, HIPAA, PCI-DSS, NIST 800-53, NIST CSF, CIS Controls v8, CMMC
+- 12 compliance frameworks: SOC2, ISO 27001, GDPR, FedRAMP Low/Moderate/High, HIPAA, PCI-DSS, NIST 800-53, NIST CSF, CIS Controls v8, CMMC
 - 3 tools: `assess` (compliance assessment), `gap_report` (gap analysis), `evidence` (evidence collection)
 - 10 rules: GRC-001 (critical control gap), GRC-002 (coverage below threshold), GRC-003 (stale evidence), GRC-004 (conflicting controls), GRC-005 (GDPR data protection), GRC-006 (SOC2 access control), GRC-007 (FedRAMP encryption), GRC-008 (incident response), GRC-009 (NIST CSF monitoring), GRC-010 (CMMC maturity)
 - Gap analysis with coverage percentage and priority remediation
@@ -238,27 +238,24 @@ exploit validation with two tools: passive analysis and active validation.
 | AI Threat-Model | `nox-plugin-threat-model` | Plugin update ✓ | threat-modeling | 19 |
 | GRC Compliance | `nox-plugin-grc` | New plugin ✓ | policy-governance | 27 |
 | Red Team | `nox-plugin-red-team` | New plugin ✓ | dynamic-runtime | 33 |
-| FedRAMP Baselines | `core/compliance/data.go` | Core enhancement ✓ | — | — |
+| FedRAMP Baselines | `nox-plugin-grc/fedramp.go` | GRC plugin ✓ | policy-governance | — |
 
-Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules, 1,517 FedRAMP mappings (11 compliance frameworks).
+Post-Phase 8: 26 → 28 plugins (2 new, 2 updated), 10 new GRC + 10 new REDTEAM rules, FedRAMP baselines in GRC plugin (8 core compliance frameworks).
 
-### 8e. FedRAMP Compliance Baselines — core enhancement ✓
+### 8e. FedRAMP Compliance Baselines — moved to GRC plugin ✓
 
-Adds FedRAMP Low, Moderate, and High as three independent compliance frameworks in the core
-compliance system. Mapped from existing NIST 800-53 controls using official FedRAMP baseline
-control lists.
+FedRAMP Low, Moderate, and High baselines with full NIST 800-53 control mappings.
+Originally implemented in core, moved to the GRC plugin (`nox-plugin-grc`) as the
+proper home for governance/risk/compliance framework assessments.
 
-- 3 new framework constants: `FedRAMP-Low`, `FedRAMP-Moderate`, `FedRAMP-High`
+- 3 baselines: `fedramp-low`, `fedramp-moderate`, `fedramp-high` (in GRC plugin)
 - Baselines are cumulative: High ⊇ Moderate ⊇ Low
-- 1,517 FedRAMP control mappings across all rules with NIST 800-53 controls:
-  - FedRAMP-Low: 309 entries (controls like SC-12, IA-5, CM-7, SC-5, AU-2)
-  - FedRAMP-Moderate: 557 entries (adds AC-6, SC-8, SC-28, SI-10, CM-3)
-  - FedRAMP-High: 651 entries (adds SA-12, CA-8, SI-6, SC-6)
-- Control ID format: `FedRAMP-L SC-12`, `FedRAMP-M AC-6`, `FedRAMP-H CA-8`
-- 41 unique NIST 800-53 controls mapped to FedRAMP baselines
-- Supported frameworks: 8 → 11
-- `core/compliance/compliance.go`, `core/compliance/data.go`, `core/compliance/compliance_test.go`
-- Tests: baseline inclusion verification (High ⊇ Moderate ⊇ Low), per-tier filtering
+- Control counts: Low 25 / Moderate 38 / High 42 NIST 800-53 controls
+- Unique rule coverage: Low 302 / Moderate 523 / High 595 rules
+- FedRAMP entries removed from `core/compliance/data.go` (1,517 lines)
+- Core supported frameworks: 11 → 8; GRC plugin frameworks: 10 → 12
+- `plugins/nox-plugin-grc/fedramp.go`, `plugins/nox-plugin-grc/frameworks.go`
+- Tests: baseline inclusion (High ⊇ Moderate ⊇ Low), control counts, framework lookup
 
 ## Explicitly Out of Scope
 

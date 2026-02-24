@@ -1,6 +1,6 @@
 // Package compliance provides mapping between nox security rules and
 // compliance framework controls (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA,
-// OWASP Top 10, OWASP LLM Top 10, OWASP Agentic, FedRAMP Low/Moderate/High).
+// OWASP Top 10, OWASP LLM Top 10, OWASP Agentic).
 // This enables compliance-filtered scan output.
 package compliance
 
@@ -11,21 +11,18 @@ type Framework string
 
 // Supported compliance frameworks.
 const (
-	CIS             Framework = "CIS"
-	PCIDSS          Framework = "PCI-DSS"
-	SOC2            Framework = "SOC2"
-	NIST80053       Framework = "NIST-800-53"
-	HIPAA           Framework = "HIPAA"
-	OWASPTop        Framework = "OWASP-Top-10"
-	OWASPLLM        Framework = "OWASP-LLM-Top-10"
-	OWASPAgent      Framework = "OWASP-Agentic"
-	FedRAMPLow      Framework = "FedRAMP-Low"
-	FedRAMPModerate Framework = "FedRAMP-Moderate"
-	FedRAMPHigh     Framework = "FedRAMP-High"
+	CIS        Framework = "CIS"
+	PCIDSS     Framework = "PCI-DSS"
+	SOC2       Framework = "SOC2"
+	NIST80053  Framework = "NIST-800-53"
+	HIPAA      Framework = "HIPAA"
+	OWASPTop   Framework = "OWASP-Top-10"
+	OWASPLLM   Framework = "OWASP-LLM-Top-10"
+	OWASPAgent Framework = "OWASP-Agentic"
 )
 
 // SupportedFrameworks lists all frameworks supported by nox.
-var SupportedFrameworks = []Framework{CIS, PCIDSS, SOC2, NIST80053, HIPAA, OWASPTop, OWASPLLM, OWASPAgent, FedRAMPLow, FedRAMPModerate, FedRAMPHigh}
+var SupportedFrameworks = []Framework{CIS, PCIDSS, SOC2, NIST80053, HIPAA, OWASPTop, OWASPLLM, OWASPAgent}
 
 // FrameworkControl is a single control within a compliance framework.
 type FrameworkControl struct {

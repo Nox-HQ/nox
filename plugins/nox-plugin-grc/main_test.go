@@ -126,14 +126,61 @@ func TestEvidenceNoEvidence(t *testing.T) {
 }
 
 func TestFrameworksByName(t *testing.T) {
-	expected := []string{"soc2", "iso27001", "gdpr", "fedramp", "hipaa", "pci-dss", "nist-800-53", "nist-csf", "cis-v8", "cmmc"}
+	expected := []string{"soc2", "iso27001", "gdpr", "fedramp-low", "fedramp-moderate", "fedramp-high", "hipaa", "pci-dss", "nist-800-53", "nist-csf", "cis-v8", "cmmc"}
 	for _, id := range expected {
 		if _, ok := frameworksByName[id]; !ok {
 			t.Errorf("framework %q not found in frameworksByName", id)
 		}
 	}
-	if len(frameworksByName) != 10 {
-		t.Errorf("expected 10 frameworks, got %d", len(frameworksByName))
+	if len(frameworksByName) != 12 {
+		t.Errorf("expected 12 frameworks, got %d", len(frameworksByName))
+	}
+}
+
+func TestFedRAMPBaselineInclusion(t *testing.T) {
+	lowControls := make(map[string]bool)
+	for _, c := range fedrampLow.Controls {
+		lowControls[c.ID] = true
+	}
+	modControls := make(map[string]bool)
+	for _, c := range fedrampModerate.Controls {
+		modControls[c.ID] = true
+	}
+	highControls := make(map[string]bool)
+	for _, c := range fedrampHigh.Controls {
+		highControls[c.ID] = true
+	}
+
+	// Moderate must include all Low controls.
+	for id := range lowControls {
+		if !modControls[id] {
+			t.Errorf("FedRAMP Moderate missing Low control %s", id)
+		}
+	}
+	// High must include all Moderate controls.
+	for id := range modControls {
+		if !highControls[id] {
+			t.Errorf("FedRAMP High missing Moderate control %s", id)
+		}
+	}
+}
+
+func TestFedRAMPControlCounts(t *testing.T) {
+	tests := []struct {
+		name     string
+		fw       Framework
+		expected int
+	}{
+		{"Low", fedrampLow, 25},
+		{"Moderate", fedrampModerate, 38},
+		{"High", fedrampHigh, 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := len(tt.fw.Controls); got != tt.expected {
+				t.Errorf("FedRAMP %s: expected %d controls, got %d", tt.name, tt.expected, got)
+			}
+		})
 	}
 }
 

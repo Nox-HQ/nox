@@ -68,19 +68,9 @@ var frameworks = []Framework{
 			{ID: "Art.44", Description: "Transfer of personal data to third countries", Priority: "high", NoxRules: []string{}},
 		},
 	},
-	{
-		ID: "fedramp", Name: "FedRAMP", Threshold: 80,
-		Controls: []Control{
-			{ID: "AC-2", Description: "Account management", Priority: "high", NoxRules: []string{"EXPLAIN-003", "THREAT-005"}},
-			{ID: "AC-6", Description: "Least privilege", Priority: "high", NoxRules: []string{"THREAT-005", "IAC-050"}},
-			{ID: "AU-2", Description: "Audit events", Priority: "high", NoxRules: []string{"THREAT-003"}},
-			{ID: "IA-5", Description: "Authenticator management", Priority: "high", NoxRules: []string{"SEC-001", "SEC-002", "SEC-003", "EXPLAIN-001"}},
-			{ID: "SC-8", Description: "Transmission confidentiality and integrity", Priority: "high", NoxRules: []string{"EXPLAIN-004", "THREAT-002"}},
-			{ID: "SC-13", Description: "Cryptographic protection", Priority: "high", NoxRules: []string{"EXPLAIN-004"}},
-			{ID: "SC-28", Description: "Protection of information at rest", Priority: "high", NoxRules: []string{"IAC-100", "IAC-101"}},
-			{ID: "SI-2", Description: "Flaw remediation", Priority: "high", NoxRules: []string{"VULN-001", "VULN-002", "VULN-003"}},
-		},
-	},
+	fedrampLow,
+	fedrampModerate,
+	fedrampHigh,
 	{
 		ID: "hipaa", Name: "HIPAA", Threshold: 75,
 		Controls: []Control{
@@ -190,12 +180,12 @@ func assessFrameworkSpecific(fw Framework, assessment *AssessmentResult) []frame
 				Category: "access-control",
 			})
 		}
-	case "fedramp":
+	case "fedramp-moderate", "fedramp-high":
 		if !assessment.HasEvidenceFor("SC-28") {
 			findings = append(findings, frameworkSpecificFinding{
 				RuleID:   "GRC-007",
 				Severity: pluginv1.Severity(3), // High
-				Message:  "Missing encryption at rest evidence (FedRAMP SC-28): no findings demonstrate data-at-rest protection",
+				Message:  fmt.Sprintf("Missing encryption at rest evidence (%s SC-28): no findings demonstrate data-at-rest protection", fw.Name),
 				Category: "encryption",
 			})
 		}
