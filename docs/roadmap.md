@@ -257,6 +257,71 @@ proper home for governance/risk/compliance framework assessments.
 - `plugins/nox-plugin-grc/fedramp.go`, `plugins/nox-plugin-grc/frameworks.go`
 - Tests: baseline inclusion (High ⊇ Moderate ⊇ Low), control counts, framework lookup
 
+## Phase 9 — Closing Security Analysis Gaps ✓
+
+Three gaps vs LLM-powered security tools (e.g. Claude Code Security): self-validation,
+business logic flaws, and interprocedural data flow. Addressed with targeted AI-augmented
+plugins that keep nox's deterministic core intact.
+
+Pipeline: SAST → IaC Graph → Reachability → Taint (intra + **interproc**) → Risk-Score → AI-Triage → K8s Runtime → AI-Explain → AI-Threat-Model → GRC → Red-Team → **Validator → Logic-Scan**
+
+### 9a. Agentic Finding Validator — new plugin `nox-plugin-validator` ✓
+
+New plugin on the `agent-assistance` track. Uses LLM reasoning to classify findings
+as true positive, false positive, or needs-review — reducing false positive noise.
+
+- Opt-in via `ai_validate: true` input parameter
+- Code context extraction: flagged line ±30 lines, enclosing function, imports
+- Tiered validation: high-confidence auto-confirm, medium/low → LLM
+- FP findings downgraded to `info` severity (not removed — auditability)
+- 4 rules: VALID-001 (confirmed TP), VALID-002 (likely FP), VALID-003 (needs review), VALID-004 (validation error)
+- 7-provider LLM support via `provider.go` pattern (OpenAI, Anthropic, Gemini, Ollama, Cohere, Bedrock, Copilot)
+- Graceful degradation: LLM failure → original findings preserved
+- `validator.go`, `prompt.go`, `provider.go`
+- ~990 LOC implementation, 17 tests all passing
+
+### 9b. Business Logic Analyzer — new plugin `nox-plugin-logic-scan` ✓
+
+New plugin on the `core-analysis` track. Detects IDOR, broken access control, mass
+assignment, and race conditions — vulnerability classes that pattern-based rules cannot catch.
+
+- Opt-in AI via `ai_logic: true` input parameter
+- File inventory: scans for route handlers, controllers, middleware, models
+- Per-endpoint analysis: route definition + auth checks + data access patterns
+- Language support: Go (net/http, gin, echo, fiber), Python (Flask, Django, FastAPI), JS/TS (Express, Next.js)
+- 3 deterministic rules: LOGIC-001 (IDOR/CWE-639), LOGIC-002 (missing authorization/CWE-862), LOGIC-003 (mass assignment/CWE-915)
+- AI-enhanced detection for race conditions, privilege escalation, broken access control
+- `scanner.go`, `extractors.go`, `provider.go`
+- ~1,500 LOC implementation, 21 tests all passing
+
+### 9c. Interprocedural Taint Enhancement — extend `nox-plugin-taint-analysis` ✓
+
+Extends the existing taint analysis plugin to track data flow across function boundaries
+within a single package/module. Catches cross-function injection patterns that
+intraprocedural analysis misses.
+
+- Go call graph via `go/ast` + `go/parser`: `CallGraph`, `FuncInfo`, parameter indexing
+- `TaintContext` stack with max depth 3 for bounded analysis
+- Cross-function taint propagation: tainted args → callee parameters → sink detection
+- Python/JS interprocedural via regex-based `TextCallGraph` with brace/indent body extraction
+- 2 new rules: TAINT-006 (cross-function SQLi/CWE-89), TAINT-007 (cross-function CMDi/CWE-78)
+- Deduplication of flows across intra/interprocedural passes
+- `callgraph.go` (~460 LOC), `text_callgraph.go` (~360 LOC), `callgraph_test.go` (~340 LOC)
+- 3 interprocedural testdata files (Go, Python, JavaScript)
+- 12 new interprocedural tests (45 total plugin tests), all passing
+
+### Phase 9 Summary
+
+| Feature | Location | Type | Track | Tests |
+|---|---|---|---|---|
+| Finding Validator | `nox-plugin-validator` | New plugin ✓ | agent-assistance | 17 |
+| Business Logic | `nox-plugin-logic-scan` | New plugin ✓ | core-analysis | 21 |
+| Interprocedural Taint | `nox-plugin-taint-analysis` | Plugin update ✓ | core-analysis | 45 (12 new) |
+
+Post-Phase 9: 28 → 30 plugins (2 new, 1 updated).
+New rules: VALID-001–004, LOGIC-001–003, TAINT-006–007 (9 new plugin rules).
+Total plugin rules: 128 + 9 = 137. Total project rules: 568 + 137 = 705.
+
 ## Explicitly Out of Scope
 
 - SaaS dashboards

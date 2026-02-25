@@ -41,6 +41,8 @@ var ruleInfo = map[string]struct {
 	"TAINT-003": {sdk.SeverityHigh, sdk.ConfidenceMedium, "XSS: tainted input flows to HTML output"},
 	"TAINT-004": {sdk.SeverityHigh, sdk.ConfidenceHigh, "Path Traversal: tainted input flows to file operations"},
 	"TAINT-005": {sdk.SeverityHigh, sdk.ConfidenceMedium, "Code Injection: tainted input flows to eval/deserialization"},
+	"TAINT-006": {sdk.SeverityHigh, sdk.ConfidenceHigh, "Cross-function SQL Injection: tainted input flows across function boundaries to SQL execution"},
+	"TAINT-007": {sdk.SeverityHigh, sdk.ConfidenceHigh, "Cross-function Command Injection: tainted input flows across function boundaries to shell execution"},
 }
 
 func buildServer() *sdk.PluginServer {
@@ -67,6 +69,11 @@ func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolR
 		return resp.Build(), nil
 	}
 
+	// Collect files by directory for interprocedural analysis.
+	goFilesByDir := make(map[string]map[string][]byte)
+	pyFiles := make(map[string][]byte)
+	jsFiles := make(map[string][]byte)
+
 	err := filepath.WalkDir(workspaceRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -92,13 +99,96 @@ func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolR
 			return nil
 		}
 
-		return scanFileForTaint(resp, path, lang)
+		// Phase 1: Intraprocedural analysis (existing).
+		if scanErr := scanFileForTaint(resp, path, lang); scanErr != nil {
+			return nil
+		}
+
+		// Phase 2: Collect files for interprocedural analysis.
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+
+		switch lang {
+		case "go":
+			dir := filepath.Dir(path)
+			if goFilesByDir[dir] == nil {
+				goFilesByDir[dir] = make(map[string][]byte)
+			}
+			goFilesByDir[dir][path] = content
+		case "python":
+			pyFiles[path] = content
+		case "javascript", "typescript":
+			jsFiles[path] = content
+		}
+
+		return nil
 	})
 	if err != nil && err != context.Canceled {
 		return nil, fmt.Errorf("walking workspace: %w", err)
 	}
 
+	// Phase 2: Interprocedural analysis — Go (per package/directory).
+	for _, files := range goFilesByDir {
+		if len(files) > 1 {
+			interprocFlows := AnalyzeGoFileInterprocedural(files)
+			emitInterproceduralFlows(resp, interprocFlows)
+		}
+	}
+
+	// Phase 2: Interprocedural analysis — Python.
+	if len(pyFiles) > 1 {
+		interprocFlows := AnalyzeTextFilesInterprocedural(pyFiles, "python")
+		emitInterproceduralFlows(resp, interprocFlows)
+	}
+
+	// Phase 2: Interprocedural analysis — JS/TS.
+	if len(jsFiles) > 1 {
+		interprocFlows := AnalyzeTextFilesInterprocedural(jsFiles, "javascript")
+		emitInterproceduralFlows(resp, interprocFlows)
+	}
+
 	return resp.Build(), nil
+}
+
+// emitInterproceduralFlows converts cross-function taint flows to findings.
+func emitInterproceduralFlows(resp *sdk.ResponseBuilder, flows []TaintFlow) {
+	for i := range flows {
+		flow := &flows[i]
+		info, ok := ruleInfo[flow.RuleID]
+		if !ok {
+			continue
+		}
+
+		message := fmt.Sprintf("%s: %s flows from %s (line %d) to %s (line %d) via %s",
+			info.Description,
+			flow.Source.VarName,
+			flow.Source.Kind,
+			flow.Source.Line,
+			flow.SinkExpr,
+			flow.SinkLine,
+			flow.FuncName,
+		)
+
+		resp.Finding(
+			flow.RuleID,
+			info.Severity,
+			info.Confidence,
+			message,
+		).
+			At(flow.FilePath, flow.Source.Line, flow.SinkLine).
+			WithMetadata("cwe", flow.CWE).
+			WithMetadata("language", flow.Language).
+			WithMetadata("source_kind", flow.Source.Kind).
+			WithMetadata("source_var", flow.Source.VarName).
+			WithMetadata("source_line", fmt.Sprintf("%d", flow.Source.Line)).
+			WithMetadata("sink_line", fmt.Sprintf("%d", flow.SinkLine)).
+			WithMetadata("function", flow.FuncName).
+			WithMetadata("interprocedural", "true").
+			WithFingerprint(fingerprint(flow)).
+			Done()
+	}
 }
 
 func scanFileForTaint(resp *sdk.ResponseBuilder, filePath, lang string) error {
