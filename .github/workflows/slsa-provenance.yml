@@ -1,0 +1,20 @@
+name: SLSA Provenance
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # nox:ignore IAC-314 -- needed for attaching provenance
+  id-token: write # needed for SLSA provenance generation
+  actions: read # needed for the SLSA generator
+
+jobs:
+  provenance:
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects-as-file: true
+      # The checksums.txt is uploaded by GoReleaser; we attest all release artifacts.
+      upload-assets: true
+      upload-tag-name: ${{ github.ref_name }}

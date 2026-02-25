@@ -222,7 +222,7 @@ func TestParseFormats(t *testing.T) {
 		{"json", []string{"json"}},
 		{"sarif", []string{"sarif"}},
 		{"json,sarif", []string{"json", "sarif"}},
-		{"all", []string{"json", "sarif", "cdx", "spdx"}},
+		{"all", []string{"json", "sarif", "cdx", "spdx", "html"}},
 		{"", []string{"json"}},
 	}
 

@@ -30,8 +30,12 @@ jobs:
           only-new-issues: true
 
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -43,18 +47,21 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage summary
+        if: matrix.os == 'ubuntu-latest'
         run: go tool cover -func coverage.out
 
       - name: Install coverctl
+        if: matrix.os == 'ubuntu-latest'
         run: go install github.com/pterm/coverctl@latest
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- optional tool, non-blocking
 
       - name: Check coverage thresholds
+        if: matrix.os == 'ubuntu-latest'
         run: coverctl check --config .coverctl.yaml --profile coverage.out
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- advisory threshold check
 
       - name: Update coverage badge
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: matrix.os == 'ubuntu-latest' && github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           if command -v coverctl &>/dev/null; then
             coverctl badge --config .coverctl.yaml --profile coverage.out --output .github/coverage-badge.svg
@@ -111,3 +118,42 @@ jobs:
           name: nox-results
           path: nox-results/
           if-no-files-found: warn
+
+      - name: Run benchmarks
+        run: go test -bench . -benchtime 1x -run ^$ ./core/ | tee bench-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: bench-results
+          path: bench-results.txt
+          if-no-files-found: warn
+
+      - name: Build Docker image (no push)
+        run: |
+          docker build \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT="${GITHUB_SHA}" \
+            --build-arg DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t nox:ci .
+
+  fuzz:
+    name: Fuzz Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+
+      - name: Fuzz rule engine
+        run: go test -fuzz FuzzScanFile -fuzztime 30s ./core/rules/
+
+      - name: Fuzz keyword matching
+        run: go test -fuzz FuzzContainsAnyKeyword -fuzztime 30s ./core/rules/
+
+      - name: Fuzz secrets analyzer
+        run: go test -fuzz FuzzScanArtifacts -fuzztime 30s ./core/analyzers/secrets/

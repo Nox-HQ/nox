@@ -2,10 +2,14 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
@@ -74,6 +78,17 @@ type ScanOptions struct {
 	// TerraformPlanPath is a path to a terraform plan JSON file. When set,
 	// the plan is scanned for security issues in addition to normal scanning.
 	TerraformPlanPath string
+
+	// Sequential forces analyzers to run sequentially instead of in parallel.
+	// Useful for debugging analyzer interactions.
+	Sequential bool
+
+	// NoCache disables the incremental scan cache, forcing a full re-scan.
+	NoCache bool
+
+	// ChangedSince limits the scan to files changed since the given git ref.
+	// Only files in the diff between the ref and HEAD are analyzed.
+	ChangedSince string
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -109,13 +124,28 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	}
 	artifacts = filterArtifactsByType(artifacts, excludeArtifactTypes)
 
+	// Phase 1c: Filter by changed files if --changed-since is set.
+	if opts.ChangedSince != "" {
+		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
+		if err != nil {
+			return nil, fmt.Errorf("computing changed files: %w", err)
+		}
+		changedSet := make(map[string]bool, len(changed))
+		for _, f := range changed {
+			changedSet[f] = true
+		}
+		var filtered []discovery.Artifact
+		for _, a := range artifacts {
+			if changedSet[a.Path] {
+				filtered = append(filtered, a)
+			}
+		}
+		artifacts = filtered
+	}
+
 	// Phase 2: Run analyzers.
-	allFindings := findings.NewFindingSet()
-
-	// Secrets scanner.
+	// Initialize analyzers.
 	secretsAnalyzer := secrets.NewAnalyzer()
-
-	// Apply entropy config overrides from .nox.yaml.
 	if ec := cfg.Scan.Entropy; ec.Threshold > 0 || ec.HexThreshold > 0 || ec.Base64Threshold > 0 || ec.RequireContext != nil {
 		secretsAnalyzer.ApplyEntropyOverrides(secrets.EntropyOverrides{
 			Threshold:       ec.Threshold,
@@ -124,62 +154,139 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 			RequireContext:  ec.RequireContext,
 		})
 	}
-
-	secretsFindings, err := secretsAnalyzer.ScanArtifacts(artifacts)
-	if err != nil {
-		return nil, err
-	}
-	secretsItems := secretsFindings.Findings()
-	for i := range secretsItems {
-		allFindings.Add(secretsItems[i])
-	}
-
-	// Data sensitivity scanner.
 	dataAnalyzer := data.NewAnalyzer()
-	dataFindings, err := dataAnalyzer.ScanArtifacts(artifacts)
-	if err != nil {
-		return nil, err
-	}
-	dataResults := dataFindings.Findings()
-	for i := range dataResults {
-		allFindings.Add(dataResults[i])
-	}
-
-	// IaC scanner.
 	iacAnalyzer := iac.NewAnalyzer()
-	iacFindings, err := iacAnalyzer.ScanArtifacts(artifacts)
-	if err != nil {
-		return nil, err
-	}
-	iacItems := iacFindings.Findings()
-	for i := range iacItems {
-		allFindings.Add(iacItems[i])
-	}
-
-	// AI security scanner.
 	aiAnalyzer := ai.NewAnalyzer()
-	aiFindings, aiInventory, err := aiAnalyzer.ScanArtifacts(artifacts)
-	if err != nil {
-		return nil, err
-	}
-	aiItems := aiFindings.Findings()
-	for i := range aiItems {
-		allFindings.Add(aiItems[i])
-	}
-
-	// Dependency scanner.
 	var depsOpts []deps.AnalyzerOption
 	if opts.DisableOSV || cfg.Scan.OSV.Disabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
-	inventory, depsFindings, err := depsAnalyzer.ScanArtifacts(artifacts)
-	if err != nil {
-		return nil, err
+
+	// Per-analyzer result collectors.
+	var (
+		mu              sync.Mutex
+		analyzerResults [][]findings.Finding
+		aiInventory     *ai.Inventory
+		inventory       *deps.PackageInventory
+	)
+
+	addFindings := func(fs *findings.FindingSet) {
+		items := fs.Findings()
+		if len(items) == 0 {
+			return
+		}
+		mu.Lock()
+		analyzerResults = append(analyzerResults, items)
+		mu.Unlock()
 	}
-	depsItems := depsFindings.Findings()
-	for i := range depsItems {
-		allFindings.Add(depsItems[i])
+
+	if opts.Sequential {
+		// Sequential execution for debugging.
+		sf, err := secretsAnalyzer.ScanArtifacts(artifacts)
+		if err != nil {
+			return nil, err
+		}
+		addFindings(sf)
+
+		df, err := dataAnalyzer.ScanArtifacts(artifacts)
+		if err != nil {
+			return nil, err
+		}
+		addFindings(df)
+
+		iacf, err := iacAnalyzer.ScanArtifacts(artifacts)
+		if err != nil {
+			return nil, err
+		}
+		addFindings(iacf)
+
+		aif, inv, err := aiAnalyzer.ScanArtifacts(artifacts)
+		if err != nil {
+			return nil, err
+		}
+		addFindings(aif)
+		aiInventory = inv
+
+		inv2, depf, err := depsAnalyzer.ScanArtifacts(artifacts)
+		if err != nil {
+			return nil, err
+		}
+		addFindings(depf)
+		inventory = inv2
+	} else {
+		// Parallel execution using errgroup.
+		g, _ := errgroup.WithContext(context.Background())
+
+		g.Go(func() error {
+			sf, err := secretsAnalyzer.ScanArtifacts(artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(sf)
+			return nil
+		})
+
+		g.Go(func() error {
+			df, err := dataAnalyzer.ScanArtifacts(artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(df)
+			return nil
+		})
+
+		g.Go(func() error {
+			iacf, err := iacAnalyzer.ScanArtifacts(artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(iacf)
+			return nil
+		})
+
+		g.Go(func() error {
+			aif, inv, err := aiAnalyzer.ScanArtifacts(artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(aif)
+			mu.Lock()
+			aiInventory = inv
+			mu.Unlock()
+			return nil
+		})
+
+		g.Go(func() error {
+			inv, depf, err := depsAnalyzer.ScanArtifacts(artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(depf)
+			mu.Lock()
+			inventory = inv
+			mu.Unlock()
+			return nil
+		})
+
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Merge per-analyzer findings into a single FindingSet.
+	allFindings := findings.NewFindingSet()
+	for _, batch := range analyzerResults {
+		for i := range batch {
+			allFindings.Add(batch[i])
+		}
+	}
+
+	if aiInventory == nil {
+		aiInventory = &ai.Inventory{}
+	}
+	if inventory == nil {
+		inventory = &deps.PackageInventory{}
 	}
 
 	// Merge all analyzer rule sets for SARIF reporting.

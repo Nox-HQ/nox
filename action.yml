@@ -30,6 +30,18 @@ inputs:
     description: 'Post inline PR annotations for findings'
     required: false
     default: 'true'
+  pr-comment:
+    description: 'Post inline PR review comments with finding details'
+    required: false
+    default: 'false'
+  max-comments:
+    description: 'Maximum number of inline PR comments to post'
+    required: false
+    default: '25'
+  min-severity:
+    description: 'Minimum severity for PR comments (critical, high, medium, low, info)'
+    required: false
+    default: 'low'
 
 outputs:
   findings-count:
@@ -58,4 +70,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         INPUT_ANNOTATE: ${{ inputs.annotate }}
+        INPUT_PR_COMMENT: ${{ inputs.pr-comment }}
+        INPUT_MAX_COMMENTS: ${{ inputs.max-comments }}
+        INPUT_MIN_SEVERITY: ${{ inputs.min-severity }}
       run: bash "${{ github.action_path }}/action.sh"

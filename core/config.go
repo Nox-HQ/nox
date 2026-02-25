@@ -17,6 +17,13 @@ type LicensePolicy struct {
 	Allow []string `yaml:"allow"` // License IDs to allow (e.g., ["MIT", "Apache-2.0", "BSD-*"])
 }
 
+// CacheSettings controls the incremental scan cache.
+type CacheSettings struct {
+	Disabled bool   `yaml:"disabled"`
+	TTL      string `yaml:"ttl"` // duration string, e.g. "7d", "24h"
+	Dir      string `yaml:"dir"` // custom cache directory
+}
+
 // ScanConfig holds project-level configuration loaded from .nox.yaml.
 type ScanConfig struct {
 	Scan       ScanSettings       `yaml:"scan"`
@@ -25,6 +32,7 @@ type ScanConfig struct {
 	Policy     PolicySettings     `yaml:"policy"`
 	License    LicensePolicy      `yaml:"license"`
 	Compliance ComplianceSettings `yaml:"compliance"`
+	Cache      CacheSettings      `yaml:"cache"`
 }
 
 // PolicySettings controls pass/fail thresholds and baseline behavior.

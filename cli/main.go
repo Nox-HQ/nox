@@ -12,6 +12,7 @@ import (
 	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
+	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/server"
@@ -81,7 +82,7 @@ func extractInterspersedArgs(args []string) []string {
 
 func isTopLevelBoolFlag(name string) bool {
 	switch name {
-	case "quiet", "q", "verbose", "v", "version":
+	case "quiet", "q", "verbose", "v", "version", "no-cache":
 		return true
 	}
 	return false
@@ -89,7 +90,7 @@ func isTopLevelBoolFlag(name string) bool {
 
 func isTopLevelStringFlag(name string) bool {
 	switch name {
-	case "format", "output", "rules":
+	case "format", "output", "rules", "changed-since":
 		return true
 	}
 	return false
@@ -132,6 +133,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  protect <cmd>    Manage git pre-commit hook\n")
 		fmt.Fprintf(os.Stderr, "  annotate         Annotate a PR with findings\n")
 		fmt.Fprintf(os.Stderr, "  dashboard [path] Generate HTML security dashboard\n")
+		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -174,6 +176,8 @@ func run(args []string) int {
 		return runRegistry(remaining[1:])
 	case "plugin":
 		return runPlugin(remaining[1:])
+	case "cache":
+		return runCache(remaining[1:])
 	case "baseline":
 		return runBaseline(remaining[1:])
 	case "diff":
@@ -218,9 +222,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	var (
 		historyFlag      bool
 		historyDepthFlag int
+		noCacheFlag      bool
+		changedSinceFlag string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
+	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
+	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -283,6 +291,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			DisableOSV:        noOSVFlag,
 			VEXPath:           vexFlag,
 			TerraformPlanPath: tfPlanFlag,
+			NoCache:           noCacheFlag,
+			ChangedSince:      changedSinceFlag,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
@@ -365,6 +375,17 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			path := filepath.Join(outputDir, "sbom.spdx.json")
 			r := sbom.NewSPDXReporter(version)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
+				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
+				return 2
+			}
+			if verbose {
+				fmt.Printf("[report] wrote %s\n", path)
+			}
+
+		case "html":
+			path := filepath.Join(outputDir, "report.html")
+			r := htmlreport.NewReporter(version)
+			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
 			}
@@ -460,7 +481,7 @@ func runServe(args []string) int {
 // strings. "all" expands to all supported formats.
 func parseFormats(fmtFlag string) []string {
 	if fmtFlag == "all" {
-		return []string{"json", "sarif", "cdx", "spdx"}
+		return []string{"json", "sarif", "cdx", "spdx", "html"}
 	}
 
 	var formats []string

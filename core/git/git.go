@@ -18,6 +18,23 @@ func ChangedFiles(repoRoot, base, head string) ([]string, error) {
 	return splitLines(out), nil
 }
 
+// ChangedFilesSince returns files changed between the given ref and HEAD.
+// This is a convenience wrapper used by --changed-since to scope scans to
+// only modified files (e.g., in a PR).
+func ChangedFilesSince(repoRoot, ref string) ([]string, error) {
+	args := []string{"diff", "--name-only", ref + "...HEAD"}
+	out, err := runGit(repoRoot, args...)
+	if err != nil {
+		// Fall back to two-dot diff if three-dot fails (e.g. shallow clone).
+		args = []string{"diff", "--name-only", ref, "HEAD"}
+		out, err = runGit(repoRoot, args...)
+		if err != nil {
+			return nil, fmt.Errorf("git diff since %s: %w", ref, err)
+		}
+	}
+	return splitLines(out), nil
+}
+
 // IsGitRepo returns true if path is inside a git repository.
 func IsGitRepo(path string) bool {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--is-inside-work-tree")

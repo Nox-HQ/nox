@@ -231,6 +231,16 @@ main() {
     annotate_pr "${INPUT_OUTPUT}"
   fi
 
+  if [[ "${INPUT_PR_COMMENT:-false}" == "true" ]]; then
+    local findings_file="${INPUT_OUTPUT}/findings.json"
+    if [[ -f "${findings_file}" ]]; then
+      bash "${GITHUB_ACTION_PATH:-.}/action-pr-comment.sh" \
+        "${findings_file}" \
+        "${INPUT_MAX_COMMENTS:-25}" \
+        "${INPUT_MIN_SEVERITY:-low}" || true
+    fi
+  fi
+
   exit "${scan_exit}"
 }
 

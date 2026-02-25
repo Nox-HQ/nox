@@ -1,4 +1,4 @@
-.PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html hooks
+.PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html hooks verify docker
 
 BINARY := nox
 CLI_PKG := ./cli
@@ -51,3 +51,14 @@ proto-generate:
 
 proto-breaking:
 	cd proto && buf breaking --against '.git#subdir=proto'
+
+docker:
+	docker build -t nox:local .
+
+verify:
+	@echo "Verifying checksums signature..."
+	cosign verify-blob checksums.txt \
+		--signature checksums.txt.sig \
+		--certificate checksums.txt.pem \
+		--certificate-identity-regexp 'https://github.com/nox-hq/nox/' \
+		--certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
