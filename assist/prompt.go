@@ -31,7 +31,8 @@ Be concise and actionable. Focus on practical remediation advice.`
 // enriched with source context and rule metadata when available.
 func formatFindings(ff []findings.Finding, basePath string, allFindings []findings.Finding, cat map[string]catalog.RuleMeta) string {
 	var b strings.Builder
-	for i, f := range ff {
+	for i := range ff {
+		f := &ff[i]
 		if i > 0 {
 			b.WriteString("\n---\n")
 		}
@@ -51,7 +52,7 @@ func formatFindings(ff []findings.Finding, basePath string, allFindings []findin
 		}
 
 		// Enrich with source context and rule metadata.
-		d := detail.Enrich(&f, basePath, allFindings, cat, 3)
+		d := detail.Enrich(f, basePath, allFindings, cat, 3)
 		if d.Source != nil && len(d.Source.Lines) > 0 {
 			b.WriteString("Source:\n")
 			for _, line := range d.Source.Lines {
@@ -82,8 +83,9 @@ func formatContext(result *core.ScanResult) string {
 
 	// Findings by severity.
 	counts := map[findings.Severity]int{}
-	for _, f := range result.Findings.Findings() {
-		counts[f.Severity]++
+	allFindings := result.Findings.Findings()
+	for i := range allFindings {
+		counts[allFindings[i].Severity]++
 	}
 	fmt.Fprintf(&b, "Total findings: %d\n", len(result.Findings.Findings()))
 	for _, sev := range []findings.Severity{

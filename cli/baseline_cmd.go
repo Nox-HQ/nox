@@ -105,8 +105,8 @@ func baselineUpdate(args []string) int {
 	// Add new findings not already in baseline.
 	added := 0
 	existing := make(map[string]struct{}, bl.Len())
-	for _, e := range bl.Entries {
-		existing[e.Fingerprint] = struct{}{}
+	for i := range bl.Entries {
+		existing[bl.Entries[i].Fingerprint] = struct{}{}
 	}
 	entries := baseline.FromFindings(ff)
 	for i := range entries {
@@ -156,8 +156,8 @@ func baselineShow(args []string) int {
 
 	// Show per-severity counts.
 	counts := make(map[string]int)
-	for _, e := range bl.Entries {
-		counts[string(e.Severity)]++
+	for i := range bl.Entries {
+		counts[string(bl.Entries[i].Severity)]++
 	}
 	for sev, count := range counts {
 		fmt.Printf("  %s: %d\n", sev, count)

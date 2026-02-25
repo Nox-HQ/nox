@@ -33,8 +33,8 @@ type Host struct {
 type HostOption func(*Host)
 
 // WithPolicy sets the safety policy for the host.
-func WithPolicy(p Policy) HostOption {
-	return func(h *Host) { h.policy = p }
+func WithPolicy(p *Policy) HostOption {
+	return func(h *Host) { h.policy = *p }
 }
 
 // WithLogger sets the logger for the host.
@@ -75,9 +75,9 @@ func (h *Host) RegisterPlugin(ctx context.Context, conn *grpc.ClientConn) error 
 		Name:         info.Name,
 		Version:      info.Version,
 		ApiVersion:   info.APIVersion,
-		Capabilities: infoToProtoCapabilities(info),
+		Capabilities: infoToProtoCapabilities(&info),
 		Safety:       info.Safety,
-	}, h.policy)
+	}, &h.policy)
 
 	if len(violations) > 0 {
 		_ = p.Close()
@@ -122,9 +122,9 @@ func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) e
 		Name:         info.Name,
 		Version:      info.Version,
 		ApiVersion:   info.APIVersion,
-		Capabilities: infoToProtoCapabilities(info),
+		Capabilities: infoToProtoCapabilities(&info),
 		Safety:       info.Safety,
-	}, h.policy)
+	}, &h.policy)
 
 	if len(violations) > 0 {
 		_ = p.Close()
@@ -148,11 +148,11 @@ func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) e
 }
 
 // Plugins returns info for all registered plugins.
-func (h *Host) Plugins() []PluginInfo {
+func (h *Host) Plugins() []Info {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	infos := make([]PluginInfo, 0, len(h.plugins))
+	infos := make([]Info, 0, len(h.plugins))
 	for _, p := range h.plugins {
 		infos = append(infos, p.Info())
 	}
@@ -533,7 +533,7 @@ func (h *Host) Violations() []RuntimeViolation {
 }
 
 // Telemetry returns a snapshot of collected plugin telemetry.
-func (h *Host) Telemetry() []PluginTelemetry {
+func (h *Host) Telemetry() []Telemetry {
 	return h.telemetry.Snapshot()
 }
 
@@ -711,18 +711,18 @@ func (h *Host) resolveToolPlugin(toolName string) (*Plugin, string, error) {
 	return nil, "", fmt.Errorf("no plugin provides tool %q", toolName)
 }
 
-// infoToProtoCapabilities converts PluginInfo capabilities back to proto
+// infoToProtoCapabilities converts Info capabilities back to proto
 // for manifest validation. This is needed because ValidateManifest works
 // with the proto GetManifestResponse type.
-func infoToProtoCapabilities(info PluginInfo) []*pluginv1.Capability {
+func infoToProtoCapabilities(info *Info) []*pluginv1.Capability {
 	caps := make([]*pluginv1.Capability, len(info.Capabilities))
 	for i, c := range info.Capabilities {
-		cap := &pluginv1.Capability{
+		capability := &pluginv1.Capability{
 			Name:        c.Name,
 			Description: c.Description,
 		}
 		for _, t := range c.Tools {
-			cap.Tools = append(cap.Tools, &pluginv1.ToolDef{
+			capability.Tools = append(capability.Tools, &pluginv1.ToolDef{
 				Name:                t.Name,
 				Description:         t.Description,
 				ReadOnly:            t.ReadOnly,
@@ -730,14 +730,14 @@ func infoToProtoCapabilities(info PluginInfo) []*pluginv1.Capability {
 			})
 		}
 		for _, r := range c.Resources {
-			cap.Resources = append(cap.Resources, &pluginv1.ResourceDef{
+			capability.Resources = append(capability.Resources, &pluginv1.ResourceDef{
 				UriTemplate: r.URITemplate,
 				Name:        r.Name,
 				Description: r.Description,
 				MimeType:    r.MimeType,
 			})
 		}
-		caps[i] = cap
+		caps[i] = capability
 	}
 	return caps
 }

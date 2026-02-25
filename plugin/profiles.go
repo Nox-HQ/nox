@@ -126,8 +126,8 @@ func ProfileForTrack(track registry.Track) Policy {
 // MergeWithUserPolicy merges a track-specific profile with user-provided policy
 // overrides. User values take precedence where set (non-zero). This allows users
 // to tighten or relax track defaults via .nox.yaml.
-func MergeWithUserPolicy(profile, user Policy) Policy {
-	merged := profile
+func MergeWithUserPolicy(profile, user *Policy) Policy {
+	merged := *profile
 
 	if len(user.AllowedNetworkHosts) > 0 {
 		merged.AllowedNetworkHosts = user.AllowedNetworkHosts

@@ -85,7 +85,7 @@ func TestMergeWithUserPolicyOverrides(t *testing.T) {
 		ToolInvocationTimeout: 5 * time.Minute,
 	}
 
-	merged := MergeWithUserPolicy(profile, user)
+	merged := MergeWithUserPolicy(&profile, &user)
 
 	if merged.MaxConcurrency != 8 {
 		t.Errorf("merged concurrency = %d, want 8", merged.MaxConcurrency)
@@ -106,7 +106,7 @@ func TestMergeWithUserPolicyNoOverrides(t *testing.T) {
 	profile := ProfileForTrack(registry.TrackAISecurity)
 	empty := Policy{}
 
-	merged := MergeWithUserPolicy(profile, empty)
+	merged := MergeWithUserPolicy(&profile, &empty)
 
 	if merged.MaxRiskClass != profile.MaxRiskClass {
 		t.Errorf("risk class changed from %q to %q", profile.MaxRiskClass, merged.MaxRiskClass)
@@ -122,7 +122,7 @@ func TestMergeWithUserPolicyRiskClassEscalation(t *testing.T) {
 		MaxRiskClass: RiskClassActive,
 	}
 
-	merged := MergeWithUserPolicy(profile, user)
+	merged := MergeWithUserPolicy(&profile, &user)
 
 	// User can escalate risk class if they want.
 	if merged.MaxRiskClass != RiskClassActive {
@@ -136,7 +136,7 @@ func TestMergeWithUserPolicyNetworkOverride(t *testing.T) {
 		AllowedNetworkHosts: []string{"custom.registry.example.com"},
 	}
 
-	merged := MergeWithUserPolicy(profile, user)
+	merged := MergeWithUserPolicy(&profile, &user)
 
 	if len(merged.AllowedNetworkHosts) != 1 || merged.AllowedNetworkHosts[0] != "custom.registry.example.com" {
 		t.Errorf("merged network hosts = %v, want [custom.registry.example.com]", merged.AllowedNetworkHosts)

@@ -26,7 +26,7 @@ func setupVerifyTest(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, []byt
 
 func TestVerifyArtifactVerified(t *testing.T) {
 	_, priv, pemData, kr := setupVerifyTest(t)
-	v := NewVerifier(WithKeyring(kr), WithTrustPolicy(DefaultTrustPolicy()))
+	v := NewVerifier(WithKeyring(kr), WithPolicy(DefaultPolicy()))
 
 	content := []byte("trusted artifact content")
 	digest := ComputeDigest(content).String()
@@ -37,8 +37,8 @@ func TestVerifyArtifactVerified(t *testing.T) {
 	if !result.OK() {
 		t.Errorf("expected OK, got violations: %v", result.Violations)
 	}
-	if result.TrustLevel != TrustVerified {
-		t.Errorf("TrustLevel = %v, want %v", result.TrustLevel, TrustVerified)
+	if result.Level != TrustVerified {
+		t.Errorf("TrustLevel = %v, want %v", result.Level, TrustVerified)
 	}
 	if !result.DigestMatch {
 		t.Error("DigestMatch should be true")
@@ -69,7 +69,7 @@ func TestVerifyArtifactCommunity(t *testing.T) {
 	_, _, _, kr := setupVerifyTest(t)
 	v := NewVerifier(
 		WithKeyring(kr),
-		WithTrustPolicy(PermissiveTrustPolicy()),
+		WithPolicy(PermissivePolicy()),
 	)
 
 	content := []byte("community artifact")
@@ -78,8 +78,8 @@ func TestVerifyArtifactCommunity(t *testing.T) {
 
 	result := v.VerifyArtifact(content, digest, sig, pemData2, "v1")
 
-	if result.TrustLevel != TrustCommunity {
-		t.Errorf("TrustLevel = %v, want %v", result.TrustLevel, TrustCommunity)
+	if result.Level != TrustCommunity {
+		t.Errorf("TrustLevel = %v, want %v", result.Level, TrustCommunity)
 	}
 	if !result.SignatureValid {
 		t.Error("SignatureValid should be true")
@@ -90,15 +90,15 @@ func TestVerifyArtifactCommunity(t *testing.T) {
 }
 
 func TestVerifyArtifactUnsigned(t *testing.T) {
-	v := NewVerifier(WithTrustPolicy(PermissiveTrustPolicy()))
+	v := NewVerifier(WithPolicy(PermissivePolicy()))
 
 	content := []byte("unsigned artifact")
 	digest := ComputeDigest(content).String()
 
 	result := v.VerifyArtifact(content, digest, nil, nil, "v1")
 
-	if result.TrustLevel != TrustUnverified {
-		t.Errorf("TrustLevel = %v, want %v", result.TrustLevel, TrustUnverified)
+	if result.Level != TrustUnverified {
+		t.Errorf("TrustLevel = %v, want %v", result.Level, TrustUnverified)
 	}
 	if result.SignatureValid {
 		t.Error("SignatureValid should be false")
@@ -111,7 +111,7 @@ func TestVerifyArtifactUnsigned(t *testing.T) {
 
 func TestVerifyArtifactBadDigest(t *testing.T) {
 	_, priv, pemData, kr := setupVerifyTest(t)
-	v := NewVerifier(WithKeyring(kr), WithTrustPolicy(DefaultTrustPolicy()))
+	v := NewVerifier(WithKeyring(kr), WithPolicy(DefaultPolicy()))
 
 	content := []byte("real content")
 	wrongDigest := ComputeDigest([]byte("different content")).String()
@@ -129,7 +129,7 @@ func TestVerifyArtifactBadDigest(t *testing.T) {
 
 func TestVerifyArtifactBadSignature(t *testing.T) {
 	_, priv, pemData, kr := setupVerifyTest(t)
-	v := NewVerifier(WithKeyring(kr), WithTrustPolicy(DefaultTrustPolicy()))
+	v := NewVerifier(WithKeyring(kr), WithPolicy(DefaultPolicy()))
 
 	content := []byte("content")
 	digest := ComputeDigest(content).String()
@@ -140,14 +140,14 @@ func TestVerifyArtifactBadSignature(t *testing.T) {
 	if result.SignatureValid {
 		t.Error("SignatureValid should be false")
 	}
-	if result.TrustLevel != TrustUnverified {
-		t.Errorf("TrustLevel = %v, want %v", result.TrustLevel, TrustUnverified)
+	if result.Level != TrustUnverified {
+		t.Errorf("TrustLevel = %v, want %v", result.Level, TrustUnverified)
 	}
 }
 
 func TestVerifyArtifactIncompatibleAPIVersion(t *testing.T) {
 	_, priv, pemData, kr := setupVerifyTest(t)
-	v := NewVerifier(WithKeyring(kr), WithTrustPolicy(DefaultTrustPolicy()))
+	v := NewVerifier(WithKeyring(kr), WithPolicy(DefaultPolicy()))
 
 	content := []byte("content")
 	digest := ComputeDigest(content).String()
@@ -172,7 +172,7 @@ func TestVerifyArtifactIncompatibleAPIVersion(t *testing.T) {
 }
 
 func TestVerifyArtifactBelowMinimumTrust(t *testing.T) {
-	v := NewVerifier(WithTrustPolicy(EnterpriseTrustPolicy()))
+	v := NewVerifier(WithPolicy(EnterprisePolicy()))
 
 	content := []byte("unsigned content")
 	digest := ComputeDigest(content).String()
@@ -196,7 +196,7 @@ func TestVerifyArtifactBelowMinimumTrust(t *testing.T) {
 }
 
 func TestVerifyArtifactMultipleViolations(t *testing.T) {
-	v := NewVerifier(WithTrustPolicy(EnterpriseTrustPolicy()))
+	v := NewVerifier(WithPolicy(EnterprisePolicy()))
 
 	content := []byte("bad artifact")
 	wrongDigest := ComputeDigest([]byte("different")).String()
@@ -221,7 +221,7 @@ func TestVerifyArtifactMultipleViolations(t *testing.T) {
 }
 
 func TestVerifyArtifactNoDigestProvided(t *testing.T) {
-	v := NewVerifier(WithTrustPolicy(PermissiveTrustPolicy()))
+	v := NewVerifier(WithPolicy(PermissivePolicy()))
 
 	content := []byte("content without digest")
 	result := v.VerifyArtifact(content, "", nil, nil, "v1")
@@ -236,7 +236,7 @@ func TestVerifyArtifactNoDigestProvided(t *testing.T) {
 func TestVerifierDefaults(t *testing.T) {
 	v := NewVerifier()
 
-	// Defaults: empty keyring, DefaultTrustPolicy.
+	// Defaults: empty keyring, DefaultPolicy.
 	content := []byte("test")
 	digest := ComputeDigest(content).String()
 

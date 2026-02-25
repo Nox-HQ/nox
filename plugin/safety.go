@@ -67,7 +67,7 @@ func (v PolicyViolation) Error() string {
 // ValidateManifest checks a plugin's manifest against the given policy.
 // It returns all violations found, not just the first.
 // A nil safety requirement in the manifest means no requirements, which always passes.
-func ValidateManifest(manifest *pluginv1.GetManifestResponse, policy Policy) []PolicyViolation {
+func ValidateManifest(manifest *pluginv1.GetManifestResponse, policy *Policy) []PolicyViolation {
 	if manifest == nil {
 		return nil
 	}

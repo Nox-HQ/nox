@@ -33,17 +33,17 @@ func TestManifest_OneCapabilityOneTool(t *testing.T) {
 	if len(m.Capabilities) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(m.Capabilities))
 	}
-	cap := m.Capabilities[0]
-	if cap.Name != "scanning" {
-		t.Errorf("cap.Name = %q, want %q", cap.Name, "scanning")
+	capability := m.Capabilities[0]
+	if capability.Name != "scanning" {
+		t.Errorf("cap.Name = %q, want %q", capability.Name, "scanning")
 	}
-	if cap.Description != "File scanning" {
-		t.Errorf("cap.Description = %q, want %q", cap.Description, "File scanning")
+	if capability.Description != "File scanning" {
+		t.Errorf("cap.Description = %q, want %q", capability.Description, "File scanning")
 	}
-	if len(cap.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(cap.Tools))
+	if len(capability.Tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(capability.Tools))
 	}
-	tool := cap.Tools[0]
+	tool := capability.Tools[0]
 	if tool.Name != "scan-files" {
 		t.Errorf("tool.Name = %q, want %q", tool.Name, "scan-files")
 	}
@@ -85,14 +85,14 @@ func TestManifest_CapabilityWithToolsAndResources(t *testing.T) {
 		Done().
 		Build()
 
-	cap := m.Capabilities[0]
-	if len(cap.Tools) != 2 {
-		t.Fatalf("expected 2 tools, got %d", len(cap.Tools))
+	capability := m.Capabilities[0]
+	if len(capability.Tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(capability.Tools))
 	}
-	if len(cap.Resources) != 1 {
-		t.Fatalf("expected 1 resource, got %d", len(cap.Resources))
+	if len(capability.Resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(capability.Resources))
 	}
-	res := cap.Resources[0]
+	res := capability.Resources[0]
 	if res.UriTemplate != "plugin://results/{id}" {
 		t.Errorf("UriTemplate = %q", res.UriTemplate)
 	}

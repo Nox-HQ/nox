@@ -93,7 +93,7 @@ func NewStore(opts ...StoreOption) *Store {
 
 // Fetch downloads, verifies, caches, and extracts a plugin artifact.
 // If the artifact is already cached, the download is skipped.
-func (s *Store) Fetch(ctx context.Context, name string, ve registry.VersionEntry) (*InstalledArtifact, error) {
+func (s *Store) Fetch(ctx context.Context, name string, ve *registry.VersionEntry) (*InstalledArtifact, error) {
 	// 1. Select platform-appropriate artifact.
 	artifact, err := SelectArtifact(ve.Artifacts)
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *Store) Fetch(ctx context.Context, name string, ve registry.VersionEntry
 }
 
 // FetchFor downloads an artifact for a specific OS/arch combination.
-func (s *Store) FetchFor(ctx context.Context, name string, ve registry.VersionEntry, goos, goarch string) (*InstalledArtifact, error) {
+func (s *Store) FetchFor(ctx context.Context, name string, ve *registry.VersionEntry, goos, goarch string) (*InstalledArtifact, error) {
 	artifact, err := SelectArtifactFor(ve.Artifacts, goos, goarch)
 	if err != nil {
 		return nil, fmt.Errorf("selecting artifact for %s (%s/%s): %w", name, goos, goarch, err)
@@ -113,7 +113,7 @@ func (s *Store) FetchFor(ctx context.Context, name string, ve registry.VersionEn
 	return s.fetchArtifact(ctx, name, ve, artifact)
 }
 
-func (s *Store) fetchArtifact(ctx context.Context, name string, ve registry.VersionEntry, artifact *registry.PlatformArtifact) (*InstalledArtifact, error) {
+func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.VersionEntry, artifact *registry.PlatformArtifact) (*InstalledArtifact, error) {
 	blobPath := s.BlobPath(artifact.Digest)
 
 	// 2. Check cache.

@@ -12,8 +12,8 @@ import (
 
 func TestDownloadSuccess(t *testing.T) {
 	content := []byte("binary content for download test")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
 	}))
 	defer srv.Close()
 
@@ -91,8 +91,8 @@ func TestDownloadHTTP500(t *testing.T) {
 
 func TestDownloadSizeExceeded(t *testing.T) {
 	content := make([]byte, 1024)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
 	}))
 	defer srv.Close()
 
@@ -109,10 +109,10 @@ func TestDownloadSizeExceeded(t *testing.T) {
 }
 
 func TestDownloadContextCancellation(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Slow response to allow cancellation.
 		time.Sleep(5 * time.Second)
-		w.Write([]byte("too late"))
+		_, _ = w.Write([]byte("too late"))
 	}))
 	defer srv.Close()
 
@@ -209,8 +209,8 @@ func TestDownloadExactMaxSize(t *testing.T) {
 	for i := range content {
 		content[i] = byte(i % 256)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
 	}))
 	defer srv.Close()
 
@@ -234,8 +234,8 @@ func TestDownloadExactMaxSize(t *testing.T) {
 
 // TestDownloadDeadlineExceeded tests download with an already-expired context.
 func TestDownloadDeadlineExceeded(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("data"))
 	}))
 	defer srv.Close()
 

@@ -41,8 +41,8 @@ func buildTarGz(t *testing.T, entries map[string]string) []byte {
 		}
 	}
 
-	tw.Close()
-	gw.Close()
+	_ = tw.Close()
+	_ = gw.Close()
 	return buf.Bytes()
 }
 
@@ -61,7 +61,7 @@ func TestStoreFetchFullFlow(t *testing.T) {
 	var requestCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer srv.Close()
 
@@ -96,7 +96,7 @@ func TestStoreFetchFullFlow(t *testing.T) {
 	ctx := context.Background()
 
 	// Use FetchFor to test a specific platform.
-	installed, err := store.FetchFor(ctx, "test/plugin", ve, "linux", "amd64")
+	installed, err := store.FetchFor(ctx, "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestStoreFetchCacheHit(t *testing.T) {
 	var requestCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer srv.Close()
 
@@ -176,7 +176,7 @@ func TestStoreFetchCacheHit(t *testing.T) {
 	ctx := context.Background()
 
 	// First fetch: downloads.
-	_, err := store.FetchFor(ctx, "test/plugin", ve, "linux", "amd64")
+	_, err := store.FetchFor(ctx, "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("first Fetch: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestStoreFetchCacheHit(t *testing.T) {
 	}
 
 	// Second fetch: should use cache, no HTTP request.
-	installed2, err := store.FetchFor(ctx, "test/plugin", ve, "linux", "amd64")
+	installed2, err := store.FetchFor(ctx, "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("second Fetch: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestStoreFetchDigestMismatch(t *testing.T) {
 	})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer srv.Close()
 
@@ -229,7 +229,7 @@ func TestStoreFetchDigestMismatch(t *testing.T) {
 		},
 	}
 
-	_, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	_, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if !errors.Is(err, ErrDigestMismatch) {
 		t.Errorf("error = %v, want %v", err, ErrDigestMismatch)
 	}
@@ -240,7 +240,7 @@ func TestStoreFetchRawBinary(t *testing.T) {
 	digest := sha256Digest(binaryData)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(binaryData)
+		_, _ = w.Write(binaryData)
 	}))
 	defer srv.Close()
 
@@ -257,7 +257,7 @@ func TestStoreFetchRawBinary(t *testing.T) {
 		},
 	}
 
-	installed, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	installed, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("Fetch raw binary: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestStoreFetchTrustVerification(t *testing.T) {
 	digest := sha256Digest(tarGzData)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer srv.Close()
 
@@ -307,14 +307,14 @@ func TestStoreFetchTrustVerification(t *testing.T) {
 		},
 	}
 
-	installed, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	installed, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 
 	// Without signature, trust level should be unverified.
-	if installed.VerifyResult.TrustLevel != trust.TrustUnverified {
-		t.Errorf("TrustLevel = %v, want %v", installed.VerifyResult.TrustLevel, trust.TrustUnverified)
+	if installed.VerifyResult.Level != trust.TrustUnverified {
+		t.Errorf("TrustLevel = %v, want %v", installed.VerifyResult.Level, trust.TrustUnverified)
 	}
 
 	// Digest should match.
@@ -357,7 +357,7 @@ func TestStoreFetchNoPlatformMatch(t *testing.T) {
 		},
 	}
 
-	_, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	_, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if !errors.Is(err, ErrNoPlatformMatch) {
 		t.Errorf("error = %v, want %v", err, ErrNoPlatformMatch)
 	}
@@ -420,7 +420,7 @@ func TestStoreFetch(t *testing.T) {
 	digest := sha256Digest(tarGzData)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer srv.Close()
 
@@ -446,7 +446,7 @@ func TestStoreFetch(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	installed, err := store.Fetch(ctx, "test/plugin", ve)
+	installed, err := store.Fetch(ctx, "test/plugin", &ve)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -478,7 +478,7 @@ func TestStoreFetchNoPlatformMatchForFetch(t *testing.T) {
 		},
 	}
 
-	_, err := store.Fetch(context.Background(), "test/plugin", ve)
+	_, err := store.Fetch(context.Background(), "test/plugin", &ve)
 	if !errors.Is(err, ErrNoPlatformMatch) {
 		t.Errorf("error = %v, want %v", err, ErrNoPlatformMatch)
 	}
@@ -487,9 +487,9 @@ func TestStoreFetchNoPlatformMatchForFetch(t *testing.T) {
 // TestDigestHex tests the digestHex function with various inputs.
 func TestDigestHex(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		want   string
+		name  string
+		input string
+		want  string
 	}{
 		{
 			name:  "standard sha256 prefix",
@@ -577,7 +577,7 @@ func TestStoreFetchHTTPError(t *testing.T) {
 		},
 	}
 
-	_, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	_, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if err == nil {
 		t.Fatal("expected error for HTTP 503")
 	}
@@ -592,7 +592,7 @@ func TestStoreFetchWithMirror(t *testing.T) {
 
 	// The mirror server that will actually receive the request.
 	mirrorSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tarGzData)
+		_, _ = w.Write(tarGzData)
 	}))
 	defer mirrorSrv.Close()
 
@@ -618,7 +618,7 @@ func TestStoreFetchWithMirror(t *testing.T) {
 		},
 	}
 
-	installed, err := store.FetchFor(context.Background(), "test/plugin", ve, "linux", "amd64")
+	installed, err := store.FetchFor(context.Background(), "test/plugin", &ve, "linux", "amd64")
 	if err != nil {
 		t.Fatalf("Fetch with mirror: %v", err)
 	}

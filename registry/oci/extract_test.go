@@ -17,13 +17,13 @@ func createTestTarGz(t *testing.T, dstPath string, entries map[string]string) {
 	if err != nil {
 		t.Fatalf("creating tar.gz: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gw := gzip.NewWriter(f)
-	defer gw.Close()
+	defer func() { _ = gw.Close() }()
 
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+	defer func() { _ = tw.Close() }()
 
 	for name, content := range entries {
 		if err := tw.WriteHeader(&tar.Header{
@@ -47,13 +47,13 @@ func createTestTarGzWithHeader(t *testing.T, dstPath string, headers []*tar.Head
 	if err != nil {
 		t.Fatalf("creating tar.gz: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gw := gzip.NewWriter(f)
-	defer gw.Close()
+	defer func() { _ = gw.Close() }()
 
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+	defer func() { _ = tw.Close() }()
 
 	for _, hdr := range headers {
 		if err := tw.WriteHeader(hdr); err != nil {
@@ -317,9 +317,9 @@ func TestExtractTarGzWithSymlinkInside(t *testing.T) {
 		t.Fatalf("writing symlink header: %v", err)
 	}
 
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	extracted, err := ExtractTarGz(archivePath, extractDir)
 	if err != nil {
@@ -377,9 +377,9 @@ func TestExtractTarGzWithDirectoryEntry(t *testing.T) {
 		t.Fatalf("writing file content: %v", err)
 	}
 
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	extracted, err := ExtractTarGz(archivePath, extractDir)
 	if err != nil {
@@ -466,9 +466,9 @@ func TestExtractTarGzFilePermissions(t *testing.T) {
 		t.Fatalf("writing content: %v", err)
 	}
 
-	tw.Close()
-	gw.Close()
-	f.Close()
+	_ = tw.Close()
+	_ = gw.Close()
+	_ = f.Close()
 
 	_, err = ExtractTarGz(archivePath, extractDir)
 	if err != nil {

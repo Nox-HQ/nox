@@ -24,7 +24,7 @@ func (s *Store) download(ctx context.Context, rawURL string, expectedSize int64)
 		return "", 0, fmt.Errorf("rewriting URL: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, finalURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, finalURL, http.NoBody)
 	if err != nil {
 		return "", 0, fmt.Errorf("creating request: %w", err)
 	}
@@ -33,7 +33,7 @@ func (s *Store) download(ctx context.Context, rawURL string, expectedSize int64)
 	if err != nil {
 		return "", 0, fmt.Errorf("downloading artifact: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", 0, fmt.Errorf("download returned HTTP %d", resp.StatusCode)
@@ -51,7 +51,7 @@ func (s *Store) download(ctx context.Context, rawURL string, expectedSize int64)
 	tmpPath = f.Name()
 
 	defer func() {
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			_ = os.Remove(tmpPath)
 			tmpPath = ""

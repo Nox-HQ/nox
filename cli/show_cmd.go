@@ -136,8 +136,8 @@ func runShow(args []string) int {
 
 func showJSON(ff []findings.Finding, basePath string, allFindings []findings.Finding, cat map[string]catalog.RuleMeta, contextLines int) int {
 	var details []*detail.FindingDetail
-	for _, f := range ff {
-		details = append(details, detail.Enrich(&f, basePath, allFindings, cat, contextLines))
+	for i := range ff {
+		details = append(details, detail.Enrich(&ff[i], basePath, allFindings, cat, contextLines))
 	}
 
 	data, err := json.MarshalIndent(details, "", "  ")
@@ -152,8 +152,8 @@ func showJSON(ff []findings.Finding, basePath string, allFindings []findings.Fin
 
 func toFindingSet(ff []findings.Finding) *findings.FindingSet {
 	fs := findings.NewFindingSet()
-	for _, f := range ff {
-		fs.Add(f)
+	for i := range ff {
+		fs.Add(ff[i])
 	}
 	return fs
 }

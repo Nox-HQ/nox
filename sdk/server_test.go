@@ -26,9 +26,7 @@ func newTestClient(t *testing.T, srv *PluginServer) pluginv1.PluginServiceClient
 	pluginv1.RegisterPluginServiceServer(grpcServer, srv)
 
 	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
-			// Server stopped — expected during test cleanup.
-		}
+		_ = grpcServer.Serve(lis)
 	}()
 	t.Cleanup(func() { grpcServer.Stop() })
 
@@ -42,7 +40,7 @@ func newTestClient(t *testing.T, srv *PluginServer) pluginv1.PluginServiceClient
 	if err != nil {
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	return pluginv1.NewPluginServiceClient(conn)
 }

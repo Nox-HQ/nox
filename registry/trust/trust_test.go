@@ -5,27 +5,27 @@ import (
 	"time"
 )
 
-func TestTrustLevelString(t *testing.T) {
+func TestLevelString(t *testing.T) {
 	tests := []struct {
-		level TrustLevel
+		level Level
 		want  string
 	}{
 		{TrustUnverified, "unverified"},
 		{TrustCommunity, "community"},
 		{TrustVerified, "verified"},
-		{TrustLevel(99), "TrustLevel(99)"},
+		{Level(99), "Level(99)"},
 	}
 	for _, tt := range tests {
 		if got := tt.level.String(); got != tt.want {
-			t.Errorf("TrustLevel(%d).String() = %q, want %q", int(tt.level), got, tt.want)
+			t.Errorf("Level(%d).String() = %q, want %q", int(tt.level), got, tt.want)
 		}
 	}
 }
 
-func TestParseTrustLevel(t *testing.T) {
+func TestParseLevel(t *testing.T) {
 	tests := []struct {
 		input   string
-		want    TrustLevel
+		want    Level
 		wantErr bool
 	}{
 		{"unverified", TrustUnverified, false},
@@ -37,22 +37,22 @@ func TestParseTrustLevel(t *testing.T) {
 		{"", 0, true},
 	}
 	for _, tt := range tests {
-		got, err := ParseTrustLevel(tt.input)
+		got, err := ParseLevel(tt.input)
 		if (err != nil) != tt.wantErr {
-			t.Errorf("ParseTrustLevel(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			t.Errorf("ParseLevel(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			continue
 		}
 		if !tt.wantErr && got != tt.want {
-			t.Errorf("ParseTrustLevel(%q) = %v, want %v", tt.input, got, tt.want)
+			t.Errorf("ParseLevel(%q) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
 }
 
-func TestTrustLevelStringRoundTrip(t *testing.T) {
-	for _, level := range []TrustLevel{TrustUnverified, TrustCommunity, TrustVerified} {
-		parsed, err := ParseTrustLevel(level.String())
+func TestLevelStringRoundTrip(t *testing.T) {
+	for _, level := range []Level{TrustUnverified, TrustCommunity, TrustVerified} {
+		parsed, err := ParseLevel(level.String())
 		if err != nil {
-			t.Fatalf("ParseTrustLevel(%q) failed: %v", level.String(), err)
+			t.Fatalf("ParseLevel(%q) failed: %v", level.String(), err)
 		}
 		if parsed != level {
 			t.Errorf("round-trip failed: %v → %q → %v", level, level.String(), parsed)
@@ -60,7 +60,7 @@ func TestTrustLevelStringRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTrustLevelOrdering(t *testing.T) {
+func TestLevelOrdering(t *testing.T) {
 	if TrustUnverified >= TrustCommunity {
 		t.Error("TrustUnverified should be less than TrustCommunity")
 	}
@@ -69,11 +69,11 @@ func TestTrustLevelOrdering(t *testing.T) {
 	}
 }
 
-func TestTrustViolationError(t *testing.T) {
-	v := TrustViolation{Field: "digest", Message: "mismatch"}
+func TestViolationError(t *testing.T) {
+	v := Violation{Field: "digest", Message: "mismatch"}
 	want := "trust violation on digest: mismatch"
 	if got := v.Error(); got != want {
-		t.Errorf("TrustViolation.Error() = %q, want %q", got, want)
+		t.Errorf("Violation.Error() = %q, want %q", got, want)
 	}
 }
 
@@ -97,7 +97,7 @@ func TestVerifyResultOK(t *testing.T) {
 			name: "not ok: violations present",
 			result: VerifyResult{
 				DigestMatch: true,
-				Violations:  []TrustViolation{{Field: "test", Message: "fail"}},
+				Violations:  []Violation{{Field: "test", Message: "fail"}},
 			},
 			want: false,
 		},
@@ -105,7 +105,7 @@ func TestVerifyResultOK(t *testing.T) {
 			name: "not ok: both digest mismatch and violations",
 			result: VerifyResult{
 				DigestMatch: false,
-				Violations:  []TrustViolation{{Field: "test", Message: "fail"}},
+				Violations:  []Violation{{Field: "test", Message: "fail"}},
 			},
 			want: false,
 		},

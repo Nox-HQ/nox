@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// PluginTelemetry holds metrics collected during a plugin's lifetime.
-type PluginTelemetry struct {
+// Telemetry holds metrics collected during a plugin's lifetime.
+type Telemetry struct {
 	PluginName        string        `json:"plugin_name"`
 	TotalDuration     time.Duration `json:"total_duration_ns"`
 	InvocationCount   int           `json:"invocation_count"`
@@ -20,13 +20,13 @@ type PluginTelemetry struct {
 
 // telemetryCollector accumulates per-plugin metrics in a thread-safe manner.
 type telemetryCollector struct {
-	entries map[string]*PluginTelemetry
+	entries map[string]*Telemetry
 	mu      sync.Mutex
 }
 
 func newTelemetryCollector() *telemetryCollector {
 	return &telemetryCollector{
-		entries: make(map[string]*PluginTelemetry),
+		entries: make(map[string]*Telemetry),
 	}
 }
 
@@ -37,7 +37,7 @@ func (tc *telemetryCollector) Record(pluginName string, duration time.Duration, 
 
 	entry, ok := tc.entries[pluginName]
 	if !ok {
-		entry = &PluginTelemetry{PluginName: pluginName}
+		entry = &Telemetry{PluginName: pluginName}
 		tc.entries[pluginName] = entry
 	}
 
@@ -53,11 +53,11 @@ func (tc *telemetryCollector) Record(pluginName string, duration time.Duration, 
 }
 
 // Snapshot returns a copy of all collected telemetry.
-func (tc *telemetryCollector) Snapshot() []PluginTelemetry {
+func (tc *telemetryCollector) Snapshot() []Telemetry {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
-	out := make([]PluginTelemetry, 0, len(tc.entries))
+	out := make([]Telemetry, 0, len(tc.entries))
 	for _, entry := range tc.entries {
 		cp := *entry
 		out = append(out, cp)

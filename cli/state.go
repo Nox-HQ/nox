@@ -38,14 +38,14 @@ func (s *State) FindPlugin(name string) *InstalledPlugin {
 }
 
 // AddPlugin adds or updates an installed plugin by name.
-func (s *State) AddPlugin(p InstalledPlugin) {
+func (s *State) AddPlugin(p *InstalledPlugin) {
 	for i := range s.Plugins {
 		if s.Plugins[i].Name == p.Name {
-			s.Plugins[i] = p
+			s.Plugins[i] = *p
 			return
 		}
 	}
-	s.Plugins = append(s.Plugins, p)
+	s.Plugins = append(s.Plugins, *p)
 }
 
 // RemovePlugin removes an installed plugin by name. Returns true if found.
@@ -62,8 +62,8 @@ func (s *State) RemovePlugin(name string) bool {
 // InstalledDigests returns the digests of all installed plugins.
 func (s *State) InstalledDigests() []string {
 	digests := make([]string, len(s.Plugins))
-	for i, p := range s.Plugins {
-		digests[i] = p.Digest
+	for i := range s.Plugins {
+		digests[i] = s.Plugins[i].Digest
 	}
 	return digests
 }

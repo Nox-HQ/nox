@@ -38,7 +38,7 @@ func runWatch(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: creating watcher: %v\n", err)
 		return 2
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Recursively add directories.
 	if err := addDirsRecursive(watcher, target); err != nil {

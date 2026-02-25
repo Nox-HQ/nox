@@ -32,6 +32,11 @@ func TestDefaultPolicy(t *testing.T) {
 	}
 }
 
+func defaultPolicyPtr() *Policy {
+	p := DefaultPolicy()
+	return &p
+}
+
 func TestValidateManifest_NilSafety(t *testing.T) {
 	manifest := &pluginv1.GetManifestResponse{
 		Name:       "test-plugin",
@@ -40,14 +45,14 @@ func TestValidateManifest_NilSafety(t *testing.T) {
 		Safety:     nil,
 	}
 
-	violations := ValidateManifest(manifest, DefaultPolicy())
+	violations := ValidateManifest(manifest, defaultPolicyPtr())
 	if len(violations) != 0 {
 		t.Errorf("nil safety should pass, got %d violations: %v", len(violations), violations)
 	}
 }
 
 func TestValidateManifest_NilManifest(t *testing.T) {
-	violations := ValidateManifest(nil, DefaultPolicy())
+	violations := ValidateManifest(nil, defaultPolicyPtr())
 	if len(violations) != 0 {
 		t.Errorf("nil manifest should pass, got %d violations", len(violations))
 	}
@@ -57,7 +62,7 @@ func TestValidateManifest_EmptySafety(t *testing.T) {
 	manifest := &pluginv1.GetManifestResponse{
 		Safety: &pluginv1.SafetyRequirements{},
 	}
-	violations := ValidateManifest(manifest, DefaultPolicy())
+	violations := ValidateManifest(manifest, defaultPolicyPtr())
 	if len(violations) != 0 {
 		t.Errorf("empty safety should pass, got %d violations: %v", len(violations), violations)
 	}
@@ -118,7 +123,7 @@ func TestValidateManifest_NetworkHosts(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.AllowedNetworkHosts = tt.allowed
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -163,7 +168,7 @@ func TestValidateManifest_NetworkCIDRs(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.AllowedNetworkCIDRs = tt.allowed
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -220,7 +225,7 @@ func TestValidateManifest_FilePaths(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.AllowedFilePaths = tt.allowed
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -265,7 +270,7 @@ func TestValidateManifest_EnvVars(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.AllowedEnvVars = tt.allowed
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -334,7 +339,7 @@ func TestValidateManifest_RiskClass(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.MaxRiskClass = tt.maxPolicy
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -385,7 +390,7 @@ func TestValidateManifest_ArtifactBytes(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.MaxArtifactBytes = tt.maxPolicy
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -430,7 +435,7 @@ func TestValidateManifest_NeedsConfirmation(t *testing.T) {
 			policy := DefaultPolicy()
 			policy.AllowConfirmationReqd = tt.policyAllow
 
-			violations := ValidateManifest(manifest, policy)
+			violations := ValidateManifest(manifest, &policy)
 			if len(violations) != tt.wantViolN {
 				t.Errorf("got %d violations, want %d: %v", len(violations), tt.wantViolN, violations)
 			}
@@ -448,7 +453,7 @@ func TestValidateManifest_MultipleViolations(t *testing.T) {
 			EnvVars:           []string{"SECRET_KEY"},
 		},
 	}
-	violations := ValidateManifest(manifest, DefaultPolicy())
+	violations := ValidateManifest(manifest, defaultPolicyPtr())
 
 	// Expect: network host, risk class, artifact bytes, confirmation, env var = 5 violations.
 	if len(violations) != 5 {

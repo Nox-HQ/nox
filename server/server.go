@@ -117,23 +117,23 @@ type Server struct {
 	aliases map[string]string // tool name aliases
 }
 
-// ServerOption is a functional option for configuring a Server.
-type ServerOption func(*Server)
+// Option is a functional option for configuring a Server.
+type Option func(*Server)
 
 // WithPluginHost attaches a plugin Host to the server, enabling
 // the plugin.list, plugin.call_tool, and plugin.read_resource tools.
-func WithPluginHost(h *plugin.Host) ServerOption {
+func WithPluginHost(h *plugin.Host) Option {
 	return func(s *Server) { s.host = h }
 }
 
 // WithAliases sets tool name aliases for the plugin bridge.
 // Keys are alias names, values are the real tool names.
-func WithAliases(aliases map[string]string) ServerOption {
+func WithAliases(aliases map[string]string) Option {
 	return func(s *Server) { s.aliases = aliases }
 }
 
 // New creates a new MCP server. If allowedPaths is empty, any path is allowed.
-func New(version string, allowedPaths []string, opts ...ServerOption) *Server {
+func New(version string, allowedPaths []string, opts ...Option) *Server {
 	// Resolve allowed paths to absolute for consistent comparison.
 	resolved := make([]string, 0, len(allowedPaths))
 	for _, p := range allowedPaths {
@@ -594,8 +594,9 @@ func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) 
 		Rule *catalog.RuleMeta `json:"rule,omitempty"`
 	}
 	var results []findingSummary
-	for _, f := range filtered {
-		fs := findingSummary{Finding: f}
+	for i := range filtered {
+		f := &filtered[i]
+		fs := findingSummary{Finding: *f}
 		if meta, ok := cat[f.RuleID]; ok {
 			fs.Rule = &meta
 		}
@@ -634,8 +635,8 @@ func (s *Server) handleBaselineStatus(_ context.Context, input baselineStatusInp
 	}
 
 	bySev := make(map[string]int)
-	for _, e := range bl.Entries {
-		bySev[string(e.Severity)]++
+	for i := range bl.Entries {
+		bySev[string(bl.Entries[i].Severity)]++
 	}
 
 	resp := statusResponse{

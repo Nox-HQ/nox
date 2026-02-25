@@ -2,10 +2,10 @@ package trust
 
 import "testing"
 
-func TestDefaultTrustPolicy(t *testing.T) {
-	p := DefaultTrustPolicy()
-	if p.MinTrustLevel != TrustCommunity {
-		t.Errorf("MinTrustLevel = %v, want %v", p.MinTrustLevel, TrustCommunity)
+func TestDefaultPolicy(t *testing.T) {
+	p := DefaultPolicy()
+	if p.MinLevel != TrustCommunity {
+		t.Errorf("MinLevel = %v, want %v", p.MinLevel, TrustCommunity)
 	}
 	if !p.RequireDigest {
 		t.Error("RequireDigest should be true")
@@ -15,20 +15,20 @@ func TestDefaultTrustPolicy(t *testing.T) {
 	}
 }
 
-func TestEnterpriseTrustPolicy(t *testing.T) {
-	p := EnterpriseTrustPolicy()
-	if p.MinTrustLevel != TrustVerified {
-		t.Errorf("MinTrustLevel = %v, want %v", p.MinTrustLevel, TrustVerified)
+func TestEnterprisePolicy(t *testing.T) {
+	p := EnterprisePolicy()
+	if p.MinLevel != TrustVerified {
+		t.Errorf("MinLevel = %v, want %v", p.MinLevel, TrustVerified)
 	}
 	if !p.RequireDigest {
 		t.Error("RequireDigest should be true")
 	}
 }
 
-func TestPermissiveTrustPolicy(t *testing.T) {
-	p := PermissiveTrustPolicy()
-	if p.MinTrustLevel != TrustUnverified {
-		t.Errorf("MinTrustLevel = %v, want %v", p.MinTrustLevel, TrustUnverified)
+func TestPermissivePolicy(t *testing.T) {
+	p := PermissivePolicy()
+	if p.MinLevel != TrustUnverified {
+		t.Errorf("MinLevel = %v, want %v", p.MinLevel, TrustUnverified)
 	}
 	if p.RequireDigest {
 		t.Error("RequireDigest should be false")
@@ -38,31 +38,31 @@ func TestPermissiveTrustPolicy(t *testing.T) {
 func TestCheckAPIVersion(t *testing.T) {
 	tests := []struct {
 		name           string
-		policy         TrustPolicy
+		policy         Policy
 		apiVersion     string
 		wantViolations int
 	}{
 		{
 			name:           "allowed version",
-			policy:         DefaultTrustPolicy(),
+			policy:         DefaultPolicy(),
 			apiVersion:     "v1",
 			wantViolations: 0,
 		},
 		{
 			name:           "disallowed version",
-			policy:         DefaultTrustPolicy(),
+			policy:         DefaultPolicy(),
 			apiVersion:     "v2",
 			wantViolations: 1,
 		},
 		{
 			name:           "empty version",
-			policy:         DefaultTrustPolicy(),
+			policy:         DefaultPolicy(),
 			apiVersion:     "",
 			wantViolations: 1,
 		},
 		{
 			name: "multiple allowed versions",
-			policy: TrustPolicy{
+			policy: Policy{
 				AllowedAPIVersions: []string{"v1", "v2"},
 			},
 			apiVersion:     "v2",
@@ -83,69 +83,69 @@ func TestCheckAPIVersion(t *testing.T) {
 func TestEnforce(t *testing.T) {
 	tests := []struct {
 		name           string
-		policy         TrustPolicy
+		policy         Policy
 		result         VerifyResult
 		wantViolations int
 	}{
 		{
 			name:   "verified meets default policy",
-			policy: DefaultTrustPolicy(),
+			policy: DefaultPolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustVerified,
+				Level:       TrustVerified,
 				DigestMatch: true,
 			},
 			wantViolations: 0,
 		},
 		{
 			name:   "community meets default policy",
-			policy: DefaultTrustPolicy(),
+			policy: DefaultPolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustCommunity,
+				Level:       TrustCommunity,
 				DigestMatch: true,
 			},
 			wantViolations: 0,
 		},
 		{
 			name:   "unverified fails default policy",
-			policy: DefaultTrustPolicy(),
+			policy: DefaultPolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustUnverified,
+				Level:       TrustUnverified,
 				DigestMatch: true,
 			},
 			wantViolations: 1, // trust level below minimum
 		},
 		{
 			name:   "digest mismatch with require digest",
-			policy: DefaultTrustPolicy(),
+			policy: DefaultPolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustVerified,
+				Level:       TrustVerified,
 				DigestMatch: false,
 			},
 			wantViolations: 1, // digest required but failed
 		},
 		{
 			name:   "digest mismatch without require digest",
-			policy: PermissiveTrustPolicy(),
+			policy: PermissivePolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustUnverified,
+				Level:       TrustUnverified,
 				DigestMatch: false,
 			},
 			wantViolations: 0,
 		},
 		{
 			name:   "community fails enterprise policy",
-			policy: EnterpriseTrustPolicy(),
+			policy: EnterprisePolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustCommunity,
+				Level:       TrustCommunity,
 				DigestMatch: true,
 			},
 			wantViolations: 1, // trust level below verified
 		},
 		{
 			name:   "multiple violations collected",
-			policy: EnterpriseTrustPolicy(),
+			policy: EnterprisePolicy(),
 			result: VerifyResult{
-				TrustLevel:  TrustUnverified,
+				Level:       TrustUnverified,
 				DigestMatch: false,
 			},
 			wantViolations: 2, // digest + trust level
@@ -153,7 +153,7 @@ func TestEnforce(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			violations := tt.policy.Enforce(tt.result)
+			violations := tt.policy.Enforce(&tt.result)
 			if len(violations) != tt.wantViolations {
 				t.Errorf("Enforce() returned %d violations, want %d: %v",
 					len(violations), tt.wantViolations, violations)

@@ -184,11 +184,15 @@ func TestRunDiff_JSONOutput(t *testing.T) {
 
 	code := runDiff([]string{"--base", "HEAD~1", "--head", "HEAD", "--json", dir})
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing pipe writer: %v", err)
+	}
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("reading pipe: %v", err)
+	}
 	output := buf.String()
 
 	if code != 1 {

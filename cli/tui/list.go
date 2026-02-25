@@ -53,8 +53,7 @@ func renderList(m *Model) string {
 		}
 
 		for i := start; i < end; i++ {
-			f := m.filtered[i]
-			line := renderFindingLine(f, i == m.cursor)
+			line := renderFindingLine(&m.filtered[i], i == m.cursor)
 			b.WriteString(line)
 			b.WriteString("\n")
 		}
@@ -76,7 +75,7 @@ func renderList(m *Model) string {
 }
 
 // renderFindingLine renders a single finding line in the list.
-func renderFindingLine(f findings.Finding, selected bool) string {
+func renderFindingLine(f *findings.Finding, selected bool) string {
 	badge := severityBadge(f.Severity)
 	ruleID := ruleIDStyle.Render(fmt.Sprintf("%-7s", f.RuleID))
 

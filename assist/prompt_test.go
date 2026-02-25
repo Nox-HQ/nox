@@ -292,8 +292,7 @@ func TestFormatContext_WithAIComponents(t *testing.T) {
 		Name: "summarizer",
 		Type: "prompt",
 		Path: "prompts/summarize.txt",
-	})
-	aiInv.Components = append(aiInv.Components, ai.Component{
+	}, ai.Component{
 		Name: "reviewer",
 		Type: "agent",
 		Path: "agents/review.yaml",

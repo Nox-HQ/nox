@@ -20,15 +20,16 @@ import (
 // HostAPIVersion is the protocol version the host advertises during handshake.
 const HostAPIVersion = "v1"
 
-// PluginState represents the lifecycle state of a plugin connection.
-type PluginState int
+// State represents the lifecycle state of a plugin connection.
+type State int
 
+// State constants for plugin lifecycle.
 const (
-	StateInit     PluginState = iota // Created, not yet handshaken.
-	StateReady                       // Handshake complete, ready for tool invocations.
-	StateStopping                    // Shutdown in progress.
-	StateStopped                     // Cleanly shut down.
-	StateFailed                      // Failed during handshake or runtime.
+	StateInit     State = iota // Created, not yet handshaken.
+	StateReady                 // Handshake complete, ready for tool invocations.
+	StateStopping              // Shutdown in progress.
+	StateStopped               // Cleanly shut down.
+	StateFailed                // Failed during handshake or runtime.
 )
 
 // Diagnostic is a non-finding message emitted by a plugin.
@@ -38,8 +39,8 @@ type Diagnostic struct {
 	Source   string
 }
 
-// PluginInfo holds the parsed manifest from a plugin after handshake.
-type PluginInfo struct {
+// Info holds the parsed manifest from a plugin after handshake.
+type Info struct {
 	Name         string
 	Version      string
 	APIVersion   string
@@ -74,8 +75,8 @@ type ResourceInfo struct {
 // Plugin manages a single gRPC connection to a plugin process.
 // It acts as the entity for plugin lifecycle: init → ready → stopped.
 type Plugin struct {
-	info        PluginInfo
-	state       PluginState
+	info        Info
+	state       State
 	client      pluginv1.PluginServiceClient
 	conn        *grpc.ClientConn
 	cmd         *exec.Cmd // nil if connected to an external process
@@ -153,14 +154,14 @@ func (p *Plugin) Handshake(ctx context.Context, hostAPIVersion string) error {
 }
 
 // Info returns the parsed plugin manifest. Only valid after a successful Handshake.
-func (p *Plugin) Info() PluginInfo {
+func (p *Plugin) Info() Info {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.info
 }
 
 // State returns the current plugin lifecycle state.
-func (p *Plugin) State() PluginState {
+func (p *Plugin) State() State {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.state
@@ -270,9 +271,9 @@ func (p *Plugin) Close() error {
 	return errors.Join(errs...)
 }
 
-// parseManifest extracts a PluginInfo from a GetManifestResponse.
-func parseManifest(resp *pluginv1.GetManifestResponse) PluginInfo {
-	info := PluginInfo{
+// parseManifest extracts an Info from a GetManifestResponse.
+func parseManifest(resp *pluginv1.GetManifestResponse) Info {
+	info := Info{
 		Name:       resp.GetName(),
 		Version:    resp.GetVersion(),
 		APIVersion: resp.GetApiVersion(),

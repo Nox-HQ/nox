@@ -76,9 +76,9 @@ func runAnnotate(args []string) int {
 	changedSet := getChangedFilesSet()
 	if changedSet != nil {
 		var filtered []findings.Finding
-		for _, f := range ff {
-			if _, ok := changedSet[f.Location.FilePath]; ok {
-				filtered = append(filtered, f)
+		for i := range ff {
+			if _, ok := changedSet[ff[i].Location.FilePath]; ok {
+				filtered = append(filtered, ff[i])
 			}
 		}
 		ff = filtered

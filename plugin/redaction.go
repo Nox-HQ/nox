@@ -22,7 +22,7 @@ func NewRedactor() *Redactor {
 			regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 			regexp.MustCompile(`(?i)aws_secret_access_key\s*[=:]\s*[A-Za-z0-9/+=]{40}`),
 			regexp.MustCompile(`gh[ps]_[A-Za-z0-9_]{36,}`),
-			regexp.MustCompile(`-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----`),
+			regexp.MustCompile(`-{5}BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-{5}`),
 			regexp.MustCompile(`(?i)(api[_-]?key|apikey|api[_-]?secret)\s*[=:]\s*['"][A-Za-z0-9]{16,}['"]`),
 		},
 	}

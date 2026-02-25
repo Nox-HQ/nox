@@ -177,7 +177,7 @@ func TestScaffoldPlugin(t *testing.T) {
 	outDir := filepath.Join(dir, "my-plugin")
 
 	data := buildInitData("nox/sast", registry.TrackCoreAnalysis, "")
-	if err := scaffoldPlugin(outDir, data); err != nil {
+	if err := scaffoldPlugin(outDir, &data); err != nil {
 		t.Fatalf("scaffoldPlugin: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestScaffoldPlugin_VerifyTemplateContent(t *testing.T) {
 	outDir := filepath.Join(dir, "test-plugin")
 
 	data := buildInitData("nox/sast", registry.TrackCoreAnalysis, "")
-	if err := scaffoldPlugin(outDir, data); err != nil {
+	if err := scaffoldPlugin(outDir, &data); err != nil {
 		t.Fatalf("scaffoldPlugin: %v", err)
 	}
 
@@ -249,7 +249,7 @@ func TestScaffoldPlugin_CreatesDirIfMissing(t *testing.T) {
 	outDir := filepath.Join(dir, "nested", "deep", "plugin")
 
 	data := buildInitData("nox/test", registry.TrackCoreAnalysis, "")
-	if err := scaffoldPlugin(outDir, data); err != nil {
+	if err := scaffoldPlugin(outDir, &data); err != nil {
 		t.Fatalf("scaffoldPlugin: %v", err)
 	}
 
@@ -310,8 +310,10 @@ func TestRunPluginInit_SuccessDefaultOutput(t *testing.T) {
 
 	// Change to temp dir so the default output lands there.
 	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
-	os.Chdir(dir)
+	defer func() { _ = os.Chdir(oldDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
 
 	code := runPluginInit([]string{
 		"--name", "nox/sast",

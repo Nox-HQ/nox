@@ -73,8 +73,8 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	}
 }
 
-func TestPluginPolicyConfig_ToPolicy(t *testing.T) {
-	cfg := PluginPolicyConfig{
+func TestPolicyConfig_ToPolicy(t *testing.T) {
+	cfg := PolicyConfig{
 		AllowedNetworkHosts:  []string{"*.example.com"},
 		MaxRiskClass:         "active",
 		MaxArtifactMB:        50,
@@ -109,8 +109,8 @@ func TestPluginPolicyConfig_ToPolicy(t *testing.T) {
 	}
 }
 
-func TestPluginPolicyConfig_ToPolicy_ZeroValues(t *testing.T) {
-	cfg := PluginPolicyConfig{}
+func TestPolicyConfig_ToPolicy_ZeroValues(t *testing.T) {
+	cfg := PolicyConfig{}
 	p := cfg.ToPolicy()
 	def := DefaultPolicy()
 

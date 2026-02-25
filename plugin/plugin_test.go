@@ -42,9 +42,7 @@ func startMockPlugin(t *testing.T, srv pluginv1.PluginServiceServer) *grpc.Clien
 	pluginv1.RegisterPluginServiceServer(s, srv)
 
 	go func() {
-		if err := s.Serve(lis); err != nil {
-			// Server stopped.
-		}
+		_ = s.Serve(lis)
 	}()
 	t.Cleanup(func() { s.Stop() })
 
@@ -58,7 +56,7 @@ func startMockPlugin(t *testing.T, srv pluginv1.PluginServiceServer) *grpc.Clien
 	if err != nil {
 		t.Fatalf("connecting to bufconn: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	return conn
 }
@@ -127,12 +125,12 @@ func TestPlugin_Handshake_Success(t *testing.T) {
 	if len(info.Capabilities) != 1 {
 		t.Fatalf("len(Capabilities) = %d, want 1", len(info.Capabilities))
 	}
-	cap := info.Capabilities[0]
-	if len(cap.Tools) != 2 {
-		t.Errorf("len(Tools) = %d, want 2", len(cap.Tools))
+	capability := info.Capabilities[0]
+	if len(capability.Tools) != 2 {
+		t.Errorf("len(Tools) = %d, want 2", len(capability.Tools))
 	}
-	if len(cap.Resources) != 1 {
-		t.Errorf("len(Resources) = %d, want 1", len(cap.Resources))
+	if len(capability.Resources) != 1 {
+		t.Errorf("len(Resources) = %d, want 1", len(capability.Resources))
 	}
 }
 

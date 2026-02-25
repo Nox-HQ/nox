@@ -25,11 +25,11 @@ func NewManifest(name, version string) *ManifestBuilder {
 // Use the returned CapabilityBuilder to add tools and resources, then call
 // Done() to return to the ManifestBuilder.
 func (b *ManifestBuilder) Capability(name, description string) *CapabilityBuilder {
-	cap := &pluginv1.Capability{
+	c := &pluginv1.Capability{
 		Name:        name,
 		Description: description,
 	}
-	return &CapabilityBuilder{parent: b, cap: cap}
+	return &CapabilityBuilder{parent: b, cap: c}
 }
 
 // Safety sets the plugin's safety requirements using functional options.

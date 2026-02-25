@@ -82,7 +82,7 @@ type diagnosticJSON struct {
 }
 
 // serializePluginList converts plugin info to clean JSON.
-func serializePluginList(plugins []plugin.PluginInfo) ([]byte, error) {
+func serializePluginList(plugins []plugin.Info) ([]byte, error) {
 	out := make([]pluginListJSON, len(plugins))
 	for i, p := range plugins {
 		pj := pluginListJSON{

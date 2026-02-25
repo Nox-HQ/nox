@@ -98,11 +98,11 @@ func runRegistryList(args []string) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tURL")
+	_, _ = fmt.Fprintln(w, "NAME\tURL")
 	for _, s := range st.Sources {
-		fmt.Fprintf(w, "%s\t%s\n", s.Name, s.URL)
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", s.Name, s.URL)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return 0
 }
 

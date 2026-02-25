@@ -5,6 +5,7 @@ import "context"
 // Role identifies the sender of a message in the chat conversation.
 type Role string
 
+// Role constants for LLM message roles.
 const (
 	RoleSystem    Role = "system"
 	RoleUser      Role = "user"

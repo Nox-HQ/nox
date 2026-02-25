@@ -436,9 +436,7 @@ func startTestMockPlugin(t *testing.T, srv pluginv1.PluginServiceServer) *grpc.C
 	pluginv1.RegisterPluginServiceServer(s, srv)
 
 	go func() {
-		if err := s.Serve(lis); err != nil {
-			// Server stopped.
-		}
+		_ = s.Serve(lis)
 	}()
 	t.Cleanup(func() { s.Stop() })
 
@@ -452,7 +450,7 @@ func startTestMockPlugin(t *testing.T, srv pluginv1.PluginServiceServer) *grpc.C
 	if err != nil {
 		t.Fatalf("connecting to bufconn: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	return conn
 }

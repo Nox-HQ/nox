@@ -396,7 +396,7 @@ func conformanceClient(t *testing.T, server pluginv1.PluginServiceServer) plugin
 	if err != nil {
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { _ = conn.Close() })
 
 	return pluginv1.NewPluginServiceClient(conn)
 }

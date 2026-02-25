@@ -146,7 +146,7 @@ func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filter.searching = false
 		m.applyFilter()
 	case "backspace":
-		if len(m.filter.search) > 0 {
+		if m.filter.search != "" {
 			m.filter.search = m.filter.search[:len(m.filter.search)-1]
 			m.applyFilter()
 		}

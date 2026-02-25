@@ -18,7 +18,7 @@ func TestTelemetryCollectorRecord(t *testing.T) {
 	}
 
 	// Find sast entry.
-	var sast, dast *PluginTelemetry
+	var sast, dast *Telemetry
 	for i := range snap {
 		switch snap[i].PluginName {
 		case "nox/sast":

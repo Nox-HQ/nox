@@ -136,7 +136,7 @@ func TestComplete_Success(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
+		_ = json.NewEncoder(w).Encode(mockResp)
 	}))
 	defer srv.Close()
 
@@ -183,7 +183,7 @@ func TestComplete_NoChoices(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResp)
+		_ = json.NewEncoder(w).Encode(mockResp)
 	}))
 	defer srv.Close()
 
@@ -207,7 +207,7 @@ func TestComplete_NoChoices(t *testing.T) {
 func TestComplete_APIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": {"message": "server error", "type": "server_error"}}`))
+		_, _ = w.Write([]byte(`{"error": {"message": "server error", "type": "server_error"}}`))
 	}))
 	defer srv.Close()
 

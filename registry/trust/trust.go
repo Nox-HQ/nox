@@ -9,13 +9,13 @@ import (
 	"time"
 )
 
-// TrustLevel classifies the level of trust established for an artifact.
+// Level classifies the level of trust established for an artifact.
 // Higher ordinal values indicate stronger trust guarantees.
-type TrustLevel int
+type Level int
 
 const (
 	// TrustUnverified indicates no valid signature was found.
-	TrustUnverified TrustLevel = iota
+	TrustUnverified Level = iota
 	// TrustCommunity indicates a valid signature from a key NOT in the keyring.
 	TrustCommunity
 	// TrustVerified indicates a valid signature from a key IN the keyring.
@@ -23,7 +23,7 @@ const (
 )
 
 // String returns the human-readable name of the trust level.
-func (t TrustLevel) String() string {
+func (t Level) String() string {
 	switch t {
 	case TrustUnverified:
 		return "unverified"
@@ -32,12 +32,12 @@ func (t TrustLevel) String() string {
 	case TrustVerified:
 		return "verified"
 	default:
-		return fmt.Sprintf("TrustLevel(%d)", int(t))
+		return fmt.Sprintf("Level(%d)", int(t))
 	}
 }
 
-// ParseTrustLevel parses a trust level string. Returns an error for unknown values.
-func ParseTrustLevel(s string) (TrustLevel, error) {
+// ParseLevel parses a trust level string. Returns an error for unknown values.
+func ParseLevel(s string) (Level, error) {
 	switch strings.ToLower(s) {
 	case "unverified":
 		return TrustUnverified, nil
@@ -50,29 +50,29 @@ func ParseTrustLevel(s string) (TrustLevel, error) {
 	}
 }
 
-// TrustViolation describes a single trust constraint violation.
-type TrustViolation struct {
+// Violation describes a single trust constraint violation.
+type Violation struct {
 	Field   string
 	Message string
 }
 
-// Error implements the error interface for TrustViolation.
-func (v TrustViolation) Error() string {
+// Error implements the error interface for Violation.
+func (v Violation) Error() string {
 	return fmt.Sprintf("trust violation on %s: %s", v.Field, v.Message)
 }
 
 // VerifyResult holds the outcome of artifact verification.
 type VerifyResult struct {
-	TrustLevel     TrustLevel
+	Level          Level
 	DigestMatch    bool
 	SignatureValid bool
 	SignerKey      string // SHA-256 fingerprint of the signing key
 	SignerName     string // name from keyring, empty if unknown
-	Violations     []TrustViolation
+	Violations     []Violation
 	VerifiedAt     time.Time
 }
 
 // OK returns true if verification passed without any violations and the digest matched.
-func (r VerifyResult) OK() bool {
+func (r *VerifyResult) OK() bool {
 	return len(r.Violations) == 0 && r.DigestMatch
 }

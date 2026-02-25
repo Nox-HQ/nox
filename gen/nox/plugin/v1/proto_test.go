@@ -193,13 +193,13 @@ func TestGetManifestResponseRoundTrip(t *testing.T) {
 			},
 		},
 		Safety: &pluginv1.SafetyRequirements{
-			NetworkHosts:     []string{"*.example.com"},
-			NetworkCidrs:     []string{"10.0.0.0/8"},
-			FilePaths:        []string{"/tmp/dast-output"},
-			EnvVars:          []string{"DAST_API_KEY"},
-			RiskClass:        "active",
+			NetworkHosts:      []string{"*.example.com"},
+			NetworkCidrs:      []string{"10.0.0.0/8"},
+			FilePaths:         []string{"/tmp/dast-output"},
+			EnvVars:           []string{"DAST_API_KEY"},
+			RiskClass:         "active",
 			NeedsConfirmation: true,
-			MaxArtifactBytes: 10 * 1024 * 1024,
+			MaxArtifactBytes:  10 * 1024 * 1024,
 		},
 	}
 
@@ -217,14 +217,14 @@ func TestGetManifestResponseRoundTrip(t *testing.T) {
 	if len(got.GetCapabilities()) != 1 {
 		t.Fatalf("capabilities: got %d, want 1", len(got.GetCapabilities()))
 	}
-	cap := got.GetCapabilities()[0]
-	if cap.GetName() != "dast.scan" {
-		t.Errorf("capability.name: got %q, want %q", cap.GetName(), "dast.scan")
+	capability := got.GetCapabilities()[0]
+	if capability.GetName() != "dast.scan" {
+		t.Errorf("capability.name: got %q, want %q", capability.GetName(), "dast.scan")
 	}
-	if len(cap.GetTools()) != 1 {
-		t.Fatalf("tools: got %d, want 1", len(cap.GetTools()))
+	if len(capability.GetTools()) != 1 {
+		t.Fatalf("tools: got %d, want 1", len(capability.GetTools()))
 	}
-	tool := cap.GetTools()[0]
+	tool := capability.GetTools()[0]
 	if tool.GetName() != "scan" {
 		t.Errorf("tool.name: got %q, want %q", tool.GetName(), "scan")
 	}
@@ -234,10 +234,10 @@ func TestGetManifestResponseRoundTrip(t *testing.T) {
 	if tool.GetInputSchema() == nil {
 		t.Fatal("tool.input_schema: got nil")
 	}
-	if len(cap.GetResources()) != 1 {
-		t.Fatalf("resources: got %d, want 1", len(cap.GetResources()))
+	if len(capability.GetResources()) != 1 {
+		t.Fatalf("resources: got %d, want 1", len(capability.GetResources()))
 	}
-	res := cap.GetResources()[0]
+	res := capability.GetResources()[0]
 	if res.GetUriTemplate() != "dast://runs/{id}/results.sarif" {
 		t.Errorf("resource.uri_template: got %q", res.GetUriTemplate())
 	}
@@ -364,9 +364,9 @@ func TestStreamArtifactsRoundTrip(t *testing.T) {
 
 func TestEnumValues(t *testing.T) {
 	tests := []struct {
-		name  string
-		enum  int32
-		str   string
+		name string
+		enum int32
+		str  string
 	}{
 		{"SEVERITY_UNSPECIFIED", int32(pluginv1.Severity_SEVERITY_UNSPECIFIED), "SEVERITY_UNSPECIFIED"},
 		{"SEVERITY_CRITICAL", int32(pluginv1.Severity_SEVERITY_CRITICAL), "SEVERITY_CRITICAL"},
@@ -393,15 +393,15 @@ func TestEnumValues(t *testing.T) {
 
 	expectedNumbers := map[string]int32{
 		"SEVERITY_UNSPECIFIED":            0,
-		"SEVERITY_CRITICAL":              1,
-		"SEVERITY_HIGH":                  2,
-		"SEVERITY_MEDIUM":                3,
-		"SEVERITY_LOW":                   4,
-		"SEVERITY_INFO":                  5,
+		"SEVERITY_CRITICAL":               1,
+		"SEVERITY_HIGH":                   2,
+		"SEVERITY_MEDIUM":                 3,
+		"SEVERITY_LOW":                    4,
+		"SEVERITY_INFO":                   5,
 		"CONFIDENCE_UNSPECIFIED":          0,
-		"CONFIDENCE_HIGH":                1,
-		"CONFIDENCE_MEDIUM":              2,
-		"CONFIDENCE_LOW":                 3,
+		"CONFIDENCE_HIGH":                 1,
+		"CONFIDENCE_MEDIUM":               2,
+		"CONFIDENCE_LOW":                  3,
 		"ARTIFACT_TYPE_UNSPECIFIED":       0,
 		"ARTIFACT_TYPE_SOURCE":            1,
 		"ARTIFACT_TYPE_CONFIG":            2,

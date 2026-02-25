@@ -78,8 +78,8 @@ func TestProtoConfidenceToGo(t *testing.T) {
 
 func TestGoConfidenceToProto(t *testing.T) {
 	tests := []struct {
-		go_  findings.Confidence
-		want pluginv1.Confidence
+		goVal findings.Confidence
+		want  pluginv1.Confidence
 	}{
 		{findings.ConfidenceHigh, pluginv1.Confidence_CONFIDENCE_HIGH},
 		{findings.ConfidenceMedium, pluginv1.Confidence_CONFIDENCE_MEDIUM},
@@ -87,10 +87,10 @@ func TestGoConfidenceToProto(t *testing.T) {
 		{findings.Confidence("unknown"), pluginv1.Confidence_CONFIDENCE_UNSPECIFIED},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.go_), func(t *testing.T) {
-			got := GoConfidenceToProto(tt.go_)
+		t.Run(string(tt.goVal), func(t *testing.T) {
+			got := GoConfidenceToProto(tt.goVal)
 			if got != tt.want {
-				t.Errorf("GoConfidenceToProto(%q) = %v, want %v", tt.go_, got, tt.want)
+				t.Errorf("GoConfidenceToProto(%q) = %v, want %v", tt.goVal, got, tt.want)
 			}
 		})
 	}
@@ -138,7 +138,7 @@ func TestFindingRoundTrip(t *testing.T) {
 		Metadata:    map[string]string{"cwe": "CWE-798", "source": "secrets-analyzer"},
 	}
 
-	proto := GoFindingToProto(original)
+	proto := GoFindingToProto(&original)
 	roundTrip := ProtoFindingToGo(proto)
 
 	if roundTrip.ID != original.ID {
@@ -181,7 +181,7 @@ func TestFindingRoundTrip_EmptyMetadata(t *testing.T) {
 		Severity: findings.SeverityLow,
 	}
 
-	proto := GoFindingToProto(original)
+	proto := GoFindingToProto(&original)
 	roundTrip := ProtoFindingToGo(proto)
 
 	if roundTrip.ID != original.ID {

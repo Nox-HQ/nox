@@ -6,7 +6,7 @@ import "time"
 // validation, trust classification, and policy enforcement.
 type Verifier struct {
 	keyring *Keyring
-	policy  TrustPolicy
+	policy  Policy
 }
 
 // VerifierOption is a functional option for configuring a Verifier.
@@ -17,17 +17,17 @@ func WithKeyring(kr *Keyring) VerifierOption {
 	return func(v *Verifier) { v.keyring = kr }
 }
 
-// WithTrustPolicy sets the trust policy for enforcement.
-func WithTrustPolicy(p TrustPolicy) VerifierOption {
+// WithPolicy sets the trust policy for enforcement.
+func WithPolicy(p Policy) VerifierOption {
 	return func(v *Verifier) { v.policy = p }
 }
 
 // NewVerifier creates a Verifier with the given options.
-// Defaults: empty keyring, DefaultTrustPolicy().
+// Defaults: empty keyring, DefaultPolicy().
 func NewVerifier(opts ...VerifierOption) *Verifier {
 	v := &Verifier{
 		keyring: NewKeyring(),
-		policy:  DefaultTrustPolicy(),
+		policy:  DefaultPolicy(),
 	}
 	for _, opt := range opts {
 		opt(v)
@@ -50,7 +50,7 @@ func (v *Verifier) VerifyArtifact(
 	apiVersion string,
 ) VerifyResult {
 	result := VerifyResult{
-		TrustLevel: TrustUnverified,
+		Level:      TrustUnverified,
 		VerifiedAt: time.Now(),
 	}
 
@@ -58,14 +58,14 @@ func (v *Verifier) VerifyArtifact(
 	if expectedDigest != "" {
 		match, err := VerifyDigest(content, expectedDigest)
 		if err != nil {
-			result.Violations = append(result.Violations, TrustViolation{
+			result.Violations = append(result.Violations, Violation{
 				Field:   "digest",
 				Message: err.Error(),
 			})
 		} else {
 			result.DigestMatch = match
 			if !match {
-				result.Violations = append(result.Violations, TrustViolation{
+				result.Violations = append(result.Violations, Violation{
 					Field:   "digest",
 					Message: "content digest does not match expected digest",
 				})
@@ -77,14 +77,14 @@ func (v *Verifier) VerifyArtifact(
 	if len(signature) > 0 && len(signerKeyPEM) > 0 {
 		valid, err := VerifySignature(content, signature, signerKeyPEM)
 		if err != nil {
-			result.Violations = append(result.Violations, TrustViolation{
+			result.Violations = append(result.Violations, Violation{
 				Field:   "signature",
 				Message: err.Error(),
 			})
 		} else {
 			result.SignatureValid = valid
 			if !valid {
-				result.Violations = append(result.Violations, TrustViolation{
+				result.Violations = append(result.Violations, Violation{
 					Field:   "signature",
 					Message: "signature verification failed",
 				})
@@ -99,10 +99,10 @@ func (v *Verifier) VerifyArtifact(
 				result.SignerKey = fp
 
 				if key := v.keyring.Find(fp); key != nil {
-					result.TrustLevel = TrustVerified
+					result.Level = TrustVerified
 					result.SignerName = key.Name
 				} else {
-					result.TrustLevel = TrustCommunity
+					result.Level = TrustCommunity
 				}
 			}
 		}
@@ -114,7 +114,7 @@ func (v *Verifier) VerifyArtifact(
 	}
 
 	// Step 5: Policy enforcement.
-	result.Violations = append(result.Violations, v.policy.Enforce(result)...)
+	result.Violations = append(result.Violations, v.policy.Enforce(&result)...)
 
 	return result
 }

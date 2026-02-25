@@ -113,8 +113,9 @@ func runPluginSearch(args []string) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTRACK\tDESCRIPTION\tLATEST")
-	for _, p := range results {
+	_, _ = fmt.Fprintln(w, "NAME\tTRACK\tDESCRIPTION\tLATEST")
+	for i := range results {
+		p := &results[i]
 		latest := ""
 		if len(p.Versions) > 0 {
 			latest = p.Versions[len(p.Versions)-1].Version
@@ -123,9 +124,9 @@ func runPluginSearch(args []string) int {
 		if track == "" {
 			track = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, p.Description, latest)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, p.Description, latest)
 	}
-	w.Flush()
+	_ = w.Flush()
 	return 0
 }
 
@@ -159,8 +160,8 @@ func runPluginInfo(args []string) int {
 
 	// Find exact match.
 	var found *registry.PluginEntry
-	for i, p := range results {
-		if p.Name == name {
+	for i := range results {
+		if results[i].Name == name {
 			found = &results[i]
 			break
 		}
@@ -192,7 +193,8 @@ func runPluginInfo(args []string) int {
 		fmt.Printf("Maintainers: %s\n", strings.Join(found.Maintainers, ", "))
 	}
 	fmt.Printf("Versions:    %d\n", len(found.Versions))
-	for _, v := range found.Versions {
+	for i := range found.Versions {
+		v := &found.Versions[i]
 		caps := ""
 		if len(v.Capabilities) > 0 {
 			caps = " (" + strings.Join(v.Capabilities, ", ") + ")"
@@ -255,13 +257,13 @@ func runPluginInstall(args []string) int {
 		return 0
 	}
 
-	artifact, err := store.Fetch(ctx, name, *ve)
+	artifact, err := store.Fetch(ctx, name, ve)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: fetching %s@%s: %v\n", name, ve.Version, err)
 		return 2
 	}
 
-	trustLevel := artifact.VerifyResult.TrustLevel.String()
+	trustLevel := artifact.VerifyResult.Level.String()
 	fmt.Printf("Trust: %s", trustLevel)
 	if artifact.VerifyResult.SignerName != "" {
 		fmt.Printf(" (signer: %s)", artifact.VerifyResult.SignerName)
@@ -275,7 +277,7 @@ func runPluginInstall(args []string) int {
 	}
 
 	now := time.Now()
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:        name,
 		Version:     ve.Version,
 		Digest:      artifact.Digest,
@@ -314,8 +316,8 @@ func runPluginUpdate(args []string) int {
 	if len(args) > 0 {
 		targets = []string{args[0]}
 	} else {
-		for _, p := range st.Plugins {
-			targets = append(targets, p.Name)
+		for i := range st.Plugins {
+			targets = append(targets, st.Plugins[i].Name)
 		}
 	}
 
@@ -347,19 +349,19 @@ func runPluginUpdate(args []string) int {
 			continue
 		}
 
-		artifact, err := store.Fetch(ctx, name, *ve)
+		artifact, err := store.Fetch(ctx, name, ve)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot fetch %s@%s: %v\n", name, ve.Version, err)
 			continue
 		}
 
 		now := time.Now()
-		st.AddPlugin(InstalledPlugin{
+		st.AddPlugin(&InstalledPlugin{
 			Name:        name,
 			Version:     ve.Version,
 			Digest:      artifact.Digest,
 			BinaryPath:  artifact.BinaryPath,
-			TrustLevel:  artifact.VerifyResult.TrustLevel.String(),
+			TrustLevel:  artifact.VerifyResult.Level.String(),
 			RiskClass:   ve.RiskClass,
 			InstalledAt: ip.InstalledAt,
 			UpdatedAt:   now,
@@ -400,11 +402,12 @@ func runPluginList(args []string) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tINSTALLED")
-	for _, p := range st.Plugins {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Version, p.TrustLevel, p.InstalledAt.Format("2006-01-02"))
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tINSTALLED")
+	for i := range st.Plugins {
+		p := &st.Plugins[i]
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Version, p.TrustLevel, p.InstalledAt.Format("2006-01-02"))
 	}
-	w.Flush()
+	_ = w.Flush()
 	return 0
 }
 
@@ -508,8 +511,8 @@ func runPluginCall(args []string) int {
 	}
 	policy := cfg.PluginPolicy.ToPolicy()
 
-	host := plugin.NewHost(plugin.WithPolicy(policy))
-	defer host.Close()
+	host := plugin.NewHost(plugin.WithPolicy(&policy))
+	defer func() { _ = host.Close() }()
 
 	ctx := context.Background()
 	if err := host.RegisterBinary(ctx, ip.BinaryPath, nil); err != nil {
@@ -546,7 +549,7 @@ func runPluginCall(args []string) int {
 
 // parseNameVersion splits "name@version" into name and constraint.
 // If no "@" is present, constraint defaults to "*".
-func parseNameVersion(s string) (string, string) {
+func parseNameVersion(s string) (name, constraint string) {
 	if idx := strings.LastIndex(s, "@"); idx > 0 {
 		return s[:idx], s[idx+1:]
 	}

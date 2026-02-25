@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func testKeyPair(t *testing.T) (ed25519.PublicKey, []byte) {
+func testKeyPair(t *testing.T) (pub ed25519.PublicKey, priv []byte) {
 	t.Helper()
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

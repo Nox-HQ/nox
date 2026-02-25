@@ -152,7 +152,8 @@ func (c *Client) Search(ctx context.Context, query string, opts ...SearchOption)
 	var results []PluginEntry
 
 	for _, idx := range indexes {
-		for _, p := range idx.Plugins {
+		for i := range idx.Plugins {
+			p := &idx.Plugins[i]
 			if seen[p.Name] {
 				continue
 			}
@@ -164,7 +165,7 @@ func (c *Client) Search(ctx context.Context, query string, opts ...SearchOption)
 			}
 			if matchesQuery(p, query) {
 				seen[p.Name] = true
-				results = append(results, p)
+				results = append(results, *p)
 			}
 		}
 	}
@@ -173,7 +174,7 @@ func (c *Client) Search(ctx context.Context, query string, opts ...SearchOption)
 
 // matchesQuery checks if a plugin matches a text query by name, description,
 // track, or tags.
-func matchesQuery(p PluginEntry, query string) bool {
+func matchesQuery(p *PluginEntry, query string) bool {
 	if strings.Contains(strings.ToLower(p.Name), query) {
 		return true
 	}
@@ -242,11 +243,12 @@ func (c *Client) Resolve(ctx context.Context, name, constraint string, opts ...R
 	var bestVer Version
 
 	for _, idx := range indexes {
-		for _, p := range idx.Plugins {
+		for i := range idx.Plugins {
+			p := &idx.Plugins[i]
 			if p.Name != name {
 				continue
 			}
-			if rc.filter != nil && !rc.filter(p) {
+			if rc.filter != nil && !rc.filter(*p) {
 				continue
 			}
 			for i := range p.Versions {
@@ -322,7 +324,7 @@ func (c *Client) getIndex(ctx context.Context, src Source) (*Index, error) {
 
 // fetch retrieves and validates a registry index from a source URL.
 func (c *Client) fetch(ctx context.Context, src Source) (*Index, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -331,7 +333,7 @@ func (c *Client) fetch(ctx context.Context, src Source) (*Index, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching index: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry returned HTTP %d", resp.StatusCode)

@@ -61,16 +61,17 @@ func extractInterspersedArgs(args []string) []string {
 		if eq := strings.Index(name, "="); eq >= 0 {
 			name = name[:eq]
 		}
-		if isTopLevelBoolFlag(name) {
+		switch {
+		case isTopLevelBoolFlag(name):
 			flags = append(flags, arg)
-		} else if subcommand == "scan" && isTopLevelStringFlag(name) {
+		case subcommand == "scan" && isTopLevelStringFlag(name):
 			flags = append(flags, arg)
 			// Consume the value unless it was --flag=value.
 			if !strings.Contains(arg, "=") && i+1 < len(args) {
 				i++
 				flags = append(flags, args[i])
 			}
-		} else {
+		default:
 			// Unknown flag — belongs to a subcommand, leave in place.
 			rest = append(rest, arg)
 		}
@@ -248,15 +249,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	formats := parseFormats(formatFlag)
 
 	if !quiet {
-		if stagedFlag {
+		switch {
+		case stagedFlag:
 			fmt.Printf("nox %s — scanning staged files in %s\n", version, target)
-		} else if historyFlag {
+		case historyFlag:
 			if historyDepthFlag > 0 {
 				fmt.Printf("nox %s — scanning git history (%d commits) in %s\n", version, historyDepthFlag, target)
 			} else {
 				fmt.Printf("nox %s — scanning git history in %s\n", version, target)
 			}
-		} else {
+		default:
 			fmt.Printf("nox %s — scanning %s\n", version, target)
 		}
 	}
@@ -266,15 +268,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	}
 
 	var result *nox.ScanResult
-	if stagedFlag {
+	switch {
+	case stagedFlag:
 		result, err = nox.RunStagedScan(target)
-	} else if historyFlag {
+	case historyFlag:
 		historyOpts := nox.HistoryScanOptions{
 			MaxDepth:    historyDepthFlag,
 			ScanOptions: nox.ScanOptions{CustomRulesPath: rulesPath},
 		}
 		result, err = nox.RunHistoryScan(target, &historyOpts)
-	} else {
+	default:
 		opts := nox.ScanOptions{
 			CustomRulesPath:   rulesPath,
 			DisableOSV:        noOSVFlag,
@@ -294,9 +297,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if thresholdFlag != "" {
 		threshold := findings.Severity(thresholdFlag)
 		var filtered []findings.Finding
-		for _, f := range activeFindings {
-			if nox.SeverityMeetsThreshold(f.Severity, threshold) {
-				filtered = append(filtered, f)
+		for i := range activeFindings {
+			if nox.SeverityMeetsThreshold(activeFindings[i].Severity, threshold) {
+				filtered = append(filtered, activeFindings[i])
 			}
 		}
 		activeFindings = filtered
@@ -455,13 +458,13 @@ func runServe(args []string) int {
 
 // parseFormats splits the comma-separated format flag into individual format
 // strings. "all" expands to all supported formats.
-func parseFormats(flag string) []string {
-	if flag == "all" {
+func parseFormats(fmtFlag string) []string {
+	if fmtFlag == "all" {
 		return []string{"json", "sarif", "cdx", "spdx"}
 	}
 
 	var formats []string
-	for _, f := range strings.Split(flag, ",") {
+	for _, f := range strings.Split(fmtFlag, ",") {
 		f = strings.TrimSpace(f)
 		if f != "" {
 			formats = append(formats, f)

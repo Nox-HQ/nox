@@ -10,11 +10,11 @@ import (
 
 // Config represents the .nox.yaml configuration file.
 type Config struct {
-	PluginPolicy PluginPolicyConfig `yaml:"plugin_policy"`
+	PluginPolicy PolicyConfig `yaml:"plugin_policy"`
 }
 
-// PluginPolicyConfig defines policy overrides loaded from configuration.
-type PluginPolicyConfig struct {
+// PolicyConfig defines policy overrides loaded from configuration.
+type PolicyConfig struct {
 	AllowedNetworkHosts   []string `yaml:"allowed_network_hosts"`
 	AllowedNetworkCIDRs   []string `yaml:"allowed_network_cidrs"`
 	AllowedFilePaths      []string `yaml:"allowed_file_paths"`
@@ -47,9 +47,9 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// ToPolicy converts PluginPolicyConfig to a runtime Policy, applying unit
+// ToPolicy converts PolicyConfig to a runtime Policy, applying unit
 // conversions and falling back to DefaultPolicy() values for zero fields.
-func (c *PluginPolicyConfig) ToPolicy() Policy {
+func (c *PolicyConfig) ToPolicy() Policy {
 	p := DefaultPolicy()
 
 	if len(c.AllowedNetworkHosts) > 0 {

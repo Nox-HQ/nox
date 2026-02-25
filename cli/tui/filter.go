@@ -43,7 +43,7 @@ func (f *filterState) activeSeverity() string {
 }
 
 // matchesFinding returns true if the finding passes all active filters.
-func (f *filterState) matchesFinding(finding findings.Finding) bool {
+func (f *filterState) matchesFinding(finding *findings.Finding) bool {
 	// Severity filter.
 	if f.severityIdx >= 0 {
 		if finding.Severity != severityOrder[f.severityIdx] {
@@ -68,9 +68,9 @@ func (f *filterState) matchesFinding(finding findings.Finding) bool {
 // filterFindings returns findings that pass the active filters.
 func (f *filterState) filterFindings(all []findings.Finding) []findings.Finding {
 	var result []findings.Finding
-	for _, finding := range all {
-		if f.matchesFinding(finding) {
-			result = append(result, finding)
+	for i := range all {
+		if f.matchesFinding(&all[i]) {
+			result = append(result, all[i])
 		}
 	}
 	return result

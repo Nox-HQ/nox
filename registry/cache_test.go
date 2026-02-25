@@ -123,7 +123,7 @@ func TestCachePath(t *testing.T) {
 	}
 
 	// Verify it's under the cache dir.
-	real, err := filepath.EvalSymlinks(dir)
+	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		t.Fatalf("eval symlinks: %v", err)
 	}
@@ -133,8 +133,8 @@ func TestCachePath(t *testing.T) {
 		if filepath.Dir(p1) != dir {
 			t.Errorf("cache path %q not under dir %q", p1, dir)
 		}
-	} else if realP1 != real {
-		t.Errorf("cache path dir %q != %q", realP1, real)
+	} else if realP1 != resolved {
+		t.Errorf("cache path dir %q != %q", realP1, resolved)
 	}
 }
 

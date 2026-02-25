@@ -19,7 +19,7 @@ func TestSerializePluginList_Empty(t *testing.T) {
 }
 
 func TestSerializePluginList_SinglePlugin(t *testing.T) {
-	plugins := []plugin.PluginInfo{
+	plugins := []plugin.Info{
 		{
 			Name:       "test-scanner",
 			Version:    "1.0.0",
@@ -60,21 +60,21 @@ func TestSerializePluginList_SinglePlugin(t *testing.T) {
 	if len(result[0].Capabilities) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(result[0].Capabilities))
 	}
-	cap := result[0].Capabilities[0]
-	if len(cap.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(cap.Tools))
+	capability := result[0].Capabilities[0]
+	if len(capability.Tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(capability.Tools))
 	}
-	if cap.Tools[0].Name != "scan" {
-		t.Errorf("tool name = %q, want %q", cap.Tools[0].Name, "scan")
+	if capability.Tools[0].Name != "scan" {
+		t.Errorf("tool name = %q, want %q", capability.Tools[0].Name, "scan")
 	}
-	if !cap.Tools[0].ReadOnly {
+	if !capability.Tools[0].ReadOnly {
 		t.Error("tool should be read_only")
 	}
-	if len(cap.Resources) != 1 {
-		t.Fatalf("expected 1 resource, got %d", len(cap.Resources))
+	if len(capability.Resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(capability.Resources))
 	}
-	if cap.Resources[0].URITemplate != "nox://plugins/test-scanner/results" {
-		t.Errorf("resource URI = %q", cap.Resources[0].URITemplate)
+	if capability.Resources[0].URITemplate != "nox://plugins/test-scanner/results" {
+		t.Errorf("resource URI = %q", capability.Resources[0].URITemplate)
 	}
 }
 

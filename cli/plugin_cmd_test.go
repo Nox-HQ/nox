@@ -160,7 +160,7 @@ func TestRunPluginInfo_ShowsInstalled(t *testing.T) {
 
 	// Pre-install a plugin in state.
 	st, _ := LoadState(filepath.Join(dir, "state.json"))
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:       "nox/dast",
 		Version:    "1.0.0",
 		TrustLevel: "verified",
@@ -468,7 +468,7 @@ func TestRunPluginInstall_AlreadyInstalled(t *testing.T) {
 
 	// Pre-install a plugin at the exact requested version.
 	st, _ := LoadState(filepath.Join(dir, "state.json"))
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:    "nox/dast",
 		Version: "1.0.0",
 	})
@@ -489,7 +489,7 @@ func TestRunPluginUpdate_SpecificPlugin(t *testing.T) {
 
 	// Install a plugin at an old version.
 	st, _ := LoadState(filepath.Join(dir, "state.json"))
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:    "nox/dast",
 		Version: "1.0.0",
 		Digest:  "sha256:aaa",
@@ -586,12 +586,12 @@ func TestRunPluginUpdate_AllPlugins(t *testing.T) {
 
 	// Install plugins.
 	st, _ := LoadState(filepath.Join(dir, "state.json"))
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:    "nox/dast",
 		Version: "1.0.0",
 		Digest:  "sha256:aaa",
 	})
-	st.AddPlugin(InstalledPlugin{
+	st.AddPlugin(&InstalledPlugin{
 		Name:    "nox/sbom",
 		Version: "0.5.0",
 		Digest:  "sha256:ddd",

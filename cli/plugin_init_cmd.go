@@ -82,7 +82,7 @@ func runPluginInit(args []string) int {
 		outDir = data.ModuleName
 	}
 
-	if err := scaffoldPlugin(outDir, data); err != nil {
+	if err := scaffoldPlugin(outDir, &data); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
@@ -160,22 +160,20 @@ func buildSafetyOpts(track registry.Track, riskClass string) string {
 
 	switch track {
 	case registry.TrackDynamicRuntime:
-		opts = append(opts, "sdk.WithNeedsConfirmation()")
-		opts = append(opts, `sdk.WithNetworkHosts("localhost")`)
+		opts = append(opts, "sdk.WithNeedsConfirmation()", `sdk.WithNetworkHosts("localhost")`)
 	case registry.TrackSupplyChain:
 		opts = append(opts, `sdk.WithNetworkHosts("*.osv.dev", "*.github.com")`)
 	case registry.TrackIntelligence:
 		opts = append(opts, `sdk.WithNetworkHosts("*.osv.dev", "*.nvd.nist.gov")`)
 	case registry.TrackAgentAssistance:
-		opts = append(opts, `sdk.WithNetworkHosts("*.openai.com", "*.anthropic.com")`)
-		opts = append(opts, `sdk.WithEnvVars("OPENAI_API_KEY", "ANTHROPIC_API_KEY")`)
+		opts = append(opts, `sdk.WithNetworkHosts("*.openai.com", "*.anthropic.com")`, `sdk.WithEnvVars("OPENAI_API_KEY", "ANTHROPIC_API_KEY")`)
 	}
 
 	return strings.Join(opts, ",\n\t\t")
 }
 
 // scaffoldPlugin writes all template files into the output directory.
-func scaffoldPlugin(outDir string, data pluginInitData) error {
+func scaffoldPlugin(outDir string, data *pluginInitData) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
@@ -217,10 +215,12 @@ func scaffoldPlugin(outDir string, data pluginInitData) error {
 		}
 
 		if err := tmpl.Execute(out, data); err != nil {
-			out.Close()
+			_ = out.Close()
 			return fmt.Errorf("executing template %s: %w", f.tmpl, err)
 		}
-		out.Close()
+		if err := out.Close(); err != nil {
+			return fmt.Errorf("closing %s: %w", f.out, err)
+		}
 	}
 
 	// Create testdata directory.

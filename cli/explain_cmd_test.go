@@ -114,7 +114,9 @@ func TestApplyExplainDefaults_OverridesUnsetFlags(t *testing.T) {
 	fs.String("plugin-dir", "", "")
 
 	// Parse no args (all defaults).
-	fs.Parse([]string{})
+	if err := fs.Parse([]string{}); err != nil {
+		t.Fatalf("fs.Parse: %v", err)
+	}
 
 	cfg := &nox.ScanConfig{
 		Explain: nox.ExplainSettings{
@@ -182,7 +184,9 @@ func TestApplyExplainDefaults_DoesNotOverrideCLIFlags(t *testing.T) {
 	fs.String("plugin-dir", "", "")
 
 	// Parse with explicit flags.
-	fs.Parse([]string{"--model", "gpt-4o-mini", "--output", "my-output.json"})
+	if err := fs.Parse([]string{"--model", "gpt-4o-mini", "--output", "my-output.json"}); err != nil {
+		t.Fatalf("fs.Parse: %v", err)
+	}
 
 	cfg := &nox.ScanConfig{
 		Explain: nox.ExplainSettings{
@@ -219,7 +223,9 @@ func TestApplyExplainDefaults_EmptyConfig(t *testing.T) {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	fs.String("model", "gpt-4o", "")
 	fs.String("base-url", "", "")
-	fs.Parse([]string{})
+	if err := fs.Parse([]string{}); err != nil {
+		t.Fatalf("fs.Parse: %v", err)
+	}
 
 	cfg := &nox.ScanConfig{}
 	applyExplainDefaults(fs, cfg)

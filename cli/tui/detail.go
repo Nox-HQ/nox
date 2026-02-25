@@ -20,10 +20,10 @@ func renderDetail(m *Model) string {
 
 	// Header.
 	sevBadge := severityStyle(f.Severity).Render(strings.ToUpper(string(f.Severity)))
-	b.WriteString(fmt.Sprintf(" %s · %s · %s\n",
+	fmt.Fprintf(&b, " %s · %s · %s\n",
 		ruleIDStyle.Render(f.RuleID),
 		f.Message,
-		sevBadge))
+		sevBadge)
 	b.WriteString(headerStyle.Render(strings.Repeat("─", m.width)))
 	b.WriteString("\n")
 
@@ -80,10 +80,10 @@ func renderDetail(m *Model) string {
 			if rel.Line > 0 {
 				relLoc = fmt.Sprintf("%s:%d", rel.FilePath, rel.Line)
 			}
-			b.WriteString(fmt.Sprintf("   %s  %s  %s\n",
+			fmt.Fprintf(&b, "   %s  %s  %s\n",
 				ruleIDStyle.Render(rel.RuleID),
 				fileStyle.Render(relLoc),
-				rel.Message))
+				rel.Message)
 		}
 		b.WriteString("\n")
 	}
@@ -92,7 +92,7 @@ func renderDetail(m *Model) string {
 	if len(f.Metadata) > 0 {
 		b.WriteString(" " + remediationHeaderStyle.Render("Metadata") + "\n")
 		for k, v := range f.Metadata {
-			b.WriteString(fmt.Sprintf("   %s: %s\n", subtleStyle.Render(k), v))
+			fmt.Fprintf(&b, "   %s: %s\n", subtleStyle.Render(k), v)
 		}
 		b.WriteString("\n")
 	}

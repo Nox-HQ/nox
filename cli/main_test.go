@@ -245,9 +245,9 @@ func TestRun_ScanStagedFlag(t *testing.T) {
 	dir := t.TempDir()
 
 	// Initialize git repo.
-	exec.Command("git", "init").Run()
-	exec.Command("git", "config", "user.email", "test@example.com").Run()
-	exec.Command("git", "config", "user.name", "Test User").Run()
+	_ = exec.Command("git", "init").Run()
+	_ = exec.Command("git", "config", "user.email", "test@example.com").Run()
+	_ = exec.Command("git", "config", "user.name", "Test User").Run()
 
 	// Create a file with a finding.
 	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
@@ -516,11 +516,10 @@ func TestRun_ScanWithAIComponents(t *testing.T) {
 	}
 
 	// Verify AI inventory was written.
+	// AI inventory might not be written if no AI components detected.
+	// That's okay, just test that scan completes.
 	aiInventoryPath := filepath.Join(outDir, "ai.inventory.json")
-	if _, err := os.Stat(aiInventoryPath); os.IsNotExist(err) {
-		// AI inventory might not be written if no AI components detected.
-		// That's okay, just test that scan completes.
-	}
+	_, _ = os.Stat(aiInventoryPath)
 }
 
 func TestRun_ScanWithPolicy(t *testing.T) {

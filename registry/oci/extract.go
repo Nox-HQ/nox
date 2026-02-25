@@ -33,7 +33,7 @@ func DetectFormat(path string) (ArtifactFormat, error) {
 	if err != nil {
 		return 0, fmt.Errorf("opening file for format detection: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	header := make([]byte, 2)
 	n, err := f.Read(header)
@@ -71,13 +71,13 @@ func ExtractTarGz(srcPath, dstDir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening archive: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return nil, fmt.Errorf("creating gzip reader: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	var extracted []string
@@ -182,7 +182,7 @@ func extractFile(target string, r io.Reader, mode os.FileMode) error {
 	}
 
 	if _, err := io.Copy(f, r); err != nil {
-		f.Close()
+		_ = f.Close()
 		_ = os.Remove(tmp)
 		return err
 	}

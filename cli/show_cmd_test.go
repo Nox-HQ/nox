@@ -51,11 +51,11 @@ func TestRunShow_JSONOutput(t *testing.T) {
 
 	code := runShow([]string{"--json", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -97,11 +97,11 @@ func TestRunShow_SeverityFilter(t *testing.T) {
 
 	code := runShow([]string{"--json", "--severity", "critical", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -146,11 +146,11 @@ func TestRunShow_RuleFilter(t *testing.T) {
 
 	code := runShow([]string{"--json", "--rule", "SEC-*", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -198,11 +198,11 @@ func TestRunShow_FileFilter(t *testing.T) {
 
 	code := runShow([]string{"--json", "--file", "config.env", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -247,11 +247,11 @@ func TestRunShow_FromFile(t *testing.T) {
 
 	code := runShow([]string{"--json", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -300,11 +300,11 @@ func TestRunShow_ContextLines(t *testing.T) {
 
 	code := runShow([]string{"--json", "--context", "10", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -342,11 +342,11 @@ func TestRunShow_MultipleSeverities(t *testing.T) {
 
 	code := runShow([]string{"--json", "--severity", "critical,high,medium", "--input", findingsPath})
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	output := buf.String()
 
 	if code != 0 {
@@ -378,7 +378,7 @@ func TestRunShow_DefaultPath(t *testing.T) {
 
 	// Change to temp dir and run show without path.
 	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)

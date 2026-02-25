@@ -196,9 +196,14 @@ func TestGetChangedFilesSet_NonGitRepo(t *testing.T) {
 	dir := t.TempDir()
 
 	// Change to non-git directory.
-	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
-	os.Chdir(dir)
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
 
 	result := getChangedFilesSet()
 	if result != nil {
@@ -236,10 +241,9 @@ func TestRunAnnotate_WithFindings(t *testing.T) {
 	// but exercises the finding parsing and comment building code.
 	code := runAnnotate([]string{"--input", findingsPath})
 	// Expected to fail at postReviewComments since gh CLI is not available.
-	if code != 2 {
-		// In CI without gh CLI, this returns 2. If gh is available it would succeed.
-		// Either way, we exercise the code paths.
-	}
+	// In CI without gh CLI, this returns 2. If gh is available it would succeed.
+	// Either way, we exercise the code paths.
+	_ = code
 }
 
 func TestGetChangedFilesSet_InGitRepo(t *testing.T) {
@@ -278,9 +282,14 @@ func TestGetChangedFilesSet_InGitRepo(t *testing.T) {
 	_ = cmd.Run()
 
 	// Change to git repo directory.
-	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
-	os.Chdir(dir)
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldDir) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
 
 	// getChangedFilesSet may return nil if origin/main doesn't exist,
 	// which is fine since this is a local repo with no remote.

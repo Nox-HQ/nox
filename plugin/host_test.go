@@ -223,7 +223,7 @@ func TestHost_InvokeAll(t *testing.T) {
 
 	policy := DefaultPolicy()
 	policy.MaxConcurrency = 2
-	h := newTestHost(WithPolicy(policy))
+	h := newTestHost(WithPolicy(&policy))
 
 	_ = h.RegisterPlugin(context.Background(), conn1)
 	_ = h.RegisterPlugin(context.Background(), conn2)
@@ -460,7 +460,7 @@ func TestHost_WithPolicy(t *testing.T) {
 		MaxRiskClass:     RiskClassRuntime,
 		MaxArtifactBytes: 100,
 	}
-	h := NewHost(WithPolicy(p))
+	h := NewHost(WithPolicy(&p))
 	if h.policy.MaxRiskClass != RiskClassRuntime {
 		t.Errorf("MaxRiskClass = %q, want %q", h.policy.MaxRiskClass, RiskClassRuntime)
 	}
@@ -541,7 +541,7 @@ func TestHost_ReadOnlyEnforcement_ActiveAllowsWrite(t *testing.T) {
 
 	policy := DefaultPolicy()
 	policy.MaxRiskClass = RiskClassActive
-	h := newTestHost(WithPolicy(policy))
+	h := newTestHost(WithPolicy(&policy))
 	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
 		t.Fatalf("RegisterPlugin: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestHost_Violations_ReturnsCopy(t *testing.T) {
 	}
 
 	// Mutating returned slice should not affect host.
-	v1 = append(v1, RuntimeViolation{Type: ViolationRateLimit, PluginName: "fake"})
+	_ = append(v1, RuntimeViolation{Type: ViolationRateLimit, PluginName: "fake"})
 	v2 := h.Violations()
 	if len(v2) != 0 {
 		t.Error("mutating returned slice should not affect host")
@@ -684,7 +684,7 @@ func TestHost_RateLimitViolation(t *testing.T) {
 
 	policy := DefaultPolicy()
 	policy.RequestsPerMinute = 1 // Very restrictive: 1 RPM.
-	h := newTestHost(WithPolicy(policy))
+	h := newTestHost(WithPolicy(&policy))
 
 	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
 		t.Fatalf("RegisterPlugin: %v", err)
@@ -749,7 +749,7 @@ plugin_policy:
 	}
 
 	// Create a host with the config-based policy.
-	h := NewHost(WithPolicy(policy))
+	h := NewHost(WithPolicy(&policy))
 	if h.policy.MaxRiskClass != RiskClassActive {
 		t.Errorf("host policy MaxRiskClass = %q, want %q", h.policy.MaxRiskClass, RiskClassActive)
 	}
@@ -772,7 +772,7 @@ func TestHost_BandwidthViolation(t *testing.T) {
 
 	policy := DefaultPolicy()
 	policy.BandwidthBytesPerMin = 100 // 100 bytes/min — will be exceeded.
-	h := newTestHost(WithPolicy(policy))
+	h := newTestHost(WithPolicy(&policy))
 
 	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
 		t.Fatalf("RegisterPlugin: %v", err)
@@ -837,7 +837,7 @@ func TestHost_InvokeAll_RateLimitedPlugin(t *testing.T) {
 	policy := DefaultPolicy()
 	policy.MaxConcurrency = 1 // Sequential so we control ordering.
 	policy.RequestsPerMinute = 1
-	h := newTestHost(WithPolicy(policy))
+	h := newTestHost(WithPolicy(&policy))
 
 	if err := h.RegisterPlugin(context.Background(), conn1); err != nil {
 		t.Fatalf("register plugin 1: %v", err)

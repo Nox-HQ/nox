@@ -882,7 +882,7 @@ func TestMatchesFindingByID(t *testing.T) {
 		Message:  "Key detected",
 	}
 
-	if !f.matchesFinding(finding) {
+	if !f.matchesFinding(&finding) {
 		t.Error("search by ID should match")
 	}
 }
@@ -899,7 +899,7 @@ func TestMatchesFindingByMessage(t *testing.T) {
 		Message:  "AWS Access Key Detected in file",
 	}
 
-	if !f.matchesFinding(finding) {
+	if !f.matchesFinding(&finding) {
 		t.Error("case-insensitive search by message should match")
 	}
 }
@@ -916,7 +916,7 @@ func TestMatchesFindingByFilePath(t *testing.T) {
 		Message:  "Something",
 	}
 
-	if !f.matchesFinding(finding) {
+	if !f.matchesFinding(&finding) {
 		t.Error("search by file path should match")
 	}
 }
@@ -933,7 +933,7 @@ func TestMatchesFindingNoMatch(t *testing.T) {
 		Message:  "Something",
 	}
 
-	if f.matchesFinding(finding) {
+	if f.matchesFinding(&finding) {
 		t.Error("non-matching search should not match")
 	}
 }
@@ -975,7 +975,7 @@ func TestRenderFindingLineSelected(t *testing.T) {
 		Message:  "AWS Access Key",
 	}
 
-	line := renderFindingLine(f, true)
+	line := renderFindingLine(&f, true)
 	if !strings.Contains(line, "SEC-001") {
 		t.Error("finding line should contain rule ID")
 	}
@@ -992,7 +992,7 @@ func TestRenderFindingLineNotSelected(t *testing.T) {
 		Message:  "AWS Access Key",
 	}
 
-	line := renderFindingLine(f, false)
+	line := renderFindingLine(&f, false)
 	if !strings.Contains(line, "SEC-001") {
 		t.Error("finding line should contain rule ID")
 	}
@@ -1006,7 +1006,7 @@ func TestRenderFindingLineNoStartLine(t *testing.T) {
 		Message:  "Test message",
 	}
 
-	line := renderFindingLine(f, false)
+	line := renderFindingLine(&f, false)
 	if !strings.Contains(line, "somefile.txt") {
 		t.Error("finding line should contain file path")
 	}

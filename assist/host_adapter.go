@@ -28,20 +28,20 @@ func (a *HostAdapter) Capabilities(_ context.Context) []PluginCapability {
 	var caps []PluginCapability
 	for _, info := range infos {
 		for _, ci := range info.Capabilities {
-			cap := PluginCapability{
+			capability := PluginCapability{
 				PluginName:  info.Name,
 				PluginVer:   info.Version,
 				Name:        ci.Name,
 				Description: ci.Description,
 			}
 			for _, ti := range ci.Tools {
-				cap.Tools = append(cap.Tools, PluginTool{
+				capability.Tools = append(capability.Tools, PluginTool{
 					Name:        ti.Name,
 					Description: ti.Description,
 					ReadOnly:    ti.ReadOnly,
 				})
 			}
-			caps = append(caps, cap)
+			caps = append(caps, capability)
 		}
 	}
 	return caps

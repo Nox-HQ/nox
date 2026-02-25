@@ -17,8 +17,8 @@ import (
 
 func makeScanResult(ff []findings.Finding) *core.ScanResult {
 	fs := findings.NewFindingSet()
-	for _, f := range ff {
-		fs.Add(f)
+	for i := range ff {
+		fs.Add(ff[i])
 	}
 	return &core.ScanResult{
 		Findings:    fs,
@@ -215,7 +215,9 @@ func TestExplain_WithBasePath(t *testing.T) {
 	// Create a temporary workspace with a source file.
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "secret.env")
-	os.WriteFile(srcFile, []byte("AWS_KEY=AKIA1234567890ABCDEF\nsecond line\nthird line\n"), 0o644)
+	if err := os.WriteFile(srcFile, []byte("AWS_KEY=AKIA1234567890ABCDEF\nsecond line\nthird line\n"), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
 
 	explanations := []FindingExplanation{
 		{

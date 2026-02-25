@@ -115,7 +115,7 @@ func ProtoAIComponentToGo(pac *pluginv1.AIComponent) ai.Component {
 // --- Go → Proto conversion ---
 
 // GoFindingToProto converts a domain Finding to its protobuf representation.
-func GoFindingToProto(f findings.Finding) *pluginv1.Finding {
+func GoFindingToProto(f *findings.Finding) *pluginv1.Finding {
 	pf := &pluginv1.Finding{
 		Id:          f.ID,
 		RuleId:      f.RuleID,
@@ -418,7 +418,7 @@ func GoScanResultToProtoContext(r *core.ScanResult) *pluginv1.ScanContext {
 	if r.Findings != nil {
 		ff := r.Findings.Findings()
 		for i := range ff {
-			sc.Findings = append(sc.Findings, GoFindingToProto(ff[i]))
+			sc.Findings = append(sc.Findings, GoFindingToProto(&ff[i]))
 		}
 	}
 	if r.Inventory != nil {

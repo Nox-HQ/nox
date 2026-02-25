@@ -86,7 +86,7 @@ func (s *PluginServer) Serve(ctx context.Context, opts ...ServeOption) error {
 
 	// Print the address for the host to connect to.
 	addr := lis.Addr().String()
-	fmt.Fprintf(cfg.addrWriter, "NOX_PLUGIN_ADDR=%s\n", addr)
+	_, _ = fmt.Fprintf(cfg.addrWriter, "NOX_PLUGIN_ADDR=%s\n", addr)
 
 	// Serve in a goroutine.
 	serveErr := make(chan error, 1)

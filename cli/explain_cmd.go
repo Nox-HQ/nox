@@ -117,7 +117,7 @@ func runExplain(args []string) int {
 	var pluginHost *plugin.Host
 	if pluginDir != "" {
 		pluginHost = plugin.NewHost()
-		defer pluginHost.Close()
+		defer func() { _ = pluginHost.Close() }()
 
 		entries, err := os.ReadDir(pluginDir)
 		if err != nil {
@@ -185,24 +185,24 @@ func applyExplainDefaults(fs *flag.FlagSet, cfg *nox.ScanConfig) {
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
 
 	if !set["model"] && ec.Model != "" {
-		fs.Set("model", ec.Model)
+		_ = fs.Set("model", ec.Model)
 	}
 	if !set["base-url"] && ec.BaseURL != "" {
-		fs.Set("base-url", ec.BaseURL)
+		_ = fs.Set("base-url", ec.BaseURL)
 	}
 	if !set["timeout"] && ec.Timeout != "" {
-		fs.Set("timeout", ec.Timeout)
+		_ = fs.Set("timeout", ec.Timeout)
 	}
 	if !set["batch-size"] && ec.BatchSize > 0 {
-		fs.Set("batch-size", fmt.Sprintf("%d", ec.BatchSize))
+		_ = fs.Set("batch-size", fmt.Sprintf("%d", ec.BatchSize))
 	}
 	if !set["output"] && ec.Output != "" {
-		fs.Set("output", ec.Output)
+		_ = fs.Set("output", ec.Output)
 	}
 	if !set["enrich"] && ec.Enrich != "" {
-		fs.Set("enrich", ec.Enrich)
+		_ = fs.Set("enrich", ec.Enrich)
 	}
 	if !set["plugin-dir"] && ec.PluginDir != "" {
-		fs.Set("plugin-dir", ec.PluginDir)
+		_ = fs.Set("plugin-dir", ec.PluginDir)
 	}
 }

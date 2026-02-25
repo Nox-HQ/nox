@@ -80,9 +80,9 @@ func TestLoadState_InvalidJSON(t *testing.T) {
 func TestState_AddPluginUpsert(t *testing.T) {
 	st := &State{}
 
-	st.AddPlugin(InstalledPlugin{Name: "a", Version: "1.0.0"})
-	st.AddPlugin(InstalledPlugin{Name: "b", Version: "2.0.0"})
-	st.AddPlugin(InstalledPlugin{Name: "a", Version: "1.1.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "a", Version: "1.0.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "b", Version: "2.0.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "a", Version: "1.1.0"})
 
 	if len(st.Plugins) != 2 {
 		t.Fatalf("expected 2 plugins, got %d", len(st.Plugins))
@@ -94,8 +94,8 @@ func TestState_AddPluginUpsert(t *testing.T) {
 
 func TestState_RemovePlugin(t *testing.T) {
 	st := &State{}
-	st.AddPlugin(InstalledPlugin{Name: "a", Version: "1.0.0"})
-	st.AddPlugin(InstalledPlugin{Name: "b", Version: "2.0.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "a", Version: "1.0.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "b", Version: "2.0.0"})
 
 	if !st.RemovePlugin("a") {
 		t.Fatal("RemovePlugin should return true for existing plugin")
@@ -110,7 +110,7 @@ func TestState_RemovePlugin(t *testing.T) {
 
 func TestState_FindPlugin(t *testing.T) {
 	st := &State{}
-	st.AddPlugin(InstalledPlugin{Name: "x", Version: "3.0.0"})
+	st.AddPlugin(&InstalledPlugin{Name: "x", Version: "3.0.0"})
 
 	if p := st.FindPlugin("x"); p == nil || p.Version != "3.0.0" {
 		t.Error("FindPlugin should return the installed plugin")
@@ -122,8 +122,8 @@ func TestState_FindPlugin(t *testing.T) {
 
 func TestState_InstalledDigests(t *testing.T) {
 	st := &State{}
-	st.AddPlugin(InstalledPlugin{Name: "a", Digest: "sha256:aaa"})
-	st.AddPlugin(InstalledPlugin{Name: "b", Digest: "sha256:bbb"})
+	st.AddPlugin(&InstalledPlugin{Name: "a", Digest: "sha256:aaa"})
+	st.AddPlugin(&InstalledPlugin{Name: "b", Digest: "sha256:bbb"})
 
 	digests := st.InstalledDigests()
 	if len(digests) != 2 {
@@ -240,10 +240,10 @@ func TestLoadState_EmptyState(t *testing.T) {
 		t.Fatalf("LoadState: %v", err)
 	}
 
-	if loaded.Sources != nil && len(loaded.Sources) != 0 {
+	if len(loaded.Sources) != 0 {
 		t.Errorf("expected nil or empty sources, got %+v", loaded.Sources)
 	}
-	if loaded.Plugins != nil && len(loaded.Plugins) != 0 {
+	if len(loaded.Plugins) != 0 {
 		t.Errorf("expected nil or empty plugins, got %+v", loaded.Plugins)
 	}
 }

@@ -15,7 +15,7 @@ func TestAddDirsRecursive_FlatDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := addDirsRecursive(watcher, dir); err != nil {
 		t.Fatalf("addDirsRecursive: %v", err)
@@ -47,7 +47,7 @@ func TestAddDirsRecursive_SkipsGitDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := addDirsRecursive(watcher, dir); err != nil {
 		t.Fatalf("addDirsRecursive: %v", err)
@@ -72,16 +72,14 @@ func TestAddDirsRecursive_NonexistentDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Nonexistent path should return an error from filepath.Walk.
-	err = addDirsRecursive(watcher, "/nonexistent/path/xyz123")
 	// filepath.Walk returns an error if root doesn't exist. But the callback
 	// swallows individual errors, so the root error is the main concern.
 	// The actual behavior depends on filepath.Walk: it returns the root error.
-	if err != nil {
-		// This is expected behavior - walk returns an error for nonexistent root.
-	}
+	// This is expected behavior - walk returns an error for nonexistent root.
+	_ = addDirsRecursive(watcher, "/nonexistent/path/xyz123")
 }
 
 func TestAddDirsRecursive_NestedDirs(t *testing.T) {
@@ -97,7 +95,7 @@ func TestAddDirsRecursive_NestedDirs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := addDirsRecursive(watcher, dir); err != nil {
 		t.Fatalf("addDirsRecursive: %v", err)
@@ -122,7 +120,7 @@ func TestAddDirsRecursive_SkipsFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := addDirsRecursive(watcher, dir); err != nil {
 		t.Fatalf("addDirsRecursive: %v", err)
