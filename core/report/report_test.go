@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -197,10 +198,12 @@ func TestWriteToFileCreatesValidFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not stat written file: %v", err)
 	}
-	// Verify file permissions (masking with 0777 to ignore OS-specific bits).
-	perm := info.Mode().Perm()
-	if perm != 0o644 {
-		t.Errorf("expected file permissions 0644, got %04o", perm)
+	// Verify file permissions (Windows does not support Unix permission bits).
+	if runtime.GOOS != "windows" {
+		perm := info.Mode().Perm()
+		if perm != 0o644 {
+			t.Errorf("expected file permissions 0644, got %04o", perm)
+		}
 	}
 }
 

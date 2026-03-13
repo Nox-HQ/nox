@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -633,9 +634,11 @@ func TestWriteToFileCreatesValidSARIFFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not stat written file: %v", err)
 	}
-	perm := info.Mode().Perm()
-	if perm != 0o644 {
-		t.Errorf("expected file permissions 0644, got %04o", perm)
+	if runtime.GOOS != "windows" {
+		perm := info.Mode().Perm()
+		if perm != 0o644 {
+			t.Errorf("expected file permissions 0644, got %04o", perm)
+		}
 	}
 }
 

@@ -153,8 +153,8 @@ func SetExecutable(path string) error {
 func validateTarEntry(hdr *tar.Header, dstDir string) error {
 	clean := filepath.Clean(hdr.Name)
 
-	// Reject absolute paths.
-	if filepath.IsAbs(clean) {
+	// Reject absolute paths (check both OS-native and Unix-style for cross-platform safety).
+	if filepath.IsAbs(clean) || strings.HasPrefix(hdr.Name, "/") {
 		return fmt.Errorf("%w: absolute path %q", ErrPathTraversal, hdr.Name)
 	}
 

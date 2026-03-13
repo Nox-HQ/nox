@@ -28,6 +28,9 @@ func TestRunAnnotate_MissingPRNumber(t *testing.T) {
 		t.Fatalf("writing findings file: %v", err)
 	}
 
+	// Clear env vars that auto-detect PR number (may be set in CI).
+	t.Setenv("GITHUB_REF", "")
+
 	// Should fail when PR number can't be determined.
 	code := runAnnotate([]string{"--input", findingsPath})
 	if code != 2 {

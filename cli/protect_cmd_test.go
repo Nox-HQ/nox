@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -60,8 +61,8 @@ func TestProtect_Install(t *testing.T) {
 		t.Fatalf("hook not found: %v", err)
 	}
 
-	// Verify hook is executable.
-	if info.Mode()&0o111 == 0 {
+	// Verify hook is executable (skip on Windows where Unix perms don't apply).
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
 		t.Fatal("hook is not executable")
 	}
 

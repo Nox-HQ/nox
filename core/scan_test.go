@@ -1463,6 +1463,9 @@ func TestLoadCustomRules_EmptyRulesArray(t *testing.T) {
 }
 
 func TestRunScanWithOptions_CustomRulesFileReadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod and permission errors are unreliable on Windows")
+	}
 	t.Parallel()
 
 	tmpDir := t.TempDir()

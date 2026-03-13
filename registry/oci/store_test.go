@@ -272,13 +272,15 @@ func TestStoreFetchRawBinary(t *testing.T) {
 		t.Errorf("BinaryPath = %q, want BlobPath %q", installed.BinaryPath, installed.BlobPath)
 	}
 
-	// Verify the binary is executable.
-	info, err := os.Stat(installed.BinaryPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if info.Mode()&0o111 == 0 {
-		t.Error("binary should be executable")
+	// Verify the binary is executable (skip on Windows where Unix perms don't apply).
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(installed.BinaryPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode()&0o111 == 0 {
+			t.Error("binary should be executable")
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -197,6 +198,9 @@ func TestDetectFormatNonexistent(t *testing.T) {
 }
 
 func TestSetExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permissions are not supported on Windows")
+	}
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "binary")
 
@@ -259,6 +263,9 @@ func TestSetExecutableNonexistent(t *testing.T) {
 
 // TestSetExecutableAlreadyExecutable verifies SetExecutable is idempotent.
 func TestSetExecutableAlreadyExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permissions are not supported on Windows")
+	}
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "already-exec")
 
@@ -441,6 +448,9 @@ func TestExtractTarGzNonexistentSource(t *testing.T) {
 // TestExtractTarGzFilePermissions tests that extracted files have the correct
 // permission bits set.
 func TestExtractTarGzFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permissions are not supported on Windows")
+	}
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "perms.tar.gz")
 	extractDir := filepath.Join(tmpDir, "extracted")

@@ -56,9 +56,12 @@ func GenerateDashboardHTML(result *nox.ScanResult, version, basePath string) (st
 		return "", fmt.Errorf("marshalling dashboard data: %w", err)
 	}
 
+	// Normalize line endings (CRLF → LF) for cross-platform consistency.
+	tmpl := strings.ReplaceAll(string(tmplBytes), "\r\n", "\n")
+
 	// Inject data by replacing the __NOX_DATA__ placeholder block.
 	html := strings.Replace(
-		string(tmplBytes),
+		tmpl,
 		"// When served via MCP resource or CLI, __NOX_DATA__ is replaced with actual scan data.\nconst DATA = typeof __NOX_DATA__ !== 'undefined' ? __NOX_DATA__ : {};",
 		"const DATA = "+string(dataJSON)+";",
 		1,
