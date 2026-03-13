@@ -28,7 +28,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/felixgeelhaar/fortify v1.1.2 // indirect
-	github.com/felixgeelhaar/mcp-go v1.6.4
+	github.com/felixgeelhaar/mcp-go v1.7.0
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
