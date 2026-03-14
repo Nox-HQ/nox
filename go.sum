@@ -28,8 +28,8 @@ github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f h1:Y/CXytFA4m6
 github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f/go.mod h1:vw97MGsxSvLiUE2X8qFplwetxpGLQrlU1Q9AUEIzCaM=
 github.com/felixgeelhaar/fortify v1.1.2 h1:v/413a60nA9dusR0jOrI7wtaL67gtyH4nUO0xdj/oIM=
 github.com/felixgeelhaar/fortify v1.1.2/go.mod h1:SXyIu11ChgBHTX+7gmVdUwIcpC0udaH8tRp05tUl3S4=
-github.com/felixgeelhaar/mcp-go v1.6.4 h1:3TnEyrgyFC4rWhsHdWEmwKXB2d49caTQaY23/vHBwZY=
-github.com/felixgeelhaar/mcp-go v1.6.4/go.mod h1:YQo2nWhXhJcu/b9QO65kz50fV3+1f5B+cg73dGLCeL8=
+github.com/felixgeelhaar/mcp-go v1.7.0 h1:vhzzfZTuydFRtMJFg3XVjOYXFx2UAQm6OyggZjh+/wg=
+github.com/felixgeelhaar/mcp-go v1.7.0/go.mod h1:YQo2nWhXhJcu/b9QO65kz50fV3+1f5B+cg73dGLCeL8=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
