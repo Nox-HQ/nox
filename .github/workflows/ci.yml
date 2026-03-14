@@ -151,10 +151,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Fuzz rule engine
-        run: go test -fuzz FuzzScanFile -fuzztime 30s ./core/rules/
+        run: go test -fuzz FuzzScanFile -fuzztime 30s -timeout 120s ./core/rules/
 
       - name: Fuzz keyword matching
-        run: go test -fuzz FuzzContainsAnyKeyword -fuzztime 30s ./core/rules/
+        run: go test -fuzz FuzzContainsAnyKeyword -fuzztime 30s -timeout 120s ./core/rules/
 
       - name: Fuzz secrets analyzer
-        run: go test -fuzz FuzzScanArtifacts -fuzztime 30s ./core/analyzers/secrets/
+        run: go test -fuzz FuzzScanArtifacts -fuzztime 30s -timeout 120s ./core/analyzers/secrets/

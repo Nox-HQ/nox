@@ -63,6 +63,9 @@ func (c *fileCache) store(source Source, idx *Index) error {
 // isStale returns true if the cached index for the source is missing or older
 // than the configured TTL.
 func (c *fileCache) isStale(source Source) bool {
+	if c.ttl == 0 {
+		return true
+	}
 	info, err := os.Stat(c.path(source))
 	if err != nil {
 		return true
