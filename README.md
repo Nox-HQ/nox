@@ -53,6 +53,7 @@ reports/
   results.sarif        # SARIF 2.1.0 (GitHub Code Scanning)
   sbom.cdx.json        # CycloneDX SBOM with vulnerability enrichment
   sbom.spdx.json       # SPDX SBOM with security references
+  report.html          # Standalone HTML report
   ai.inventory.json    # AI component inventory (if detected)
 ```
 
@@ -352,6 +353,20 @@ nox badge . --output status.svg --label "security"
 nox badge . --by-severity
 ```
 
+### Security Dashboard
+
+Generate a standalone HTML dashboard with security grade, severity breakdown, and dependency overview:
+
+```bash
+# Generate and open in browser
+nox dashboard .
+
+# Save to a specific path
+nox dashboard . --output reports/dashboard.html --no-browser
+```
+
+The dashboard is a single self-contained HTML file with no external dependencies — share it, embed it, or archive it.
+
 ### Shell Completions
 
 ```bash
@@ -424,6 +439,8 @@ Commands:
   annotate                 Annotate a GitHub PR with inline findings
   protect <cmd> [path]     Manage git pre-commit hooks (install, uninstall, status)
   completion <shell>       Generate shell completions (bash, zsh, fish, powershell)
+  dashboard [path]         Generate an interactive HTML security dashboard
+  cache <cmd>              Manage scan cache (clear, status)
   serve                    Start MCP server on stdio
   registry <cmd>           Manage plugin registries (add, list, remove)
   plugin <cmd>             Manage and invoke plugins
@@ -435,11 +452,13 @@ Global Flags:
   --verbose, -v            Verbose output
 
 Scan Flags:
-  --format string          Output formats: json, sarif, cdx, spdx, all (default: json)
+  --format string          Output formats: json, sarif, cdx, spdx, html, all (default: json)
   --output string          Output directory (default: .)
   --staged                 Scan only git-staged files
   --severity-threshold     Minimum severity to report (critical, high, medium, low)
   --no-osv                 Disable OSV.dev vulnerability lookups (offline mode)
+  --no-cache               Disable incremental scan cache
+  --changed-since string   Only scan files changed since git ref
 
 Show Flags:
   --severity string        Filter by severity (comma-separated: critical,high,medium,low,info)
@@ -486,6 +505,14 @@ Annotate Flags:
   --input string           Path to findings.json (default: findings.json)
   --pr string              PR number (auto-detected from GITHUB_REF)
   --repo string            Repository owner/name (auto-detected from GITHUB_REPOSITORY)
+
+Dashboard Flags:
+  --output string          Output HTML file path (default: temp file)
+  --no-browser             Write HTML file without opening browser
+
+Cache Commands:
+  clear                    Clear the scan cache
+  status                   Show cache statistics
 
 Serve Flags:
   --allowed-paths string   Comma-separated list of allowed workspace paths

@@ -1,0 +1,47 @@
+# Version control
+.git
+.github
+.gitignore
+.gitattributes
+
+# Build artifacts
+dist/
+*.exe
+*.test
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD and tooling
+.golangci.yml
+.goreleaser.yaml
+.pre-commit-config.yaml
+.pre-commit-hooks.yaml
+.coverctl.yaml
+.relicta.yaml
+.editorconfig
+Makefile
+
+# Project management
+.nox/
+.roady/
+.relicta/
+
+# IDE
+.vscode/
+.idea/
+
+# Assets (not needed in runtime image)
+assets/
+
+# Proto source (generated code is committed)
+proto/
+
+# Plugin source (separate builds)
+plugins/
+
+# Test fixtures
+testdata/
+*_test.go

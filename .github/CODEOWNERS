@@ -1,0 +1,27 @@
+# Default owner for all files
+* @felixgeelhaar
+
+# Core scan engine
+/core/ @felixgeelhaar
+
+# CLI and user-facing commands
+/cli/ @felixgeelhaar
+
+# MCP server
+/server/ @felixgeelhaar
+
+# Plugin system
+/plugin/ @felixgeelhaar
+/sdk/ @felixgeelhaar
+/registry/ @felixgeelhaar
+
+# AI assist module
+/assist/ @felixgeelhaar
+
+# CI/CD and release
+/.github/workflows/ @felixgeelhaar
+/.goreleaser.yaml @felixgeelhaar
+/Dockerfile @felixgeelhaar
+
+# Documentation
+/docs/ @felixgeelhaar
