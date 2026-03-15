@@ -15,8 +15,10 @@ scan:
     - "core/compliance/data.go"
     - "registry/trust/signature.go"
     - "cli/plugin_cmd.go"
-    # CI workflows contain pinned commit SHAs and Actions expressions (false positives)
+    # CI workflows and action scripts contain pinned commit SHAs, GITHUB_TOKEN refs, and Actions expressions (false positives)
     - ".github/workflows/*.yml"
+    - "action-pr-comment.sh"
+    - "action.sh"
     # Documentation files contain example code snippets with token references
     - "docs/*.md"
     - "README.md"
