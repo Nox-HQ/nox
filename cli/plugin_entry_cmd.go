@@ -160,9 +160,13 @@ func buildPluginEntry(m *pluginManifest, version, repo, minNox string) registry.
 			// Cosign keyless signs checksums.txt. Both the legacy
 			// .sig and the v4-compatible .sig.bundle are published;
 			// nox prefers the bundle when available.
-			CosignSigURL:             fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig", repoURL, version),
-			CosignBundleURL:          fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig.bundle", repoURL, version),
-			CosignCertIdentityRegexp: fmt.Sprintf("https://github.com/%s/.github/workflows/release.yml@.*", repo),
+			CosignSigURL:    fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig", repoURL, version),
+			CosignBundleURL: fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig.bundle", repoURL, version),
+			// Case-insensitive prefix: GitHub preserves the org's
+			// canonical case in OIDC certificate SANs (e.g. "Nox-HQ"),
+			// but the registry index conventionally lowercases owners.
+			// `(?i)` makes the comparison robust to either casing.
+			CosignCertIdentityRegexp: fmt.Sprintf("(?i)https://github.com/%s/.github/workflows/release.yml@.*", repo),
 			CosignOIDCIssuer:         "https://token.actions.githubusercontent.com",
 		})
 	}

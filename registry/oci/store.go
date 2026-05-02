@@ -180,45 +180,61 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 		ve.APIVersion,
 	)
 
-	// Optional cosign keyless verification. When the registry entry
-	// names a CosignSigURL and the operator has cosign on PATH, fetch
-	// the .sig and run `cosign verify-blob` against the configured
-	// certificate identity. A failure adds a violation to the
-	// VerifyResult so the policy enforcement layer treats it the same
-	// as any other trust violation. cosign-not-installed is silent.
+	// Optional cosign keyless verification. The cosign signature is
+	// produced by GoReleaser over the release's `checksums.txt`, NOT
+	// over the per-platform tarball directly. Trust chain:
+	//
+	//   cosign(checksums.txt) signed by release.yml workflow OIDC
+	//      ⇒ checksums.txt contains <hex>  <tarball-name>
+	//      ⇒ tarball SHA-256 == registry artifact.Digest (verified above)
+	//
+	// We therefore fetch checksums.txt, run cosign verify-blob against
+	// it, then confirm the artifact's filename is listed in the file
+	// with the same digest the registry advertised. Either step
+	// failing yields a violation; cosign-not-installed is silent.
 	if (artifact.CosignSigURL != "" || artifact.CosignBundleURL != "") && trust.CosignAvailable() {
-		params := trust.CosignVerifyParams{
-			ArtifactPath:              blobPath,
-			CertificateIdentityRegexp: artifact.CosignCertIdentityRegexp,
-			CertificateOIDCIssuer:     artifact.CosignOIDCIssuer,
-		}
-		// Prefer the bundle (cosign v4 compatible). Fall back to legacy
-		// .sig when only that's published.
-		var fetchErr error
-		if artifact.CosignBundleURL != "" {
-			params.BundlePath, fetchErr = s.downloadSignature(ctx, artifact.CosignBundleURL)
-		} else {
-			params.SignaturePath, fetchErr = s.downloadSignature(ctx, artifact.CosignSigURL)
-		}
+		checksumsURL := deriveChecksumsURL(artifact.CosignBundleURL, artifact.CosignSigURL)
+		checksumsPath, fetchErr := s.downloadChecksums(ctx, checksumsURL)
 		if fetchErr != nil {
 			verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
 				Field:   "cosign_signature",
-				Message: fmt.Sprintf("downloading signature: %v", fetchErr),
+				Message: fmt.Sprintf("downloading checksums.txt: %v", fetchErr),
 			})
 		} else {
-			err := trust.CosignVerifyBlob(ctx, params)
-			if err != nil {
+			params := trust.CosignVerifyParams{
+				ArtifactPath:              checksumsPath,
+				CertificateIdentityRegexp: artifact.CosignCertIdentityRegexp,
+				CertificateOIDCIssuer:     artifact.CosignOIDCIssuer,
+			}
+			if artifact.CosignBundleURL != "" {
+				params.BundlePath, fetchErr = s.downloadSignature(ctx, artifact.CosignBundleURL)
+			} else {
+				params.SignaturePath, fetchErr = s.downloadSignature(ctx, artifact.CosignSigURL)
+			}
+			if fetchErr != nil {
+				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
+					Field:   "cosign_signature",
+					Message: fmt.Sprintf("downloading signature: %v", fetchErr),
+				})
+			} else if err := trust.CosignVerifyBlob(ctx, params); err != nil {
 				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
 					Field:   "cosign_signature",
 					Message: err.Error(),
 				})
+			} else if mismatch, mErr := verifyChecksumsListsArtifact(checksumsPath, artifact.URL, artifact.Digest); mErr != nil {
+				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
+					Field:   "cosign_signature",
+					Message: mErr.Error(),
+				})
+			} else if mismatch {
+				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
+					Field:   "cosign_signature",
+					Message: "checksums.txt does not list the artifact filename or digest disagrees with registry entry",
+				})
 			} else {
-				// A passing Cosign keyless verification is at least as
-				// strong as community trust: the signature was issued by
-				// a known OIDC subject (e.g. the plugin's release.yml
-				// workflow). Promote the level so DefaultPolicy
-				// (TrustCommunity minimum) accepts the artifact even
-				// without an Ed25519 signer key in the registry index.
+				// Cosign keyless verification + checksums binding both
+				// passed. Promote to TrustCommunity so DefaultPolicy
+				// accepts the artifact without an Ed25519 signer key.
 				if verifyResult.Level < trust.TrustCommunity {
 					verifyResult.Level = trust.TrustCommunity
 				}
@@ -300,6 +316,58 @@ func digestHex(digest string) string {
 		return digest[len(prefix):]
 	}
 	return digest
+}
+
+// deriveChecksumsURL strips the GoReleaser signing suffix from a
+// cosign signature URL to recover the URL of the checksums.txt that
+// was signed. Both `.sig.bundle` (cosign v4) and `.sig` (cosign v3.x)
+// resolve to the same `checksums.txt`.
+func deriveChecksumsURL(bundleURL, sigURL string) string {
+	if bundleURL != "" {
+		return strings.TrimSuffix(bundleURL, ".sig.bundle")
+	}
+	return strings.TrimSuffix(sigURL, ".sig")
+}
+
+// downloadChecksums fetches a release's checksums.txt into the
+// signatures/ directory. Same size budget as a signature payload —
+// checksums.txt is small (one short line per artifact).
+func (s *Store) downloadChecksums(ctx context.Context, rawURL string) (string, error) {
+	// Reuse the signature-download path: same network policy, same
+	// 64 KB cap, same staging directory. The on-disk filename is
+	// arbitrary; cosign verify-blob takes the path directly.
+	return s.downloadSignature(ctx, rawURL)
+}
+
+// verifyChecksumsListsArtifact opens a GoReleaser-style checksums.txt
+// (one `<hex>  <filename>` per line) and confirms the registry
+// artifact's filename appears with the registry-advertised digest.
+// Returns (mismatch=true, nil) when the file is well-formed but the
+// artifact isn't listed, or its hex disagrees with artifactDigest.
+// Returns (false, err) only on parse / IO failure.
+func verifyChecksumsListsArtifact(checksumsPath, artifactURL, artifactDigest string) (bool, error) {
+	body, err := os.ReadFile(checksumsPath)
+	if err != nil {
+		return false, fmt.Errorf("reading checksums.txt: %w", err)
+	}
+	wantHex := strings.ToLower(strings.TrimPrefix(artifactDigest, "sha256:"))
+	artifactName := filepath.Base(artifactURL)
+	for _, line := range strings.Split(string(body), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		gotHex := strings.ToLower(fields[0])
+		gotName := fields[1]
+		if gotName != artifactName {
+			continue
+		}
+		if gotHex != wantHex {
+			return true, nil
+		}
+		return false, nil
+	}
+	return true, nil
 }
 
 // isRealDigest reports whether a registry-stamped digest is a usable
