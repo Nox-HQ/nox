@@ -51,6 +51,15 @@ type PluginsConfig struct {
 	// AutoInstall, when true (default), lets `nox scan` install missing
 	// required plugins automatically. Set false to fail loudly instead.
 	AutoInstall *bool `yaml:"auto_install"`
+	// TrustPolicy controls signature enforcement on install. Values:
+	//   "permissive"  — accept unverified plugins (default until ecosystem
+	//                   pipelines stamp signatures consistently)
+	//   "default"     — require valid signature, any signer (community or
+	//                   verified)
+	//   "enterprise"  — require signature from a key in the local keyring
+	//
+	// Empty defaults to "permissive". CLI flags override.
+	TrustPolicy string `yaml:"trust_policy"`
 }
 
 // AutoInstallEnabled returns whether the project consents to scan-time

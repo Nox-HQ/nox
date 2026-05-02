@@ -13,7 +13,9 @@ import (
 
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/registry/oci"
+	"github.com/nox-hq/nox/registry/trust"
 )
 
 // runPlugin dispatches plugin subcommands.
@@ -63,8 +65,57 @@ func newRegistryClient(st *State) *registry.Client {
 
 // newOCIStore creates an OCI artifact store using the nox home cache.
 func newOCIStore() *oci.Store {
+	return newOCIStoreWithPolicy("")
+}
+
+// newOCIStoreWithPolicy creates an OCI store whose verifier enforces
+// the named trust policy ("permissive" / "default" / "enterprise").
+// Empty string falls through to the package default ("permissive"
+// for now while signatures are still rolling out across plugins).
+func newOCIStoreWithPolicy(policyName string) *oci.Store {
 	cacheDir := filepath.Join(noxHome(), "cache", "artifacts")
-	return oci.NewStore(oci.WithCacheDir(cacheDir))
+	verifier := trust.NewVerifier(trust.WithPolicy(policyFromName(policyName)))
+	return oci.NewStore(
+		oci.WithCacheDir(cacheDir),
+		oci.WithVerifier(verifier),
+	)
+}
+
+// policyFromName resolves a config / flag string into a trust.Policy.
+func policyFromName(name string) trust.Policy {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "default":
+		return trust.DefaultPolicy()
+	case "enterprise":
+		return trust.EnterprisePolicy()
+	}
+	return trust.PermissivePolicy()
+}
+
+// resolveTrustPolicy combines the operator's CLI flags and the
+// project's .nox.yaml trust_policy into a single policy name. Order
+// of precedence (highest wins): --allow-unverified, --require-verified,
+// --require-signature, --trust-policy=NAME, .nox.yaml plugins.trust_policy,
+// fallback "permissive".
+func resolveTrustPolicy(override string, requireVerified, requireSignature, allowUnverified bool) string {
+	if allowUnverified {
+		return "permissive"
+	}
+	if requireVerified {
+		return "enterprise"
+	}
+	if requireSignature {
+		return "default"
+	}
+	if override != "" {
+		return strings.ToLower(strings.TrimSpace(override))
+	}
+	cwd, _ := os.Getwd()
+	cfg, err := nox.LoadScanConfig(cwd)
+	if err == nil && cfg.Plugins.TrustPolicy != "" {
+		return strings.ToLower(strings.TrimSpace(cfg.Plugins.TrustPolicy))
+	}
+	return "permissive"
 }
 
 // runPluginSearch searches registries for plugins matching a query.
@@ -217,12 +268,28 @@ func runPluginInfo(args []string) int {
 
 // runPluginInstall installs a plugin from a registry.
 func runPluginInstall(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin install <name[@version]>")
+	fs := flag.NewFlagSet("plugin install", flag.ContinueOnError)
+	var (
+		requireSignature bool
+		requireVerified  bool
+		allowUnverified  bool
+		policyOverride   string
+	)
+	fs.BoolVar(&requireSignature, "require-signature", false, "fail install when artifact has no valid signature (any signer)")
+	fs.BoolVar(&requireVerified, "require-verified", false, "fail install when signer key is not in the local keyring")
+	fs.BoolVar(&allowUnverified, "allow-unverified", false, "accept unsigned artifacts (overrides .nox.yaml trust_policy)")
+	fs.StringVar(&policyOverride, "trust-policy", "", "override trust policy: permissive, default, enterprise")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
-	nameVer := args[0]
+	rest := fs.Args()
+	if len(rest) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin install [--require-signature|--require-verified|--allow-unverified] <name[@version]>")
+		return 2
+	}
+
+	nameVer := rest[0]
 	name, constraint := parseNameVersion(nameVer)
 
 	statePath := DefaultStatePath()
@@ -243,8 +310,9 @@ func runPluginInstall(args []string) int {
 		return 0
 	}
 
+	policyName := resolveTrustPolicy(policyOverride, requireVerified, requireSignature, allowUnverified)
 	client := newRegistryClient(st)
-	store := newOCIStore()
+	store := newOCIStoreWithPolicy(policyName)
 	ctx := context.Background()
 
 	ve, err := client.Resolve(ctx, name, constraint)
@@ -273,8 +341,17 @@ func runPluginInstall(args []string) int {
 	fmt.Println()
 
 	if len(artifact.VerifyResult.Violations) > 0 {
+		fatal := !allowUnverified && policyName != "permissive"
 		for _, v := range artifact.VerifyResult.Violations {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", v.Message)
+			label := "warning"
+			if fatal {
+				label = "error"
+			}
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", label, v.Message)
+		}
+		if fatal {
+			fmt.Fprintf(os.Stderr, "Install blocked by trust policy %q. Override with --allow-unverified or set plugins.trust_policy: permissive in .nox.yaml.\n", policyName)
+			return 2
 		}
 	}
 

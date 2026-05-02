@@ -134,13 +134,48 @@ live in `~/.nox/plugins/`.
 Every registry entry includes:
 
 - `digest` (SHA-256) — required for install. nox verifies before exec.
-- `signature` + `signer_key_pem` — optional Cosign-style signature.
-  Future enhancement: enforce signed installs via
-  `--require-signature` flag.
+- `signature` + `signer_key_pem` — Ed25519 signature over the
+  artifact body, paired with the public key that produced it.
 
-Until signature enforcement ships, operators should pin to specific
-versions and verify digests out-of-band when the threat model
-warrants it.
+Three trust policies, configurable per-project via
+`plugins.trust_policy` in `.nox.yaml` or per-invocation via flags:
+
+| Policy | Accepts | Use case |
+|---|---|---|
+| `permissive` (default) | any digest match | bootstrap, public POC |
+| `default` | digest + valid signature from any signer | community trust |
+| `enterprise` | digest + signature from a key in the local keyring | hardened orgs |
+
+CLI overrides:
+
+```bash
+nox plugin install nox/ai-eval --require-signature   # default policy
+nox plugin install nox/ai-eval --require-verified    # enterprise policy
+nox plugin install nox/ai-eval --allow-unverified    # bypass .nox.yaml
+nox plugin install nox/ai-eval --trust-policy enterprise
+```
+
+When the resolved policy is anything other than `permissive` and the
+fetched artifact fails verification, install aborts with an error
+listing every violation. Operators bypass either by relaxing the
+policy or by adding the signer key to their local keyring.
+
+Cosign keyless signatures over the **release archive** (produced by
+each plugin's GitHub Actions release pipeline) are an additional
+verification layer operators can run out-of-band:
+
+```bash
+cosign verify-blob \
+  --certificate-identity-regexp "https://github.com/nox-hq/nox-plugin-NAME/.github/workflows/release.yml@.*" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --signature checksums.txt.sig \
+  checksums.txt
+```
+
+The Cosign signature ties the archive to the workflow run that
+produced it via OIDC; the in-tool Ed25519 signature ties the
+artifact bytes to a signer key stamped in the registry index. Both
+verify the same supply-chain claim from different angles.
 
 ## Stages of marketplace maturity
 
