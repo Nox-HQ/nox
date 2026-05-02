@@ -73,7 +73,6 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			}
 
 			f := findings.Finding{
-				ID:         fmt.Sprintf("%s:%s:%d", rule.ID, path, mr.Line),
 				RuleID:     rule.ID,
 				Severity:   rule.Severity,
 				Confidence: rule.Confidence,
@@ -85,6 +84,11 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			// here so callers who do not use FindingSet still get a stable
 			// fingerprint.
 			f.Fingerprint = findings.ComputeFingerprint(f.RuleID, f.Location, mr.MatchText)
+			fpShort := f.Fingerprint
+			if len(fpShort) > 12 {
+				fpShort = fpShort[:12]
+			}
+			f.ID = f.RuleID + "-" + fpShort
 
 			out = append(out, f)
 		}
@@ -104,15 +108,25 @@ func containsAnyKeyword(contentLower []byte, keywords []string) bool {
 }
 
 // fileMatchesRule returns true if the file path matches at least one of the
-// rule's FilePatterns, or if the rule has no file patterns (applies to all
-// files).
+// rule's FilePatterns (or all files when none are set) AND does not match any
+// of the rule's IgnoreFilePatterns. Ignore patterns take precedence over
+// allow patterns so well-known noisy files (lockfiles, checksums) can be
+// skipped even when the include list otherwise matches.
 func fileMatchesRule(path string, rule *Rule) bool {
+	base := filepath.Base(path)
+
+	for _, pattern := range rule.IgnoreFilePatterns {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return false
+		}
+		if matched, _ := filepath.Match(pattern, base); matched {
+			return false
+		}
+	}
+
 	if len(rule.FilePatterns) == 0 {
 		return true
 	}
-	// Match against both the full path and the base name so that patterns
-	// like "*.go" work as expected even when path contains directories.
-	base := filepath.Base(path)
 	for _, pattern := range rule.FilePatterns {
 		if matched, _ := filepath.Match(pattern, path); matched {
 			return true

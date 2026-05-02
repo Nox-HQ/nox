@@ -96,12 +96,24 @@ func NewFindingSet() *FindingSet {
 
 // Add appends a finding to the set. If the finding has an empty Fingerprint,
 // one is computed automatically from RuleID, Location, and Message so that
-// every finding in the set is always fingerprintable.
+// every finding in the set is always fingerprintable. Empty ID is populated
+// as "<RuleID>-<Fingerprint[:12]>" for stable cross-scan identity. Zero EndLine
+// is defaulted to StartLine so that consumers always see a valid range.
 //
 //nolint:gocritic // Findings are passed by value throughout the pipeline for simplicity.
 func (fs *FindingSet) Add(f Finding) {
 	if f.Fingerprint == "" {
 		f.Fingerprint = ComputeFingerprint(f.RuleID, f.Location, f.Message)
+	}
+	if f.ID == "" {
+		fp := f.Fingerprint
+		if len(fp) > 12 {
+			fp = fp[:12]
+		}
+		f.ID = f.RuleID + "-" + fp
+	}
+	if f.Location.EndLine == 0 && f.Location.StartLine > 0 {
+		f.Location.EndLine = f.Location.StartLine
 	}
 	fs.items = append(fs.items, f)
 }

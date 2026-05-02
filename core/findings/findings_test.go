@@ -122,6 +122,49 @@ func TestFindingSet_Add_ComputesFingerprint(t *testing.T) {
 	}
 }
 
+func TestFindingSet_Add_PopulatesIDAndEndLine(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{
+		RuleID:   "CONT-001",
+		Location: Location{FilePath: "Dockerfile", StartLine: 4},
+		Message:  "image not pinned",
+	})
+
+	got := fs.Findings()[0]
+
+	if got.ID == "" {
+		t.Fatal("expected non-empty ID")
+	}
+	if got.ID != got.RuleID+"-"+got.Fingerprint[:12] {
+		t.Errorf("ID format unexpected: got %q want %q", got.ID, got.RuleID+"-"+got.Fingerprint[:12])
+	}
+	if got.Location.EndLine != got.Location.StartLine {
+		t.Errorf("expected EndLine=%d (StartLine), got %d", got.Location.StartLine, got.Location.EndLine)
+	}
+}
+
+func TestFindingSet_Add_PreservesExistingIDAndEndLine(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{
+		ID:       "preset-id",
+		RuleID:   "SEC001",
+		Location: Location{FilePath: "main.go", StartLine: 10, EndLine: 12},
+		Message:  "secret detected",
+	})
+
+	got := fs.Findings()[0]
+	if got.ID != "preset-id" {
+		t.Errorf("ID mutated: got %q want preset-id", got.ID)
+	}
+	if got.Location.EndLine != 12 {
+		t.Errorf("EndLine mutated: got %d want 12", got.Location.EndLine)
+	}
+}
+
 func TestFindingSet_Add_PreservesExistingFingerprint(t *testing.T) {
 	t.Parallel()
 

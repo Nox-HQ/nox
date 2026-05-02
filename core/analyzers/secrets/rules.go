@@ -1,6 +1,8 @@
 package secrets
 
 import (
+	"strconv"
+
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -17,6 +19,14 @@ type secretRule struct {
 	keywords    []string
 	remediation string
 	references  []string
+	// secretShape, when true, instructs the regex matcher to apply a
+	// secret-shape post-filter (entropy + charset + identifier rejection)
+	// to matches. Used for vendor-name rules whose loose patterns would
+	// otherwise fire on identifier substrings.
+	secretShape bool
+	// minEntropy overrides the default 3.0 minimum Shannon entropy when
+	// secretShape is enabled. Higher values reject more candidates.
+	minEntropy float64
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
@@ -3186,7 +3196,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-434", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `bootstrap\.servers`, description: "Detected Kafka", cwe: "CWE-798", keywords: []string{"kafka"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-435", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `gh[pousr]_[A-Za-z0-9_]`, description: "Detected GitHub Token", cwe: "CWE-798", keywords: []string{"github"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-436", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `glpat-`, description: "Detected GitLab Token", cwe: "CWE-798", keywords: []string{"gitlab"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-437", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `xox[baprs]-`, description: "Detected Slack Token", cwe: "CWE-798", keywords: []string{"slack"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-437", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `xox[baprs]-[A-Za-z0-9-]{20,}`, description: "Detected Slack Token", cwe: "CWE-798", keywords: []string{"slack"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.0},
 		{id: "SEC-438", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_`, description: "Detected Stripe Key", cwe: "CWE-798", keywords: []string{"stripe"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-439", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `SG\.`, description: "Detected SendGrid Key", cwe: "CWE-798", keywords: []string{"sendgrid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-440", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `key-[0-9a-zA-Z]{32}`, description: "Detected Mailgun Key", cwe: "CWE-798", keywords: []string{"mailgun"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3293,7 +3303,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-542", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32,}`, description: "Detected Cloudflare API Token (alternate)", cwe: "CWE-798", keywords: []string{"cloudflare"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-543", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Datadog API Key (alternate)", cwe: "CWE-798", keywords: []string{"datadog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-544", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{32}`, description: "Detected New Relic License Key (alternate)", cwe: "CWE-798", keywords: []string{"newrelic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-545", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{20}`, description: "Detected PagerDuty API Key (alternate)", cwe: "CWE-798", keywords: []string{"pagerduty"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-545", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{20}\b`, description: "Detected PagerDuty API Key (alternate)", cwe: "CWE-798", keywords: []string{"pagerduty"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-546", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Sentry DSN (alternate)", cwe: "CWE-798", keywords: []string{"sentry"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-547", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_test_[a-zA-Z0-9]{24}`, description: "Detected Stripe Test API Key", cwe: "CWE-798", keywords: []string{"stripe_test"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-548", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_[a-zA-Z0-9]{24}`, description: "Detected Stripe Live API Key", cwe: "CWE-798", keywords: []string{"stripe_live"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3385,7 +3395,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-626", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `amazonses[_-]?access[_-]?key`, description: "Detected Amazonses[ ]?access[ ]?key", cwe: "CWE-798", keywords: []string{"ses"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-627", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Mailtrap API Key", cwe: "CWE-798", keywords: []string{"mailtrap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-628", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `devise[_-]?secret[_-]?key`, description: "Detected Devise[ ]?secret[ ]?key", cwe: "CWE-798", keywords: []string{"devise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-629", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected LOB API Key", cwe: "CWE-798", keywords: []string{"lob"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-629", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected LOB API Key", cwe: "CWE-798", keywords: []string{"lob"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-630", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `cloudsponge[_-]?api[_-]?key`, description: "Detected Cloudsponge[ ]?api[ ]?key", cwe: "CWE-798", keywords: []string{"cloudsponge"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-631", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `pipedrive[_-]?api[_-]?token`, description: "Detected Pipedrive[ ]?api[ ]?token", cwe: "CWE-798", keywords: []string{"pipedrive"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-632", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Copper API Key", cwe: "CWE-798", keywords: []string{"copper"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3728,6 +3738,13 @@ func builtinSecretRules() []*rules.Rule {
 	out := make([]*rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
 	for i := range defs {
 		d := &defs[i]
+		md := map[string]string{"cwe": d.cwe}
+		if d.secretShape {
+			md["secret_shape"] = "true"
+			if d.minEntropy > 0 {
+				md["min_entropy"] = strconv.FormatFloat(d.minEntropy, 'f', -1, 64)
+			}
+		}
 		out = append(out, &rules.Rule{
 			ID:          d.id,
 			Version:     "1.0",
@@ -3738,7 +3755,7 @@ func builtinSecretRules() []*rules.Rule {
 			Pattern:     d.pattern,
 			Keywords:    d.keywords,
 			Tags:        []string{"secrets"},
-			Metadata:    map[string]string{"cwe": d.cwe},
+			Metadata:    md,
 			Remediation: d.remediation,
 			References:  d.references,
 		})
@@ -3761,6 +3778,52 @@ var entropySourceFilePatterns = []string{
 	"Makefile", "*.mk",
 }
 
+// entropyIgnoreFilePatterns explicitly excludes well-known files whose
+// content is structurally high-entropy (module checksums, lock files,
+// content-addressed IDs). Matches gitleaks/trufflehog/detect-secrets default
+// behaviour. Operators can override via config if they want to scan these.
+var entropyIgnoreFilePatterns = []string{
+	// Go module checksums.
+	"go.sum",
+	// Lock files (dependency / build).
+	"package-lock.json",
+	"yarn.lock",
+	"pnpm-lock.yaml",
+	"npm-shrinkwrap.json",
+	"Cargo.lock",
+	"composer.lock",
+	"Gemfile.lock",
+	"Pipfile.lock",
+	"poetry.lock",
+	"uv.lock",
+	"flake.lock",
+	"deno.lock",
+	"bun.lockb",
+	"mix.lock",
+	"*.lock",
+	"*.lockfile",
+	// Generic content-hash files.
+	"*.sum",
+	// SBOM / lock-style state files.
+	"*.lock.json",
+	"spec.lock.json",
+	// goreleaser / build template files (ldflags variables produce hex-like
+	// strings that look high-entropy).
+	".goreleaser.yaml",
+	".goreleaser.yml",
+	"goreleaser.yaml",
+	"goreleaser.yml",
+	// Common minified / bundled output.
+	"*.min.js",
+	"*.min.css",
+	"*.bundle.js",
+	"*.map",
+	// Test fixtures and snapshots that frequently contain seeded values.
+	"*.snap",
+	"*.golden",
+	"testdata/*",
+}
+
 // builtinEntropyRules returns entropy-based secret detection rules. These
 // use the "entropy" matcher type and do not require a regex pattern.
 // Instead, they rely on Shannon entropy analysis with context-aware
@@ -3768,46 +3831,49 @@ var entropySourceFilePatterns = []string{
 func builtinEntropyRules() []*rules.Rule {
 	return []*rules.Rule{
 		{
-			ID:           "SEC-161",
-			Version:      "1.1",
-			Description:  "High-entropy string in assignment (possible secret)",
-			Severity:     findings.SeverityMedium,
-			Confidence:   findings.ConfidenceMedium,
-			MatcherType:  "entropy",
-			Keywords:     []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
-			FilePatterns: entropySourceFilePatterns,
-			Tags:         []string{"secrets", "entropy"},
-			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0"},
-			Remediation:  "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
-			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:                 "SEC-161",
+			Version:            "1.2",
+			Description:        "High-entropy string in assignment (possible secret)",
+			Severity:           findings.SeverityMedium,
+			Confidence:         findings.ConfidenceMedium,
+			MatcherType:        "entropy",
+			Keywords:           []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
+			FilePatterns:       entropySourceFilePatterns,
+			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			Tags:               []string{"secrets", "entropy"},
+			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0"},
+			Remediation:        "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
+			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			ID:           "SEC-162",
-			Version:      "1.1",
-			Description:  "High-entropy base64 blob detected (possible encoded secret)",
-			Severity:     findings.SeverityMedium,
-			Confidence:   findings.ConfidenceLow,
-			MatcherType:  "entropy",
-			Keywords:     []string{"password", "secret", "key", "token", "credential", "api_key", "private", "auth"},
-			FilePatterns: entropySourceFilePatterns,
-			Tags:         []string{"secrets", "entropy"},
-			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2", "require_context": "true"},
-			Remediation:  "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
-			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:                 "SEC-162",
+			Version:            "1.2",
+			Description:        "High-entropy base64 blob detected (possible encoded secret)",
+			Severity:           findings.SeverityMedium,
+			Confidence:         findings.ConfidenceLow,
+			MatcherType:        "entropy",
+			Keywords:           []string{"password", "secret", "key", "token", "credential", "api_key", "private", "auth"},
+			FilePatterns:       entropySourceFilePatterns,
+			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			Tags:               []string{"secrets", "entropy"},
+			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2", "require_context": "true"},
+			Remediation:        "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
+			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			ID:           "SEC-163",
-			Version:      "1.1",
-			Description:  "High-entropy hex string detected (possible secret key)",
-			Severity:     findings.SeverityMedium,
-			Confidence:   findings.ConfidenceLow,
-			MatcherType:  "entropy",
-			Keywords:     []string{"key", "secret", "token", "password", "credential", "private", "auth"},
-			FilePatterns: entropySourceFilePatterns,
-			Tags:         []string{"secrets", "entropy"},
-			Metadata:     map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5", "require_context": "true"},
-			Remediation:  "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
-			References:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			ID:                 "SEC-163",
+			Version:            "1.2",
+			Description:        "High-entropy hex string detected (possible secret key)",
+			Severity:           findings.SeverityMedium,
+			Confidence:         findings.ConfidenceLow,
+			MatcherType:        "entropy",
+			Keywords:           []string{"key", "secret", "token", "password", "credential", "private", "auth"},
+			FilePatterns:       entropySourceFilePatterns,
+			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			Tags:               []string{"secrets", "entropy"},
+			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5", "require_context": "true"},
+			Remediation:        "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
+			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 	}
 }

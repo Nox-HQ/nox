@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strconv"
 	"sync"
 )
 
@@ -54,6 +55,12 @@ func (m *RegexMatcher) compile(pattern string) (*regexp.Regexp, error) {
 
 // Match finds all occurrences of the rule pattern in content and returns
 // their positions as MatchResult values with 1-based line and column numbers.
+// When rule.Metadata["secret_shape"] == "true", matches are post-filtered to
+// require a secret-shaped value: minimum Shannon entropy, restricted charset,
+// and rejection of obvious non-secret patterns (camelCase identifiers,
+// version strings, file paths, all-lowercase dictionary words). The minimum
+// entropy threshold defaults to 3.0 and can be overridden via
+// rule.Metadata["min_entropy"].
 func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	re, err := m.compile(rule.Pattern)
 	if err != nil {
@@ -88,7 +95,47 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 			MatchText: string(content[startOffset:endOffset]),
 		})
 	}
+
+	if rule.Metadata["secret_shape"] == "true" {
+		results = filterBySecretShape(results, rule)
+	}
 	return results
+}
+
+// filterBySecretShape rejects matches whose text doesn't look like a real
+// secret. Used by vendor-name secret rules with loose regex patterns
+// (e.g. `[a-zA-Z0-9]{20}`) that would otherwise fire on identifier
+// substrings, README example text, or other non-secret content.
+func filterBySecretShape(in []MatchResult, rule *Rule) []MatchResult {
+	minEntropy := 3.0
+	if v, ok := rule.Metadata["min_entropy"]; ok {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			minEntropy = parsed
+		}
+	}
+	out := in[:0]
+	for _, r := range in {
+		if !isSecretShape(r.MatchText, minEntropy) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// isSecretShape returns true if text has the entropy/character profile of a
+// real secret rather than a code identifier or human-readable string.
+func isSecretShape(text string, minEntropy float64) bool {
+	if len(text) < 12 {
+		return false
+	}
+	if isLikelyNotSecret(text) {
+		return false
+	}
+	if ShannonEntropy(text) < minEntropy {
+		return false
+	}
+	return true
 }
 
 // findLine returns the 0-based line index for the given byte offset using a

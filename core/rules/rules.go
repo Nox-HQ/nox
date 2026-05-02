@@ -22,19 +22,20 @@ var ValidMatcherTypes = map[string]bool{
 // what to look for (Pattern + MatcherType), where to look (FilePatterns), and
 // how to classify the result (Severity, Confidence).
 type Rule struct {
-	ID           string              `yaml:"id"`
-	Version      string              `yaml:"version"`
-	Description  string              `yaml:"description"`
-	Severity     findings.Severity   `yaml:"severity"`
-	Confidence   findings.Confidence `yaml:"confidence"`
-	MatcherType  string              `yaml:"matcher_type"`
-	Pattern      string              `yaml:"pattern"`
-	FilePatterns []string            `yaml:"file_patterns"`
-	Keywords     []string            `yaml:"keywords"`
-	Tags         []string            `yaml:"tags"`
-	Metadata     map[string]string   `yaml:"metadata"`
-	Remediation  string              `yaml:"remediation"`
-	References   []string            `yaml:"references"`
+	ID                 string              `yaml:"id"`
+	Version            string              `yaml:"version"`
+	Description        string              `yaml:"description"`
+	Severity           findings.Severity   `yaml:"severity"`
+	Confidence         findings.Confidence `yaml:"confidence"`
+	MatcherType        string              `yaml:"matcher_type"`
+	Pattern            string              `yaml:"pattern"`
+	FilePatterns       []string            `yaml:"file_patterns"`
+	IgnoreFilePatterns []string            `yaml:"ignore_file_patterns"`
+	Keywords           []string            `yaml:"keywords"`
+	Tags               []string            `yaml:"tags"`
+	Metadata           map[string]string   `yaml:"metadata"`
+	Remediation        string              `yaml:"remediation"`
+	References         []string            `yaml:"references"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.

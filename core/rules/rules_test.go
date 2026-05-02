@@ -305,6 +305,53 @@ func TestRegexMatcher_NoMatch(t *testing.T) {
 	}
 }
 
+func TestRegexMatcher_SecretShape_RejectsIdentifier(t *testing.T) {
+	m := NewRegexMatcher()
+	// camelCase identifier exactly 20 chars long; would match SEC-545
+	// pattern but should be rejected as shape filter sees camelCase.
+	content := []byte("var pagerdutyCreateThing = handle()\n")
+	rule := Rule{
+		Pattern: `\b[a-zA-Z0-9]{20}\b`,
+		Metadata: map[string]string{
+			"secret_shape": "true",
+			"min_entropy":  "3.5",
+		},
+	}
+	results := m.Match(content, &rule)
+	for _, r := range results {
+		if r.MatchText == "pagerdutyCreateThing" {
+			t.Fatalf("camelCase identifier should be rejected: %q", r.MatchText)
+		}
+	}
+}
+
+func TestRegexMatcher_SecretShape_AcceptsHighEntropy(t *testing.T) {
+	m := NewRegexMatcher()
+	// 20-char high-entropy alnum (looks like a real key).
+	content := []byte(`pagerduty_token = "u8K2wQ9pX5mZbV3rT7nJ"` + "\n")
+	rule := Rule{
+		Pattern: `\b[a-zA-Z0-9]{20}\b`,
+		Metadata: map[string]string{
+			"secret_shape": "true",
+			"min_entropy":  "3.5",
+		},
+	}
+	results := m.Match(content, &rule)
+	if len(results) == 0 {
+		t.Fatal("expected high-entropy alnum to pass shape filter")
+	}
+}
+
+func TestRegexMatcher_NoShapeFilter_BackwardsCompatible(t *testing.T) {
+	m := NewRegexMatcher()
+	content := []byte("var pagerdutyCreateThing = handle()\n")
+	rule := Rule{Pattern: `\b[a-zA-Z0-9]{20}\b`}
+	results := m.Match(content, &rule)
+	if len(results) == 0 {
+		t.Fatal("rules without secret_shape metadata should not be filtered")
+	}
+}
+
 func TestRegexMatcher_InvalidPattern(t *testing.T) {
 	m := NewRegexMatcher()
 	content := []byte("test content\n")
@@ -677,6 +724,55 @@ func TestFileMatchesRule(t *testing.T) {
 			got := fileMatchesRule(tt.path, &rule)
 			if got != tt.want {
 				t.Fatalf("fileMatchesRule(%q, %v) = %v, want %v", tt.path, tt.filePatterns, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFileMatchesRule_IgnorePatterns(t *testing.T) {
+	tests := []struct {
+		name         string
+		path         string
+		patterns     []string
+		ignore       []string
+		want         bool
+	}{
+		{
+			name:     "ignore lockfile excluded from json allowlist",
+			path:     "package-lock.json",
+			patterns: []string{"*.json"},
+			ignore:   []string{"package-lock.json"},
+			want:     false,
+		},
+		{
+			name:     "ignore go.sum even when no allowlist",
+			path:     "go.sum",
+			patterns: nil,
+			ignore:   []string{"go.sum"},
+			want:     false,
+		},
+		{
+			name:     "ignore goreleaser yaml excluded from yaml allowlist",
+			path:     ".goreleaser.yaml",
+			patterns: []string{"*.yaml"},
+			ignore:   []string{".goreleaser.yaml"},
+			want:     false,
+		},
+		{
+			name:     "non-ignored yaml still matches",
+			path:     "config.yaml",
+			patterns: []string{"*.yaml"},
+			ignore:   []string{".goreleaser.yaml"},
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := Rule{FilePatterns: tt.patterns, IgnoreFilePatterns: tt.ignore}
+			got := fileMatchesRule(tt.path, &rule)
+			if got != tt.want {
+				t.Fatalf("fileMatchesRule(%q) = %v, want %v", tt.path, got, tt.want)
 			}
 		})
 	}

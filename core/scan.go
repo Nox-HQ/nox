@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,6 +90,10 @@ type ScanOptions struct {
 	// ChangedSince limits the scan to files changed since the given git ref.
 	// Only files in the diff between the ref and HEAD are analyzed.
 	ChangedSince string
+
+	// NoRespectGitignore disables .gitignore handling. When true, every
+	// file under the target is walked regardless of ignore rules.
+	NoRespectGitignore bool
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -112,6 +117,9 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	// Phase 1: Discover artifacts.
 	walker := discovery.NewWalker(target)
 	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
+	if opts.NoRespectGitignore {
+		walker.RespectGitignore = false
+	}
 	artifacts, err := walker.Walk()
 	if err != nil {
 		return nil, err
@@ -272,6 +280,16 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		if err := g.Wait(); err != nil {
 			return nil, err
 		}
+	}
+
+	// Phase 2c: Apply GitHub Actions context-aware downgrades across all
+	// analyzer outputs. Findings on .github/workflows/*.yml that match
+	// well-known false-positive patterns (ephemeral test DB credentials,
+	// permissions paired with a justifying consumer action) get downgraded
+	// before merging.
+	ghaWorkflowContent := loadGHAWorkflowContent(artifacts)
+	for i, batch := range analyzerResults {
+		analyzerResults[i] = iac.ApplyGHAContext(batch, ghaWorkflowContent)
 	}
 
 	// Merge per-analyzer findings into a single FindingSet.
@@ -438,6 +456,24 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 }
 
 // loadCustomRules loads rules from a path, which can be a file or directory.
+// loadGHAWorkflowContent reads the contents of every artifact under
+// .github/workflows/ so that the GH Actions context-aware downgrade pass
+// has the full file body available when evaluating findings.
+func loadGHAWorkflowContent(artifacts []discovery.Artifact) map[string][]byte {
+	out := map[string][]byte{}
+	for _, a := range artifacts {
+		if !strings.HasPrefix(a.Path, ".github/workflows/") {
+			continue
+		}
+		b, err := os.ReadFile(a.AbsPath)
+		if err != nil {
+			continue
+		}
+		out[a.Path] = b
+	}
+	return out
+}
+
 func loadCustomRules(path string) (*rules.RuleSet, error) {
 	info, err := os.Stat(path)
 	if err != nil {

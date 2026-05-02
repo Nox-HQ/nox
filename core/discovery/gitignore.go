@@ -7,24 +7,57 @@ import (
 	"strings"
 )
 
-// LoadGitignore reads a .gitignore file from root and returns the parsed
-// patterns. If no .gitignore exists, it returns an empty slice and nil error.
+// LoadGitignore reads ignore patterns from the standard set of locations git
+// itself consults: the root .gitignore, the optional .noxignore convenience
+// file, the per-repo .git/info/exclude, and the global excludesfile (resolved
+// from $GIT_CONFIG_GLOBAL, $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore).
+// Missing files are treated as empty.
 func LoadGitignore(root string) ([]string, error) {
-	p := filepath.Join(root, ".gitignore")
+	var patterns []string
 
-	patterns, err := loadIgnoreFile(p)
+	for _, name := range []string{".gitignore", ".noxignore"} {
+		p, err := loadIgnoreFile(filepath.Join(root, name))
+		if err != nil {
+			return nil, err
+		}
+		patterns = append(patterns, p...)
+	}
+
+	infoExclude := filepath.Join(root, ".git", "info", "exclude")
+	p, err := loadIgnoreFile(infoExclude)
 	if err != nil {
 		return nil, err
 	}
+	patterns = append(patterns, p...)
 
-	noxignorePath := filepath.Join(root, ".noxignore")
-	noxPatterns, err := loadIgnoreFile(noxignorePath)
-	if err != nil {
-		return nil, err
+	if globalPath := globalGitignorePath(); globalPath != "" {
+		gp, err := loadIgnoreFile(globalPath)
+		if err == nil {
+			patterns = append(patterns, gp...)
+		}
 	}
 
-	patterns = append(patterns, noxPatterns...)
 	return patterns, nil
+}
+
+// globalGitignorePath resolves the global git ignore file location, checking
+// XDG_CONFIG_HOME first, then the conventional ~/.config/git/ignore.
+func globalGitignorePath() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "git", "ignore")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".config", "git", "ignore")
+}
+
+// LoadNestedGitignore reads a .gitignore file from dir and returns the parsed
+// patterns. Nested gitignores apply only to paths under their containing
+// directory; callers must scope checks accordingly.
+func LoadNestedGitignore(dir string) ([]string, error) {
+	return loadIgnoreFile(filepath.Join(dir, ".gitignore"))
 }
 
 func loadIgnoreFile(path string) ([]string, error) {

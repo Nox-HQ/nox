@@ -41,13 +41,25 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 
 // ScanArtifacts reads each artifact file from disk, scans it for IaC
 // misconfigurations, and collects all findings into a deduplicated FindingSet.
+// GitHub Actions workflow findings receive a context-aware post-pass that
+// downgrades well-known false positives (ephemeral test DB credentials,
+// permissions paired with their justifying consumer action).
 func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
+	// Cache GHA workflow file contents so the post-pass can see the full
+	// file, not just the matched line.
+	ghaContent := map[string][]byte{}
+
+	var collected []findings.Finding
 	for _, artifact := range artifacts {
 		content, err := os.ReadFile(artifact.AbsPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
+		}
+
+		if isGHAWorkflowPath(artifact.Path) {
+			ghaContent[artifact.Path] = content
 		}
 
 		results, err := a.ScanFile(artifact.Path, content)
@@ -55,11 +67,19 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
-		for i := range results {
-			fs.Add(results[i])
-		}
+		collected = append(collected, results...)
+	}
+
+	collected = applyGHAContext(collected, ghaContent)
+
+	for i := range collected {
+		fs.Add(collected[i])
 	}
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+func isGHAWorkflowPath(path string) bool {
+	return len(path) > len(ghaWorkflowsPrefix) && path[:len(ghaWorkflowsPrefix)] == ghaWorkflowsPrefix
 }

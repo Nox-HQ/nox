@@ -217,8 +217,13 @@ type Walker struct {
 	Root string
 	// Registry classifies discovered files.
 	Registry *ClassifierRegistry
-	// IgnorePatterns holds gitignore-style patterns for skipping files.
+	// IgnorePatterns holds gitignore-style patterns for skipping files at
+	// the workspace root.
 	IgnorePatterns []string
+	// RespectGitignore controls whether nested .gitignore files and the
+	// root patterns are applied during traversal. When false, every file
+	// in the tree is walked regardless of ignore rules. Defaults to true.
+	RespectGitignore bool
 }
 
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
@@ -231,9 +236,10 @@ func NewWalker(root string) *Walker {
 	patterns, _ := LoadGitignore(root)
 
 	return &Walker{
-		Root:           root,
-		Registry:       reg,
-		IgnorePatterns: patterns,
+		Root:             root,
+		Registry:         reg,
+		IgnorePatterns:   patterns,
+		RespectGitignore: true,
 	}
 }
 
@@ -247,6 +253,11 @@ func (w *Walker) Walk() ([]Artifact, error) {
 	}
 
 	var artifacts []Artifact
+
+	// nestedPatterns maps an absolute directory path to its .gitignore
+	// patterns. Nested gitignores apply to paths under their containing
+	// directory.
+	nestedPatterns := map[string][]string{}
 
 	err = filepath.Walk(absRoot, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -269,12 +280,19 @@ func (w *Walker) Walk() ([]Artifact, error) {
 			return filepath.SkipDir
 		}
 
-		// Check gitignore patterns.
-		if IsIgnored(rel, w.IgnorePatterns) {
-			if info.IsDir() {
-				return filepath.SkipDir
+		if w.RespectGitignore {
+			if info.IsDir() && path != absRoot {
+				if pats, _ := LoadNestedGitignore(path); len(pats) > 0 {
+					nestedPatterns[path] = pats
+				}
 			}
-			return nil
+
+			if w.isIgnored(absRoot, path, rel, nestedPatterns) {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 
 		// Only classify regular files.
@@ -302,4 +320,36 @@ func (w *Walker) Walk() ([]Artifact, error) {
 	})
 
 	return artifacts, nil
+}
+
+// isIgnored reports whether a path should be skipped by the walker. It
+// applies the root IgnorePatterns plus any nested .gitignore patterns from
+// directories on the path between absRoot and the candidate.
+func (w *Walker) isIgnored(absRoot, absPath, rel string, nested map[string][]string) bool {
+	if IsIgnored(rel, w.IgnorePatterns) {
+		return true
+	}
+
+	// Walk up the directory chain. For each ancestor that has a nested
+	// gitignore, check the candidate path expressed relative to that
+	// ancestor. This matches git's semantics: patterns in subdir/.gitignore
+	// apply to paths inside subdir, not the workspace as a whole.
+	dir := filepath.Dir(absPath)
+	for dir != "" && strings.HasPrefix(dir, absRoot) {
+		if pats, ok := nested[dir]; ok {
+			scoped, err := filepath.Rel(dir, absPath)
+			if err == nil && IsIgnored(scoped, pats) {
+				return true
+			}
+		}
+		if dir == absRoot {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
 }

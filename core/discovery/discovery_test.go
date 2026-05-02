@@ -229,7 +229,9 @@ func TestClassifierRegistry_Empty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoadGitignore_NoFile(t *testing.T) {
-	t.Parallel()
+	// Isolate from global gitignore on the host system.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 
 	dir := t.TempDir()
 	patterns, err := LoadGitignore(dir)
@@ -242,7 +244,8 @@ func TestLoadGitignore_NoFile(t *testing.T) {
 }
 
 func TestLoadGitignore_ParsesPatterns(t *testing.T) {
-	t.Parallel()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 
 	dir := t.TempDir()
 	content := `# comment
@@ -269,6 +272,131 @@ vendor/
 		if p != expected[i] {
 			t.Errorf("pattern[%d] = %q, want %q", i, p, expected[i])
 		}
+	}
+}
+
+func TestLoadGitignore_IncludesInfoExclude(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".git", "info", "exclude"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns, err := LoadGitignore(dir)
+	if err != nil {
+		t.Fatalf("LoadGitignore: %v", err)
+	}
+	found := false
+	for _, p := range patterns {
+		if p == "*.tmp" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected *.tmp from .git/info/exclude, got %v", patterns)
+	}
+}
+
+func TestLoadGitignore_IncludesGlobal(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("HOME", t.TempDir())
+	if err := os.MkdirAll(filepath.Join(xdg, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(xdg, "git", "ignore"), []byte(".DS_Store\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns, err := LoadGitignore(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadGitignore: %v", err)
+	}
+	found := false
+	for _, p := range patterns {
+		if p == ".DS_Store" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected .DS_Store from XDG global, got %v", patterns)
+	}
+}
+
+func TestWalker_RespectsNestedGitignore(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Nested .gitignore in sub/ ignores *.log within sub.
+	if err := os.WriteFile(filepath.Join(sub, ".gitignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "skip.log"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "keep.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Root-level .log is unaffected by the nested gitignore.
+	if err := os.WriteFile(filepath.Join(root, "root.log"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewWalker(root)
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+
+	have := map[string]bool{}
+	for _, a := range arts {
+		have[a.Path] = true
+	}
+	if have["sub/skip.log"] {
+		t.Error("nested gitignore should have skipped sub/skip.log")
+	}
+	if !have["sub/keep.txt"] {
+		t.Error("nested gitignore should not have skipped sub/keep.txt")
+	}
+	if !have["root.log"] {
+		t.Error("nested gitignore must not affect root files")
+	}
+}
+
+func TestWalker_NoRespectGitignore(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "root.log"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewWalker(root)
+	w.RespectGitignore = false
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	have := map[string]bool{}
+	for _, a := range arts {
+		have[a.Path] = true
+	}
+	if !have["root.log"] {
+		t.Error("RespectGitignore=false should have included root.log")
 	}
 }
 
