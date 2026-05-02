@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nox-hq/nox/registry"
 )
 
 // bundledPlugins is the set of plugin binary names that ship in the nox
@@ -13,6 +15,15 @@ import (
 // without an explicit `nox plugin install`.
 var bundledPlugins = []string{
 	"nox-plugin-reachability",
+}
+
+// defaultRegistrySource is the official nox plugin registry. Auto-added
+// to state on first CLI run so `nox plugin search` / `nox plugin install`
+// work without `nox registry add`. Operators can remove it via
+// `nox registry remove official`.
+var defaultRegistrySource = registry.Source{
+	Name: "official",
+	URL:  "https://raw.githubusercontent.com/nox-hq/nox/main/registry-scaffold/index.json",
 }
 
 // bootstrapBundledPlugins registers any plugin binaries that ship in the
@@ -38,6 +49,21 @@ func bootstrapBundledPlugins() {
 	}
 
 	changed := false
+
+	// Auto-add the official registry on first run so plugin commands
+	// work without manual `nox registry add`. Idempotent.
+	hasDefault := false
+	for _, s := range st.Sources {
+		if s.Name == defaultRegistrySource.Name {
+			hasDefault = true
+			break
+		}
+	}
+	if !hasDefault {
+		st.Sources = append(st.Sources, defaultRegistrySource)
+		changed = true
+	}
+
 	for _, name := range bundledPlugins {
 		if st.FindPlugin(canonicalName(name)) != nil {
 			continue

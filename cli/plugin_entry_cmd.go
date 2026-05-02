@@ -1,0 +1,171 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/nox-hq/nox/registry"
+	"gopkg.in/yaml.v3"
+)
+
+// runPluginEntry produces a registry index entry (JSON) for a plugin
+// directory. Operators paste the output into a PR against the
+// official registry repo (or their private fork) to publish the
+// plugin. This sidesteps the chicken-and-egg of "plugins exist but
+// no marketplace": the marketplace is a JSON file in a git repo and
+// the entry generator removes the manual hand-authoring step.
+//
+// Inputs are read from plugin.yaml in the target directory plus
+// command-line flags for version + repository. Output is JSON
+// pretty-printed.
+func runPluginEntry(args []string) int {
+	fs := flag.NewFlagSet("plugin entry", flag.ContinueOnError)
+	var (
+		dir         string
+		version     string
+		repo        string
+		owner       string
+		minNox      string
+		stdout      bool
+		outFile     string
+	)
+	fs.StringVar(&dir, "dir", ".", "path to plugin source directory containing plugin.yaml")
+	fs.StringVar(&version, "release", "", "release version (e.g. 0.1.0); read from plugin.yaml when empty")
+	fs.StringVar(&repo, "repo", "", "github repository slug, e.g. nox-hq/nox-plugin-foo")
+	fs.StringVar(&owner, "owner", "nox-hq", "github org owning the plugin (used to derive default repo slug)")
+	fs.StringVar(&minNox, "min-nox", "0.6.0", "minimum nox version this plugin requires")
+	fs.BoolVar(&stdout, "stdout", true, "print to stdout (default)")
+	fs.StringVar(&outFile, "output", "", "write to this file instead of stdout")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	manifest, err := loadPluginManifest(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	if version == "" {
+		version = manifest.Version
+	}
+	if version == "" {
+		fmt.Fprintln(os.Stderr, "error: missing --version (and plugin.yaml has no version)")
+		return 2
+	}
+	if repo == "" {
+		// Derive repo slug from the manifest name. Handle both
+		// `nox/foo` and `nox-plugin-foo` shapes; either way we want
+		// `owner/nox-plugin-foo`.
+		shortName := strings.TrimPrefix(manifest.Name, "nox/")
+		shortName = strings.TrimPrefix(shortName, "nox-plugin-")
+		repo = owner + "/nox-plugin-" + shortName
+	}
+
+	entry := buildPluginEntry(manifest, version, repo, minNox)
+
+	out, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: marshalling entry: %v\n", err)
+		return 2
+	}
+
+	if outFile != "" {
+		if err := os.WriteFile(outFile, out, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", outFile, err)
+			return 2
+		}
+		fmt.Fprintf(os.Stderr, "[plugin entry] wrote %s\n", outFile)
+		return 0
+	}
+
+	fmt.Println(string(out))
+	return 0
+}
+
+// pluginManifest mirrors the on-disk plugin.yaml shape. Loose typing
+// here so unknown fields don't reject the file — operators may add
+// future schema fields the entry generator doesn't yet read.
+type pluginManifest struct {
+	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
+	Track       string `yaml:"track"`
+	Description string `yaml:"description"`
+	Tools       []struct {
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
+	} `yaml:"tools"`
+}
+
+func loadPluginManifest(dir string) (*pluginManifest, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "plugin.yaml"))
+	if err != nil {
+		return nil, fmt.Errorf("reading plugin.yaml: %w", err)
+	}
+	var m pluginManifest
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("parsing plugin.yaml: %w", err)
+	}
+	return &m, nil
+}
+
+func buildPluginEntry(m *pluginManifest, version, repo, minNox string) registry.PluginEntry {
+	noxName := m.Name
+	if !strings.HasPrefix(noxName, "nox/") {
+		noxName = "nox/" + strings.TrimPrefix(noxName, "nox-plugin-")
+	}
+	repoURL := "https://github.com/" + repo
+	binBase := strings.TrimPrefix(noxName, "nox/")
+	binBase = "nox-plugin-" + binBase
+
+	caps := make([]string, 0, len(m.Tools))
+	for _, t := range m.Tools {
+		caps = append(caps, t.Name)
+	}
+
+	artifacts := make([]registry.PlatformArtifact, 0, 6)
+	for _, p := range []struct{ os, arch string }{
+		{"linux", "amd64"},
+		{"linux", "arm64"},
+		{"darwin", "amd64"},
+		{"darwin", "arm64"},
+		{"windows", "amd64"},
+	} {
+		ext := "tar.gz"
+		if p.os == "windows" {
+			ext = "zip"
+		}
+		url := fmt.Sprintf("%s/releases/download/v%s/%s_%s_%s_%s.%s",
+			repoURL, version, binBase, version, p.os, p.arch, ext)
+		artifacts = append(artifacts, registry.PlatformArtifact{
+			OS:     p.os,
+			Arch:   p.arch,
+			URL:    url,
+			Digest: "sha256:tbd",
+		})
+	}
+
+	return registry.PluginEntry{
+		Name:        noxName,
+		Description: m.Description,
+		Homepage:    repoURL,
+		Repository:  repoURL,
+		License:     "Apache-2.0",
+		Track:       registry.Track(m.Track),
+		Maintainers: []string{"nox-hq"},
+		Versions: []registry.VersionEntry{{
+			Version:       version,
+			APIVersion:    "v1",
+			PublishedAt:   time.Now().UTC(),
+			Digest:        "sha256:tbd",
+			Capabilities:  caps,
+			MinNoxVersion: minNox,
+			ChangelogURL:  repoURL + "/blob/main/CHANGELOG.md",
+			Artifacts:     artifacts,
+		}},
+	}
+}

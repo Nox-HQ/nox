@@ -19,7 +19,7 @@ import (
 // runPlugin dispatches plugin subcommands.
 func runPlugin(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
 		return 2
 	}
 
@@ -42,9 +42,11 @@ func runPlugin(args []string) int {
 		return runPluginInit(args[1:])
 	case "test":
 		return runPluginTest(args[1:])
+	case "entry":
+		return runPluginEntry(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
 		return 2
 	}
 }
