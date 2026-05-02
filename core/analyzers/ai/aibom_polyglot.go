@@ -150,30 +150,76 @@ var providerInvocations = []sdkInvocationPattern{
 // invocation detected in the file. Provider classification is taken from
 // the matching pattern (overrides classifyModelRegistry's prefix-based
 // guess) so that an `azure.openai` deployment shows up correctly even
-// when its model name is a custom string.
+// when its model name is a custom string. The result is enriched with
+// the invocation's line number, the auth env var (when an api_key is
+// passed inline), and the endpoint / base URL (Azure, Bedrock, custom).
 func extractSDKInvocations(path string, content []byte) []ModelReference {
 	text := string(content)
-	var refs []ModelReference
+	endpointGuess := detectEndpoint(text)
+	authGuess := detectAuthEnvVar(text)
 
+	var refs []ModelReference
 	for _, p := range providerInvocations {
-		matches := p.re.FindAllStringSubmatch(text, -1)
-		for _, m := range matches {
-			name := ""
-			if len(m) > 1 && m[1] != "" {
-				name = m[1]
+		locs := p.re.FindAllSubmatchIndex(content, -1)
+		for _, m := range locs {
+			if len(m) < 4 || m[2] == -1 {
+				continue
 			}
+			name := string(content[m[2]:m[3]])
 			if name == "" {
 				continue
 			}
 			refs = append(refs, ModelReference{
-				Name:     name,
-				Registry: p.provider,
-				Path:     path,
+				Name:       name,
+				Registry:   p.provider,
+				Path:       path,
+				Line:       lineForOffset(content, m[0]),
+				AuthEnvVar: authGuess,
+				Endpoint:   endpointGuess,
 			})
 		}
 	}
 	return refs
 }
+
+// detectAuthEnvVar inspects content for `api_key = os.getenv("X")` /
+// `process.env.X` style references commonly used to feed LLM clients.
+// Returns the env var name when one matches, or "" otherwise.
+func detectAuthEnvVar(text string) string {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`os\.getenv\s*\(\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),
+		regexp.MustCompile(`os\.environ\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),
+		regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))`),
+		regexp.MustCompile(`process\.env\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),
+		regexp.MustCompile(`os\.Getenv\s*\(\s*"([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))"\s*\)`),
+	}
+	for _, re := range patterns {
+		if m := re.FindStringSubmatch(text); len(m) > 1 {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// detectEndpoint extracts a non-default LLM endpoint URL when present.
+// Captures Azure OpenAI deployment names, AWS Bedrock regions, and
+// custom base_url values.
+func detectEndpoint(text string) string {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`base_url\s*[:=]\s*["']([^"']+)["']`),
+		regexp.MustCompile(`baseURL\s*:\s*["']([^"']+)["']`),
+		regexp.MustCompile(`azure_endpoint\s*[:=]\s*["']([^"']+)["']`),
+		regexp.MustCompile(`AzureOpenAI\s*\([^)]*endpoint\s*[:=]\s*["']([^"']+)["']`),
+		regexp.MustCompile(`bedrock-runtime[^"']*['"]?,?\s*region_name\s*=\s*["']([^"']+)["']`),
+	}
+	for _, re := range patterns {
+		if m := re.FindStringSubmatch(text); len(m) > 1 {
+			return m[1]
+		}
+	}
+	return ""
+}
+
 
 // frameworkPattern recognises agent / vector-store framework usage and
 // emits a Component for the inventory. Designed to over-report — a single

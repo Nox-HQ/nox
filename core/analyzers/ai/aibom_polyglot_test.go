@@ -62,6 +62,58 @@ func TestExtractSDKInvocations_AnthropicTypeScript(t *testing.T) {
 	}
 }
 
+func TestExtractSDKInvocations_CapturesLineAndAuthEnv(t *testing.T) {
+	content := []byte(`import os
+import openai
+
+api_key = os.getenv("OPENAI_API_KEY")
+client = openai.OpenAI(api_key=api_key)
+client.chat.completions.create(model="gpt-4o", messages=[])
+`)
+	refs := extractSDKInvocations("svc/llm.py", content)
+	if len(refs) == 0 {
+		t.Fatal("expected at least 1 invocation")
+	}
+	r := refs[0]
+	if r.Line == 0 {
+		t.Errorf("expected non-zero line, got %d", r.Line)
+	}
+	if r.AuthEnvVar != "OPENAI_API_KEY" {
+		t.Errorf("expected auth_env_var=OPENAI_API_KEY, got %q", r.AuthEnvVar)
+	}
+}
+
+func TestExtractSDKInvocations_CapturesAzureEndpoint(t *testing.T) {
+	content := []byte(`from openai import AzureOpenAI
+
+client = AzureOpenAI(
+    api_key=os.environ["AZURE_OPENAI_API_KEY"],
+    azure_endpoint="https://my-resource.openai.azure.com/",
+    api_version="2024-02-01",
+)
+client.chat.completions.create(model="gpt-4-deploy", messages=[])
+`)
+	refs := extractSDKInvocations("svc/azure.py", content)
+	if len(refs) == 0 {
+		t.Fatal("expected azure invocation")
+	}
+	if refs[0].Endpoint != "https://my-resource.openai.azure.com/" {
+		t.Errorf("expected azure endpoint, got %q", refs[0].Endpoint)
+	}
+}
+
+func TestDetectAuthEnvVar_NodeEnv(t *testing.T) {
+	for _, src := range []string{
+		"const k = process.env.ANTHROPIC_API_KEY;",
+		"const k = process.env['ANTHROPIC_API_KEY'];",
+	} {
+		got := detectAuthEnvVar(src)
+		if got != "ANTHROPIC_API_KEY" {
+			t.Errorf("expected ANTHROPIC_API_KEY for %q, got %q", src, got)
+		}
+	}
+}
+
 func TestExtractFrameworkComponents_LangChainAndPinecone(t *testing.T) {
 	content := []byte(`from langchain.agents import Tool
 import pinecone

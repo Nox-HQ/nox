@@ -7,11 +7,14 @@ import (
 
 // ModelReference represents a reference to an ML model found in the codebase.
 type ModelReference struct {
-	Name     string `json:"name"`
-	Version  string `json:"version,omitempty"`
-	Registry string `json:"registry,omitempty"`
-	Hash     string `json:"hash,omitempty"`
-	Path     string `json:"path"`
+	Name       string `json:"name"`
+	Version    string `json:"version,omitempty"`
+	Registry   string `json:"registry,omitempty"`
+	Hash       string `json:"hash,omitempty"`
+	Path       string `json:"path"`
+	Line       int    `json:"line,omitempty"`
+	AuthEnvVar string `json:"auth_env_var,omitempty"`
+	Endpoint   string `json:"endpoint,omitempty"`
 }
 
 // extractModelReferences scans file content for ML model loading patterns and
