@@ -205,6 +205,18 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 					Field:   "cosign_signature",
 					Message: err.Error(),
 				})
+			} else {
+				// A passing Cosign keyless verification is at least as
+				// strong as community trust: the signature was issued by
+				// a known OIDC subject (e.g. the plugin's release.yml
+				// workflow). Promote the level so DefaultPolicy
+				// (TrustCommunity minimum) accepts the artifact even
+				// without an Ed25519 signer key in the registry index.
+				if verifyResult.Level < trust.TrustCommunity {
+					verifyResult.Level = trust.TrustCommunity
+				}
+				verifyResult.SignatureValid = true
+				verifyResult.SignerName = "cosign-keyless:" + artifact.CosignCertIdentityRegexp
 			}
 		}
 	}

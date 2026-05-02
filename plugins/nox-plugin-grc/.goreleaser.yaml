@@ -10,9 +10,13 @@ project_name: nox-plugin-grc
 
 before:
   hooks:
-    - go mod download
-    - sed -i.bak '/^replace /d' go.mod && rm -f go.mod.bak
+    # Strip replace directives first — plugin source uses local
+    # `replace ../..` during development; standalone releases must
+    # consume the published module. Order matters: sed runs before
+    # any `go mod` command can resolve the missing path.
+    - sh -c "sed -i.bak '/^replace /d' go.mod && rm -f go.mod.bak"
     - go mod tidy
+    - go mod download
     - go test ./...
 
 builds:
