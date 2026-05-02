@@ -443,7 +443,15 @@ Commands:
   cache <cmd>              Manage scan cache (clear, status)
   serve                    Start MCP server on stdio
   registry <cmd>           Manage plugin registries (add, list, remove)
-  plugin <cmd>             Manage and invoke plugins
+  plugin <cmd>             Manage and invoke plugins (search, info, install, update,
+                              list, remove, call, init, test, entry)
+  vex <cmd>                OpenVEX waiver document tools (vex init)
+  install-hook             Install pre-commit/pre-push git hooks
+  fix                      Apply OSV fixed_in remediation upgrades (go/npm/pypi/cargo)
+  doctor                   Report environment, plugin state, config sanity
+  agent-graph              Render agent capability lattice (mermaid/dot)
+  bench                    Scan a corpus directory; report rule fire-rates
+  calibrate                Suggest severity overrides from a bench report
   version                  Print version and exit
 
 Global Flags:
@@ -589,37 +597,53 @@ See [`docs/plugin-authoring.md`](docs/plugin-authoring.md) for the full SDK guid
 
 ### Install and Use Plugins
 
+The official registry is auto-added on first run; no `nox registry add` needed for the public set. Operators add private registries on top.
+
 ```bash
-# Add a registry
-nox registry add https://registry.nox.dev/index.json
-nox registry add https://custom.registry.io/index.json --name custom
+# Search and install (registry auto-configured)
+nox plugin search ai
+nox plugin search --track ai-security
+nox plugin install nox/ai-eval
+nox plugin install nox/reachability@0.5.0
 
-# List registries
-nox registry list
-
-# Search and install
-nox plugin search sast
-nox plugin search --track ai-security fuzzing
-nox plugin install nox/sast
-nox plugin install nox/sast@1.2.0
-
-# List installed plugins
+# Inspect, run, update, remove
+nox plugin info nox/ai-eval
 nox plugin list
+nox plugin call ai-eval ai_eval endpoint=http://localhost:8080/chat
+nox plugin update nox/ai-eval
+nox plugin remove nox/ai-eval
 
-# Get plugin info
-nox plugin info nox/sast
-
-# Call a plugin tool
-nox plugin call nox/sast scan workspace_root=/path/to/project
-nox plugin call nox/sast analyze --input params.json
-
-# Update and remove
-nox plugin update nox/sast
-nox plugin remove nox/sast
-
-# Remove a registry
-nox registry remove custom
+# Add a private / enterprise registry on top
+nox registry add https://registry.acme.internal/nox/index.json --name acme
+nox registry list
+nox registry remove acme
 ```
+
+### Currently published plugins
+
+| Plugin | Track | What it adds |
+|---|---|---|
+| `nox/reachability` | core-analysis | Multi-language reachability for VULN findings (Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet). Bundled in the default release archive. |
+| `nox/taint-analysis` | core-analysis | Cross-file taint flow. TAINT-001..005 + interprocedural TAINT-006/007 + AI flows TAINT-AI-001/002. |
+| `nox/k8s-runtime` | dynamic-runtime | Live cluster scanning. KRUNT-001..008. |
+| `nox/red-team` | dynamic-runtime | Attack-chain analysis + active validation. |
+| `nox/grc` | policy-governance | 12 compliance frameworks (SOC2, ISO 27001, GDPR, FedRAMP L/M/H, HIPAA, PCI-DSS, NIST 800-53, NIST CSF, CIS v8, CMMC). |
+| `nox/ai-eval` | dynamic-runtime | Adversarial prompt corpus runner. Fires jailbreak / system-leak / role-confusion / tool-misuse against a chat endpoint. AI-EVAL-001..004. |
+
+### Publish a plugin
+
+```bash
+# Tag the plugin repo. The release workflow builds binaries via
+# GoReleaser, signs the checksums via Cosign keyless, generates a
+# registry entry, and uploads it as a workflow artifact.
+git tag v0.2.0 && git push --tags
+
+# Open a PR against nox-hq/nox to add the entry to
+# registry-scaffold/index.json. Operators see the new version in
+# `nox plugin search` once the PR merges.
+```
+
+See [`docs/marketplace.md`](docs/marketplace.md) for the full publish flow and the maturity ladder (signed installs, auto-update, dependency graph, private hosting).
 
 ## MCP Server
 

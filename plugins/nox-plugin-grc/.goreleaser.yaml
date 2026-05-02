@@ -1,0 +1,112 @@
+# Shared GoReleaser template for nox plugins. Each plugin's repo
+# copies this verbatim and parameterises only the project_name. The
+# archive naming convention matches the URL pattern in the registry
+# index, so a successful release auto-aligns with the marketplace
+# entry produced by `nox plugin entry`.
+
+version: 2
+
+project_name: nox-plugin-grc
+
+before:
+  hooks:
+    - go mod download
+    - sed -i.bak '/^replace /d' go.mod && rm -f go.mod.bak
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: plugin
+    binary: nox-plugin-grc
+    main: ./
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: plugin-archive
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - plugin.yaml
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Cosign keyless signing of release artifacts. Operators verify with:
+#   cosign verify-blob --certificate-identity-regexp ... checksums.txt
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+
+sboms:
+  - artifacts: archive
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    Add to your registry:
+
+    ```bash
+    nox plugin install nox/grc
+    ```
+
+    Or pin a specific version:
+
+    ```bash
+    nox plugin install nox/grc@{{ .Version }}
+    ```
+
+    Verify the release artifacts:
+
+    ```bash
+    cosign verify-blob \
+      --certificate-identity-regexp "https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      --signature checksums.txt.sig \
+      checksums.txt
+    ```
