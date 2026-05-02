@@ -33,6 +33,34 @@ type ScanConfig struct {
 	License    LicensePolicy      `yaml:"license"`
 	Compliance ComplianceSettings `yaml:"compliance"`
 	Cache      CacheSettings      `yaml:"cache"`
+	Plugins    PluginsConfig      `yaml:"plugins"`
+}
+
+// PluginsConfig declares the plugins a project requires plus any
+// non-default registries to consult when resolving them. Modeled on
+// package.json / Gemfile dependency manifests: `nox install` reads the
+// block and installs missing entries; `nox scan` checks the block and
+// auto-installs unless --no-auto-install is set.
+type PluginsConfig struct {
+	// Required lists plugin specifiers — `name@constraint` or bare name.
+	// Examples: "nox/reachability@>=0.5", "nox/ai-eval", "nox/grc@0.5.0".
+	Required []string `yaml:"required"`
+	// Registries are extra registry index URLs to consult on top of the
+	// official source. Each entry is a URL or `name=url` pair.
+	Registries []string `yaml:"registries"`
+	// AutoInstall, when true (default), lets `nox scan` install missing
+	// required plugins automatically. Set false to fail loudly instead.
+	AutoInstall *bool `yaml:"auto_install"`
+}
+
+// AutoInstallEnabled returns whether the project consents to scan-time
+// auto-install. Defaults to true for parity with package.json semantics
+// but operators can opt out via `auto_install: false`.
+func (p PluginsConfig) AutoInstallEnabled() bool {
+	if p.AutoInstall == nil {
+		return true
+	}
+	return *p.AutoInstall
 }
 
 // PolicySettings controls pass/fail thresholds and baseline behavior.

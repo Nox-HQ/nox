@@ -19,19 +19,45 @@ List or remove with `nox registry list` / `nox registry remove official`.
 
 ## How an operator installs a plugin
 
+### Project-level manifest (recommended)
+
+Declare required plugins in `.nox.yaml` the same way you'd list deps
+in `package.json` or `Gemfile`. Anyone cloning the project gets the
+right plugins automatically; first `nox scan` resolves+installs the
+list.
+
+```yaml
+# .nox.yaml
+plugins:
+  required:
+    - nox/reachability@>=0.5
+    - nox/ai-eval
+    - nox/taint-analysis
+  registries:
+    # Project-level registry overrides; merged with the official
+    # source. Use `name=url` to set an explicit name.
+    - acme=https://registry.acme.internal/nox/index.json
+  # Optional: opt out of scan-time auto-install. Default true.
+  # auto_install: false
+```
+
+Manual install / refresh:
+
 ```bash
-# 1. Find a plugin.
-nox plugin search reachability
+nox install         # reads .nox.yaml, resolves+installs all required plugins
+```
 
-# 2. Inspect.
-nox plugin info nox/reachability
+Auto-install on scan: every `nox scan` checks the manifest and
+installs missing entries silently. Operators bypass with
+`nox scan --no-auto-install` or by setting `auto_install: false`.
 
-# 3. Install. Resolves to platform-specific binary, verifies digest,
-#    drops into the local plugin state.
-nox plugin install nox/reachability
+### One-shot CLI (no manifest)
 
-# 4. Use.
-nox plugin call reachability analyze_reachability
+```bash
+nox plugin search ai
+nox plugin info nox/ai-eval
+nox plugin install nox/ai-eval
+nox plugin call ai-eval ai_eval endpoint=http://localhost:8080/chat
 ```
 
 ## How a plugin author publishes

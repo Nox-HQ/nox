@@ -599,6 +599,29 @@ See [`docs/plugin-authoring.md`](docs/plugin-authoring.md) for the full SDK guid
 
 The official registry is auto-added on first run; no `nox registry add` needed for the public set. Operators add private registries on top.
 
+**Recommended: declare plugins in `.nox.yaml`** so anyone cloning your project gets the right set automatically:
+
+```yaml
+# .nox.yaml
+plugins:
+  required:
+    - nox/reachability@>=0.5
+    - nox/ai-eval
+    - nox/taint-analysis
+  registries:
+    # Project-level registry overrides; merged with the official source.
+    # Use `name=url` to assign a name.
+    - acme=https://registry.acme.internal/nox/index.json
+```
+
+```bash
+nox install                       # reads plugins.required, fetches each
+nox scan .                        # auto-installs missing required plugins
+nox scan . --no-auto-install      # opt out
+```
+
+**One-shot install (no manifest):**
+
 ```bash
 # Search and install (registry auto-configured)
 nox plugin search ai

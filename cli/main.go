@@ -145,6 +145,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates\n")
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
+		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -215,6 +216,8 @@ func run(args []string) int {
 		return runBench(remaining[1:])
 	case "calibrate":
 		return runCalibrate(remaining[1:])
+	case "install":
+		return runInstall(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
@@ -248,12 +251,14 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noCacheFlag           bool
 		changedSinceFlag      string
 		noRespectGitignoreFlg bool
+		noAutoInstallFlg      bool
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
 	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
+	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -269,6 +274,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: loading .nox.yaml: %v\n", err)
 		return 2
+	}
+
+	// Auto-install required plugins from .nox.yaml plugins.required when
+	// the project opts in (default) and the operator hasn't passed
+	// --no-auto-install. Failures are non-fatal — the scan still runs.
+	if !noAutoInstallFlg && cfg.Plugins.AutoInstallEnabled() && len(cfg.Plugins.Required) > 0 {
+		if rc := autoInstallProjectPlugins(target, &cfg.Plugins, quiet); rc != 0 && verbose {
+			fmt.Fprintf(os.Stderr, "[warn] auto-install returned %d; some plugins may be missing\n", rc)
+		}
 	}
 
 	// Apply output defaults from config (CLI flags take precedence).
