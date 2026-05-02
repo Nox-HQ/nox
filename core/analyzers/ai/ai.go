@@ -122,8 +122,9 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 
 		// Agent tool-use lattice (OWASP LLM07): detect dangerous tool
 		// combinations registered in the same source file.
-		for _, lf := range scanAgentLattice(artifact.Path, content) {
-			fs.Add(lf)
+		latticeFindings := scanAgentLattice(artifact.Path, content)
+		for i := range latticeFindings {
+			fs.Add(latticeFindings[i])
 		}
 
 		// Extract inventory entries. AIComponent artifacts (prompts/, agents/,

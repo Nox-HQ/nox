@@ -731,11 +731,11 @@ func TestFileMatchesRule(t *testing.T) {
 
 func TestFileMatchesRule_IgnorePatterns(t *testing.T) {
 	tests := []struct {
-		name         string
-		path         string
-		patterns     []string
-		ignore       []string
-		want         bool
+		name     string
+		path     string
+		patterns []string
+		ignore   []string
+		want     bool
 	}{
 		{
 			name:     "ignore lockfile excluded from json allowlist",

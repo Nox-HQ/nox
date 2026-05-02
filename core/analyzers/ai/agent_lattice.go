@@ -28,20 +28,20 @@ type CapabilityTag string
 
 // Capability tag constants used by the dangerous-combination policy.
 const (
-	CapFileRead         CapabilityTag = "file_read"
-	CapFileWrite        CapabilityTag = "file_write"
-	CapShellExec        CapabilityTag = "shell_exec"
-	CapHTTPRequest      CapabilityTag = "http_request"
-	CapEmailSend        CapabilityTag = "email_send"
-	CapWebhookPost      CapabilityTag = "webhook_post"
-	CapDatabaseRead     CapabilityTag = "database_read"
-	CapDatabaseWrite    CapabilityTag = "database_write"
-	CapGitPush          CapabilityTag = "git_push"
-	CapReadSecret       CapabilityTag = "read_secret"
-	CapCloudIAMModify   CapabilityTag = "cloud_iam_modify"
-	CapPaymentInitiate  CapabilityTag = "payment_initiate"
-	CapHumanApproval    CapabilityTag = "human_approval_required"
-	CapUntrustedInput   CapabilityTag = "untrusted_input_path"
+	CapFileRead        CapabilityTag = "file_read"
+	CapFileWrite       CapabilityTag = "file_write"
+	CapShellExec       CapabilityTag = "shell_exec"
+	CapHTTPRequest     CapabilityTag = "http_request"
+	CapEmailSend       CapabilityTag = "email_send"
+	CapWebhookPost     CapabilityTag = "webhook_post"
+	CapDatabaseRead    CapabilityTag = "database_read"
+	CapDatabaseWrite   CapabilityTag = "database_write"
+	CapGitPush         CapabilityTag = "git_push"
+	CapReadSecret      CapabilityTag = "read_secret"
+	CapCloudIAMModify  CapabilityTag = "cloud_iam_modify"
+	CapPaymentInitiate CapabilityTag = "payment_initiate"
+	CapHumanApproval   CapabilityTag = "human_approval_required"
+	CapUntrustedInput  CapabilityTag = "untrusted_input_path"
 )
 
 // extractedTool is a single tool registration discovered in source.
@@ -126,8 +126,7 @@ func classifyToolName(name string) []CapabilityTag {
 	low := strings.ToLower(name)
 	var tags []CapabilityTag
 
-	switch {
-	case containsAny(low, "shell", "exec", "run_command", "runcommand", "system_call", "subprocess", "bash"):
+	if containsAny(low, "shell", "exec", "run_command", "runcommand", "system_call", "subprocess", "bash") {
 		tags = append(tags, CapShellExec)
 	}
 	switch {
@@ -317,7 +316,8 @@ func scanAgentLattice(path string, content []byte) []findings.Finding {
 	}
 
 	var out []findings.Finding
-	for _, combo := range dangerousCombos {
+	for i := range dangerousCombos {
+		combo := &dangerousCombos[i]
 		if !satisfies(tagSet, combo.required) {
 			continue
 		}
@@ -351,7 +351,7 @@ func satisfies(have map[CapabilityTag]bool, need []CapabilityTag) bool {
 	return true
 }
 
-func latticeMetadata(tools []extractedTool, combo dangerousCombo) map[string]string {
+func latticeMetadata(tools []extractedTool, combo *dangerousCombo) map[string]string {
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {
 		names = append(names, t.name)
@@ -365,9 +365,9 @@ func latticeMetadata(tools []extractedTool, combo dangerousCombo) map[string]str
 	sort.Strings(required)
 
 	return map[string]string{
-		"cwe":               combo.cwe,
-		"agent_tools":       strings.Join(names, ","),
+		"cwe":                  combo.cwe,
+		"agent_tools":          strings.Join(names, ","),
 		"violated_combination": strings.Join(required, "+"),
-		"owasp":             "LLM07",
+		"owasp":                "LLM07",
 	}
 }

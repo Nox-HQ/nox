@@ -29,18 +29,18 @@ const (
 // Statement is a single VEX statement declaring the status of a vulnerability
 // for a specific product.
 type Statement struct {
-	VulnerabilityID string `json:"vulnerability"`
-	Status          Status `json:"status"`
-	Justification   string `json:"justification,omitempty"`
-	ImpactStatement string `json:"impact_statement,omitempty"`
-	ActionStatement string `json:"action_statement,omitempty"`
+	VulnerabilityID string   `json:"vulnerability"`
+	Status          Status   `json:"status"`
+	Justification   string   `json:"justification,omitempty"`
+	ImpactStatement string   `json:"impact_statement,omitempty"`
+	ActionStatement string   `json:"action_statement,omitempty"`
 	Products        []string `json:"products,omitempty"`
 	// NoxLocations is a non-OpenVEX auxiliary field listing finding locations
 	// for the operator's convenience during triage. Consumers that don't
 	// know about it can ignore it; OpenVEX validators will treat it as an
 	// unknown extension key.
-	NoxLocations []string `json:"_nox_locations,omitempty"`
-	NoxFingerprint string `json:"_nox_fingerprint,omitempty"`
+	NoxLocations   []string `json:"_nox_locations,omitempty"`
+	NoxFingerprint string   `json:"_nox_fingerprint,omitempty"`
 }
 
 // Document is a simplified OpenVEX document.
@@ -77,8 +77,8 @@ func ApplyVEX(fs *findings.FindingSet, doc *Document) int {
 
 	// Build a lookup from vulnerability ID to VEX status.
 	stmtMap := make(map[string]Statement, len(doc.Statements))
-	for _, stmt := range doc.Statements {
-		stmtMap[strings.ToUpper(stmt.VulnerabilityID)] = stmt
+	for i := range doc.Statements {
+		stmtMap[strings.ToUpper(doc.Statements[i].VulnerabilityID)] = doc.Statements[i]
 	}
 
 	applied := 0
@@ -120,8 +120,8 @@ func Summary(doc *Document) string {
 		return "no VEX document"
 	}
 	counts := make(map[Status]int)
-	for _, stmt := range doc.Statements {
-		counts[stmt.Status]++
+	for i := range doc.Statements {
+		counts[doc.Statements[i].Status]++
 	}
 	parts := make([]string, 0, len(counts))
 	for status, count := range counts {
@@ -151,7 +151,8 @@ func BuildStub(items []findings.Finding, product string) *Document {
 		Author:     "nox",
 		Statements: []Statement{},
 	}
-	for _, f := range items {
+	for i := range items {
+		f := &items[i]
 		k := key{ruleID: f.RuleID, fp: f.Fingerprint}
 		if idx, ok := seen[k]; ok {
 			doc.Statements[idx].NoxLocations = append(doc.Statements[idx].NoxLocations, locationLine(f))
@@ -172,7 +173,7 @@ func BuildStub(items []findings.Finding, product string) *Document {
 	return doc
 }
 
-func locationLine(f findings.Finding) string {
+func locationLine(f *findings.Finding) string {
 	if f.Location.StartLine > 0 {
 		return fmt.Sprintf("%s:%d", f.Location.FilePath, f.Location.StartLine)
 	}

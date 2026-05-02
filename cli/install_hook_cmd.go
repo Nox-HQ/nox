@@ -14,11 +14,11 @@ import (
 func runInstallHook(args []string) int {
 	fs := flag.NewFlagSet("install-hook", flag.ContinueOnError)
 	var (
-		repoPath   string
-		hookKind   string
-		failOn     string
-		bin        string
-		force      bool
+		repoPath string
+		hookKind string
+		failOn   string
+		bin      string
+		force    bool
 	)
 	fs.StringVar(&repoPath, "repo", ".", "path to the git repository")
 	fs.StringVar(&hookKind, "kind", "pre-commit", "hook kind: pre-commit or pre-push")

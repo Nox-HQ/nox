@@ -124,8 +124,8 @@ func contains(haystack []CapabilityTag, needle CapabilityTag) bool {
 }
 
 func hasRule(in []findings.Finding, ruleID string) bool {
-	for _, f := range in {
-		if f.RuleID == ruleID {
+	for i := range in {
+		if in[i].RuleID == ruleID {
 			return true
 		}
 	}

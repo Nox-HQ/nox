@@ -107,6 +107,8 @@ func RunScan(target string) (*ScanResult, error) {
 
 // RunScanWithOptions executes the full scan pipeline with the given options.
 // See RunScan for a description of the pipeline stages.
+//
+//nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
 func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	// Load project config.
 	cfg, err := LoadScanConfig(target)
@@ -495,6 +497,8 @@ func RunStagedScan(repoRoot string) (*ScanResult, error) {
 }
 
 // RunStagedScanWithOptions executes a staged-files scan with the given options.
+//
+//nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
 func RunStagedScanWithOptions(repoRoot string, opts ScanOptions) (*ScanResult, error) {
 	stagedPaths, err := git.StagedFiles(repoRoot)
 	if err != nil {
