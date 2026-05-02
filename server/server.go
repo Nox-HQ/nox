@@ -15,6 +15,7 @@ import (
 
 	mcp "github.com/felixgeelhaar/mcp-go"
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/annotate"
 	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
@@ -87,6 +88,13 @@ type pluginCallToolInput struct {
 	Tool          string         `json:"tool"`
 	Input         map[string]any `json:"input,omitempty"`
 	WorkspaceRoot string         `json:"workspace_root,omitempty"`
+}
+type fixPlanInput struct {
+	IncludeMajor bool   `json:"include_major,omitempty"`
+	Path         string `json:"path,omitempty"`
+}
+type agentGraphInput struct {
+	Format string `json:"format,omitempty"` // "mermaid" or "dot"; defaults to "mermaid"
 }
 type pluginReadResourceInput struct {
 	Plugin string `json:"plugin"`
@@ -263,6 +271,16 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Load a VEX document and show a summary of vulnerability statuses").
 		ReadOnly().
 		Handler(s.handleVEXStatus)
+
+	srv.Tool("fix_plan").
+		Description("Plan dependency upgrade actions from VULN-001 findings with fixed_in metadata. Read-only — returns the upgrade plan as a list; never mutates the workspace. Operators apply via the nox fix CLI subcommand.").
+		ReadOnly().
+		Handler(s.handleFixPlan)
+
+	srv.Tool("agent_graph").
+		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
+		ReadOnly().
+		Handler(s.handleAgentGraph)
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
@@ -1368,4 +1386,185 @@ func truncate(s string) string {
 		return s
 	}
 	return s[:maxOutputBytes] + "\n... [truncated: output exceeded 1MB limit]"
+}
+
+// --- fix_plan / agent_graph handlers ---
+
+// fixAction is the wire shape for a single planned upgrade. Mirrors
+// cli's upgradeAction but JSON-tagged for MCP transport.
+type fixAction struct {
+	RuleID    string `json:"rule_id"`
+	Package   string `json:"package"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Ecosystem string `json:"ecosystem"`
+	Command   string `json:"command"`
+}
+
+type fixPlanResponse struct {
+	Actions      []fixAction `json:"actions"`
+	Skipped      int         `json:"skipped"`
+	MajorSkipped int         `json:"major_skipped"`
+	Note         string      `json:"note,omitempty"`
+}
+
+func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	resp := fixPlanResponse{
+		Note: "Plan only. Apply with: nox fix --input findings.json",
+	}
+
+	seen := map[string]bool{}
+	items := pc.result.Findings.ActiveFindings()
+	for i := range items {
+		f := &items[i]
+		if f.RuleID != "VULN-001" {
+			continue
+		}
+		fixed := f.Metadata["fixed_in"]
+		eco := f.Metadata["ecosystem"]
+		pkg := f.Metadata["package"]
+		from := f.Metadata["version"]
+		if fixed == "" || pkg == "" || eco == "" {
+			resp.Skipped++
+			continue
+		}
+		if !input.IncludeMajor && majorOfVersion(from) != majorOfVersion(fixed) && from != "" {
+			resp.MajorSkipped++
+			continue
+		}
+		key := pkg + "@" + fixed
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		resp.Actions = append(resp.Actions, fixAction{
+			RuleID:    f.RuleID,
+			Package:   pkg,
+			From:      from,
+			To:        fixed,
+			Ecosystem: eco,
+			Command:   commandFor(eco, pkg, fixed),
+		})
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return "Error: marshalling plan: " + err.Error(), nil
+	}
+	return truncate(string(data)), nil
+}
+
+// majorOfVersion returns the leading numeric segment of a semver-ish
+// version string ("v1.2.3" -> "1", "" -> "").
+func majorOfVersion(v string) string {
+	v = strings.TrimPrefix(v, "v")
+	if i := strings.IndexByte(v, '.'); i >= 0 {
+		v = v[:i]
+	}
+	return v
+}
+
+// commandFor returns the canonical operator-runnable upgrade command
+// for a (ecosystem, package, version) tuple. Mirrors cli's
+// upgradeCommand but lives here to avoid pulling cli/ into server/.
+func commandFor(eco, pkg, fixedVer string) string {
+	v := strings.TrimPrefix(fixedVer, "v")
+	switch eco {
+	case "go":
+		return "go get " + pkg + "@v" + v
+	case "npm":
+		return "npm install " + pkg + "@" + v
+	case "pypi":
+		return "pip install '" + pkg + ">=" + v + "'"
+	case "rubygems":
+		return "bundle update " + pkg + " --conservative"
+	case "cargo":
+		return "cargo update -p " + pkg + " --precise " + v
+	case "maven", "gradle":
+		return "upgrade " + pkg + " to " + v + " in your build file"
+	case "nuget":
+		return "dotnet add package " + pkg + " --version " + v
+	}
+	return ""
+}
+
+func (s *Server) handleAgentGraph(_ context.Context, input agentGraphInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+	if pc.result.AIInventory == nil || len(pc.result.AIInventory.ToolMatrix) == 0 {
+		return "No agent tool registrations detected. Run scan on a project with agent code first.", nil
+	}
+
+	format := input.Format
+	if format == "" {
+		format = "mermaid"
+	}
+	switch format {
+	case "mermaid":
+		return renderMermaidGraph(pc.result.AIInventory), nil
+	case "dot":
+		return renderDotGraph(pc.result.AIInventory), nil
+	default:
+		return "Error: unknown format " + format + " (use mermaid or dot)", nil
+	}
+}
+
+func renderMermaidGraph(inv *ai.Inventory) string {
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+	for i, set := range inv.ToolMatrix {
+		fmt.Fprintf(&b, "    subgraph agent%d [%s]\n", i, sanitiseGraph(set.Agent))
+		for j, tool := range set.Tools {
+			caps := graphCaps(set.Capabilities[tool])
+			label := tool
+			if caps != "" {
+				label = label + "<br/><small>" + caps + "</small>"
+			}
+			fmt.Fprintf(&b, "        a%d_t%d[\"%s\"]\n", i, j, label)
+		}
+		b.WriteString("    end\n")
+	}
+	return b.String()
+}
+
+func renderDotGraph(inv *ai.Inventory) string {
+	var b strings.Builder
+	b.WriteString("digraph nox_agent_lattice {\n")
+	b.WriteString("    rankdir=LR;\n    node [shape=box, style=rounded];\n")
+	for i, set := range inv.ToolMatrix {
+		fmt.Fprintf(&b, "    subgraph cluster_%d {\n        label=%q;\n", i, set.Agent)
+		for j, tool := range set.Tools {
+			caps := graphCaps(set.Capabilities[tool])
+			label := tool
+			if caps != "" {
+				label = tool + "\\n[" + caps + "]"
+			}
+			fmt.Fprintf(&b, "        a%d_t%d [label=%q];\n", i, j, label)
+		}
+		b.WriteString("    }\n")
+	}
+	b.WriteString("}\n")
+	return b.String()
+}
+
+func sanitiseGraph(s string) string {
+	r := strings.NewReplacer("\"", "'", "\n", " ", "[", "(", "]", ")")
+	return r.Replace(s)
+}
+
+func graphCaps(caps []string) string {
+	if len(caps) == 0 {
+		return ""
+	}
+	cp := make([]string, len(caps))
+	copy(cp, caps)
+	sort.Strings(cp)
+	return strings.Join(cp, ",")
 }

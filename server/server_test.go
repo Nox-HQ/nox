@@ -1683,6 +1683,72 @@ func TestProjectResourceAIInventory_AfterScan(t *testing.T) {
 	}
 }
 
+// --- handleFixPlan / handleAgentGraph tests ---
+
+func TestHandleFixPlan_NoScan(t *testing.T) {
+	s := New("test", []string{t.TempDir()})
+	result, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(result, "Error:") || !strings.Contains(result, "no scan results") {
+		t.Fatalf("expected no-scan-results error, got: %s", result)
+	}
+}
+
+func TestHandleFixPlan_AfterScan(t *testing.T) {
+	s := scanCleanDir(t)
+	result, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected success, got: %s", result)
+	}
+	if !strings.Contains(result, `"actions"`) {
+		t.Fatalf("expected actions key in response, got: %s", result)
+	}
+}
+
+func TestHandleAgentGraph_NoScan(t *testing.T) {
+	s := New("test", []string{t.TempDir()})
+	result, err := s.handleAgentGraph(context.Background(), agentGraphInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(result, "Error:") {
+		t.Fatalf("expected no-scan-results error, got: %s", result)
+	}
+}
+
+func TestHandleAgentGraph_NoAgents(t *testing.T) {
+	s := scanCleanDir(t)
+	result, err := s.handleAgentGraph(context.Background(), agentGraphInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Clean dir has no agents — handler returns a friendly message.
+	if !strings.Contains(result, "No agent tool registrations") &&
+		!strings.HasPrefix(result, "graph LR") {
+		t.Fatalf("expected no-agents message or empty mermaid, got: %s", result)
+	}
+}
+
+func TestMajorOfVersion(t *testing.T) {
+	cases := map[string]string{
+		"v1.2.3": "1",
+		"1.2.3":  "1",
+		"v2.0.0": "2",
+		"":       "",
+		"1":      "1",
+	}
+	for in, want := range cases {
+		if got := majorOfVersion(in); got != want {
+			t.Errorf("majorOfVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestProjectResourceDashboard_AfterScan(t *testing.T) {
 	s, absPath := scanDirWithPath(t)
 	encoded := url.PathEscape(absPath)
