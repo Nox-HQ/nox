@@ -1765,10 +1765,18 @@ func TestHandlePluginInstall_MissingName(t *testing.T) {
 func TestHandlePluginInstall_RejectsUnsafeName(t *testing.T) {
 	s := New("test", []string{t.TempDir()})
 	for _, bad := range []string{"foo;rm -rf /", "../etc/passwd", "foo$(whoami)", "name with space"} {
-		result, _ := s.handlePluginInstall(context.Background(), pluginInstallInput{Name: bad})
+		result, _ := s.handlePluginInstall(context.Background(), pluginInstallInput{Name: bad, Confirmed: true})
 		if !strings.Contains(result, "invalid plugin name") {
 			t.Errorf("expected reject for %q, got: %s", bad, result)
 		}
+	}
+}
+
+func TestHandlePluginInstall_RequiresConfirmation(t *testing.T) {
+	s := New("test", []string{t.TempDir()})
+	result, _ := s.handlePluginInstall(context.Background(), pluginInstallInput{Name: "nox/ai-eval"})
+	if !strings.Contains(result, "confirmed: true") {
+		t.Errorf("expected consent gate, got: %s", result)
 	}
 }
 

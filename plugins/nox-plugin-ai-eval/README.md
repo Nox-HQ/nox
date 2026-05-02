@@ -23,9 +23,18 @@ The plugin will not run unless the operator passes `endpoint`.
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `endpoint` | yes | — | URL of the chat endpoint to test (HTTP POST) |
+| `authorize` | yes | — | Must be `true`. Operator confirms they own or have written permission to test `endpoint`. |
+| `authorized_target` | yes | — | Must equal `endpoint` byte-for-byte. Prevents consent from being smuggled across endpoints. |
 | `payload_template` | no | OpenAI-shape | JSON template; `{{prompt}}` is replaced with the corpus entry |
 | `auth_header` | no | — | `Header-Name: value` for authenticated endpoints |
 | `response_path` | no | `choices.0.message.content` | dot-path into the JSON response |
+
+The corpus contains real jailbreak / prompt-leak / role-confusion
+prompts. Running them against an endpoint you don't own is
+unauthorised security testing. The dual-flag gate above is a
+deliberate friction point — automation pipelines pin
+`authorized_target` next to `endpoint` so accidentally pointing
+the corpus at a third-party URL fails closed.
 
 ## Findings
 

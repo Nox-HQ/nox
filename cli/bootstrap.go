@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,10 +28,17 @@ var defaultRegistrySource = registry.Source{
 }
 
 // bootstrapBundledPlugins registers any plugin binaries that ship in the
-// same directory as the running nox binary. Called once at CLI startup;
-// idempotent (existing registrations are left alone).
+// same directory as the running nox binary, plus the official plugin
+// registry. Called once at CLI startup; idempotent (existing
+// registrations are left alone). Errors are logged-only — bootstrap
+// never blocks the CLI from running.
 //
-// Errors are logged-only — bootstrap never blocks the CLI from running.
+// Operator opt-outs:
+//   NOX_NO_BUNDLED_PLUGINS=1  — skip bundled-plugin registration
+//   NOX_NO_DEFAULT_REGISTRY=1 — skip default-registry auto-add
+//
+// First-run registrations print a one-line notice on stderr so the
+// operator sees what got auto-wired and how to disable it.
 func bootstrapBundledPlugins() {
 	noxBin, err := os.Executable()
 	if err != nil {
@@ -49,43 +57,55 @@ func bootstrapBundledPlugins() {
 	}
 
 	changed := false
+	notices := make([]string, 0, 2)
 
-	// Auto-add the official registry on first run so plugin commands
-	// work without manual `nox registry add`. Idempotent.
-	hasDefault := false
-	for _, s := range st.Sources {
-		if s.Name == defaultRegistrySource.Name {
-			hasDefault = true
-			break
+	if os.Getenv("NOX_NO_DEFAULT_REGISTRY") == "" {
+		hasDefault := false
+		for _, s := range st.Sources {
+			if s.Name == defaultRegistrySource.Name {
+				hasDefault = true
+				break
+			}
+		}
+		if !hasDefault {
+			st.Sources = append(st.Sources, defaultRegistrySource)
+			changed = true
+			notices = append(notices, fmt.Sprintf(
+				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)",
+				defaultRegistrySource.URL))
 		}
 	}
-	if !hasDefault {
-		st.Sources = append(st.Sources, defaultRegistrySource)
-		changed = true
-	}
 
-	for _, name := range bundledPlugins {
-		if st.FindPlugin(canonicalName(name)) != nil {
-			continue
+	if os.Getenv("NOX_NO_BUNDLED_PLUGINS") == "" {
+		for _, name := range bundledPlugins {
+			if st.FindPlugin(canonicalName(name)) != nil {
+				continue
+			}
+			path := filepath.Join(binDir, name)
+			if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+				continue
+			}
+			st.AddPlugin(&InstalledPlugin{
+				Name:        canonicalName(name),
+				Version:     "bundled",
+				BinaryPath:  path,
+				TrustLevel:  "bundled",
+				RiskClass:   "passive",
+				InstalledAt: time.Now().UTC(),
+				UpdatedAt:   time.Now().UTC(),
+			})
+			changed = true
+			notices = append(notices, fmt.Sprintf(
+				"registered bundled plugin %s -> %s (disable: export NOX_NO_BUNDLED_PLUGINS=1)",
+				canonicalName(name), path))
 		}
-		path := filepath.Join(binDir, name)
-		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		st.AddPlugin(&InstalledPlugin{
-			Name:        canonicalName(name),
-			Version:     "bundled",
-			BinaryPath:  path,
-			TrustLevel:  "bundled",
-			RiskClass:   "passive",
-			InstalledAt: time.Now().UTC(),
-			UpdatedAt:   time.Now().UTC(),
-		})
-		changed = true
 	}
 
 	if changed {
 		_ = SaveState(statePath, st)
+		for _, n := range notices {
+			fmt.Fprintf(os.Stderr, "[nox bootstrap] %s\n", n)
+		}
 	}
 }
 

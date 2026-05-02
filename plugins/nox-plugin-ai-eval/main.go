@@ -74,11 +74,28 @@ func handleAIEval(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToo
 	payloadTemplate, _ := req.Input["payload_template"].(string)
 	authHeader, _ := req.Input["auth_header"].(string)
 	responsePath, _ := req.Input["response_path"].(string)
+	authorize, _ := req.Input["authorize"].(bool)
+	authorizedFor, _ := req.Input["authorized_target"].(string)
 
 	resp := sdk.NewResponse()
 
 	if endpoint == "" {
 		return resp.Build(), fmt.Errorf("ai_eval requires `endpoint` (URL of the chat endpoint to test)")
+	}
+	// Active-attack consent gate. The corpus contains real
+	// jailbreak-class prompts and runs them at the configured
+	// endpoint. Operators must explicitly authorize each target so a
+	// hostile prompt or accidental config can't aim the corpus at a
+	// third-party endpoint. Both flags must be present and
+	// authorized_target must match endpoint exactly.
+	if !authorize || authorizedFor == "" {
+		return resp.Build(), fmt.Errorf(
+			"ai_eval is an active attack tool. Set `authorize: true` and `authorized_target: <endpoint>` to confirm you own or have written permission to test the target. The bundled corpus includes jailbreak / prompt-leak / role-confusion prompts; running them against an endpoint you don't own is unauthorised testing")
+	}
+	if authorizedFor != endpoint {
+		return resp.Build(), fmt.Errorf(
+			"authorized_target %q does not match endpoint %q. The two must be byte-identical so consent can't be smuggled across endpoints",
+			authorizedFor, endpoint)
 	}
 	if payloadTemplate == "" {
 		// OpenAI-shape default. Operators can override.

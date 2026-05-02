@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nox-hq/nox/registry"
@@ -114,6 +115,19 @@ func (s *Store) FetchFor(ctx context.Context, name string, ve *registry.VersionE
 }
 
 func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.VersionEntry, artifact *registry.PlatformArtifact) (*InstalledArtifact, error) {
+	// Refuse to install when the registry entry hasn't been stamped
+	// with a real digest. A placeholder ("sha256:tbd") or empty value
+	// means the publisher hasn't completed the release pipeline; trust
+	// is impossible because the bytes that arrive aren't bound to a
+	// known hash. Marketplace authoring tooling stamps "sha256:tbd"
+	// before binaries land — this gate ensures operators never install
+	// against an unfinished entry.
+	if !isRealDigest(artifact.Digest) {
+		return nil, fmt.Errorf(
+			"refusing to install %s@%s: artifact digest %q is a placeholder or missing. The plugin's release pipeline must stamp the real SHA-256 in registry-scaffold/index.json before installs can proceed",
+			name, ve.Version, artifact.Digest)
+	}
+
 	blobPath := s.BlobPath(artifact.Digest)
 
 	// 2. Check cache.
@@ -238,4 +252,28 @@ func digestHex(digest string) string {
 		return digest[len(prefix):]
 	}
 	return digest
+}
+
+// isRealDigest reports whether a registry-stamped digest is a usable
+// SHA-256. Empty values, the marketplace placeholder "sha256:tbd", and
+// values shorter than a real hex digest are all rejected so install
+// cannot proceed against an unsigned-and-unhashed artifact entry.
+func isRealDigest(d string) bool {
+	if d == "" {
+		return false
+	}
+	hex := strings.TrimPrefix(d, "sha256:")
+	if len(hex) < 32 {
+		return false
+	}
+	for _, r := range hex {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }

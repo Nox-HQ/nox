@@ -98,9 +98,15 @@ type agentGraphInput struct {
 	Format string `json:"format,omitempty"` // "mermaid" or "dot"; defaults to "mermaid"
 }
 type pluginInstallInput struct {
-	Name       string `json:"name"`               // required: nox/foo or nox-plugin-foo
-	Version    string `json:"version,omitempty"`  // optional version constraint
-	NeedsConfirm bool `json:"_needs_confirm,omitempty"` // host-set: operator approved active call
+	Name    string `json:"name"`              // required: nox/foo or nox-plugin-foo
+	Version string `json:"version,omitempty"` // optional version constraint
+	// Confirmed must be true for the install to proceed. The MCP host
+	// (e.g. Claude Desktop) is responsible for collecting operator
+	// consent before forwarding the call. A hostile prompt asking the
+	// LLM to install a plugin without confirmation hits this gate and
+	// fails closed. Boolean rather than a free-form string so prompt
+	// engineering can't talk the LLM into auto-supplying consent text.
+	Confirmed bool `json:"confirmed"`
 }
 type pluginReadResourceInput struct {
 	Plugin string `json:"plugin"`
@@ -289,7 +295,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Handler(s.handleAgentGraph)
 
 	srv.Tool("plugin_install").
-		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only.").
+		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only. REQUIRES `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine.").
 		Handler(s.handlePluginInstall)
 
 	srv.Tool("data_sensitivity_report").
@@ -1395,6 +1401,9 @@ func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, p
 func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput) (string, error) {
 	if input.Name == "" {
 		return "Error: missing required argument: name (e.g. nox/ai-eval)", nil
+	}
+	if !input.Confirmed {
+		return "Error: plugin_install requires `confirmed: true`. The MCP host must collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine; auto-approval would be a privilege-escalation vector for prompt injection.", nil
 	}
 	// Reject obviously suspicious names so a hostile prompt can't tunnel
 	// arbitrary args into the subprocess. Plugin names are restricted to
