@@ -140,6 +140,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
 		fmt.Fprintf(os.Stderr, "  vex <cmd>        OpenVEX waiver document tools (vex init)\n")
 		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
+		fmt.Fprintf(os.Stderr, "  fix              Apply OSV fixed_in remediation upgrades\n")
+		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -200,6 +202,10 @@ func run(args []string) int {
 		return runVex(remaining[1:])
 	case "install-hook":
 		return runInstallHook(remaining[1:])
+	case "fix":
+		return runFix(remaining[1:])
+	case "doctor":
+		return runDoctor(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
@@ -339,6 +345,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			fmt.Printf("[results] %d findings, %d dependencies, %d AI components\n",
 				findingCount, pkgCount, len(result.AIInventory.Components))
 		}
+		if summary := familySummary(activeFindings); summary != "" {
+			fmt.Printf("[families] %s\n", summary)
+		}
 	}
 
 	// Generate reports.
@@ -429,6 +438,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	}
 
 	if !quiet {
+		printNextStepTips(activeFindings, outputDir)
 		fmt.Println("[done]")
 	}
 
