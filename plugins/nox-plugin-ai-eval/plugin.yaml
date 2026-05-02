@@ -1,0 +1,7 @@
+name: nox-plugin-ai-eval
+version: 0.1.0
+track: dynamic-runtime
+description: Adversarial prompt corpus runner. Fires a bundled jailbreak / prompt-leak / role-confusion corpus against a configured chat endpoint and reports which attacks succeeded.
+tools:
+  - name: ai_eval
+    description: Evaluate a chat endpoint against the bundled adversarial prompt corpus (active, network, needs confirmation)
