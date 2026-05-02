@@ -120,6 +120,20 @@ func extractMCPToolPermissions(path string, content []byte) []ToolPermissionSet 
 }
 
 func extractAgentToolPermissions(path string, content []byte) []ToolPermissionSet {
+	// Source-code files (.py / .js / .ts / .go) are handled by the
+	// agent-lattice extractor, which captures tool name + description
+	// + capability tags. This legacy regex is kept only for config /
+	// data files (yaml, json, toml) where the lattice extractor's
+	// language-specific patterns don't apply.
+	switch {
+	case strings.HasSuffix(path, ".py"),
+		strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".jsx"),
+		strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".tsx"),
+		strings.HasSuffix(path, ".mjs"), strings.HasSuffix(path, ".cjs"),
+		strings.HasSuffix(path, ".go"):
+		return nil
+	}
+
 	var sets []ToolPermissionSet
 	text := string(content)
 

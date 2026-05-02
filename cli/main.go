@@ -142,6 +142,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
 		fmt.Fprintf(os.Stderr, "  fix              Apply OSV fixed_in remediation upgrades\n")
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
+		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -206,6 +207,8 @@ func run(args []string) int {
 		return runFix(remaining[1:])
 	case "doctor":
 		return runDoctor(remaining[1:])
+	case "agent-graph":
+		return runAgentGraph(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
