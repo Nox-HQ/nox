@@ -12,9 +12,20 @@
   <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" />
 </p>
 
-**Language-agnostic security scanner with first-class AI application security.**
+**The security scanner for AI application developers.** Open source, offline-first, no SaaS.
 
-Nox produces standard artifacts (SARIF, SBOM) and explicitly models AI application security risks. It is designed to be callable by humans, CI systems, and AI agents (via MCP).
+If you're shipping LLM features — `chat.completions.create`, RAG ingest into a vector DB, agents with tool calls, MCP servers — nox is the static analyzer that knows how those break. Plus the boring stuff: secrets, dep CVEs, IaC, container scans.
+
+**What nox catches that other scanners don't:**
+
+- **Prompt injection** at the call site (AI-PI-*, OWASP LLM01)
+- **Embedding leakage** when secrets / PII land in vector stores (AI-EMBED-*, LLM06)
+- **Agent over-privilege** when `file_read` + `http_request` live in the same agent context (AI-AGENT-*, LLM07)
+- **MCP server hardening** misconfigs (MCP-001..008)
+- **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
+- **Polyglot AIBOM** — Python ingest + Go service + TS frontend produce one inventory naming every model invocation, auth env var, and endpoint
+
+Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
 - **Deterministic** -- same inputs produce same outputs, no hidden state
 - **Offline-first** -- zero required external services

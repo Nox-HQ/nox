@@ -14,25 +14,54 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 )
 
-// runBench scans every directory in --corpus (defaults to a local
-// `corpus/` folder) and produces a fire-rate report that operators
-// can publish or use to calibrate severity. The corpus is the
-// operator's responsibility to populate; nox bench just orchestrates
-// the runs and aggregates results.
+// curatedAutoCorpus is the default benchmark corpus when --autocorpus
+// is set. Each entry targets the AI app developer ICP: LLM client
+// SDKs (openai, anthropic), agent frameworks (langchain, llamaindex,
+// crewai, agent-go, vercel-ai), and the MCP reference SDK. Pinned to
+// specific refs so bench output is reproducible across runs.
+var curatedAutoCorpus = []struct {
+	Repo string
+	Ref  string
+}{
+	{Repo: "langchain-ai/langchain", Ref: "v0.3.7"},
+	{Repo: "run-llama/llama_index", Ref: "v0.12.0"},
+	{Repo: "openai/openai-python", Ref: "v1.54.0"},
+	{Repo: "anthropics/anthropic-sdk-python", Ref: "v0.40.0"},
+	{Repo: "felixgeelhaar/agent-go", Ref: "main"},
+	{Repo: "modelcontextprotocol/python-sdk", Ref: "main"},
+	{Repo: "vercel/ai", Ref: "main"},
+	{Repo: "joaomdmoura/crewai", Ref: "main"},
+}
+
+// runBench scans every directory in --corpus and produces a fire-rate
+// report. With --autocorpus, nox first clones the curated benchmark
+// set into a temp directory and runs the same harness against it —
+// reproducible numbers without manual setup.
 func runBench(args []string) int {
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	var (
-		corpusDir string
-		output    string
-		quiet     bool
-		fmtFlag   string
+		corpusDir  string
+		output     string
+		quiet      bool
+		fmtFlag    string
+		autoCorpus bool
 	)
 	fs.StringVar(&corpusDir, "corpus", "corpus", "directory containing one subdirectory per project to scan")
 	fs.StringVar(&output, "output", "", "destination path (defaults to stdout)")
 	fs.BoolVar(&quiet, "quiet", false, "suppress per-project progress logs")
 	fs.StringVar(&fmtFlag, "format", "json", "report format: json or markdown")
+	fs.BoolVar(&autoCorpus, "autocorpus", false, "clone the curated benchmark corpus into a temp directory and scan that instead of --corpus")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	if autoCorpus {
+		dir, err := materialiseAutoCorpus(quiet)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: materialising autocorpus: %v\n", err)
+			return 2
+		}
+		corpusDir = dir
 	}
 
 	entries, err := os.ReadDir(corpusDir)
@@ -227,4 +256,45 @@ func renderBenchMarkdown(report *BenchReport) string {
 		}
 	}
 	return b.String()
+}
+
+// materialiseAutoCorpus clones every entry in curatedAutoCorpus into
+// a fresh temp directory and returns its path. Repos already present
+// from a previous run are skipped (the temp dir is unique per
+// invocation, so this only matters when callers pass the same
+// directory twice — operators don't, but bench tests do).
+func materialiseAutoCorpus(quiet bool) (string, error) {
+	dir, err := os.MkdirTemp("", "nox-bench-autocorpus-*")
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range curatedAutoCorpus {
+		owner, repo := splitRepoSlug(entry.Repo)
+		if owner == "" {
+			continue
+		}
+		dest := filepath.Join(dir, owner+"--"+repo)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "[bench] cloning %s@%s\n", entry.Repo, entry.Ref)
+		}
+		cmd := exec.Command("git", "clone", "--depth", "1",
+			"--branch", entry.Ref,
+			"https://github.com/"+entry.Repo+".git",
+			dest)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[bench] skipping %s: %v\n%s\n", entry.Repo, err, out)
+			continue
+		}
+	}
+	return dir, nil
+}
+
+func splitRepoSlug(slug string) (owner, repo string) {
+	for i := 0; i < len(slug); i++ {
+		if slug[i] == '/' {
+			return slug[:i], slug[i+1:]
+		}
+	}
+	return "", slug
 }
