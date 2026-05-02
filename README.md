@@ -24,6 +24,7 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 - **MCP server hardening** misconfigs (MCP-001..008)
 - **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
 - **Polyglot AIBOM** — Python ingest + Go service + TS frontend produce one inventory naming every model invocation, auth env var, and endpoint
+- **Verified plugin marketplace** — extension scanners (reachability, cross-file taint, k8s-runtime, red-team chains, GRC for 12 frameworks) install with one command, signed end-to-end via Sigstore
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
@@ -31,6 +32,7 @@ Built so you can keep your source local, your CI green, and your CISO answered w
 - **Offline-first** -- zero required external services
 - **Safe by default** -- never uploads source code, never executes untrusted code, never auto-applies fixes
 - **Agent-native** -- safely callable via the Model Context Protocol (MCP)
+- **Cosign-signed plugin marketplace** -- every official plugin verifies via Sigstore keyless OIDC; default trust policy refuses unsigned third-party drops
 
 ## Quick Demo
 
@@ -654,12 +656,21 @@ nox registry remove acme
 ```
 
 All plugins in the official registry ship Cosign-signed (keyless via
-GitHub OIDC). The default trust policy is `default`: nox refuses
-install on plugins that don't satisfy at least Cosign keyless **or**
-an in-tool Ed25519 signature, unless you explicitly pass
-`--allow-unverified` or set `plugins.trust_policy: permissive` in
-`.nox.yaml`. See [`docs/marketplace.md`](docs/marketplace.md) for the
-trust model details.
+GitHub OIDC). The default trust policy is `default`: nox downloads
+the release's `checksums.txt` + Sigstore bundle, verifies the bundle
+against the plugin's `release.yml` workflow OIDC subject, and
+confirms the artifact's SHA-256 is listed in the signed checksums.
+Install fails closed unless either Cosign keyless **or** an in-tool
+Ed25519 signature passes; operators bypass with `--allow-unverified`
+or `plugins.trust_policy: permissive` in `.nox.yaml`. See
+[`docs/marketplace.md`](docs/marketplace.md) for the trust model
+details.
+
+```bash
+$ nox plugin install nox/reachability
+Trust: community (signer: cosign-keyless:(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*)
+Installed nox/reachability@0.6.5 (community)
+```
 
 ### Currently published plugins
 
