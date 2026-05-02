@@ -129,4 +129,12 @@ type PlatformArtifact struct {
 	URL    string `json:"url"`
 	Size   int64  `json:"size"`
 	Digest string `json:"digest"`
+	// CosignSigURL points at the .sig file produced by cosign
+	// sign-blob over the release archive. When set and the operator
+	// has cosign on PATH, install runs cosign verify-blob against
+	// CosignCertIdentityRegexp + CosignOIDCIssuer to confirm the
+	// archive came from the expected GitHub Actions workflow.
+	CosignSigURL             string `json:"cosign_sig_url,omitempty"`
+	CosignCertIdentityRegexp string `json:"cosign_cert_identity_regexp,omitempty"`
+	CosignOIDCIssuer         string `json:"cosign_oidc_issuer,omitempty"`
 }

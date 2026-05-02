@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,13 +28,14 @@ import (
 func runPluginEntry(args []string) int {
 	fs := flag.NewFlagSet("plugin entry", flag.ContinueOnError)
 	var (
-		dir         string
-		version     string
-		repo        string
-		owner       string
-		minNox      string
-		stdout      bool
-		outFile     string
+		dir          string
+		version      string
+		repo         string
+		owner        string
+		minNox       string
+		stdout       bool
+		outFile      string
+		stampDigests bool
 	)
 	fs.StringVar(&dir, "dir", ".", "path to plugin source directory containing plugin.yaml")
 	fs.StringVar(&version, "release", "", "release version (e.g. 0.1.0); read from plugin.yaml when empty")
@@ -41,6 +44,7 @@ func runPluginEntry(args []string) int {
 	fs.StringVar(&minNox, "min-nox", "0.6.0", "minimum nox version this plugin requires")
 	fs.BoolVar(&stdout, "stdout", true, "print to stdout (default)")
 	fs.StringVar(&outFile, "output", "", "write to this file instead of stdout")
+	fs.BoolVar(&stampDigests, "stamp-digests", false, "fetch checksums.txt from the release URL and replace sha256:tbd placeholders with real SHA-256s")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -67,6 +71,13 @@ func runPluginEntry(args []string) int {
 	}
 
 	entry := buildPluginEntry(manifest, version, repo, minNox)
+
+	if stampDigests {
+		if err := stampEntryDigests(&entry, repo, version); err != nil {
+			fmt.Fprintf(os.Stderr, "error: stamping digests: %v\n", err)
+			return 2
+		}
+	}
 
 	out, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
@@ -146,6 +157,13 @@ func buildPluginEntry(m *pluginManifest, version, repo, minNox string) registry.
 			Arch:   p.arch,
 			URL:    url,
 			Digest: "sha256:tbd",
+			// Cosign keyless signs checksums.txt, not each archive
+			// individually. Operators verify via cosign verify-blob
+			// against checksums.txt.sig; nox shells out automatically
+			// when the binary is on PATH.
+			CosignSigURL:             fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig", repoURL, version),
+			CosignCertIdentityRegexp: fmt.Sprintf("https://github.com/%s/.github/workflows/release.yml@.*", repo),
+			CosignOIDCIssuer:         "https://token.actions.githubusercontent.com",
 		})
 	}
 
@@ -168,4 +186,80 @@ func buildPluginEntry(m *pluginManifest, version, repo, minNox string) registry.
 			Artifacts:     artifacts,
 		}},
 	}
+}
+
+// stampEntryDigests downloads the GoReleaser-published checksums.txt
+// for the release tag and rewrites every sha256:tbd placeholder in
+// the entry's artifacts with the real SHA-256. Plugin release
+// pipelines call this at the end of the workflow before opening the
+// PR against the marketplace registry — the entry shipped to nox-hq/nox
+// then carries enforceable digests instead of placeholders.
+func stampEntryDigests(entry *registry.PluginEntry, repo, version string) error {
+	checksumURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/checksums.txt", repo, version)
+	body, err := fetchHTTP(checksumURL)
+	if err != nil {
+		return fmt.Errorf("fetching %s: %w", checksumURL, err)
+	}
+	digests := parseChecksumsFile(body)
+	if len(digests) == 0 {
+		return fmt.Errorf("no SHA-256 entries parsed from %s", checksumURL)
+	}
+
+	stamped := 0
+	for vi := range entry.Versions {
+		ve := &entry.Versions[vi]
+		for ai := range ve.Artifacts {
+			a := &ve.Artifacts[ai]
+			fname := filepath.Base(a.URL)
+			if d, ok := digests[fname]; ok {
+				a.Digest = "sha256:" + d
+				stamped++
+			}
+		}
+	}
+	if stamped == 0 {
+		return fmt.Errorf("checksums.txt at %s did not match any artifact filename", checksumURL)
+	}
+	fmt.Fprintf(os.Stderr, "[plugin entry] stamped %d digests from %s\n", stamped, checksumURL)
+	return nil
+}
+
+// fetchHTTP retrieves a small text file (e.g. checksums.txt) and
+// returns its body. Caps the read at 1 MB so a hostile redirect
+// can't exhaust memory.
+func fetchHTTP(url string) ([]byte, error) {
+	resp, err := stdHTTPGet(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck // best-effort
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+}
+
+// stdHTTPGet is a tiny wrapper so tests can override.
+var stdHTTPGet = func(url string) (*http.Response, error) {
+	return http.Get(url) //nolint:gosec,noctx // checksum URL is operator-supplied; install path validates contents
+}
+
+// parseChecksumsFile parses a GoReleaser-style checksums.txt:
+//   <hex-sha256>  <filename>
+// One line per artifact. Returns a map of filename -> hex digest.
+func parseChecksumsFile(body []byte) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(string(body), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		hex := fields[0]
+		name := fields[1]
+		if len(hex) < 32 {
+			continue
+		}
+		out[name] = hex
+	}
+	return out
 }

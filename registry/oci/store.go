@@ -180,6 +180,35 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 		ve.APIVersion,
 	)
 
+	// Optional cosign keyless verification. When the registry entry
+	// names a CosignSigURL and the operator has cosign on PATH, fetch
+	// the .sig and run `cosign verify-blob` against the configured
+	// certificate identity. A failure adds a violation to the
+	// VerifyResult so the policy enforcement layer treats it the same
+	// as any other trust violation. cosign-not-installed is silent.
+	if artifact.CosignSigURL != "" && trust.CosignAvailable() {
+		sigPath, err := s.downloadSignature(ctx, artifact.CosignSigURL)
+		if err != nil {
+			verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
+				Field:   "cosign_signature",
+				Message: fmt.Sprintf("downloading signature: %v", err),
+			})
+		} else {
+			err := trust.CosignVerifyBlob(ctx, trust.CosignVerifyParams{
+				ArtifactPath:              blobPath,
+				SignaturePath:             sigPath,
+				CertificateIdentityRegexp: artifact.CosignCertIdentityRegexp,
+				CertificateOIDCIssuer:     artifact.CosignOIDCIssuer,
+			})
+			if err != nil {
+				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
+					Field:   "cosign_signature",
+					Message: err.Error(),
+				})
+			}
+		}
+	}
+
 	// 7. Detect format and extract/set executable.
 	format, err := DetectFormat(blobPath)
 	if err != nil {

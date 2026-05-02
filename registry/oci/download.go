@@ -14,6 +14,46 @@ import (
 // ErrSizeExceeded indicates an artifact exceeds the maximum download size.
 var ErrSizeExceeded = errors.New("artifact exceeds maximum download size")
 
+// downloadSignature fetches a small signature file (e.g. cosign .sig
+// or .crt) into the cache's signatures/ directory. Signatures are
+// expected to be << 16 KB so the size budget is much smaller than
+// for archives.
+func (s *Store) downloadSignature(ctx context.Context, rawURL string) (string, error) {
+	finalURL, err := s.rewriteURL(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("rewriting signature URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, finalURL, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetching signature: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("signature URL returned HTTP %d", resp.StatusCode)
+	}
+
+	sigDir := filepath.Join(s.cacheDir, "signatures")
+	if err := os.MkdirAll(sigDir, 0o755); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(sigDir, "sig-*.bin")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+
+	// 64 KB cap — Sigstore .sig payloads are tiny.
+	limited := io.LimitReader(resp.Body, 64*1024)
+	if _, err := io.Copy(f, limited); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
+}
+
 // download fetches a URL to a temporary file in the store's tmp directory.
 // It enforces the configured maximum download size. On success it returns the
 // temporary file path and the number of bytes written. The caller is responsible
