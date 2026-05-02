@@ -1,0 +1,12 @@
+{
+  "name": "nox-demo-frontend",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Nox demo: TypeScript LLM frontend showcasing AIBOM detection. Not a working build target.",
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
+  "scripts": {
+    "scan": "nox scan .."
+  }
+}

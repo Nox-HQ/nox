@@ -1,0 +1,49 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  nox:
+    name: Nox Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Nox
+        id: nox
+        uses: nox-hq/nox@v1
+        with:
+          path: .
+          format: sarif
+          output: nox-out
+          severity-threshold: high
+          fail-on-findings: true
+          vex: vex.json
+          changed-since: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          pr-comment: ${{ github.event_name == 'pull_request' }}
+          min-severity: high
+
+      - name: Upload SARIF to Code Scanning
+        if: always() && steps.nox.outputs.sarif-file != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.nox.outputs.sarif-file }}
+
+      - name: Upload findings JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nox-findings
+          path: nox-out/
+          retention-days: 30

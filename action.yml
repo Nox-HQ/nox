@@ -42,6 +42,18 @@ inputs:
     description: 'Minimum severity for PR comments (critical, high, medium, low, info)'
     required: false
     default: 'low'
+  severity-threshold:
+    description: 'Filter findings to those at or above this severity (critical, high, medium, low). Empty = no filter.'
+    required: false
+    default: ''
+  vex:
+    description: 'Path to OpenVEX waiver document (skips VEX-not-affected findings)'
+    required: false
+    default: ''
+  changed-since:
+    description: 'Scan only files changed since this git ref (e.g. origin/main). Empty = full scan.'
+    required: false
+    default: ''
 
 outputs:
   findings-count:
@@ -73,4 +85,7 @@ runs:
         INPUT_PR_COMMENT: ${{ inputs.pr-comment }}
         INPUT_MAX_COMMENTS: ${{ inputs.max-comments }}
         INPUT_MIN_SEVERITY: ${{ inputs.min-severity }}
+        INPUT_SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        INPUT_VEX: ${{ inputs.vex }}
+        INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
       run: bash "${{ github.action_path }}/action.sh"

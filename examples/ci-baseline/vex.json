@@ -1,0 +1,23 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "example-baseline",
+  "author": "security-team@example.com",
+  "timestamp": "2026-05-02T00:00:00Z",
+  "statements": [
+    {
+      "vulnerability": "CVE-2024-12345",
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "We use the affected library only for unit tests; production binary does not link the vulnerable codepath.",
+      "products": ["github.com/example/our-app"],
+      "_nox_locations": ["go.sum:1"],
+      "_nox_fingerprint": "<fill-in-after-nox-vex-init>"
+    },
+    {
+      "vulnerability": "VULN-001",
+      "status": "under_investigation",
+      "products": ["github.com/example/our-app"],
+      "_nox_fingerprint": "<another-fingerprint>"
+    }
+  ]
+}

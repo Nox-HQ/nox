@@ -137,7 +137,17 @@ run_scan() {
   fi
 
   local exit_code=0
-  "${install_dir}/nox" --format "${scan_format}" --output "${output_dir}" -q scan "${scan_path}" || exit_code=$?
+  local extra_args=()
+  if [[ -n "${INPUT_SEVERITY_THRESHOLD:-}" ]]; then
+    extra_args+=(--severity-threshold "${INPUT_SEVERITY_THRESHOLD}")
+  fi
+  if [[ -n "${INPUT_VEX:-}" ]]; then
+    extra_args+=(--vex "${INPUT_VEX}")
+  fi
+  if [[ -n "${INPUT_CHANGED_SINCE:-}" ]]; then
+    extra_args+=(--changed-since "${INPUT_CHANGED_SINCE}")
+  fi
+  "${install_dir}/nox" --format "${scan_format}" --output "${output_dir}" -q scan "${scan_path}" "${extra_args[@]}" || exit_code=$?
 
   # Set outputs.
   echo "exit-code=${exit_code}" >> "${GITHUB_OUTPUT}"
