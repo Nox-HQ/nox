@@ -146,6 +146,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates\n")
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
+		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -218,6 +219,8 @@ func run(args []string) int {
 		return runCalibrate(remaining[1:])
 	case "install":
 		return runInstall(remaining[1:])
+	case "uri":
+		return runURI(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0

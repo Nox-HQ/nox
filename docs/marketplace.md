@@ -156,6 +156,26 @@ Stages 2-5 are tracked individually; the index format is forward-
 compatible with all of them (signature + dependency fields exist
 already, just not enforced).
 
+## One-click install via `nox://` deep links
+
+Marketplace pages and docs can link to `nox://install?plugin=NAME`.
+A click runs `nox uri nox://install?plugin=NAME` against the local
+binary, which dispatches to `nox plugin install`. Operators register
+the OS-level URL handler once:
+
+```bash
+nox uri register             # writes the OS-specific handler
+nox uri register --dry-run   # preview without applying
+nox uri unregister           # linux only; reverse manually elsewhere
+```
+
+Supported on macOS (generates a minimal .app bundle), Linux (.desktop
+file in $XDG_DATA_HOME/applications), and Windows (HKCU registry
+import). The URI parser allows the install action only and applies
+the same plugin-name / version-constraint allowlist the MCP
+plugin_install tool uses, so a hostile link can't smuggle shell
+metacharacters into the install command.
+
 ## Public marketplace site
 
 A static HTML site is rendered from the same `index.json` and deployed

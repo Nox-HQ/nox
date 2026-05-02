@@ -44,6 +44,9 @@
     <p>Or one-shot from the CLI:</p>
 <pre><code>{{installCmd .Name}}</code></pre>
 
+    <p>Deep link (operators who ran <code>nox uri register</code> can click):</p>
+    <p><a class="install-deeplink" href="nox://install?plugin={{.Name}}{{if $v.Version}}&amp;version={{$v.Version}}{{end}}">→ Install via nox://</a></p>
+
     {{if $v.Capabilities}}
     <h2>Tools</h2>
     <ul>
