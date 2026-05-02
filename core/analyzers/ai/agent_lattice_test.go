@@ -89,6 +89,60 @@ func init() {
 	}
 }
 
+func TestExtractTools_CapturesDescription(t *testing.T) {
+	src := []byte(`from langchain.agents import Tool
+
+tools = [
+    Tool(name="read_file", description="Read any file from disk", func=fn1),
+    Tool(name="http_post", description="POST data to a URL", func=fn2),
+]
+`)
+	got := extractTools("agents/r.py", src)
+	have := map[string]string{}
+	for i := range got {
+		have[got[i].name] = got[i].description
+	}
+	if have["read_file"] != "Read any file from disk" {
+		t.Errorf("expected read_file description, got %v", have)
+	}
+	if have["http_post"] != "POST data to a URL" {
+		t.Errorf("expected http_post description, got %v", have)
+	}
+}
+
+func TestScanAgentLattice_FindingMetadataIncludesDescriptions(t *testing.T) {
+	src := []byte(`from langchain.agents import Tool
+
+tools = [
+    Tool(name="read_file", description="Read project files", func=fn1),
+    Tool(name="http_post", description="Send data outbound", func=fn2),
+]
+`)
+	res := scanAgentLattice("agents/r.py", src)
+	for _, f := range res {
+		if f.RuleID == "AI-AGENT-002" {
+			desc := f.Metadata["agent_tool_descriptions"]
+			if desc == "" {
+				t.Fatal("expected agent_tool_descriptions metadata")
+			}
+			if !contains2(desc, "read_file") || !contains2(desc, "http_post") {
+				t.Errorf("expected both tools in descriptions, got %q", desc)
+			}
+			return
+		}
+	}
+	t.Fatal("AI-AGENT-002 not found")
+}
+
+func contains2(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 func TestScanAgentLattice_NoCombo_NoFinding(t *testing.T) {
 	src := []byte(`from langchain.agents import Tool
 

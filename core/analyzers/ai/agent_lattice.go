@@ -45,10 +45,15 @@ const (
 )
 
 // extractedTool is a single tool registration discovered in source.
+// description is the operator-/LLM-facing string passed at registration
+// time; capturing it lets AIBOM downstream consumers audit whether the
+// description matches what the tool actually does. Mis-described tools
+// are a real LLM07 pattern (`name="read_only"` granting write).
 type extractedTool struct {
-	name string
-	line int
-	tags []CapabilityTag
+	name        string
+	line        int
+	description string
+	tags        []CapabilityTag
 }
 
 // toolPattern is one regex per agent framework that captures a tool name.
@@ -205,14 +210,43 @@ func extractTools(path string, content []byte) []extractedTool {
 				continue
 			}
 			seen[name] = true
+			// Capture the description argument when present in a small
+			// window after the tool name.
+			desc := descriptionAfterMatch(content, m[1])
 			tools = append(tools, extractedTool{
-				name: name,
-				line: lineForOffset(content, m[0]),
-				tags: classifyToolName(name),
+				name:        name,
+				line:        lineForOffset(content, m[0]),
+				description: desc,
+				tags:        classifyToolName(name),
 			})
 		}
 	}
 	return tools
+}
+
+// descriptionRe matches `description = "..."` / `description: "..."` /
+// `description="..."` patterns inside a tool registration. Used to
+// capture the operator/LLM-facing description string so AIBOM can audit
+// description-vs-implementation drift.
+var descriptionRe = regexp.MustCompile(`(?i)description\s*[:=]\s*["']([^"']{1,300})["']`)
+
+// descriptionAfterMatch scans up to 400 bytes after the tool-name
+// match for a description field. Returns "" when no description is in
+// the window — most direct OpenAI / Anthropic tool registrations omit
+// the description (it's set elsewhere); LangChain Tool() and similar
+// pass it inline.
+func descriptionAfterMatch(content []byte, start int) string {
+	end := start + 400
+	if end > len(content) {
+		end = len(content)
+	}
+	if start >= len(content) {
+		return ""
+	}
+	if m := descriptionRe.FindSubmatch(content[start:end]); len(m) > 1 {
+		return string(m[1])
+	}
+	return ""
 }
 
 func lineForOffset(content []byte, offset int) int {
@@ -353,10 +387,16 @@ func satisfies(have map[CapabilityTag]bool, need []CapabilityTag) bool {
 
 func latticeMetadata(tools []extractedTool, combo *dangerousCombo) map[string]string {
 	names := make([]string, 0, len(tools))
-	for _, t := range tools {
-		names = append(names, t.name)
+	described := make([]string, 0, len(tools))
+	for i := range tools {
+		names = append(names, tools[i].name)
+		if tools[i].description != "" {
+			described = append(described,
+				tools[i].name+":\""+truncateDescription(tools[i].description)+"\"")
+		}
 	}
 	sort.Strings(names)
+	sort.Strings(described)
 
 	required := make([]string, 0, len(combo.required))
 	for _, t := range combo.required {
@@ -364,10 +404,25 @@ func latticeMetadata(tools []extractedTool, combo *dangerousCombo) map[string]st
 	}
 	sort.Strings(required)
 
-	return map[string]string{
+	md := map[string]string{
 		"cwe":                  combo.cwe,
 		"agent_tools":          strings.Join(names, ","),
 		"violated_combination": strings.Join(required, "+"),
 		"owasp":                "LLM07",
 	}
+	if len(described) > 0 {
+		md["agent_tool_descriptions"] = strings.Join(described, " | ")
+	}
+	return md
+}
+
+// truncateDescription caps captured tool descriptions so finding
+// metadata stays compact. AIBOM's ToolPermissionSet can carry the full
+// string when needed.
+func truncateDescription(s string) string {
+	const maxLen = 120
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

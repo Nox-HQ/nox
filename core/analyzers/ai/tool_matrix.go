@@ -15,10 +15,19 @@ type Connection struct {
 
 // ToolPermissionSet represents the tools available to an agent or MCP server.
 type ToolPermissionSet struct {
-	Agent  string   `json:"agent"`
-	Server string   `json:"server,omitempty"`
-	Tools  []string `json:"tools"`
-	Path   string   `json:"path"`
+	Agent       string             `json:"agent"`
+	Server      string             `json:"server,omitempty"`
+	Tools       []string           `json:"tools"`
+	Path        string             `json:"path"`
+	// Descriptions maps tool name -> description string captured at
+	// registration time. Empty entries omitted; populated by the
+	// agent-lattice extractor for languages where description appears
+	// inline (LangChain, LangChain.js, agent-go).
+	Descriptions map[string]string `json:"descriptions,omitempty"`
+	// Capabilities maps tool name -> normalised capability tags
+	// (file_read, http_request, shell_exec, ...). Same source as the
+	// AI-AGENT-* lattice findings.
+	Capabilities map[string][]string `json:"capabilities,omitempty"`
 }
 
 // extractToolPermissions parses MCP and agent configs for tool permission matrices.
@@ -33,7 +42,46 @@ func extractToolPermissions(path string, content []byte) []ToolPermissionSet {
 	// Agent config files with tools arrays
 	sets = append(sets, extractAgentToolPermissions(path, content)...)
 
+	// Source-code-level tool registrations with description + capability
+	// metadata captured by the agent-lattice extractor.
+	if set := extractAgentLatticeToolSet(path, content); set != nil {
+		sets = append(sets, *set)
+	}
+
 	return sets
+}
+
+// extractAgentLatticeToolSet returns a ToolPermissionSet populated from
+// the agent-lattice tool extractor when the file registers any tools.
+// Captures description and capability tags so AIBOM consumers can
+// audit description-vs-implementation drift.
+func extractAgentLatticeToolSet(path string, content []byte) *ToolPermissionSet {
+	tools := extractTools(path, content)
+	if len(tools) == 0 {
+		return nil
+	}
+	set := &ToolPermissionSet{
+		Agent:        baseName(path),
+		Path:         path,
+		Tools:        make([]string, 0, len(tools)),
+		Descriptions: map[string]string{},
+		Capabilities: map[string][]string{},
+	}
+	for i := range tools {
+		t := &tools[i]
+		set.Tools = append(set.Tools, t.name)
+		if t.description != "" {
+			set.Descriptions[t.name] = t.description
+		}
+		if len(t.tags) > 0 {
+			caps := make([]string, 0, len(t.tags))
+			for _, tag := range t.tags {
+				caps = append(caps, string(tag))
+			}
+			set.Capabilities[t.name] = caps
+		}
+	}
+	return set
 }
 
 func extractMCPToolPermissions(path string, content []byte) []ToolPermissionSet {
