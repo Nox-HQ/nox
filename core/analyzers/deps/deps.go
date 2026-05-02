@@ -485,6 +485,18 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*PackageInvent
 					}
 
 					aliases := strings.Join(ov.Aliases, ",")
+					meta := map[string]string{
+						"vuln_id":   ov.ID,
+						"package":   pkg.Name,
+						"version":   pkg.Version,
+						"ecosystem": pkg.Ecosystem,
+						"aliases":   aliases,
+					}
+					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem); fix != "" {
+						meta["fixed_in"] = fix
+						meta["remediation_action"] = "upgrade"
+						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)
+					}
 					fs.Add(findings.Finding{
 						RuleID:     "VULN-001",
 						Severity:   sev,
@@ -493,14 +505,8 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*PackageInvent
 							FilePath:  lockfilePath,
 							StartLine: 1,
 						},
-						Message: fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary),
-						Metadata: map[string]string{
-							"vuln_id":   ov.ID,
-							"package":   pkg.Name,
-							"version":   pkg.Version,
-							"ecosystem": pkg.Ecosystem,
-							"aliases":   aliases,
-						},
+						Message:  fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary),
+						Metadata: meta,
 					})
 				}
 

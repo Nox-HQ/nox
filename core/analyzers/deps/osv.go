@@ -49,12 +49,61 @@ type osvVuln struct {
 	Severity []osvSeverity `json:"severity"`
 	Aliases  []string      `json:"aliases"`
 	Details  string        `json:"details"`
+	Affected []osvAffected `json:"affected"`
 }
 
 // osvSeverity holds a CVSS or other severity score.
 type osvSeverity struct {
 	Type  string `json:"type"`
 	Score string `json:"score"`
+}
+
+// osvAffected describes packages and version ranges affected by a vuln.
+// We only consume Package and Ranges — the broader OSV schema includes
+// many additional fields not yet used here.
+type osvAffected struct {
+	Package osvPackage `json:"package"`
+	Ranges  []osvRange `json:"ranges"`
+}
+
+// osvRange is a version range with events marking introduction / fix.
+type osvRange struct {
+	Type   string     `json:"type"`
+	Events []osvEvent `json:"events"`
+}
+
+// osvEvent is a single point in a version range. Either Introduced or
+// Fixed (or LastAffected) is populated; the others are empty.
+type osvEvent struct {
+	Introduced   string `json:"introduced,omitempty"`
+	Fixed        string `json:"fixed,omitempty"`
+	LastAffected string `json:"last_affected,omitempty"`
+	Limit        string `json:"limit,omitempty"`
+}
+
+// fixedVersion returns the lowest fixed version listed across the affected
+// entries that match the given package name + ecosystem. Returns "" when
+// the OSV record names no fix (an unfixed vulnerability).
+func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
+	want := strings.ToLower(pkgName)
+	wantEco := ecosystemToOSV(ecosystem)
+	var first string
+	for _, aff := range vuln.Affected {
+		if !strings.EqualFold(aff.Package.Name, want) {
+			continue
+		}
+		if aff.Package.Ecosystem != "" && aff.Package.Ecosystem != wantEco {
+			continue
+		}
+		for _, r := range aff.Ranges {
+			for _, e := range r.Events {
+				if e.Fixed != "" && first == "" {
+					first = e.Fixed
+				}
+			}
+		}
+	}
+	return first
 }
 
 // queryOSV queries the OSV.dev batch API for known vulnerabilities affecting
@@ -168,6 +217,30 @@ func cvssToSeverity(score string) findings.Severity {
 		return findings.SeverityLow
 	default:
 		return findings.SeverityInfo
+	}
+}
+
+// upgradeCommand returns the canonical one-liner an operator can run to
+// upgrade a package to its fixed version. Returns "" for ecosystems we
+// don't have a templated command for (the operator can still see fixed_in).
+func upgradeCommand(ecosystem, pkg, fixedVer string) string {
+	switch ecosystem {
+	case "go":
+		return fmt.Sprintf("go get %s@v%s", pkg, strings.TrimPrefix(fixedVer, "v"))
+	case "npm":
+		return fmt.Sprintf("npm install %s@%s", pkg, fixedVer)
+	case "pypi":
+		return fmt.Sprintf("pip install '%s>=%s'", pkg, fixedVer)
+	case "rubygems":
+		return fmt.Sprintf("bundle update %s --conservative", pkg)
+	case "cargo":
+		return fmt.Sprintf("cargo update -p %s --precise %s", pkg, fixedVer)
+	case "maven", "gradle":
+		return fmt.Sprintf("upgrade %s to %s in your build file", pkg, fixedVer)
+	case "nuget":
+		return fmt.Sprintf("dotnet add package %s --version %s", pkg, fixedVer)
+	default:
+		return ""
 	}
 }
 

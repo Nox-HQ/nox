@@ -314,6 +314,73 @@ func TestMapOSVSeverity(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// fixedVersion tests
+// ---------------------------------------------------------------------------
+
+func TestFixedVersion_ExtractsFromAffected(t *testing.T) {
+	t.Parallel()
+
+	v := osvVuln{
+		ID: "CVE-2024-1234",
+		Affected: []osvAffected{{
+			Package: osvPackage{Name: "github.com/foo/bar", Ecosystem: "Go"},
+			Ranges: []osvRange{{
+				Type: "SEMVER",
+				Events: []osvEvent{
+					{Introduced: "0"},
+					{Fixed: "1.2.4"},
+				},
+			}},
+		}},
+	}
+	got := fixedVersion(&v, "github.com/foo/bar", "go")
+	if got != "1.2.4" {
+		t.Errorf("expected 1.2.4, got %q", got)
+	}
+}
+
+func TestFixedVersion_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	v := osvVuln{Affected: []osvAffected{{
+		Package: osvPackage{Name: "other", Ecosystem: "Go"},
+		Ranges:  []osvRange{{Events: []osvEvent{{Fixed: "1.0.0"}}}},
+	}}}
+	if got := fixedVersion(&v, "github.com/foo/bar", "go"); got != "" {
+		t.Errorf("expected empty for non-matching package, got %q", got)
+	}
+}
+
+func TestFixedVersion_NoFixEvent(t *testing.T) {
+	t.Parallel()
+
+	v := osvVuln{Affected: []osvAffected{{
+		Package: osvPackage{Name: "p", Ecosystem: "npm"},
+		Ranges:  []osvRange{{Events: []osvEvent{{Introduced: "0"}}}},
+	}}}
+	if got := fixedVersion(&v, "p", "npm"); got != "" {
+		t.Errorf("expected empty for unfixed vuln, got %q", got)
+	}
+}
+
+func TestUpgradeCommand_ByEcosystem(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		eco, pkg, ver, want string
+	}{
+		{"go", "github.com/foo/bar", "1.2.4", "go get github.com/foo/bar@v1.2.4"},
+		{"npm", "express", "4.19.0", "npm install express@4.19.0"},
+		{"pypi", "requests", "2.32.0", "pip install 'requests>=2.32.0'"},
+	}
+	for _, tt := range tests {
+		got := upgradeCommand(tt.eco, tt.pkg, tt.ver)
+		if got != tt.want {
+			t.Errorf("upgradeCommand(%s, %s, %s) = %q, want %q", tt.eco, tt.pkg, tt.ver, got, tt.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // ecosystemToOSV tests
 // ---------------------------------------------------------------------------
 
