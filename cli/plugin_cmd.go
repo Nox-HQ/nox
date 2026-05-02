@@ -82,21 +82,28 @@ func newOCIStoreWithPolicy(policyName string) *oci.Store {
 }
 
 // policyFromName resolves a config / flag string into a trust.Policy.
+// Empty / unknown names map to the default policy (TrustCommunity
+// minimum) — every published plugin in the official registry now
+// ships with cosign keyless signatures, and the install path
+// promotes a passing cosign verify to TrustCommunity. Operators who
+// want to install unsigned artifacts pass --allow-unverified or
+// --trust-policy permissive explicitly.
 func policyFromName(name string) trust.Policy {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "default":
-		return trust.DefaultPolicy()
+	case "permissive":
+		return trust.PermissivePolicy()
 	case "enterprise":
 		return trust.EnterprisePolicy()
 	}
-	return trust.PermissivePolicy()
+	return trust.DefaultPolicy()
 }
 
 // resolveTrustPolicy combines the operator's CLI flags and the
 // project's .nox.yaml trust_policy into a single policy name. Order
 // of precedence (highest wins): --allow-unverified, --require-verified,
 // --require-signature, --trust-policy=NAME, .nox.yaml plugins.trust_policy,
-// fallback "permissive".
+// fallback "default" (every official plugin ships cosign-signed; the
+// promoted Level satisfies the policy without operator intervention).
 func resolveTrustPolicy(override string, requireVerified, requireSignature, allowUnverified bool) string {
 	if allowUnverified {
 		return "permissive"
@@ -115,7 +122,7 @@ func resolveTrustPolicy(override string, requireVerified, requireSignature, allo
 	if err == nil && cfg.Plugins.TrustPolicy != "" {
 		return strings.ToLower(strings.TrimSpace(cfg.Plugins.TrustPolicy))
 	}
-	return "permissive"
+	return "default"
 }
 
 // runPluginSearch searches registries for plugins matching a query.

@@ -135,24 +135,40 @@ Every registry entry includes:
 
 - `digest` (SHA-256) — required for install. nox verifies before exec.
 - `signature` + `signer_key_pem` — Ed25519 signature over the
-  artifact body, paired with the public key that produced it.
+  artifact body, paired with the public key that produced it (legacy
+  in-tool path; optional once Cosign keyless signing is in place).
+- `cosign_bundle_url` + `cosign_cert_identity_regexp` +
+  `cosign_oidc_issuer` — Sigstore keyless attestation produced by the
+  plugin's GitHub Actions release pipeline. nox fetches the bundle
+  and shells out to the local `cosign` binary; a passing verify
+  promotes the artifact to `TrustCommunity`, satisfying the default
+  policy without operator-managed keyrings.
 
 Three trust policies, configurable per-project via
 `plugins.trust_policy` in `.nox.yaml` or per-invocation via flags:
 
 | Policy | Accepts | Use case |
 |---|---|---|
-| `permissive` (default) | any digest match | bootstrap, public POC |
-| `default` | digest + valid signature from any signer | community trust |
-| `enterprise` | digest + signature from a key in the local keyring | hardened orgs |
+| `permissive` | any digest match (no signature required) | bootstrap, air-gapped sideload |
+| `default` (current default) | digest + Cosign keyless **or** Ed25519 signature | community trust — every plugin in the official registry meets this bar today |
+| `enterprise` | digest + signature from a key in the local keyring | hardened orgs requiring operator-managed keys |
+
+The default policy was ramped from `permissive` to `default` once
+every official plugin (`reachability`, `taint-analysis`, `k8s-runtime`,
+`red-team`, `grc` at ≥ v0.6.5) shipped Cosign-signed checksum bundles.
+Installing a plugin from the official registry today satisfies the
+default policy with no extra flags. Installing from a third-party
+registry or a private bootstrap fork that hasn't signed yet requires
+either `--allow-unverified` (or `--trust-policy permissive`) or
+adding a signer key.
 
 CLI overrides:
 
 ```bash
 nox plugin install nox/ai-eval --require-signature   # default policy
 nox plugin install nox/ai-eval --require-verified    # enterprise policy
-nox plugin install nox/ai-eval --allow-unverified    # bypass .nox.yaml
-nox plugin install nox/ai-eval --trust-policy enterprise
+nox plugin install nox/ai-eval --allow-unverified    # downgrade to permissive
+nox plugin install nox/ai-eval --trust-policy permissive
 ```
 
 When the resolved policy is anything other than `permissive` and the
@@ -160,22 +176,21 @@ fetched artifact fails verification, install aborts with an error
 listing every violation. Operators bypass either by relaxing the
 policy or by adding the signer key to their local keyring.
 
-Cosign keyless signatures over the **release archive** (produced by
-each plugin's GitHub Actions release pipeline) are an additional
-verification layer operators can run out-of-band:
+Out-of-band verification of any release archive:
 
 ```bash
 cosign verify-blob \
   --certificate-identity-regexp "https://github.com/nox-hq/nox-plugin-NAME/.github/workflows/release.yml@.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --signature checksums.txt.sig \
+  --bundle checksums.txt.sig.bundle \
+  --new-bundle-format \
   checksums.txt
 ```
 
 The Cosign signature ties the archive to the workflow run that
-produced it via OIDC; the in-tool Ed25519 signature ties the
-artifact bytes to a signer key stamped in the registry index. Both
-verify the same supply-chain claim from different angles.
+produced it via OIDC; the (optional) in-tool Ed25519 signature ties
+the artifact bytes to a signer key stamped in the registry index.
+Both verify the same supply-chain claim from different angles.
 
 ## Stages of marketplace maturity
 

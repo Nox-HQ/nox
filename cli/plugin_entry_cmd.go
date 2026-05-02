@@ -157,11 +157,11 @@ func buildPluginEntry(m *pluginManifest, version, repo, minNox string) registry.
 			Arch:   p.arch,
 			URL:    url,
 			Digest: "sha256:tbd",
-			// Cosign keyless signs checksums.txt, not each archive
-			// individually. Operators verify via cosign verify-blob
-			// against checksums.txt.sig; nox shells out automatically
-			// when the binary is on PATH.
+			// Cosign keyless signs checksums.txt. Both the legacy
+			// .sig and the v4-compatible .sig.bundle are published;
+			// nox prefers the bundle when available.
 			CosignSigURL:             fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig", repoURL, version),
+			CosignBundleURL:          fmt.Sprintf("%s/releases/download/v%s/checksums.txt.sig.bundle", repoURL, version),
 			CosignCertIdentityRegexp: fmt.Sprintf("https://github.com/%s/.github/workflows/release.yml@.*", repo),
 			CosignOIDCIssuer:         "https://token.actions.githubusercontent.com",
 		})

@@ -653,6 +653,14 @@ nox registry list
 nox registry remove acme
 ```
 
+All plugins in the official registry ship Cosign-signed (keyless via
+GitHub OIDC). The default trust policy is `default`: nox refuses
+install on plugins that don't satisfy at least Cosign keyless **or**
+an in-tool Ed25519 signature, unless you explicitly pass
+`--allow-unverified` or set `plugins.trust_policy: permissive` in
+`.nox.yaml`. See [`docs/marketplace.md`](docs/marketplace.md) for the
+trust model details.
+
 ### Currently published plugins
 
 | Plugin | Track | What it adds |

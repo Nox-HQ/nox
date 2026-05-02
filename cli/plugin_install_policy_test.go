@@ -24,9 +24,13 @@ func TestResolveTrustPolicy_RequireSignature(t *testing.T) {
 	}
 }
 
-func TestResolveTrustPolicy_FallthroughPermissive(t *testing.T) {
-	if got := resolveTrustPolicy("", false, false, false); got != "permissive" {
-		t.Errorf("with no flags or .nox.yaml in cwd, got %q", got)
+func TestResolveTrustPolicy_FallthroughDefault(t *testing.T) {
+	// Fall-through ramp (Phase 10 / Cosign-keyless GA): every official
+	// plugin in the registry now ships cosign-signed; the install
+	// path promotes a passing cosign verify to TrustCommunity, which
+	// satisfies the default policy without operator intervention.
+	if got := resolveTrustPolicy("", false, false, false); got != "default" {
+		t.Errorf("with no flags or .nox.yaml in cwd, got %q (expected default — cosign-signed plugins now satisfy this)", got)
 	}
 }
 
@@ -35,8 +39,10 @@ func TestPolicyFromName(t *testing.T) {
 		"permissive": trust.TrustUnverified,
 		"default":    trust.TrustCommunity,
 		"enterprise": trust.TrustVerified,
-		"":           trust.TrustUnverified,
-		"junk":       trust.TrustUnverified,
+		// Empty / unknown names ramp to default policy alongside the
+		// fall-through above.
+		"":     trust.TrustCommunity,
+		"junk": trust.TrustCommunity,
 	}
 	for name, wantMin := range cases {
 		got := policyFromName(name)
