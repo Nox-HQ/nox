@@ -134,6 +134,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  annotate         Annotate a PR with findings\n")
 		fmt.Fprintf(os.Stderr, "  dashboard [path] Generate HTML security dashboard\n")
 		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
+		fmt.Fprintf(os.Stderr, "  vex <cmd>        OpenVEX waiver document tools (vex init)\n")
+		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -190,6 +192,10 @@ func run(args []string) int {
 		return runAnnotate(remaining[1:])
 	case "dashboard":
 		return runDashboard(remaining[1:])
+	case "vex":
+		return runVex(remaining[1:])
+	case "install-hook":
+		return runInstallHook(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
@@ -220,15 +226,17 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&complianceFlag, "compliance", "", "filter output by compliance framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10)")
 	scanFS.StringVar(&tfPlanFlag, "tf-plan", "", "path to terraform plan JSON file to scan")
 	var (
-		historyFlag      bool
-		historyDepthFlag int
-		noCacheFlag      bool
-		changedSinceFlag string
+		historyFlag           bool
+		historyDepthFlag      int
+		noCacheFlag           bool
+		changedSinceFlag      string
+		noRespectGitignoreFlg bool
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
 	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
+	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -287,12 +295,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		result, err = nox.RunHistoryScan(target, &historyOpts)
 	default:
 		opts := nox.ScanOptions{
-			CustomRulesPath:   rulesPath,
-			DisableOSV:        noOSVFlag,
-			VEXPath:           vexFlag,
-			TerraformPlanPath: tfPlanFlag,
-			NoCache:           noCacheFlag,
-			ChangedSince:      changedSinceFlag,
+			CustomRulesPath:    rulesPath,
+			DisableOSV:         noOSVFlag,
+			VEXPath:            vexFlag,
+			TerraformPlanPath:  tfPlanFlag,
+			NoCache:            noCacheFlag,
+			ChangedSince:       changedSinceFlag,
+			NoRespectGitignore: noRespectGitignoreFlg,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}

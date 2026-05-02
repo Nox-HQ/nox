@@ -34,6 +34,13 @@ type Statement struct {
 	Justification   string `json:"justification,omitempty"`
 	ImpactStatement string `json:"impact_statement,omitempty"`
 	ActionStatement string `json:"action_statement,omitempty"`
+	Products        []string `json:"products,omitempty"`
+	// NoxLocations is a non-OpenVEX auxiliary field listing finding locations
+	// for the operator's convenience during triage. Consumers that don't
+	// know about it can ignore it; OpenVEX validators will treat it as an
+	// unknown extension key.
+	NoxLocations []string `json:"_nox_locations,omitempty"`
+	NoxFingerprint string `json:"_nox_fingerprint,omitempty"`
 }
 
 // Document is a simplified OpenVEX document.
@@ -121,6 +128,55 @@ func Summary(doc *Document) string {
 		parts = append(parts, fmt.Sprintf("%d %s", count, status))
 	}
 	return fmt.Sprintf("VEX: %d statements (%s)", len(doc.Statements), strings.Join(parts, ", "))
+}
+
+// BuildStub generates a stub OpenVEX document containing one
+// `under_investigation` statement per (RuleID, Fingerprint) pair found in the
+// inputs. Operators triage by changing each statement's Status, adding a
+// Justification / ImpactStatement, and committing the file. Subsequent scans
+// can then diff against the document to detect new vs known findings.
+//
+// product is the SBOM-style identifier for the project (typically the Go
+// module path or package name); when empty, statements omit the products
+// field and operators must fill it in.
+func BuildStub(items []findings.Finding, product string) *Document {
+	type key struct {
+		ruleID string
+		fp     string
+	}
+	seen := map[key]int{} // pointer into doc.Statements
+	doc := &Document{
+		Context:    "https://openvex.dev/ns/v0.2.0",
+		ID:         "nox-vex-init",
+		Author:     "nox",
+		Statements: []Statement{},
+	}
+	for _, f := range items {
+		k := key{ruleID: f.RuleID, fp: f.Fingerprint}
+		if idx, ok := seen[k]; ok {
+			doc.Statements[idx].NoxLocations = append(doc.Statements[idx].NoxLocations, locationLine(f))
+			continue
+		}
+		stmt := Statement{
+			VulnerabilityID: f.RuleID,
+			Status:          StatusUnderInvestigation,
+			NoxFingerprint:  f.Fingerprint,
+			NoxLocations:    []string{locationLine(f)},
+		}
+		if product != "" {
+			stmt.Products = []string{product}
+		}
+		seen[k] = len(doc.Statements)
+		doc.Statements = append(doc.Statements, stmt)
+	}
+	return doc
+}
+
+func locationLine(f findings.Finding) string {
+	if f.Location.StartLine > 0 {
+		return fmt.Sprintf("%s:%d", f.Location.FilePath, f.Location.StartLine)
+	}
+	return f.Location.FilePath
 }
 
 // collectVulnIDs extracts all vulnerability identifiers from a finding's metadata.

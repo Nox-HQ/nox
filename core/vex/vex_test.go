@@ -184,6 +184,42 @@ func TestSummary(t *testing.T) {
 	}
 }
 
+func TestBuildStub_OneStatementPerFingerprint(t *testing.T) {
+	in := []findings.Finding{
+		{RuleID: "VULN-001", Fingerprint: "fp1", Location: findings.Location{FilePath: "go.sum", StartLine: 1}},
+		{RuleID: "VULN-001", Fingerprint: "fp1", Location: findings.Location{FilePath: "go.sum", StartLine: 1}},
+		{RuleID: "VULN-001", Fingerprint: "fp2", Location: findings.Location{FilePath: "package-lock.json", StartLine: 12}},
+	}
+	doc := BuildStub(in, "github.com/foo/bar")
+
+	if len(doc.Statements) != 2 {
+		t.Fatalf("expected 2 stub statements, got %d", len(doc.Statements))
+	}
+	for _, s := range doc.Statements {
+		if s.Status != StatusUnderInvestigation {
+			t.Errorf("stub status must default to under_investigation, got %s", s.Status)
+		}
+		if len(s.Products) != 1 || s.Products[0] != "github.com/foo/bar" {
+			t.Errorf("expected product to be github.com/foo/bar, got %v", s.Products)
+		}
+	}
+}
+
+func TestBuildStub_DedupesAndAggregatesLocations(t *testing.T) {
+	in := []findings.Finding{
+		{RuleID: "VULN-001", Fingerprint: "fp1", Location: findings.Location{FilePath: "a", StartLine: 1}},
+		{RuleID: "VULN-001", Fingerprint: "fp1", Location: findings.Location{FilePath: "b", StartLine: 2}},
+	}
+	doc := BuildStub(in, "")
+
+	if len(doc.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(doc.Statements))
+	}
+	if got := doc.Statements[0].NoxLocations; len(got) != 2 {
+		t.Errorf("expected 2 aggregated locations, got %v", got)
+	}
+}
+
 func TestCollectVulnIDs(t *testing.T) {
 	f := findings.Finding{
 		Metadata: map[string]string{
