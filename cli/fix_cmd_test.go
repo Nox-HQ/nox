@@ -61,7 +61,7 @@ func TestPlanUpgrades_IncludesMajorWhenFlagSet(t *testing.T) {
 	}
 }
 
-func TestPlanUpgrades_SkipsNonGoEcosystem(t *testing.T) {
+func TestPlanUpgrades_NpmAction(t *testing.T) {
 	in := []findings.Finding{{
 		RuleID: "VULN-001",
 		Metadata: map[string]string{
@@ -71,8 +71,53 @@ func TestPlanUpgrades_SkipsNonGoEcosystem(t *testing.T) {
 		},
 	}}
 	plan := planUpgrades(in, false)
+	if len(plan.actions) != 1 || plan.actions[0].action != "npm install" {
+		t.Errorf("expected npm install action, got %+v", plan.actions)
+	}
+}
+
+func TestPlanUpgrades_PyPIAction(t *testing.T) {
+	in := []findings.Finding{{
+		RuleID: "VULN-001",
+		Metadata: map[string]string{
+			"package":   "requests",
+			"fixed_in":  "2.32.0",
+			"ecosystem": "pypi",
+		},
+	}}
+	plan := planUpgrades(in, false)
+	if len(plan.actions) != 1 || plan.actions[0].action != "pip install" {
+		t.Errorf("expected pip install action, got %+v", plan.actions)
+	}
+}
+
+func TestPlanUpgrades_CargoAction(t *testing.T) {
+	in := []findings.Finding{{
+		RuleID: "VULN-001",
+		Metadata: map[string]string{
+			"package":   "openssl",
+			"fixed_in":  "0.10.55",
+			"ecosystem": "cargo",
+		},
+	}}
+	plan := planUpgrades(in, false)
+	if len(plan.actions) != 1 || plan.actions[0].action != "cargo update" {
+		t.Errorf("expected cargo update action, got %+v", plan.actions)
+	}
+}
+
+func TestPlanUpgrades_UnsupportedEcosystem(t *testing.T) {
+	in := []findings.Finding{{
+		RuleID: "VULN-001",
+		Metadata: map[string]string{
+			"package":   "example/lib",
+			"fixed_in":  "1.0.0",
+			"ecosystem": "Packagist",
+		},
+	}}
+	plan := planUpgrades(in, false)
 	if len(plan.actions) != 0 {
-		t.Errorf("npm ecosystem should not produce a Go upgrade action yet, got %+v", plan.actions)
+		t.Errorf("unsupported ecosystem must not produce an action, got %+v", plan.actions)
 	}
 	if plan.skipped != 1 {
 		t.Errorf("expected skipped=1, got %d", plan.skipped)

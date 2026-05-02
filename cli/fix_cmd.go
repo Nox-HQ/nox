@@ -70,18 +70,22 @@ func runFix(args []string) int {
 	}
 
 	failed := 0
+	usedEcos := map[string]bool{}
 	for _, a := range plan.actions {
-		if err := applyGoUpgrade(manifestRoot, a); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", a.pkg, err)
+		if err := applyUpgrade(manifestRoot, a); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %s (%s): %v\n", a.pkg, a.ecosystem, err)
 			failed++
 			continue
 		}
-		fmt.Printf("applied: %s -> %s\n", a.pkg, a.toVersion)
+		usedEcos[a.ecosystem] = true
+		fmt.Printf("applied: %s [%s] -> %s\n", a.pkg, a.ecosystem, a.toVersion)
 	}
 
 	if failed == 0 {
-		if err := tidyGoMod(manifestRoot); err != nil {
-			fmt.Fprintf(os.Stderr, "warn: go mod tidy failed: %v\n", err)
+		for eco := range usedEcos {
+			if err := tidyEco(manifestRoot, eco); err != nil {
+				fmt.Fprintf(os.Stderr, "warn: %s tidy failed: %v\n", eco, err)
+			}
 		}
 	}
 	if failed > 0 {
@@ -105,8 +109,18 @@ type upgradePlan struct {
 	majorSkipped int
 }
 
+// supportedFixEcosystems lists the package managers nox fix can drive
+// directly. Other ecosystems get counted as skipped — operators can
+// still see the fixed_in metadata in findings.json, just not auto-apply.
+var supportedFixEcosystems = map[string]string{
+	"go":    "go get",
+	"npm":   "npm install",
+	"pypi":  "pip install",
+	"cargo": "cargo update",
+}
+
 // planUpgrades extracts upgrade actions from VULN findings. Skips
-// findings without fixed_in metadata, non-Go ecosystems (until follow-up),
+// findings without fixed_in metadata, ecosystems we can't drive yet,
 // and major-version-boundary upgrades unless includeMajor is set.
 func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 	var plan upgradePlan
@@ -124,7 +138,8 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			plan.skipped++
 			continue
 		}
-		if eco != "go" {
+		action, ok := supportedFixEcosystems[eco]
+		if !ok {
 			plan.skipped++
 			continue
 		}
@@ -132,7 +147,7 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			plan.majorSkipped++
 			continue
 		}
-		key := pkg + "@" + fixed
+		key := eco + ":" + pkg + "@" + fixed
 		if seen[key] {
 			continue
 		}
@@ -143,7 +158,7 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			fromVer:   from,
 			toVersion: fixed,
 			ecosystem: eco,
-			action:    "go get",
+			action:    action,
 		})
 	}
 	return plan
@@ -167,26 +182,78 @@ func majorOf(version string) string {
 	return v
 }
 
-// applyGoUpgrade runs `go get pkg@vVERSION` in manifestRoot. Goreleaser /
-// vendoring concerns are deferred to the follow-up `go mod tidy`.
+// applyUpgrade dispatches to the appropriate ecosystem-specific
+// applier. Each applier runs the canonical package-manager command in
+// manifestRoot. Operators wire their own venv / nvm / asdf via the
+// shell environment; nox doesn't try to manage them.
+func applyUpgrade(manifestRoot string, a upgradeAction) error {
+	switch a.ecosystem {
+	case "go":
+		return applyGoUpgrade(manifestRoot, a)
+	case "npm":
+		return applyNpmUpgrade(manifestRoot, a)
+	case "pypi":
+		return applyPyPIUpgrade(manifestRoot, a)
+	case "cargo":
+		return applyCargoUpgrade(manifestRoot, a)
+	}
+	return fmt.Errorf("ecosystem %q not supported by applyUpgrade", a.ecosystem)
+}
+
+// applyGoUpgrade runs `go get pkg@vVERSION` in manifestRoot.
 func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
 	target := a.pkg + "@v" + strings.TrimPrefix(a.toVersion, "v")
-	cmd := exec.Command("go", "get", target)
-	cmd.Dir = manifestRoot
+	return runIn(manifestRoot, "go", "get", target)
+}
+
+// applyNpmUpgrade runs `npm install pkg@version`. Works against
+// package.json + package-lock.json. Yarn / pnpm projects need to be
+// driven via their own CLI; this targets the npm baseline.
+func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
+	target := a.pkg + "@" + strings.TrimPrefix(a.toVersion, "v")
+	return runIn(manifestRoot, "npm", "install", target)
+}
+
+// applyPyPIUpgrade runs `pip install --upgrade pkg==version`. Operators
+// who manage requirements.txt / pyproject.toml directly should re-pin
+// after running. Plain pip is the lowest common denominator.
+func applyPyPIUpgrade(manifestRoot string, a upgradeAction) error {
+	target := a.pkg + "==" + strings.TrimPrefix(a.toVersion, "v")
+	return runIn(manifestRoot, "pip", "install", "--upgrade", target)
+}
+
+// applyCargoUpgrade runs `cargo update -p pkg --precise version`.
+// Cargo has no separate "install" semantics for project deps; update
+// rewrites Cargo.lock.
+func applyCargoUpgrade(manifestRoot string, a upgradeAction) error {
+	return runIn(manifestRoot, "cargo", "update", "-p", a.pkg, "--precise", strings.TrimPrefix(a.toVersion, "v"))
+}
+
+func runIn(dir, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// tidyGoMod runs go mod tidy to clean up indirect dependencies after
-// upgrades.
-func tidyGoMod(manifestRoot string) error {
-	if _, err := os.Stat(filepath.Join(manifestRoot, "go.mod")); err != nil {
+// tidyEco runs the canonical post-upgrade clean-up for an ecosystem.
+// Unsupported ecosystems no-op; missing manifests no-op too so the
+// cleanup is safe to call unconditionally.
+func tidyEco(manifestRoot, eco string) error {
+	switch eco {
+	case "go":
+		if _, err := os.Stat(filepath.Join(manifestRoot, "go.mod")); err != nil {
+			return nil
+		}
+		return runIn(manifestRoot, "go", "mod", "tidy")
+	case "npm":
+		// `npm install` already updates the lockfile in place; no extra
+		// tidy step needed.
+		return nil
+	case "pypi", "cargo":
+		// Nothing canonical to run.
 		return nil
 	}
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir = manifestRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return nil
 }
