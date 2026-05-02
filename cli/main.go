@@ -144,6 +144,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates\n")
+		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
@@ -212,6 +213,8 @@ func run(args []string) int {
 		return runAgentGraph(remaining[1:])
 	case "bench":
 		return runBench(remaining[1:])
+	case "calibrate":
+		return runCalibrate(remaining[1:])
 	case "version":
 		fmt.Printf("nox %s (commit: %s, built: %s)\n", version, commit, date)
 		return 0
