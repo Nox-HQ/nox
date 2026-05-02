@@ -240,6 +240,13 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 				}
 				verifyResult.SignatureValid = true
 				verifyResult.SignerName = "cosign-keyless:" + artifact.CosignCertIdentityRegexp
+				// Re-enforce policy after promotion: VerifyArtifact ran
+				// Policy.Enforce when level was still TrustUnverified
+				// (cosign hadn't been consulted yet) and may have
+				// recorded a trust_level violation. Drop those and
+				// re-run so the post-promotion level is authoritative.
+				verifyResult.Violations = dropPolicyLevelViolations(verifyResult.Violations)
+				verifyResult.Violations = append(verifyResult.Violations, s.verifier.Policy().Enforce(&verifyResult)...)
 			}
 		}
 	}
@@ -316,6 +323,24 @@ func digestHex(digest string) string {
 		return digest[len(prefix):]
 	}
 	return digest
+}
+
+// dropPolicyLevelViolations removes the `trust_level` violation
+// (added by Policy.Enforce when level < MinLevel) from a slice. The
+// install path uses this to discard a stale violation after an
+// out-of-band cosign verification promotes the result's Level.
+func dropPolicyLevelViolations(in []trust.Violation) []trust.Violation {
+	if len(in) == 0 {
+		return in
+	}
+	out := in[:0]
+	for _, v := range in {
+		if v.Field == "trust_level" {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // deriveChecksumsURL strips the GoReleaser signing suffix from a

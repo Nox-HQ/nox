@@ -22,6 +22,12 @@ func WithPolicy(p Policy) VerifierOption {
 	return func(v *Verifier) { v.policy = p }
 }
 
+// Policy returns the verifier's configured policy. Used by callers
+// that promote a verification result out-of-band (e.g. an OCI store
+// passing a Cosign keyless verification) and then need to re-enforce
+// the policy against the updated trust level.
+func (v *Verifier) Policy() Policy { return v.policy }
+
 // NewVerifier creates a Verifier with the given options.
 // Defaults: empty keyring, DefaultPolicy().
 func NewVerifier(opts ...VerifierOption) *Verifier {
