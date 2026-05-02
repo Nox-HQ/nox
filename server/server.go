@@ -19,7 +19,6 @@ import (
 	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
-	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
@@ -80,9 +79,6 @@ type protectStatusInput struct {
 }
 type vexStatusInput struct {
 	Path string `json:"path"`
-}
-type complianceReportInput struct {
-	Framework string `json:"framework"`
 }
 type dashboardInput struct {
 	Path string `json:"path,omitempty"`
@@ -267,11 +263,6 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Load a VEX document and show a summary of vulnerability statuses").
 		ReadOnly().
 		Handler(s.handleVEXStatus)
-
-	srv.Tool("compliance_report").
-		Description("Generate a compliance report for a specific framework (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA, OWASP-Top-10, OWASP-LLM-Top-10, OWASP-Agentic)").
-		ReadOnly().
-		Handler(s.handleComplianceReport)
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
@@ -916,39 +907,6 @@ func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (strin
 	}
 
 	return string(data), nil
-}
-
-// Compliance report handler.
-
-func (s *Server) handleComplianceReport(_ context.Context, input complianceReportInput) (string, error) {
-	if input.Framework == "" {
-		return "Error: missing required argument: framework", nil
-	}
-
-	pc := s.getCache("")
-	if pc == nil {
-		return "Error: no scan results available — run the scan tool first", nil
-	}
-
-	// Collect triggered rule IDs from active findings.
-	triggered := make(map[string]struct{})
-	activeItems := pc.result.Findings.ActiveFindings()
-	for i := range activeItems {
-		triggered[activeItems[i].RuleID] = struct{}{}
-	}
-	ruleIDs := make([]string, 0, len(triggered))
-	for id := range triggered {
-		ruleIDs = append(ruleIDs, id)
-	}
-
-	compReport := compliance.GenerateReport(compliance.Framework(input.Framework), ruleIDs)
-
-	data, err := json.MarshalIndent(compReport, "", "  ")
-	if err != nil {
-		return "Error: marshalling report: " + err.Error(), nil
-	}
-
-	return truncate(string(data)), nil
 }
 
 // Data sensitivity report handler.

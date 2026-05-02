@@ -1,6 +1,11 @@
 // Package catalog provides a central registry of all built-in rule metadata
 // across all Nox analyzers. It aggregates rules from secrets, AI, and IaC
 // analyzers into a single lookup map keyed by rule ID.
+//
+// Compliance framework mapping (CIS, PCI-DSS, SOC2, NIST-800-53, HIPAA,
+// OWASP-Top-10, FedRAMP, ISO 27001, GDPR, etc.) lives in the GRC plugin
+// rather than core, so the catalog reports per-rule metadata only and
+// downstream consumers join against the plugin's framework data.
 package catalog
 
 import (
@@ -9,36 +14,29 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
-	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/rules"
 )
 
 // RuleMeta provides extended metadata for a built-in rule.
 type RuleMeta struct {
-	ID                   string                        `json:"id"`
-	Description          string                        `json:"description"`
-	Severity             string                        `json:"severity"`
-	Confidence           string                        `json:"confidence"`
-	CWE                  string                        `json:"cwe,omitempty"`
-	Tags                 []string                      `json:"tags,omitempty"`
-	Remediation          string                        `json:"remediation,omitempty"`
-	References           []string                      `json:"references,omitempty"`
-	ComplianceFrameworks []compliance.FrameworkControl `json:"compliance_frameworks,omitempty"`
+	ID          string   `json:"id"`
+	Description string   `json:"description"`
+	Severity    string   `json:"severity"`
+	Confidence  string   `json:"confidence"`
+	CWE         string   `json:"cwe,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Remediation string   `json:"remediation,omitempty"`
+	References  []string `json:"references,omitempty"`
 }
 
 // Catalog returns the complete set of built-in rule metadata keyed by rule ID.
 func Catalog() map[string]RuleMeta {
 	cat := make(map[string]RuleMeta)
-	complianceMappings := compliance.GetMappings()
 
 	// Aggregate rules from all analyzers.
 	for _, rs := range allRuleSets() {
 		for _, r := range rs.Rules() {
-			meta := metaFromRule(r)
-			if controls, ok := complianceMappings[r.ID]; ok {
-				meta.ComplianceFrameworks = controls
-			}
-			cat[r.ID] = meta
+			cat[r.ID] = metaFromRule(r)
 		}
 	}
 

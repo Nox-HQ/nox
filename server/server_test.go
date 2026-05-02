@@ -1401,36 +1401,6 @@ func TestHandleVEXStatus_Success(t *testing.T) {
 	}
 }
 
-// --- handleComplianceReport tests ---
-
-func TestHandleComplianceReport_MissingFramework(t *testing.T) {
-	s := scanCleanDir(t)
-	result, err := s.handleComplianceReport(context.Background(), complianceReportInput{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(result, "Error:") {
-		t.Fatal("expected error for missing framework")
-	}
-	if !strings.Contains(result, "missing required argument: framework") {
-		t.Fatalf("expected missing framework message, got: %s", result)
-	}
-}
-
-func TestHandleComplianceReport_Success(t *testing.T) {
-	s := scanCleanDir(t)
-	result, err := s.handleComplianceReport(context.Background(), complianceReportInput{Framework: "CIS"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
-	}
-	if !strings.Contains(result, `"framework"`) || !strings.Contains(result, "CIS") {
-		t.Fatalf("expected framework in report, got: %s", result)
-	}
-}
-
 // --- handleDataSensitivityReport tests ---
 
 func TestHandleDataSensitivityReport_NoScanResults(t *testing.T) {
