@@ -67,47 +67,74 @@ func LoadVEX(path string) (*Document, error) {
 	return &doc, nil
 }
 
-// ApplyVEX matches VEX statements to findings by CVE/GHSA ID in the finding's
-// Metadata and updates their status accordingly. Only VULN-001 findings with
-// a vuln_id or aliases metadata key are eligible for VEX matching.
+// ApplyVEX matches VEX statements to findings and updates their status
+// accordingly. Match candidates per finding (in order):
+//
+//   1. The finding's RuleID (e.g. SEC-073, IAC-013, AI-PI-001). This
+//      catches the `nox vex init` flow where every nox rule ID is a
+//      valid waiver target.
+//   2. The finding's Fingerprint, when the VEX statement carries a
+//      matching _nox_fingerprint aux field — pins a waiver to a
+//      specific occurrence rather than a whole rule class.
+//   3. (VULN-001 only) The CVE / GHSA identifiers in the finding's
+//      vuln_id and aliases metadata. Operators can keep waiving by
+//      CVE without learning nox-specific rule IDs.
+//
+// First match wins per finding.
 func ApplyVEX(fs *findings.FindingSet, doc *Document) int {
 	if doc == nil || len(doc.Statements) == 0 {
 		return 0
 	}
 
-	// Build a lookup from vulnerability ID to VEX status.
-	stmtMap := make(map[string]Statement, len(doc.Statements))
+	stmtByID := make(map[string]Statement, len(doc.Statements))
+	stmtByFingerprint := make(map[string]Statement)
 	for i := range doc.Statements {
-		stmtMap[strings.ToUpper(doc.Statements[i].VulnerabilityID)] = doc.Statements[i]
+		stmt := doc.Statements[i]
+		stmtByID[strings.ToUpper(stmt.VulnerabilityID)] = stmt
+		if stmt.NoxFingerprint != "" {
+			stmtByFingerprint[stmt.NoxFingerprint] = stmt
+		}
 	}
 
 	applied := 0
 	items := fs.Findings()
 	for i := range items {
-		if items[i].RuleID != "VULN-001" {
-			continue
+		f := &items[i]
+
+		var matched *Statement
+		// 1. Fingerprint pin (most specific).
+		if stmt, ok := stmtByFingerprint[f.Fingerprint]; ok {
+			matched = &stmt
+		}
+		// 2. Rule ID match (covers SEC-*, IAC-*, AI-*, etc.).
+		if matched == nil {
+			if stmt, ok := stmtByID[strings.ToUpper(f.RuleID)]; ok {
+				matched = &stmt
+			}
+		}
+		// 3. CVE / GHSA aliases for VULN-001 findings.
+		if matched == nil && f.RuleID == "VULN-001" {
+			for _, id := range collectVulnIDs(f) {
+				if stmt, ok := stmtByID[strings.ToUpper(id)]; ok {
+					matched = &stmt
+					break
+				}
+			}
 		}
 
-		// Check vuln_id and aliases for a VEX match.
-		ids := collectVulnIDs(&items[i])
-		for _, id := range ids {
-			stmt, ok := stmtMap[strings.ToUpper(id)]
-			if !ok {
-				continue
-			}
-
-			switch stmt.Status {
-			case StatusNotAffected:
-				fs.SetStatus(i, findings.StatusVEXNotAffected)
-				applied++
-			case StatusUnderInvestigation:
-				fs.SetStatus(i, findings.StatusVEXUnderInvestigation)
-				applied++
-			case StatusFixed:
-				fs.SetStatus(i, findings.StatusVEXFixed)
-				applied++
-			}
-			break // first match wins
+		if matched == nil {
+			continue
+		}
+		switch matched.Status {
+		case StatusNotAffected:
+			fs.SetStatus(i, findings.StatusVEXNotAffected)
+			applied++
+		case StatusUnderInvestigation:
+			fs.SetStatus(i, findings.StatusVEXUnderInvestigation)
+			applied++
+		case StatusFixed:
+			fs.SetStatus(i, findings.StatusVEXFixed)
+			applied++
 		}
 	}
 

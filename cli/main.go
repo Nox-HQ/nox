@@ -255,6 +255,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		changedSinceFlag      string
 		noRespectGitignoreFlg bool
 		noAutoInstallFlg      bool
+		failOnUnwaivedFlg     bool
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -262,6 +263,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
+	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
 	if err := scanFS.Parse(args); err != nil {
 		return 2
 	}
@@ -345,6 +347,21 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	}
 
 	activeFindings := result.Findings.ActiveFindings()
+
+	// --fail-on-unwaived: when --vex is set, treat findings whose VEX
+	// status is `under_investigation` as covered for exit-code purposes.
+	// Operators waiving by RuleID without classifying each entry get
+	// the same green CI as `not_affected`.
+	if failOnUnwaivedFlg && vexFlag != "" {
+		var unwaived []findings.Finding
+		for i := range activeFindings {
+			if activeFindings[i].Status == findings.StatusVEXUnderInvestigation {
+				continue
+			}
+			unwaived = append(unwaived, activeFindings[i])
+		}
+		activeFindings = unwaived
+	}
 
 	// Apply severity threshold filtering if specified.
 	if thresholdFlag != "" {

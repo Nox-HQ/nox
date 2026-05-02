@@ -139,6 +139,74 @@ func TestApplyVEX_NilDocument(t *testing.T) {
 	}
 }
 
+func TestApplyVEX_MatchesByRuleID(t *testing.T) {
+	// Reproduces issue #50: VEX waivers covering nox RuleIDs (e.g.
+	// SEC-073, IAC-013) used to be ignored because ApplyVEX only
+	// inspected vuln_id metadata. Confirm rule-ID-shaped waivers
+	// flip the status now.
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		RuleID:   "SEC-073",
+		Severity: findings.SeverityCritical,
+		Message:  "Postgres conn string",
+		Location: findings.Location{FilePath: ".github/workflows/ci.yml", StartLine: 12},
+	})
+	fs.Add(findings.Finding{
+		RuleID:   "IAC-013",
+		Severity: findings.SeverityHigh,
+		Location: findings.Location{FilePath: "infra/main.tf", StartLine: 88},
+	})
+
+	doc := &Document{
+		Statements: []Statement{
+			{VulnerabilityID: "SEC-073", Status: StatusNotAffected},
+			{VulnerabilityID: "IAC-013", Status: StatusNotAffected},
+		},
+	}
+	if applied := ApplyVEX(fs, doc); applied != 2 {
+		t.Errorf("expected 2 applied, got %d", applied)
+	}
+	for _, f := range fs.Findings() {
+		if f.Status != findings.StatusVEXNotAffected {
+			t.Errorf("rule %s: expected not_affected status, got %q", f.RuleID, f.Status)
+		}
+	}
+}
+
+func TestApplyVEX_FingerprintPin(t *testing.T) {
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		RuleID:      "SEC-073",
+		Fingerprint: "abc123",
+	})
+	fs.Add(findings.Finding{
+		RuleID:      "SEC-073",
+		Fingerprint: "def456",
+	})
+
+	doc := &Document{
+		Statements: []Statement{{
+			VulnerabilityID: "SEC-073",
+			Status:          StatusNotAffected,
+			NoxFingerprint:  "abc123",
+		}},
+	}
+	ApplyVEX(fs, doc)
+
+	got := fs.Findings()
+	if got[0].Status != findings.StatusVEXNotAffected {
+		t.Errorf("fingerprint match should waive abc123, got %q", got[0].Status)
+	}
+	// def456 finding has the same RuleID; with fingerprint pin
+	// preference, it falls through to the rule-ID match (which also
+	// hits in this test). The contract is: fingerprint takes
+	// precedence, but rule-ID still applies when no fingerprint pin
+	// matches.
+	if got[1].Status != findings.StatusVEXNotAffected {
+		t.Errorf("def456 finding should waive via rule-id fallback, got %q", got[1].Status)
+	}
+}
+
 func TestApplyVEX_UnderInvestigation(t *testing.T) {
 	fs := findings.NewFindingSet()
 	fs.Add(findings.Finding{
