@@ -186,20 +186,27 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 	// certificate identity. A failure adds a violation to the
 	// VerifyResult so the policy enforcement layer treats it the same
 	// as any other trust violation. cosign-not-installed is silent.
-	if artifact.CosignSigURL != "" && trust.CosignAvailable() {
-		sigPath, err := s.downloadSignature(ctx, artifact.CosignSigURL)
-		if err != nil {
+	if (artifact.CosignSigURL != "" || artifact.CosignBundleURL != "") && trust.CosignAvailable() {
+		params := trust.CosignVerifyParams{
+			ArtifactPath:              blobPath,
+			CertificateIdentityRegexp: artifact.CosignCertIdentityRegexp,
+			CertificateOIDCIssuer:     artifact.CosignOIDCIssuer,
+		}
+		// Prefer the bundle (cosign v4 compatible). Fall back to legacy
+		// .sig when only that's published.
+		var fetchErr error
+		if artifact.CosignBundleURL != "" {
+			params.BundlePath, fetchErr = s.downloadSignature(ctx, artifact.CosignBundleURL)
+		} else {
+			params.SignaturePath, fetchErr = s.downloadSignature(ctx, artifact.CosignSigURL)
+		}
+		if fetchErr != nil {
 			verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
 				Field:   "cosign_signature",
-				Message: fmt.Sprintf("downloading signature: %v", err),
+				Message: fmt.Sprintf("downloading signature: %v", fetchErr),
 			})
 		} else {
-			err := trust.CosignVerifyBlob(ctx, trust.CosignVerifyParams{
-				ArtifactPath:              blobPath,
-				SignaturePath:             sigPath,
-				CertificateIdentityRegexp: artifact.CosignCertIdentityRegexp,
-				CertificateOIDCIssuer:     artifact.CosignOIDCIssuer,
-			})
+			err := trust.CosignVerifyBlob(ctx, params)
 			if err != nil {
 				verifyResult.Violations = append(verifyResult.Violations, trust.Violation{
 					Field:   "cosign_signature",

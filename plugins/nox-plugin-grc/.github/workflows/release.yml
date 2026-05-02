@@ -43,6 +43,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate registry entry
+        # Best-effort. The `nox plugin entry` subcommand requires nox
+        # >= 0.8.0 (added 2026-05). Older nox releases on PATH cause
+        # this step to exit non-zero — that's fine, the actual
+        # GoReleaser release + Cosign signing already succeeded above.
+        continue-on-error: true
         run: |
           set -euo pipefail
           # Pull a release-built nox binary so we can run `plugin entry`.

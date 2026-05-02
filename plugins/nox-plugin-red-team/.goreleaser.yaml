@@ -59,8 +59,10 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-# Cosign keyless signing of release artifacts. Operators verify with:
-#   cosign verify-blob --certificate-identity-regexp ... checksums.txt
+# Cosign keyless signing of release artifacts. Bundle format
+# (cosign v3.10+, required by cosign v4) is produced alongside the
+# legacy --output-signature for backward compatibility with older
+# verifiers in the wild.
 signs:
   - cmd: cosign
     artifacts: checksum
@@ -68,6 +70,8 @@ signs:
     args:
       - sign-blob
       - "--yes"
+      - "--new-bundle-format"
+      - "--bundle=${signature}.bundle"
       - "--output-signature=${signature}"
       - "${artifact}"
 

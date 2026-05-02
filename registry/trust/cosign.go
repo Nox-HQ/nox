@@ -21,8 +21,12 @@ type CosignVerifyParams struct {
 	// caller must have already downloaded the artifact to disk.
 	ArtifactPath string
 	// SignaturePath is the local path to the .sig file produced by
-	// cosign sign-blob.
+	// cosign sign-blob (legacy format, cosign v3.x).
 	SignaturePath string
+	// BundlePath is the local path to the .sig.bundle file produced
+	// by cosign sign-blob --new-bundle-format. Required for cosign v4
+	// verification. When set, takes precedence over SignaturePath.
+	BundlePath string
 	// CertificateIdentityRegexp matches the OIDC subject expected on
 	// the signing certificate. For GitHub Actions release pipelines
 	// this looks like:
@@ -49,8 +53,11 @@ func CosignVerifyBlob(ctx context.Context, p CosignVerifyParams) error {
 	if _, err := exec.LookPath("cosign"); err != nil {
 		return ErrCosignNotInstalled
 	}
-	if p.ArtifactPath == "" || p.SignaturePath == "" {
-		return fmt.Errorf("cosign verify-blob: artifact and signature paths are required")
+	if p.ArtifactPath == "" {
+		return fmt.Errorf("cosign verify-blob: artifact path required")
+	}
+	if p.BundlePath == "" && p.SignaturePath == "" {
+		return fmt.Errorf("cosign verify-blob: bundle or signature path required")
 	}
 	if p.CertificateIdentityRegexp == "" {
 		return fmt.Errorf("cosign verify-blob: certificate-identity-regexp is required")
@@ -66,13 +73,22 @@ func CosignVerifyBlob(ctx context.Context, p CosignVerifyParams) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx,
-		"cosign", "verify-blob",
+	args := []string{
+		"verify-blob",
 		"--certificate-identity-regexp", p.CertificateIdentityRegexp,
 		"--certificate-oidc-issuer", issuer,
-		"--signature", p.SignaturePath,
-		p.ArtifactPath,
-	)
+	}
+	if p.BundlePath != "" {
+		// New bundle format — required by cosign v4, supported by v3.10+.
+		args = append(args, "--bundle", p.BundlePath, "--new-bundle-format")
+	} else {
+		// Legacy --signature path. Cosign v4 rejects this; falls
+		// through to a clearer error message.
+		args = append(args, "--signature", p.SignaturePath)
+	}
+	args = append(args, p.ArtifactPath)
+
+	cmd := exec.CommandContext(ctx, "cosign", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cosign verify-blob failed: %w\n%s", err, strings.TrimSpace(string(out)))
