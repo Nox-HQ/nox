@@ -3780,8 +3780,11 @@ var entropySourceFilePatterns = []string{
 
 // entropyIgnoreFilePatterns explicitly excludes well-known files whose
 // content is structurally high-entropy (module checksums, lock files,
-// content-addressed IDs). Matches gitleaks/trufflehog/detect-secrets default
-// behaviour. Operators can override via config if they want to scan these.
+// content-addressed IDs, agent / IDE state dirs). Matches gitleaks /
+// trufflehog / detect-secrets default behaviour and extends with
+// modern-AI-tool state directories that pile up content-addressed IDs
+// outside of source control. Operators can override via config if they
+// want to scan these.
 var entropyIgnoreFilePatterns = []string{
 	// Go module checksums.
 	"go.sum",
@@ -3822,6 +3825,24 @@ var entropyIgnoreFilePatterns = []string{
 	"*.snap",
 	"*.golden",
 	"testdata/*",
+	// Modern AI / agent tooling state directories. These contain
+	// content-addressed IDs, settings tokens, and roundtrip blobs that
+	// register as high-entropy. Operators don't write code in them.
+	".claude/*",
+	".roady/*",
+	".nox/*",
+	".cursor/*",
+	".aider*",
+	".continue/*",
+	// VEX / SARIF / SBOM produced by nox itself — running nox on its own
+	// outputs causes self-referential noise.
+	"vex.json",
+	".vex/*",
+	"results.sarif",
+	"sbom.cdx.json",
+	"sbom.spdx.json",
+	"findings.json",
+	"ai.inventory.json",
 }
 
 // builtinEntropyRules returns entropy-based secret detection rules. These
