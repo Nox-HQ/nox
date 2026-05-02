@@ -38,6 +38,19 @@ var goSinkSelectors = []struct {
 	{"os.ReadFile", "TAINT-004", "CWE-22"},
 	{"os.WriteFile", "TAINT-004", "CWE-22"},
 	{"os.Create", "TAINT-004", "CWE-22"},
+	// AI prompt sink — chat completion / messages create (TAINT-AI-001)
+	{"openai.Client", "TAINT-AI-001", "CWE-77"},
+	{"CreateChatCompletion", "TAINT-AI-001", "CWE-77"},
+	{"ChatCompletionStream", "TAINT-AI-001", "CWE-77"},
+	{"Messages.New", "TAINT-AI-001", "CWE-77"},
+	{"Messages.Stream", "TAINT-AI-001", "CWE-77"},
+	{"GenerateContent", "TAINT-AI-001", "CWE-77"},
+	// AI embedding sink (TAINT-AI-002)
+	{"CreateEmbeddings", "TAINT-AI-002", "CWE-200"},
+	{"client.Embed", "TAINT-AI-002", "CWE-200"},
+	// AI tool-call argument sink (TAINT-AI-003)
+	{"openai.Tool", "TAINT-AI-003", "CWE-77"},
+	{"anthropic.Tool", "TAINT-AI-003", "CWE-77"},
 }
 
 // MatchGoSink checks if a flattened selector chain matches a Go sink.
@@ -74,6 +87,18 @@ var pythonSinks = []sinkDef{
 	{regexp.MustCompile(`yaml\.load\(`), "TAINT-005", "CWE-94"},
 	{regexp.MustCompile(`yaml\.unsafe_load\(`), "TAINT-005", "CWE-94"},
 	{regexp.MustCompile(`\beval\(`), "TAINT-005", "CWE-94"},
+	// AI prompt sink — chat completion / messages create (TAINT-AI-001)
+	{regexp.MustCompile(`chat\.completions\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`completions\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`ChatCompletion\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`messages\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`generate_content\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`litellm\.completion\(`), "TAINT-AI-001", "CWE-77"},
+	// AI embedding sink (TAINT-AI-002)
+	{regexp.MustCompile(`embeddings\.create\(`), "TAINT-AI-002", "CWE-200"},
+	{regexp.MustCompile(`cohere\.embed\(`), "TAINT-AI-002", "CWE-200"},
+	{regexp.MustCompile(`embed_content\(`), "TAINT-AI-002", "CWE-200"},
+	{regexp.MustCompile(`SentenceTransformer\([^)]*\)\.encode\(`), "TAINT-AI-002", "CWE-200"},
 }
 
 // jsSinks are regex patterns for JavaScript/TypeScript sinks.
@@ -99,6 +124,12 @@ var jsSinks = []sinkDef{
 	// Code/Deser (TAINT-005)
 	{regexp.MustCompile(`\beval\(`), "TAINT-005", "CWE-94"},
 	{regexp.MustCompile(`\bFunction\(`), "TAINT-005", "CWE-94"},
+	// AI prompt sink — chat completion / messages create (TAINT-AI-001)
+	{regexp.MustCompile(`chat\.completions\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`messages\.create\(`), "TAINT-AI-001", "CWE-77"},
+	{regexp.MustCompile(`generateContent\(`), "TAINT-AI-001", "CWE-77"},
+	// AI embedding sink (TAINT-AI-002)
+	{regexp.MustCompile(`embeddings\.create\(`), "TAINT-AI-002", "CWE-200"},
 }
 
 // MatchTextSink checks if a line matches a sink pattern for the given language.

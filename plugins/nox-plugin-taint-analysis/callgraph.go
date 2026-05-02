@@ -149,11 +149,20 @@ func callsSink(stmt ast.Stmt, calls map[string][]string, depth int) string {
 	return hit
 }
 
-// isSinkName matches function names that look like SQL or shell-exec
-// sinks. Heuristic: substring match on the lowercase form.
+// isSinkName matches function names that look like dangerous sinks
+// (SQL, shell-exec, file I/O) or AI sinks (chat completion, embeddings,
+// generate_content). Heuristic: substring match on the lowercase form.
 func isSinkName(name string) bool {
 	low := strings.ToLower(name)
-	for _, sub := range []string{"exec", "query", "queryrow", "command", "sprintf", "execute", "run"} {
+	for _, sub := range []string{
+		// Generic sinks
+		"exec", "query", "queryrow", "command", "sprintf", "execute", "run",
+		// AI prompt sinks
+		"chatcompletion", "completions", "messages", "generatecontent",
+		"generate_content", "completion",
+		// AI embedding sinks
+		"embeddings", "createembeddings", "embed",
+	} {
 		if strings.Contains(low, sub) {
 			return true
 		}
@@ -165,14 +174,7 @@ func isSinkName(name string) bool {
 // The exact source position is the callee's first reference; the rule ID
 // is chosen by sink kind.
 func buildInterprocFlow(path, funcName string, pos token.Pos, fset *token.FileSet, calleeName, lang string) TaintFlow {
-	rule := "TAINT-006"
-	cwe := "CWE-89"
-	if strings.Contains(strings.ToLower(calleeName), "exec") ||
-		strings.Contains(strings.ToLower(calleeName), "command") ||
-		strings.Contains(strings.ToLower(calleeName), "run") {
-		rule = "TAINT-007"
-		cwe = "CWE-78"
-	}
+	rule, cwe := classifyInterprocSink(calleeName)
 	line := fset.Position(pos).Line
 	return TaintFlow{
 		Source: TaintSource{
@@ -189,4 +191,28 @@ func buildInterprocFlow(path, funcName string, pos token.Pos, fset *token.FileSe
 		FuncName: funcName,
 		Language: lang,
 	}
+}
+
+// classifyInterprocSink picks the most specific rule ID and CWE for a
+// callee name. AI sinks take precedence; falls through to SQL / cmd
+// classification for the original TAINT-006/007 cases.
+func classifyInterprocSink(calleeName string) (rule, cwe string) {
+	low := strings.ToLower(calleeName)
+	switch {
+	case strings.Contains(low, "embeddings") ||
+		strings.Contains(low, "embed") && !strings.Contains(low, "ember"):
+		return "TAINT-AI-002", "CWE-200"
+	case strings.Contains(low, "completions") ||
+		strings.Contains(low, "chatcompletion") ||
+		strings.Contains(low, "messages") ||
+		strings.Contains(low, "generatecontent") ||
+		strings.Contains(low, "generate_content") ||
+		strings.Contains(low, "completion"):
+		return "TAINT-AI-001", "CWE-77"
+	case strings.Contains(low, "exec") ||
+		strings.Contains(low, "command") ||
+		strings.Contains(low, "run"):
+		return "TAINT-007", "CWE-78"
+	}
+	return "TAINT-006", "CWE-89"
 }

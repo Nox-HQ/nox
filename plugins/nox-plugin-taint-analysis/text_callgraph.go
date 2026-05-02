@@ -113,13 +113,8 @@ func lineForByteOffset(content []byte, offset int) int {
 // buildTextInterprocFlow shapes a TaintFlow for a cross-function call
 // in Python / JS / TS source.
 func buildTextInterprocFlow(path, callee string, line int, lang string) TaintFlow {
-	rule := "TAINT-006"
-	cwe := "CWE-89"
-	low := strings.ToLower(callee)
-	if strings.Contains(low, "exec") || strings.Contains(low, "command") || strings.Contains(low, "spawn") || strings.Contains(low, "shell") {
-		rule = "TAINT-007"
-		cwe = "CWE-78"
-	}
+	rule, cwe := classifyInterprocSink(callee)
+	_ = strings.ToLower // ensure classifyInterprocSink already lowercases
 	return TaintFlow{
 		Source: TaintSource{
 			VarName: "<interproc>",
