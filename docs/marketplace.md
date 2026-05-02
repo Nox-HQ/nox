@@ -155,3 +155,18 @@ warrants it.
 Stages 2-5 are tracked individually; the index format is forward-
 compatible with all of them (signature + dependency fields exist
 already, just not enforced).
+
+## Public marketplace site
+
+A static HTML site is rendered from the same `index.json` and deployed
+via GitHub Pages from this repo. The generator lives in
+`cmd/marketplace-build/`; the workflow at
+`.github/workflows/marketplace.yml` rebuilds and deploys on every
+change to the index or the generator. Operators who prefer a
+clickable view land on `https://nox-hq.github.io/nox/` (or the
+configured custom domain) and discover plugins by track / tag.
+
+The generator is intentionally one Go file plus two HTML templates.
+No JS runtime, no SaaS, no build pipeline beyond `go run`. Operators
+who fork the marketplace into a private context get the same UI by
+pointing the generator at their internal index.

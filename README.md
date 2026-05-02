@@ -666,7 +666,7 @@ git tag v0.2.0 && git push --tags
 # `nox plugin search` once the PR merges.
 ```
 
-See [`docs/marketplace.md`](docs/marketplace.md) for the full publish flow and the maturity ladder (signed installs, auto-update, dependency graph, private hosting).
+See [`docs/marketplace.md`](docs/marketplace.md) for the full publish flow and the maturity ladder. A public marketplace site rendered from the same index is published at [`nox-hq.github.io/nox`](https://nox-hq.github.io/nox/).
 
 ## MCP Server
 

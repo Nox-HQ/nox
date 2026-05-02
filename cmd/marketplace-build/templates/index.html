@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="{{.BaseURL}}/assets/style.css">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a href="{{.BaseURL}}/" class="logo">nox <span>marketplace</span></a>
+    <nav>
+      <a href="https://github.com/nox-hq/nox">GitHub</a>
+      <a href="https://github.com/nox-hq/nox/blob/main/docs/marketplace.md">Docs</a>
+      <a href="https://github.com/nox-hq/nox/releases">Releases</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Open-source security plugins for the nox scanner.</h1>
+    <p>Polyglot AI security, OWASP LLM Top 10 detection, multi-language reachability, runtime checks, compliance frameworks. Apache-2.0. No SaaS.</p>
+    <pre><code>brew install felixgeelhaar/tap/nox
+nox plugin install nox/ai-eval</code></pre>
+  </section>
+
+  <section class="filters">
+    <strong>Track:</strong>
+    <button data-filter="all" class="active">All</button>
+    <button data-filter="core-analysis">Core Analysis</button>
+    <button data-filter="dynamic-runtime">Dynamic / Runtime</button>
+    <button data-filter="policy-governance">Policy / Governance</button>
+    <button data-filter="threat-modeling">Threat Modeling</button>
+    <button data-filter="supply-chain">Supply Chain</button>
+  </section>
+
+  <section class="grid">
+  {{range .Plugins}}
+    {{$v := firstVersion .}}
+    <a class="card" data-track="{{.Track}}" href="{{$.BaseURL}}/plugins/{{slug .Name}}.html">
+      <header>
+        <h2>{{.Name}}</h2>
+        {{if .Track}}<span class="track">{{trackName .Track}}</span>{{end}}
+      </header>
+      <p>{{.Description}}</p>
+      <footer>
+        {{if $v.Version}}<span class="version">v{{$v.Version}}</span>{{end}}
+        {{if $v.RiskClass}}<span class="risk" style="background:{{riskColor $v.RiskClass}}">{{$v.RiskClass}}</span>{{end}}
+        {{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+      </footer>
+    </a>
+  {{end}}
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>Generated {{.Generated}} from <a href="{{.BaseURL}}/index.json">index.json</a>. Apache-2.0.</p>
+  </div>
+</footer>
+
+<script>
+const buttons = document.querySelectorAll('.filters button');
+buttons.forEach(b => b.addEventListener('click', () => {
+  buttons.forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  const filter = b.dataset.filter;
+  document.querySelectorAll('.card').forEach(c => {
+    c.style.display = (filter === 'all' || c.dataset.track === filter) ? '' : 'none';
+  });
+}));
+</script>
+</body>
+</html>
