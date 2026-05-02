@@ -552,6 +552,142 @@ func builtinAIRules() []*rules.Rule {
 			remediation: "Enable retries with exponential backoff to handle transient API failures gracefully.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/705.html"},
 		},
+
+		// -----------------------------------------------------------------
+		// OWASP LLM01: Prompt Injection — multi-language heuristic detection.
+		// Confidence is medium-to-low because pure regex cannot follow
+		// taint flow across function boundaries; rules trigger when a
+		// known untrusted source appears within a small window of a known
+		// LLM SDK invocation.
+		// -----------------------------------------------------------------
+		{
+			id: "AI-PI-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:chat\.completions\.create|ChatCompletion\.create|messages\.create|generate_content|litellm\.completion)\s*\([^)]{0,800}f["'][^"']{0,400}\{[^}]*(?:request\.(?:json|form|args|body|POST|GET)|input\s*\(|sys\.stdin|os\.environ)`,
+			description:  "Prompt injection (Python): untrusted source flows into LLM call via f-string",
+			cwe:          "CWE-77",
+			keywords:     []string{"chat.completions.create", "messages.create", "generate_content", "litellm.completion"},
+			filePatterns: []string{"*.py"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm01", "language:python"},
+			remediation:  "Stop string-interpolating untrusted input into prompt content. Use the SDK's structured message arrays, validate the input against an allowlist, or wrap user content in explicit boundary markers and apply a system-level instruction not to follow embedded directives.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/", "https://cwe.mitre.org/data/definitions/77.html"},
+		},
+		{
+			id: "AI-PI-002", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)["']\s*role\s*["']\s*:\s*["']\s*system\s*["'][^}]{0,300}["']\s*content\s*["']\s*:\s*[^,}]*(?:f["']|\.format\(|%s|\+\s*(?:request\.|user_input|user_message))`,
+			description:  "Prompt injection (Python): user-tainted value flows into system-role message",
+			cwe:          "CWE-77",
+			keywords:     []string{"role", "system", "content"},
+			filePatterns: []string{"*.py"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm01", "language:python"},
+			remediation:  "Never put user-controlled data inside the system role. The model is trained to defer to system content; treating it as user-controlled inverts the trust boundary. Move user input to the user role and keep system content static.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-PI-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      "(?s)(?:openai|anthropic|client)[^\\n]{0,100}(?:chat\\.completions\\.create|messages\\.create)\\s*\\([^)]{0,800}\\$\\{[^}]*(?:req\\.(?:body|params|query|headers)|process\\.argv|new URL\\(req\\.url\\))",
+			description:  "Prompt injection (JS/TS): untrusted source flows into LLM call via template literal",
+			cwe:          "CWE-77",
+			keywords:     []string{"chat.completions.create", "messages.create"},
+			filePatterns: []string{"*.js", "*.ts", "*.jsx", "*.tsx", "*.mjs", "*.cjs"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm01", "language:javascript"},
+			remediation:  "Replace template-literal interpolation of req.body / req.params / req.query inside LLM message content with a structured message object. Validate inputs at the route boundary and keep system messages static.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-PI-004", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:openai|anthropic|client|llm)\.(?:CreateChatCompletion|Messages\.Create|CreateMessage)[^)]{0,800}fmt\.Sprintf\([^)]*r\.(?:FormValue|URL\.Query|Body)`,
+			description:  "Prompt injection (Go): untrusted HTTP source flows into LLM call via fmt.Sprintf",
+			cwe:          "CWE-77",
+			keywords:     []string{"CreateChatCompletion", "Messages.Create"},
+			filePatterns: []string{"*.go"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm01", "language:go"},
+			remediation:  "Remove fmt.Sprintf-based prompt construction with HTTP request data. Use the SDK's structured message types and place untrusted content only inside user-role messages with input validation.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-PI-005", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:openai\.embeddings\.create|cohere\.embed|voyageai\.embed|google\.generativeai\.embed_content)\s*\([^)]{0,400}(?:request\.(?:json|form|body|args)|req\.body|input\s*\(|sys\.stdin)`,
+			description:  "Embedding sink receives untrusted source without sanitisation",
+			cwe:          "CWE-200",
+			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
+			filePatterns: []string{"*.py", "*.js", "*.ts", "*.jsx", "*.tsx"},
+			tags:         []string{"ai", "ai-embed", "embedding-leak", "owasp-llm06", "owasp-llm01"},
+			remediation:  "Filter and redact untrusted input before embedding. Vector DB writes are durable; PII or secrets land in retrieval results forever. Add a redaction layer on the data path, or restrict embeddings to sanitised text.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-PI-006", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)["']\s*tool_calls?\s*["']\s*:\s*\[[^\]]{0,400}["']\s*arguments\s*["']\s*:\s*[^,}]*(?:f["']|\.format\(|\$\{[^}]*req\.|\+\s*request\.)`,
+			description:  "Tool-call arguments contain untrusted input verbatim",
+			cwe:          "CWE-77",
+			keywords:     []string{"tool_calls", "arguments"},
+			filePatterns: []string{"*.py", "*.js", "*.ts", "*.go"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm07"},
+			remediation:  "Validate tool-call arguments against the schema before dispatching. Never relay untrusted input into a function-call payload without parsing.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+
+		// -----------------------------------------------------------------
+		// OWASP LLM06: Sensitive Information Disclosure (embedding leakage).
+		// AI-EMBED-* covers vector-DB writes that consume secrets, PII, or
+		// raw HTTP bodies — once embedded, the data persists in retrieval
+		// results forever and travels with downstream RAG queries.
+		// -----------------------------------------------------------------
+		{
+			id: "AI-EMBED-001", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:embeddings\.create|cohere\.embed|voyageai\.embed|embed_content|SentenceTransformer\([^)]*\)\.encode|feature_extraction)\s*\([^)]{0,400}os\.getenv\s*\(\s*["'][A-Z0-9_]*(?:SECRET|KEY|TOKEN|PASSWORD)`,
+			description:  "Embedding sink consumes secret env var (Python)",
+			cwe:          "CWE-200",
+			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
+			filePatterns: []string{"*.py"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm06", "language:python"},
+			remediation:  "Stop embedding raw secret values into the vector store. Once embedded, the secret travels with retrieval results and is permanently exposed. Move the secret to a dedicated secret manager and embed only the data the model needs to retrieve.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/", "https://cwe.mitre.org/data/definitions/200.html"},
+		},
+		{
+			id: "AI-EMBED-002", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
+			pattern:      `(?s)(?:openai\.embeddings\.create|cohere\.embed|embed_content)\s*\([^)]{0,400}(?:[\w.]+@[\w.]+|\b\d{3}-\d{2}-\d{4}\b|\b(?:4\d{15}|5[1-5]\d{14}|3[47]\d{13})\b)`,
+			description:  "Embedding sink contains literal PII pattern (email/SSN/credit card)",
+			cwe:          "CWE-359",
+			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
+			filePatterns: []string{"*.py", "*.js", "*.ts"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm06", "pii"},
+			remediation:  "Redact PII before embedding. Vector DBs index on cosine similarity; PII embedded once cannot be selectively forgotten without re-indexing the entire collection.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/", "https://cwe.mitre.org/data/definitions/359.html"},
+		},
+		{
+			id: "AI-EMBED-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:\.upsert|\.add|\.insert|pgvector)\s*\([^)]{0,400}(?:request\.(?:json|form|args|body|POST|GET)|req\.body|req\.params)`,
+			description:  "Vector DB write receives raw HTTP request body without filtering",
+			cwe:          "CWE-200",
+			keywords:     []string{"pinecone", "qdrant", "weaviate", "chromadb", "lancedb"},
+			filePatterns: []string{"*.py", "*.js", "*.ts"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm06", "high-bandwidth-leak"},
+			remediation:  "Never embed an entire HTTP body. Extract just the fields the retrieval pipeline needs and apply a redaction layer for known-sensitive fields.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-EMBED-004", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)(?:CreateEmbeddings|client\.Embed)\s*\([^)]{0,400}os\.Getenv\s*\(\s*"[A-Z0-9_]*(?:SECRET|KEY|TOKEN|PASSWORD)`,
+			description:  "Embedding sink consumes secret env var (Go)",
+			cwe:          "CWE-200",
+			keywords:     []string{"CreateEmbeddings", "client.Embed"},
+			filePatterns: []string{"*.go"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm06", "language:go"},
+			remediation:  "Move secret retrieval out of the embedding code path. Embed the data the retrieval pipeline needs, never the credential that protects it.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AI-EMBED-005", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:      `(?s)(?:pinecone\.Index|chromadb\.Collection|qdrant_client\.[A-Za-z0-9_]+)\s*\([^)]*["'](?:public|demo|marketing)[\w_/-]*["']`,
+			description:  "Vector store collection name suggests a public/demo namespace",
+			cwe:          "CWE-200",
+			keywords:     []string{"public", "demo", "marketing"},
+			filePatterns: []string{"*.py", "*.js", "*.ts", "*.go"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm06", "audit"},
+			remediation:  "Verify the destination collection's read scope. Embedding into a public/demo namespace surfaces records to anyone with retrieval access.",
+			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))

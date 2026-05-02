@@ -120,24 +120,36 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.Find
 			fs.Add(results[i])
 		}
 
-		// Extract inventory entries from AI component artifacts.
-		if artifact.Type == discovery.AIComponent {
-			components := extractComponents(artifact.Path, content)
-			for _, c := range components {
-				inv.Add(c)
+		// Agent tool-use lattice (OWASP LLM07): detect dangerous tool
+		// combinations registered in the same source file.
+		for _, lf := range scanAgentLattice(artifact.Path, content) {
+			fs.Add(lf)
+		}
+
+		// Extract inventory entries. AIComponent artifacts (prompts/, agents/,
+		// mcp.json, *.prompt) get full extraction. Non-AIComponent source
+		// files participate too when their content contains an AI SDK
+		// marker — this catches the common case of LLM/embedding calls
+		// scattered throughout a polyglot service codebase.
+		isAIComp := artifact.Type == discovery.AIComponent
+		if isAIComp || (isSourceFile(artifact.Path) && isLikelyAIContent(content)) {
+			if isAIComp {
+				for _, c := range extractComponents(artifact.Path, content) {
+					inv.Add(c)
+				}
 			}
 
-			// Extract model references.
-			modelRefs := extractModelReferences(artifact.Path, content)
-			inv.ModelProvenance = append(inv.ModelProvenance, modelRefs...)
+			inv.ModelProvenance = append(inv.ModelProvenance, extractModelReferences(artifact.Path, content)...)
+			inv.PromptTemplates = append(inv.PromptTemplates, extractPromptTemplates(artifact.Path, content)...)
+			inv.ToolMatrix = append(inv.ToolMatrix, extractToolPermissions(artifact.Path, content)...)
 
-			// Extract prompt templates.
-			promptTmpls := extractPromptTemplates(artifact.Path, content)
-			inv.PromptTemplates = append(inv.PromptTemplates, promptTmpls...)
-
-			// Extract tool permissions.
-			toolPerms := extractToolPermissions(artifact.Path, content)
-			inv.ToolMatrix = append(inv.ToolMatrix, toolPerms...)
+			// Polyglot SDK invocation discovery — captures `client.chat.
+			// completions.create(model="gpt-4o")` style call sites that
+			// extractModelReferences misses.
+			inv.ModelProvenance = append(inv.ModelProvenance, extractSDKInvocations(artifact.Path, content)...)
+			for _, comp := range extractFrameworkComponents(artifact.Path, content) {
+				inv.Add(comp)
+			}
 		}
 	}
 

@@ -753,10 +753,107 @@ func TestDetect_LLMOutputInFilePath(t *testing.T) {
 // Rule count and compilation
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// AI-PI-* OWASP LLM01 prompt-injection rules
+// ---------------------------------------------------------------------------
+
+func TestDetect_AIPI001_PythonFStringRequestJSON(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`from openai import OpenAI
+
+def chat(request):
+    user = request.json["q"]
+    OpenAI().chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": f"Answer this: {request.json['q']}"}],
+    )
+`)
+	results, err := a.ScanFile("app.py", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	f := findingWithRule(results, "AI-PI-001")
+	if f == nil {
+		t.Fatal("expected AI-PI-001 finding for f-string with request.json")
+	}
+}
+
+func TestDetect_AIPI002_SystemRoleTainted(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`messages = [
+    {"role": "system", "content": f"You are {request.json['persona']}"},
+    {"role": "user", "content": "hi"},
+]
+`)
+	results, err := a.ScanFile("agent.py", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "AI-PI-002") == nil {
+		t.Fatal("expected AI-PI-002 finding for tainted system role")
+	}
+}
+
+func TestDetect_AIPI003_TypeScriptTemplateLiteral(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("import OpenAI from 'openai';\n" +
+		"const client = new OpenAI();\n" +
+		"app.post('/q', async (req, res) => {\n" +
+		"  const out = await client.chat.completions.create({\n" +
+		"    model: 'gpt-4o',\n" +
+		"    messages: [{ role: 'user', content: `Answer ${req.body.question}` }],\n" +
+		"  });\n" +
+		"});\n")
+	results, err := a.ScanFile("api.ts", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "AI-PI-003") == nil {
+		t.Fatalf("expected AI-PI-003 finding; got %+v", results)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AI-EMBED-* OWASP LLM06 embedding-leak rules
+// ---------------------------------------------------------------------------
+
+func TestDetect_AIEmbed001_PythonSecretIntoEmbedding(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`import os
+import openai
+
+client = openai.OpenAI()
+client.embeddings.create(model="text-embedding-3-small", input=os.getenv("STRIPE_SECRET"))
+`)
+	results, err := a.ScanFile("ingest.py", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "AI-EMBED-001") == nil {
+		t.Fatalf("expected AI-EMBED-001 for secret env into embedding; got %+v", results)
+	}
+}
+
+func TestDetect_AIEmbed003_RawHTTPBodyIntoVectorWrite(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`import pinecone
+
+idx = pinecone.Index("production")
+idx.upsert(vectors=[{"id": "x", "values": embed(request.json)}])
+`)
+	results, err := a.ScanFile("api.py", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "AI-EMBED-003") == nil {
+		t.Fatalf("expected AI-EMBED-003 for HTTP body into vector store; got %+v", results)
+	}
+}
+
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 50 {
-		t.Errorf("expected 50 AI rules, got %d", got)
+	if got := len(rules); got != 61 {
+		t.Errorf("expected 61 AI rules, got %d", got)
 	}
 }
 
