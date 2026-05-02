@@ -688,6 +688,96 @@ func builtinAIRules() []*rules.Rule {
 			remediation:  "Verify the destination collection's read scope. Embedding into a public/demo namespace surfaces records to anyone with retrieval access.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
+
+		// -----------------------------------------------------------------
+		// MCP server / configuration security (MCP-001..008). MCP is
+		// first-class for nox positioning; these rules cover common
+		// misconfigurations in mcp.json files and MCP server source code.
+		// AI-004 / AI-005 also cover MCP tool exposure but predate the
+		// dedicated MCP-* family. Keep both in place: AI-004/005 are the
+		// generic AI-side mirror, MCP-001..008 are the operator-facing
+		// MCP-specific guidance.
+		// -----------------------------------------------------------------
+		{
+			id: "MCP-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			pattern:      `(?i)"command"\s*:\s*"(?:bash|sh|zsh|powershell|cmd\.exe|/bin/sh|/bin/bash)"`,
+			description:  "MCP server invokes a shell interpreter directly",
+			cwe:          "CWE-78", keywords: []string{"command", "bash", "sh", "powershell"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "tool-exposure"},
+			remediation:  "Replace direct shell invocation with the specific binary the server needs. A shell-launched server inherits arbitrary subprocess capability that the MCP host can't constrain.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-002", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			pattern:      `(?i)"args"\s*:\s*\[[^\]]*"(?:\$HOME|~|/Users/|/home/|C:\\\\Users\\\\)[^"]*"`,
+			description:  "MCP server granted broad home-directory or root-path access",
+			cwe:          "CWE-732", keywords: []string{"args", "$HOME", "/Users/", "/home/"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "filesystem-exposure"},
+			remediation:  "Restrict the MCP server's path argument to the minimum project directory it needs. Granting home-directory scope means every tool call can read SSH keys, browser profiles, password managers, and shell history.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			pattern:      `(?i)"--allow-write"|"--no-sandbox"|"--dangerously-allow-[a-z-]+"|"--unsafe"|"--insecure"`,
+			description:  "MCP server invoked with dangerously-permissive flags",
+			cwe:          "CWE-732", keywords: []string{"allow-write", "no-sandbox", "dangerously"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "configuration"},
+			remediation:  "Remove permissive flags. If the MCP server requires elevated capability, document the operator decision in a config comment and restrict the scope to a specific subdirectory or operation.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-004", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?i)"env"\s*:\s*\{[^}]*"[A-Z0-9_]*(?:SECRET|API_KEY|TOKEN|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*"\s*:\s*"[^$"][^"]*"`,
+			description:  "MCP server config embeds a secret value in the env block",
+			cwe:          "CWE-798", keywords: []string{"env", "SECRET", "API_KEY", "TOKEN"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "secrets"},
+			remediation:  "Reference secrets via shell expansion ($VAR) rather than embedding the literal value. mcp.json files often live in version control or sync directories where literal secrets become exposed.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-005", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			pattern:      `(?s)server\.tool\s*\(\s*"[a-zA-Z_][a-zA-Z0-9_]*"\s*\)\s*\.handler`,
+			description:  "MCP tool registration missing description metadata",
+			cwe:          "CWE-1059", keywords: []string{"server.tool"},
+			filePatterns: []string{"*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "audit"},
+			remediation:  "Add a Description() call to every tool registration. The description is what the operator and the LLM see when reasoning about whether to invoke the tool. Missing descriptions are an auditability gap.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/tools"},
+		},
+		{
+			id: "MCP-006", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:      `(?i)"transport"\s*:\s*"http"|new\s+HttpServerTransport\s*\(\s*\{[^}]*"http://`,
+			description:  "MCP server uses plaintext HTTP transport",
+			cwe:          "CWE-319", keywords: []string{"transport", "http", "HttpServerTransport"},
+			filePatterns: []string{"mcp.json", "*.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "transport"},
+			remediation:  "Use HTTPS for any MCP transport that crosses a network boundary. stdio transport is fine for local servers; remote MCP must be TLS-protected to prevent tool-call interception.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-007", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
+			pattern:      `(?i)"command"\s*:\s*"(?:curl|wget|npx)\s+(?:[a-z]+://|--?[a-z]+\s+[a-z]+://)`,
+			description:  "MCP server fetches and executes remote code at startup",
+			cwe:          "CWE-829", keywords: []string{"command", "curl", "wget", "npx"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "supply-chain"},
+			remediation:  "Pin the MCP server to a specific version installed locally. Fetching at runtime turns every host start into a supply-chain attack surface — a compromised registry can ship arbitrary code to every operator's machine.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+		{
+			id: "MCP-008", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:      `(?s)server\.tool\s*\([^)]*\)[^.]*\.handler\s*\([^)]*\)\s*$`,
+			description:  "MCP tool handler appears unbounded (no rate limit / scope guard)",
+			cwe:          "CWE-770", keywords: []string{"server.tool", "handler"},
+			filePatterns: []string{"*.go", "*.ts", "*.js"},
+			tags:         []string{"ai", "mcp", "abuse"},
+			remediation:  "Wrap tool handlers in a rate-limited / scope-checked middleware. An LLM or compromised host can invoke handlers in tight loops; without a guard, a single bug becomes denial-of-service or quota exhaustion.",
+			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))

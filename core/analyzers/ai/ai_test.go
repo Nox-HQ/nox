@@ -850,10 +850,55 @@ idx.upsert(vectors=[{"id": "x", "values": embed(request.json)}])
 	}
 }
 
+// ---------------------------------------------------------------------------
+// MCP-* server hardening rules
+// ---------------------------------------------------------------------------
+
+func TestDetect_MCP002_HomeDirectoryAccess(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`{
+  "mcpServers": {
+    "fs": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/alice"]
+    }
+  }
+}
+`)
+	results, err := a.ScanFile("mcp.json", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "MCP-002") == nil {
+		t.Fatalf("expected MCP-002 for /Users/ path scope, got %+v", results)
+	}
+}
+
+func TestDetect_MCP004_LiteralSecretInEnv(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {"GITHUB_API_TOKEN": "ghp_abcd1234realtoken"}
+    }
+  }
+}
+`)
+	results, err := a.ScanFile("mcp.json", content)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if findingWithRule(results, "MCP-004") == nil {
+		t.Fatalf("expected MCP-004 for embedded secret, got %+v", results)
+	}
+}
+
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 61 {
-		t.Errorf("expected 61 AI rules, got %d", got)
+	if got := len(rules); got != 69 {
+		t.Errorf("expected 69 AI rules, got %d", got)
 	}
 }
 
