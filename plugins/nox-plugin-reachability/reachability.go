@@ -27,10 +27,26 @@ type Result struct {
 }
 
 // supportedEcosystems lists ecosystems we can perform import analysis on.
+// Precision class per language is documented per extractor:
+//   - Go: AST-based (parser.ParseFile); precision class A
+//   - PyPI: top-level module regex + PEP 503 distribution-name normalisation; class B
+//   - npm: import/require regex + scoped-package handling; class B
+//   - crates.io: `use foo::...` regex with std exclusion; class B
+//   - Maven: import-statement regex collapsed to top-three segments; class C (over-reports)
+//   - RubyGems: require/require_relative regex; class B
+//   - NuGet: using-statement regex collapsed to top-two segments; class C (over-reports)
+//
+// "Over-reports" means false-positives on reachability are possible,
+// which is the safer direction (we never silently miss an exploited
+// vulnerability path).
 var supportedEcosystems = map[string]bool{
-	"Go":   true,
-	"PyPI": true,
-	"npm":  true,
+	"Go":        true,
+	"PyPI":      true,
+	"npm":       true,
+	"crates.io": true,
+	"Maven":     true,
+	"RubyGems":  true,
+	"NuGet":     true,
 }
 
 // Analyze cross-references VULN findings against workspace imports and
@@ -83,6 +99,23 @@ func normalizePackageName(pkg, ecosystem string) string {
 		return PyPIToImportName(pkg)
 	case "npm":
 		// npm package names match import specifiers directly.
+		return pkg
+	case "crates.io":
+		// Cargo crate names use hyphens but `use` paths use underscores
+		// after the crate root. We index extractors on the crate root
+		// segment which preserves underscores.
+		return strings.ReplaceAll(strings.ToLower(pkg), "-", "_")
+	case "Maven":
+		// Maven coordinates are `group:artifact`; reachability indexes
+		// on `group.artifact-leading-segments`. Take the group portion
+		// when present, else the bare name.
+		if idx := strings.IndexByte(pkg, ':'); idx > 0 {
+			return pkg[:idx]
+		}
+		return pkg
+	case "RubyGems":
+		return strings.ToLower(pkg)
+	case "NuGet":
 		return pkg
 	default:
 		return strings.ToLower(pkg)

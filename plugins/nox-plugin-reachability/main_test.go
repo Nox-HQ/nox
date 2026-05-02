@@ -104,13 +104,13 @@ func TestAnalyzeReachabilityUnsupportedEcosystem(t *testing.T) {
 					RuleId:      "VULN-001",
 					Severity:    sdk.SeverityHigh,
 					Confidence:  sdk.ConfidenceHigh,
-					Message:     "CVE-2024-0001 in some-crate",
-					Fingerprint: "fp-vuln-cargo",
+					Message:     "CVE-2024-0001 in some-pkg",
+					Fingerprint: "fp-vuln-packagist",
 					Metadata: map[string]string{
 						"vuln_id":   "CVE-2024-0001",
-						"package":   "some-crate",
+						"package":   "vendor/some-pkg",
 						"version":   "0.5.0",
-						"ecosystem": "crates.io",
+						"ecosystem": "Packagist",
 					},
 				},
 			},
@@ -264,7 +264,7 @@ func TestAnalyzeFunction(t *testing.T) {
 		{Fingerprint: "fp1", Package: "github.com/vuln/pkg", Ecosystem: "Go", VulnID: "CVE-1"},
 		{Fingerprint: "fp2", Package: "requests", Ecosystem: "PyPI", VulnID: "CVE-2"},
 		{Fingerprint: "fp3", Package: "express", Ecosystem: "npm", VulnID: "CVE-3"},
-		{Fingerprint: "fp4", Package: "some-gem", Ecosystem: "RubyGems", VulnID: "CVE-4"},
+		{Fingerprint: "fp4", Package: "some-pkg", Ecosystem: "Packagist", VulnID: "CVE-4"},
 	}
 
 	results := Analyze(vulns, imports)
@@ -291,7 +291,7 @@ func TestAnalyzeFunction(t *testing.T) {
 		t.Errorf("results[2].RuleID = %q, want REACH-002", results[2].RuleID)
 	}
 
-	// RubyGems unsupported → REACH-003.
+	// Packagist (PHP) unsupported → REACH-003.
 	if results[3].RuleID != "REACH-003" {
 		t.Errorf("results[3].RuleID = %q, want REACH-003", results[3].RuleID)
 	}
