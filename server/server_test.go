@@ -1749,6 +1749,59 @@ func TestMajorOfVersion(t *testing.T) {
 	}
 }
 
+// --- handlePluginInstall tests ---
+
+func TestHandlePluginInstall_MissingName(t *testing.T) {
+	s := New("test", []string{t.TempDir()})
+	result, err := s.handlePluginInstall(context.Background(), pluginInstallInput{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(result, "Error:") || !strings.Contains(result, "missing required argument") {
+		t.Fatalf("expected missing-name error, got: %s", result)
+	}
+}
+
+func TestHandlePluginInstall_RejectsUnsafeName(t *testing.T) {
+	s := New("test", []string{t.TempDir()})
+	for _, bad := range []string{"foo;rm -rf /", "../etc/passwd", "foo$(whoami)", "name with space"} {
+		result, _ := s.handlePluginInstall(context.Background(), pluginInstallInput{Name: bad})
+		if !strings.Contains(result, "invalid plugin name") {
+			t.Errorf("expected reject for %q, got: %s", bad, result)
+		}
+	}
+}
+
+func TestIsSafePluginName(t *testing.T) {
+	good := []string{"nox/ai-eval", "nox/reachability", "acme/secret-scanner-v2", "nox-plugin-foo"}
+	bad := []string{"", "foo;bar", "foo bar", "foo$(x)", "foo|bar", "../foo", strings.Repeat("a", 201)}
+	for _, n := range good {
+		if !isSafePluginName(n) {
+			t.Errorf("safe name rejected: %q", n)
+		}
+	}
+	for _, n := range bad {
+		if isSafePluginName(n) {
+			t.Errorf("unsafe name accepted: %q", n)
+		}
+	}
+}
+
+func TestIsSafeVersionConstraint(t *testing.T) {
+	good := []string{"1.2.3", "v1.2.3", ">=0.5", "^1.0.0", "~1.2", "1.0.0-beta+build"}
+	bad := []string{"1.2; rm -rf", "1.0.0`whoami`", "$(x)", "../1.0"}
+	for _, v := range good {
+		if !isSafeVersionConstraint(v) {
+			t.Errorf("safe version rejected: %q", v)
+		}
+	}
+	for _, v := range bad {
+		if isSafeVersionConstraint(v) {
+			t.Errorf("unsafe version accepted: %q", v)
+		}
+	}
+}
+
 func TestProjectResourceDashboard_AfterScan(t *testing.T) {
 	s, absPath := scanDirWithPath(t)
 	encoded := url.PathEscape(absPath)

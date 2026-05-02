@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os/exec"
 	"os"
 	"path/filepath"
 	"sort"
@@ -95,6 +96,11 @@ type fixPlanInput struct {
 }
 type agentGraphInput struct {
 	Format string `json:"format,omitempty"` // "mermaid" or "dot"; defaults to "mermaid"
+}
+type pluginInstallInput struct {
+	Name       string `json:"name"`               // required: nox/foo or nox-plugin-foo
+	Version    string `json:"version,omitempty"`  // optional version constraint
+	NeedsConfirm bool `json:"_needs_confirm,omitempty"` // host-set: operator approved active call
 }
 type pluginReadResourceInput struct {
 	Plugin string `json:"plugin"`
@@ -281,6 +287,10 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
 		Handler(s.handleAgentGraph)
+
+	srv.Tool("plugin_install").
+		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only.").
+		Handler(s.handlePluginInstall)
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
@@ -1378,6 +1388,87 @@ func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, p
 		MimeType: "text/html",
 		Text:     html,
 	}, nil
+}
+
+// --- plugin_install handler ---
+
+func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput) (string, error) {
+	if input.Name == "" {
+		return "Error: missing required argument: name (e.g. nox/ai-eval)", nil
+	}
+	// Reject obviously suspicious names so a hostile prompt can't tunnel
+	// arbitrary args into the subprocess. Plugin names are restricted to
+	// the registry's character set.
+	if !isSafePluginName(input.Name) {
+		return "Error: invalid plugin name (allowed chars: a-z, 0-9, /, -, _, .)", nil
+	}
+	if input.Version != "" && !isSafeVersionConstraint(input.Version) {
+		return "Error: invalid version constraint", nil
+	}
+
+	noxBin, err := os.Executable()
+	if err != nil {
+		return "Error: locating nox binary: " + err.Error(), nil
+	}
+
+	spec := input.Name
+	if input.Version != "" {
+		spec = input.Name + "@" + input.Version
+	}
+
+	cmd := exec.Command(noxBin, "plugin", "install", spec)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Plugin install failed: %v\n\nOutput:\n%s", err, string(out)), nil
+	}
+	return "Plugin install:\n" + string(out), nil
+}
+
+// isSafePluginName accepts only registry-shaped names so a hostile
+// prompt can't smuggle shell metacharacters into an exec.Command call.
+// Path-traversal sequences (..) and leading dots are rejected even
+// though the underlying chars are otherwise allowed.
+func isSafePluginName(s string) bool {
+	if s == "" || len(s) > 200 {
+		return false
+	}
+	if strings.Contains(s, "..") {
+		return false
+	}
+	if s[0] == '.' || s[0] == '-' || s[0] == '/' {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '/' || r == '-' || r == '_' || r == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isSafeVersionConstraint accepts a constrained subset of semver-shaped
+// strings: digits, dots, hyphens, plus, ASCII letters (for prerelease
+// identifiers like 1.0.0-beta), and the range operators >= ^ ~.
+func isSafeVersionConstraint(s string) bool {
+	if s == "" || len(s) > 50 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r == '.' || r == '-' || r == '+' || r == '>' || r == '=' || r == '^' || r == '~':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.
