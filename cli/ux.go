@@ -44,7 +44,7 @@ func familyOf(ruleID string) string {
 	}
 }
 
-// familySummary returns a one-line "Secrets:23, Infrastructure:12, ..."
+// familySummary returns a one-line "Secrets:23, Infrastructure:12, ..." // nox:ignore SEC-163 -- code comment
 // breakdown of active findings sorted by descending count. Returns "" on
 // empty input.
 func familySummary(items []findings.Finding) string {

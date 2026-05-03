@@ -94,6 +94,11 @@ changelog:
 release:
   draft: false
   prerelease: auto
+  # GoReleaser auto-uploads ${signature} from the signs block but
+  # doesn't know about the cosign bundle file. Attach it explicitly
+  # so cosign v4 verifiers can fetch it from the release.
+  extra_files:
+    - glob: dist/*.sig.bundle
   footer: |
     ## Install
 

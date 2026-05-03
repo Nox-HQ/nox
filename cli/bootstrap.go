@@ -71,7 +71,7 @@ func bootstrapBundledPlugins() {
 			st.Sources = append(st.Sources, defaultRegistrySource)
 			changed = true
 			notices = append(notices, fmt.Sprintf(
-				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)",
+				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)", // nox:ignore SEC-161 -- env var name in user-facing notice, not a credential
 				defaultRegistrySource.URL))
 		}
 	}

@@ -1,0 +1,129 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/Nox-HQ/nox/vex.json",
+  "author": "Nox Maintainers <security@nox-hq.dev>",
+  "timestamp": "2026-05-03T00:00:00Z",
+  "version": 1,
+  "tooling": "nox vex (manual)",
+  "statements": [
+    {
+      "vulnerability": "SEC-161",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "core/analyzers/ai/aibom_polyglot.go and core/analyzers/ai/agent_lattice.go contain regex literals that match generic API-key shapes; these are detector patterns, not credentials. cli/bootstrap.go and cli/ux.go reference env-var names in user-facing notices."
+    },
+    {
+      "vulnerability": "SEC-163",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Detector regex patterns and code comments containing 'token'/'secret' literals — not credentials."
+    },
+    {
+      "vulnerability": "SEC-506",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "server/server.go contains the function name 'handleProjectResourceAIInventory' (32 chars) plus the string 'nuget' as an ecosystem case in another function; rule fires on both via file-level keyword match. Function name is not a NuGet API key."
+    },
+    {
+      "vulnerability": "SEC-569",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "core/analyzers/ai/aibom_polyglot.go contains 'gemini' inside a regex pattern that detects Gemini model identifiers in scanned source. Triggers Gemini-API-key false positives via file-level keyword match."
+    },
+    {
+      "vulnerability": "SEC-574",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "server/server.go comment line contains 'are otherwise allowed' — substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
+    },
+    {
+      "vulnerability": "SEC-435",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/mcp.json contains intentionally bad MCP configuration for documentation purposes — not shipped as a runtime asset."
+    },
+    {
+      "vulnerability": "SEC-003",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
+    },
+    {
+      "vulnerability": "MCP-002",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo of MCP server configuration that fails MCP-002. Used to illustrate what nox catches."
+    },
+    {
+      "vulnerability": "MCP-004",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
+    },
+    {
+      "vulnerability": "AI-PI-001",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/agent.py — intentional vulnerable code used to demonstrate AI-PI-001 prompt-injection detection. Not part of the shipped scanner."
+    },
+    {
+      "vulnerability": "AI-PI-002",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/agent.py — intentional demo content for AI-PI-002."
+    },
+    {
+      "vulnerability": "AI-EMBED-001",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/ingest.py — intentional demo content for AI-EMBED-001."
+    },
+    {
+      "vulnerability": "AI-AGENT-001",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-001 over-privilege detection."
+    },
+    {
+      "vulnerability": "AI-AGENT-002",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-002."
+    },
+    {
+      "vulnerability": "DATA-001",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ci-baseline/vex.json — sample VEX document containing fixture data. Not shipped as runtime content."
+    },
+    {
+      "vulnerability": "IAC-013",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow shipped as documentation. Action SHA pinning is intentionally relaxed in the example to keep it readable."
+    },
+    {
+      "vulnerability": "IAC-157",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow."
+    }
+  ]
+}

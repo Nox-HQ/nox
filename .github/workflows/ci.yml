@@ -92,7 +92,7 @@ jobs:
         run: make build
 
       - name: Run nox self-scan
-        run: ./nox scan . --format all --output nox-results --quiet || true
+        run: ./nox scan . --format all --output nox-results --vex vex.json --quiet || true
 
       - name: Generate security badges
         run: ./nox badge --input nox-results/findings.json --output .github/nox-badge.svg --by-severity || true

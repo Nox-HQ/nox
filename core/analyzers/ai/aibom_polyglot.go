@@ -186,6 +186,10 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 // `process.env.X` style references commonly used to feed LLM clients.
 // Returns the env var name when one matches, or "" otherwise.
 func detectAuthEnvVar(text string) string {
+	// nox:ignore SEC-161,SEC-163,SEC-574 -- these are detector
+	// regex patterns, not credentials. The patterns themselves match
+	// "API_KEY"/"TOKEN"/"SECRET"/"PASSWORD" identifiers in scanned
+	// source; they are not secrets.
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`os\.getenv\s*\(\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),
 		regexp.MustCompile(`os\.environ\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),
