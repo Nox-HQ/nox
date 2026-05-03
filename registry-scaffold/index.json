@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "generated_at": "2026-05-03T07:41:36.401807Z",
+  "generated_at": "2026-05-03T08:48:20.916680Z",
   "plugins": [
     {
       "name": "nox/reachability",
@@ -1048,6 +1048,87 @@
               "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-threat-enrich/releases/download/v0.2.0/checksums.txt.sig",
               "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-threat-enrich/releases/download/v0.2.0/checksums.txt.sig.bundle",
               "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-threat-enrich/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nox/triage-agent",
+      "description": "LLM-powered finding prioritization and false-positive reduction (4 rules + 7-provider LLM: openai, anthropic, gemini, ollama, cohere, bedrock, copilot)",
+      "homepage": "https://github.com/Nox-HQ/nox-plugin-triage-agent",
+      "repository": "https://github.com/Nox-HQ/nox-plugin-triage-agent",
+      "license": "Apache-2.0",
+      "track": "agent-assistance",
+      "maintainers": [
+        "nox-hq"
+      ],
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api_version": "v1",
+          "published_at": "2026-05-03T08:48:20.916557Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "triage"
+          ],
+          "min_nox_version": "0.6.0",
+          "changelog_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/blob/main/CHANGELOG.md",
+          "artifacts": [
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/nox-plugin-triage-agent_0.2.0_linux_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:37c25971046ae88b29f82f35091bb4063234b5f44161d83e67b67f5452b9c557",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-triage-agent/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/nox-plugin-triage-agent_0.2.0_linux_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:45a55b422ad2678465cbf3467ff18b967592509c2e015406747770387d79c476",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-triage-agent/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/nox-plugin-triage-agent_0.2.0_darwin_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:2144058a6ac22e4e758f4805064a6b0b5082485338092bddac87c7d34d2b4743",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-triage-agent/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/nox-plugin-triage-agent_0.2.0_darwin_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:4be083f064276700a1e05030cac995a40fb63615594ef248cc328d40cd5bdcce",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-triage-agent/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/nox-plugin-triage-agent_0.2.0_windows_amd64.zip",
+              "size": 0,
+              "digest": "sha256:8cb5ac3a69812ba6914c85d4669bfb18ac526ef29c54ffa217cc094e4fcdf6e1",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-triage-agent/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-triage-agent/.github/workflows/release.yml@.*",
               "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
             }
           ]
