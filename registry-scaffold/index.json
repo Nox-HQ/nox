@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "generated_at": "2026-05-02T17:38:47Z",
+  "generated_at": "2026-05-03T07:08:56.732989Z",
   "plugins": [
     {
       "name": "nox/reachability",
@@ -485,6 +485,87 @@
       ],
       "license": "Apache-2.0",
       "repository": "https://github.com/nox-hq/nox-plugin-ai-eval"
+    },
+    {
+      "name": "nox/dast",
+      "description": "DAST web/API scanning with HTTP misconfig probes (headers, CORS, TLS, cookies, rate-limit, open-redirect)",
+      "homepage": "https://github.com/Nox-HQ/nox-plugin-dast",
+      "repository": "https://github.com/Nox-HQ/nox-plugin-dast",
+      "license": "Apache-2.0",
+      "track": "dynamic-runtime",
+      "maintainers": [
+        "nox-hq"
+      ],
+      "versions": [
+        {
+          "version": "0.2.0",
+          "api_version": "v1",
+          "published_at": "2026-05-03T07:08:56.732876Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "scan"
+          ],
+          "min_nox_version": "0.6.0",
+          "changelog_url": "https://github.com/Nox-HQ/nox-plugin-dast/blob/main/CHANGELOG.md",
+          "artifacts": [
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/nox-plugin-dast_0.2.0_linux_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:4b0a2a09bdce5f40577ae75ccfbc074f330ad7806ee7046dda93a5130e206f62",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-dast/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/nox-plugin-dast_0.2.0_linux_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:d539e225d1966dd3f165495a0e0e88d80016f6e43fa4eda0407735223534a003",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-dast/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/nox-plugin-dast_0.2.0_darwin_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:881679c60c3ccc7deafa0809eefde4c3b9970490214fa93543d3ba0d90d235db",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-dast/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/nox-plugin-dast_0.2.0_darwin_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:a4d90be39664b155bce4eb8fb142f48002cb81534567186c1b767407b4bc7e8e",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-dast/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/nox-plugin-dast_0.2.0_windows_amd64.zip",
+              "size": 0,
+              "digest": "sha256:8d306a5358566216f3460e9142da83ee8e2751754f1a6c0c1d8adeccfbb0d444",
+              "cosign_sig_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/Nox-HQ/nox-plugin-dast/releases/download/v0.2.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/Nox-HQ/nox-plugin-dast/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
