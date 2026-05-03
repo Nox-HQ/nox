@@ -1,0 +1,49 @@
+# Scan-of-the-week rotation queue.
+#
+# Bi-weekly cadence, alphabetical-first selection. The /schedule
+# job pops the top non-comment line, runs `nox scan` on the repo,
+# writes a draft post to nox-hq.dev/src/content/blog/, then strikes
+# the line through (or comments it out) on commit.
+#
+# Format: <github-org>/<repo>@<ref>   <- ref optional, defaults to HEAD
+#
+# Categories: agent frameworks, LLM SDKs, RAG, MCP servers, vector
+# DBs, AI dev tools. Curated for AI-security relevance — skipping
+# repos that are purely tutorial / dataset / model weights.
+#
+# Refill via PR when this list runs short.
+
+# ── Q3 2026 ─────────────────────────────────────────────────────
+anthropics/anthropic-cookbook
+deepset-ai/haystack
+huggingface/smolagents
+langchain-ai/langgraph
+microsoft/autogen
+modelcontextprotocol/servers
+openai/openai-agents-python
+phidatahq/phidata
+princeton-nlp/SWE-agent
+pydantic/pydantic-ai
+ragflow-io/ragflow
+run-llama/create-llama
+sgl-project/sglang
+stanfordnlp/dspy
+TransformerOptimus/SuperAGI
+vercel/ai-sdk
+
+# ── Q4 2026 ─────────────────────────────────────────────────────
+chroma-core/chroma
+guardrails-ai/guardrails
+huggingface/text-generation-inference
+langchain-ai/langchainjs
+microsoft/semantic-kernel
+microsoft/TaskWeaver
+mlc-ai/mlc-llm
+ollama/ollama
+qdrant/qdrant
+weaviate/weaviate
+
+# ── 2027+ ──────────────────────────────────────────────────────
+# Add more as the ecosystem evolves. Keep the list mixed across
+# Python / TypeScript / Go / Rust so the rule families get exercised
+# across language detection paths.
