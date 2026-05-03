@@ -3,6 +3,7 @@
 
 # GoReleaser
 dist/
+bundled/
 
 # Go
 *.exe

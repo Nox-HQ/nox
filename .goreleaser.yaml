@@ -10,9 +10,12 @@ before:
     # Pre-build the reachability plugin so the archive can ship it
     # alongside the nox binary. The plugin lives in its own module;
     # goreleaser's builds: stanza can't follow nested go.mod files
-    # directly, so a pre-hook produces dist/nox-plugin-reachability
-    # which the archive includes via files:.
-    - sh -c 'cd plugins/nox-plugin-reachability && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../../dist/nox-plugin-reachability .'
+    # directly, so a pre-hook produces the sibling artifact which the
+    # archive includes via files:. Output goes to top-level `bundled/`
+    # — recent GoReleaser asserts dist/ is empty after before-hooks
+    # run, so we cannot land artifacts there ahead of the build phase.
+    - mkdir -p bundled
+    - sh -c 'cd plugins/nox-plugin-reachability && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../../bundled/nox-plugin-reachability .'
 
 builds:
   - id: nox
@@ -49,8 +52,8 @@ archives:
       - README.md
       # Bundle the reachability plugin so vulnerable-dep call-graph
       # analysis works out of the box without a separate plugin
-      # install. Built by the pre-hook above.
-      - src: dist/nox-plugin-reachability
+      # install. Built by the pre-hook above into bundled/.
+      - src: bundled/nox-plugin-reachability
         dst: bin/nox-plugin-reachability
 
 checksum:
