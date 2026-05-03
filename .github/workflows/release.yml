@@ -33,10 +33,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
-          # SKIP_BREW=1 disables the homebrew formula bump in
-          # .goreleaser.yaml. Used while TAP_GITHUB_TOKEN is being
-          # rotated; flip back to "0" or remove once the token is fresh.
-          SKIP_BREW: '1'
 
   sign:
     runs-on: ubuntu-latest

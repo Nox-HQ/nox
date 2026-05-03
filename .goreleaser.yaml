@@ -115,31 +115,27 @@ release:
   footer: |
     **Full Changelog**: https://github.com/nox-hq/nox/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-# brews block disabled for v0.8.0 — TAP_GITHUB_TOKEN expired (401),
-# blocks the entire release. Restore once a fresh token is rotated
-# into repo secrets and the next tag will bump the formula again.
-#
-# brews:
-#   - name: nox
-#     directory: Formula
-#     repository:
-#       owner: felixgeelhaar
-#       name: homebrew-tap
-#       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-#     commit_author:
-#       name: goreleaserbot
-#       email: bot@goreleaser.com
-#     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-#     homepage: "https://github.com/nox-hq/nox"
-#     description: "Language-agnostic security scanner with first-class AI application security"
-#     license: "Apache-2.0"
-#     install: |
-#       bin.install "nox"
-#       bin.install "bin/nox-plugin-reachability"
-#     test: |
-#       system "#{bin}/nox", "--help"
-#       system "#{bin}/nox-plugin-reachability", "--help" rescue true
-#     skip_upload: auto
+brews:
+  - name: nox
+    directory: Formula
+    repository:
+      owner: felixgeelhaar
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}" # nox:ignore SEC-163 -- Go template using env var
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com # nox:ignore DATA-001 -- goreleaser bot email
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/nox-hq/nox"
+    description: "Language-agnostic security scanner with first-class AI application security"
+    license: "Apache-2.0"
+    install: |
+      bin.install "nox"
+      bin.install "bin/nox-plugin-reachability"
+    test: |
+      system "#{bin}/nox", "--help"
+      system "#{bin}/nox-plugin-reachability", "--help" rescue true
+    skip_upload: auto
 
 sboms:
   - artifacts: archive
