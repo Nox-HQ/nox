@@ -117,6 +117,10 @@ release:
 
 brews:
   - name: nox
+    # Auto-skip when SKIP_BREW=1. Used for v0.8.0 while the
+    # TAP_GITHUB_TOKEN secret is rotated; remove or set the env to 0
+    # once the token is back to bump the homebrew formula on release.
+    disable: '{{ if eq .Env.SKIP_BREW "1" }}true{{ end }}'
     directory: Formula
     repository:
       owner: felixgeelhaar
