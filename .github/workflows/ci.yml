@@ -97,24 +97,9 @@ jobs:
         # ignores everything after the path.
         run: ./nox scan --format all --output nox-results --vex vex.json --quiet . || true
 
-      - name: Generate security badges
-        run: ./nox badge --input nox-results/findings.json --output .github/nox-badge.svg --by-severity || true
-
-      - name: Update security badges
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        # Best-effort. Branch protection on main rejects pushes from
-        # GITHUB_TOKEN (rule GH006), so this either succeeds when a
-        # bypass is in place or fails silently. The badges are
-        # cosmetic — failure here must not fail the whole CI run.
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/nox-badge.svg .github/nox-critical.svg .github/nox-high.svg .github/nox-medium.svg .github/nox-low.svg
-          if ! git diff --cached --quiet; then
-            git commit -m "ci: update security badges [skip ci]"
-            git push || echo "badge push rejected (branch protection); skipping"
-          fi
+      # Badge generation + push lives in .github/workflows/badge.yml
+      # — it runs on a schedule and opens a PR, bypassing the
+      # branch-protection rule that blocks GITHUB_TOKEN pushes to main.
 
       - name: Upload SARIF to GitHub
         uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
