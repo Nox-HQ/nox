@@ -62,8 +62,12 @@ func runBadge(args []string) int {
 			fmt.Fprintf(os.Stderr, "error: parsing findings JSON: %v\n", err)
 			return 2
 		}
+		// Match RunScan path's ActiveFindings() semantics: include only
+		// findings whose status counts as active. Without this, VEX-waived
+		// (vex_not_affected) and baselined findings inflate the badge
+		// grade even when the operator has explicitly accepted them.
 		for i := range rep.Findings {
-			if rep.Findings[i].Status != findings.StatusSuppressed {
+			if rep.Findings[i].Status.IsActive() {
 				findingsList = append(findingsList, rep.Findings[i])
 			}
 		}

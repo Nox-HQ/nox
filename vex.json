@@ -42,6 +42,20 @@
       "impact_statement": "server/server.go comment line contains 'are otherwise allowed' — substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
     },
     {
+      "vulnerability": "SEC-162",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Generic SECRET-token false positive on user-facing notice strings referencing env var names."
+    },
+    {
+      "vulnerability": "SEC-697",
+      "products": ["github.com/nox-hq/nox"],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "Generic detector firing on the vex.json document itself (recursive self-eat). The waiver bundle contains 32-char hashes/IDs as part of the OpenVEX schema; not credentials."
+    },
+    {
       "vulnerability": "SEC-435",
       "products": ["github.com/nox-hq/nox"],
       "status": "not_affected",
