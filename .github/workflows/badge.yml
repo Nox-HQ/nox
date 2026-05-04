@@ -9,8 +9,10 @@ name: Refresh security badge
 # not a direct push.
 
 on:
+  release:
+    types: [published]      # primary trigger — every published release
   schedule:
-    - cron: "17 6 * * *"   # daily at 06:17 UTC
+    - cron: "17 6 * * *"    # daily safety net for between-release drift
   workflow_dispatch:
   workflow_run:
     workflows: ["CI"]
