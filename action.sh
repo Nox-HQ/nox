@@ -89,11 +89,13 @@ install_nox() {
   # Verify checksum if checksums.txt is available.
   if curl -fsSL -o "${tmp_dir}/checksums.txt" "${checksums_url}" 2>/dev/null; then
     local expected actual
-    # Strip trailing CR — checksums.txt can ship with CRLF endings, in
-    # which case `awk '{print $1}'` keeps the \r in the hash field. The
-    # \r then makes `[[ "$a" != "$b" ]]` fire even when the visible
-    # values match (the \r hides the diff in CI logs).
-    expected=$(grep "${archive}" "${tmp_dir}/checksums.txt" | awk '{print $1}' | tr -d '\r')
+    # Match the filename column EXACTLY (sha256sum format: "<hash>  <name>").
+    # `grep "$archive"` would also match sibling rows like
+    # "<hash>  nox_<v>_linux_amd64.tar.gz.sbom.json" because the substring
+    # is contained — concatenating two hashes into `expected` and tripping
+    # the comparison below. Strip trailing CR for safety against CRLF
+    # checksum files.
+    expected=$(awk -v f="${archive}" '$2 == f {print $1}' "${tmp_dir}/checksums.txt" | tr -d '\r')
     if [[ -n "${expected}" ]]; then
       actual=$(sha256sum "${tmp_dir}/${archive}" 2>/dev/null | awk '{print $1}' \
         || shasum -a 256 "${tmp_dir}/${archive}" | awk '{print $1}')
