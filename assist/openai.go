@@ -7,23 +7,28 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 )
 
 // OpenAIProvider implements Provider using the official OpenAI Go SDK.
 // It supports any OpenAI-compatible endpoint via WithBaseURL.
 type OpenAIProvider struct {
-	client openai.Client
-	model  string
+	client      openai.Client
+	model       string
+	temperature float64
+	hasTemp     bool
 }
 
 // OpenAIOption configures an OpenAIProvider.
 type OpenAIOption func(*openaiConfig)
 
 type openaiConfig struct {
-	model   string
-	apiKey  string
-	baseURL string
-	timeout time.Duration
+	model       string
+	apiKey      string
+	baseURL     string
+	timeout     time.Duration
+	temperature float64
+	hasTemp     bool
 }
 
 // WithModel sets the model name (default: "gpt-4o").
@@ -47,6 +52,12 @@ func WithTimeout(d time.Duration) OpenAIOption {
 	return func(c *openaiConfig) { c.timeout = d }
 }
 
+// WithTemperature sets the sampling temperature for generation. When unset
+// the provider relies on the model's server-side default.
+func WithTemperature(t float64) OpenAIOption {
+	return func(c *openaiConfig) { c.temperature = t; c.hasTemp = true }
+}
+
 // NewOpenAIProvider creates an OpenAIProvider with the given options.
 func NewOpenAIProvider(opts ...OpenAIOption) *OpenAIProvider {
 	cfg := openaiConfig{model: "gpt-4o"}
@@ -66,8 +77,10 @@ func NewOpenAIProvider(opts ...OpenAIOption) *OpenAIProvider {
 	}
 
 	return &OpenAIProvider{
-		client: openai.NewClient(clientOpts...),
-		model:  cfg.model,
+		client:      openai.NewClient(clientOpts...),
+		model:       cfg.model,
+		temperature: cfg.temperature,
+		hasTemp:     cfg.hasTemp,
 	}
 }
 
@@ -77,6 +90,9 @@ func (p *OpenAIProvider) Complete(ctx context.Context, messages []Message) (*Res
 	params := openai.ChatCompletionNewParams{
 		Model:    p.model,
 		Messages: toOpenAIMessages(messages),
+	}
+	if p.hasTemp {
+		params.Temperature = param.NewOpt(p.temperature)
 	}
 
 	completion, err := p.client.Chat.Completions.New(ctx, params)
