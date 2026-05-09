@@ -14,7 +14,7 @@
 # Refill via PR when this list runs short.
 
 # ── Q3 2026 ─────────────────────────────────────────────────────
-anthropics/anthropic-cookbook
+# DONE 2026-05-09: anthropics/anthropic-cookbook — 1.95M findings (mostly RAG-corpus FPs); precision-tuning post
 deepset-ai/haystack
 huggingface/smolagents
 langchain-ai/langgraph
