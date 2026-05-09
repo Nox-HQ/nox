@@ -46,5 +46,8 @@ explanations.json
 # Plugin local clones
 plugins/
 
+# Stray badge artifacts (canonical lives at .github/nox-badge.svg)
+cli/.github/
+
 # Relicta
 .relicta/
