@@ -89,7 +89,7 @@ func isTopLevelBoolFlag(name string) bool {
 
 func isTopLevelStringFlag(name string) bool {
 	switch name {
-	case "format", "output", "rules", "changed-since":
+	case "format", "output", "rules":
 		return true
 	}
 	return false
