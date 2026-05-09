@@ -45,6 +45,10 @@ Map findings directly to CIS Kubernetes Benchmark controls (5.1.x through 5.5.x)
 | KRUNT-006 | Unpinned container image (:latest or no tag) | Medium | CWE-829 | 5.5.1 |
 | KRUNT-007 | Service account token auto-mounted | Low | CWE-668 | 5.1.6 |
 | KRUNT-008 | Dangerous Linux capabilities (SYS_ADMIN, NET_RAW, ALL, etc.) | High | CWE-250 | 5.2.7-9 |
+| KDRIFT-001 | Image differs from declared IaC | High | CWE-829 | — |
+| KDRIFT-002 | Resource limits drift from declared IaC | Medium | CWE-770 | — |
+| KDRIFT-003 | securityContext less restrictive than declared | High | CWE-250 | — |
+| KDRIFT-004 | Running workload not declared in IaC (unmanaged) | Medium | CWE-710 | — |
 
 ### Dangerous Capabilities (KRUNT-008)
 
@@ -58,11 +62,20 @@ The following Linux capabilities are flagged: `SYS_ADMIN`, `NET_RAW`, `ALL`, `SY
 
 The plugin automatically detects in-cluster configuration when running inside a Kubernetes pod. When running externally, it falls back to the `KUBECONFIG` environment variable or `~/.kube/config`.
 
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `scan` | Run KRUNT-001..008 against live workloads. |
+| `drift` | Compare live workloads to declared IaC (Pod, Deployment, StatefulSet, DaemonSet) and emit KDRIFT-001..004. |
+
 ### Tool Input Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `namespace` | string | No | Kubernetes namespace to scan. Scans all namespaces if omitted. |
+| Tool | Parameter | Type | Required | Description |
+|------|-----------|------|----------|-------------|
+| `scan` | `namespace` | string | No | Kubernetes namespace to scan. Scans all namespaces if omitted. |
+| `drift` | `namespace` | string | No | Kubernetes namespace to compare. Scans all namespaces if omitted. |
+| `drift` | `iac_path` | string | Yes | Directory containing the declared k8s manifests (multi-doc YAML supported). |
 
 ## Installation
 

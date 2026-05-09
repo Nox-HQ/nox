@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `drift` tool: compare live cluster workloads against declared IaC manifests
+  (Pod, Deployment, StatefulSet, DaemonSet) and emit drift findings.
+- KDRIFT-001 (image), KDRIFT-002 (resource limits), KDRIFT-003 (security
+  context regression), KDRIFT-004 (unmanaged workload).
+- Multi-document YAML loader; owner-reference based workload identity.
+- 9 new tests covering loader, comparators, and tool wiring.
+
 ## [0.1.0] - 2026-02-22
 
 ### Added

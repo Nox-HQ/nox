@@ -23,6 +23,7 @@ func buildServer() *sdk.PluginServer {
 	manifest := sdk.NewManifest("nox/k8s-runtime", version).
 		Capability("k8s-runtime", "Kubernetes runtime security scanning for running workloads").
 		Tool("scan", "Inspect running Kubernetes workloads for security misconfigurations", true).
+		Tool("drift", "Compare cluster state to declared IaC manifests for drift findings", true).
 		Done().
 		Safety(
 			sdk.WithRiskClass(sdk.RiskActive),
@@ -32,7 +33,8 @@ func buildServer() *sdk.PluginServer {
 		Build()
 
 	return sdk.NewPluginServer(manifest).
-		HandleTool("scan", handleScan)
+		HandleTool("scan", handleScan).
+		HandleTool("drift", handleDrift)
 }
 
 func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolResponse, error) {
@@ -54,6 +56,57 @@ func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolR
 	if err != nil {
 		resp.Diagnostic(pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_ERROR,
 			fmt.Sprintf("scan failed: %v", err),
+			"nox/k8s-runtime",
+		)
+		return resp.Build(), nil
+	}
+
+	for _, f := range findings {
+		fb := resp.Finding(f.RuleID, f.Severity, f.Confidence, f.Message).
+			At(f.Path, 0, 0).
+			WithMetadata("cwe", f.CWE).
+			WithMetadata("namespace", f.Namespace).
+			WithMetadata("pod", f.Pod)
+		if f.Container != "" {
+			fb = fb.WithMetadata("container", f.Container)
+		}
+		for k, v := range f.Metadata {
+			fb = fb.WithMetadata(k, v)
+		}
+		fb.Done()
+	}
+
+	return resp.Build(), nil
+}
+
+func handleDrift(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolResponse, error) {
+	namespace := req.InputString("namespace")
+	iacPath := req.InputString("iac_path")
+
+	resp := sdk.NewResponse()
+
+	if iacPath == "" {
+		resp.Diagnostic(pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_ERROR,
+			"drift requires \"iac_path\" pointing at a directory of k8s manifests",
+			"nox/k8s-runtime",
+		)
+		return resp.Build(), nil
+	}
+
+	client, err := buildK8sClient()
+	if err != nil {
+		resp.Diagnostic(pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_ERROR,
+			fmt.Sprintf("failed to connect to Kubernetes cluster: %v", err),
+			"nox/k8s-runtime",
+		)
+		return resp.Build(), nil
+	}
+
+	scanner := NewScanner(client)
+	findings, err := scanner.ScanDrift(ctx, namespace, iacPath)
+	if err != nil {
+		resp.Diagnostic(pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_ERROR,
+			fmt.Sprintf("drift detection failed: %v", err),
 			"nox/k8s-runtime",
 		)
 		return resp.Build(), nil
