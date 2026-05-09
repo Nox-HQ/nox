@@ -29,18 +29,32 @@ type tfConfiguration struct {
 	RootModule tfConfigModule `json:"root_module"`
 }
 
-// tfConfigModule holds the resources within a configuration module.
+// tfConfigModule holds the resources, data sources, and child module calls
+// within a configuration module.
 type tfConfigModule struct {
-	Resources []tfConfigResource `json:"resources"`
+	Resources     []tfConfigResource        `json:"resources"`
+	DataResources []tfConfigResource        `json:"data_resources"`
+	ModuleCalls   map[string]tfModuleCall   `json:"module_calls"`
+}
+
+// tfModuleCall describes a child module invocation within a configuration.
+type tfModuleCall struct {
+	Source string         `json:"source"`
+	Module tfConfigModule `json:"module"`
 }
 
 // tfConfigResource represents a resource's HCL expressions (references to
 // other resources) in the configuration section of a Terraform plan.
+// DependsOn carries explicit dependency declarations from `depends_on` blocks
+// and is rendered as EdgeKindDependsOn in the graph; expression references
+// are rendered as EdgeKindReferences.
 type tfConfigResource struct {
 	Address     string                        `json:"address"`
 	Type        string                        `json:"type"`
 	Name        string                        `json:"name"`
+	Mode        string                        `json:"mode"`
 	Expressions map[string]tfConfigExpression `json:"expressions"`
+	DependsOn   []string                      `json:"depends_on"`
 }
 
 // tfConfigExpression captures the references within a single HCL expression.

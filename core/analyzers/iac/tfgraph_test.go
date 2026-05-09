@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/graph"
 )
 
 // --- IAC-366: Public subnet + unrestricted security group in same VPC ---
@@ -772,4 +773,165 @@ func assertMetadata(t *testing.T, fs *findings.FindingSet, ruleID, key, value st
 		}
 	}
 	t.Errorf("finding %s not found for metadata check", ruleID)
+}
+
+// --- task-43: extended graph (data sources, modules, edge-kind split) ---
+
+func TestBuildResourceGraph_DataSource(t *testing.T) {
+	planJSON := []byte(`{
+		"planned_values": {"root_module": {"resources": []}},
+		"resource_changes": [
+			{"address": "aws_subnet.public", "type": "aws_subnet",
+			 "change": {"actions": ["create"], "after": {}}}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{"address": "aws_subnet.public", "type": "aws_subnet", "name": "public",
+					 "expressions": {"vpc_id": {"references": ["data.aws_vpc.shared.id"]}}}
+				],
+				"data_resources": [
+					{"address": "data.aws_vpc.shared", "type": "aws_vpc", "name": "shared", "mode": "data"}
+				]
+			}
+		}
+	}`)
+
+	g, err := BuildResourceGraph(planJSON, "plan.json")
+	if err != nil {
+		t.Fatalf("BuildResourceGraph error: %v", err)
+	}
+	if len(g.Nodes) != 2 {
+		t.Fatalf("expected 2 nodes (subnet + data.aws_vpc), got %d", len(g.Nodes))
+	}
+
+	var dataNode *graph.Node
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == "data.aws_vpc.shared" {
+			dataNode = &g.Nodes[i]
+		}
+	}
+	if dataNode == nil {
+		t.Fatal("expected data source node 'data.aws_vpc.shared' in graph")
+	}
+	if dataNode.Properties["mode"] != "data" {
+		t.Errorf("expected data-source node mode=data, got %q", dataNode.Properties["mode"])
+	}
+
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 edge (subnet→data.aws_vpc), got %d", len(g.Edges))
+	}
+	e := g.Edges[0]
+	if e.Source != "aws_subnet.public" || e.Target != "data.aws_vpc.shared" {
+		t.Errorf("unexpected edge endpoints: %s → %s", e.Source, e.Target)
+	}
+	if e.Kind != graph.EdgeKindReferences {
+		t.Errorf("expected EdgeKindReferences for expression-derived edge, got %q", e.Kind)
+	}
+}
+
+func TestBuildResourceGraph_DependsOnEdgeKind(t *testing.T) {
+	planJSON := []byte(`{
+		"planned_values": {"root_module": {"resources": []}},
+		"resource_changes": [
+			{"address": "aws_vpc.main", "type": "aws_vpc",
+			 "change": {"actions": ["create"], "after": {}}},
+			{"address": "aws_subnet.public", "type": "aws_subnet",
+			 "change": {"actions": ["create"], "after": {}}}
+		],
+		"configuration": {
+			"root_module": {
+				"resources": [
+					{"address": "aws_subnet.public", "type": "aws_subnet", "name": "public",
+					 "depends_on": ["aws_vpc.main"]}
+				]
+			}
+		}
+	}`)
+
+	g, err := BuildResourceGraph(planJSON, "plan.json")
+	if err != nil {
+		t.Fatalf("BuildResourceGraph error: %v", err)
+	}
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 edge from depends_on, got %d", len(g.Edges))
+	}
+	e := g.Edges[0]
+	if e.Kind != graph.EdgeKindDependsOn {
+		t.Errorf("expected EdgeKindDependsOn for depends_on entry, got %q", e.Kind)
+	}
+	if e.Label != "depends_on" {
+		t.Errorf("expected edge label 'depends_on', got %q", e.Label)
+	}
+}
+
+func TestBuildResourceGraph_ChildModule(t *testing.T) {
+	planJSON := []byte(`{
+		"planned_values": {"root_module": {"resources": []}},
+		"resource_changes": [
+			{"address": "aws_vpc.main", "type": "aws_vpc",
+			 "change": {"actions": ["create"], "after": {}}},
+			{"address": "module.network.aws_subnet.public", "type": "aws_subnet",
+			 "change": {"actions": ["create"], "after": {}}}
+		],
+		"configuration": {
+			"root_module": {
+				"module_calls": {
+					"network": {
+						"source": "./modules/network",
+						"module": {
+							"resources": [
+								{"address": "module.network.aws_subnet.public", "type": "aws_subnet", "name": "public",
+								 "expressions": {"vpc_id": {"references": ["aws_vpc.main.id"]}}}
+							]
+						}
+					}
+				},
+				"resources": []
+			}
+		}
+	}`)
+
+	g, err := BuildResourceGraph(planJSON, "plan.json")
+	if err != nil {
+		t.Fatalf("BuildResourceGraph error: %v", err)
+	}
+	var moduleNode *graph.Node
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == "module.network.aws_subnet.public" {
+			moduleNode = &g.Nodes[i]
+		}
+	}
+	if moduleNode == nil {
+		t.Fatal("expected module-scoped node 'module.network.aws_subnet.public' in graph")
+	}
+	if moduleNode.Properties["module"] != "module.network" {
+		t.Errorf("expected node module property = module.network, got %q", moduleNode.Properties["module"])
+	}
+
+	if len(g.Edges) != 1 {
+		t.Fatalf("expected 1 cross-module edge, got %d", len(g.Edges))
+	}
+	if g.Edges[0].Source != "module.network.aws_subnet.public" || g.Edges[0].Target != "aws_vpc.main" {
+		t.Errorf("unexpected cross-module edge: %s → %s", g.Edges[0].Source, g.Edges[0].Target)
+	}
+	if g.Edges[0].Kind != graph.EdgeKindReferences {
+		t.Errorf("expected EdgeKindReferences for module expression ref, got %q", g.Edges[0].Kind)
+	}
+}
+
+func TestModulePath(t *testing.T) {
+	tests := []struct {
+		address string
+		want    string
+	}{
+		{"aws_vpc.main", ""},
+		{"module.network.aws_vpc.main", "module.network"},
+		{"module.network.module.subnet.aws_subnet.public", "module.network.module.subnet"},
+	}
+	for _, tt := range tests {
+		if got := modulePath(tt.address); got != tt.want {
+			t.Errorf("modulePath(%q) = %q, want %q", tt.address, got, tt.want)
+		}
+	}
 }

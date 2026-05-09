@@ -27,12 +27,17 @@ const (
 )
 
 // resourceEntry holds merged resource data from plan values and configuration references.
+// Mode is "managed" for resources, "data" for data sources.
+// DependsOn is the explicit `depends_on` list parsed from configuration; rendered
+// as EdgeKindDependsOn while expression-derived Refs are rendered as EdgeKindReferences.
 type resourceEntry struct {
-	Address string
-	Type    string
-	Name    string
-	Values  map[string]interface{}
-	Refs    map[string][]string // field → referenced resource addresses
+	Address   string
+	Type      string
+	Name      string
+	Mode      string
+	Values    map[string]interface{}
+	Refs      map[string][]string // field → referenced resource addresses
+	DependsOn []string
 }
 
 // resourceIndex enables efficient cross-resource lookup by address and type.
@@ -57,6 +62,7 @@ func newResourceIndex(plan *tfPlan) *resourceIndex {
 		idx.addEntry(&resourceEntry{
 			Address: rc.Address,
 			Type:    rc.Type,
+			Mode:    "managed",
 			Values:  rc.Change.After,
 			Refs:    make(map[string][]string),
 		})
@@ -72,28 +78,65 @@ func newResourceIndex(plan *tfPlan) *resourceIndex {
 			Address: res.Address,
 			Type:    res.Type,
 			Name:    res.Name,
+			Mode:    "managed",
 			Values:  res.Values,
 			Refs:    make(map[string][]string),
 		})
 	}
 
-	// Merge HCL configuration expression references.
-	for _, cr := range plan.Configuration.RootModule.Resources {
-		e, ok := idx.byAddress[cr.Address]
-		if !ok {
-			continue
-		}
-		if e.Name == "" {
-			e.Name = cr.Name
-		}
-		for field, expr := range cr.Expressions {
-			if len(expr.References) > 0 {
-				e.Refs[field] = expr.References
-			}
-		}
-	}
+	// Merge HCL configuration recursively across root + child modules.
+	mergeConfigModule(idx, plan.Configuration.RootModule)
 
 	return idx
+}
+
+// mergeConfigModule walks a configuration module and its child module_calls,
+// attaching expression refs / depends_on to known managed resources and
+// adding data sources as new entries.
+func mergeConfigModule(idx *resourceIndex, mod tfConfigModule) {
+	for _, cr := range mod.Resources {
+		mergeConfigResource(idx, cr, "managed")
+	}
+	for _, cr := range mod.DataResources {
+		mergeConfigResource(idx, cr, "data")
+	}
+	for _, child := range mod.ModuleCalls {
+		mergeConfigModule(idx, child.Module)
+	}
+}
+
+func mergeConfigResource(idx *resourceIndex, cr tfConfigResource, defaultMode string) {
+	mode := cr.Mode
+	if mode == "" {
+		mode = defaultMode
+	}
+	e, ok := idx.byAddress[cr.Address]
+	if !ok {
+		// Data sources rarely show up in planned_values/resource_changes;
+		// register them here so refs into/out of them are resolvable.
+		e = &resourceEntry{
+			Address: cr.Address,
+			Type:    cr.Type,
+			Name:    cr.Name,
+			Mode:    mode,
+			Refs:    make(map[string][]string),
+		}
+		idx.addEntry(e)
+	}
+	if e.Name == "" {
+		e.Name = cr.Name
+	}
+	if e.Mode == "" {
+		e.Mode = mode
+	}
+	for field, expr := range cr.Expressions {
+		if len(expr.References) > 0 {
+			e.Refs[field] = expr.References
+		}
+	}
+	if len(cr.DependsOn) > 0 {
+		e.DependsOn = append(e.DependsOn, cr.DependsOn...)
+	}
 }
 
 func (idx *resourceIndex) addEntry(e *resourceEntry) {
@@ -126,6 +169,12 @@ func buildResourceGraph(idx *resourceIndex, path string) *graph.Graph {
 		if e.Name != "" {
 			props["name"] = e.Name
 		}
+		if e.Mode != "" {
+			props["mode"] = e.Mode
+		}
+		if mod := modulePath(e.Address); mod != "" {
+			props["module"] = mod
+		}
 		g.Nodes = append(g.Nodes, graph.Node{
 			ID:         e.Address,
 			Kind:       graph.NodeKindResource,
@@ -137,6 +186,7 @@ func buildResourceGraph(idx *resourceIndex, path string) *graph.Graph {
 
 	nodeIDs := g.NodeIDs()
 	for _, e := range idx.entries {
+		// Implicit references via expressions → EdgeKindReferences.
 		for field, refs := range e.Refs {
 			for _, ref := range refs {
 				target := normalizeRef(ref)
@@ -144,15 +194,45 @@ func buildResourceGraph(idx *resourceIndex, path string) *graph.Graph {
 					g.Edges = append(g.Edges, graph.Edge{
 						Source: e.Address,
 						Target: target,
-						Kind:   graph.EdgeKindDependsOn,
+						Kind:   graph.EdgeKindReferences,
 						Label:  field,
 					})
 				}
 			}
 		}
+		// Explicit `depends_on` block entries → EdgeKindDependsOn.
+		for _, ref := range e.DependsOn {
+			target := normalizeRef(ref)
+			if target != e.Address && nodeIDs[target] {
+				g.Edges = append(g.Edges, graph.Edge{
+					Source: e.Address,
+					Target: target,
+					Kind:   graph.EdgeKindDependsOn,
+					Label:  "depends_on",
+				})
+			}
+		}
 	}
 
 	return g
+}
+
+// modulePath extracts the dotted module path from a resource address
+// (e.g. "module.network.aws_vpc.main" → "module.network"). Empty for
+// root-module resources.
+func modulePath(address string) string {
+	if !strings.HasPrefix(address, "module.") {
+		return ""
+	}
+	parts := strings.Split(address, ".")
+	var modParts []string
+	for i := 0; i+1 < len(parts); i += 2 {
+		if parts[i] != "module" {
+			break
+		}
+		modParts = append(modParts, "module."+parts[i+1])
+	}
+	return strings.Join(modParts, ".")
 }
 
 // checkCrossResourcePatterns runs all graph-based cross-resource security checks.
