@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 129,
+  "version": 161,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -303,8 +303,14 @@
       "elapsed_minutes": 0
     },
     "task-39": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-taint-analysis/callgraph.go (Phase 9c interprocedural ✓)"
+      ],
+      "started_at": "2026-05-09T11:39:10.186664+02:00",
+      "completed_at": "2026-05-09T11:39:20.280964+02:00",
       "elapsed_minutes": 0
     },
     "task-4": {
@@ -317,18 +323,36 @@
       "elapsed_minutes": 0
     },
     "task-40": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Architecture substitution: regex extraction for Python/JS/TS imports + calls (plugins/nox-plugin-taint-analysis/text_callgraph.go, text_analyzer.go) instead of tree-sitter. Tradeoff: simpler dep, no CGo, sufficient accuracy for current sources/sinks. Tree-sitter upgrade tracked as future task if precision becomes blocker."
+      ],
+      "started_at": "2026-05-09T11:41:15.476852+02:00",
+      "completed_at": "2026-05-09T11:41:22.039053+02:00",
       "elapsed_minutes": 0
     },
     "task-41": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Nox-HQ/nox-plugin-reachability (Phase 7b ✓): ToolWithContext on core-analysis track, REACH-001/002/003, import extraction Go/Python/JS, PyPI name map ~15 entries, 19 tests, ~550 LOC."
+      ],
+      "started_at": "2026-05-09T11:41:24.925061+02:00",
+      "completed_at": "2026-05-09T11:41:30.144626+02:00",
       "elapsed_minutes": 0
     },
     "task-42": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Nox-HQ/nox-plugin-reachability: 19 tests including conformance, integration with mock VULN findings, 3 verdicts (REACH-001 unreachable/info, 002 reachable/high, 003 undetermined/low)."
+      ],
+      "started_at": "2026-05-09T11:41:34.855742+02:00",
+      "completed_at": "2026-05-09T11:41:42.20565+02:00",
       "elapsed_minutes": 0
     },
     "task-43": {
@@ -343,28 +367,58 @@
       "elapsed_minutes": 2
     },
     "task-44": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "core/analyzers/iac/tfgraph.go IAC-366–369 (Phase 7a ✓)"
+      ],
+      "started_at": "2026-05-09T11:39:24.006117+02:00",
+      "completed_at": "2026-05-09T11:39:27.952889+02:00",
       "elapsed_minutes": 0
     },
     "task-45": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Architecture decision: cross-resource graph rules live in core/analyzers/iac/tfgraph.go (IAC-366–369) not separate plugin. BuildResourceGraph() exported. 23 tests in tfgraph_test.go. Tighter integration with native IaC analyzer over plugin boundary."
+      ],
+      "started_at": "2026-05-09T11:39:54.967438+02:00",
+      "completed_at": "2026-05-09T11:40:05.1475+02:00",
       "elapsed_minutes": 0
     },
     "task-46": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-taint-analysis/sinks.go, TAINT-001–007 (Phase 7c ✓)"
+      ],
+      "started_at": "2026-05-09T11:39:10.947681+02:00",
+      "completed_at": "2026-05-09T11:39:20.91475+02:00",
       "elapsed_minutes": 0
     },
     "task-47": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-taint-analysis (Phase 9c interprocedural ✓): CallGraph + TaintContext, max depth 3, callgraph.go + text_callgraph.go, TAINT-006/007 cross-function SQLi/CMDi, 45 tests ~3070 LOC."
+      ],
+      "started_at": "2026-05-09T11:41:25.251783+02:00",
+      "completed_at": "2026-05-09T11:41:32.287687+02:00",
       "elapsed_minutes": 0
     },
     "task-48": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-taint-analysis: TestTrackConformance(TrackCoreAnalysis), TestConformance, 45 tests total, plugin binary builds (Makefile + main.go)."
+      ],
+      "started_at": "2026-05-09T11:41:35.237757+02:00",
+      "completed_at": "2026-05-09T11:41:43.658106+02:00",
       "elapsed_minutes": 0
     },
     "task-49": {
@@ -388,38 +442,80 @@
       "elapsed_minutes": 0
     },
     "task-50": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Nox-HQ/nox-plugin-triage-agent (Phase 7d ✓, TRIAGE-001–004 + AI pass)"
+      ],
+      "started_at": "2026-05-09T11:39:24.33754+02:00",
+      "completed_at": "2026-05-09T11:39:29.688975+02:00",
       "elapsed_minutes": 0
     },
     "task-51": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "assist/history.go: TriageHistory JSON store at .nox/triage-history.json (configurable). Fingerprint+ContextHash key, atomic Save (temp+rename, mkdir-p), Load tolerates missing file. Similar(ruleID, n) returns recent decisions for few-shot prompts (FewShotExamples renders). Export sorts stable by RuleID then DecidedAt. Import merges with newer-wins by DecidedAt. 13 tests pass, race-clean."
+      ],
+      "started_at": "2026-05-09T11:51:28.015963+02:00",
+      "completed_at": "2026-05-09T11:51:35.011238+02:00",
       "elapsed_minutes": 0
     },
     "task-52": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Nox-HQ/nox-plugin-triage-agent: 20 tests (9 AI + 11 deterministic), RunForTrack(TrackAgentAssistance), graceful degradation when LLM fails (ai_triage_error metadata)."
+      ],
+      "started_at": "2026-05-09T11:39:54.753438+02:00",
+      "completed_at": "2026-05-09T11:40:02.685671+02:00",
       "elapsed_minutes": 0
     },
     "task-53": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-k8s-runtime/scanner.go (Phase 7e ✓, KRUNT-001–008, 37 tests)"
+      ],
+      "started_at": "2026-05-09T11:39:09.919086+02:00",
+      "completed_at": "2026-05-09T11:39:19.153293+02:00",
       "elapsed_minutes": 0
     },
     "task-54": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-k8s-runtime/scanner.go: 8 rules KRUNT-001 root, 002 priv, 003 host-NS, 004 no-netpol, 005 no-limits, 006 unpinned-image, 007 SA-token, 008 caps. effectiveSecurityContext merges pod+container. 37 tests."
+      ],
+      "started_at": "2026-05-09T11:39:54.318785+02:00",
+      "completed_at": "2026-05-09T11:40:00.195792+02:00",
       "elapsed_minutes": 0
     },
     "task-55": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "plugins/nox-plugin-k8s-runtime/drift.go (new tool \"drift\"). KDRIFT-001 image, KDRIFT-002 limits, KDRIFT-003 securityContext regression, KDRIFT-004 unmanaged. Multi-doc YAML loader (Pod/Deployment/StatefulSet/DaemonSet), owner-ref workload identity (ReplicaSet → Deployment trim). 9 new tests, 46 total in plugin. Less-restrictive-only diffing for SC (tightening != drift)."
+      ],
+      "started_at": "2026-05-09T11:41:35.682022+02:00",
+      "completed_at": "2026-05-09T11:48:50.453907+02:00",
+      "elapsed_minutes": 7
     },
     "task-56": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "plugin binary builds (go build ./...), TestConformance + TestTrackConformance(TrackDynamicRuntime) pass. Both \"scan\" and \"drift\" tools exposed via manifest. 46 tests pass."
+      ],
+      "started_at": "2026-05-09T11:48:50.613317+02:00",
+      "completed_at": "2026-05-09T11:48:54.90989+02:00",
       "elapsed_minutes": 0
     },
     "task-57": {
@@ -525,5 +621,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-05-09T07:47:51.72608+02:00"
+  "updated_at": "2026-05-09T11:51:35.011239+02:00"
 }
