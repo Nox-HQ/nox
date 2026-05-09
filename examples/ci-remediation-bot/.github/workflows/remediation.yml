@@ -1,0 +1,86 @@
+name: Nox Remediation Bot
+
+on:
+  schedule:
+    - cron: "0 3 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  remediate:
+    name: Scan and Propose Dependency Fixes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nox
+        uses: nox-hq/nox@v1
+        with:
+          path: .
+          format: json
+          output: nox-out
+          fail-on-findings: false
+
+      - name: Build remediation plan
+        id: plan
+        run: |
+          set -euo pipefail
+          nox fix --input nox-out/findings.json --dry-run | tee remediation-plan.txt
+          if grep -q "no eligible upgrades found" remediation-plan.txt; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply remediation
+        if: steps.plan.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          nox fix --input nox-out/findings.json
+
+      - name: Verify dependency state
+        if: steps.plan.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f go.mod ]; then
+            go test ./...
+          fi
+
+      - name: Create pull request
+        if: steps.plan.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: nox/remediation/${{ github.run_id }}
+          delete-branch: true
+          title: "security(deps): apply Nox remediation upgrades"
+          commit-message: "fix(deps): apply nox remediation upgrades"
+          labels: |
+            security
+            dependencies
+            nox-remediation
+          body: |
+            ## Summary
+            - This PR was generated from `nox scan` + `nox fix`.
+            - Changes upgrade vulnerable dependencies to `fixed_in` versions.
+
+            ## Plan
+            ```text
+            ${{ steps.plan.outputs.has_updates == 'true' && 'See remediation-plan.txt in workflow artifacts/logs.' || 'No upgrades found.' }}
+            ```
+
+            ## Verification
+            - Workflow ran project verification after applying upgrades.
+
+      - name: Upload remediation plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-plan
+          path: remediation-plan.txt
+          retention-days: 14
