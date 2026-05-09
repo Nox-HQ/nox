@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 112,
+  "version": 129,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -332,9 +332,15 @@
       "elapsed_minutes": 0
     },
     "task-43": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "core/analyzers/iac/tfplan.go: schema extended with DataResources, ModuleCalls, depends_on. core/analyzers/iac/tfgraph.go: data sources + nested module_calls walked recursively, edges split into EdgeKindReferences (expression refs) vs EdgeKindDependsOn (depends_on block), node Properties expose mode and module path. 4 new tests (data source, depends_on edge kind, child module, modulePath helper); full IaC suite + all 35 packages green."
+      ],
+      "started_at": "2026-05-09T07:37:28.060445+02:00",
+      "completed_at": "2026-05-09T07:39:35.856235+02:00",
+      "elapsed_minutes": 2
     },
     "task-44": {
       "status": "pending",
@@ -362,9 +368,15 @@
       "elapsed_minutes": 0
     },
     "task-49": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "assist/ extended into shared LLM provider abstraction. New: anthropic.go (HTTP-based Messages API client), ollama.go (factory wrapping OpenAI-compat /v1), resolve.go (NOX_AI_PROVIDER/API_KEY/MODEL/BASE_URL/TEMPERATURE env-driven factory), triage.go (BuildTriagePrompt with system+user templates and JSON schema constraint). openai.go gained WithTemperature option (param.Opt[float64]). 14 new tests cover Anthropic happy path/error/missing-key, ResolveProvider 6 paths (defaults, missing key, anthropic w/ temp, ollama→OpenAI client, unsupported, bad temp), triage prompt structure + omit-empty. Full repo: 35 packages green."
+      ],
+      "started_at": "2026-05-09T07:41:58.987274+02:00",
+      "completed_at": "2026-05-09T07:47:51.726079+02:00",
+      "elapsed_minutes": 5
     },
     "task-5": {
       "status": "verified",
@@ -410,6 +422,39 @@
       "path": "",
       "elapsed_minutes": 0
     },
+    "task-57": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Implemented plugin scaffolding under plugins/nox-plugin-remediate with plan_code/apply_code/verify_code handlers, deterministic patch engine and guardrails, fixture harness layout, and passing tests via `go test ./...` in plugin module"
+      ],
+      "started_at": "2026-05-08T12:09:50.626847+02:00",
+      "completed_at": "2026-05-08T12:13:59.64146+02:00",
+      "elapsed_minutes": 4
+    },
+    "task-58": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Added remediation policy parser/validator in plugins/nox-plugin-remediate/policy.go with blast-radius and merge gate validation, severity validation, verify command allowlist validation, integrated policy loading into plan/apply/verify handlers, and added policy tests; plugin tests pass via `go test ./...`"
+      ],
+      "started_at": "2026-05-08T12:33:08.792009+02:00",
+      "completed_at": "2026-05-08T12:35:15.100998+02:00",
+      "elapsed_minutes": 2
+    },
+    "task-59": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Implemented WEB-SEC-001 fixer in plugin engine (Go net/http + Express/helmet), integrated into plan/apply flow, added idempotence tests for both languages, and validated with `go test ./...` in plugins/nox-plugin-remediate"
+      ],
+      "started_at": "2026-05-08T12:36:14.571855+02:00",
+      "completed_at": "2026-05-08T12:37:36.277956+02:00",
+      "elapsed_minutes": 1
+    },
     "task-6": {
       "status": "verified",
       "path": "",
@@ -418,6 +463,39 @@
         "Secrets scanner fully implemented in core/analyzers/secrets/ with 5 built-in rules (AWS keys, GitHub tokens, private keys, API keys), rule engine integration, and 14 passing tests"
       ],
       "elapsed_minutes": 0
+    },
+    "task-60": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Implemented AI-LOG-001 fixer for Go, Python, JS with redacted logging patterns, fixture tests for all languages, negative test for no false positives, and idempotence verification; all 10 tests pass via `go test ./...` in plugins/nox-plugin-remediate"
+      ],
+      "started_at": "2026-05-08T13:42:55.937079+02:00",
+      "completed_at": "2026-05-08T13:45:12.478672+02:00",
+      "elapsed_minutes": 2
+    },
+    "task-61": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "SEC-003 Go/Python/JS secret-literal -\u003e env lookup fixers in plugins/nox-plugin-remediate/engine.go (lines 422-637); TODO markers + sensitive-var allowlist; idempotence + verify hook in Verify(); 5 SEC-003 tests pass."
+      ],
+      "started_at": "2026-05-08T13:45:18.391439+02:00",
+      "completed_at": "2026-05-09T07:29:20.967451+02:00",
+      "elapsed_minutes": 1064
+    },
+    "task-62": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "SEC-001/SEC-002 fixers complete across Go/Python/JS in plugins/nox-plugin-remediate/engine.go. Added Rollback() + ApplyAndVerify() orchestrator with auto-rollback on failed verify. apply_code handler accepts {\"verify\":true,\"command\":\"...\"} with allowlist enforcement. New tests: SEC-002 Python/JS, SEC-001 Go/JS, conservative skips (already-parameterized SQL, dynamic shell), rollback-on-failure, keep-on-success. 12 targeted tests + full plugin suite pass; go vet clean."
+      ],
+      "started_at": "2026-05-09T07:29:43.60298+02:00",
+      "completed_at": "2026-05-09T07:34:39.116875+02:00",
+      "elapsed_minutes": 4
     },
     "task-7": {
       "status": "verified",
@@ -447,5 +525,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-02-17T21:48:54.896191+01:00"
+  "updated_at": "2026-05-09T07:47:51.72608+02:00"
 }

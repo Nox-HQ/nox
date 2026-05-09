@@ -210,3 +210,9 @@ LLM-assisted severity adjustment and false-positive classification based on code
 Live cluster scanning via kubectl/Kubernetes API access. Compares running workloads against IaC definitions for drift detection. Runtime-specific checks: containers running as root, mounted secrets in environment variables, missing network policies, privileged containers, host namespace sharing, missing resource limits, outdated images. Implemented as a plugin on the dynamic-runtime track with RiskActive safety class and needs_confirmation=true (since it accesses live infrastructure). Emits Graph output with NodeKindService/NodeKindResource nodes representing cluster topology. Produces findings for runtime misconfigurations and Enrichments linking runtime state to existing IaC findings (drift detection). Clearly marked as optional — breaks the offline-first constraint. Requires KUBECONFIG or in-cluster auth.
 
 ---
+
+## Remediation plugin: deterministic code fixers with policy-driven blast-radius controls
+
+Add a new remediation capability to nox via a dedicated plugin (`nox-plugin-remediate`) that extends dependency upgrades to safe, deterministic code issue remediation. Scope includes plugin tooling (`remediate.plan_code`, `remediate.apply_code`, `remediate.verify_code`), policy-driven risk and blast-radius controls (including auto-merge thresholds), and an initial phased backlog of five deterministic fixers with strict verification/rollback gates. Milestones: (0) plugin foundations and policy parser, (1) WEB-SEC-001 header middleware insertion, (2) AI-LOG-001 sensitive prompt/response log redaction, (3) SEC-003 hardcoded secret to env/config rewrite, (4) SEC-002 SQL parameterization codemods, (5) SEC-001 subprocess hardening codemods. Each fixer must meet acceptance criteria: deterministic output, idempotence, bounded change surface, golden fixtures, mandatory re-scan evidence, and rollback on verify failure.
+
+---
