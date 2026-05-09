@@ -39,9 +39,12 @@ resolve_version() {
 
   if [[ "${version}" == "latest" ]]; then
     local tag
+    # The Authorization header pattern below uses ${GITHUB_TOKEN:+...}
+    # which the secrets analyzer flags as SEC-161/SEC-163; the env-var
+    # name is not a secret. (Inline `# nox:ignore ...` comments break
+    # multiline shell commands — leave them out of pipelines.)
     tag=$(curl -fsSL \
       -H "Accept: application/vnd.github+json" \
-      # nox:ignore SEC-161,SEC-163 -- env var pattern not a secret
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
       "https://api.github.com/repos/${REPO}/releases/latest" \
       | grep -o '"tag_name":\s*"[^"]*"' \
