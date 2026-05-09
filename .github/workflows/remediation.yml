@@ -1,0 +1,32 @@
+name: Nox Remediation
+
+on:
+  schedule:
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  remediate:
+    name: Scan and propose dependency upgrades
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - uses: nox-hq/nox-remediate-action@v1
+        with:
+          path: .
+          manifest-root: .
+          # Run the full test suite before opening the PR so reviewers
+          # don't get untested upgrades.
+          verify-cmd: 'go test ./...'
+          pr-labels: 'security,dependencies,nox-remediation'
