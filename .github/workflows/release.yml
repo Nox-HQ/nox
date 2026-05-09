@@ -53,15 +53,16 @@ jobs:
 
       - name: Sign checksums with cosign (keyless)
         run: |
-          # Newer cosign defaults to the new bundle format and requires
-          # an explicit --bundle path; the legacy --output-signature /
-          # --output-certificate flags are now silently ignored without
-          # one. Emit the bundle (canonical) plus the legacy pair so
-          # existing verification scripts keep working.
+          # Newer cosign defaults to the new bundle format and ignores
+          # --output-signature / --output-certificate. Emit only the
+          # bundle. Verifiers use:
+          #   cosign verify-blob --bundle checksums.txt.sig.bundle \
+          #     --new-bundle-format \
+          #     --certificate-identity-regexp "..." \
+          #     --certificate-oidc-issuer "..." \
+          #     checksums.txt
           cosign sign-blob /tmp/release/checksums.txt \
             --bundle /tmp/release/checksums.txt.sig.bundle \
-            --output-signature /tmp/release/checksums.txt.sig \
-            --output-certificate /tmp/release/checksums.txt.pem \
             --yes
 
       - name: Attach signature to release
@@ -70,8 +71,6 @@ jobs:
         run: |
           gh release upload "${GITHUB_REF_NAME}" \
             /tmp/release/checksums.txt.sig.bundle \
-            /tmp/release/checksums.txt.sig \
-            /tmp/release/checksums.txt.pem \
             --clobber
 
   docker:
