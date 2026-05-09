@@ -1,0 +1,133 @@
+name: 'Nox Remediate'
+description: 'Scan with Nox, propose deterministic dependency upgrades, and open a pull request.'
+
+branding:
+  icon: 'git-pull-request'
+  color: 'purple'
+
+inputs:
+  path:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+  version:
+    description: 'Nox version to install (e.g., 0.5.0 or latest)'
+    required: false
+    default: 'latest'
+  include-major:
+    description: 'Apply upgrades that cross a major-version boundary'
+    required: false
+    default: 'false'
+  manifest-root:
+    description: 'Directory containing the project manifest (go.mod, package.json, etc.)'
+    required: false
+    default: '.'
+  apply:
+    description: 'Apply remediation changes; when false, only the dry-run plan is produced'
+    required: false
+    default: 'true'
+  open-pr:
+    description: 'Open a pull request with the resulting changes (no-op when no changes)'
+    required: false
+    default: 'true'
+  pr-branch-prefix:
+    description: 'Branch prefix for the remediation PR'
+    required: false
+    default: 'nox/remediation'
+  pr-title:
+    description: 'Pull-request title'
+    required: false
+    default: 'security(deps): apply Nox remediation upgrades'
+  pr-labels:
+    description: 'Comma-separated PR labels'
+    required: false
+    default: 'security,dependencies,nox-remediation'
+  pr-base:
+    description: 'Base branch for the pull request'
+    required: false
+    default: ''
+  verify-cmd:
+    description: 'Optional shell command to run after applying upgrades (e.g. "go test ./...")'
+    required: false
+    default: ''
+  scan-format:
+    description: 'Scan output format(s) for findings.json generation'
+    required: false
+    default: 'json'
+  scan-output:
+    description: 'Scan output directory'
+    required: false
+    default: 'nox-out'
+  github-token:
+    description: 'Token used to create the pull request (defaults to GITHUB_TOKEN)'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  has-updates:
+    description: '"true" when at least one eligible upgrade was found'
+    value: ${{ steps.plan.outputs.has-updates }}
+  plan-file:
+    description: 'Path to the dry-run remediation plan (always present)'
+    value: ${{ steps.plan.outputs.plan-file }}
+  pr-url:
+    description: 'URL of the opened pull request, if any'
+    value: ${{ steps.pr.outputs.pull-request-url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Nox
+      uses: nox-hq/nox@v1
+      with:
+        path: ${{ inputs.path }}
+        format: ${{ inputs.scan-format }}
+        output: ${{ inputs.scan-output }}
+        version: ${{ inputs.version }}
+        fail-on-findings: 'false'
+
+    - name: Build remediation plan
+      id: plan
+      shell: bash
+      env:
+        INPUT_OUTPUT: ${{ inputs.scan-output }}
+        INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
+        INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+      run: bash "${{ github.action_path }}/remediate.sh" plan
+
+    - name: Apply remediation
+      if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true'
+      shell: bash
+      env:
+        INPUT_OUTPUT: ${{ inputs.scan-output }}
+        INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
+        INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+      run: bash "${{ github.action_path }}/remediate.sh" apply
+
+    - name: Verify changes
+      if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.verify-cmd != ''
+      shell: bash
+      working-directory: ${{ inputs.manifest-root }}
+      run: ${{ inputs.verify-cmd }}
+
+    - name: Open pull request
+      id: pr
+      if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.open-pr == 'true'
+      uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
+      with:
+        token: ${{ inputs.github-token }}
+        branch: ${{ inputs.pr-branch-prefix }}/${{ github.run_id }}
+        delete-branch: true
+        base: ${{ inputs.pr-base }}
+        title: ${{ inputs.pr-title }}
+        commit-message: 'fix(deps): apply nox remediation upgrades'
+        labels: ${{ inputs.pr-labels }}
+        body-path: ${{ inputs.scan-output }}/pr-body.md
+
+    - name: Upload remediation plan
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: nox-remediation-plan
+        path: ${{ inputs.scan-output }}/remediation-plan.txt
+        if-no-files-found: warn

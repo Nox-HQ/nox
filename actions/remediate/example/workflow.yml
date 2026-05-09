@@ -1,0 +1,28 @@
+name: Nox Remediation
+
+on:
+  schedule:
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  remediate:
+    name: Scan and propose dependency upgrades
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: nox-hq/nox-remediate-action@v1
+        with:
+          path: .
+          # Run a real verification step before opening the PR so reviewers
+          # aren't asked to evaluate untested upgrades.
+          verify-cmd: 'go test ./...'
+          # Tighten labels for downstream automation (e.g. auto-merge bots).
+          pr-labels: 'security,dependencies,nox-remediation,auto-merge-candidate'
