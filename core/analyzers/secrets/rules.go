@@ -746,7 +746,12 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-085", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `https?://[^:\n]+:[^@\n]+@[^\s'"]{3,}`,
+			// Require an RFC-3986 userinfo component: user:pass@host where
+			// neither user nor pass may contain `/`, whitespace, `@`, or `:`
+			// (except the single separating colon). Bare URLs without
+			// userinfo (e.g. https://opensource.org/licenses/MIT) must not
+			// match — see issue #60.
+			pattern:     `https?://[^/\s:@'"<>]+:[^/\s@'"<>]+@[^\s'"<>]+`,
 			description: "URL with embedded password detected",
 			cwe:         "CWE-798", keywords: []string{"://"},
 			remediation: "Remove credentials from URLs. Use environment variables or a credentials provider.",
@@ -3335,8 +3340,8 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-570", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `pub-[a-z0-9]{34}`, description: "Detected CoinGecko API Key", cwe: "CWE-798", keywords: []string{"coingecko"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-571", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9-]{36,}`, description: "Detected CoinMarketCap API Key", cwe: "CWE-798", keywords: []string{"coinmarketcap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-572", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `live_[a-zA-Z0-9]{32}`, description: "Detected Payoneer API Token", cwe: "CWE-798", keywords: []string{"payoneer"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-573", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{20}`, description: "Detected TransferWise API Key", cwe: "CWE-798", keywords: []string{"transferwise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-574", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detectedwise API Key", cwe: "CWE-798", keywords: []string{"wise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-573", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-z0-9]{20}\b`, description: "Detected TransferWise API Key", cwe: "CWE-798", keywords: []string{"transferwise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
+		{id: "SEC-574", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Wise API Key", cwe: "CWE-798", keywords: []string{"wise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-575", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{24}`, description: "Detected Square POS API Key", cwe: "CWE-798", keywords: []string{"square_pos"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-576", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Bambora API Key", cwe: "CWE-798", keywords: []string{"bambora"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-577", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `spreedly[_-]?token`, description: "Detected Spreedly Token", cwe: "CWE-798", keywords: []string{"spreedly"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

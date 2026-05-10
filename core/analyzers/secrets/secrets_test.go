@@ -937,3 +937,103 @@ func TestDecodeHexSegments_OddLength(t *testing.T) {
 		t.Errorf("expected 0 segments for odd-length hex, got %d", len(segments))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// SEC-574: Wise API Key — regression for issue #58
+// ---------------------------------------------------------------------------
+
+// TestSEC574_NoFalsePositiveOnGoIdentifier ensures the rule does not fire on
+// camelCase Go function names in files that happen to contain the substring
+// "wise" (e.g. "otherwise") — the original report had it firing on
+// findMatchingTransitionHierarchical.
+func TestSEC574_NoFalsePositiveOnGoIdentifier(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`package interpreter
+
+// otherwise the transition is hierarchical
+func findMatchingTransitionHierarchical(state State) Transition {
+	return findMatchingTransition(state)
+}
+
+func findMatchingTransition(state State) Transition {
+	return Transition{}
+}
+`)
+	results, err := a.ScanFile("interpreter.go", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-574" {
+			t.Fatalf("SEC-574 fired on Go identifier: %+v", f)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SEC-085: URL with embedded password — regression for issue #60
+// ---------------------------------------------------------------------------
+
+// TestSEC085_NoFalsePositiveOnBareURL ensures bare https URLs without a
+// userinfo component (user:pass@) do not trigger the rule. Issue #60 reported
+// it firing on JSON-LD license URLs like https://opensource.org/licenses/MIT.
+func TestSEC085_NoFalsePositiveOnBareURL(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "license": "https://opensource.org/licenses/MIT",
+  "codeRepository": "https://github.com/example/repo"
+}
+</script>
+`)
+	results, err := a.ScanFile("Layout.astro", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-085" {
+			t.Fatalf("SEC-085 fired on bare URL: %+v", f)
+		}
+	}
+}
+
+// TestSEC085_StillFiresOnRealCredentialURL ensures the tightened regex still
+// catches genuine user:pass@host URLs.
+func TestSEC085_StillFiresOnRealCredentialURL(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("DATABASE_URL=https://admin:s3cret@db.example.com/app\n")
+	results, err := a.ScanFile("config.env", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var hit bool
+	for _, f := range results {
+		if f.RuleID == "SEC-085" {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		t.Fatalf("SEC-085 did not fire on a real credential-bearing URL; results=%+v", results)
+	}
+}
+
+// TestSEC574_DescriptionFixed ensures the rule message is grammatical
+// ("Detected Wise API Key", not "Detectedwise API Key").
+func TestSEC574_DescriptionFixed(t *testing.T) {
+	for _, r := range builtinSecretRules() {
+		if r.ID != "SEC-574" {
+			continue
+		}
+		if r.Description == "Detectedwise API Key" {
+			t.Fatalf("SEC-574 still has the typo description")
+		}
+		if r.Description != "Detected Wise API Key" {
+			t.Fatalf("unexpected SEC-574 description: %q", r.Description)
+		}
+		return
+	}
+	t.Fatal("SEC-574 not found in builtin rules")
+}
