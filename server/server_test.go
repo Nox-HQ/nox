@@ -1118,6 +1118,129 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 	}
 }
 
+// --- handleBaselineAdd cache invalidation (issue #61) ---
+
+// TestHandleBaselineAdd_InvalidatesCachedStatus ensures that after a single
+// baseline_add the cached scan results reflect the suppressed status, so a
+// follow-up list_findings (without --include-suppressed) and badge call
+// don't return the now-baselined finding.
+func TestHandleBaselineAdd_InvalidatesCachedStatus(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+
+	s := New("0.1.0", nil)
+	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	pc := s.getCache("")
+	items := pc.result.Findings.Findings()
+	if len(items) == 0 {
+		t.Fatal("expected at least one finding")
+	}
+	fp := items[0].Fingerprint
+
+	if _, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
+		Path:        dir,
+		Fingerprint: fp,
+		Reason:      "test",
+	}); err != nil {
+		t.Fatalf("baseline_add failed: %v", err)
+	}
+
+	// list_findings (default: active only) must no longer include the
+	// suppressed finding.
+	listed, err := s.handleListFindings(context.Background(), listFindingsInput{})
+	if err != nil {
+		t.Fatalf("list_findings failed: %v", err)
+	}
+	if strings.Contains(listed, fp) {
+		t.Fatalf("list_findings still returned the baselined fingerprint:\n%s", listed)
+	}
+}
+
+// TestHandleBaselineAddMany_BatchSuppress covers the batch tool added for
+// issue #61 (3): a single MCP call should suppress N findings and update the
+// cache so list_findings reflects the change without a re-scan.
+func TestHandleBaselineAddMany_BatchSuppress(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "b.env", "AWS_KEY=AKIAIOSFODNN7EXAMPL2\n")
+
+	s := New("0.1.0", nil)
+	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	pc := s.getCache("")
+	items := pc.result.Findings.ActiveFindings()
+	if len(items) < 2 {
+		t.Fatalf("expected at least two findings, got %d", len(items))
+	}
+	fps := []string{items[0].Fingerprint, items[1].Fingerprint, "deadbeef-not-real"}
+
+	out, err := s.handleBaselineAddMany(context.Background(), baselineAddManyInput{
+		Path:         dir,
+		Fingerprints: fps,
+		Reason:       "test batch",
+	})
+	if err != nil {
+		t.Fatalf("baseline_add_many failed: %v", err)
+	}
+	if strings.HasPrefix(out, "Error:") {
+		t.Fatalf("unexpected error response: %s", out)
+	}
+
+	var resp baselineAddManyResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Added != 2 {
+		t.Fatalf("expected 2 added, got %d", resp.Added)
+	}
+	if len(resp.NotFound) != 1 || resp.NotFound[0] != "deadbeef-not-real" {
+		t.Fatalf("expected 1 not_found entry, got %+v", resp.NotFound)
+	}
+
+	// Cache should now report 0 active findings for those fingerprints.
+	active := pc.result.Findings.ActiveFindings()
+	for _, f := range active {
+		if f.Fingerprint == fps[0] || f.Fingerprint == fps[1] {
+			t.Fatalf("expected suppression in cache, found active: %+v", f)
+		}
+	}
+}
+
+// --- fix_plan status field (issue #61 (2)) ---
+
+func TestHandleFixPlan_StatusNoVulns(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "ok.txt", "no vulns here\n")
+
+	s := New("0.1.0", nil)
+	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	out, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("fix_plan failed: %v", err)
+	}
+	var resp fixPlanResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Status != fixPlanStatusNoVulns {
+		t.Fatalf("expected status %q, got %q", fixPlanStatusNoVulns, resp.Status)
+	}
+	if resp.Actions == nil {
+		t.Fatal("expected empty slice, got nil — agents can't tell `no vulns` from `feature off`")
+	}
+	if len(resp.Actions) != 0 {
+		t.Fatalf("expected 0 actions, got %d", len(resp.Actions))
+	}
+}
+
 // --- handleVersion tests ---
 
 func TestHandleVersion(t *testing.T) {

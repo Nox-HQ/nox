@@ -249,6 +249,10 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Add a finding to the baseline by fingerprint").
 		Handler(s.handleBaselineAdd)
 
+	srv.Tool("baseline_add_many").
+		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
+		Handler(s.handleBaselineAddMany)
+
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
 		ReadOnly().
@@ -698,18 +702,19 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 		return "Error: no scan results available — run the scan tool first", nil
 	}
 
-	var matched *findings.Finding
+	matchedIdx := -1
 	items := pc.result.Findings.Findings()
 	for i := range items {
 		if items[i].Fingerprint == input.Fingerprint {
-			matched = &items[i]
+			matchedIdx = i
 			break
 		}
 	}
 
-	if matched == nil {
+	if matchedIdx < 0 {
 		return fmt.Sprintf("Error: finding with fingerprint %q not found in scan results", input.Fingerprint), nil
 	}
+	matched := &items[matchedIdx]
 
 	blPath := baseline.DefaultPath(input.Path)
 	bl, err := baseline.Load(blPath)
@@ -730,7 +735,90 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 		return "Error: saving baseline: " + err.Error(), nil
 	}
 
+	// Invalidate the cached finding's status so subsequent list_findings /
+	// badge calls reflect the suppression without requiring a re-scan —
+	// see issue #61 (1) and (4).
+	pc.result.Findings.SetStatus(matchedIdx, findings.StatusBaselined)
+
 	return fmt.Sprintf("Added finding %s to baseline (%d total entries)", input.Fingerprint[:12], bl.Len()), nil
+}
+
+// baselineAddManyInput supports batch suppression so an agent doing a
+// baseline pass can avoid N round-trips per finding — see issue #61 (3).
+type baselineAddManyInput struct {
+	Path         string   `json:"path"`
+	Fingerprints []string `json:"fingerprints"`
+	Reason       string   `json:"reason"`
+}
+
+type baselineAddManyResponse struct {
+	Path         string   `json:"path"`
+	Added        int      `json:"added"`
+	NotFound     []string `json:"not_found,omitempty"`
+	BaselineSize int      `json:"baseline_size"`
+}
+
+func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyInput) (string, error) {
+	if input.Path == "" {
+		return "Error: missing required argument: path", nil
+	}
+	if err := s.isPathAllowed(input.Path); err != nil {
+		return "Error: " + err.Error(), nil
+	}
+	if len(input.Fingerprints) == 0 {
+		return "Error: missing required argument: fingerprints", nil
+	}
+
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	blPath := baseline.DefaultPath(input.Path)
+	bl, err := baseline.Load(blPath)
+	if err != nil {
+		return "Error: loading baseline: " + err.Error(), nil
+	}
+
+	now := time.Now().UTC()
+	items := pc.result.Findings.Findings()
+
+	// Build a lookup so the loop is O(N + M) instead of O(N*M).
+	byFP := make(map[string]int, len(items))
+	for i := range items {
+		byFP[items[i].Fingerprint] = i
+	}
+
+	resp := baselineAddManyResponse{Path: blPath}
+	for _, fp := range input.Fingerprints {
+		idx, ok := byFP[fp]
+		if !ok {
+			resp.NotFound = append(resp.NotFound, fp)
+			continue
+		}
+		f := &items[idx]
+		bl.Add(&baseline.Entry{
+			Fingerprint: f.Fingerprint,
+			RuleID:      f.RuleID,
+			FilePath:    f.Location.FilePath,
+			Severity:    f.Severity,
+			Reason:      input.Reason,
+			CreatedAt:   now,
+		})
+		pc.result.Findings.SetStatus(idx, findings.StatusBaselined)
+		resp.Added++
+	}
+
+	if err := bl.Save(blPath); err != nil {
+		return "Error: saving baseline: " + err.Error(), nil
+	}
+	resp.BaselineSize = bl.Len()
+
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return "Error: marshalling response: " + err.Error(), nil
+	}
+	return string(data), nil
 }
 
 // Diff handler.
@@ -1501,10 +1589,22 @@ type fixAction struct {
 	Command   string `json:"command"`
 }
 
+// fix_plan status values disambiguate the four outcomes an empty actions
+// list can represent — see issue #61 (2). An agent reading the response
+// can decide whether to act, scan first, or surface a "feature disabled"
+// message without guessing.
+const (
+	fixPlanStatusOKWithActions = "ok_with_actions"
+	fixPlanStatusNoVulns       = "no_vulns"
+	fixPlanStatusNoDepMetadata = "no_dep_metadata"
+)
+
 type fixPlanResponse struct {
+	Status       string      `json:"status"`
 	Actions      []fixAction `json:"actions"`
 	Skipped      int         `json:"skipped"`
 	MajorSkipped int         `json:"major_skipped"`
+	VulnCount    int         `json:"vuln_count"`
 	Note         string      `json:"note,omitempty"`
 }
 
@@ -1515,7 +1615,8 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, e
 	}
 
 	resp := fixPlanResponse{
-		Note: "Plan only. Apply with: nox fix --input findings.json",
+		Note:    "Plan only. Apply with: nox fix --input findings.json",
+		Actions: []fixAction{},
 	}
 
 	seen := map[string]bool{}
@@ -1525,6 +1626,7 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, e
 		if f.RuleID != "VULN-001" {
 			continue
 		}
+		resp.VulnCount++
 		fixed := f.Metadata["fixed_in"]
 		eco := f.Metadata["ecosystem"]
 		pkg := f.Metadata["package"]
@@ -1550,6 +1652,17 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, e
 			Ecosystem: eco,
 			Command:   commandFor(eco, pkg, fixed),
 		})
+	}
+
+	switch {
+	case len(resp.Actions) > 0:
+		resp.Status = fixPlanStatusOKWithActions
+	case resp.VulnCount == 0:
+		resp.Status = fixPlanStatusNoVulns
+	default:
+		// VULN-001 findings exist but none had the metadata required to
+		// build an upgrade command (fixed_in / package / ecosystem).
+		resp.Status = fixPlanStatusNoDepMetadata
 	}
 
 	data, err := json.MarshalIndent(resp, "", "  ")
