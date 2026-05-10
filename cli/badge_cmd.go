@@ -37,12 +37,14 @@ func runBadge(args []string) int {
 		output     string
 		label      string
 		bySeverity bool
+		explain    bool
 	)
 
 	fs.StringVar(&input, "input", "", "path to findings.json (default: run scan)")
 	fs.StringVar(&output, "output", ".github/nox-badge.svg", "output SVG file path")
 	fs.StringVar(&label, "label", "nox", "badge label text")
 	fs.BoolVar(&bySeverity, "by-severity", false, "generate additional badges per severity level")
+	fs.BoolVar(&explain, "explain", false, "print per-finding score contributions instead of writing the badge")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
@@ -93,6 +95,11 @@ func runBadge(args []string) int {
 
 	badgeResult := badge.GenerateFromFindings(findingsList, label)
 
+	if explain {
+		printBadgeExplain(findingsList, badgeResult)
+		return 0
+	}
+
 	// Ensure parent directory exists.
 	if dir := filepath.Dir(output); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -124,4 +131,33 @@ func runBadge(args []string) int {
 	}
 
 	return 0
+}
+
+// printBadgeExplain prints a human-readable breakdown of how the security
+// score was computed: total, grade, formula, and the per-finding
+// contributions sorted by points descending. Surfaces the score formula so
+// users can decide whether to fix vs baseline vs ignore — issue #62.
+func printBadgeExplain(ff []findings.Finding, result *badge.Result) {
+	score, contribs := badge.WeightedSecurityScore(ff)
+
+	fmt.Printf("Score: %d  Grade: %s  Findings: %d\n",
+		score, result.Grade, len(ff))
+	fmt.Println("Formula: ceil( sum( severity_weight * confidence_weight ) )")
+	fmt.Println("  severity_weight   critical=10  high=5  medium=2  low=1  info=0")
+	fmt.Println("  confidence_weight high=1.0     medium=0.5  low=0.2")
+
+	if len(contribs) == 0 {
+		fmt.Println("\nNo active findings.")
+		return
+	}
+
+	fmt.Println()
+	fmt.Printf("%-14s  %-9s  %-10s  %5s  %5s  %7s  %s\n",
+		"RULE", "SEVERITY", "CONFIDENCE", "SEV-W", "CONF-W", "POINTS", "LOCATION")
+	fmt.Println(strings.Repeat("-", 90))
+	for _, c := range contribs {
+		fmt.Printf("%-14s  %-9s  %-10s  %5d  %5.1f  %7.2f  %s\n",
+			c.RuleID, string(c.Severity), string(c.Confidence),
+			c.SeverityW, c.ConfidenceW, c.Points, c.Location)
+	}
 }

@@ -29,6 +29,28 @@ var SeverityWeight = map[findings.Severity]int{
 	findings.SeverityInfo:     0,
 }
 
+// ConfidenceWeight scales each finding's contribution to the security score
+// by how sure the rule itself is. Low-confidence pattern matches no longer
+// tank the grade as hard as confirmed high-severity issues — see issue #62.
+//
+// A missing or unknown confidence value defaults to 1.0 so older rules that
+// haven't declared a confidence still count fully. New rules should set an
+// explicit confidence.
+var ConfidenceWeight = map[findings.Confidence]float64{
+	findings.ConfidenceHigh:   1.0,
+	findings.ConfidenceMedium: 0.5,
+	findings.ConfidenceLow:    0.2,
+}
+
+// confidenceWeight returns the multiplier for a given confidence, defaulting
+// to 1.0 when the value is empty or unrecognised.
+func confidenceWeight(c findings.Confidence) float64 {
+	if w, ok := ConfidenceWeight[c]; ok {
+		return w
+	}
+	return 1.0
+}
+
 // Grade represents a security letter grade A through F.
 type Grade struct {
 	Letter string
@@ -74,13 +96,82 @@ func CountBySeverity(ff []findings.Finding) map[findings.Severity]int {
 	return counts
 }
 
-// SecurityScore computes a weighted score from finding severity counts.
+// SecurityScore computes a severity-weighted score from finding counts.
+// It is preserved for callers that work from pre-tallied severity counts and
+// have no confidence information; new code should prefer
+// WeightedSecurityScore which also factors in rule confidence.
 func SecurityScore(counts map[findings.Severity]int) int {
 	score := 0
 	for sev, n := range counts {
 		score += SeverityWeight[sev] * n
 	}
 	return score
+}
+
+// Contribution describes how a single finding contributed to the
+// WeightedSecurityScore. Returned by Explain so users can see why their
+// grade is what it is — see issue #62 (`nox badge --explain`).
+type Contribution struct {
+	RuleID     string              `json:"rule_id"`
+	Severity   findings.Severity   `json:"severity"`
+	Confidence findings.Confidence `json:"confidence"`
+	SeverityW  int                 `json:"severity_weight"`
+	ConfidenceW float64            `json:"confidence_weight"`
+	Points     float64             `json:"points"`
+	Location   string              `json:"location,omitempty"`
+}
+
+// WeightedSecurityScore computes the score as
+//
+//	sum( SeverityWeight[severity] * ConfidenceWeight[confidence] )
+//
+// over all findings, rounded up to the next integer. Low-confidence pattern
+// matches now contribute proportionally less than confirmed high-confidence
+// findings, which prevents a clean repo from grading E off a handful of
+// uncertain regex hits.
+//
+// Returns the rounded score and the per-finding contributions (sorted by
+// descending points) for use by --explain output.
+func WeightedSecurityScore(ff []findings.Finding) (int, []Contribution) {
+	contribs := make([]Contribution, 0, len(ff))
+	var total float64
+	for i := range ff {
+		f := &ff[i]
+		sw := SeverityWeight[f.Severity]
+		cw := confidenceWeight(f.Confidence)
+		pts := float64(sw) * cw
+		total += pts
+		loc := ""
+		if f.Location.FilePath != "" {
+			loc = fmt.Sprintf("%s:%d", f.Location.FilePath, f.Location.StartLine)
+		}
+		contribs = append(contribs, Contribution{
+			RuleID:      f.RuleID,
+			Severity:    f.Severity,
+			Confidence:  f.Confidence,
+			SeverityW:   sw,
+			ConfidenceW: cw,
+			Points:      pts,
+			Location:    loc,
+		})
+	}
+	sortContributionsDesc(contribs)
+	return int(math.Ceil(total)), contribs
+}
+
+// sortContributionsDesc sorts contributions by points descending, then by
+// rule ID ascending for stable output.
+func sortContributionsDesc(c []Contribution) {
+	for i := 1; i < len(c); i++ {
+		for j := i; j > 0; j-- {
+			if c[j].Points > c[j-1].Points ||
+				(c[j].Points == c[j-1].Points && c[j].RuleID < c[j-1].RuleID) {
+				c[j], c[j-1] = c[j-1], c[j]
+				continue
+			}
+			break
+		}
+	}
 }
 
 // GradeFromScore returns the letter grade for a given score.
@@ -94,9 +185,10 @@ func GradeFromScore(score int) Grade {
 }
 
 // GenerateFromFindings creates a badge result from a set of findings.
+// The score is confidence-weighted so low-confidence pattern matches don't
+// disproportionately tank the grade — see issue #62.
 func GenerateFromFindings(ff []findings.Finding, label string) *Result {
-	counts := CountBySeverity(ff)
-	score := SecurityScore(counts)
+	score, _ := WeightedSecurityScore(ff)
 	grade := GradeFromScore(score)
 
 	return &Result{
