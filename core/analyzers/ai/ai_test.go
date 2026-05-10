@@ -895,6 +895,94 @@ func TestDetect_MCP004_LiteralSecretInEnv(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// AI-028 / AI-006 false-positive regressions for issue #59
+// ---------------------------------------------------------------------------
+
+// TestAI028_NoFalsePositiveOnFuzzCorpus ensures the rule does not fire on Go
+// fuzz-test corpus seeds whose payloads happen to be the literal `null` or
+// `undefined` (e.g. JSON parser fuzz inputs). Files matching *_test.go are
+// also excluded from the rule entirely.
+func TestAI028_NoFalsePositiveOnFuzzCorpus(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`package viz
+
+import "testing"
+
+func FuzzParseNativeJSON(f *testing.F) {
+	f.Add([]byte(` + "`" + `{"id":"m"}` + "`" + `))
+	f.Add([]byte(` + "`" + `{` + "`" + `))
+	f.Add([]byte(` + "`" + `` + "`" + `))
+	f.Add([]byte(` + "`" + `null` + "`" + `))
+}
+`)
+	results, err := a.ScanFile("viz/fuzz_test.go", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "AI-028" {
+			t.Fatalf("AI-028 fired on fuzz corpus seed: %+v", f)
+		}
+	}
+}
+
+// TestAI028_NoBareNullMatch ensures the alternation precedence fix prevents
+// bare `null` / `undefined` literals (with no `seed = ` prefix) from
+// matching the rule, even outside test files.
+func TestAI028_NoBareNullMatch(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`config = { "value": null }
+state = undefined
+`)
+	results, err := a.ScanFile("config.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "AI-028" {
+			t.Fatalf("AI-028 fired on bare null/undefined: %+v", f)
+		}
+	}
+}
+
+// TestAI028_StillFiresOnRealSeed ensures the tightened regex still flags
+// genuine `seed = None` / `seed: null` patterns.
+func TestAI028_StillFiresOnRealSeed(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("response = openai.ChatCompletion.create(model='gpt-4', seed=None)\n")
+	results, err := a.ScanFile("client.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if findingWithRule(results, "AI-028") == nil {
+		t.Fatalf("AI-028 did not fire on `seed=None`; results=%+v", results)
+	}
+}
+
+// TestAI006_IgnoresGoTestFiles ensures the rule is skipped for Go test files
+// where prints of test state are expected and benign.
+func TestAI006_IgnoresGoTestFiles(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`package main
+
+import "fmt"
+
+func TestThing(t *testing.T) {
+	fmt.Printf("response: %s", responseFromLLM)
+}
+`)
+	results, err := a.ScanFile("agent_test.go", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "AI-006" {
+			t.Fatalf("AI-006 fired in *_test.go file: %+v", f)
+		}
+	}
+}
+
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
 	if got := len(rules); got != 69 {

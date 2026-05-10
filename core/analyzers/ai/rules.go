@@ -8,17 +8,18 @@ import (
 // aiRule is a compact representation used to define built-in AI security rules
 // in a table. Each entry is converted to a rules.Rule by builtinAIRules().
 type aiRule struct {
-	id           string
-	severity     findings.Severity
-	confidence   findings.Confidence
-	pattern      string
-	description  string
-	cwe          string
-	keywords     []string
-	filePatterns []string
-	tags         []string
-	remediation  string
-	references   []string
+	id                 string
+	severity           findings.Severity
+	confidence         findings.Confidence
+	pattern            string
+	description        string
+	cwe                string
+	keywords           []string
+	filePatterns       []string
+	ignoreFilePatterns []string
+	tags               []string
+	remediation        string
+	references         []string
 }
 
 // builtinAIRules returns all built-in AI security rules.
@@ -89,9 +90,10 @@ func builtinAIRules() []*rules.Rule {
 			pattern:     `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
 			description: "Prompt or LLM response logged without redaction",
 			cwe:         "CWE-532", keywords: []string{"prompt", "completion", "response.text", "response.content"},
-			tags:        []string{"ai", "logging", "data-exposure"},
-			remediation: "Redact or truncate prompt and response content before logging. Use structured logging with PII-safe fields. Avoid logging full LLM interactions in production.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
+			ignoreFilePatterns: []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
+			tags:               []string{"ai", "logging", "data-exposure"},
+			remediation:        "Redact or truncate prompt and response content before logging. Use structured logging with PII-safe fields. Avoid logging full LLM interactions in production.",
+			references:         []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 		{
 			id: "AI-007", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -347,12 +349,17 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-028", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(seed\s*[:=]\s*None|null|undefined)`,
+			// Alternation must be grouped — the previous form
+			// `(seed\s*[:=]\s*None|null|undefined)` allowed bare `null` or
+			// `undefined` anywhere in the file (e.g. fuzz seed corpora like
+			// `f.Add([]byte(\`null\`))`). See issue #59.
+			pattern:     `(?i)\bseed\s*[:=]\s*(None|null|undefined)\b`,
 			description: "LLM seed not set, causing non-deterministic output",
 			cwe:         "CWE-754", keywords: []string{"seed"},
-			tags:        []string{"ai", "reproducibility", "testing"},
-			remediation: "Set a seed value for reproducible outputs in testing and auditing. This ensures consistent behavior for the same inputs.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
+			ignoreFilePatterns: []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
+			tags:               []string{"ai", "reproducibility", "testing"},
+			remediation:        "Set a seed value for reproducible outputs in testing and auditing. This ensures consistent behavior for the same inputs.",
+			references:         []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
 			id: "AI-029", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
@@ -700,9 +707,9 @@ func builtinAIRules() []*rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "MCP-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)"command"\s*:\s*"(?:bash|sh|zsh|powershell|cmd\.exe|/bin/sh|/bin/bash)"`,
-			description:  "MCP server invokes a shell interpreter directly",
-			cwe:          "CWE-78", keywords: []string{"command", "bash", "sh", "powershell"},
+			pattern:     `(?i)"command"\s*:\s*"(?:bash|sh|zsh|powershell|cmd\.exe|/bin/sh|/bin/bash)"`,
+			description: "MCP server invokes a shell interpreter directly",
+			cwe:         "CWE-78", keywords: []string{"command", "bash", "sh", "powershell"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "tool-exposure"},
 			remediation:  "Replace direct shell invocation with the specific binary the server needs. A shell-launched server inherits arbitrary subprocess capability that the MCP host can't constrain.",
@@ -710,9 +717,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-002", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)"args"\s*:\s*\[[^\]]*"(?:\$HOME|~|/Users/|/home/|C:\\\\Users\\\\)[^"]*"`,
-			description:  "MCP server granted broad home-directory or root-path access",
-			cwe:          "CWE-732", keywords: []string{"args", "$HOME", "/Users/", "/home/"},
+			pattern:     `(?i)"args"\s*:\s*\[[^\]]*"(?:\$HOME|~|/Users/|/home/|C:\\\\Users\\\\)[^"]*"`,
+			description: "MCP server granted broad home-directory or root-path access",
+			cwe:         "CWE-732", keywords: []string{"args", "$HOME", "/Users/", "/home/"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "filesystem-exposure"},
 			remediation:  "Restrict the MCP server's path argument to the minimum project directory it needs. Granting home-directory scope means every tool call can read SSH keys, browser profiles, password managers, and shell history.",
@@ -720,9 +727,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)"--allow-write"|"--no-sandbox"|"--dangerously-allow-[a-z-]+"|"--unsafe"|"--insecure"`,
-			description:  "MCP server invoked with dangerously-permissive flags",
-			cwe:          "CWE-732", keywords: []string{"allow-write", "no-sandbox", "dangerously"},
+			pattern:     `(?i)"--allow-write"|"--no-sandbox"|"--dangerously-allow-[a-z-]+"|"--unsafe"|"--insecure"`,
+			description: "MCP server invoked with dangerously-permissive flags",
+			cwe:         "CWE-732", keywords: []string{"allow-write", "no-sandbox", "dangerously"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "configuration"},
 			remediation:  "Remove permissive flags. If the MCP server requires elevated capability, document the operator decision in a config comment and restrict the scope to a specific subdirectory or operation.",
@@ -730,9 +737,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-004", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)"env"\s*:\s*\{[^}]*"[A-Z0-9_]*(?:SECRET|API_KEY|TOKEN|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*"\s*:\s*"[^$"][^"]*"`,
-			description:  "MCP server config embeds a secret value in the env block",
-			cwe:          "CWE-798", keywords: []string{"env", "SECRET", "API_KEY", "TOKEN"},
+			pattern:     `(?i)"env"\s*:\s*\{[^}]*"[A-Z0-9_]*(?:SECRET|API_KEY|TOKEN|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*"\s*:\s*"[^$"][^"]*"`,
+			description: "MCP server config embeds a secret value in the env block",
+			cwe:         "CWE-798", keywords: []string{"env", "SECRET", "API_KEY", "TOKEN"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "secrets"},
 			remediation:  "Reference secrets via shell expansion ($VAR) rather than embedding the literal value. mcp.json files often live in version control or sync directories where literal secrets become exposed.",
@@ -740,9 +747,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-005", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:      `(?s)server\.tool\s*\(\s*"[a-zA-Z_][a-zA-Z0-9_]*"\s*\)\s*\.handler`,
-			description:  "MCP tool registration missing description metadata",
-			cwe:          "CWE-1059", keywords: []string{"server.tool"},
+			pattern:     `(?s)server\.tool\s*\(\s*"[a-zA-Z_][a-zA-Z0-9_]*"\s*\)\s*\.handler`,
+			description: "MCP tool registration missing description metadata",
+			cwe:         "CWE-1059", keywords: []string{"server.tool"},
 			filePatterns: []string{"*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "audit"},
 			remediation:  "Add a Description() call to every tool registration. The description is what the operator and the LLM see when reasoning about whether to invoke the tool. Missing descriptions are an auditability gap.",
@@ -750,9 +757,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-006", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)"transport"\s*:\s*"http"|new\s+HttpServerTransport\s*\(\s*\{[^}]*"http://`,
-			description:  "MCP server uses plaintext HTTP transport",
-			cwe:          "CWE-319", keywords: []string{"transport", "http", "HttpServerTransport"},
+			pattern:     `(?i)"transport"\s*:\s*"http"|new\s+HttpServerTransport\s*\(\s*\{[^}]*"http://`,
+			description: "MCP server uses plaintext HTTP transport",
+			cwe:         "CWE-319", keywords: []string{"transport", "http", "HttpServerTransport"},
 			filePatterns: []string{"mcp.json", "*.json", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "transport"},
 			remediation:  "Use HTTPS for any MCP transport that crosses a network boundary. stdio transport is fine for local servers; remote MCP must be TLS-protected to prevent tool-call interception.",
@@ -760,9 +767,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-007", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)"command"\s*:\s*"(?:curl|wget|npx)\s+(?:[a-z]+://|--?[a-z]+\s+[a-z]+://)`,
-			description:  "MCP server fetches and executes remote code at startup",
-			cwe:          "CWE-829", keywords: []string{"command", "curl", "wget", "npx"},
+			pattern:     `(?i)"command"\s*:\s*"(?:curl|wget|npx)\s+(?:[a-z]+://|--?[a-z]+\s+[a-z]+://)`,
+			description: "MCP server fetches and executes remote code at startup",
+			cwe:         "CWE-829", keywords: []string{"command", "curl", "wget", "npx"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "supply-chain"},
 			remediation:  "Pin the MCP server to a specific version installed locally. Fetching at runtime turns every host start into a supply-chain attack surface — a compromised registry can ship arbitrary code to every operator's machine.",
@@ -770,9 +777,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-008", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:      `(?s)server\.tool\s*\([^)]*\)[^.]*\.handler\s*\([^)]*\)\s*$`,
-			description:  "MCP tool handler appears unbounded (no rate limit / scope guard)",
-			cwe:          "CWE-770", keywords: []string{"server.tool", "handler"},
+			pattern:     `(?s)server\.tool\s*\([^)]*\)[^.]*\.handler\s*\([^)]*\)\s*$`,
+			description: "MCP tool handler appears unbounded (no rate limit / scope guard)",
+			cwe:         "CWE-770", keywords: []string{"server.tool", "handler"},
 			filePatterns: []string{"*.go", "*.ts", "*.js"},
 			tags:         []string{"ai", "mcp", "abuse"},
 			remediation:  "Wrap tool handlers in a rate-limited / scope-checked middleware. An LLM or compromised host can invoke handlers in tight loops; without a guard, a single bug becomes denial-of-service or quota exhaustion.",
@@ -783,19 +790,20 @@ func builtinAIRules() []*rules.Rule {
 	out := make([]*rules.Rule, len(defs))
 	for i := range defs {
 		out[i] = &rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
+			ID:                 defs[i].id,
+			Version:            "1.0",
+			Description:        defs[i].description,
+			Severity:           defs[i].severity,
+			Confidence:         defs[i].confidence,
+			MatcherType:        "regex",
+			Pattern:            defs[i].pattern,
+			FilePatterns:       defs[i].filePatterns,
+			IgnoreFilePatterns: defs[i].ignoreFilePatterns,
+			Keywords:           defs[i].keywords,
+			Tags:               defs[i].tags,
+			Metadata:           map[string]string{"cwe": defs[i].cwe},
+			Remediation:        defs[i].remediation,
+			References:         defs[i].references,
 		}
 	}
 	return out
