@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -339,6 +340,36 @@ func TestRegexMatcher_SecretShape_AcceptsHighEntropy(t *testing.T) {
 	results := m.Match(content, &rule)
 	if len(results) == 0 {
 		t.Fatal("expected high-entropy alnum to pass shape filter")
+	}
+}
+
+func TestRegexMatcher_PublisherAllowlist_DropsTrustedPublisher(t *testing.T) {
+	m := NewRegexMatcher()
+	content := []byte("- uses: actions/checkout@v4\n- uses: someuser/myaction@v1\n")
+	rule := Rule{
+		Pattern: `(?i)uses:\s*[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+@(v\d|main|master|latest|develop|HEAD)`,
+		Metadata: map[string]string{
+			"publisher_allowlist": "actions,github",
+		},
+	}
+	results := m.Match(content, &rule)
+	if len(results) != 1 {
+		t.Fatalf("expected exactly 1 match (third-party action), got %d: %+v", len(results), results)
+	}
+	if !strings.Contains(results[0].MatchText, "someuser/myaction") {
+		t.Fatalf("expected the third-party match to remain, got %q", results[0].MatchText)
+	}
+}
+
+func TestRegexMatcher_PublisherAllowlist_NoMetadata_NoFilter(t *testing.T) {
+	m := NewRegexMatcher()
+	content := []byte("- uses: actions/checkout@v4\n")
+	rule := Rule{
+		Pattern: `(?i)uses:\s*[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+@(v\d|main|master|latest|develop|HEAD)`,
+	}
+	results := m.Match(content, &rule)
+	if len(results) != 1 {
+		t.Fatalf("expected the match to remain when no allowlist is set, got %d", len(results))
 	}
 }
 

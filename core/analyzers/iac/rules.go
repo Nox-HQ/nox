@@ -1,6 +1,8 @@
 package iac
 
 import (
+	"maps"
+
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -19,6 +21,10 @@ type iacRule struct {
 	tags         []string
 	remediation  string
 	references   []string
+	// extraMetadata carries optional rule.Metadata entries beyond `cwe`.
+	// Used e.g. by IAC-013 to declare a trusted-publisher allowlist that the
+	// regex matcher consumes via a post-filter.
+	extraMetadata map[string]string
 }
 
 // builtinBaseIaCRules returns the original set of IaC security rules (IAC-001 to IAC-185).
@@ -408,6 +414,11 @@ func builtinBaseIaCRules() []rules.Rule {
 			tags:         []string{"iac", "github-actions", "supply-chain"},
 			remediation:  "Pin third-party actions to a full commit SHA (e.g., actions/checkout@a5ac7e...). Mutable tags can be moved to point to different, potentially malicious code.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html", "https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions"},
+			// First-party publishers ship immutable releases via tagged refs
+			// and are tracked by Dependabot. SHA-pinning would actively break
+			// automatic minor/patch updates without adding meaningful supply-
+			// chain protection. See issue #63. Override via .nox.yml later.
+			extraMetadata: map[string]string{"publisher_allowlist": "actions,github"},
 		},
 		{
 			id: "IAC-014", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -1933,6 +1944,8 @@ func builtinBaseIaCRules() []rules.Rule {
 
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
+		md := map[string]string{"cwe": defs[i].cwe}
+		maps.Copy(md, defs[i].extraMetadata)
 		out[i] = rules.Rule{
 			ID:           defs[i].id,
 			Version:      "1.0",
@@ -1944,7 +1957,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			FilePatterns: defs[i].filePatterns,
 			Keywords:     defs[i].keywords,
 			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
+			Metadata:     md,
 			Remediation:  defs[i].remediation,
 			References:   defs[i].references,
 		}

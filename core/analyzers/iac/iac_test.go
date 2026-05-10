@@ -945,7 +945,8 @@ func TestDetect_GHAScriptInjection(t *testing.T) {
 
 func TestDetect_GHAUnpinnedAction(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("uses: actions/checkout@v4\n")
+	// Third-party action (not in the trusted-publisher allowlist).
+	content := []byte("uses: someuser/myaction@v4\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -960,7 +961,33 @@ func TestDetect_GHAUnpinnedAction(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("expected IAC-013 finding for unpinned action")
+		t.Fatal("expected IAC-013 finding for unpinned third-party action")
+	}
+}
+
+// TestNoDetect_GHAUnpinnedTrustedPublisher confirms that first-party
+// publishers (actions/*, github/*) are exempt from IAC-013 because their
+// releases are immutable and Dependabot keeps them up-to-date — see issue #63.
+func TestNoDetect_GHAUnpinnedTrustedPublisher(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`name: deploy
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+      - uses: github/codeql-action/init@v3
+`)
+	results, err := a.ScanFile("deploy.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "IAC-013" {
+			t.Fatalf("IAC-013 fired on trusted-publisher action: %+v", f)
+		}
 	}
 }
 

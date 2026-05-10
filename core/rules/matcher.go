@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -99,7 +100,59 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	if rule.Metadata["secret_shape"] == "true" {
 		results = filterBySecretShape(results, rule)
 	}
+	if rule.Metadata["publisher_allowlist"] != "" {
+		results = filterByPublisherAllowlist(results, rule)
+	}
 	return results
+}
+
+// filterByPublisherAllowlist drops matches whose `<publisher>/<name>@<ref>`
+// reference belongs to a trusted publisher. Used by IAC-013 to silence
+// findings on first-party GitHub actions (actions/*, github/*) that ship
+// immutable releases via tagged refs and are managed by Dependabot.
+//
+// The allowlist is read from rule.Metadata["publisher_allowlist"] as a
+// comma-separated list (e.g. "actions,github"). Comparison is case-
+// insensitive and ignores surrounding whitespace.
+func filterByPublisherAllowlist(in []MatchResult, rule *Rule) []MatchResult {
+	raw := rule.Metadata["publisher_allowlist"]
+	if raw == "" {
+		return in
+	}
+	allowed := make(map[string]struct{})
+	for p := range strings.SplitSeq(raw, ",") {
+		p = strings.TrimSpace(strings.ToLower(p))
+		if p != "" {
+			allowed[p] = struct{}{}
+		}
+	}
+	out := in[:0]
+	for _, r := range in {
+		pub := extractPublisher(r.MatchText)
+		if pub != "" {
+			if _, ok := allowed[strings.ToLower(pub)]; ok {
+				continue
+			}
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// extractPublisher returns the publisher segment of a `uses: <pub>/<name>@<ref>`
+// match text, or "" when the match doesn't follow that shape.
+func extractPublisher(text string) string {
+	// Strip the `uses:` prefix and surrounding whitespace.
+	idx := strings.Index(strings.ToLower(text), "uses:")
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(text[idx+len("uses:"):])
+	slash := strings.Index(rest, "/")
+	if slash <= 0 {
+		return ""
+	}
+	return rest[:slash]
 }
 
 // filterBySecretShape rejects matches whose text doesn't look like a real
