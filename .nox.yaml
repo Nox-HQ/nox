@@ -21,3 +21,4 @@ scan:
     # Documentation files contain example code snippets with token references
     - "docs/*.md"
     - "README.md"
+    - "CHANGELOG.md"
