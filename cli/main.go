@@ -264,7 +264,23 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
+	var fingerprintVersionFlag string
+	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v1 unless NOX_FINGERPRINT_VERSION is set.")
 	if err := scanFS.Parse(args); err != nil {
+		return 2
+	}
+	// Wire fingerprint version: explicit flag wins, then env var (handled
+	// at package init), then default. Unknown values fall back to default
+	// inside findings.SetFingerprintVersion.
+	switch fingerprintVersionFlag {
+	case "":
+		// no-op; init() already consulted NOX_FINGERPRINT_VERSION
+	case "1", "v1":
+		findings.SetFingerprintVersion(findings.FingerprintV1)
+	case "2", "v2":
+		findings.SetFingerprintVersion(findings.FingerprintV2)
+	default:
+		fmt.Fprintf(os.Stderr, "error: --fingerprint-version must be 1 or 2, got %q\n", fingerprintVersionFlag)
 		return 2
 	}
 
