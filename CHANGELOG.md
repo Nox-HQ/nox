@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation / interop
 
+- **`nox doctor` version-drift check** — doctor now scans
+  `.github/workflows/*.yml` for `nox-hq/nox/cli@vX.Y.Z` pins and warns
+  when CI and the local nox binary disagree. Same nox version on both
+  sides makes "I just ran nox locally, it's clean" actually meaningful
+  again. Reports `ok` per workflow when versions match, `DRIFT` when
+  they diverge, with a suggested fix-up command (bump CI or
+  `go install` locally). Closes [#73 item 7](https://github.com/Nox-HQ/nox/issues/73).
+- **Exit-code semantics already correct** (item 8 follow-up). Verified
+  that `nox scan` already returns 0 when every finding is baselined or
+  suppressed and exits 1 only on truly-new active findings —
+  `ActiveFindings()` filters `StatusBaselined` and `StatusSuppressed`
+  out of the count that drives the exit code. The `|| true` shim in
+  downstream CI workflows (e.g. felixgeelhaar/fortify) is no longer
+  necessary; remove it on next workflow refresh.
 - **`nox:disable` alias**: inline suppression now accepts both
   `nox:ignore` (legacy spelling) and `nox:disable` (matches gosec
   `#nosec`, staticcheck, golangci-lint `//nolint`). The two are
