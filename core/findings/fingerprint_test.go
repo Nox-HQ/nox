@@ -150,14 +150,14 @@ func TestComputeFingerprintWith_ExplicitVersion(t *testing.T) {
 // fingerprints.
 func TestNormaliseFilePath_KnownCases(t *testing.T) {
 	cases := map[string]string{
-		"http/middleware.go":      "http/middleware.go",
-		"./http/middleware.go":    "http/middleware.go",
-		"http\\middleware.go":     "http/middleware.go",
-		"http/./middleware.go":    "http/middleware.go",
-		"./":                      "",
-		".":                       "",
-		"":                        "",
-		"a/b/../c.go":             "a/c.go",
+		"http/middleware.go":   "http/middleware.go",
+		"./http/middleware.go": "http/middleware.go",
+		"http\\middleware.go":  "http/middleware.go",
+		"http/./middleware.go": "http/middleware.go",
+		"./":                   "",
+		".":                    "",
+		"":                     "",
+		"a/b/../c.go":          "a/c.go",
 	}
 	for in, want := range cases {
 		if got := normaliseFilePath(in); got != want {
