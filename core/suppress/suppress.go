@@ -6,6 +6,11 @@
 //	<!-- nox:ignore AI-001 -->
 //	/* nox:ignore IAC-001 */
 //	-- nox:ignore DEP-001 -- known issue expires:2025-12-31
+//
+// `nox:disable` is accepted as an alias for `nox:ignore` to match the
+// convention used by gosec (`#nosec`), staticcheck, and golangci-lint
+// (`//nolint:RULE`) so muscle memory carries over. The two forms are
+// fully interchangeable.
 package suppress
 
 import (
@@ -25,9 +30,13 @@ type Suppression struct {
 	Expires  *time.Time
 }
 
-// suppressionRE matches nox:ignore directives in any comment style.
+// suppressionRE matches nox:ignore / nox:disable directives in any
+// comment style. The `(?:ignore|disable)` alternation makes both
+// keywords equivalent at the regex level — every downstream consumer
+// just sees a Suppression record with no notion of which spelling was
+// used in source.
 var suppressionRE = regexp.MustCompile(
-	`(?://|#|--|/\*|<!--)\s*nox:ignore\s+([\w-]+(?:,[\w-]+)*)\s*(?:--\s*(.*))?`,
+	`(?://|#|--|/\*|<!--)\s*nox:(?:ignore|disable)\s+([\w-]+(?:,[\w-]+)*)\s*(?:--\s*(.*))?`,
 )
 
 // expiresRE extracts an expires:YYYY-MM-DD from the reason text.

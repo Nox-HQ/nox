@@ -189,3 +189,68 @@ func TestScanForSuppressions_NextLineSkipsBlank(t *testing.T) {
 		t.Fatalf("expected line 3, got %d", supps[0].Line)
 	}
 }
+
+// TestScanForSuppressions_DisableAlias — `nox:disable` is accepted
+// as a synonym for `nox:ignore` to match gosec/staticcheck/golangci
+// convention. Behaviour must be identical: rule list, reason,
+// expires, and target-line resolution all work the same way.
+func TestScanForSuppressions_DisableAlias(t *testing.T) {
+	t.Parallel()
+	content := []byte(`# nox:disable SEC-001 -- documented FP
+secret = "AKIA..."`)
+	supps := ScanForSuppressions(content, "main.py")
+	if len(supps) != 1 {
+		t.Fatalf("expected 1 suppression, got %d", len(supps))
+	}
+	if len(supps[0].RuleIDs) != 1 || supps[0].RuleIDs[0] != "SEC-001" {
+		t.Errorf("rule IDs = %v", supps[0].RuleIDs)
+	}
+	if supps[0].Reason != "documented FP" {
+		t.Errorf("reason = %q", supps[0].Reason)
+	}
+	if supps[0].Line != 2 {
+		t.Errorf("line = %d, want 2", supps[0].Line)
+	}
+}
+
+// TestScanForSuppressions_DisableAndIgnoreInterop — both spellings
+// can appear in the same file and target different rules.
+func TestScanForSuppressions_DisableAndIgnoreInterop(t *testing.T) {
+	t.Parallel()
+	content := []byte(`// nox:ignore SEC-001
+foo()
+// nox:disable SEC-002 -- alt spelling
+bar()`)
+	supps := ScanForSuppressions(content, "main.go")
+	if len(supps) != 2 {
+		t.Fatalf("expected 2 suppressions, got %d", len(supps))
+	}
+	want := map[string]bool{"SEC-001": false, "SEC-002": false}
+	for _, s := range supps {
+		for _, id := range s.RuleIDs {
+			if _, ok := want[id]; ok {
+				want[id] = true
+			}
+		}
+	}
+	for id, seen := range want {
+		if !seen {
+			t.Errorf("did not see suppression for %s", id)
+		}
+	}
+}
+
+// TestScanForSuppressions_DisableTrailingComment — disable as a
+// trailing comment must still apply to the same line.
+func TestScanForSuppressions_DisableTrailingComment(t *testing.T) {
+	t.Parallel()
+	content := []byte(`secret = "AKIA..." # nox:disable SEC-001
+`)
+	supps := ScanForSuppressions(content, "main.py")
+	if len(supps) != 1 {
+		t.Fatalf("expected 1 suppression, got %d", len(supps))
+	}
+	if supps[0].Line != 1 {
+		t.Errorf("line = %d, want 1 (trailing comment applies to same line)", supps[0].Line)
+	}
+}
