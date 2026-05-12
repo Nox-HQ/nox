@@ -7,19 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **AI-012 precision** — tightened the regex so it stops firing on every
-  `.Execute(`/`Query(` call whose body coincidentally references an uppercase
-  `Response` identifier (Go return types, struct fields, error variants). The
-  rule now (a) matches the method name case-insensitively but the LLM-output
-  keyword case-sensitive lowercase only, and (b) requires `\b` word boundaries
-  around the keyword. Verified against `felixgeelhaar/fortify`: 4 known
-  false positives in `http/middleware.go` and `http/streaming.go` are gone,
-  the true-positive `cursor.execute("SELECT " + completion)` patterns still
-  fire (including with nested calls in the argument list). Closes [#73 item
-  3](https://github.com/Nox-HQ/nox/issues/73).
-
 ### Added
 
 - **Fingerprint v2** (opt-in): new `--fingerprint-version 2` flag on `nox scan`
@@ -33,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and then running `nox baseline update` so existing entries re-hash
   under V2. A dedicated `nox baseline migrate` command will land in a
   follow-up PR (#73 item 4). Closes [#73 items 1+2](https://github.com/Nox-HQ/nox/issues/73).
+- **`nox baseline add`** — additive counterpart to `baseline update`.
+  Adds findings not yet in the baseline without pruning stale entries.
+  Accepts `--rule <id,id>` and `--fingerprint <fp,fp>` filters; the
+  fingerprint flag bypasses the scan entirely and is the surgical
+  "baseline these specific entries" workflow #73 item 4 calls out.
+  `--reason` and `--owner` annotate every new entry. Closes [#73 item
+  4](https://github.com/Nox-HQ/nox/issues/73).
+- **`nox baseline diff`** — read-only preview of what
+  `baseline update` would change against the current scan. Lists adds
+  and prunes separately so the operator can decide whether a prune is
+  real (resolved) or a regression (rule sharpened, file renamed,
+  fingerprint algorithm bumped).
+
+### Fixed
+
+- **AI-012 precision** — tightened the regex so it stops firing on every
+  `.Execute(`/`Query(` call whose body coincidentally references an uppercase
+  `Response` identifier (Go return types, struct fields, error variants). The
+  rule now (a) matches the method name case-insensitively but the LLM-output
+  keyword case-sensitive lowercase only, and (b) requires `\b` word boundaries
+  around the keyword. Verified against `felixgeelhaar/fortify`: 4 known
+  false positives in `http/middleware.go` and `http/streaming.go` are gone,
+  the true-positive `cursor.execute("SELECT " + completion)` patterns still
+  fire (including with nested calls in the argument list). Closes [#73 item
+  3](https://github.com/Nox-HQ/nox/issues/73).
 
 ## [0.6.0] - 2026-02-24
 
