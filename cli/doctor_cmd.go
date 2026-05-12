@@ -146,7 +146,7 @@ func hasSuffix(s, suffix string) bool {
 }
 
 func stripVPrefix(v string) string {
-	if len(v) > 0 && v[0] == 'v' {
+	if v != "" && v[0] == 'v' {
 		return v[1:]
 	}
 	return v
