@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	nox "github.com/nox-hq/nox/core"
@@ -144,19 +145,15 @@ func baselineUpdate(args []string) int {
 // without losing entries that happen to be missing from this scan.
 // `baseline update` would prune those — `baseline add` won't touch them.
 //
-// Filters:
+// Filters (each accepts a comma-separated list of values):
 //
-//	--rule <id>   only add findings whose rule_id matches (repeatable
-//	              by passing comma-separated values).
-//	--fingerprint <fp>
-//	              only add the entries whose fingerprint matches one
-//	              of the supplied values (repeatable / comma list).
-//	              Useful when piping fingerprints from `baseline diff`.
+//	--rule <id,id,…>          only add findings whose rule_id is in the set.
+//	--fingerprint <fp,fp,…>   add these exact fingerprints. Bypasses the
+//	                          scan entirely; entries get empty rule_id /
+//	                          file_path until an editor fills them in.
 //
-// When --fingerprint is set, no scan is run; the supplied fingerprints
-// are added as bare entries with empty rule_id / file_path. The
-// surgical-add path is the workflow nox-hq/nox#73 item 4 calls out:
-// "add these specific fingerprints without rewriting the file".
+// The --fingerprint path is the workflow nox-hq/nox#73 item 4 calls
+// out: "add these specific fingerprints without rewriting the file".
 func baselineAdd(args []string) int {
 	fs := flag.NewFlagSet("baseline add", flag.ContinueOnError)
 	var (
@@ -258,8 +255,9 @@ func baselineAdd(args []string) int {
 // (finding genuinely resolved) or a regression (rule sharpened, file
 // renamed, fingerprint algorithm bumped).
 //
-// Exit status is always 0 unless the scan itself fails. The diff is
-// informational.
+// The diff is informational: a non-zero exit code is reserved for the
+// usual hard failures (flag-parse, baseline-load, scan errors). A
+// "diff that shows differences" is itself success.
 func baselineDiff(args []string) int {
 	fs := flag.NewFlagSet("baseline diff", flag.ContinueOnError)
 	var baselinePath string
@@ -306,28 +304,48 @@ func baselineDiff(args []string) int {
 		}
 	}
 	// Prunes: baseline entries no longer matched by any current finding.
+	// Map iteration order is random in Go; sort for stable diff output
+	// so subsequent runs against the same baseline produce the same
+	// terminal output (helpful for piping to git diff or grep).
 	var prunes []baseline.Entry
 	for fp, e := range existing {
 		if _, ok := current[fp]; !ok {
 			prunes = append(prunes, *e)
 		}
 	}
+	sort.Slice(adds, func(i, j int) bool {
+		return adds[i].Fingerprint < adds[j].Fingerprint
+	})
+	sort.Slice(prunes, func(i, j int) bool {
+		return prunes[i].Fingerprint < prunes[j].Fingerprint
+	})
 
 	fmt.Printf("baseline diff — %s vs scan of %s\n", baselinePath, target)
 	fmt.Printf("  +%d would be added\n", len(adds))
 	for i := range adds {
-		fmt.Printf("    + %s %s:%d  %s\n", adds[i].RuleID, adds[i].Location.FilePath, adds[i].Location.StartLine, adds[i].Fingerprint[:12])
+		fmt.Printf("    + %s %s:%d  %s\n", adds[i].RuleID, adds[i].Location.FilePath, adds[i].Location.StartLine, shortFP(adds[i].Fingerprint))
 	}
 	fmt.Printf("  -%d would be pruned\n", len(prunes))
 	for i := range prunes {
-		fmt.Printf("    - %s %s  %s\n", prunes[i].RuleID, prunes[i].FilePath, prunes[i].Fingerprint[:12])
+		fmt.Printf("    - %s %s  %s\n", prunes[i].RuleID, prunes[i].FilePath, shortFP(prunes[i].Fingerprint))
 	}
-	if len(prunes) > 0 {
+	if len(adds) > 0 || len(prunes) > 0 {
 		fmt.Println()
-		fmt.Println("Run `nox baseline update` to apply both changes,")
-		fmt.Println("or `nox baseline add` to keep the prunes but pick up the adds.")
+		fmt.Println("Run `nox baseline update` to apply both adds and prunes,")
+		fmt.Println("or `nox baseline add` to insert the adds without pruning.")
 	}
 	return 0
+}
+
+// shortFP returns the leading 12 hex chars of fp, or the whole string
+// if it's shorter (caller-supplied / user-typed fingerprints can be
+// arbitrary lengths). Avoids the panic that a fixed `fp[:12]` slice
+// would cause on short inputs.
+func shortFP(fp string) string {
+	if len(fp) <= 12 {
+		return fp
+	}
+	return fp[:12]
 }
 
 func splitCSV(s string) []string {
