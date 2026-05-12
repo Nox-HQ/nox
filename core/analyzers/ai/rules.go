@@ -147,14 +147,17 @@ func builtinAIRules() []*rules.Rule {
 			//     dominant false-positive class — Go type identifiers
 			//     like `*http.Response` or `LLMResponse` (UpperCamel)
 			//     no longer trip the rule when they appear as return
-			//     types or struct fields of a `.Execute(` call.
-			//   - `[^)]*?` (instead of `.*?`) keeps the match inside
-			//     the call's argument list. Crossing a `)` reaches a
-			//     subsequent statement that genuinely has nothing to
-			//     do with the call.
+			//     types or struct fields of a `.Execute(` call. The
+			//     LLM-output identifiers in Python/JS are conventionally
+			//     lowercase (`response`, `output`, `completion`).
 			//   - `\b…\b` word boundaries prevent a substring match
 			//     against unrelated words (e.g. "outputstream").
-			pattern:     `(?i:\.(execute|query|raw))\s*\((?-i:[^)]*?\b(response|completion|output|generated|llm_output|model_output|ai_result)\b)`,
+			//   - We deliberately keep `.*?` (not `[^)]*?`) so a true
+			//     positive with nested calls in the args is still caught
+			//     — e.g. `cursor.execute(safe_fn(x) + completion)`. RE2
+			//     `.` doesn't cross newlines unless `(?s)` is set, so
+			//     the match still bounds to the same statement.
+			pattern:     `(?i:\.(execute|query|raw))\s*\(.*?(?-i:\b(response|completion|output|generated|llm_output|model_output|ai_result)\b)`,
 			description: "LLM-generated text used directly in database query",
 			cwe:         "CWE-89", keywords: []string{".execute(", ".query(", ".raw("},
 			tags:        []string{"ai", "output-handling", "sql-injection"},

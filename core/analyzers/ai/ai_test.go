@@ -644,6 +644,15 @@ func TestDetect_LLMOutputInSQL_TruePositives(t *testing.T) {
 			file:    "orm.py",
 			content: `MyModel.objects.raw("SELECT " + llm_output)`,
 		},
+		{
+			// Nested call inside the args — the previous tightening
+			// used `[^)]*?` which stopped at the first `)` and missed
+			// this. Switched back to `.*?` (which RE2 still bounds to
+			// the same line because `.` doesn't span newlines).
+			name:    "execute with nested call before keyword",
+			file:    "db.py",
+			content: `cursor.execute(json.dumps({"x": 1}) + " WHERE id = " + response)`,
+		},
 	}
 	a := NewAnalyzer()
 	for _, c := range cases {
