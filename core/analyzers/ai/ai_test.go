@@ -615,6 +615,108 @@ func TestDetect_LLMOutputInSQL(t *testing.T) {
 	}
 }
 
+// TestDetect_LLMOutputInSQL_TruePositives covers the variations of
+// the real risk pattern: an interpolated / concatenated LLM-output
+// identifier flowing into a SQL execution method.
+func TestDetect_LLMOutputInSQL_TruePositives(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		content string
+	}{
+		{
+			name:    "f-string with response",
+			file:    "db.py",
+			content: `cursor.execute(f"SELECT * FROM users WHERE name = '{response}'")`,
+		},
+		{
+			name:    "concat with output",
+			file:    "db.py",
+			content: `db.query("DELETE FROM logs WHERE msg = '" + output + "'")`,
+		},
+		{
+			name:    "session.execute with generated",
+			file:    "db.py",
+			content: `session.execute("UPDATE x SET v = " + generated)`,
+		},
+		{
+			name:    "raw with llm_output",
+			file:    "orm.py",
+			content: `MyModel.objects.raw("SELECT " + llm_output)`,
+		},
+	}
+	a := NewAnalyzer()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			results, err := a.ScanFile(c.file, []byte(c.content))
+			if err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if findingWithRule(results, "AI-012") == nil {
+				t.Errorf("expected AI-012 finding, source:\n%s", c.content)
+			}
+		})
+	}
+}
+
+// TestDetect_LLMOutputInSQL_FalsePositiveRegression covers patterns
+// that the old `.*?(response|…)` regex flagged because `.Execute(` was
+// followed somewhere by an uppercase `Response` identifier (Go return
+// type, struct field, error variant). After tightening the rule —
+// case-sensitive lowercase keyword + word boundary + bounded inside
+// the call's argument list — these must NOT fire.
+func TestDetect_LLMOutputInSQL_FalsePositiveRegression(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		content string
+	}{
+		{
+			// fortify/http.CircuitBreaker — the canonical false
+			// positive that prompted Nox-HQ/nox#73.
+			name:    "go circuit breaker Execute with *http.Response",
+			file:    "middleware.go",
+			content: `_, err := cb.Execute(r.Context(), func(ctx context.Context) (*http.Response, error) { return nil, nil })`,
+		},
+		{
+			name:    "go retry Execute returning Response",
+			file:    "retry.go",
+			content: `result, err := retry.Execute(ctx, func() (Response, error) { return Response{}, nil })`,
+		},
+		{
+			name:    "method named Execute on breaker, body references Response type",
+			file:    "breaker.go",
+			content: `breaker.Execute(ctx, func() (*sql.Response, error) { return nil, nil })`,
+		},
+		{
+			name:    "Query() on http client returning UpperCamel Response struct",
+			file:    "client.go",
+			content: `client.Query(ctx, request) // returns Response`,
+		},
+		{
+			// Edge: the LLM keyword appears further down the file,
+			// not inside the call. Old `.*?` could leak across.
+			// `[^)]*?` constrains the match to the args.
+			name: "Execute call followed later by response variable",
+			file: "code.go",
+			content: `breaker.Execute(ctx, fn)
+response := loadCachedResult()`,
+		},
+	}
+	a := NewAnalyzer()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			results, err := a.ScanFile(c.file, []byte(c.content))
+			if err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if f := findingWithRule(results, "AI-012"); f != nil {
+				t.Errorf("AI-012 fired on benign pattern; source:\n%s\nmessage: %s", c.content, f.Message)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // AI-013: Error details leaked
 // ---------------------------------------------------------------------------

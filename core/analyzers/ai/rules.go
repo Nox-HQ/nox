@@ -135,7 +135,26 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-012", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(\.execute|\.query|\.raw)\s*\(.*?(response|completion|output|generated|llm_output|model_output|ai_result)`,
+			// Match a `.execute(` / `.query(` / `.raw(` call whose
+			// argument list references an LLM-output identifier.
+			//
+			// Tightened from the previous `(?i)(\.execute|\.query|\.raw)\s*\(.*?(response|…)`:
+			//
+			//   - the method name is matched case-insensitively (Python
+			//     uses lowercase, Go uses upper, JS varies), but
+			//   - the LLM-output identifier is now case-sensitive
+			//     lowercase only. That single change eliminates the
+			//     dominant false-positive class — Go type identifiers
+			//     like `*http.Response` or `LLMResponse` (UpperCamel)
+			//     no longer trip the rule when they appear as return
+			//     types or struct fields of a `.Execute(` call.
+			//   - `[^)]*?` (instead of `.*?`) keeps the match inside
+			//     the call's argument list. Crossing a `)` reaches a
+			//     subsequent statement that genuinely has nothing to
+			//     do with the call.
+			//   - `\b…\b` word boundaries prevent a substring match
+			//     against unrelated words (e.g. "outputstream").
+			pattern:     `(?i:\.(execute|query|raw))\s*\((?-i:[^)]*?\b(response|completion|output|generated|llm_output|model_output|ai_result)\b)`,
 			description: "LLM-generated text used directly in database query",
 			cwe:         "CWE-89", keywords: []string{".execute(", ".query(", ".raw("},
 			tags:        []string{"ai", "output-handling", "sql-injection"},
