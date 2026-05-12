@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **AI-012 precision** — tightened the regex so it stops firing on every
+  `.Execute(`/`Query(` call whose body coincidentally references an uppercase
+  `Response` identifier (Go return types, struct fields, error variants). The
+  rule now (a) matches the method name case-insensitively but the LLM-output
+  keyword case-sensitive lowercase only, and (b) requires `\b` word boundaries
+  around the keyword. Verified against `felixgeelhaar/fortify`: 4 known
+  false positives in `http/middleware.go` and `http/streaming.go` are gone,
+  the true-positive `cursor.execute("SELECT " + completion)` patterns still
+  fire (including with nested calls in the argument list). Closes [#73 item
+  3](https://github.com/Nox-HQ/nox/issues/73).
+
 ### Added
 
 - **Fingerprint v2** (opt-in): new `--fingerprint-version 2` flag on `nox scan`
