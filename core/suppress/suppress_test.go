@@ -214,7 +214,9 @@ secret = "AKIA..."`)
 }
 
 // TestScanForSuppressions_DisableAndIgnoreInterop — both spellings
-// can appear in the same file and target different rules.
+// can appear in the same file and target different rules. Asserts the
+// IDENTITY of each suppression (rule ID, target line, reason), not
+// just that both rule IDs appear somewhere in the output.
 func TestScanForSuppressions_DisableAndIgnoreInterop(t *testing.T) {
 	t.Parallel()
 	content := []byte(`// nox:ignore SEC-001
@@ -225,18 +227,64 @@ bar()`)
 	if len(supps) != 2 {
 		t.Fatalf("expected 2 suppressions, got %d", len(supps))
 	}
-	want := map[string]bool{"SEC-001": false, "SEC-002": false}
+
+	byRule := map[string]Suppression{}
 	for _, s := range supps {
-		for _, id := range s.RuleIDs {
-			if _, ok := want[id]; ok {
-				want[id] = true
-			}
+		if len(s.RuleIDs) != 1 {
+			t.Errorf("expected each suppression to carry one rule, got %v", s.RuleIDs)
+			continue
 		}
+		byRule[s.RuleIDs[0]] = s
 	}
-	for id, seen := range want {
-		if !seen {
-			t.Errorf("did not see suppression for %s", id)
-		}
+
+	ig, ok := byRule["SEC-001"]
+	if !ok {
+		t.Fatal("missing SEC-001 suppression")
+	}
+	if ig.Line != 2 {
+		t.Errorf("SEC-001 target line = %d, want 2", ig.Line)
+	}
+	if ig.Reason != "" {
+		t.Errorf("SEC-001 reason = %q, want empty", ig.Reason)
+	}
+
+	dis, ok := byRule["SEC-002"]
+	if !ok {
+		t.Fatal("missing SEC-002 suppression")
+	}
+	if dis.Line != 4 {
+		t.Errorf("SEC-002 target line = %d, want 4", dis.Line)
+	}
+	if dis.Reason != "alt spelling" {
+		t.Errorf("SEC-002 reason = %q, want %q", dis.Reason, "alt spelling")
+	}
+}
+
+// TestScanForSuppressions_HTMLCommentReason — HTML comments leak a
+// trailing `>` into the reason capture because `--` of `-->` doubles
+// as the reason separator. The cleanup loop strips it; assert the
+// reason ends up clean.
+func TestScanForSuppressions_HTMLCommentReason(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		line   string
+		reason string
+	}{
+		{"no reason", `<!-- nox:ignore SEC-001 -->`, ""},
+		{"with reason", `<!-- nox:ignore SEC-001 -- false positive -->`, "false positive"},
+		{"disable alias", `<!-- nox:disable SEC-001 -- known issue -->`, "known issue"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			supps := ScanForSuppressions([]byte(c.line+"\ntarget\n"), "page.html")
+			if len(supps) != 1 {
+				t.Fatalf("expected 1 suppression, got %d", len(supps))
+			}
+			if supps[0].Reason != c.reason {
+				t.Errorf("reason = %q, want %q", supps[0].Reason, c.reason)
+			}
+		})
 	}
 }
 

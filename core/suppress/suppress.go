@@ -64,10 +64,29 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 		ruleIDs := strings.Split(match[1], ",")
 		reason := strings.TrimSpace(match[2])
 
-		// Clean up reason: remove closing comment markers.
-		reason = strings.TrimSuffix(reason, "*/")
-		reason = strings.TrimSuffix(reason, "-->")
-		reason = strings.TrimSpace(reason)
+		// Clean up reason: remove closing comment markers. HTML comments
+		// are tricky — `<!-- nox:ignore X -->` leaves `-->` partially in
+		// the reason capture because the `(?:--\s*(.*))?` group reads
+		// the leading `--` of `-->` as the reason separator. Strip in
+		// a loop so we catch nested/whitespaced variants like `*/  ` or
+		// `--> /* trailing */`.
+		for {
+			prev := reason
+			reason = strings.TrimSuffix(reason, "*/")
+			reason = strings.TrimSuffix(reason, "-->")
+			// HTML-comment leftover: after `--` was consumed as the
+			// reason separator, the `>` sits alone. Only strip it when
+			// the source line was an HTML comment, to avoid clobbering
+			// a legitimate trailing `>` in a non-HTML reason (e.g. a
+			// version range note).
+			if strings.HasSuffix(reason, ">") && strings.Contains(line, "<!--") {
+				reason = strings.TrimSuffix(reason, ">")
+			}
+			reason = strings.TrimSpace(reason)
+			if reason == prev {
+				break
+			}
+		}
 
 		// Parse expiration from reason.
 		var expires *time.Time
