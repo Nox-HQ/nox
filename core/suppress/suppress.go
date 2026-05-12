@@ -6,6 +6,11 @@
 //	<!-- nox:ignore AI-001 -->
 //	/* nox:ignore IAC-001 */
 //	-- nox:ignore DEP-001 -- known issue expires:2025-12-31
+//
+// `nox:disable` is accepted as an alias for `nox:ignore` to match the
+// convention used by gosec (`#nosec`), staticcheck, and golangci-lint
+// (`//nolint:RULE`) so muscle memory carries over. The two forms are
+// fully interchangeable.
 package suppress
 
 import (
@@ -25,9 +30,13 @@ type Suppression struct {
 	Expires  *time.Time
 }
 
-// suppressionRE matches nox:ignore directives in any comment style.
+// suppressionRE matches nox:ignore / nox:disable directives in any
+// comment style. The `(?:ignore|disable)` alternation makes both
+// keywords equivalent at the regex level — every downstream consumer
+// just sees a Suppression record with no notion of which spelling was
+// used in source.
 var suppressionRE = regexp.MustCompile(
-	`(?://|#|--|/\*|<!--)\s*nox:ignore\s+([\w-]+(?:,[\w-]+)*)\s*(?:--\s*(.*))?`,
+	`(?://|#|--|/\*|<!--)\s*nox:(?:ignore|disable)\s+([\w-]+(?:,[\w-]+)*)\s*(?:--\s*(.*))?`,
 )
 
 // expiresRE extracts an expires:YYYY-MM-DD from the reason text.
@@ -55,10 +64,29 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 		ruleIDs := strings.Split(match[1], ",")
 		reason := strings.TrimSpace(match[2])
 
-		// Clean up reason: remove closing comment markers.
-		reason = strings.TrimSuffix(reason, "*/")
-		reason = strings.TrimSuffix(reason, "-->")
-		reason = strings.TrimSpace(reason)
+		// Clean up reason: remove closing comment markers. HTML comments
+		// are tricky — `<!-- nox:ignore X -->` leaves `-->` partially in
+		// the reason capture because the `(?:--\s*(.*))?` group reads
+		// the leading `--` of `-->` as the reason separator. Strip in
+		// a loop so we catch nested/whitespaced variants like `*/  ` or
+		// `--> /* trailing */`.
+		for {
+			prev := reason
+			reason = strings.TrimSuffix(reason, "*/")
+			reason = strings.TrimSuffix(reason, "-->")
+			// HTML-comment leftover: after `--` was consumed as the
+			// reason separator, the `>` sits alone. Only strip it when
+			// the source line was an HTML comment, to avoid clobbering
+			// a legitimate trailing `>` in a non-HTML reason (e.g. a
+			// version range note).
+			if strings.HasSuffix(reason, ">") && strings.Contains(line, "<!--") {
+				reason = strings.TrimSuffix(reason, ">")
+			}
+			reason = strings.TrimSpace(reason)
+			if reason == prev {
+				break
+			}
+		}
 
 		// Parse expiration from reason.
 		var expires *time.Time

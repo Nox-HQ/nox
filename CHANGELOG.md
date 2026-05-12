@@ -33,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real (resolved) or a regression (rule sharpened, file renamed,
   fingerprint algorithm bumped).
 
+### Documentation / interop
+
+- **`nox:disable` alias**: inline suppression now accepts both
+  `nox:ignore` (legacy spelling) and `nox:disable` (matches gosec
+  `#nosec`, staticcheck, golangci-lint `//nolint`). The two are
+  semantically identical — same rule-list parsing, same `expires:` /
+  reason handling, same scope (trailing comment vs next-line). This is
+  the inline directive surface item 6 of #73 asked for; the underlying
+  mechanism already shipped under the `nox:ignore` name.
+
 ### Fixed
 
 - **AI-012 precision** — tightened the regex so it stops firing on every
