@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Fingerprint v2** (opt-in): new `--fingerprint-version 2` flag on `nox scan`
+  (or `NOX_FINGERPRINT_VERSION=2` env). V2 hashes only `rule_id + normalised
+  file_path + content`; drops the start line so trivial diffs (import shifts,
+  gofmt, comment edits) no longer invalidate baselined findings. Path
+  normalisation collapses leading `./`, backslash → forward-slash, and `..`
+  segments so `nox scan ./http` and `nox scan .` produce the same fingerprint
+  for the same finding. V1 remains the default; switch your repo when ready
+  via `nox baseline update --fingerprint-version 2`. Closes [#73 items 1+2](https://github.com/Nox-HQ/nox/issues/73).
+
 ## [0.6.0] - 2026-02-24
 
 ### Added
