@@ -255,3 +255,143 @@ func TestRunBaseline_ShowLoadError(t *testing.T) {
 		t.Fatalf("expected exit code 2 for load error, got %d", code)
 	}
 }
+
+// TestRunBaselineAdd_PreservesEntries — the additive command must not
+// prune anything. Pre-existing baseline entries that no longer match a
+// scan must still be in the file after add runs.
+func TestRunBaselineAdd_PreservesEntries(t *testing.T) {
+	dir := t.TempDir()
+
+	// Seed a baseline with a stale entry that won't match any scan.
+	baselinePath := filepath.Join(dir, "baseline.json")
+	bl := &baseline.Baseline{}
+	bl.Add(&baseline.Entry{
+		Fingerprint: "deadbeef1234567890abcdef0123456789abcdef0123456789abcdef01234567",
+		RuleID:      "SEC-999",
+		FilePath:    "obsolete.go",
+		Reason:      "kept for posterity",
+	})
+	if err := bl.Save(baselinePath); err != nil {
+		t.Fatalf("seed baseline: %v", err)
+	}
+
+	// Add a real finding so the scan turns something up.
+	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+
+	code := runBaseline([]string{"add", "--baseline", baselinePath, dir})
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+
+	got, err := baseline.Load(baselinePath)
+	if err != nil {
+		t.Fatalf("loading baseline: %v", err)
+	}
+	// Original stale entry must still be present.
+	var foundStale bool
+	for i := range got.Entries {
+		if got.Entries[i].Fingerprint == "deadbeef1234567890abcdef0123456789abcdef0123456789abcdef01234567" {
+			foundStale = true
+			break
+		}
+	}
+	if !foundStale {
+		t.Error("baseline add pruned the stale entry; it should be additive only")
+	}
+	// And at least one new entry should have been added from the scan.
+	if got.Len() < 2 {
+		t.Errorf("expected baseline to grow; got %d entries (started with 1)", got.Len())
+	}
+}
+
+// TestRunBaselineAdd_FingerprintFilter — when --fingerprint is set,
+// no scan runs; only the supplied fingerprints get inserted.
+func TestRunBaselineAdd_FingerprintFilter(t *testing.T) {
+	dir := t.TempDir()
+	baselinePath := filepath.Join(dir, "baseline.json")
+
+	code := runBaseline([]string{
+		"add",
+		"--baseline", baselinePath,
+		"--fingerprint", "aaaa1111,bbbb2222",
+		"--reason", "documented false positive",
+		"--owner", "platform",
+		dir,
+	})
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+
+	got, err := baseline.Load(baselinePath)
+	if err != nil {
+		t.Fatalf("loading baseline: %v", err)
+	}
+	if got.Len() != 2 {
+		t.Fatalf("expected 2 entries, got %d", got.Len())
+	}
+	for i := range got.Entries {
+		if got.Entries[i].Reason != "documented false positive" {
+			t.Errorf("entry %d missing reason", i)
+		}
+		if got.Entries[i].Owner != "platform" {
+			t.Errorf("entry %d missing owner", i)
+		}
+	}
+}
+
+// TestRunBaselineAdd_FingerprintIdempotent — re-adding the same
+// fingerprint must not duplicate it.
+func TestRunBaselineAdd_FingerprintIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	baselinePath := filepath.Join(dir, "baseline.json")
+
+	for i := 0; i < 3; i++ {
+		code := runBaseline([]string{
+			"add", "--baseline", baselinePath, "--fingerprint", "abcdef12", dir,
+		})
+		if code != 0 {
+			t.Fatalf("run %d: exit %d", i, code)
+		}
+	}
+	got, _ := baseline.Load(baselinePath)
+	if got.Len() != 1 {
+		t.Errorf("expected 1 entry after 3 idempotent adds, got %d", got.Len())
+	}
+}
+
+// TestRunBaselineDiff_ReportsAddsAndPrunes — the read-only diff lists
+// what update would change without writing the file.
+func TestRunBaselineDiff_ReportsAddsAndPrunes(t *testing.T) {
+	dir := t.TempDir()
+	baselinePath := filepath.Join(dir, "baseline.json")
+
+	// Pre-seed a stale entry.
+	bl := &baseline.Baseline{}
+	bl.Add(&baseline.Entry{
+		Fingerprint: "deadbeef0000000000000000000000000000000000000000000000000000beef",
+		RuleID:      "SEC-999",
+		FilePath:    "gone.go",
+	})
+	if err := bl.Save(baselinePath); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add a fresh finding so the scan turns something up.
+	if err := os.WriteFile(filepath.Join(dir, "config.env"),
+		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code := runBaseline([]string{"diff", "--baseline", baselinePath, dir})
+	if code != 0 {
+		t.Errorf("expected exit 0, got %d", code)
+	}
+	// File must NOT have changed (diff is read-only).
+	got, _ := baseline.Load(baselinePath)
+	if got.Len() != 1 {
+		t.Errorf("baseline mutated by `diff`; expected 1 entry, got %d", got.Len())
+	}
+}

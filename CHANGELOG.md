@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (cont.)
+
+- **`nox baseline add`** — additive counterpart to `baseline update`.
+  Adds findings not yet in the baseline without pruning stale entries.
+  Accepts `--rule <id,id>` and `--fingerprint <fp,fp>` filters; the
+  fingerprint flag bypasses the scan entirely and is the surgical
+  "baseline these specific entries" workflow #73 item 4 calls out.
+  `--reason` and `--owner` annotate every new entry. Closes [#73 item
+  4](https://github.com/Nox-HQ/nox/issues/73).
+- **`nox baseline diff`** — read-only preview of what
+  `baseline update` would change against the current scan. Lists adds
+  and prunes separately so the operator can decide whether a prune is
+  real (resolved) or a regression (rule sharpened, file renamed,
+  fingerprint algorithm bumped).
+
 ### Fixed
 
 - **AI-012 precision** — tightened the regex so it stops firing on every
