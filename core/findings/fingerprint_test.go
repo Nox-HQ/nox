@@ -1,16 +1,25 @@
 package findings
 
 import (
-	"strings"
 	"testing"
 )
+
+// withFingerprintVersion swaps the active algorithm for the duration of
+// a test and restores the prior value (not the package default) on
+// Cleanup, so concurrent / sequential tests can't observe each other's
+// state.
+func withFingerprintVersion(t *testing.T, v FingerprintVersion) {
+	t.Helper()
+	prev := GetFingerprintVersion()
+	SetFingerprintVersion(v)
+	t.Cleanup(func() { SetFingerprintVersion(prev) })
+}
 
 // TestFingerprintV2_LineIndependent — the core promise of V2: shifting
 // a finding up or down (import order changes, gofmt, comment edits)
 // must not change its fingerprint.
 func TestFingerprintV2_LineIndependent(t *testing.T) {
-	SetFingerprintVersion(FingerprintV2)
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	withFingerprintVersion(t, FingerprintV2)
 
 	loc1 := Location{FilePath: "http/middleware.go", StartLine: 60}
 	loc2 := Location{FilePath: "http/middleware.go", StartLine: 59}
@@ -28,8 +37,7 @@ func TestFingerprintV2_LineIndependent(t *testing.T) {
 // leading "./" prefix and (on Windows) the separator. V2 normalises
 // both away.
 func TestFingerprintV2_PathNormalisation(t *testing.T) {
-	SetFingerprintVersion(FingerprintV2)
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	withFingerprintVersion(t, FingerprintV2)
 
 	// All four describe the same underlying file. Forward-slash and
 	// leading-./ variants must all collapse to one fingerprint.
@@ -52,31 +60,24 @@ func TestFingerprintV2_PathNormalisation(t *testing.T) {
 	}
 }
 
-// TestFingerprintV1_Preserved — V1 must still produce identical output
-// bit-for-bit to the v0.10.0 algorithm. Pin one known fingerprint here
-// as a regression guard against accidental algorithm drift.
+// TestFingerprintV1_Preserved — V1 must still thread StartLine through
+// the hash, so an import shift that moves a finding from line 42 to
+// line 99 produces a different fingerprint under V1. This is the exact
+// behaviour V2 was created to fix; the test pins V1 against accidental
+// regressions toward the V2 algorithm.
 func TestFingerprintV1_Preserved(t *testing.T) {
-	SetFingerprintVersion(FingerprintV1)
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	withFingerprintVersion(t, FingerprintV1)
 
-	// Computed against v0.10.0:
-	//   sha256("SEC001\x00cmd/server/main.go\x0042\x00hardcoded credential")
-	const want = "67a78f3cf2c2c8e9da59d4f2cdb7770a3a5d8aa14c0db13e0eccba5c0bc4cdef"
-	loc := Location{FilePath: "cmd/server/main.go", StartLine: 42}
-	got := ComputeFingerprint("SEC001", loc, "hardcoded credential")
-	// The exact byte sequence depends on the historical implementation;
-	// rather than hard-code the digest (which would require running the
-	// old binary to obtain), assert the digest is hex-64 and the V1
-	// algorithm still threads StartLine through the hash so changing
-	// the line produces a different value.
-	if len(got) != 64 {
-		t.Fatalf("expected 64-char hex, got %d", len(got))
-	}
-	_ = want // documentation only
-
+	loc1 := Location{FilePath: "cmd/server/main.go", StartLine: 42}
 	loc2 := Location{FilePath: "cmd/server/main.go", StartLine: 99}
-	got2 := ComputeFingerprint("SEC001", loc2, "hardcoded credential")
-	if got == got2 {
+
+	fp1 := ComputeFingerprint("SEC001", loc1, "hardcoded credential")
+	fp2 := ComputeFingerprint("SEC001", loc2, "hardcoded credential")
+
+	if len(fp1) != 64 {
+		t.Fatalf("expected 64-char hex, got %d", len(fp1))
+	}
+	if fp1 == fp2 {
 		t.Errorf("V1 must vary with StartLine; got identical fingerprints across lines 42 and 99")
 	}
 }
@@ -86,8 +87,7 @@ func TestFingerprintV1_Preserved(t *testing.T) {
 // space. Different content on the same line must yield different
 // fingerprints.
 func TestFingerprintV2_ContentStillMatters(t *testing.T) {
-	SetFingerprintVersion(FingerprintV2)
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	withFingerprintVersion(t, FingerprintV2)
 
 	loc := Location{FilePath: "main.go", StartLine: 10}
 	a := ComputeFingerprint("SEC001", loc, "cb.Execute(ctx)")
@@ -101,8 +101,7 @@ func TestFingerprintV2_ContentStillMatters(t *testing.T) {
 // different rules must produce two different fingerprints. Without this
 // the baseline file couldn't disambiguate them.
 func TestFingerprintV2_RuleIDStillMatters(t *testing.T) {
-	SetFingerprintVersion(FingerprintV2)
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	withFingerprintVersion(t, FingerprintV2)
 
 	loc := Location{FilePath: "main.go", StartLine: 10}
 	a := ComputeFingerprint("AI-012", loc, "cb.Execute(ctx)")
@@ -115,7 +114,8 @@ func TestFingerprintV2_RuleIDStillMatters(t *testing.T) {
 // TestSetFingerprintVersion_RoundTrip — the public setter accepts both
 // versions and rejects unknown values by falling back to the default.
 func TestSetFingerprintVersion_RoundTrip(t *testing.T) {
-	t.Cleanup(func() { SetFingerprintVersion(DefaultFingerprintVersion) })
+	prev := GetFingerprintVersion()
+	t.Cleanup(func() { SetFingerprintVersion(prev) })
 
 	SetFingerprintVersion(FingerprintV2)
 	if got := GetFingerprintVersion(); got != FingerprintV2 {
@@ -140,7 +140,7 @@ func TestComputeFingerprintWith_ExplicitVersion(t *testing.T) {
 	if v1 == v2 {
 		t.Error("V1 and V2 fingerprints unexpectedly collide for the same input")
 	}
-	if !strings.HasPrefix(v1, "") || len(v1) != 64 || len(v2) != 64 {
+	if len(v1) != 64 || len(v2) != 64 {
 		t.Fatalf("unexpected fingerprint shape: v1=%q v2=%q", v1, v2)
 	}
 }

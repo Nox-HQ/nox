@@ -15,8 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gofmt, comment edits) no longer invalidate baselined findings. Path
   normalisation collapses leading `./`, backslash → forward-slash, and `..`
   segments so `nox scan ./http` and `nox scan .` produce the same fingerprint
-  for the same finding. V1 remains the default; switch your repo when ready
-  via `nox baseline update --fingerprint-version 2`. Closes [#73 items 1+2](https://github.com/Nox-HQ/nox/issues/73).
+  for the same finding. V1 remains the default; switch a repo over by
+  passing `--fingerprint-version 2` to `nox scan` (or setting the env)
+  and then running `nox baseline update` so existing entries re-hash
+  under V2. A dedicated `nox baseline migrate` command will land in a
+  follow-up PR (#73 item 4). Closes [#73 items 1+2](https://github.com/Nox-HQ/nox/issues/73).
 
 ## [0.6.0] - 2026-02-24
 

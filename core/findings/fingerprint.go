@@ -12,9 +12,12 @@ import (
 // FingerprintVersion controls which fingerprint algorithm runs. Default
 // is V1 (line + path + content + rule_id) for full backwards compatibility
 // with existing baselines. V2 (path + content + rule_id, with path
-// normalised to forward-slash + repo-root-relative) drops the line
-// number so trivial diffs — import shifts, gofmt, comment edits — don't
-// invalidate baselined findings.
+// normalised — backslash → forward-slash, leading `./` stripped, `..`
+// collapsed) drops the line number so trivial diffs — import shifts,
+// gofmt, comment edits — don't invalidate baselined findings. V2 does
+// NOT resolve a git root; producing a stable repo-root-relative path is
+// the caller's responsibility (the scan loop already does this when
+// invoked from a git working tree).
 //
 // V2 is opt-in. Switch it on via:
 //
@@ -140,8 +143,9 @@ func normaliseFilePath(p string) string {
 	// Path-elements `.` and `..` collapse via Clean. Force forward
 	// slashes regardless of OS so Windows and Linux runners agree.
 	p = filepath.ToSlash(filepath.Clean(p))
-	// filepath.Clean(".") returns "." — keep it explicit rather than
-	// hashing the empty string.
+	// filepath.Clean(".") returns ".". Normalise that down to the empty
+	// string so a degenerate path (only "./" or ".") doesn't accidentally
+	// hash a literal "." into the digest.
 	if p == "." {
 		return ""
 	}
