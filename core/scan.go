@@ -122,6 +122,22 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if opts.NoRespectGitignore {
 		walker.RespectGitignore = false
 	}
+
+	// Phase 1a: When --changed-since is set, resolve the diff and wire
+	// it into the walker as an allow-list BEFORE walking. Pushing this
+	// down avoids walking unchanged subtrees in large monorepos — the
+	// previous post-walk filter still paid the full traversal cost.
+	if opts.ChangedSince != "" {
+		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
+		if err != nil {
+			return nil, fmt.Errorf("computing changed files: %w", err)
+		}
+		walker.IncludePaths = make(map[string]bool, len(changed))
+		for _, f := range changed {
+			walker.IncludePaths[f] = true
+		}
+	}
+
 	artifacts, err := walker.Walk()
 	if err != nil {
 		return nil, err
@@ -133,25 +149,6 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
 	}
 	artifacts = filterArtifactsByType(artifacts, excludeArtifactTypes)
-
-	// Phase 1c: Filter by changed files if --changed-since is set.
-	if opts.ChangedSince != "" {
-		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
-		if err != nil {
-			return nil, fmt.Errorf("computing changed files: %w", err)
-		}
-		changedSet := make(map[string]bool, len(changed))
-		for _, f := range changed {
-			changedSet[f] = true
-		}
-		var filtered []discovery.Artifact
-		for _, a := range artifacts {
-			if changedSet[a.Path] {
-				filtered = append(filtered, a)
-			}
-		}
-		artifacts = filtered
-	}
 
 	// Phase 2: Run analyzers.
 	// Initialize analyzers.

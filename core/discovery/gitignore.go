@@ -8,12 +8,37 @@ import (
 )
 
 // LoadGitignore reads ignore patterns from the standard set of locations git
-// itself consults: the root .gitignore, the optional .noxignore convenience
-// file, the per-repo .git/info/exclude, and the global excludesfile (resolved
-// from $GIT_CONFIG_GLOBAL, $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore).
-// Missing files are treated as empty.
+// itself consults: every .gitignore from the scan target up to the repo
+// root (so `nox scan apps/api` still honors the project-root .gitignore
+// that lists `node_modules/`), the optional .noxignore convenience file,
+// the per-repo .git/info/exclude, and the global excludesfile (resolved
+// from $XDG_CONFIG_HOME/git/ignore or ~/.config/git/ignore).
+//
+// Missing files are treated as empty. If no enclosing .git directory is
+// found, only the target's own .gitignore + .noxignore are loaded.
 func LoadGitignore(root string) ([]string, error) {
 	var patterns []string
+
+	absTarget, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	repoRoot := findRepoRoot(absTarget)
+
+	// Walk the ancestor chain from the repo root down to (but not
+	// including) the target, loading each .gitignore. Parent patterns
+	// apply to paths underneath them, which is the standard git
+	// semantic. Loading top-down means a deeper .gitignore can override
+	// with negation (`!`) patterns.
+	if repoRoot != "" && repoRoot != absTarget {
+		for _, dir := range ancestorChain(repoRoot, absTarget) {
+			p, err := loadIgnoreFile(filepath.Join(dir, ".gitignore"))
+			if err != nil {
+				return nil, err
+			}
+			patterns = append(patterns, p...)
+		}
+	}
 
 	for _, name := range []string{".gitignore", ".noxignore"} {
 		p, err := loadIgnoreFile(filepath.Join(root, name))
@@ -23,8 +48,12 @@ func LoadGitignore(root string) ([]string, error) {
 		patterns = append(patterns, p...)
 	}
 
-	infoExclude := filepath.Join(root, ".git", "info", "exclude")
-	p, err := loadIgnoreFile(infoExclude)
+	// .git/info/exclude lives only at the repo root.
+	gitInfoDir := absTarget
+	if repoRoot != "" {
+		gitInfoDir = repoRoot
+	}
+	p, err := loadIgnoreFile(filepath.Join(gitInfoDir, ".git", "info", "exclude"))
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +67,49 @@ func LoadGitignore(root string) ([]string, error) {
 	}
 
 	return patterns, nil
+}
+
+// findRepoRoot walks upward from an absolute start path looking for the
+// first directory containing a `.git` entry (file or directory —
+// submodules use a file). Returns the empty string when no enclosing
+// repo is found, leaving the caller to fall back to target-only loading.
+func findRepoRoot(absStart string) string {
+	abs := absStart
+	for {
+		if _, err := os.Stat(filepath.Join(abs, ".git")); err == nil {
+			return abs
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return ""
+		}
+		abs = parent
+	}
+}
+
+// ancestorChain returns the directories between absRoot and absLeaf,
+// in top-down order, starting with absRoot and excluding absLeaf. Both
+// inputs must be absolute. Returns nil if absLeaf is not under absRoot.
+func ancestorChain(absRoot, absLeaf string) []string {
+	rel, err := filepath.Rel(absRoot, absLeaf)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return nil
+	}
+	if rel == "." {
+		return nil
+	}
+	out := []string{absRoot}
+	cur := absRoot
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	// Drop the final component so absLeaf isn't included.
+	for _, p := range parts[:len(parts)-1] {
+		if p == "" || p == "." {
+			continue
+		}
+		cur = filepath.Join(cur, p)
+		out = append(out, cur)
+	}
+	return out
 }
 
 // globalGitignorePath resolves the global git ignore file location, checking
