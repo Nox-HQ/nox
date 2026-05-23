@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-05-23
+
+### Fixed
+
+- **Scan now honours ancestor `.gitignore` files** ([#82]). Previously
+  `LoadGitignore` only consulted `<target>/.gitignore`, so
+  `nox scan apps/api` walked `apps/api/node_modules` even when
+  `node_modules/` was ignored at the repo root. The walker now climbs
+  to the enclosing `.git` directory and accumulates patterns top-down.
+- **`--changed-since=<ref>` now scopes the file walk** ([#83]). The
+  flag used to walk the full target tree and filter artifacts after,
+  paying the full traversal cost on every push. The diff is now
+  resolved before `walker.Walk()` and wired into a new
+  `Walker.IncludePaths` allow-list that short-circuits descent into
+  directories that contain no included path.
+
+Empirical impact on a real Astro+Go monorepo with 521 MB of
+`node_modules`: `nox scan apps` dropped from **14 min 54 s →
+2.03 s** and from **1,729,404 findings → 3,630** — the rest was
+secrets-pattern noise inside npm bundles.
+
+[#82]: https://github.com/Nox-HQ/nox/issues/82
+[#83]: https://github.com/Nox-HQ/nox/issues/83
+
 ### Added
 
 - **Fingerprint v2** (opt-in): new `--fingerprint-version 2` flag on `nox scan`
