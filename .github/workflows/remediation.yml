@@ -2,7 +2,8 @@ name: Nox Remediation
 
 on:
   schedule:
-    - cron: '0 3 * * 1-5'
+    # Weekly Mon 03:00 UTC. Weekday-daily retired; dispatch on demand.
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 permissions:

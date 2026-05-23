@@ -12,7 +12,7 @@ on:
   release:
     types: [published]      # primary trigger — every published release
   schedule:
-    - cron: "17 6 * * *"    # daily safety net for between-release drift
+    - cron: "17 6 * * 1"    # weekly safety net (Mon). Release+CI events keep badges fresh.
   workflow_dispatch:
   workflow_run:
     workflows: ["CI"]
