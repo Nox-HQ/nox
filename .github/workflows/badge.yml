@@ -36,6 +36,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          # peter-evans/create-pull-request sets its own Authorization
+          # header. If checkout also persists one, git push hits
+          # "Duplicate header: Authorization" → HTTP 400. Drop the
+          # checkout-side credential so only the action's token is in
+          # play.
+          persist-credentials: false
 
       - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
@@ -70,15 +76,7 @@ jobs:
           fi
 
       - name: Open PR with refreshed badges
-        # continue-on-error so the workflow's overall conclusion stays
-        # green even when GITHUB_TOKEN lacks PR-creation permission.
-        # Real fix is the repo setting Actions → General →
-        # "Allow GitHub Actions to create and approve pull requests".
-        # Until that lands, the badge SVGs still get regenerated and
-        # uploaded on every run; this step just isn't allowed to
-        # publish a PR with them.
         if: steps.diff.outputs.changed == 'true'
-        continue-on-error: true
         uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
