@@ -11,6 +11,12 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to backfill provenance for (e.g. v0.10.1). Leave blank to attest the latest published release."
+        required: false
+        type: string
 
 permissions: {}
 
@@ -20,8 +26,9 @@ jobs:
   # generator expects. Runs only when Release was a success on a tag.
   subjects:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,9 +36,21 @@ jobs:
       hashes: ${{ steps.hash.outputs.hashes }}
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - name: Resolve tag from the Release run
+      - name: Resolve tag
         id: tag
-        run: echo "tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -n "$DISPATCH_TAG" ]; then
+            tag="$DISPATCH_TAG"
+          elif [ -n "$RUN_BRANCH" ]; then
+            tag="$RUN_BRANCH"
+          else
+            tag=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download release assets
         env:
