@@ -328,6 +328,127 @@ func TestLoadGitignore_IncludesGlobal(t *testing.T) {
 	}
 }
 
+// Regression for #82: when the scan target is a subdirectory, the
+// walker should still honor the project-root .gitignore. Previously
+// LoadGitignore only consulted the target's own .gitignore, so
+// `nox scan apps/api` would walk apps/api/node_modules even though
+// node_modules was ignored at the repo root.
+func TestLoadGitignore_TraversesAncestorsUpToRepoRoot(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	apps := filepath.Join(repoRoot, "apps", "api")
+	if err := os.MkdirAll(apps, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns, err := LoadGitignore(apps)
+	if err != nil {
+		t.Fatalf("LoadGitignore: %v", err)
+	}
+	found := false
+	for _, p := range patterns {
+		if p == "node_modules/" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected repo-root node_modules/ pattern to flow into a sub-target scan; got %v", patterns)
+	}
+}
+
+// Regression for #82: scanning a subdirectory of a repo must actually
+// skip ignored directories during traversal, not just load the
+// patterns. End-to-end check that the walker stops descending into
+// node_modules when the repo-root .gitignore lists it.
+func TestWalker_RespectsRepoRootGitignoreFromSubTarget(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// apps/api/node_modules/should-skip.js should NOT be scanned.
+	target := filepath.Join(repoRoot, "apps", "api")
+	if err := os.MkdirAll(filepath.Join(target, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "node_modules", "should-skip.js"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// apps/api/src/keep.go SHOULD be scanned.
+	if err := os.MkdirAll(filepath.Join(target, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "src", "keep.go"), []byte("package x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewWalker(target)
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	have := map[string]bool{}
+	for _, a := range arts {
+		have[a.Path] = true
+	}
+	if have["node_modules/should-skip.js"] {
+		t.Error("repo-root gitignore should have caused node_modules/should-skip.js to be skipped from a sub-target scan")
+	}
+	if !have["src/keep.go"] {
+		t.Error("src/keep.go should still be walked")
+	}
+}
+
+// Regression for #83: --changed-since must short-circuit the file
+// walk, not just filter the artifact list afterwards. The walker now
+// accepts an IncludePaths allow-list and skips directories that don't
+// contain any included path.
+func TestWalker_IncludePathsRestrictsTraversal(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	// Three files, two of which the caller will mark as "changed".
+	mustWrite := func(rel, body string) {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/changed.go", "package x")
+	mustWrite("src/unchanged.go", "package x")
+	mustWrite("other/skip.go", "package x")
+
+	w := NewWalker(root)
+	w.IncludePaths = map[string]bool{
+		"src/changed.go": true,
+	}
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+
+	if len(arts) != 1 || arts[0].Path != "src/changed.go" {
+		t.Errorf("expected only src/changed.go in artifacts; got %v", arts)
+	}
+}
+
 func TestWalker_RespectsNestedGitignore(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())

@@ -211,6 +211,24 @@ func containsSegment(path, segment string) bool {
 	return false
 }
 
+// dirContainsAnyIncluded reports whether any path in the include-set is
+// at or under the given directory (relative, slash-separated). Used to
+// short-circuit `filepath.Walk` descent when --changed-since restricts
+// the scan to a small set of files. The root directory ("") is treated
+// as containing every path so the walk always enters at least once.
+func dirContainsAnyIncluded(relDir string, include map[string]bool) bool {
+	if relDir == "" || relDir == "." {
+		return len(include) > 0
+	}
+	prefix := relDir + "/"
+	for p := range include {
+		if p == relDir || strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // Walker recursively discovers and classifies files under Root.
 type Walker struct {
 	// Root is the directory to walk.
@@ -224,6 +242,12 @@ type Walker struct {
 	// root patterns are applied during traversal. When false, every file
 	// in the tree is walked regardless of ignore rules. Defaults to true.
 	RespectGitignore bool
+	// IncludePaths, when non-empty, restricts the walk to files whose
+	// path (relative to Root, slash-separated) appears in the set. Used
+	// by --changed-since to avoid walking unchanged subtrees. The walker
+	// also short-circuits directory descent when no included path lives
+	// under the current directory.
+	IncludePaths map[string]bool
 }
 
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
@@ -291,6 +315,21 @@ func (w *Walker) Walk() ([]Artifact, error) {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}
+				return nil
+			}
+		}
+
+		// IncludePaths short-circuit: when an allow-list is supplied
+		// (e.g. via --changed-since), skip dirs that don't contain any
+		// included path and skip files not in the set. This avoids
+		// walking unchanged subtrees in large monorepos.
+		if len(w.IncludePaths) > 0 {
+			relSlash := filepath.ToSlash(rel)
+			if info.IsDir() {
+				if !dirContainsAnyIncluded(relSlash, w.IncludePaths) {
+					return filepath.SkipDir
+				}
+			} else if !w.IncludePaths[relSlash] {
 				return nil
 			}
 		}
