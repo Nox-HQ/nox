@@ -52,7 +52,33 @@ jobs:
       - name: Generate badges
         run: ./nox badge --input nox-results/findings.json --output .github/nox-badge.svg --by-severity || true
 
+      # Bail out early when no SVG actually changed. The default
+      # GITHUB_TOKEN can't always push to a feature branch under
+      # branch protection — repositories without "Allow GitHub
+      # Actions to create and approve pull requests" enabled get a
+      # HTTP 400 from git push. Detect the no-change case so a
+      # routine self-scan (where findings counts match the previous
+      # run) doesn't go red.
+      - name: Detect badge diff
+        id: diff
+        run: |
+          if git diff --quiet -- .github/nox-badge.svg .github/nox-critical.svg .github/nox-high.svg .github/nox-medium.svg .github/nox-low.svg; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Badges unchanged; skipping PR open."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Open PR with refreshed badges
+        # continue-on-error so the workflow's overall conclusion stays
+        # green even when GITHUB_TOKEN lacks PR-creation permission.
+        # Real fix is the repo setting Actions → General →
+        # "Allow GitHub Actions to create and approve pull requests".
+        # Until that lands, the badge SVGs still get regenerated and
+        # uploaded on every run; this step just isn't allowed to
+        # publish a PR with them.
+        if: steps.diff.outputs.changed == 'true'
+        continue-on-error: true
         uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

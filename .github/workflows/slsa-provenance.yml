@@ -1,20 +1,72 @@
 name: SLSA Provenance
 
-on:
-  push:
-    tags:
-      - 'v*'
+# Generates SLSA Level 3 provenance for every published release
+# tarball/zip. Triggers AFTER the Release workflow completes so
+# GoReleaser has uploaded the artifacts to a GitHub release — the
+# previous tag-push trigger raced against Release and never had
+# anything to attest, which made the slsa-github-generator's `final`
+# job exit 27 (no subjects supplied).
 
-permissions:
-  contents: write # nox:ignore IAC-314 -- needed for attaching provenance
-  id-token: write # needed for SLSA provenance generation
-  actions: read # needed for the SLSA generator
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions: {}
 
 jobs:
+  # Phase 1: pull the release artifacts the GoReleaser job uploaded
+  # and turn their sha256 sums into the base64 subject blob the SLSA
+  # generator expects. Runs only when Release was a success on a tag.
+  subjects:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve tag from the Release run
+        id: tag
+        run: echo "tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/release
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --dir /tmp/release \
+            --pattern '*.tar.gz' \
+            --pattern '*.zip' \
+            --pattern 'checksums.txt'
+
+      - name: Compute base64 subjects from checksums.txt
+        id: hash
+        working-directory: /tmp/release
+        run: |
+          if [ ! -f checksums.txt ]; then
+            echo "::error::checksums.txt missing from release; GoReleaser did not publish it."
+            exit 1
+          fi
+          # checksums.txt is already `<sha256>  <filename>` per line —
+          # exactly the format the SLSA generator expects as subjects.
+          # base64 -w0 keeps it on one line; the macOS `-b 0` form
+          # isn't available on ubuntu-latest.
+          echo "hashes=$(base64 -w0 < checksums.txt)" >> "$GITHUB_OUTPUT"
+
   provenance:
+    needs: subjects
+    permissions:
+      actions: read       # required by the reusable workflow
+      id-token: write     # OIDC token for sigstore keyless signing
+      contents: write     # upload provenance to the release
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
-      base64-subjects-as-file: true
-      # The checksums.txt is uploaded by GoReleaser; we attest all release artifacts.
+      base64-subjects: ${{ needs.subjects.outputs.hashes }}
       upload-assets: true
-      upload-tag-name: ${{ github.ref_name }}
+      upload-tag-name: ${{ needs.subjects.outputs.tag }}
