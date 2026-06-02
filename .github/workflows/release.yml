@@ -42,6 +42,11 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # cosign 4.x broke keyless signing (--output-signature /
+          # --output-certificate → "create bundle file: open : no such
+          # file"). Pin CLI to 2.x until v4 flag migration.
+          cosign-release: 'v2.6.3'
 
       - name: Download checksums
         env:
@@ -113,6 +118,11 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # cosign 4.x broke keyless signing (--output-signature /
+          # --output-certificate → "create bundle file: open : no such
+          # file"). Pin CLI to 2.x until v4 flag migration.
+          cosign-release: 'v2.6.3'
 
       - name: Sign Docker image with cosign
         run: |
