@@ -137,39 +137,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	// Phase 1: Discover artifacts.
-	walker := discovery.NewWalker(target)
-	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
-	if opts.NoRespectGitignore {
-		walker.RespectGitignore = false
-	}
-
-	// Phase 1a: When --changed-since is set, resolve the diff and wire
-	// it into the walker as an allow-list BEFORE walking. Pushing this
-	// down avoids walking unchanged subtrees in large monorepos — the
-	// previous post-walk filter still paid the full traversal cost.
-	if opts.ChangedSince != "" {
-		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
-		if err != nil {
-			return nil, fmt.Errorf("computing changed files: %w", err)
-		}
-		walker.IncludePaths = make(map[string]bool, len(changed))
-		for _, f := range changed {
-			walker.IncludePaths[f] = true
-		}
-	}
-
-	artifacts, err := walker.Walk()
+	// Stage 1: Discover artifacts.
+	artifacts, err := discoverArtifacts(target, cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-
-	// Phase 1b: Filter artifacts by excluded artifact types.
-	var excludeArtifactTypes []string
-	for _, et := range cfg.Scan.ExcludeArtifactTypes {
-		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
-	}
-	artifacts = filterArtifactsByType(artifacts, excludeArtifactTypes)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -213,97 +185,59 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		mu.Unlock()
 	}
 
-	if opts.Sequential {
-		// Sequential execution for debugging.
-		sf, err := secretsAnalyzer.ScanArtifacts(ctx, artifacts)
-		if err != nil {
-			return nil, err
-		}
-		addFindings(sf)
-
-		df, err := dataAnalyzer.ScanArtifacts(ctx, artifacts)
-		if err != nil {
-			return nil, err
-		}
-		addFindings(df)
-
-		iacf, err := iacAnalyzer.ScanArtifacts(ctx, artifacts)
-		if err != nil {
-			return nil, err
-		}
-		addFindings(iacf)
-
-		aif, inv, err := aiAnalyzer.ScanArtifacts(ctx, artifacts)
-		if err != nil {
-			return nil, err
-		}
-		addFindings(aif)
-		aiInventory = inv
-
-		inv2, depf, err := depsAnalyzer.ScanArtifacts(ctx, artifacts)
-		if err != nil {
-			return nil, err
-		}
-		addFindings(depf)
-		inventory = inv2
-	} else {
-		// Parallel execution using errgroup.
-		g, gctx := errgroup.WithContext(ctx)
-
-		g.Go(func() error {
-			sf, err := secretsAnalyzer.ScanArtifacts(gctx, artifacts)
+	// Each analyzer is wrapped as a uniform task so sequential and parallel
+	// execution share one code path. The ai/deps tasks also capture their
+	// inventories into the shared collectors.
+	tasks := []analyzerTask{
+		func(c context.Context) error {
+			fs, err := secretsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
-			addFindings(sf)
+			addFindings(fs)
 			return nil
-		})
-
-		g.Go(func() error {
-			df, err := dataAnalyzer.ScanArtifacts(gctx, artifacts)
+		},
+		func(c context.Context) error {
+			fs, err := dataAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
-			addFindings(df)
+			addFindings(fs)
 			return nil
-		})
-
-		g.Go(func() error {
-			iacf, err := iacAnalyzer.ScanArtifacts(gctx, artifacts)
+		},
+		func(c context.Context) error {
+			fs, err := iacAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
-			addFindings(iacf)
+			addFindings(fs)
 			return nil
-		})
-
-		g.Go(func() error {
-			aif, inv, err := aiAnalyzer.ScanArtifacts(gctx, artifacts)
+		},
+		func(c context.Context) error {
+			fs, inv, err := aiAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
-			addFindings(aif)
+			addFindings(fs)
 			mu.Lock()
 			aiInventory = inv
 			mu.Unlock()
 			return nil
-		})
-
-		g.Go(func() error {
-			inv, depf, err := depsAnalyzer.ScanArtifacts(gctx, artifacts)
+		},
+		func(c context.Context) error {
+			inv, fs, err := depsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
-			addFindings(depf)
+			addFindings(fs)
 			mu.Lock()
 			inventory = inv
 			mu.Unlock()
 			return nil
-		})
-
-		if err := g.Wait(); err != nil {
-			return nil, err
-		}
+		},
+	}
+	if err := runAnalyzerTasks(ctx, tasks, opts.Sequential); err != nil {
+		return nil, err
 	}
 
 	// Phase 2c: Apply GitHub Actions context-aware downgrades across all
@@ -389,7 +323,67 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
-	// Phase 3: Apply rule config.
+	// Stage 3: Refine findings — apply rule config, generated/noise filters,
+	// conditional severity, dedup, inline suppressions, terraform plan,
+	// baseline matching, and VEX.
+	refineFindings(allFindings, cfg, opts, target)
+
+	// Stage 4: Evaluate policy gates.
+	policyResult := evaluatePolicy(cfg, allFindings)
+
+	return &ScanResult{
+		Findings:     allFindings,
+		Inventory:    inventory,
+		AIInventory:  aiInventory,
+		PolicyResult: policyResult,
+		Rules:        allRules,
+	}, nil
+}
+
+// discoverArtifacts walks the target, honoring .gitignore and config excludes,
+// optionally restricting to files changed since a git ref, and filtering out
+// excluded artifact types. It is stage 1 of the scan pipeline.
+func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
+	walker := discovery.NewWalker(target)
+	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
+	if opts.NoRespectGitignore {
+		walker.RespectGitignore = false
+	}
+
+	// When --changed-since is set, resolve the diff and wire it into the
+	// walker as an allow-list BEFORE walking. Pushing this down avoids walking
+	// unchanged subtrees in large monorepos.
+	if opts.ChangedSince != "" {
+		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
+		if err != nil {
+			return nil, fmt.Errorf("computing changed files: %w", err)
+		}
+		walker.IncludePaths = make(map[string]bool, len(changed))
+		for _, f := range changed {
+			walker.IncludePaths[f] = true
+		}
+	}
+
+	artifacts, err := walker.Walk()
+	if err != nil {
+		return nil, err
+	}
+
+	var excludeArtifactTypes []string
+	for _, et := range cfg.Scan.ExcludeArtifactTypes {
+		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
+	}
+	return filterArtifactsByType(artifacts, excludeArtifactTypes), nil
+}
+
+// refineFindings applies all post-analysis transformations to the merged
+// finding set in place: config-driven rule disabling/severity overrides,
+// analyzer_rules, generated/noise-directory filtering for content rules,
+// conditional severity, dedup + deterministic sort, inline suppressions,
+// optional terraform-plan findings, baseline matching, and VEX. It is stage 3
+// of the scan pipeline.
+func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string) {
+	// Config rule disabling and severity overrides.
 	if len(cfg.Scan.Rules.Disable) > 0 {
 		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
 	}
@@ -397,9 +391,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allFindings.OverrideSeverity(ruleID, findings.Severity(sev))
 	}
 
-	// Phase 3b: Apply analyzer_rules. "disable" removes the listed rules for
-	// the matching paths; "skip_analyzer" removes every rule belonging to the
-	// named analyzer for the matching paths (all paths when none are given).
+	// analyzer_rules: "disable" removes the listed rules for the matching paths;
+	// "skip_analyzer" removes every rule belonging to the named analyzer for the
+	// matching paths (all paths when none are given).
 	for _, ar := range cfg.Scan.AnalyzerRules {
 		switch ar.Action {
 		case "disable":
@@ -419,36 +413,29 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
-	// Phase 3b-gen: Drop content-rule findings (AI-*, MCP-*) on generated /
-	// vendored files (lockfiles, minified bundles, generated type defs). These
-	// files are not human-authored and only ever yield false positives for
-	// prose / AI-security rules. Dependency scanning already happened against
-	// the same lockfiles, so no real CVE is hidden.
+	// Drop content-rule findings (AI-*, MCP-*) on generated/vendored files and
+	// inside test/fixture/example trees — false-positive sources. Dependency
+	// scanning already ran against the same lockfiles, so no real CVE is hidden.
 	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
 		allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
 	}
-	// Also drop content-rule findings inside test / fixture / example trees:
-	// security tests carry deliberate attack strings and examples log demo
-	// output, so AI-*/MCP-* findings there are false positives.
 	if noiseDirs := cfg.Scan.GeneratedPaths.ResolveNoiseDirs(); len(noiseDirs) > 0 {
 		allFindings.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, noiseDirs)
 	}
 
-	// Phase 3c: Apply conditional_severity (override severity based on rule + path).
+	// conditional_severity overrides based on rule + path.
 	for _, cs := range cfg.Scan.ConditionalSeverity {
 		if len(cs.Rules) > 0 && len(cs.Paths) > 0 {
 			allFindings.OverrideSeverityByRulePatternsAndPaths(cs.Rules, cs.Paths, findings.Severity(cs.Severity))
 		}
 	}
 
-	// Phase 4: Deduplicate and sort.
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 
-	// Phase 5: Apply inline suppressions.
 	applySuppressions(allFindings, target)
 
-	// Phase 5b: Scan Terraform plan if provided.
+	// Scan a terraform plan if provided.
 	if opts.TerraformPlanPath != "" {
 		tfPlanPath := opts.TerraformPlanPath
 		if !filepath.IsAbs(tfPlanPath) {
@@ -463,7 +450,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
-	// Phase 6: Apply baseline matching.
+	// Baseline matching.
 	baselinePath := cfg.Policy.BaselinePath
 	if baselinePath == "" {
 		baselinePath = baseline.DefaultPath(target)
@@ -472,7 +459,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	applyBaseline(allFindings, baselinePath)
 
-	// Phase 6b: Apply VEX document.
+	// VEX document.
 	vexPath := opts.VEXPath
 	if vexPath == "" {
 		vexPath = cfg.Policy.VEXPath
@@ -485,28 +472,47 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			vex.ApplyVEX(allFindings, vexDoc)
 		}
 	}
-
-	// Phase 7: Evaluate policy.
-	var policyResult *policy.Result
-	if cfg.Policy.FailOn != "" || cfg.Policy.BaselineMode != "" {
-		policyCfg := policy.Config{
-			FailOn:       findings.Severity(cfg.Policy.FailOn),
-			WarnOn:       findings.Severity(cfg.Policy.WarnOn),
-			BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
-		}
-		policyResult = policy.Evaluate(policyCfg, allFindings.Findings())
-	}
-
-	return &ScanResult{
-		Findings:     allFindings,
-		Inventory:    inventory,
-		AIInventory:  aiInventory,
-		PolicyResult: policyResult,
-		Rules:        allRules,
-	}, nil
 }
 
-// loadCustomRules loads rules from a path, which can be a file or directory.
+// evaluatePolicy runs the configured fail-on / baseline policy gate over the
+// refined findings. It returns nil when no policy is configured. Stage 4.
+func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet) *policy.Result {
+	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" {
+		return nil
+	}
+	policyCfg := policy.Config{
+		FailOn:       findings.Severity(cfg.Policy.FailOn),
+		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
+		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
+	}
+	return policy.Evaluate(policyCfg, allFindings.Findings())
+}
+
+// analyzerTask runs one analyzer against the discovered artifacts. Wrapping
+// each analyzer as a uniform task lets sequential and parallel execution share
+// a single runner.
+type analyzerTask func(context.Context) error
+
+// runAnalyzerTasks executes tasks sequentially (deterministic, for debugging)
+// or in parallel via errgroup, returning the first error and canceling
+// siblings through the group context.
+func runAnalyzerTasks(ctx context.Context, tasks []analyzerTask, sequential bool) error {
+	if sequential {
+		for _, t := range tasks {
+			if err := t(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	for _, t := range tasks {
+		t := t
+		g.Go(func() error { return t(gctx) })
+	}
+	return g.Wait()
+}
+
 // loadGHAWorkflowContent reads the contents of every artifact under
 // .github/workflows/ so that the GH Actions context-aware downgrade pass
 // has the full file body available when evaluating findings.
