@@ -118,6 +118,53 @@ type ScanSettings struct {
 	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
 	OSV                  OSVConfig               `yaml:"osv"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
+	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
+}
+
+// GeneratedPathsConfig controls the built-in noise filter that stops the
+// content rule families (AI-*, MCP-*) from firing on generated and vendored
+// files — lockfiles, minified bundles, generated type definitions, etc. These
+// files are not human-authored and produce only false positives for prose and
+// AI-security rules. Dependency scanning is unaffected: the deps analyzer still
+// reads lockfiles directly, so this filter never hides a real CVE.
+type GeneratedPathsConfig struct {
+	// Disabled turns the filter off entirely. Default false (filter on).
+	Disabled bool `yaml:"disabled"`
+	// Extend adds glob patterns to the built-in generated-path set.
+	Extend []string `yaml:"extend"`
+	// Override replaces the built-in set with exactly these globs (advanced;
+	// when non-empty, Extend is ignored).
+	Override []string `yaml:"override"`
+}
+
+// DefaultGeneratedPaths is the built-in set of generated/vendored file globs
+// excluded from the content rule families. Globs are matched against both the
+// full path and the base name.
+func DefaultGeneratedPaths() []string {
+	return []string{
+		// Dependency lockfiles (still read by the deps analyzer).
+		"package-lock.json", "pnpm-lock.yaml", "yarn.lock", "npm-shrinkwrap.json",
+		"Cargo.lock", "poetry.lock", "Gemfile.lock", "composer.lock", "go.sum",
+		"*-lock.json", "*-lock.yaml",
+		// Minified / bundled assets.
+		"*.min.js", "*.min.css", "*.bundle.js",
+		// Generated type definitions and protobuf/codegen output.
+		"worker-configuration.d.ts", "*.pb.go", "*_pb2.py", "*_pb2.pyi",
+		"*.generated.go", "*.generated.ts", "*.gen.go",
+	}
+}
+
+// ResolveGeneratedPaths returns the effective generated-path glob set for the
+// config: nil when disabled, Override when set, otherwise the default set plus
+// Extend.
+func (g GeneratedPathsConfig) ResolveGeneratedPaths() []string {
+	if g.Disabled {
+		return nil
+	}
+	if len(g.Override) > 0 {
+		return g.Override
+	}
+	return append(DefaultGeneratedPaths(), g.Extend...)
 }
 
 // EntropyConfig allows overriding entropy-based secret detection thresholds

@@ -401,6 +401,15 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		}
 	}
 
+	// Phase 3b-gen: Drop content-rule findings (AI-*, MCP-*) on generated /
+	// vendored files (lockfiles, minified bundles, generated type defs). These
+	// files are not human-authored and only ever yield false positives for
+	// prose / AI-security rules. Dependency scanning already happened against
+	// the same lockfiles, so no real CVE is hidden.
+	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
+		allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
+	}
+
 	// Phase 3c: Apply conditional_severity (override severity based on rule + path).
 	for _, cs := range cfg.Scan.ConditionalSeverity {
 		if len(cs.Rules) > 0 && len(cs.Paths) > 0 {

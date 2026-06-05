@@ -396,3 +396,39 @@ func TestLoadScanConfig_ConditionalSeverity(t *testing.T) {
 		t.Errorf("rule[0] = %q, want %q", cfg.Scan.ConditionalSeverity[1].Rules[0], "VULN-*")
 	}
 }
+
+func TestResolveGeneratedPaths(t *testing.T) {
+	t.Parallel()
+
+	// Default: returns the built-in set.
+	def := GeneratedPathsConfig{}.ResolveGeneratedPaths()
+	if len(def) == 0 {
+		t.Fatal("default generated paths must be non-empty")
+	}
+	hasLock := false
+	for _, g := range def {
+		if g == "package-lock.json" {
+			hasLock = true
+		}
+	}
+	if !hasLock {
+		t.Error("default set should include package-lock.json")
+	}
+
+	// Disabled: nil.
+	if got := (GeneratedPathsConfig{Disabled: true}).ResolveGeneratedPaths(); got != nil {
+		t.Errorf("disabled should resolve to nil, got %v", got)
+	}
+
+	// Extend: default + extra.
+	ext := GeneratedPathsConfig{Extend: []string{"gen/**"}}.ResolveGeneratedPaths()
+	if len(ext) != len(def)+1 || ext[len(ext)-1] != "gen/**" {
+		t.Errorf("extend should append to defaults, got %v", ext)
+	}
+
+	// Override: exactly the given set, defaults ignored.
+	ovr := GeneratedPathsConfig{Override: []string{"only.json"}, Extend: []string{"ignored"}}.ResolveGeneratedPaths()
+	if len(ovr) != 1 || ovr[0] != "only.json" {
+		t.Errorf("override should replace defaults and ignore extend, got %v", ovr)
+	}
+}

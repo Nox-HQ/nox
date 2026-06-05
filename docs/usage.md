@@ -642,6 +642,31 @@ scan:
       severity: info    # Only show as informational
 ```
 
+### Generated Paths (content-rule noise filter)
+
+The content rule families (`AI-*`, `MCP-*`) are not run against generated and
+vendored files — lockfiles, minified bundles, generated type definitions —
+because those files are not human-authored and only ever yield false
+positives there. This is **on by default** with a sensible built-in set
+(`package-lock.json`, `pnpm-lock.yaml`, `*.min.js`, `worker-configuration.d.ts`,
+`*.pb.go`, `*_pb2.py`, `*.generated.*`, …).
+
+Dependency scanning is unaffected: the deps analyzer still reads lockfiles
+directly, so this never hides a real CVE.
+
+```yaml
+scan:
+  generated_paths:
+    # disabled: true        # turn the filter off entirely
+    extend:                  # add to the built-in set
+      - "internal/gen/*.go"
+      - "*.snap"
+    # override: [...]        # replace the built-in set entirely (advanced)
+```
+
+Tune precedence: `disabled` wins; otherwise `override` (if set) replaces the
+defaults; otherwise the defaults plus `extend` apply.
+
 ### .noxignore
 
 Create a `.noxignore` file (similar to `.gitignore`) for additional exclusions:

@@ -226,6 +226,38 @@ func TestRunScan_ConfigDisableRule(t *testing.T) {
 	}
 }
 
+// The generated-paths filter drops content-rule findings (AI-*, MCP-*) on
+// generated/vendored files but leaves them in human-authored source — and
+// never touches dependency findings, so a lockfile is still CVE-scanned.
+func TestGeneratedPathsFilter_ScopedToContentRules(t *testing.T) {
+	t.Parallel()
+
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{RuleID: "AI-026", Location: findings.Location{FilePath: "pnpm-lock.yaml", StartLine: 1}, Message: "logger noise"})
+	fs.Add(findings.Finding{RuleID: "AI-026", Location: findings.Location{FilePath: "src/app.ts", StartLine: 1}, Message: "real"})
+	fs.Add(findings.Finding{RuleID: "MCP-022", Location: findings.Location{FilePath: "worker-configuration.d.ts", StartLine: 1}, Message: "gen types"})
+	fs.Add(findings.Finding{RuleID: "VULN-001", Location: findings.Location{FilePath: "package-lock.json", StartLine: 1}, Message: "real CVE"})
+
+	fs.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, DefaultGeneratedPaths())
+
+	got := map[string]bool{}
+	for _, f := range fs.Findings() {
+		got[f.RuleID+"@"+f.Location.FilePath] = true
+	}
+	if got["AI-026@pnpm-lock.yaml"] {
+		t.Error("AI finding on a lockfile should be filtered")
+	}
+	if got["MCP-022@worker-configuration.d.ts"] {
+		t.Error("MCP finding on generated type defs should be filtered")
+	}
+	if !got["AI-026@src/app.ts"] {
+		t.Error("AI finding in real source must be kept")
+	}
+	if !got["VULN-001@package-lock.json"] {
+		t.Error("dependency finding on a lockfile must be kept (CVE scanning intact)")
+	}
+}
+
 // Offline scan over a project containing a lockfile must complete without
 // reaching the network. The authoritative no-egress assertion lives in the
 // deps package (TestOSVDisabled_NoNetworkEgress); this is the integration

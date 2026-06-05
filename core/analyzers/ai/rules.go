@@ -966,9 +966,14 @@ func builtinAIRules() []*rules.Rule {
 		// discovered config inventory and is emitted by core/mcpshadow.
 		// -----------------------------------------------------------------
 		{
-			id: "MCP-022", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// Advisory (info): every remote MCP config legitimately points at a
+			// URL, so this fires on normal first-party config. It is a
+			// posture/inventory signal — "you trust a remote server that has no
+			// cryptographic identity in the protocol" — not a defect. Surfaced
+			// at info severity so it informs without failing gates or crying wolf.
+			id: "MCP-022", severity: findings.SeverityInfo, confidence: findings.ConfidenceLow,
 			pattern:     `(?i)"(?:url|serverurl|endpoint|baseurl)"\s*:\s*"https?://|"type"\s*:\s*"(?:sse|streamable-http|http)"`,
-			description: "MCP config trusts a remote server without identity verification or pinning",
+			description: "MCP config trusts a remote server with no protocol-level identity (advisory)",
 			cwe:         "CWE-300", keywords: []string{"url", "serverUrl", "endpoint", "baseUrl", "sse", "streamable-http"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "cline_mcp_settings.json", "mcp_config.json"},
 			tags:         []string{"ai", "mcp", "shadow-server", "supply-chain", "owasp-mcp09"},
