@@ -1026,7 +1026,7 @@ func builtinAIRules() []*rules.Rule {
 func applyAINoiseGlobs(out []*rules.Rule) {
 	noisy := map[string]bool{
 		"AI-006": true, "AI-008": true, "AI-026": true, "AI-030": true,
-		"AI-036": true, "AI-039": true,
+		"AI-036": true, "AI-039": true, "AI-042": true,
 	}
 	globs := []string{
 		"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*",
@@ -1052,7 +1052,7 @@ func applyMCPProsePrecision(out []*rules.Rule) {
 		"MCP-013": true, "MCP-014": true, "MCP-018": true, "MCP-019": true,
 	}
 	testGlobs := []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*"}
-	ssrfDenyContext := []string{"block", "deny", "denylist", "blocklist", "blocked", "disallow", "allowlist", "reject", "forbidden", "ssrf"}
+	ssrfDenyContext := []string{"block", "deny", "denylist", "blocklist", "blocked", "disallow", "allowlist", "reject", "forbidden", "ssrf", "networkpolicy", "network policy", "egress", "cidr"}
 
 	for _, r := range out {
 		if !proseFP[r.ID] {
