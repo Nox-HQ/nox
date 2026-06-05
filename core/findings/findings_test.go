@@ -384,6 +384,36 @@ func TestFindingSet_RemoveByRuleIDs(t *testing.T) {
 	}
 }
 
+// Regression: analyzer_rules rule IDs may be wildcards (e.g. "VULN-*").
+// Previously RemoveByRuleIDsAndPaths did an exact map lookup so wildcards
+// never matched.
+func TestFindingSet_RemoveByRuleIDsAndPaths_Wildcard(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "VULN-001", Location: Location{FilePath: "vendor/x.go", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "VULN-042", Location: Location{FilePath: "vendor/y.go", StartLine: 2}, Message: "b"})
+	fs.Add(Finding{RuleID: "VULN-001", Location: Location{FilePath: "src/main.go", StartLine: 3}, Message: "c"})
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "vendor/z.go", StartLine: 4}, Message: "d"})
+
+	// Remove all VULN-* findings under vendor/, leaving the src VULN and the SEC.
+	fs.RemoveByRuleIDsAndPaths([]string{"VULN-*"}, []string{"vendor/*"})
+
+	got := fs.Findings()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 findings after wildcard removal, got %d: %+v", len(got), got)
+	}
+	for _, f := range got {
+		if f.RuleID == "VULN-001" && f.Location.FilePath == "src/main.go" {
+			continue
+		}
+		if f.RuleID == "SEC-001" {
+			continue
+		}
+		t.Errorf("unexpected surviving finding %s @ %s", f.RuleID, f.Location.FilePath)
+	}
+}
+
 func TestFindingSet_RemoveByRuleIDs_Multiple(t *testing.T) {
 	t.Parallel()
 

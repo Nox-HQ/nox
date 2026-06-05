@@ -372,13 +372,25 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		allFindings.OverrideSeverity(ruleID, findings.Severity(sev))
 	}
 
-	// Phase 3b: Apply analyzer_rules (disable rules for specific paths).
+	// Phase 3b: Apply analyzer_rules. "disable" removes the listed rules for
+	// the matching paths; "skip_analyzer" removes every rule belonging to the
+	// named analyzer for the matching paths (all paths when none are given).
 	for _, ar := range cfg.Scan.AnalyzerRules {
-		if ar.Action != "disable" {
-			continue
-		}
-		if len(ar.Rules) > 0 && len(ar.Paths) > 0 {
-			allFindings.RemoveByRuleIDsAndPaths(ar.Rules, ar.Paths)
+		switch ar.Action {
+		case "disable":
+			if len(ar.Rules) > 0 && len(ar.Paths) > 0 {
+				allFindings.RemoveByRuleIDsAndPaths(ar.Rules, ar.Paths)
+			}
+		case "skip_analyzer":
+			patterns := analyzerRulePatterns(ar.Analyzer)
+			if len(patterns) == 0 {
+				continue
+			}
+			paths := ar.Paths
+			if len(paths) == 0 {
+				paths = []string{"*"} // all files
+			}
+			allFindings.RemoveByRuleIDsAndPaths(patterns, paths)
 		}
 	}
 
@@ -700,6 +712,26 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string) {
 		if bl.Match(&f) != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
 		}
+	}
+}
+
+// analyzerRulePatterns returns the rule-ID wildcard patterns owned by a named
+// analyzer, used to implement the skip_analyzer action. Unknown analyzer names
+// return nil so the action is a safe no-op.
+func analyzerRulePatterns(analyzer string) []string {
+	switch analyzer {
+	case "secrets":
+		return []string{"SEC-*"}
+	case "ai":
+		return []string{"AI-*", "MCP-*"}
+	case "iac":
+		return []string{"IAC-*"}
+	case "data":
+		return []string{"DATA-*"}
+	case "deps":
+		return []string{"VULN-*", "CONT-*", "LIC-*"}
+	default:
+		return nil
 	}
 }
 

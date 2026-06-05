@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,6 +223,66 @@ func TestRunScan_ConfigDisableRule(t *testing.T) {
 		if f.RuleID == "SEC-001" {
 			t.Error("expected SEC-001 to be disabled, but found a finding")
 		}
+	}
+}
+
+// Regression: skip_analyzer was documented and parsed but never applied.
+func TestRunScan_ConfigSkipAnalyzer(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// skip the entire secrets analyzer for files under generated/.
+	noxConfig := filepath.Join(tmpDir, ".nox.yaml")
+	configContent := `scan:
+  analyzer_rules:
+    - analyzer: secrets
+      action: skip_analyzer
+      paths:
+        - "generated/*"
+`
+	if err := os.WriteFile(noxConfig, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("write .nox.yaml: %v", err)
+	}
+
+	genDir := filepath.Join(tmpDir, "generated")
+	if err := os.MkdirAll(genDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// A secret under generated/ (skipped) and one under src/ (kept).
+	if err := os.WriteFile(filepath.Join(genDir, "g.go"), []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+		t.Fatalf("write generated file: %v", err)
+	}
+	srcDir := filepath.Join(tmpDir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "s.go"), []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+		t.Fatalf("write src file: %v", err)
+	}
+
+	result, err := RunScan(tmpDir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	var genSecrets, srcSecrets int
+	for _, f := range result.Findings.Findings() {
+		if !strings.HasPrefix(f.RuleID, "SEC-") {
+			continue
+		}
+		if strings.Contains(f.Location.FilePath, "generated/") {
+			genSecrets++
+		}
+		if strings.Contains(f.Location.FilePath, "src/") {
+			srcSecrets++
+		}
+	}
+	if genSecrets != 0 {
+		t.Errorf("skip_analyzer should remove SEC findings under generated/, got %d", genSecrets)
+	}
+	if srcSecrets == 0 {
+		t.Error("secrets analyzer must still run for non-skipped paths (src/)")
 	}
 }
 

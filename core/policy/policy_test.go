@@ -33,6 +33,53 @@ func TestEvaluate_AllNewBelowThreshold(t *testing.T) {
 	}
 }
 
+// Regression: an inline-suppressed High must not fail the fail-on gate.
+// Previously suppressed findings fell through to r.New and tripped the gate.
+func TestEvaluate_SuppressedHighDoesNotFailGate(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	ff := []findings.Finding{
+		{RuleID: "SEC-001", Severity: findings.SeverityHigh, Status: findings.StatusSuppressed},
+	}
+	r := Evaluate(cfg, ff)
+	if !r.Pass {
+		t.Fatal("suppressed High must not fail the gate")
+	}
+	if len(r.New) != 0 {
+		t.Errorf("suppressed finding must not be counted as new, got %d", len(r.New))
+	}
+	if len(r.Suppressed) != 1 {
+		t.Errorf("expected 1 suppressed finding, got %d", len(r.Suppressed))
+	}
+}
+
+func TestEvaluate_VEXFixedExcludedFromGate(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	ff := []findings.Finding{
+		{RuleID: "VULN-001", Severity: findings.SeverityCritical, Status: findings.StatusVEXFixed},
+	}
+	r := Evaluate(cfg, ff)
+	if !r.Pass {
+		t.Fatal("VEX-fixed finding must not fail the gate")
+	}
+}
+
+// A suppressed High alongside a real Low: gate passes (Low is below High), and
+// the suppressed High is not silently promoted into the gate.
+func TestEvaluate_SuppressedHighWithActiveLow(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	ff := []findings.Finding{
+		{RuleID: "SEC-001", Severity: findings.SeverityHigh, Status: findings.StatusSuppressed},
+		{RuleID: "SEC-002", Severity: findings.SeverityLow, Status: findings.StatusNew},
+	}
+	r := Evaluate(cfg, ff)
+	if !r.Pass {
+		t.Fatal("only an active Low remains; gate should pass")
+	}
+	if len(r.New) != 1 || r.New[0].RuleID != "SEC-002" {
+		t.Errorf("expected only the active Low in New, got %+v", r.New)
+	}
+}
+
 func TestEvaluate_NoFindings(t *testing.T) {
 	cfg := Config{FailOn: findings.SeverityHigh}
 	r := Evaluate(cfg, nil)

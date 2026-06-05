@@ -227,16 +227,14 @@ func (fs *FindingSet) RemoveByRuleIDsAndPaths(ruleIDs, paths []string) {
 	if len(ruleIDs) == 0 && len(paths) == 0 {
 		return
 	}
-	ruleSet := make(map[string]struct{}, len(ruleIDs))
-	for _, id := range ruleIDs {
-		ruleSet[id] = struct{}{}
-	}
 	kept := make([]Finding, 0, len(fs.items))
 	for i := range fs.items {
 		finding := fs.items[i]
 		skipRule := false
 		if len(ruleIDs) > 0 {
-			_, skipRule = ruleSet[finding.RuleID]
+			// ruleIDs may be exact IDs or wildcards (e.g. "VULN-*"), matching
+			// the documented analyzer_rules behaviour.
+			skipRule = matchRulePatterns(finding.RuleID, ruleIDs)
 		}
 		skipPath := false
 		if len(paths) > 0 {

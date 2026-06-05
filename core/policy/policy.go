@@ -34,8 +34,11 @@ type Result struct {
 	ExitCode  int
 	New       []findings.Finding
 	Baselined []findings.Finding
-	Warnings  []string
-	Summary   string
+	// Suppressed holds inline-suppressed (nox:ignore) and VEX-cleared findings.
+	// They are excluded from the fail-on gate.
+	Suppressed []findings.Finding
+	Warnings   []string
+	Summary    string
 }
 
 // severityRank maps severity levels to numeric ranks for comparison.
@@ -54,9 +57,14 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 
 	for i := range all {
 		finding := all[i]
-		switch finding.Status {
-		case findings.StatusBaselined:
+		switch {
+		case finding.Status == findings.StatusBaselined:
 			r.Baselined = append(r.Baselined, finding)
+		case !finding.Status.IsActive():
+			// Inline-suppressed (nox:ignore) and VEX-cleared findings are not
+			// active and must never count toward the fail-on gate. Previously
+			// these fell through to r.New, so a suppressed High failed CI.
+			r.Suppressed = append(r.Suppressed, finding)
 		default:
 			r.New = append(r.New, finding)
 		}
