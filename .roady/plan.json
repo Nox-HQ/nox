@@ -3,55 +3,277 @@
   "spec_id": "nox",
   "tasks": [
     {
-      "id": "task-63",
-      "title": "MCP03 tool-poisoning content analyzer and rules",
-      "description": "Add a content analyzer for MCP tool metadata that inspects tool descriptions, input schemas, and tool return-value templates for malicious instructions (OWASP MCP03). Detect: imperative injection phrases ('ignore previous instructions', 'do not tell the user', 'always call'), hidden/zero-width unicode and bidi control chars, exfiltration verbs targeting secrets/files/credentials/env, and instructions aimed at the host model rather than the operator. New rules MCP-009..MCP-014 in core/analyzers/ai/rules.go reusing AI-PI heuristics. Wire into existing mcp.json + claude_desktop_config.json + source tool-registration scanning.",
+      "id": "task-73",
+      "title": "MCP rule precision hardening (FP reduction)",
+      "description": "Reduce false positives in MCP-009..014 and MCP-018/019 surfaced by dogfooding 17 own MCP repos. Concrete fixes: (1) add ignoreFilePatterns for test files (*_test.go, *_test.py, *.test.ts/js, *.spec.ts) to the noisy prose rules; (2) avoid matching inside line/block comments (engine-level comment awareness or per-rule anchoring); (3) MCP-018 must not fire when a metadata IP appears in a block/deny/blocklist context; (4) anchor MCP-009/010/011/013/014 to a tool-description/string-literal context rather than free source prose. Re-run the 17-repo dogfood corpus and confirm the high-interest counts drop to genuine signal. Mirror the AI-028 fuzz-corpus FP-reduction test pattern. Gate before publishing dogfood findings.",
       "priority": "high",
       "estimate": "6h",
       "depends_on": [],
-      "feature_id": "mcp-tool-poisoning-detection",
+      "feature_id": "mcp-rule-precision-hardening",
       "source": {}
     },
     {
-      "id": "task-64",
-      "title": "Tool-poisoning test corpus and fixtures",
-      "description": "Build a positive/negative fixture corpus for the MCP03 analyzer: known tool-poisoning payloads (unicode evasion, instruction override, exfil), plus benign descriptions that must not false-positive. Table-driven tests for each MCP-009..MCP-014 rule. Confirm determinism and offline operation.",
-      "priority": "high",
-      "estimate": "3h",
-      "depends_on": [
-        "task-63"
-      ],
-      "feature_id": "mcp-tool-poisoning-detection",
-      "source": {}
-    },
-    {
-      "id": "task-65",
-      "title": "MCP rug-pull tool-hash pinning and drift detection",
-      "description": "Persist a hash of each discovered MCP tool's description+schema to .nox/ state on first observation (reuse atomic-write content-hash infra in cache.go/state.go). On subsequent scans, flag tools whose definition changed after approval (OWASP MCP04 rug pull). Emit findings with before/after hashes and a new rule MCP-015. Fully offline, deterministic. Include drift + no-drift + first-run tests.",
+      "id": "task-43",
+      "title": "Terraform resource relationship model",
+      "description": "Extend tfplan.go and Terraform HCL parsing to build a resource dependency graph. Parse resource references (e.g., aws_subnet.vpc_id → aws_vpc.id), data source dependencies, and module relationships. Output Graph with NodeKindResource nodes and EdgeKindDependsOn/EdgeKindReferences edges.",
       "priority": "high",
       "estimate": "5h",
-      "depends_on": [],
-      "feature_id": "mcp-rug-pull-detection",
+      "depends_on": null,
+      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
       "source": {}
     },
     {
-      "id": "task-66",
-      "title": "MCP07 authorization and token-safety rules",
-      "description": "Add rules anchored to the official MCP spec security MUST/SHOULD clauses: token passthrough (server accepts tokens not issued to it), confused-deputy OAuth proxy (static client id + dynamic registration), SSRF in OAuth metadata discovery (169.254.169.254, private CIDRs, DNS-rebinding/redirect chains), and weak session handling (deterministic session ids, sessions-as-auth, missing user binding). New rules MCP-016..MCP-021 with spec-section citations in remediation. Tests with positive/negative configs.",
+      "id": "task-51",
+      "title": "Triage history learning and persistence",
+      "description": "Implement .nox/triage-history.json for persisting user-confirmed triage decisions. When a user confirms or overrides a triage verdict, store the finding fingerprint, verdict, and context hash. Use historical data to improve LLM prompts with few-shot examples of similar past decisions. Include import/export for team sharing.",
+      "priority": "medium",
+      "estimate": "3h",
+      "depends_on": [
+        "task-50"
+      ],
+      "feature_id": "ai-powered-triage-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-20",
+      "title": "Implement MCP plugin bridge",
+      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., nox.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
       "priority": "high",
-      "estimate": "6h",
-      "depends_on": [],
-      "feature_id": "mcp-authorization-and-token-safety-rules",
+      "estimate": "M",
+      "depends_on": [
+        "task-17",
+        "task-18"
+      ],
+      "feature_id": "mcp-plugin-bridge",
       "source": {}
     },
     {
-      "id": "task-68",
-      "title": "Multi-client MCP config discovery (17+ clients)",
-      "description": "Add an MCP client-config registry enumerating config locations for Cursor, VS Code, Windsurf, Cline, Continue, Gemini CLI, Zed, Claude Desktop, and others across macOS/Linux/Windows. Extend core/discovery to resolve and classify these as MCP configs. Add a 'scan machine' entry path that discovers installed MCP servers system-wide. Tests with per-OS path fixtures.",
+      "id": "task-59",
+      "title": "Fixer WEB-SEC-001 header middleware insertion",
+      "description": "Implement first deterministic fixer WEB-SEC-001 for missing baseline security headers middleware in supported Go and Node HTTP stacks. Ensure no duplicate middleware injection. Add before/after fixtures and idempotence tests.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [
+        "task-57",
+        "task-58"
+      ],
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
+      "source": {}
+    },
+    {
+      "id": "task-16",
+      "title": "Define protobuf plugin interface",
+      "description": "Define proto/nox/plugin/v1/plugin.proto with PluginService (GetManifest, InvokeTool, StreamArtifacts RPCs), PluginManifest message (name, version, capabilities, safety requirements, API compatibility), ToolInvocation request/response messages, and artifact streaming messages. Generate Go code via buf/protoc. Establish versioning scheme for the plugin API.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-14"
+      ],
+      "feature_id": "plugin-grpc-interface",
+      "source": {}
+    },
+    {
+      "id": "task-31",
+      "title": "Add staged-files-only scan mode",
+      "description": "Add --staged flag to 'nox scan' that scans only git staged files (git diff --cached --name-only --diff-filter=ACMR). Used by the pre-commit hook for fast scanning. Only reads and scans the staged versions of files. Integrates with existing discovery and analyzer pipeline.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-30"
+      ],
+      "feature_id": "pre-commit-hook-(nox-protect)",
+      "source": {}
+    },
+    {
+      "id": "task-62",
+      "title": "Fixers SEC-002 and SEC-001 with full verification gates",
+      "description": "Implement SEC-002 SQL parameterization fixer and SEC-001 subprocess hardening fixer with conservative skip behavior for ambiguous cases. Add strict verification pipeline: targeted tests, lint/typecheck, mandatory re-scan evidence, deterministic and idempotence assertions, and rollback on failed verification.",
+      "priority": "high",
+      "estimate": "10h",
+      "depends_on": [
+        "task-61"
+      ],
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
+      "source": {}
+    },
+    {
+      "id": "task-25",
+      "title": "Agent capability discovery integration",
+      "description": "Integrate plugin capabilities with agent-assist module: advertise available plugin capabilities (dast.passive, cloud.read_only, policy.enforcement, etc.) to agent runtimes, allow agents to discover and invoke plugin tools, summarize plugin results in agent explanations. Agents never influence scan results. Package: ai-assist/plugins.",
+      "priority": "low",
+      "estimate": "M",
+      "depends_on": [
+        "task-20",
+        "task-15"
+      ],
+      "feature_id": "agent-assist-module-(optional)",
+      "source": {}
+    },
+    {
+      "id": "task-48",
+      "title": "Taint analysis plugin binary and conformance tests",
+      "description": "Create taint analysis plugin using SDK on core-analysis track. Wire up taint engine, produce findings with full source→intermediate→sink paths in metadata. Add conformance tests and integration tests with known taint flows (SQL injection, command injection, XSS patterns) across multiple files.",
       "priority": "high",
       "estimate": "4h",
+      "depends_on": [
+        "task-47"
+      ],
+      "feature_id": "cross-file-taint-analysis-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-46",
+      "title": "Taint source and sink definitions for Go/Python/JS",
+      "description": "Define taint sources (HTTP request params, env vars, file reads, user input, CLI args) and sinks (SQL queries, shell exec, eval, file write, HTTP response body, template rendering) for Go, Python, and JavaScript/TypeScript. Implement as configurable YAML definitions.",
+      "priority": "high",
+      "estimate": "3h",
+      "depends_on": null,
+      "feature_id": "cross-file-taint-analysis-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-3",
+      "title": "Implement canonical findings model",
+      "description": "Define Finding struct with ID, rule ID, severity, confidence, location (file/region/line/column), message. Implement deterministic fingerprinting (SHA-256 hash of rule+location+content). Implement deduplication by fingerprint. Ensure SARIF-compatible location model. Package: core/findings.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-1"
+      ],
+      "feature_id": "canonical-findings-model",
+      "source": {}
+    },
+    {
+      "id": "task-70",
+      "title": "Zero-telemetry offline guarantee and positioning",
+      "description": "Add an enforced offline guarantee: a CI/test gate asserting the core scan path makes zero outbound network calls (dialer hook that fails the test on any connection), plus a --offline assertion flag. Update README and docs with the vendor-neutral, no-telemetry positioning vs commercial scanners. The verifiable engineering (network-assertion test, flag) is the deliverable; messaging accompanies.",
+      "priority": "medium",
+      "estimate": "3h",
       "depends_on": [],
-      "feature_id": "multi-client-mcp-config-discovery",
+      "feature_id": "zero-telemetry-positioning-and-guarantee",
+      "source": {}
+    },
+    {
+      "id": "task-8",
+      "title": "Implement CLI scaffold with scan command",
+      "description": "CLI entry point using cobra or similar. 'nox scan \u003cpath\u003e' command wiring discovery -\u003e analyzers -\u003e reporters. Output format flag (--format sarif,cdx,spdx,json,all). Exit codes (0=clean, 1=findings, 2=error). Quiet/verbose flags. Config file loading (.nox.yaml). Package: cli.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-4",
+        "task-6",
+        "task-7"
+      ],
+      "feature_id": "cli-interface",
+      "source": {}
+    },
+    {
+      "id": "task-27",
+      "title": "Integrate history scanning into secrets analyzer and CLI",
+      "description": "Add HistoryScan mode to the secrets analyzer that consumes CommitWalker output and runs all 86 rules against historical diffs. Enrich findings with commit SHA, author, and date in Metadata. Add --history flag to 'nox scan' CLI with --history-depth and --history-branch options. Add HistoryFinding fields to the findings model. Update SARIF reporter to include commit metadata in result properties.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-26"
+      ],
+      "feature_id": "git-history-scanning-for-secrets",
+      "source": {}
+    },
+    {
+      "id": "task-10",
+      "title": "Implement dependency scanner",
+      "description": "Parse lockfiles: npm package-lock.json, Go go.sum, Python requirements.txt/poetry.lock, Ruby Gemfile.lock. Extract package name/version/ecosystem. OSV API client for vulnerability lookup (offline-graceful). Produce CycloneDX component entries. Package: core/analyzers/deps.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-4",
+        "task-5"
+      ],
+      "feature_id": "dependency-scanner",
+      "source": {}
+    },
+    {
+      "id": "task-61",
+      "title": "Fixer SEC-003 hardcoded secret to env/config rewrite",
+      "description": "Implement SEC-003 fixer for hardcoded secret literals -\u003e env/config lookup rewrites in supported language idioms. Add guarded fallback behavior and TODO marker options for provisioning. Include compile/runtime smoke verification hooks.",
+      "priority": "high",
+      "estimate": "6h",
+      "depends_on": [
+        "task-60"
+      ],
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
+      "source": {}
+    },
+    {
+      "id": "task-54",
+      "title": "K8s runtime security checks",
+      "description": "Implement runtime-specific checks: containers running as root, privileged containers, host PID/network/IPC namespace, mounted secrets in env vars, missing network policies, missing resource limits, latest/unpinned image tags, host path mounts, capabilities not dropped. Emit findings with precise workload/container location.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "task-53"
+      ],
+      "feature_id": "kubernetes-runtime-scanning-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-23",
+      "title": "Implement trust and verification",
+      "description": "Plugin trust system: validate artifact signatures against configurable trust roots, verify content digests on download and before execution, check API version compatibility, run conformance tests as part of install verification. Implement trust levels (verified: signed by known key, community: signed by unknown key, unverified: unsigned) with configurable minimum trust policy. Enterprise mode: mandate verified-only. Package: registry/trust.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-21"
+      ],
+      "feature_id": "plugin-trust-\u0026-verification",
+      "source": {}
+    },
+    {
+      "id": "task-38",
+      "title": "Conformance: Graph and Enrichment validation, track options",
+      "description": "Extend validateResponse() in sdk/conformance.go to validate graph node IDs, edge endpoint references, enrichment fingerprints and kinds. Add WithRequireGraphs and WithRequireEnrichments track conformance options. Add conformance tests exercising graphs and enrichments.",
+      "priority": "medium",
+      "estimate": "1h",
+      "depends_on": [
+        "task-37"
+      ],
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "source": {}
+    },
+    {
+      "id": "task-41",
+      "title": "Reachability plugin: ScanContext integration and enrichment output",
+      "description": "Create the reachability plugin binary using the SDK. Consume ScanContext to get dependency findings, cross-reference with call graph to determine if vulnerable functions are reachable. Emit Enrichments with kind=reachability on each dependency finding (reachable/unreachable verdict, call path in metadata). Register on core-analysis track with requires_scan_context=true.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "task-40"
+      ],
+      "feature_id": "reachability-analysis-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-52",
+      "title": "AI triage conformance tests and integration tests",
+      "description": "Write conformance tests using RunForTrack(TrackAgentAssistance). Add integration tests with mock LLM responses verifying enrichment output structure. Test offline fallback behavior when no LLM is configured.",
+      "priority": "medium",
+      "estimate": "2h",
+      "depends_on": [
+        "task-50"
+      ],
+      "feature_id": "ai-powered-triage-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-37",
+      "title": "SDK: GraphBuilder, EnrichmentBuilder, ToolWithContext, ToolRequest, type constants",
+      "description": "Add fluent GraphBuilder (Node, NodeAt, Edge, EdgeLabeled, Done) and EnrichmentBuilder (Body, WithMetadata, WithConfidence, Source, Done) to sdk/response.go. Add ToolWithContext() to sdk/manifest.go. Add NodeKind/EdgeKind/Confidence constants to sdk/types.go. Add ToolRequest helper to sdk/request.go. Include tests for all builders and helpers.",
+      "priority": "high",
+      "estimate": "2h",
+      "depends_on": [
+        "task-33"
+      ],
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
       "source": {}
     },
     {
@@ -67,28 +289,201 @@
       "source": {}
     },
     {
-      "id": "task-69",
-      "title": "OWASP MCP Top 10 + MCP-38 + spec compliance mapping",
-      "description": "Map every MCP and AI rule to OWASP MCP Top 10 (MCP01-10), MCP-38 categories, and official spec clauses in core/compliance data. Add framework entry 'owasp-mcp-top-10'. Emit control IDs as SARIF rule tags/properties so GitHub Code Scanning and registries see standards alignment. Tests asserting each MCP-0xx rule carries a mapped control.",
+      "id": "task-49",
+      "title": "AI triage LLM provider abstraction",
+      "description": "Build LLM provider abstraction supporting OpenAI, Anthropic, and Ollama backends. Integrate with existing assist/ module patterns. Implement prompt templates for triage: include finding details, surrounding code context, and severity assessment instructions. Support configurable model selection and temperature.",
       "priority": "high",
       "estimate": "4h",
-      "depends_on": [
-        "task-63",
-        "task-65",
-        "task-66",
-        "task-67"
-      ],
-      "feature_id": "owasp-mcp-top-10-compliance-mapping",
+      "depends_on": null,
+      "feature_id": "ai-powered-triage-plugin",
       "source": {}
     },
     {
-      "id": "task-70",
-      "title": "Zero-telemetry offline guarantee and positioning",
-      "description": "Add an enforced offline guarantee: a CI/test gate asserting the core scan path makes zero outbound network calls (dialer hook that fails the test on any connection), plus a --offline assertion flag. Update README and docs with the vendor-neutral, no-telemetry positioning vs commercial scanners. The verifiable engineering (network-assertion test, flag) is the deliverable; messaging accompanies.",
+      "id": "task-22",
+      "title": "Implement OCI artifact distribution",
+      "description": "Download plugins as OCI artifacts: pull from OCI registries, verify content digests, cache locally with content-addressable storage, support platform-specific binaries, extract plugin manifest and documentation from artifact layers. Support mirror configuration for air-gapped environments. Package: core/plugins/oci.",
       "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-21"
+      ],
+      "feature_id": "plugin-registry-\u0026-distribution",
+      "source": {}
+    },
+    {
+      "id": "task-11",
+      "title": "Implement CycloneDX and SPDX SBOM generators",
+      "description": "Generate sbom.cdx.json (CycloneDX JSON) and sbom.spdx.json (SPDX JSON) from dependency scanner component inventory. Optional vulnerability enrichment via OSV data. Package: core/report/sbom.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-10"
+      ],
+      "feature_id": "sbom-output-(cyclonedx-\u0026-spdx)",
+      "source": {}
+    },
+    {
+      "id": "task-21",
+      "title": "Implement plugin registry client",
+      "description": "Registry client that fetches and parses static registry index files from configured URLs. Support multiple registry sources (official, community, enterprise). Implement version resolution with semver constraints and API compatibility checks. Local metadata caching with TTL-based refresh. Offline-friendly: work from cache when network unavailable. Package: core/plugins/registry.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-16"
+      ],
+      "feature_id": "plugin-registry-\u0026-distribution",
+      "source": {}
+    },
+    {
+      "id": "task-56",
+      "title": "K8s plugin binary with dynamic-runtime track conformance",
+      "description": "Create K8s plugin using SDK on dynamic-runtime track with RiskActive, needs_confirmation=true, and network_hosts=[kubernetes API]. Wire up API client, security checks, and drift detection. Add conformance tests using RunForTrack(TrackDynamicRuntime). Integration tests with kind (Kubernetes in Docker) for CI.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "task-55"
+      ],
+      "feature_id": "kubernetes-runtime-scanning-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-34",
+      "title": "Domain types: core/graph and core/findings/enrichment",
+      "description": "Create core/graph/graph.go with NodeKind, EdgeKind, Node, Edge, Graph types and Validate()/NodeIDs() methods. Create core/findings/enrichment.go with Enrichment type. Add Graphs and Enrichments fields to ScanResult in core/scan.go. Include unit tests.",
+      "priority": "high",
+      "estimate": "1h",
+      "depends_on": [
+        "task-33"
+      ],
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "source": {}
+    },
+    {
+      "id": "task-60",
+      "title": "Fixer AI-LOG-001 sensitive logging redaction",
+      "description": "Implement AI-LOG-001 fixer to replace raw prompt/response logging with redacted metadata-safe logging helpers for Go, Python, and JS patterns. Add fixture matrix and negative tests for already-safe logging.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [
+        "task-59"
+      ],
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
+      "source": {}
+    },
+    {
+      "id": "task-36",
+      "title": "Host extensions: InvokePostScan, MergeResults, estimateResponseSize",
+      "description": "Extend plugin/host.go MergeResults() to handle graphs and enrichments. Add InvokePostScan() for post-scan plugin orchestration with ScanContext. Update estimateResponseSize() for new types. Update PluginInfo/ToolInfo with RequiresScanContext. Add comprehensive tests in host_test.go.",
+      "priority": "high",
       "estimate": "3h",
+      "depends_on": [
+        "task-35"
+      ],
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "source": {}
+    },
+    {
+      "id": "task-68",
+      "title": "Multi-client MCP config discovery (17+ clients)",
+      "description": "Add an MCP client-config registry enumerating config locations for Cursor, VS Code, Windsurf, Cline, Continue, Gemini CLI, Zed, Claude Desktop, and others across macOS/Linux/Windows. Extend core/discovery to resolve and classify these as MCP configs. Add a 'scan machine' entry path that discovers installed MCP servers system-wide. Tests with per-OS path fixtures.",
+      "priority": "high",
+      "estimate": "4h",
       "depends_on": [],
-      "feature_id": "zero-telemetry-positioning-and-guarantee",
+      "feature_id": "multi-client-mcp-config-discovery",
+      "source": {}
+    },
+    {
+      "id": "task-33",
+      "title": "Proto schema: Add Graph, Enrichment, ScanContext messages to types.proto and plugin.proto",
+      "description": "Add NodeKind/EdgeKind enums, GraphNode/GraphEdge/Graph/Enrichment/ScanContext messages to types.proto. Add scan_context field to InvokeToolRequest, graphs/enrichments to InvokeToolResponse, requires_scan_context to ToolDef in plugin.proto. Generate code with buf generate.",
+      "priority": "high",
+      "estimate": "2h",
+      "depends_on": null,
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "source": {}
+    },
+    {
+      "id": "task-6",
+      "title": "Implement secrets scanner analyzer",
+      "description": "Pattern-based analyzer using rule engine for detecting AWS keys, GitHub tokens, private keys, generic high-entropy strings. Configurable entropy threshold. Allowlist/ignore via .nox.yaml. Line-level location reporting into findings model. Package: core/analyzers/secrets.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-4",
+        "task-5"
+      ],
+      "feature_id": "secrets-scanner",
+      "source": {}
+    },
+    {
+      "id": "task-29",
+      "title": "Add entropy-based rules and integrate with secrets analyzer",
+      "description": "Define 3-5 entropy rules: high-entropy assignment (SEC-087), high-entropy base64 blob (SEC-088), high-entropy hex string (SEC-089). Add to builtinSecretRules() in core/analyzers/secrets/rules.go. Tune thresholds to minimize false positives (entropy \u003e= 4.5 for assignments, \u003e= 5.0 for standalone strings). Add comprehensive tests with known secrets and known non-secrets (UUIDs, hashes in comments, etc.).",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-28"
+      ],
+      "feature_id": "entropy-based-secret-detection",
+      "source": {}
+    },
+    {
+      "id": "task-30",
+      "title": "Implement nox protect command with hook installer",
+      "description": "Add 'nox protect install' and 'nox protect uninstall' CLI commands. Generate .git/hooks/pre-commit that runs 'nox scan' on staged files only (git diff --cached --name-only). Add .pre-commit-hooks.yaml for pre-commit framework integration. Support --severity-threshold flag (default: high) to control which findings block commits. Clear output showing rule ID, file, line, and how to suppress with nox:ignore.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "pre-commit-hook-(nox-protect)",
+      "source": {}
+    },
+    {
+      "id": "task-64",
+      "title": "Tool-poisoning test corpus and fixtures",
+      "description": "Build a positive/negative fixture corpus for the MCP03 analyzer: known tool-poisoning payloads (unicode evasion, instruction override, exfil), plus benign descriptions that must not false-positive. Table-driven tests for each MCP-009..MCP-014 rule. Confirm determinism and offline operation.",
+      "priority": "high",
+      "estimate": "3h",
+      "depends_on": [
+        "task-63"
+      ],
+      "feature_id": "mcp-tool-poisoning-detection",
+      "source": {}
+    },
+    {
+      "id": "task-17",
+      "title": "Implement plugin host runtime",
+      "description": "Core plugin runtime: discover plugin endpoints (local binary via exec, container via docker, remote gRPC address), call GetManifest on startup, validate manifest against host policy, manage plugin lifecycle (init/invoke/shutdown with graceful timeout), merge plugin-produced findings and SBOM components into Nox's unified ScanResult. Support parallel plugin execution with configurable concurrency. Package: core/plugins/host.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-16"
+      ],
+      "feature_id": "plugin-host-runtime",
+      "source": {}
+    },
+    {
+      "id": "task-24",
+      "title": "Implement CLI plugin commands",
+      "description": "Add CLI commands: 'nox registry add/list/remove' for registry management, 'nox plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [
+        "task-17",
+        "task-21"
+      ],
+      "feature_id": "cli-plugin-commands",
+      "source": {}
+    },
+    {
+      "id": "task-58",
+      "title": "Policy model with blast-radius and merge gates",
+      "description": "Implement remediation policy parser and validator (plugin config section in `.nox.yaml`) including blast radius thresholds, auto-merge gates, severity filters, major-version behavior, and verification command allowlists. Emit clear validation errors for invalid policy combinations.",
+      "priority": "high",
+      "estimate": "3h",
+      "depends_on": [
+        "task-57"
+      ],
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
       "source": {}
     },
     {
@@ -109,133 +504,6 @@
       "source": {}
     },
     {
-      "id": "task-72",
-      "title": "Pursue trusted-catalog embedding",
-      "description": "Pursue embedding Nox as the security scanner in a trusted distribution layer (Docker MCP Catalog security tier or a downstream MCP registry security check). Produce the integration artifacts (action manifest, SARIF contract, signed Docker image entry) and outreach materials needed to land the embed.",
-      "priority": "medium",
-      "estimate": "4h",
-      "depends_on": [
-        "task-71"
-      ],
-      "feature_id": "mcp-distribution-and-catalog-embedding",
-      "source": {}
-    },
-    {
-      "id": "task-54",
-      "title": "K8s runtime security checks",
-      "description": "Implement runtime-specific checks: containers running as root, privileged containers, host PID/network/IPC namespace, mounted secrets in env vars, missing network policies, missing resource limits, latest/unpinned image tags, host path mounts, capabilities not dropped. Emit findings with precise workload/container location.",
-      "priority": "high",
-      "estimate": "4h",
-      "depends_on": [
-        "task-53"
-      ],
-      "feature_id": "kubernetes-runtime-scanning-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-29",
-      "title": "Add entropy-based rules and integrate with secrets analyzer",
-      "description": "Define 3-5 entropy rules: high-entropy assignment (SEC-087), high-entropy base64 blob (SEC-088), high-entropy hex string (SEC-089). Add to builtinSecretRules() in core/analyzers/secrets/rules.go. Tune thresholds to minimize false positives (entropy \u003e= 4.5 for assignments, \u003e= 5.0 for standalone strings). Add comprehensive tests with known secrets and known non-secrets (UUIDs, hashes in comments, etc.).",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-28"
-      ],
-      "feature_id": "entropy-based-secret-detection",
-      "source": {}
-    },
-    {
-      "id": "task-53",
-      "title": "Kubernetes API client and resource discovery",
-      "description": "Build Kubernetes API client using client-go. Discover running workloads: Deployments, StatefulSets, DaemonSets, Pods, Services, NetworkPolicies, ConfigMaps, Secrets. Extract security-relevant configuration: securityContext, volumes, env vars, resource limits, image tags. Support KUBECONFIG and in-cluster auth.",
-      "priority": "high",
-      "estimate": "5h",
-      "depends_on": null,
-      "feature_id": "kubernetes-runtime-scanning-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-55",
-      "title": "K8s drift detection: runtime vs IaC comparison",
-      "description": "Compare running workload configuration against IaC definitions (Kubernetes YAML manifests). Detect drift: configuration values that differ between declared and running state. Emit Enrichments linking runtime findings to existing IaC findings. Emit Graph with NodeKindService nodes representing cluster topology and EdgeKindReferences edges to IaC resources.",
-      "priority": "high",
-      "estimate": "5h",
-      "depends_on": [
-        "task-54"
-      ],
-      "feature_id": "kubernetes-runtime-scanning-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-17",
-      "title": "Implement plugin host runtime",
-      "description": "Core plugin runtime: discover plugin endpoints (local binary via exec, container via docker, remote gRPC address), call GetManifest on startup, validate manifest against host policy, manage plugin lifecycle (init/invoke/shutdown with graceful timeout), merge plugin-produced findings and SBOM components into Nox's unified ScanResult. Support parallel plugin execution with configurable concurrency. Package: core/plugins/host.",
-      "priority": "high",
-      "estimate": "L",
-      "depends_on": [
-        "task-16"
-      ],
-      "feature_id": "plugin-host-runtime",
-      "source": {}
-    },
-    {
-      "id": "task-2",
-      "title": "Configure GitHub Actions CI workflow",
-      "description": "Set up .github/workflows/ci.yml with Go build, test, lint steps. Trigger on push/PR to main.",
-      "priority": "high",
-      "estimate": "S",
-      "depends_on": [
-        "task-1"
-      ],
-      "feature_id": "project-scaffold-\u0026-go-module-setup",
-      "source": {}
-    },
-    {
-      "id": "task-23",
-      "title": "Implement trust and verification",
-      "description": "Plugin trust system: validate artifact signatures against configurable trust roots, verify content digests on download and before execution, check API version compatibility, run conformance tests as part of install verification. Implement trust levels (verified: signed by known key, community: signed by unknown key, unverified: unsigned) with configurable minimum trust policy. Enterprise mode: mandate verified-only. Package: registry/trust.",
-      "priority": "medium",
-      "estimate": "M",
-      "depends_on": [
-        "task-21"
-      ],
-      "feature_id": "plugin-trust-\u0026-verification",
-      "source": {}
-    },
-    {
-      "id": "task-57",
-      "title": "Remediation plugin foundations and tool scaffolding",
-      "description": "Create `nox-plugin-remediate` scaffolding with tool routing for `remediate.plan_code`, `remediate.apply_code`, and `remediate.verify_code`. Add deterministic patch engine interfaces, idempotence checks, bounded change guardrails (max files/LOC), and rollback-on-verify-failure plumbing. Include fixture harness layout under plugin testdata.",
-      "priority": "high",
-      "estimate": "4h",
-      "depends_on": [],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-59",
-      "title": "Fixer WEB-SEC-001 header middleware insertion",
-      "description": "Implement first deterministic fixer WEB-SEC-001 for missing baseline security headers middleware in supported Go and Node HTTP stacks. Ensure no duplicate middleware injection. Add before/after fixtures and idempotence tests.",
-      "priority": "high",
-      "estimate": "5h",
-      "depends_on": [
-        "task-57",
-        "task-58"
-      ],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-26",
-      "title": "Implement git history commit walker",
-      "description": "Add CommitWalker to core/git/ that traverses commit history using git rev-list and git diff-tree. Extract added/modified content per commit as (commitSHA, filePath, content) tuples. Support depth limits, branch selection, and bookmark-based incremental scanning. Return commit metadata (SHA, author, date, message) with each result.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [],
-      "feature_id": "git-history-scanning-for-secrets",
-      "source": {}
-    },
-    {
       "id": "task-14",
       "title": "Implement MCP server",
       "description": "MCP server using mcp-go with stdio transport. Read-only tools: scan, get-findings, get-sbom. Workspace allowlisting configuration. Artifact serving via MCP resources. Output size limits and rate limiting. Package: server.",
@@ -247,136 +515,6 @@
         "task-11"
       ],
       "feature_id": "mcp-server",
-      "source": {}
-    },
-    {
-      "id": "task-34",
-      "title": "Domain types: core/graph and core/findings/enrichment",
-      "description": "Create core/graph/graph.go with NodeKind, EdgeKind, Node, Edge, Graph types and Validate()/NodeIDs() methods. Create core/findings/enrichment.go with Enrichment type. Add Graphs and Enrichments fields to ScanResult in core/scan.go. Include unit tests.",
-      "priority": "high",
-      "estimate": "1h",
-      "depends_on": [
-        "task-33"
-      ],
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
-      "source": {}
-    },
-    {
-      "id": "task-44",
-      "title": "Cross-resource rule engine with graph pattern matching",
-      "description": "Implement declarative cross-resource rules as graph patterns (subgraph matching). Rules define a pattern of nodes and edges that indicate a misconfiguration. Initial rules: public subnet + no NACL + open SG, S3 bucket + no encryption + public ACL, RDS + public subnet + no encryption, EC2 + public IP + permissive SG. Emit findings with multi-resource locations.",
-      "priority": "high",
-      "estimate": "5h",
-      "depends_on": [
-        "task-43"
-      ],
-      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-33",
-      "title": "Proto schema: Add Graph, Enrichment, ScanContext messages to types.proto and plugin.proto",
-      "description": "Add NodeKind/EdgeKind enums, GraphNode/GraphEdge/Graph/Enrichment/ScanContext messages to types.proto. Add scan_context field to InvokeToolRequest, graphs/enrichments to InvokeToolResponse, requires_scan_context to ToolDef in plugin.proto. Generate code with buf generate.",
-      "priority": "high",
-      "estimate": "2h",
-      "depends_on": null,
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
-      "source": {}
-    },
-    {
-      "id": "task-5",
-      "title": "Implement YAML rule engine with matchers",
-      "description": "YAML rule parser/loader with versioned rule ID scheme. Pluggable matcher interface with regex, jsonpath, yamlpath, and heuristic implementations. Rule validation and test harness. No embedded code execution. Package: core/rules.",
-      "priority": "high",
-      "estimate": "L",
-      "depends_on": [
-        "task-3"
-      ],
-      "feature_id": "yaml-rule-engine",
-      "source": {}
-    },
-    {
-      "id": "task-49",
-      "title": "AI triage LLM provider abstraction",
-      "description": "Build LLM provider abstraction supporting OpenAI, Anthropic, and Ollama backends. Integrate with existing assist/ module patterns. Implement prompt templates for triage: include finding details, surrounding code context, and severity assessment instructions. Support configurable model selection and temperature.",
-      "priority": "high",
-      "estimate": "4h",
-      "depends_on": null,
-      "feature_id": "ai-powered-triage-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-13",
-      "title": "Implement AI security rules and inventory extractor",
-      "description": "YAML rules for prompt/RAG boundary violations, unsafe MCP tool exposure, insecure prompt/response logging, unpinned models. AI inventory extractor that produces ai.inventory.json. Package: core/analyzers/ai, rules/ai/.",
-      "priority": "medium",
-      "estimate": "L",
-      "depends_on": [
-        "task-4",
-        "task-5"
-      ],
-      "feature_id": "ai-security-rules",
-      "source": {}
-    },
-    {
-      "id": "task-40",
-      "title": "Tree-sitter AST parsing for Python/JS/TS call graphs",
-      "description": "Integrate tree-sitter grammars for Python, JavaScript, and TypeScript. Extract function definitions and call sites from AST. Build cross-file call graph by resolving imports. Output Graph with NodeKindFunction nodes and EdgeKindCalls edges.",
-      "priority": "high",
-      "estimate": "6h",
-      "depends_on": [
-        "task-39"
-      ],
-      "feature_id": "reachability-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-9",
-      "title": "Implement SARIF 2.1.0 report generator",
-      "description": "Convert findings to SARIF 2.1.0 JSON. One run per scan. Populate rule catalog from matched rules. Attach fingerprints to results. Validate against GitHub Code Scanning ingestion requirements. Package: core/report/sarif.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-3",
-        "task-5"
-      ],
-      "feature_id": "sarif-report-output",
-      "source": {}
-    },
-    {
-      "id": "task-30",
-      "title": "Implement nox protect command with hook installer",
-      "description": "Add 'nox protect install' and 'nox protect uninstall' CLI commands. Generate .git/hooks/pre-commit that runs 'nox scan' on staged files only (git diff --cached --name-only). Add .pre-commit-hooks.yaml for pre-commit framework integration. Support --severity-threshold flag (default: high) to control which findings block commits. Clear output showing rule ID, file, line, and how to suppress with nox:ignore.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [],
-      "feature_id": "pre-commit-hook-(nox-protect)",
-      "source": {}
-    },
-    {
-      "id": "task-6",
-      "title": "Implement secrets scanner analyzer",
-      "description": "Pattern-based analyzer using rule engine for detecting AWS keys, GitHub tokens, private keys, generic high-entropy strings. Configurable entropy threshold. Allowlist/ignore via .nox.yaml. Line-level location reporting into findings model. Package: core/analyzers/secrets.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-4",
-        "task-5"
-      ],
-      "feature_id": "secrets-scanner",
-      "source": {}
-    },
-    {
-      "id": "task-25",
-      "title": "Agent capability discovery integration",
-      "description": "Integrate plugin capabilities with agent-assist module: advertise available plugin capabilities (dast.passive, cloud.read_only, policy.enforcement, etc.) to agent runtimes, allow agents to discover and invoke plugin tools, summarize plugin results in agent explanations. Agents never influence scan results. Package: ai-assist/plugins.",
-      "priority": "low",
-      "estimate": "M",
-      "depends_on": [
-        "task-20",
-        "task-15"
-      ],
-      "feature_id": "agent-assist-module-(optional)",
       "source": {}
     },
     {
@@ -414,15 +552,120 @@
       "source": {}
     },
     {
-      "id": "task-7",
-      "title": "Implement JSON findings output",
-      "description": "Serialize findings to canonical findings.json with deterministic key ordering. Include schema version field. Package: core/report.",
+      "id": "task-35",
+      "title": "Bidirectional proto conversion for Graph, Enrichment, ScanContext",
+      "description": "Add ProtoGraphToGo, GoGraphToProto, ProtoEnrichmentToGo, GoEnrichmentToProto, GoScanResultToProtoContext, and enum converters to plugin/convert.go. Include roundtrip tests and nil-safety tests in convert_test.go.",
+      "priority": "high",
+      "estimate": "2h",
+      "depends_on": [
+        "task-33",
+        "task-34"
+      ],
+      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "source": {}
+    },
+    {
+      "id": "task-1",
+      "title": "Initialize Go module and directory structure",
+      "description": "Create Go module (go.mod), set up /core, /cli, /server, /ai-assist package directories with placeholder files, configure golangci-lint (.golangci.yml), and create Makefile with build/test/lint/run targets.",
       "priority": "high",
       "estimate": "S",
+      "depends_on": [],
+      "feature_id": "project-scaffold-\u0026-go-module-setup",
+      "source": {}
+    },
+    {
+      "id": "task-66",
+      "title": "MCP07 authorization and token-safety rules",
+      "description": "Add rules anchored to the official MCP spec security MUST/SHOULD clauses: token passthrough (server accepts tokens not issued to it), confused-deputy OAuth proxy (static client id + dynamic registration), SSRF in OAuth metadata discovery (169.254.169.254, private CIDRs, DNS-rebinding/redirect chains), and weak session handling (deterministic session ids, sessions-as-auth, missing user binding). New rules MCP-016..MCP-021 with spec-section citations in remediation. Tests with positive/negative configs.",
+      "priority": "high",
+      "estimate": "6h",
+      "depends_on": [],
+      "feature_id": "mcp-authorization-and-token-safety-rules",
+      "source": {}
+    },
+    {
+      "id": "task-72",
+      "title": "Pursue trusted-catalog embedding",
+      "description": "Pursue embedding Nox as the security scanner in a trusted distribution layer (Docker MCP Catalog security tier or a downstream MCP registry security check). Produce the integration artifacts (action manifest, SARIF contract, signed Docker image entry) and outreach materials needed to land the embed.",
+      "priority": "medium",
+      "estimate": "4h",
       "depends_on": [
-        "task-3"
+        "task-71"
       ],
-      "feature_id": "json-findings-output",
+      "feature_id": "mcp-distribution-and-catalog-embedding",
+      "source": {}
+    },
+    {
+      "id": "task-44",
+      "title": "Cross-resource rule engine with graph pattern matching",
+      "description": "Implement declarative cross-resource rules as graph patterns (subgraph matching). Rules define a pattern of nodes and edges that indicate a misconfiguration. Initial rules: public subnet + no NACL + open SG, S3 bucket + no encryption + public ACL, RDS + public subnet + no encryption, EC2 + public IP + permissive SG. Emit findings with multi-resource locations.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [
+        "task-43"
+      ],
+      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-63",
+      "title": "MCP03 tool-poisoning content analyzer and rules",
+      "description": "Add a content analyzer for MCP tool metadata that inspects tool descriptions, input schemas, and tool return-value templates for malicious instructions (OWASP MCP03). Detect: imperative injection phrases ('ignore previous instructions', 'do not tell the user', 'always call'), hidden/zero-width unicode and bidi control chars, exfiltration verbs targeting secrets/files/credentials/env, and instructions aimed at the host model rather than the operator. New rules MCP-009..MCP-014 in core/analyzers/ai/rules.go reusing AI-PI heuristics. Wire into existing mcp.json + claude_desktop_config.json + source tool-registration scanning.",
+      "priority": "high",
+      "estimate": "6h",
+      "depends_on": [],
+      "feature_id": "mcp-tool-poisoning-detection",
+      "source": {}
+    },
+    {
+      "id": "task-69",
+      "title": "OWASP MCP Top 10 + MCP-38 + spec compliance mapping",
+      "description": "Map every MCP and AI rule to OWASP MCP Top 10 (MCP01-10), MCP-38 categories, and official spec clauses in core/compliance data. Add framework entry 'owasp-mcp-top-10'. Emit control IDs as SARIF rule tags/properties so GitHub Code Scanning and registries see standards alignment. Tests asserting each MCP-0xx rule carries a mapped control.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "task-63",
+        "task-65",
+        "task-66",
+        "task-67"
+      ],
+      "feature_id": "owasp-mcp-top-10-compliance-mapping",
+      "source": {}
+    },
+    {
+      "id": "task-26",
+      "title": "Implement git history commit walker",
+      "description": "Add CommitWalker to core/git/ that traverses commit history using git rev-list and git diff-tree. Extract added/modified content per commit as (commitSHA, filePath, content) tuples. Support depth limits, branch selection, and bookmark-based incremental scanning. Return commit metadata (SHA, author, date, message) with each result.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "git-history-scanning-for-secrets",
+      "source": {}
+    },
+    {
+      "id": "task-40",
+      "title": "Tree-sitter AST parsing for Python/JS/TS call graphs",
+      "description": "Integrate tree-sitter grammars for Python, JavaScript, and TypeScript. Extract function definitions and call sites from AST. Build cross-file call graph by resolving imports. Output Graph with NodeKindFunction nodes and EdgeKindCalls edges.",
+      "priority": "high",
+      "estimate": "6h",
+      "depends_on": [
+        "task-39"
+      ],
+      "feature_id": "reachability-analysis-plugin",
+      "source": {}
+    },
+    {
+      "id": "task-9",
+      "title": "Implement SARIF 2.1.0 report generator",
+      "description": "Convert findings to SARIF 2.1.0 JSON. One run per scan. Populate rule catalog from matched rules. Attach fingerprints to results. Validate against GitHub Code Scanning ingestion requirements. Package: core/report/sarif.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-3",
+        "task-5"
+      ],
+      "feature_id": "sarif-report-output",
       "source": {}
     },
     {
@@ -436,30 +679,6 @@
       "source": {}
     },
     {
-      "id": "task-48",
-      "title": "Taint analysis plugin binary and conformance tests",
-      "description": "Create taint analysis plugin using SDK on core-analysis track. Wire up taint engine, produce findings with full source→intermediate→sink paths in metadata. Add conformance tests and integration tests with known taint flows (SQL injection, command injection, XSS patterns) across multiple files.",
-      "priority": "high",
-      "estimate": "4h",
-      "depends_on": [
-        "task-47"
-      ],
-      "feature_id": "cross-file-taint-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-38",
-      "title": "Conformance: Graph and Enrichment validation, track options",
-      "description": "Extend validateResponse() in sdk/conformance.go to validate graph node IDs, edge endpoint references, enrichment fingerprints and kinds. Add WithRequireGraphs and WithRequireEnrichments track conformance options. Add conformance tests exercising graphs and enrichments.",
-      "priority": "medium",
-      "estimate": "1h",
-      "depends_on": [
-        "task-37"
-      ],
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
-      "source": {}
-    },
-    {
       "id": "task-42",
       "title": "Reachability plugin conformance tests and integration tests",
       "description": "Write conformance tests using RunForTrack(TrackCoreAnalysis). Add integration tests with sample Go/Python/JS projects containing known reachable and unreachable vulnerable dependencies. Verify enrichment output accuracy.",
@@ -469,78 +688,6 @@
         "task-41"
       ],
       "feature_id": "reachability-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-22",
-      "title": "Implement OCI artifact distribution",
-      "description": "Download plugins as OCI artifacts: pull from OCI registries, verify content digests, cache locally with content-addressable storage, support platform-specific binaries, extract plugin manifest and documentation from artifact layers. Support mirror configuration for air-gapped environments. Package: core/plugins/oci.",
-      "priority": "medium",
-      "estimate": "M",
-      "depends_on": [
-        "task-21"
-      ],
-      "feature_id": "plugin-registry-\u0026-distribution",
-      "source": {}
-    },
-    {
-      "id": "task-46",
-      "title": "Taint source and sink definitions for Go/Python/JS",
-      "description": "Define taint sources (HTTP request params, env vars, file reads, user input, CLI args) and sinks (SQL queries, shell exec, eval, file write, HTTP response body, template rendering) for Go, Python, and JavaScript/TypeScript. Implement as configurable YAML definitions.",
-      "priority": "high",
-      "estimate": "3h",
-      "depends_on": null,
-      "feature_id": "cross-file-taint-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-8",
-      "title": "Implement CLI scaffold with scan command",
-      "description": "CLI entry point using cobra or similar. 'nox scan \u003cpath\u003e' command wiring discovery -\u003e analyzers -\u003e reporters. Output format flag (--format sarif,cdx,spdx,json,all). Exit codes (0=clean, 1=findings, 2=error). Quiet/verbose flags. Config file loading (.nox.yaml). Package: cli.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-4",
-        "task-6",
-        "task-7"
-      ],
-      "feature_id": "cli-interface",
-      "source": {}
-    },
-    {
-      "id": "task-27",
-      "title": "Integrate history scanning into secrets analyzer and CLI",
-      "description": "Add HistoryScan mode to the secrets analyzer that consumes CommitWalker output and runs all 86 rules against historical diffs. Enrich findings with commit SHA, author, and date in Metadata. Add --history flag to 'nox scan' CLI with --history-depth and --history-branch options. Add HistoryFinding fields to the findings model. Update SARIF reporter to include commit metadata in result properties.",
-      "priority": "high",
-      "estimate": "L",
-      "depends_on": [
-        "task-26"
-      ],
-      "feature_id": "git-history-scanning-for-secrets",
-      "source": {}
-    },
-    {
-      "id": "task-16",
-      "title": "Define protobuf plugin interface",
-      "description": "Define proto/nox/plugin/v1/plugin.proto with PluginService (GetManifest, InvokeTool, StreamArtifacts RPCs), PluginManifest message (name, version, capabilities, safety requirements, API compatibility), ToolInvocation request/response messages, and artifact streaming messages. Generate Go code via buf/protoc. Establish versioning scheme for the plugin API.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-14"
-      ],
-      "feature_id": "plugin-grpc-interface",
-      "source": {}
-    },
-    {
-      "id": "task-11",
-      "title": "Implement CycloneDX and SPDX SBOM generators",
-      "description": "Generate sbom.cdx.json (CycloneDX JSON) and sbom.spdx.json (SPDX JSON) from dependency scanner component inventory. Optional vulnerability enrichment via OSV data. Package: core/report/sbom.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-10"
-      ],
-      "feature_id": "sbom-output-(cyclonedx-\u0026-spdx)",
       "source": {}
     },
     {
@@ -557,74 +704,25 @@
       "source": {}
     },
     {
-      "id": "task-10",
-      "title": "Implement dependency scanner",
-      "description": "Parse lockfiles: npm package-lock.json, Go go.sum, Python requirements.txt/poetry.lock, Ruby Gemfile.lock. Extract package name/version/ecosystem. OSV API client for vulnerability lookup (offline-graceful). Produce CycloneDX component entries. Package: core/analyzers/deps.",
-      "priority": "high",
-      "estimate": "L",
-      "depends_on": [
-        "task-4",
-        "task-5"
-      ],
-      "feature_id": "dependency-scanner",
-      "source": {}
-    },
-    {
-      "id": "task-61",
-      "title": "Fixer SEC-003 hardcoded secret to env/config rewrite",
-      "description": "Implement SEC-003 fixer for hardcoded secret literals -\u003e env/config lookup rewrites in supported language idioms. Add guarded fallback behavior and TODO marker options for provisioning. Include compile/runtime smoke verification hooks.",
-      "priority": "high",
-      "estimate": "6h",
-      "depends_on": [
-        "task-60"
-      ],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-43",
-      "title": "Terraform resource relationship model",
-      "description": "Extend tfplan.go and Terraform HCL parsing to build a resource dependency graph. Parse resource references (e.g., aws_subnet.vpc_id → aws_vpc.id), data source dependencies, and module relationships. Output Graph with NodeKindResource nodes and EdgeKindDependsOn/EdgeKindReferences edges.",
+      "id": "task-53",
+      "title": "Kubernetes API client and resource discovery",
+      "description": "Build Kubernetes API client using client-go. Discover running workloads: Deployments, StatefulSets, DaemonSets, Pods, Services, NetworkPolicies, ConfigMaps, Secrets. Extract security-relevant configuration: securityContext, volumes, env vars, resource limits, image tags. Support KUBECONFIG and in-cluster auth.",
       "priority": "high",
       "estimate": "5h",
       "depends_on": null,
-      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
+      "feature_id": "kubernetes-runtime-scanning-plugin",
       "source": {}
     },
     {
-      "id": "task-50",
-      "title": "AI triage plugin with ScanContext and enrichment output",
-      "description": "Create AI triage plugin on agent-assistance track with requires_scan_context=true. Consume all findings from ScanContext, batch findings by file for context efficiency, call LLM for each finding/batch. Emit Enrichments with kind=triage carrying verdict (true_positive/false_positive/needs_review), adjusted severity, confidence, and markdown explanation. Implement rate limiting and cost controls.",
+      "id": "task-2",
+      "title": "Configure GitHub Actions CI workflow",
+      "description": "Set up .github/workflows/ci.yml with Go build, test, lint steps. Trigger on push/PR to main.",
       "priority": "high",
-      "estimate": "5h",
+      "estimate": "S",
       "depends_on": [
-        "task-49"
+        "task-1"
       ],
-      "feature_id": "ai-powered-triage-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-21",
-      "title": "Implement plugin registry client",
-      "description": "Registry client that fetches and parses static registry index files from configured URLs. Support multiple registry sources (official, community, enterprise). Implement version resolution with semver constraints and API compatibility checks. Local metadata caching with TTL-based refresh. Offline-friendly: work from cache when network unavailable. Package: core/plugins/registry.",
-      "priority": "medium",
-      "estimate": "M",
-      "depends_on": [
-        "task-16"
-      ],
-      "feature_id": "plugin-registry-\u0026-distribution",
-      "source": {}
-    },
-    {
-      "id": "task-51",
-      "title": "Triage history learning and persistence",
-      "description": "Implement .nox/triage-history.json for persisting user-confirmed triage decisions. When a user confirms or overrides a triage verdict, store the finding fingerprint, verdict, and context hash. Use historical data to improve LLM prompts with few-shot examples of similar past decisions. Include import/export for team sharing.",
-      "priority": "medium",
-      "estimate": "3h",
-      "depends_on": [
-        "task-50"
-      ],
-      "feature_id": "ai-powered-triage-plugin",
+      "feature_id": "project-scaffold-\u0026-go-module-setup",
       "source": {}
     },
     {
@@ -640,77 +738,25 @@
       "source": {}
     },
     {
-      "id": "task-20",
-      "title": "Implement MCP plugin bridge",
-      "description": "Extend MCP server with plugin tools: plugin.list (enumerate installed plugins and their capabilities), plugin.call_tool (invoke a specific plugin tool with arguments, returning results), plugin.read_resource (read plugin-provided resources). Support convenience aliases mapping friendly names to plugin tools (e.g., nox.dast.scan). Inherit workspace allowlisting and output size limits. Package: server/plugins.",
-      "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-17",
-        "task-18"
-      ],
-      "feature_id": "mcp-plugin-bridge",
-      "source": {}
-    },
-    {
-      "id": "task-56",
-      "title": "K8s plugin binary with dynamic-runtime track conformance",
-      "description": "Create K8s plugin using SDK on dynamic-runtime track with RiskActive, needs_confirmation=true, and network_hosts=[kubernetes API]. Wire up API client, security checks, and drift detection. Add conformance tests using RunForTrack(TrackDynamicRuntime). Integration tests with kind (Kubernetes in Docker) for CI.",
+      "id": "task-45",
+      "title": "IaC cross-resource plugin binary and conformance tests",
+      "description": "Create the IaC cross-resource plugin using the SDK on core-analysis track. Wire up Terraform parsing, graph construction, and cross-resource rule engine. Add conformance tests and integration tests with sample Terraform configurations containing cross-resource misconfigurations.",
       "priority": "high",
       "estimate": "4h",
       "depends_on": [
-        "task-55"
+        "task-44"
       ],
-      "feature_id": "kubernetes-runtime-scanning-plugin",
+      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
       "source": {}
     },
     {
-      "id": "task-60",
-      "title": "Fixer AI-LOG-001 sensitive logging redaction",
-      "description": "Implement AI-LOG-001 fixer to replace raw prompt/response logging with redacted metadata-safe logging helpers for Go, Python, and JS patterns. Add fixture matrix and negative tests for already-safe logging.",
-      "priority": "high",
-      "estimate": "5h",
-      "depends_on": [
-        "task-59"
-      ],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-41",
-      "title": "Reachability plugin: ScanContext integration and enrichment output",
-      "description": "Create the reachability plugin binary using the SDK. Consume ScanContext to get dependency findings, cross-reference with call graph to determine if vulnerable functions are reachable. Emit Enrichments with kind=reachability on each dependency finding (reachable/unreachable verdict, call path in metadata). Register on core-analysis track with requires_scan_context=true.",
-      "priority": "high",
-      "estimate": "4h",
-      "depends_on": [
-        "task-40"
-      ],
-      "feature_id": "reachability-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-24",
-      "title": "Implement CLI plugin commands",
-      "description": "Add CLI commands: 'nox registry add/list/remove' for registry management, 'nox plugin search/info/install/update/list/remove/call' for plugin lifecycle. Install command performs trust verification, conformance test, and manifest validation. Call command invokes a plugin tool directly from CLI with JSON input/output. Package: cli/plugins.",
+      "id": "task-32",
+      "title": "Wire custom rules loader to CLI",
+      "description": "Add --rules flag to scan, diff, and protect commands that accepts a file or directory path. Load custom YAML rules via existing LoadRulesFromFile/LoadRulesFromDir and merge with built-in rules. Support 'rules_dir' key in .nox.yaml for default custom rules path. Validate rules at load time with clear errors for invalid patterns, missing fields, or duplicate IDs. Add tests for custom rule loading and merging.",
       "priority": "medium",
-      "estimate": "L",
-      "depends_on": [
-        "task-17",
-        "task-21"
-      ],
-      "feature_id": "cli-plugin-commands",
-      "source": {}
-    },
-    {
-      "id": "task-36",
-      "title": "Host extensions: InvokePostScan, MergeResults, estimateResponseSize",
-      "description": "Extend plugin/host.go MergeResults() to handle graphs and enrichments. Add InvokePostScan() for post-scan plugin orchestration with ScanContext. Update estimateResponseSize() for new types. Update PluginInfo/ToolInfo with RequiresScanContext. Add comprehensive tests in host_test.go.",
-      "priority": "high",
-      "estimate": "3h",
-      "depends_on": [
-        "task-35"
-      ],
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
+      "estimate": "S",
+      "depends_on": [],
+      "feature_id": "custom-rules-cli-integration",
       "source": {}
     },
     {
@@ -727,110 +773,72 @@
       "source": {}
     },
     {
-      "id": "task-52",
-      "title": "AI triage conformance tests and integration tests",
-      "description": "Write conformance tests using RunForTrack(TrackAgentAssistance). Add integration tests with mock LLM responses verifying enrichment output structure. Test offline fallback behavior when no LLM is configured.",
+      "id": "task-13",
+      "title": "Implement AI security rules and inventory extractor",
+      "description": "YAML rules for prompt/RAG boundary violations, unsafe MCP tool exposure, insecure prompt/response logging, unpinned models. AI inventory extractor that produces ai.inventory.json. Package: core/analyzers/ai, rules/ai/.",
       "priority": "medium",
-      "estimate": "2h",
+      "estimate": "L",
       "depends_on": [
-        "task-50"
+        "task-4",
+        "task-5"
       ],
-      "feature_id": "ai-powered-triage-plugin",
+      "feature_id": "ai-security-rules",
       "source": {}
     },
     {
-      "id": "task-31",
-      "title": "Add staged-files-only scan mode",
-      "description": "Add --staged flag to 'nox scan' that scans only git staged files (git diff --cached --name-only --diff-filter=ACMR). Used by the pre-commit hook for fast scanning. Only reads and scans the staged versions of files. Integrates with existing discovery and analyzer pipeline.",
+      "id": "task-55",
+      "title": "K8s drift detection: runtime vs IaC comparison",
+      "description": "Compare running workload configuration against IaC definitions (Kubernetes YAML manifests). Detect drift: configuration values that differ between declared and running state. Emit Enrichments linking runtime findings to existing IaC findings. Emit Graph with NodeKindService nodes representing cluster topology and EdgeKindReferences edges to IaC resources.",
       "priority": "high",
-      "estimate": "S",
+      "estimate": "5h",
       "depends_on": [
-        "task-30"
+        "task-54"
       ],
-      "feature_id": "pre-commit-hook-(nox-protect)",
+      "feature_id": "kubernetes-runtime-scanning-plugin",
       "source": {}
     },
     {
-      "id": "task-3",
-      "title": "Implement canonical findings model",
-      "description": "Define Finding struct with ID, rule ID, severity, confidence, location (file/region/line/column), message. Implement deterministic fingerprinting (SHA-256 hash of rule+location+content). Implement deduplication by fingerprint. Ensure SARIF-compatible location model. Package: core/findings.",
+      "id": "task-65",
+      "title": "MCP rug-pull tool-hash pinning and drift detection",
+      "description": "Persist a hash of each discovered MCP tool's description+schema to .nox/ state on first observation (reuse atomic-write content-hash infra in cache.go/state.go). On subsequent scans, flag tools whose definition changed after approval (OWASP MCP04 rug pull). Emit findings with before/after hashes and a new rule MCP-015. Fully offline, deterministic. Include drift + no-drift + first-run tests.",
       "priority": "high",
-      "estimate": "M",
-      "depends_on": [
-        "task-1"
-      ],
-      "feature_id": "canonical-findings-model",
+      "estimate": "5h",
+      "depends_on": [],
+      "feature_id": "mcp-rug-pull-detection",
       "source": {}
     },
     {
-      "id": "task-35",
-      "title": "Bidirectional proto conversion for Graph, Enrichment, ScanContext",
-      "description": "Add ProtoGraphToGo, GoGraphToProto, ProtoEnrichmentToGo, GoEnrichmentToProto, GoScanResultToProtoContext, and enum converters to plugin/convert.go. Include roundtrip tests and nil-safety tests in convert_test.go.",
-      "priority": "high",
-      "estimate": "2h",
-      "depends_on": [
-        "task-33",
-        "task-34"
-      ],
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
-      "source": {}
-    },
-    {
-      "id": "task-37",
-      "title": "SDK: GraphBuilder, EnrichmentBuilder, ToolWithContext, ToolRequest, type constants",
-      "description": "Add fluent GraphBuilder (Node, NodeAt, Edge, EdgeLabeled, Done) and EnrichmentBuilder (Body, WithMetadata, WithConfidence, Source, Done) to sdk/response.go. Add ToolWithContext() to sdk/manifest.go. Add NodeKind/EdgeKind/Confidence constants to sdk/types.go. Add ToolRequest helper to sdk/request.go. Include tests for all builders and helpers.",
-      "priority": "high",
-      "estimate": "2h",
-      "depends_on": [
-        "task-33"
-      ],
-      "feature_id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
-      "source": {}
-    },
-    {
-      "id": "task-45",
-      "title": "IaC cross-resource plugin binary and conformance tests",
-      "description": "Create the IaC cross-resource plugin using the SDK on core-analysis track. Wire up Terraform parsing, graph construction, and cross-resource rule engine. Add conformance tests and integration tests with sample Terraform configurations containing cross-resource misconfigurations.",
+      "id": "task-57",
+      "title": "Remediation plugin foundations and tool scaffolding",
+      "description": "Create `nox-plugin-remediate` scaffolding with tool routing for `remediate.plan_code`, `remediate.apply_code`, and `remediate.verify_code`. Add deterministic patch engine interfaces, idempotence checks, bounded change guardrails (max files/LOC), and rollback-on-verify-failure plumbing. Include fixture harness layout under plugin testdata.",
       "priority": "high",
       "estimate": "4h",
-      "depends_on": [
-        "task-44"
-      ],
-      "feature_id": "graph-based-iac-cross-resource-analysis-plugin",
-      "source": {}
-    },
-    {
-      "id": "task-58",
-      "title": "Policy model with blast-radius and merge gates",
-      "description": "Implement remediation policy parser and validator (plugin config section in `.nox.yaml`) including blast radius thresholds, auto-merge gates, severity filters, major-version behavior, and verification command allowlists. Emit clear validation errors for invalid policy combinations.",
-      "priority": "high",
-      "estimate": "3h",
-      "depends_on": [
-        "task-57"
-      ],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-62",
-      "title": "Fixers SEC-002 and SEC-001 with full verification gates",
-      "description": "Implement SEC-002 SQL parameterization fixer and SEC-001 subprocess hardening fixer with conservative skip behavior for ambiguous cases. Add strict verification pipeline: targeted tests, lint/typecheck, mandatory re-scan evidence, deterministic and idempotence assertions, and rollback on failed verification.",
-      "priority": "high",
-      "estimate": "10h",
-      "depends_on": [
-        "task-61"
-      ],
-      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
-      "source": {}
-    },
-    {
-      "id": "task-1",
-      "title": "Initialize Go module and directory structure",
-      "description": "Create Go module (go.mod), set up /core, /cli, /server, /ai-assist package directories with placeholder files, configure golangci-lint (.golangci.yml), and create Makefile with build/test/lint/run targets.",
-      "priority": "high",
-      "estimate": "S",
       "depends_on": [],
-      "feature_id": "project-scaffold-\u0026-go-module-setup",
+      "feature_id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
+      "source": {}
+    },
+    {
+      "id": "task-5",
+      "title": "Implement YAML rule engine with matchers",
+      "description": "YAML rule parser/loader with versioned rule ID scheme. Pluggable matcher interface with regex, jsonpath, yamlpath, and heuristic implementations. Rule validation and test harness. No embedded code execution. Package: core/rules.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-3"
+      ],
+      "feature_id": "yaml-rule-engine",
+      "source": {}
+    },
+    {
+      "id": "task-50",
+      "title": "AI triage plugin with ScanContext and enrichment output",
+      "description": "Create AI triage plugin on agent-assistance track with requires_scan_context=true. Consume all findings from ScanContext, batch findings by file for context efficiency, call LLM for each finding/batch. Emit Enrichments with kind=triage carrying verdict (true_positive/false_positive/needs_review), adjusted severity, confidence, and markdown explanation. Implement rate limiting and cost controls.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [
+        "task-49"
+      ],
+      "feature_id": "ai-powered-triage-plugin",
       "source": {}
     },
     {
@@ -846,17 +854,19 @@
       "source": {}
     },
     {
-      "id": "task-32",
-      "title": "Wire custom rules loader to CLI",
-      "description": "Add --rules flag to scan, diff, and protect commands that accepts a file or directory path. Load custom YAML rules via existing LoadRulesFromFile/LoadRulesFromDir and merge with built-in rules. Support 'rules_dir' key in .nox.yaml for default custom rules path. Validate rules at load time with clear errors for invalid patterns, missing fields, or duplicate IDs. Add tests for custom rule loading and merging.",
-      "priority": "medium",
+      "id": "task-7",
+      "title": "Implement JSON findings output",
+      "description": "Serialize findings to canonical findings.json with deterministic key ordering. Include schema version field. Package: core/report.",
+      "priority": "high",
       "estimate": "S",
-      "depends_on": [],
-      "feature_id": "custom-rules-cli-integration",
+      "depends_on": [
+        "task-3"
+      ],
+      "feature_id": "json-findings-output",
       "source": {}
     }
   ],
-  "approval_status": "approved",
+  "approval_status": "pending",
   "created_at": "2026-02-07T22:13:51.824599+01:00",
-  "updated_at": "2026-06-05T10:47:42.503222+02:00"
+  "updated_at": "2026-06-05T11:49:42.838056+02:00"
 }

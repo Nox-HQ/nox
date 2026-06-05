@@ -189,5 +189,9 @@ features:
       title: MCP Distribution and Catalog Embedding
       description: Win the embedding layer that makes a scanner 'default'. Dogfood Nox across the owner's own projects (Obvia, agent-go, Mnemos, Chronos, Praxis, statekit, Relicta) and publish findings as credibility content. Ship a one-command 'scan-before-publish' MCP workflow and GitHub Action variant focused on MCP servers. Pursue embedding in a trusted distribution layer (Docker MCP Catalog security tier or a downstream MCP registry's security check). Distribution/partnership track that converts capability into category ownership.
       requirements: []
+    - id: mcp-rule-precision-hardening
+      title: MCP Rule Precision Hardening
+      description: 'Reduce false positives in the new MCP prose rules (MCP-009..014 tool poisoning, MCP-018/019 SSRF), surfaced by dogfooding nox against 17 of the owner''s own MCP repos. The rules currently match defensive code, code comments, capability/permission descriptions, and test boilerplate rather than real tool metadata. Confirmed examples: MCP-018 fires on a repo''s own SSRF blocklist (169.254.169.254 in a deny-list); MCP-014 fires on a test doc-comment ''after the first invocation''; MCP-009/011 fire on anti-injection system prompts and comments describing attacks. Needed: exclude test files (ignoreFilePatterns), avoid matching inside comments, suppress SSRF metadata hits in block/deny contexts, and anchor tool-poisoning prose to actual tool-description/string-literal context instead of free source text. Mirror the existing AI-028 fuzz-corpus FP-reduction approach. This is a gate before publishing any dogfood findings as launch content.'
+      requirements: []
 constraints: []
 version: 0.1.0
