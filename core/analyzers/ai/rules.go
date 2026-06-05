@@ -949,6 +949,22 @@ func builtinAIRules() []*rules.Rule {
 			remediation:  "Do not use the session ID for authentication. The spec states sessions MUST NOT be used as the auth mechanism; bind each session to a verified user identity (e.g. <user_id>:<session_id>) and authenticate every request independently.",
 			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices#session-hijacking"},
 		},
+
+		// -----------------------------------------------------------------
+		// MCP shadow / rogue servers (MCP-022, OWASP MCP09). Cross-server
+		// name and tool shadowing (MCP-023/024) is relational across the
+		// discovered config inventory and is emitted by core/mcpshadow.
+		// -----------------------------------------------------------------
+		{
+			id: "MCP-022", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)"(?:url|serverurl|endpoint|baseurl)"\s*:\s*"https?://|"type"\s*:\s*"(?:sse|streamable-http|http)"`,
+			description: "MCP config trusts a remote server without identity verification or pinning",
+			cwe:         "CWE-300", keywords: []string{"url", "serverUrl", "endpoint", "baseUrl", "sse", "streamable-http"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "cline_mcp_settings.json", "mcp_config.json"},
+			tags:         []string{"ai", "mcp", "shadow-server", "supply-chain", "owasp-mcp09"},
+			remediation:  "A remote MCP server has no cryptographic identity in the protocol — a rogue or hijacked endpoint can impersonate it (shadow server). Pin the server to a verified host, prefer signed/pinned local installs, and maintain an explicit allowlist of trusted server identities rather than trusting any reachable URL.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))

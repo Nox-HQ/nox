@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 170,
+  "version": 172,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -632,9 +632,15 @@
       "elapsed_minutes": 2
     },
     "task-67": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "MCP-022 regex (unpinned remote server) + core/mcpshadow relational pass for MCP-023 (server-name impersonation across configs) and MCP-024 (tool-name shadowing across servers); 8 tests green; AI 82 / catalog 1538"
+      ],
+      "started_at": "2026-06-05T11:14:46.768049+02:00",
+      "completed_at": "2026-06-05T11:17:11.073696+02:00",
+      "elapsed_minutes": 2
     },
     "task-68": {
       "status": "done",
@@ -695,5 +701,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:14:07.322455+02:00"
+  "updated_at": "2026-06-05T11:17:11.073697+02:00"
 }
