@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 176,
+  "version": 179,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -694,6 +694,17 @@
       "path": "",
       "elapsed_minutes": 0
     },
+    "task-73": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Engine precision filters (IgnoreInComments + windowed ExcludeContextKeywords) + test-file globs on MCP-009/010/011/013/014/018/019; 4 precision tests + positive control; dogfood re-scan: preflight 8-\u003e0, chronos/coverctl 1-\u003e0, temper 6-\u003e3, nomi 4-\u003e1, roady 7-\u003e5, tokenops 4-\u003e1; total findings unchanged"
+      ],
+      "started_at": "2026-06-05T12:22:45.429293+02:00",
+      "completed_at": "2026-06-05T12:22:50.377785+02:00",
+      "elapsed_minutes": 0
+    },
     "task-8": {
       "status": "verified",
       "path": "",
@@ -713,5 +724,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:34:57.64334+02:00"
+  "updated_at": "2026-06-05T12:22:50.377786+02:00"
 }

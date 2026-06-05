@@ -43,6 +43,8 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 	// Pre-compute a lowercase copy of content for keyword filtering.
 	var contentLower []byte
+	// Lazily split lines for the comment / context precision filters.
+	var lines []string
 	for _, rule := range e.rules.Rules() {
 		if !fileMatchesRule(path, rule) {
 			continue
@@ -64,6 +66,21 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 		results := matcher.Match(content, rule)
 		for _, mr := range results {
+			// Precision filters: drop matches in comments or defensive
+			// contexts when the rule opts in. Lines are computed lazily.
+			if rule.IgnoreInComments || len(rule.ExcludeContextKeywords) > 0 {
+				if lines == nil {
+					lines = splitLines(content)
+				}
+				if rule.IgnoreInComments && lineIsComment(lines, mr.Line) {
+					continue
+				}
+				if len(rule.ExcludeContextKeywords) > 0 &&
+					contextHasKeyword(lines, mr.Line, contextWindow, rule.ExcludeContextKeywords) {
+					continue
+				}
+			}
+
 			loc := findings.Location{
 				FilePath:    path,
 				StartLine:   mr.Line,
@@ -94,6 +111,51 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 		}
 	}
 	return out, nil
+}
+
+// contextWindow is the number of lines above and below a match that
+// ExcludeContextKeywords inspects for a defensive context.
+const contextWindow = 4
+
+// splitLines splits content into lines without a trailing-newline empty entry.
+func splitLines(content []byte) []string {
+	return strings.Split(string(content), "\n")
+}
+
+// commentPrefixes are the leading tokens that mark a line as a comment across
+// the languages nox scans (Go, JS/TS, Python, YAML, shell, C-style).
+var commentPrefixes = []string{"//", "#", "*", "/*", "<!--", ";", "--"}
+
+// lineIsComment reports whether the 1-based line is a comment line.
+func lineIsComment(lines []string, line1 int) bool {
+	idx := line1 - 1
+	if idx < 0 || idx >= len(lines) {
+		return false
+	}
+	trimmed := strings.TrimSpace(lines[idx])
+	for _, p := range commentPrefixes {
+		if strings.HasPrefix(trimmed, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// contextHasKeyword reports whether any keyword appears within ±window lines of
+// the 1-based match line. Keywords are matched case-insensitively.
+func contextHasKeyword(lines []string, line1, window int, keywords []string) bool {
+	idx := line1 - 1
+	start := max(idx-window, 0)
+	end := min(idx+window, len(lines)-1)
+	for i := start; i <= end; i++ {
+		lower := strings.ToLower(lines[i])
+		for _, kw := range keywords {
+			if strings.Contains(lower, strings.ToLower(kw)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // containsAnyKeyword returns true if content contains at least one of the

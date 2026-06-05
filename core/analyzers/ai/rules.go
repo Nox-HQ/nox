@@ -986,5 +986,34 @@ func builtinAIRules() []*rules.Rule {
 			References:         defs[i].references,
 		}
 	}
+
+	applyMCPProsePrecision(out)
 	return out
+}
+
+// applyMCPProsePrecision hardens the MCP prose rules against false positives
+// (task-73). These rules scan general source and would otherwise fire on code
+// comments describing an attack, defensive code, and test fixtures rather than
+// on real MCP tool metadata. Dogfooding nox against 17 MCP repos surfaced this:
+// e.g. MCP-018 fired on a repo's own SSRF blocklist and MCP-014 on a test
+// doc-comment. We drop matches in comments, skip test files, and (for the SSRF
+// rules) suppress matches that sit in a block/deny context.
+func applyMCPProsePrecision(out []*rules.Rule) {
+	proseFP := map[string]bool{
+		"MCP-009": true, "MCP-010": true, "MCP-011": true,
+		"MCP-013": true, "MCP-014": true, "MCP-018": true, "MCP-019": true,
+	}
+	testGlobs := []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*"}
+	ssrfDenyContext := []string{"block", "deny", "denylist", "blocklist", "blocked", "disallow", "allowlist", "reject", "forbidden", "ssrf"}
+
+	for _, r := range out {
+		if !proseFP[r.ID] {
+			continue
+		}
+		r.IgnoreInComments = true
+		r.IgnoreFilePatterns = append(r.IgnoreFilePatterns, testGlobs...)
+		if r.ID == "MCP-018" || r.ID == "MCP-019" {
+			r.ExcludeContextKeywords = ssrfDenyContext
+		}
+	}
 }

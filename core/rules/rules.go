@@ -36,6 +36,16 @@ type Rule struct {
 	Metadata           map[string]string   `yaml:"metadata"`
 	Remediation        string              `yaml:"remediation"`
 	References         []string            `yaml:"references"`
+
+	// IgnoreInComments drops matches that land on a source comment line.
+	// Used by prose rules (e.g. MCP tool-poisoning) that would otherwise fire
+	// on comments describing an attack rather than on real tool metadata.
+	IgnoreInComments bool `yaml:"ignore_in_comments"`
+	// ExcludeContextKeywords drops a match when any of these keywords appears
+	// on or near the matched line (windowed). Used to suppress matches in
+	// defensive contexts — e.g. an SSRF metadata IP that sits in a block/deny
+	// list rather than in a live request.
+	ExcludeContextKeywords []string `yaml:"exclude_context_keywords"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
