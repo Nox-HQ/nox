@@ -154,6 +154,41 @@ func TestNoDetect_ModelWithoutHash_WrongFileType(t *testing.T) {
 	}
 }
 
+// TestNoDetect_ModelWithoutHash_DBPipelineFP ensures that database and cache
+// client `.pipeline()` method calls (psycopg3, redis-py, etc.) do not trigger
+// AI-019. The rule targets HuggingFace's standalone `pipeline("task")` function,
+// not method names that happen to end in "pipeline". Regression test for the
+// langgraph scan-of-the-week false positive (scan-of-week-2026-06-05).
+func TestNoDetect_ModelWithoutHash_DBPipelineFP(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		// psycopg3 sync pipeline
+		{"psycopg_sync_pipeline", `self.supports_pipeline = Capabilities().has_pipeline()`},
+		// psycopg3 async pipeline
+		{"psycopg_async_pipeline", `async with conn.pipeline() as pipe:`},
+		// redis-py pipeline
+		{"redis_pipeline", `pipe = self.redis.pipeline()`},
+		// method call on arbitrary object
+		{"generic_method_pipeline", `result = client.pipeline()`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := NewAnalyzer()
+			results, err := a.ScanFile("checkpoint.py", []byte(tt.content))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			f := findingWithRule(results, "AI-019")
+			if f != nil {
+				t.Fatalf("AI-019 should not fire on DB/cache pipeline method call: %q", tt.content)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // AI-020: Model from untrusted registry
 // ---------------------------------------------------------------------------
