@@ -1240,6 +1240,31 @@ func TestIsGeneratedContent(t *testing.T) {
 	}
 }
 
+func TestAI018_RequiresLLMOutputToken(t *testing.T) {
+	a := NewAnalyzer()
+	// Ordinary file I/O into a "generated"/"output" dir must NOT fire.
+	for _, s := range []string{`open("generated/lsp-server.bin")`, `shutil.move(src, output_dir)`} {
+		if r, _ := a.ScanFile("dl.py", []byte(s)); findingWithRule(r, "AI-018") != nil {
+			t.Errorf("AI-018 false-positive on %q", s)
+		}
+	}
+	if r, _ := a.ScanFile("w.py", []byte(`open(os.path.join(d, model_output))`)); findingWithRule(r, "AI-018") == nil {
+		t.Error("AI-018 must fire on a path built from model_output")
+	}
+}
+
+func TestAI049_RequiresAIArgToken(t *testing.T) {
+	a := NewAnalyzer()
+	for _, s := range []string{`tx.exec(query)`, `describeEval("scores", fn)`} {
+		if r, _ := a.ScanFile("db.ts", []byte(s)); findingWithRule(r, "AI-049") != nil {
+			t.Errorf("AI-049 false-positive on %q", s)
+		}
+	}
+	if r, _ := a.ScanFile("x.py", []byte(`eval(llm_output)`)); findingWithRule(r, "AI-049") == nil {
+		t.Error("AI-049 must fire on eval(llm_output)")
+	}
+}
+
 func TestAI026_RequiresLLMToken(t *testing.T) {
 	a := NewAnalyzer()
 	// Generic logging with common words must NOT fire.

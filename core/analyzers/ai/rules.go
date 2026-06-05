@@ -178,7 +178,10 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-018", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(os\.path\.join|Path\(|open\(|os\.(remove|rename|mkdir)|shutil\.).*?(response|completion|output|generated|llm_output|model_output|ai_result)`,
+			// Require an LLM-specific token; the old generic
+			// output/generated/response matched ordinary file I/O (e.g. an LSP
+			// binary download into a "generated" dir, PDF path building).
+			pattern:     `(?i)(?:os\.path\.join|Path\(|open\(|os\.(?:remove|rename|mkdir)|shutil\.)[^)\n]*\b(?:llm_output|model_output|ai_result|ai_output|completion|generated_text|chat_response)\b`,
 			description: "LLM output used to construct file system path",
 			cwe:         "CWE-22", keywords: []string{"os.path", "shutil"},
 			tags:        []string{"ai", "output-handling", "path-traversal"},
@@ -573,7 +576,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-049", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?i)(eval|exec)\s*\(.*?(?:prompt|input|query|user)`,
+			// \b avoids method-name matches (describeEval); AI-specific arg
+			// tokens avoid DB calls like tx.exec(query).
+			pattern:     `(?i)\b(?:eval|exec)\s*\([^)]*\b(?:prompt|user_input|user_content|llm_output|model_output|ai_output|ai_response|completion)\b`,
 			description: "AI output passed to eval/exec function",
 			cwe:         "CWE-95", keywords: []string{"eval", "exec", "prompt"},
 			tags:        []string{"ai", "injection", "code-execution"},

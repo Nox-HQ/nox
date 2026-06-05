@@ -432,3 +432,26 @@ func TestResolveGeneratedPaths(t *testing.T) {
 		t.Errorf("override should replace defaults and ignore extend, got %v", ovr)
 	}
 }
+
+func TestResolveNoiseDirs(t *testing.T) {
+	t.Parallel()
+	def := GeneratedPathsConfig{}.ResolveNoiseDirs()
+	has := func(s string) bool {
+		for _, d := range def {
+			if d == s {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("tests") || !has("fixtures") || !has("examples") {
+		t.Errorf("default noise dirs missing expected segments: %v", def)
+	}
+	if got := (GeneratedPathsConfig{Disabled: true}).ResolveNoiseDirs(); got != nil {
+		t.Errorf("disabled should resolve to nil, got %v", got)
+	}
+	ovr := GeneratedPathsConfig{OverrideDirs: []string{"only"}}.ResolveNoiseDirs()
+	if len(ovr) != 1 || ovr[0] != "only" {
+		t.Errorf("override_dirs should replace defaults, got %v", ovr)
+	}
+}

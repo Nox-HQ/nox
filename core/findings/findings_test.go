@@ -870,3 +870,28 @@ func TestMatchRulePatterns(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveByRuleIDsInDirs(t *testing.T) {
+	t.Parallel()
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "AI-006", Location: Location{FilePath: "tests/foo_test.py", StartLine: 1}, Message: "a"})
+	fs.Add(Finding{RuleID: "MCP-011", Location: Location{FilePath: "internal/fixtures/x.go", StartLine: 1}, Message: "b"})
+	fs.Add(Finding{RuleID: "AI-006", Location: Location{FilePath: "src/app.go", StartLine: 1}, Message: "c"})
+	fs.Add(Finding{RuleID: "VULN-001", Location: Location{FilePath: "tests/dep.go", StartLine: 1}, Message: "d"})
+
+	fs.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, []string{"tests", "fixtures"})
+
+	kept := map[string]bool{}
+	for _, f := range fs.Findings() {
+		kept[f.RuleID+"@"+f.Location.FilePath] = true
+	}
+	if kept["AI-006@tests/foo_test.py"] || kept["MCP-011@internal/fixtures/x.go"] {
+		t.Error("content-rule findings in test/fixture dirs should be removed")
+	}
+	if !kept["AI-006@src/app.go"] {
+		t.Error("content-rule finding in src must be kept")
+	}
+	if !kept["VULN-001@tests/dep.go"] {
+		t.Error("non-content-rule (VULN) finding in tests must be kept")
+	}
+}

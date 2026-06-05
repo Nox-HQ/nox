@@ -135,6 +135,35 @@ type GeneratedPathsConfig struct {
 	// Override replaces the built-in set with exactly these globs (advanced;
 	// when non-empty, Extend is ignored).
 	Override []string `yaml:"override"`
+	// ExtendDirs adds directory-name segments to the built-in noise-dir set
+	// (test/example/fixture trees the content rules skip).
+	ExtendDirs []string `yaml:"extend_dirs"`
+	// OverrideDirs replaces the built-in noise-dir segment set entirely.
+	OverrideDirs []string `yaml:"override_dirs"`
+}
+
+// DefaultNoiseDirs is the built-in set of directory-name segments whose
+// contents are excluded from the content rule families (AI-*, MCP-*). Code
+// under these trees is test scaffolding, fixtures, mocks, or runnable examples
+// — it produces only false positives for prose / AI-security rules (security
+// tests carry deliberate attack strings; examples log demo output).
+func DefaultNoiseDirs() []string {
+	return []string{
+		"test", "tests", "__tests__", "spec", "specs", "e2e",
+		"fixtures", "testdata", "mocks", "mock", "samples", "example", "examples",
+	}
+}
+
+// ResolveNoiseDirs returns the effective noise-dir segment set: nil when
+// disabled, OverrideDirs when set, otherwise the defaults plus ExtendDirs.
+func (g GeneratedPathsConfig) ResolveNoiseDirs() []string {
+	if g.Disabled {
+		return nil
+	}
+	if len(g.OverrideDirs) > 0 {
+		return g.OverrideDirs
+	}
+	return append(DefaultNoiseDirs(), g.ExtendDirs...)
 }
 
 // DefaultGeneratedPaths is the built-in set of generated/vendored file globs

@@ -409,6 +409,12 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
 		allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
 	}
+	// Also drop content-rule findings inside test / fixture / example trees:
+	// security tests carry deliberate attack strings and examples log demo
+	// output, so AI-*/MCP-* findings there are false positives.
+	if noiseDirs := cfg.Scan.GeneratedPaths.ResolveNoiseDirs(); len(noiseDirs) > 0 {
+		allFindings.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, noiseDirs)
+	}
 
 	// Phase 3c: Apply conditional_severity (override severity based on rule + path).
 	for _, cs := range cfg.Scan.ConditionalSeverity {

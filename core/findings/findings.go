@@ -249,6 +249,39 @@ func (fs *FindingSet) RemoveByRuleIDsAndPaths(ruleIDs, paths []string) {
 	fs.items = kept
 }
 
+// RemoveByRuleIDsInDirs removes findings whose RuleID matches any of ruleIDs
+// (exact or wildcard) AND whose path contains any of the given directory-name
+// segments. Used to drop content-rule findings inside test / fixture / example
+// trees, which produce only false positives there.
+func (fs *FindingSet) RemoveByRuleIDsInDirs(ruleIDs, dirSegments []string) {
+	if len(ruleIDs) == 0 || len(dirSegments) == 0 {
+		return
+	}
+	segSet := make(map[string]struct{}, len(dirSegments))
+	for _, s := range dirSegments {
+		segSet[strings.ToLower(s)] = struct{}{}
+	}
+	kept := make([]Finding, 0, len(fs.items))
+	for i := range fs.items {
+		f := fs.items[i]
+		if matchRulePatterns(f.RuleID, ruleIDs) && pathHasSegment(f.Location.FilePath, segSet) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	fs.items = kept
+}
+
+// pathHasSegment reports whether any slash-separated segment of path is in set.
+func pathHasSegment(path string, set map[string]struct{}) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if _, ok := set[strings.ToLower(seg)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func matchAnyPattern(path string, patterns []string) bool {
 	for _, pattern := range patterns {
 		if matched, _ := filepath.Match(pattern, path); matched {
