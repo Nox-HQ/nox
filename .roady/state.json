@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 179,
+  "version": 183,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -605,8 +605,14 @@
       "elapsed_minutes": 4
     },
     "task-64": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "TestDetect_MCPToolPoisoning (6 cases MCP-009..014) + benign-no-fire + MCPPrecision corpus (comments/test-files/SSRF-blocklist/real-poison + MCP-011/019 refinement tests) in core/analyzers/ai/ai_test.go"
+      ],
+      "started_at": "2026-06-05T12:30:18.370079+02:00",
+      "completed_at": "2026-06-05T12:30:23.765932+02:00",
       "elapsed_minutes": 0
     },
     "task-65": {
@@ -685,8 +691,14 @@
       "elapsed_minutes": 3
     },
     "task-71": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Build: offline action input + examples/mcp-scan-before-publish workflow. Dogfood: scanned 17 own MCP repos, triaged all retained findings (0 genuine vulns), drove 2 precision rounds. Draft writeup at docs/blog-draft-dogfooding-mcp.md pending user review (publishing user-gated)"
+      ],
+      "started_at": "2026-06-05T12:30:27.230824+02:00",
+      "completed_at": "2026-06-05T12:30:31.493415+02:00",
       "elapsed_minutes": 0
     },
     "task-72": {
@@ -724,5 +736,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T12:22:50.377786+02:00"
+  "updated_at": "2026-06-05T12:30:31.493416+02:00"
 }
