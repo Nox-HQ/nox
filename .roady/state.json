@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 183,
+  "version": 186,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -717,6 +717,17 @@
       "completed_at": "2026-06-05T12:22:50.377785+02:00",
       "elapsed_minutes": 0
     },
+    "task-74": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "AI-033/036 pattern bugs fixed, AI-026 tightened, test/doc ignore for AI-006/008/026/036/039, content-based generated detection (banner+minified) in AI analyzer; validated cloudflare AI-033-\u003e0, mongodb 38-\u003e6, top-26 scan 0 TP/0 disclosure; CHANGELOG documented; commits 82682f0+51b8dd1"
+      ],
+      "started_at": "2026-06-05T13:07:34.723595+02:00",
+      "completed_at": "2026-06-05T13:07:40.026159+02:00",
+      "elapsed_minutes": 0
+    },
     "task-8": {
       "status": "verified",
       "path": "",
@@ -736,5 +747,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T12:30:31.493416+02:00"
+  "updated_at": "2026-06-05T13:07:40.02616+02:00"
 }
