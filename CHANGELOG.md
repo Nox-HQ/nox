@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that stops the content rule families (AI-*, MCP-*) from firing on generated
   and vendored files (lockfiles, minified bundles, generated type defs).
   Dependency scanning is unaffected — lockfiles are still CVE-scanned.
+  Content rules also skip machine-generated/minified blobs detected by
+  content (an `AUTO-GENERATED`/`@generated`/`DO NOT EDIT` banner or a minified
+  line), catching generated output embedded in a normal extension (e.g. a
+  1.4 MB vite bundle exported as a `.ts` string).
 - 17+ MCP client config locations are now discovered (`core/discovery/mcpclients`).
 
 ### Fixed
