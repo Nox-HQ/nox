@@ -881,6 +881,74 @@ func builtinAIRules() []*rules.Rule {
 			remediation:  "Conditional triggers ('once approved…', 'after the first call…', 'when no one is watching…') in tool metadata stage delayed malicious behaviour that passes initial review. Remove the conditional language and pin the tool definition so post-approval drift is detected (see MCP-015 rug-pull detection).",
 			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
 		},
+
+		// -----------------------------------------------------------------
+		// MCP authorization & token safety (MCP-016..021). OWASP MCP07,
+		// anchored to the official MCP spec "Security Best Practices"
+		// (normative MUST/SHOULD). Covers token passthrough (forbidden),
+		// confused-deputy OAuth proxy, SSRF during metadata/OAuth discovery,
+		// and weak session handling.
+		// -----------------------------------------------------------------
+		{
+			id: "MCP-016", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `(?i)"?(?:pass[_-]?through|forward|relay|reuse)[_-]?(?:token|auth|authorization|credentials?|bearer)"?\s*[:=]\s*(?:true|["'](?:enabled|on|yes)["'])`,
+			description: "MCP server passes incoming tokens through to downstream APIs",
+			cwe:         "CWE-287", keywords: []string{"passthrough", "pass_through", "forward", "relay", "reuse", "token", "bearer", "credential"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.json", "*.yaml", "*.yml", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "authorization", "owasp-mcp07"},
+			remediation:  "Never forward a token the MCP server received to an upstream service. The spec forbids token passthrough: a server MUST only accept tokens issued to it and MUST exchange for its own downstream credentials. Passthrough lets a stolen or over-scoped token traverse trust boundaries.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices#token-passthrough"},
+		},
+		{
+			id: "MCP-017", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)client_id\s*[:=]\s*["'][^"']+["'][\s\S]{0,400}(?:dynamic[_-]?(?:client[_-]?)?registration|/register\b|registration_endpoint)`,
+			description: "MCP OAuth proxy combines a static client ID with dynamic client registration (confused deputy)",
+			cwe:         "CWE-441", keywords: []string{"client_id", "dynamic registration", "registration_endpoint", "/register"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.json", "*.yaml", "*.yml", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "authorization", "confused-deputy", "owasp-mcp07"},
+			remediation:  "An OAuth proxy that uses a static client ID together with dynamic client registration enables a confused-deputy consent bypass. Require explicit user consent for each dynamically registered client, or issue distinct client IDs. See the spec's confused-deputy guidance.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices#confused-deputy-problem"},
+		},
+		{
+			id: "MCP-018", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `(?i)(?:169\.254\.169\.254|metadata\.google\.internal|metadata\.azure\.com|100\.100\.100\.200|fd00:ec2::254)`,
+			description: "MCP server references a cloud metadata endpoint (SSRF target)",
+			cwe:         "CWE-918", keywords: []string{"169.254.169.254", "metadata.google.internal", "metadata.azure.com", "fd00:ec2"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.json", "*.yaml", "*.yml", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "ssrf", "owasp-mcp07"},
+			remediation:  "A reachable cloud metadata endpoint (169.254.169.254 and equivalents) is the canonical SSRF target for stealing instance credentials. Block link-local and metadata addresses in any MCP fetch/OAuth-discovery path and enforce an egress allowlist.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-019", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)(?:fetch|callback|redirect|webhook|discovery|oauth)[\s\S]{0,80}https?://(?:127\.0\.0\.1|0\.0\.0\.0|localhost|10\.\d{1,3}\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)`,
+			description: "MCP fetch/OAuth-discovery target points at a private or loopback address (SSRF)",
+			cwe:         "CWE-918", keywords: []string{"fetch", "callback", "redirect", "webhook", "discovery", "oauth"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.json", "*.yaml", "*.yml", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "ssrf", "owasp-mcp07"},
+			remediation:  "MCP OAuth metadata discovery and fetch tools must reject private, loopback, and link-local targets to prevent SSRF and DNS-rebinding. Validate resolved IPs (not just hostnames) against a deny list and re-validate after redirects.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices"},
+		},
+		{
+			id: "MCP-020", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)session[_-]?id\s*[:=]\s*(?:["']?\d+["']?|counter|sequence|sequential|(?:time\.Now\(\)|Date\.now\(\)|time\.time\(\)))`,
+			description: "MCP session identifier is predictable (sequential or time-based)",
+			cwe:         "CWE-330", keywords: []string{"session_id", "sessionid", "counter", "sequential"},
+			filePatterns: []string{"*.go", "*.ts", "*.js", "*.py", "*.json", "*.yaml", "*.yml"},
+			tags:         []string{"ai", "mcp", "session", "owasp-mcp07"},
+			remediation:  "Generate MCP session IDs from a cryptographically secure random source. Sequential or timestamp-derived IDs are guessable, enabling session hijacking. The spec requires non-deterministic session identifiers.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices#session-hijacking"},
+		},
+		{
+			id: "MCP-021", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)(?:authenticat\w+|authoriz\w+|login|is[_-]?authed)[^;\n]{0,40}session[_-]?id|session[_-]?id\b[^;\n]{0,20}\bas\b[^;\n]{0,20}(?:auth|credential|identity)`,
+			description: "MCP server uses the session ID as an authentication credential",
+			cwe:         "CWE-287", keywords: []string{"session_id", "sessionid", "authenticate", "authorize", "login"},
+			filePatterns: []string{"*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "session", "authorization", "owasp-mcp07"},
+			remediation:  "Do not use the session ID for authentication. The spec states sessions MUST NOT be used as the auth mechanism; bind each session to a verified user identity (e.g. <user_id>:<session_id>) and authenticate every request independently.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices#session-hijacking"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))

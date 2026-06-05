@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 166,
+  "version": 168,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -621,9 +621,15 @@
       "elapsed_minutes": 4
     },
     "task-66": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "MCP-016..021 added (token passthrough, confused deputy, cloud-metadata SSRF, private-range SSRF, predictable session, session-as-auth); spec-anchored; TestDetect_MCPAuthorization + benign-no-fire green; AI 81 / catalog 1537"
+      ],
+      "started_at": "2026-06-05T11:05:52.997359+02:00",
+      "completed_at": "2026-06-05T11:08:39.826563+02:00",
+      "elapsed_minutes": 2
     },
     "task-67": {
       "status": "pending",
@@ -683,5 +689,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:05:24.093493+02:00"
+  "updated_at": "2026-06-05T11:08:39.826564+02:00"
 }

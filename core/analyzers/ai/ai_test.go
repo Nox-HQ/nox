@@ -1090,6 +1090,57 @@ func TestDetect_MCPToolPoisoning_BenignNoFire(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP authorization & token safety (MCP-016..021, OWASP MCP07)
+// ---------------------------------------------------------------------------
+
+func TestDetect_MCPAuthorization(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		rule string
+		body string
+	}{
+		{"token passthrough", "server.go", "MCP-016", `cfg := Config{ForwardToken: true}`},
+		{"confused deputy", "auth.go", "MCP-017", `client_id = "static-app-123"; useDynamicClientRegistration(registrationEndpoint)`},
+		{"cloud metadata ssrf", "fetch.go", "MCP-018", `resp, _ := http.Get("http://169.254.169.254/latest/meta-data/iam/")`},
+		{"private-range ssrf", "oauth.ts", "MCP-019", `const discovery = "http://169.254... no"; fetch("http://192.168.1.10/.well-known/oauth")`},
+		{"predictable session", "session.go", "MCP-020", `sessionID = fmt.Sprint(counter)` + "\n" + `session_id = time.Now()`},
+		{"session as auth", "mw.py", "MCP-021", `def authenticate(req): return validate using session_id`},
+	}
+	a := NewAnalyzer()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			results, err := a.ScanFile(tc.file, []byte(tc.body))
+			if err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if findingWithRule(results, tc.rule) == nil {
+				t.Fatalf("expected %s to fire, got %+v", tc.rule, results)
+			}
+		})
+	}
+}
+
+func TestDetect_MCPAuthorization_BenignNoFire(t *testing.T) {
+	a := NewAnalyzer()
+	benign := []byte(`package server
+
+func newSession() string { return secureRandomID() }      // crypto-random
+func authenticate(r *Request) error { return verifyBearer(r.Token) }
+var oauthDiscovery = "https://auth.example.com/.well-known/openid-configuration"
+`)
+	results, err := a.ScanFile("server.go", benign)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, rule := range []string{"MCP-016", "MCP-017", "MCP-018", "MCP-019", "MCP-020", "MCP-021"} {
+		if f := findingWithRule(results, rule); f != nil {
+			t.Errorf("%s false-positive on benign auth code: %+v", rule, f)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // AI-028 / AI-006 false-positive regressions for issue #59
 // ---------------------------------------------------------------------------
 
@@ -1179,8 +1230,8 @@ func TestThing(t *testing.T) {
 
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 75 {
-		t.Errorf("expected 75 AI rules, got %d", got)
+	if got := len(rules); got != 81 {
+		t.Errorf("expected 81 AI rules, got %d", got)
 	}
 }
 
