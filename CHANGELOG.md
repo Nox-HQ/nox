@@ -36,7 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `AI-026` matched any log call containing the generic words
     `content`/`output`/`message`/`response`; it now requires an LLM-specific
     token.
-  - `AI-006/008/026/036/039` no longer fire in test files or documentation.
+  - `AI-006/008/026/030/036/039/042` no longer fire in test files or
+    documentation, and content rules skip whole test/fixture/sample/example
+    directory trees (`scan.generated_paths.extend_dirs`/`override_dirs`) plus
+    machine-generated/minified blobs detected by content.
+  - `AI-018` (LLM output → file path) and `AI-049` (AI output → eval/exec) now
+    require an LLM-specific token, so ordinary file I/O and DB `exec(query)` /
+    `describeEval` calls no longer match.
   - MCP prose rules (`MCP-009..014/018/019`) skip comments, test files, and
     defensive contexts (e.g. an SSRF metadata IP inside a blocklist); `MCP-011`
     needs an exfil sink or sensitive path; `MCP-019` ignores loopback.
