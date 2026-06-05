@@ -21,12 +21,14 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 - **Prompt injection** at the call site (AI-PI-*, OWASP LLM01)
 - **Embedding leakage** when secrets / PII land in vector stores (AI-EMBED-*, LLM06)
 - **Agent over-privilege** when `file_read` + `http_request` live in the same agent context (AI-AGENT-*, LLM07)
-- **MCP server hardening** misconfigs (MCP-001..008)
+- **Full MCP threat coverage** mapped to the OWASP MCP Top 10 — server hardening (MCP-001..008), tool poisoning (MCP-009..014, MCP03), rug-pull / definition drift (MCP-015, MCP04), authn/authz & SSRF (MCP-016..021, MCP07), shadow & cross-server tool shadowing (MCP-022..024, MCP09)
 - **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
 - **Polyglot AIBOM** — Python ingest + Go service + TS frontend produce one inventory naming every model invocation, auth env var, and endpoint
 - **Verified plugin marketplace** — extension scanners (reachability, cross-file taint, k8s-runtime, red-team chains, GRC for 12 frameworks) install with one command, signed end-to-end via Sigstore
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
+
+> **The MCP scanner that never sees your code.** No API. No token. No telemetry. Deterministic. Run `nox scan --offline` and the scan path makes zero outbound connections — enforced by a test, not a promise (`TestOSVDisabled_NoNetworkEgress`). Unlike scanners that proxy your traffic or phone home to a vendor API, nox runs entirely on your machine.
 
 - **Deterministic** -- same inputs produce same outputs, no hidden state
 - **Offline-first** -- zero required external services

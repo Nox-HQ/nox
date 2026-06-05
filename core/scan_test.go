@@ -226,6 +226,28 @@ func TestRunScan_ConfigDisableRule(t *testing.T) {
 	}
 }
 
+// Offline scan over a project containing a lockfile must complete without
+// reaching the network. The authoritative no-egress assertion lives in the
+// deps package (TestOSVDisabled_NoNetworkEgress); this is the integration
+// smoke that the Offline option threads through RunScan.
+func TestRunScanWithOptions_OfflineSucceeds(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "package-lock.json"),
+		[]byte(`{"packages":{"node_modules/express":{"version":"4.18.2"}}}`), 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	result, err := RunScanWithOptions(tmpDir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("offline scan failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected a scan result")
+	}
+}
+
 // Regression: skip_analyzer was documented and parsed but never applied.
 func TestRunScan_ConfigSkipAnalyzer(t *testing.T) {
 	t.Parallel()

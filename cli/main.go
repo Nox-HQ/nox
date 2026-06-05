@@ -256,6 +256,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noRespectGitignoreFlg bool
 		noAutoInstallFlg      bool
 		failOnUnwaivedFlg     bool
+		offlineFlag           bool
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -264,6 +265,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
+	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v1 unless NOX_FINGERPRINT_VERSION is set.")
 	if err := scanFS.Parse(args); err != nil {
@@ -349,6 +351,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		opts := nox.ScanOptions{
 			CustomRulesPath:    rulesPath,
 			DisableOSV:         noOSVFlag,
+			Offline:            offlineFlag,
 			VEXPath:            vexFlag,
 			TerraformPlanPath:  tfPlanFlag,
 			NoCache:            noCacheFlag,

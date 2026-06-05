@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 174,
+  "version": 176,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -674,9 +674,15 @@
       "elapsed_minutes": 0
     },
     "task-70": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "ScanOptions.Offline umbrella flag + --offline CLI flag; deps network-tripwire tests (OSV-disabled no egress + positive control); RunScan offline smoke; README no-telemetry positioning + enforced-by-test claim; full suite green"
+      ],
+      "started_at": "2026-06-05T11:31:28.952928+02:00",
+      "completed_at": "2026-06-05T11:34:57.643339+02:00",
+      "elapsed_minutes": 3
     },
     "task-71": {
       "status": "pending",
@@ -707,5 +713,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:21:06.09154+02:00"
+  "updated_at": "2026-06-05T11:34:57.64334+02:00"
 }

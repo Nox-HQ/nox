@@ -72,6 +72,13 @@ type ScanOptions struct {
 	// calls.
 	DisableOSV bool
 
+	// Offline is the umbrella zero-network guarantee. When true, every
+	// feature that could make an outbound connection is disabled (currently
+	// OSV.dev lookups — the only network path in the core scan). Use this to
+	// assert that a scan never sees the network: no API, no token, no
+	// telemetry. New network-capable features must honor this flag.
+	Offline bool
+
 	// VEXPath is a path to an OpenVEX document. When set, VEX statements
 	// are applied to VULN-001 findings after baseline matching.
 	VEXPath string
@@ -165,7 +172,7 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 	iacAnalyzer := iac.NewAnalyzer()
 	aiAnalyzer := ai.NewAnalyzer()
 	var depsOpts []deps.AnalyzerOption
-	if opts.DisableOSV || cfg.Scan.OSV.Disabled {
+	if opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
