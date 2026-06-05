@@ -457,7 +457,7 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-037", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(system|assistant)\s*[:=]\s*["'][^"']{2000,}`,
+			pattern:     `(?i)(system|assistant)\s*[:=]\s*["'][^"']{1000}[^"']{1000,}`,
 			description: "Excessively long system prompt may cause inconsistency",
 			cwe:         "CWE-754", keywords: []string{"system", "prompt"},
 			tags:        []string{"ai", "reliability", "prompt-engineering"},
@@ -475,7 +475,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-039", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(webhook|callback|url)\s*[:=]\s*["']http://(?!localhost|127\.0\.0\.1)`,
+			// RE2 has no negative lookahead; exclude loopback hosts (localhost,
+			// 127.0.0.1) by requiring the first host char(s) not begin "lo"/"12".
+			pattern:     `(?i)(webhook|callback|url)\s*[:=]\s*["']http://(?:[^l1"']|l[^o"']|1[^2"'])`,
 			description: "AI webhook uses insecure HTTP",
 			cwe:         "CWE-295", keywords: []string{"webhook", "http://"},
 			tags:        []string{"ai", "transport-security", "webhook"},
@@ -806,6 +808,78 @@ func builtinAIRules() []*rules.Rule {
 			tags:         []string{"ai", "mcp", "abuse"},
 			remediation:  "Wrap tool handlers in a rate-limited / scope-checked middleware. An LLM or compromised host can invoke handlers in tight loops; without a guard, a single bug becomes denial-of-service or quota exhaustion.",
 			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
+		},
+
+		// -----------------------------------------------------------------
+		// MCP tool poisoning (MCP-009..014). OWASP MCP03: an MCP server can
+		// embed malicious instructions in the metadata the host model reads
+		// — tool descriptions, input-schema field docs, and return-value
+		// templates. The model treats this text as trusted context, so a
+		// poisoned description can override host instructions, conceal
+		// actions from the operator, or stage exfiltration. These rules scan
+		// mcp.json/config files and tool-registration source. They reuse the
+		// AI-PI prompt-injection heuristics but anchor them to MCP tool
+		// surfaces and operator-facing remediation.
+		// -----------------------------------------------------------------
+		{
+			id: "MCP-009", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `(?i)(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:previous|prior|above|earlier|the\s+system)\s+(?:instructions?|prompts?|messages?|context|rules?)`,
+			description: "MCP tool metadata contains an instruction-override phrase (tool poisoning)",
+			cwe:         "CWE-77", keywords: []string{"ignore", "disregard", "forget", "override"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "prompt-injection", "owasp-mcp03"},
+			remediation:  "Remove the instruction-override phrasing from the tool description/schema. A tool's description is read by the host model as trusted context; text that tells the model to ignore prior instructions is a tool-poisoning payload. Pin the tool definition and review it before granting the server access.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-010", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `(?i)(?:do\s+not|don't|never)\s+(?:tell|inform|notify|mention|reveal|disclose|alert|show)\s+(?:this|it|anything|the\s+(?:call|result))?\s*(?:to\s+)?the\s+(?:user|human|operator|developer)`,
+			description: "MCP tool metadata instructs the model to conceal actions from the user (tool poisoning)",
+			cwe:         "CWE-77", keywords: []string{"do not tell", "don't tell", "do not inform", "do not reveal", "never tell"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "owasp-mcp03"},
+			remediation:  "Delete any 'do not tell the user' directive from the tool description. Concealment instructions in tool metadata are a hallmark of tool poisoning — they coerce the host model into hiding tool behaviour from the operator.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-011", severity: findings.SeverityCritical, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)(?:read|cat|exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)`,
+			description: "MCP tool metadata stages credential/secret exfiltration (tool poisoning)",
+			cwe:         "CWE-77", keywords: []string{"id_rsa", ".ssh", ".env", "exfiltrate", "credentials", "api key", "secrets", "access token"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "data-exfiltration", "owasp-mcp03"},
+			remediation:  "Treat this tool as hostile until proven otherwise. A tool description that instructs the model to read SSH keys, .env files, or credentials and send them somewhere is an active exfiltration payload. Do not grant the server filesystem or network scope; pin and review the definition.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-012", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]`,
+			description: "MCP config or tool metadata contains hidden/zero-width or bidi control characters",
+			cwe:         "CWE-77", keywords: nil,
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "unicode-evasion", "owasp-mcp03"},
+			remediation:  "Strip zero-width and bidirectional control characters from MCP config and tool metadata. These invisible characters hide instructions from human reviewers while remaining visible to the host model — a common tool-poisoning evasion. Render the file with control characters made visible and re-review.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-013", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     `(?i)"(?:description|instructions?|inputSchema|schema)"\s*:\s*"[^"]*(?:<system>|<\|system\|>|system:\s|you\s+are\s+now|new\s+instructions?:|as\s+an?\s+ai\s+(?:assistant|model)|the\s+assistant\s+(?:must|should|will|shall))`,
+			description: "MCP tool description injects a fake system directive at the host model",
+			cwe:         "CWE-77", keywords: []string{"description", "system:", "you are now", "new instructions", "the assistant"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "prompt-injection", "owasp-mcp03"},
+			remediation:  "A tool description must describe the tool to the operator, not issue directives to the model. Remove embedded system prompts, role reassignments, or 'the assistant must…' instructions — they hijack the host model's behaviour the moment the tool is listed.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-014", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)(?:after\s+(?:the\s+)?(?:first|initial|next)\s+(?:run|call|invocation|install)|once\s+(?:installed|approved|trusted|enabled)|on\s+the\s+\d+(?:st|nd|rd|th)\s+(?:call|invocation|request)|when\s+(?:no\s+one|nobody)\s+is\s+(?:watching|looking))`,
+			description: "MCP tool metadata contains a conditional/time-delayed behavioural trigger",
+			cwe:         "CWE-77", keywords: []string{"once installed", "once approved", "once trusted", "after the first", "when no one", "when nobody"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
+			tags:         []string{"ai", "mcp", "tool-poisoning", "owasp-mcp03"},
+			remediation:  "Conditional triggers ('once approved…', 'after the first call…', 'when no one is watching…') in tool metadata stage delayed malicious behaviour that passes initial review. Remove the conditional language and pin the tool definition so post-approval drift is detected (see MCP-015 rug-pull detection).",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
 		},
 	}
 

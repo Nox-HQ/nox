@@ -7,11 +7,12 @@ import (
 func TestCatalogContainsAllRules(t *testing.T) {
 	cat := Catalog()
 
-	// We expect 1525 built-in rules across all analyzers
+	// We expect 1531 built-in rules across all analyzers
 	// (SEC + DATA + AI + IAC + VULN). AI includes AI-PI-* (LLM01),
-	// AI-EMBED-* (LLM06), and MCP-* (MCP server hardening) families.
-	if got := len(cat); got != 1525 {
-		t.Errorf("Catalog() returned %d rules, want 1525", got)
+	// AI-EMBED-* (LLM06), and MCP-* families: MCP-001..008 (server
+	// hardening) and MCP-009..014 (tool poisoning, OWASP MCP03).
+	if got := len(cat); got != 1531 {
+		t.Errorf("Catalog() returned %d rules, want 1531", got)
 	}
 }
 
