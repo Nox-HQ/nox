@@ -278,7 +278,14 @@ func builtinAIRules() []*rules.Rule {
 			// of a hash pin is the signal (lines with revision= or sha256 are
 			// unlikely to match because the keyword filter requires the load call
 			// keywords but the pattern stops before consuming the whole line).
-			pattern:      `(?i)(from_pretrained|load_model|AutoModel|download_model|pipeline)\s*\(`,
+			//
+			// pipeline() is intentionally not matched when it is a method name
+			// suffix (e.g. has_pipeline(), conn.pipeline(), redis.pipeline()).
+			// [^.a-zA-Z0-9_] before "pipeline" excludes those method-call sites
+			// while still catching standalone `pipeline("task")` invocations.
+			// Go RE2 has no negative lookbehind, so this character-class guard
+			// is the RE2-safe equivalent.
+			pattern:      `(?i)(?:from_pretrained|load_model|AutoModel|download_model|[^.a-zA-Z0-9_]pipeline)\s*\(`,
 			description:  "Model loaded without hash verification",
 			cwe:          "CWE-494",
 			keywords:     []string{"from_pretrained", "load_model", "automodel", "download_model", "pipeline"},
