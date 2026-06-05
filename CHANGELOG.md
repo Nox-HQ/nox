@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-05
+
 ### Added
 
 - **MCP threat coverage mapped to the OWASP MCP Top 10.** New rules for tool
@@ -51,6 +53,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new — a suppressed High no longer fails the gate.
 - **`analyzer_rules`** rule IDs now match wildcards (e.g. `VULN-*`); the
   documented but unimplemented `skip_analyzer` action now works.
+- Three rule precision fixes surfaced by the scan-of-the-week rotation:
+  `AI-009` no longer flags Python's safe `ast.literal_eval`; `VULN-002`
+  normalizes PEP 503 names so canonical packages (`huggingface_hub`,
+  `python_pptx`) aren't flagged as typosquats of themselves; `AI-019` no
+  longer matches DB/cache `.pipeline()` method calls.
+
+### Changed
+
+- **DDD / best-practices hardening.** Findings gain validated value objects
+  (`Severity.IsValid`/`Confidence.IsValid`, `Location.Normalized`, `NewFinding`,
+  `Finding.Validate`). A `FindingAnalyzer` interface formalizes the analyzer
+  contract. `context.Context` is threaded through analyzers and a new
+  `RunScanContext` entry point (with cancellation); `RunScan`/`RunScanWithOptions`
+  are unchanged, non-breaking wrappers. The scan orchestrator is split into named
+  pipeline stages. `TrustedRegistries` is now an immutable accessor.
 
 ## [0.10.1] - 2026-05-23
 
