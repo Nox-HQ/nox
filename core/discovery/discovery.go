@@ -184,7 +184,10 @@ func (d *DefaultClassifier) Classify(path string, _ os.FileInfo) ArtifactType {
 // patterns: mcp.json, *.prompt, *.prompt.md, or paths containing /prompts/
 // or /agents/ segments.
 func isAIComponent(name, normalised string) bool {
-	if name == "mcp.json" {
+	if mcpConfigNames[name] {
+		return true
+	}
+	if strings.HasSuffix(name, ".mcp.json") {
 		return true
 	}
 	if strings.HasSuffix(name, ".prompt") {

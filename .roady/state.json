@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 168,
+  "version": 170,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -637,9 +637,15 @@
       "elapsed_minutes": 0
     },
     "task-68": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "core/discovery/mcpclients.go: 17-client config registry (per-OS, pure KnownClientConfigs + ResolveExistingClientConfigs); extended isAIComponent for MCP config filenames + *.mcp.json; per-OS fixture tests green"
+      ],
+      "started_at": "2026-06-05T11:11:58.09181+02:00",
+      "completed_at": "2026-06-05T11:14:07.322453+02:00",
+      "elapsed_minutes": 2
     },
     "task-69": {
       "status": "pending",
@@ -689,5 +695,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:08:39.826564+02:00"
+  "updated_at": "2026-06-05T11:14:07.322455+02:00"
 }
