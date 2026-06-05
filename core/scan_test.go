@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2129,5 +2131,18 @@ func TestRunHistoryScan_ResultHasRules(t *testing.T) {
 	}
 	if result.AIInventory == nil {
 		t.Fatal("expected non-nil AI inventory")
+	}
+}
+
+func TestRunScanContext_CanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before running
+	_, err := RunScanContext(ctx, t.TempDir(), ScanOptions{})
+	if err == nil {
+		t.Fatal("expected error from a canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }

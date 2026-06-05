@@ -5,6 +5,7 @@
 package secrets
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -92,7 +93,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 // ScanArtifacts reads each artifact file from disk, scans it for secrets, and
 // collects all findings into a deduplicated FindingSet. If any artifact cannot
 // be read, scanning stops and the error is returned.
-func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.FindingSet, error) {
+func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
 	for _, artifact := range artifacts {

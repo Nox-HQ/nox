@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -475,7 +476,7 @@ logger.info("Prompt: " + prompt)
 	}
 
 	a := NewAnalyzer()
-	fs, inv, err := a.ScanArtifacts(artifacts)
+	fs, inv, err := a.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -498,7 +499,7 @@ func TestScanArtifacts_UnreadableFile(t *testing.T) {
 	}
 
 	a := NewAnalyzer()
-	_, _, err := a.ScanArtifacts(artifacts)
+	_, _, err := a.ScanArtifacts(context.Background(), artifacts)
 	if err == nil {
 		t.Fatal("expected error for unreadable file")
 	}

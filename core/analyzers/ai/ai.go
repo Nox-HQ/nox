@@ -7,6 +7,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -102,7 +103,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 // ScanArtifacts reads each artifact file from disk, scans it for AI security
 // issues, and collects findings. It also builds an AI component inventory from
 // artifacts classified as AIComponent.
-func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.FindingSet, *Inventory, error) {
+func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, *Inventory, error) {
 	fs := findings.NewFindingSet()
 	inv := NewInventory()
 

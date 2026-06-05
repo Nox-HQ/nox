@@ -4,6 +4,7 @@
 package iac
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -44,7 +45,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 // GitHub Actions workflow findings receive a context-aware post-pass that
 // downgrades well-known false positives (ephemeral test DB credentials,
 // permissions paired with their justifying consumer action).
-func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*findings.FindingSet, error) {
+func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
 	// Cache GHA workflow file contents so the post-pass can see the full

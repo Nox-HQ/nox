@@ -5,10 +5,9 @@ import (
 	"strings"
 )
 
-// TrustedRegistries lists known legitimate model registries. These are used by
-// IsUntrustedRegistry to decide whether a model download URL points to a
-// reputable source.
-var TrustedRegistries = []string{
+// trustedRegistries lists known legitimate model registries. Kept unexported
+// and immutable; expose a defensive copy via TrustedRegistries().
+var trustedRegistries = []string{
 	"huggingface.co",
 	"hf.co",
 	"pytorch.org",
@@ -18,12 +17,17 @@ var TrustedRegistries = []string{
 	"models.ai.azure.com",
 }
 
+// TrustedRegistries returns a copy of the known legitimate model registries.
+// Returning a copy prevents callers from mutating the package's trust list.
+func TrustedRegistries() []string {
+	return append([]string(nil), trustedRegistries...)
+}
+
 // IsUntrustedRegistry returns true if the URL does not match any of the known
-// trusted model registries listed in TrustedRegistries. An empty URL is
-// considered untrusted.
+// trusted model registries. An empty URL is considered untrusted.
 func IsUntrustedRegistry(url string) bool {
 	lower := strings.ToLower(url)
-	for _, registry := range TrustedRegistries {
+	for _, registry := range trustedRegistries {
 		if strings.Contains(lower, registry) {
 			return false
 		}

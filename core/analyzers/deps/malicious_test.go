@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -289,7 +290,7 @@ func TestScanArtifacts_MaliciousPackageDetection(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	_, fs, err := analyzer.ScanArtifacts(artifacts)
+	_, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -329,7 +330,7 @@ func TestScanArtifacts_TyposquattingDetection(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	_, fs, err := analyzer.ScanArtifacts(artifacts)
+	_, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -381,7 +382,7 @@ func TestScanArtifacts_LegitimatePackagesNoFindings(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	_, fs, err := analyzer.ScanArtifacts(artifacts)
+	_, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}

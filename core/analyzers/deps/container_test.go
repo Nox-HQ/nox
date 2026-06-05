@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -485,7 +486,7 @@ FROM alpine@sha256:abcdef1234567890
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -559,7 +560,7 @@ COPY dist/ /usr/share/nginx/html/
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -613,7 +614,7 @@ FROM node@sha256:bbbb2222
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -656,7 +657,7 @@ services:
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, _, err := analyzer.ScanArtifacts(artifacts)
+	inventory, _, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -702,7 +703,7 @@ RUN go build -o app
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, _, err := analyzer.ScanArtifacts(artifacts)
+	inventory, _, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -744,7 +745,7 @@ CMD ["python", "app.py"]
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, _, err := analyzer.ScanArtifacts(artifacts)
+	inventory, _, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -785,7 +786,7 @@ COPY --from=builder /app /app
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	_, fs, err := analyzer.ScanArtifacts(artifacts)
+	_, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}

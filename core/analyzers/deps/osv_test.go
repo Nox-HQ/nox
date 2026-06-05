@@ -467,7 +467,7 @@ func TestScanArtifacts_WithOSV(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVBaseURL(srv.URL), WithHTTPClient(srv.Client()))
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -552,7 +552,7 @@ func TestScanArtifacts_OSVDisabled(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled(), WithOSVBaseURL(srv.URL), WithHTTPClient(srv.Client()))
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -616,7 +616,7 @@ func TestScanArtifacts_VulnerabilityMetadata(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVBaseURL(srv.URL), WithHTTPClient(srv.Client()))
-	_, fs, err := analyzer.ScanArtifacts(artifacts)
+	_, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}

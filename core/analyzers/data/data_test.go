@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -329,7 +330,7 @@ func TestScanArtifacts_MixedFiles(t *testing.T) {
 	}
 
 	a := NewAnalyzer()
-	fs, err := a.ScanArtifacts(artifacts)
+	fs, err := a.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -371,7 +372,7 @@ func TestScanArtifacts_Deduplicates(t *testing.T) {
 	}
 
 	a := NewAnalyzer()
-	fs, err := a.ScanArtifacts(artifacts)
+	fs, err := a.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -393,7 +394,7 @@ func TestScanArtifacts_UnreadableFile(t *testing.T) {
 	}
 
 	a := NewAnalyzer()
-	_, err := a.ScanArtifacts(artifacts)
+	_, err := a.ScanArtifacts(context.Background(), artifacts)
 	if err == nil {
 		t.Fatal("expected error for unreadable file")
 	}

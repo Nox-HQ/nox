@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -399,7 +400,7 @@ func TestScanArtifacts(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, fs, err := analyzer.ScanArtifacts(artifacts)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
@@ -446,7 +447,7 @@ func TestScanArtifacts_SkipsUnsupportedLockfiles(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, _, err := analyzer.ScanArtifacts(artifacts)
+	inventory, _, err := analyzer.ScanArtifacts(context.Background(), artifacts)
 	if err != nil {
 		t.Fatalf("ScanArtifacts should not error on unsupported lockfiles: %v", err)
 	}
@@ -459,7 +460,7 @@ func TestScanArtifacts_SkipsUnsupportedLockfiles(t *testing.T) {
 
 func TestScanArtifacts_EmptyInput(t *testing.T) {
 	analyzer := NewAnalyzer(WithOSVDisabled())
-	inventory, fs, err := analyzer.ScanArtifacts(nil)
+	inventory, fs, err := analyzer.ScanArtifacts(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ScanArtifacts returned error on nil input: %v", err)
 	}

@@ -112,11 +112,25 @@ func RunScan(target string) (*ScanResult, error) {
 	return RunScanWithOptions(target, ScanOptions{})
 }
 
-// RunScanWithOptions executes the full scan pipeline with the given options.
-// See RunScan for a description of the pipeline stages.
+// RunScanWithOptions executes the full scan pipeline with the given options
+// using a background context. See RunScanContext for cancellation support.
 //
 //nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
 func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
+	return RunScanContext(context.Background(), target, opts)
+}
+
+// RunScanContext executes the full scan pipeline with the given options,
+// honoring ctx for cancellation and deadlines. The context is propagated to
+// every analyzer (including OSV network lookups) and bounds parallel analyzer
+// execution.
+//
+//nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
+func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*ScanResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Load project config.
 	cfg, err := LoadScanConfig(target)
 	if err != nil {
@@ -156,6 +170,10 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
 	}
 	artifacts = filterArtifactsByType(artifacts, excludeArtifactTypes)
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Phase 2: Run analyzers.
 	// Initialize analyzers.
@@ -197,32 +215,32 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 
 	if opts.Sequential {
 		// Sequential execution for debugging.
-		sf, err := secretsAnalyzer.ScanArtifacts(artifacts)
+		sf, err := secretsAnalyzer.ScanArtifacts(ctx, artifacts)
 		if err != nil {
 			return nil, err
 		}
 		addFindings(sf)
 
-		df, err := dataAnalyzer.ScanArtifacts(artifacts)
+		df, err := dataAnalyzer.ScanArtifacts(ctx, artifacts)
 		if err != nil {
 			return nil, err
 		}
 		addFindings(df)
 
-		iacf, err := iacAnalyzer.ScanArtifacts(artifacts)
+		iacf, err := iacAnalyzer.ScanArtifacts(ctx, artifacts)
 		if err != nil {
 			return nil, err
 		}
 		addFindings(iacf)
 
-		aif, inv, err := aiAnalyzer.ScanArtifacts(artifacts)
+		aif, inv, err := aiAnalyzer.ScanArtifacts(ctx, artifacts)
 		if err != nil {
 			return nil, err
 		}
 		addFindings(aif)
 		aiInventory = inv
 
-		inv2, depf, err := depsAnalyzer.ScanArtifacts(artifacts)
+		inv2, depf, err := depsAnalyzer.ScanArtifacts(ctx, artifacts)
 		if err != nil {
 			return nil, err
 		}
@@ -230,10 +248,10 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		inventory = inv2
 	} else {
 		// Parallel execution using errgroup.
-		g, _ := errgroup.WithContext(context.Background())
+		g, gctx := errgroup.WithContext(ctx)
 
 		g.Go(func() error {
-			sf, err := secretsAnalyzer.ScanArtifacts(artifacts)
+			sf, err := secretsAnalyzer.ScanArtifacts(gctx, artifacts)
 			if err != nil {
 				return err
 			}
@@ -242,7 +260,7 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		})
 
 		g.Go(func() error {
-			df, err := dataAnalyzer.ScanArtifacts(artifacts)
+			df, err := dataAnalyzer.ScanArtifacts(gctx, artifacts)
 			if err != nil {
 				return err
 			}
@@ -251,7 +269,7 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		})
 
 		g.Go(func() error {
-			iacf, err := iacAnalyzer.ScanArtifacts(artifacts)
+			iacf, err := iacAnalyzer.ScanArtifacts(gctx, artifacts)
 			if err != nil {
 				return err
 			}
@@ -260,7 +278,7 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		})
 
 		g.Go(func() error {
-			aif, inv, err := aiAnalyzer.ScanArtifacts(artifacts)
+			aif, inv, err := aiAnalyzer.ScanArtifacts(gctx, artifacts)
 			if err != nil {
 				return err
 			}
@@ -272,7 +290,7 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 		})
 
 		g.Go(func() error {
-			inv, depf, err := depsAnalyzer.ScanArtifacts(artifacts)
+			inv, depf, err := depsAnalyzer.ScanArtifacts(gctx, artifacts)
 			if err != nil {
 				return err
 			}

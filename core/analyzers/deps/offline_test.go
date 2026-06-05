@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -39,7 +40,7 @@ func TestOSVDisabled_NoNetworkEgress(t *testing.T) {
 	tw := &tripwireTransport{}
 	a := NewAnalyzer(WithOSVDisabled(), WithHTTPClient(&http.Client{Transport: tw}))
 
-	if _, _, err := a.ScanArtifacts(lockfileArtifact(t)); err != nil {
+	if _, _, err := a.ScanArtifacts(context.Background(), lockfileArtifact(t)); err != nil {
 		t.Fatalf("offline scan returned error: %v", err)
 	}
 	if tw.called {
@@ -56,7 +57,7 @@ func TestOSVEnabled_AttemptsEgress(t *testing.T) {
 	tw := &tripwireTransport{}
 	a := NewAnalyzer(WithHTTPClient(&http.Client{Transport: tw}))
 
-	if _, _, err := a.ScanArtifacts(lockfileArtifact(t)); err != nil {
+	if _, _, err := a.ScanArtifacts(context.Background(), lockfileArtifact(t)); err != nil {
 		t.Fatalf("scan returned error: %v", err)
 	}
 	if !tw.called {

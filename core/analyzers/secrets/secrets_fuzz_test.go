@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +39,6 @@ func FuzzScanArtifacts(f *testing.F) {
 		}
 
 		// Must not panic regardless of input.
-		_, _ = analyzer.ScanArtifacts(artifacts)
+		_, _ = analyzer.ScanArtifacts(context.Background(), artifacts)
 	})
 }

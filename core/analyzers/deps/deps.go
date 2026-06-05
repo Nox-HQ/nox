@@ -279,7 +279,7 @@ func (a *Analyzer) ParseLockfile(path string, content []byte) ([]Package, error)
 // ScanArtifacts processes the provided artifacts, filters for Lockfile types,
 // parses each one, queries OSV for known vulnerabilities, and returns a
 // PackageInventory plus a FindingSet with vulnerability findings.
-func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*PackageInventory, *findings.FindingSet, error) {
+func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*PackageInventory, *findings.FindingSet, error) {
 	inventory := &PackageInventory{}
 	fs := findings.NewFindingSet()
 
@@ -457,7 +457,7 @@ func (a *Analyzer) ScanArtifacts(artifacts []discovery.Artifact) (*PackageInvent
 	if a.osvEnabled {
 		pkgs := inventory.Packages()
 		if len(pkgs) > 0 {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
 			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs)
