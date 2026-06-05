@@ -2,9 +2,9 @@ package discovery
 
 import (
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 )
 
 // ClientEnv carries the environment inputs needed to resolve MCP client config
@@ -194,9 +194,18 @@ func KnownClientConfigs(env ClientEnv) []MCPClientConfig {
 		if len(segs) == 0 {
 			continue
 		}
+		// Join with the separator of the TARGET OS (env.GOOS), not the host's.
+		// KnownClientConfigs is GOOS-parameterized, so filepath.Join (which uses
+		// the running host's separator) would produce wrong paths when the host
+		// OS differs from env.GOOS — e.g. on a Windows CI runner evaluating the
+		// darwin/linux cases.
+		sep := "/"
+		if env.GOOS == "windows" {
+			sep = `\`
+		}
 		out = append(out, MCPClientConfig{
 			Client: s.client,
-			Path:   filepath.Join(append([]string{base}, segs...)...),
+			Path:   base + sep + strings.Join(segs, sep),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Client < out[j].Client })

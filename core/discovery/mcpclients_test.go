@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -29,7 +28,7 @@ func TestKnownClientConfigs_PerOS(t *testing.T) {
 			goos:    "windows",
 			env:     ClientEnv{Home: `C:\Users\alice`, AppData: `C:\Users\alice\AppData\Roaming`, GOOS: "windows"},
 			client:  "Claude Desktop",
-			wantSub: filepath.Join(`C:\Users\alice\AppData\Roaming`, "Claude", "claude_desktop_config.json"),
+			wantSub: `C:\Users\alice\AppData\Roaming\Claude\claude_desktop_config.json`,
 		},
 		{
 			goos:    "darwin",
