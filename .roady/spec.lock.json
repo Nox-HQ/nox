@@ -7,211 +7,302 @@
       "id": "core-foundation",
       "title": "Core Foundation",
       "description": "The essential building blocks of the project.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "project-scaffold-\u0026-go-module-setup",
       "title": "Project Scaffold \u0026 Go Module Setup",
       "description": "Initialize Go module, set up directory structure (/core, /cli, /server, /ai-assist), configure golangci-lint, Makefile with build/test/lint targets, and GitHub Actions CI workflow. This is the foundation for all other features.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "file-discovery-engine",
       "title": "File Discovery Engine",
       "description": "Core artifact discovery system that recursively walks a workspace, respects gitignore patterns, and classifies files by type (source, config, lockfile, container definition, AI component). Provides an extensible file classifier registry for adding new artifact types.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "canonical-findings-model",
       "title": "Canonical Findings Model",
       "description": "Core data model for security findings with stable versioned fingerprinting (deterministic hash), explicit severity and confidence levels, precise source location (file, region, line, column), deduplication by fingerprint, and SARIF-compatible location model. This is the central data structure consumed by all reporters.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "yaml-rule-engine",
       "title": "YAML Rule Engine",
       "description": "Declarative rule system using YAML definitions with versioned rule IDs, deterministic matching, and pluggable matchers (regex, jsonpath, yamlpath, heuristic). Includes rule validation, testing support, and strictly no embedded code execution. Rules are the primary configuration mechanism for all analyzers.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "secrets-scanner",
       "title": "Secrets Scanner",
       "description": "Pattern-based analyzer for detecting secrets, API keys, tokens, and credentials in source files and configuration. Includes built-in rules for common secret patterns (AWS keys, GitHub tokens, private keys), configurable entropy-based detection, allowlist/ignore mechanism, and line-level location reporting.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "dependency-scanner",
       "title": "Dependency Scanner",
       "description": "Analyzer for lockfiles and dependency manifests (npm package-lock.json, Go go.sum, Python requirements.txt/poetry.lock, Ruby Gemfile.lock) that extracts package inventories with name/version/ecosystem, checks against OSV API for known vulnerabilities, and produces CycloneDX component entries for SBOM generation.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "sarif-report-output",
       "title": "SARIF Report Output",
       "description": "Generate SARIF 2.1.0 reports compatible with GitHub Code Scanning. One run per scan with full rule catalog populated from matched rules, fingerprints attached to results, and precise result locations. Must pass GitHub Code Scanning ingestion validation.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "sbom-output-(cyclonedx-\u0026-spdx)",
       "title": "SBOM Output (CycloneDX \u0026 SPDX)",
       "description": "Generate Software Bill of Materials in CycloneDX JSON (primary, sbom.cdx.json) and SPDX JSON (secondary, sbom.spdx.json) formats from dependency analysis. Component inventory sourced from dependency scanner with optional vulnerability enrichment via OSV.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "json-findings-output",
       "title": "JSON Findings Output",
       "description": "Emit canonical findings.json with the full findings model, usable as machine-readable input for downstream tooling. Deterministic output ordering and schema versioning included.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "cli-interface",
       "title": "CLI Interface",
       "description": "Command-line interface with 'nox scan \u0026lt;path\u0026gt;' as the primary command. Supports output format selection (sarif, cdx, spdx, json, all), exit codes reflecting finding severity, quiet/verbose modes, and config file support (.nox.yaml).",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "infrastructure-as-code-rules",
       "title": "Infrastructure-as-Code Rules",
       "description": "Basic security rules for Terraform (public access, encryption), Dockerfiles (no root, pinned base images), and Kubernetes manifests (privilege escalation, host network). All defined as YAML-based rules consumed by the rule engine.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "ai-security-rules",
       "title": "AI Security Rules",
       "description": "First-class AI security scanning: detect prompt/RAG boundary violations, unsafe MCP/agent tool exposure, insecure prompt/response logging, unpinned model/prompt versions. Produces ai.inventory.json with extracted AI component inventory. This is a differentiating feature of Nox.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "mcp-server",
       "title": "MCP Server",
       "description": "Model Context Protocol server using mcp-go with stdio transport. Exposes read-only tools (scan, get-findings, get-sbom), workspace allowlisting, artifact serving via MCP resources, output size limits, and rate limiting. Agent-safe by default.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "agent-assist-module-(optional)",
       "title": "Agent Assist Module (Optional)",
       "description": "Optional LLM-powered module built on agent-go that consumes findings and AI inventory to produce human-readable explanations. Strictly no side effects, never affects scan results, opt-in only, lives in a separate module boundary from core.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-grpc-interface",
       "title": "Plugin gRPC Interface",
       "description": "Protobuf definitions and gRPC service contract for plugin manifests, tool invocations, and artifact exchange. Defines the PluginService with GetManifest, InvokeTool, and StreamArtifacts RPCs. Plugin manifests declare capabilities (analyzers, reporters, tools), safety requirements (network hosts, file paths, environment variables), and API version compatibility. All message types are versioned and backwards-compatible.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-host-runtime",
       "title": "Plugin Host Runtime",
       "description": "Core runtime that discovers plugin endpoints (local binaries, containers, remote gRPC), calls GetManifest to learn capabilities, validates safety constraints against host policy, manages plugin lifecycle (init, invoke, shutdown), and merges plugin results (findings, SBOM components, AI inventory entries) into Nox's unified outputs. Supports parallel plugin execution with configurable concurrency limits.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-safety-engine",
       "title": "Plugin Safety Engine",
       "description": "Host-enforced safety model that validates and constrains plugin behavior. Enforces scope allowlists (permitted network hosts/CIDRs, file path globs, environment variables), rate limits (requests per minute, bandwidth), concurrency caps, read-only defaults, artifact size limits, and secret redaction from plugin outputs. Destructive actions require explicit opt-in via nox.yaml. Safety violations are logged and cause plugin termination.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-sdk",
       "title": "Plugin SDK",
       "description": "Minimal SDK for plugin authors providing: versioned protobuf definitions, gRPC server scaffolding (Go initially, with extension points for other languages), manifest and capability declaration helpers, safety envelope parsing and enforcement utilities, artifact serialization helpers (findings, SBOM components, AI inventory entries), and a conformance test runner that validates plugin behavior against the contract. Includes a plugin template generator for bootstrapping new plugins.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "mcp-plugin-bridge",
       "title": "MCP Plugin Bridge",
       "description": "Expose plugin capabilities through the MCP server interface. Adds plugin.list tool (enumerate installed plugins and capabilities), plugin.call_tool tool (invoke a specific plugin tool with arguments), and plugin.read_resource tool (read plugin-provided resources). Supports convenience aliases that map friendly names to plugin tools (e.g., nox.dast.scan maps to a DAST plugin's scan tool). Plugin tools inherit workspace allowlisting and output size limits from the MCP server.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-registry-\u0026-distribution",
       "title": "Plugin Registry \u0026 Distribution",
       "description": "Registry client for discovering and installing plugins. Supports static index fetching from registry URLs, OCI artifact download with local caching and digest verification, semantic version resolution with compatibility constraints, and multiple registry sources (official Nox registry, community registries, enterprise private registries). Registry metadata includes plugin manifests, compatibility matrices, and trust information. Implements offline-friendly caching with TTL-based refresh.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-trust-\u0026-verification",
       "title": "Plugin Trust \u0026 Verification",
       "description": "Signature validation and trust management for plugins. Verifies artifact signatures against configurable trust roots, checks content digests on download and before execution, validates API version compatibility between plugin and host, runs conformance tests as part of installation verification. Implements trust levels (verified: signed by known key, community: signed but unknown key, unverified: unsigned) with configurable minimum trust requirements. Enterprise deployments can mandate verified-only plugins.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "cli-plugin-commands",
       "title": "CLI Plugin Commands",
       "description": "CLI commands for managing registries and plugins. Registry commands: 'nox registry add \u003curl\u003e' (add registry source), 'nox registry list' (show configured registries), 'nox registry remove \u003cname\u003e' (remove registry). Plugin commands: 'nox plugin search \u003cquery\u003e' (search registries), 'nox plugin info \u003cname\u003e' (show plugin details and trust status), 'nox plugin install \u003cname\u003e[@version]' (install with verification), 'nox plugin update [name]' (update one or all plugins), 'nox plugin list' (show installed plugins), 'nox plugin remove \u003cname\u003e' (uninstall), 'nox plugin call \u003cname\u003e \u003ctool\u003e [args]' (invoke plugin tool directly from CLI).",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "git-history-scanning-for-secrets",
       "title": "Git History Scanning for Secrets",
       "description": "Scan git commit history for leaked secrets that were committed and later removed. Traverse commits using git rev-list, extract diffs with git diff-tree, run the secrets analyzer against historical content. Support depth limits (--history-depth), branch selection (--branch), and incremental scanning from a bookmark commit. Report findings with commit SHA, author, and date metadata. Critical for detecting secrets that exist in git history but not in the working tree. Integrates with existing secrets analyzer (86 rules) and findings model.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "entropy-based-secret-detection",
       "title": "Entropy-Based Secret Detection",
       "description": "Add Shannon entropy calculation as a complementary detection method alongside regex patterns. Implement an entropy matcher type in the rule engine that scores string segments and flags high-entropy values above configurable thresholds. Detect base64-encoded blobs, hex-encoded secrets, and random strings that don't match any known pattern. Integrate as a new matcher type ('entropy') in the MatcherRegistry alongside the existing regex matcher. Combine with assignment context (e.g., variable named 'secret' or 'password' with high-entropy value) to reduce false positives.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "pre-commit-hook-(nox-protect)",
       "title": "Pre-commit Hook (nox protect)",
       "description": "Add a 'nox protect' command that installs a git pre-commit hook to prevent secrets from being committed. The hook scans only staged files (git diff --cached) for speed. Supports install/uninstall subcommands, .pre-commit-hooks.yaml for the pre-commit framework, and direct .git/hooks/pre-commit shell script generation. Fail-fast on any critical/high finding. Configurable severity threshold via .nox.yaml. Exit code 1 blocks the commit with a clear message showing what was found and how to suppress false positives.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "custom-rules-cli-integration",
       "title": "Custom Rules CLI Integration",
       "description": "Wire up the existing YAML rule loader (core/rules/loader.go) to the CLI via --rules flag on scan, diff, and protect commands. Load user-defined rules from a file or directory and merge them with built-in rules. Support .nox.yaml configuration for default rules paths. Validate custom rules at load time with clear error messages. This completes the custom rules story — the loader already exists but is unreachable from the CLI.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "expand-secrets-rule-library-to-900+-detectors",
       "title": "Expand secrets rule library to 900+ detectors",
       "description": "Expand secrets rule library to 900+ detectors matching TruffleHog coverage. This includes: (1) Import existing Gitleaks/Checkov rule definitions, (2) Add AWS, GCP, Azure, GitHub, GitLab, Slack, Jira, Docker, JWT, and other cloud/service-specific patterns, (3) Add generic high-entropy patterns with configurable thresholds, (4) Add API key formats for 200+ services, (5) Add private key formats (RSA, EC, PGP, SSH), (6) Add database connection string patterns, (7) Implement heuristic context scoring to reduce false positives, (8) Add comprehensive tests with known secrets and non-secrets.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "plugin-protocol-enhancement-—-graph,-enrichment-\u0026-scan-context-primitives",
       "title": "Plugin Protocol Enhancement — Graph, Enrichment \u0026 Scan Context Primitives",
       "description": "Extend the plugin protocol with three new backward-compatible primitives required by Phase 7 features (AI triage, IaC cross-resource analysis, reachability analysis, K8s policy, taint tracking). All proto changes are additive (new fields/messages only) — old plugins and hosts remain fully compatible.\n\n**Graph type**: Nodes + directed edges for relationship modeling. Supports NodeKind (resource, function, data, service, policy) and EdgeKind (depends_on, calls, flows_to, exposes, references). Domain types in core/graph/, proto messages in types.proto, fluent GraphBuilder in SDK.\n\n**Enrichment type**: Annotates existing findings without modifying them, preserving determinism of the core scan engine. Links to findings via fingerprint, carries kind (triage, reachability, explanation), markdown body, metadata, confidence, and source plugin name. Domain type in core/findings/enrichment.go, fluent EnrichmentBuilder in SDK.\n\n**ScanContext**: Carries core scan results (findings, packages, AI components) to post-scan plugins via InvokeToolRequest. Enabled by requires_scan_context=true on ToolDef. Host implements InvokePostScan() to orchestrate post-scan plugin invocation and merge results back.\n\n**SDK extensions**: GraphBuilder and EnrichmentBuilder fluent APIs in sdk/response.go, ToolWithContext() in sdk/manifest.go for declaring post-scan tools, NodeKind/EdgeKind/Confidence constants in sdk/types.go, ToolRequest helper in sdk/request.go for accessing scan context.\n\n**Conformance**: Extended validateResponse() in sdk/conformance.go to validate graph structure (node IDs, edge endpoint references) and enrichment fields. Track-specific options (WithRequireGraphs, WithRequireEnrichments) for track conformance testing.\n\n**Bidirectional conversion**: Full proto↔domain conversion for Graph, Enrichment, ScanContext, NodeKind, EdgeKind in plugin/convert.go with roundtrip tests.\n\n**Host extensions**: MergeResults() handles graphs and enrichments, estimateResponseSize() accounts for new types, InvokePostScan() orchestrates post-scan plugin lifecycle.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "reachability-analysis-plugin",
       "title": "Reachability Analysis Plugin",
       "description": "Language-specific call graph construction for Go, Python, and JavaScript/TypeScript to determine whether vulnerable dependency functions are actually called. Reduces false positives in dependency scanning by filtering unreachable code paths. Implemented as a plugin on the core-analysis track using the new Graph and Enrichment primitives. The plugin emits a call graph (function→function edges with EdgeKindCalls) and produces Enrichment annotations on dependency findings marking them as reachable or unreachable. Uses Go's go/callgraph for Go, tree-sitter for Python/JS/TS AST parsing. Requires scan context (findings + packages) from the core scan to know which dependency findings to evaluate.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "graph-based-iac-cross-resource-analysis-plugin",
       "title": "Graph-Based IaC Cross-Resource Analysis Plugin",
       "description": "Build a resource dependency graph from Terraform state/plan files and detect misconfigurations that span multiple resources (e.g., public subnet + no NACL + open security group, S3 bucket + no encryption + public ACL, RDS instance + public subnet + no encryption at rest). Implemented as a plugin on the core-analysis track. Emits Graph output with NodeKindResource nodes and EdgeKindDependsOn/EdgeKindReferences edges. Cross-resource rules are defined declaratively as graph patterns (subgraph matching). Extends existing tfplan.go resource parsing with a relationship model. Produces findings with precise multi-resource locations.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "cross-file-taint-analysis-plugin",
       "title": "Cross-File Taint Analysis Plugin",
       "description": "Dataflow tracking across function and file boundaries to detect untrusted input flowing to sensitive sinks (SQL queries, shell commands, eval, file operations, HTTP responses). Language-specific AST parsing for Go, Python, and JavaScript/TypeScript using tree-sitter grammars. Implemented as a plugin on the core-analysis track. Emits Graph output with NodeKindFunction/NodeKindData nodes and EdgeKindFlowsTo edges representing taint propagation paths. Produces findings with full taint path in the finding metadata (source→intermediate→sink). Taint sources: HTTP request params, environment variables, file reads, user input. Taint sinks: SQL, shell exec, eval, file write, HTTP response body.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "ai-powered-triage-plugin",
       "title": "AI-Powered Triage Plugin",
       "description": "LLM-assisted severity adjustment and false-positive classification based on code context. Implemented as a post-scan plugin that consumes ScanContext (all findings from core scan) and produces Enrichment annotations with kind=triage. Each enrichment carries a verdict (true_positive, false_positive, needs_review), adjusted severity, confidence score, and markdown explanation. Integrates with the assist/ module's LLM provider abstraction. Opt-in only — never modifies original findings, only adds enrichments. Supports configurable LLM backends (OpenAI, Anthropic, Ollama for offline use). Includes historical pattern learning from user-confirmed triage decisions stored in .nox/triage-history.json. Planned on the agent-assistance track.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "kubernetes-runtime-scanning-plugin",
       "title": "Kubernetes Runtime Scanning Plugin",
       "description": "Live cluster scanning via kubectl/Kubernetes API access. Compares running workloads against IaC definitions for drift detection. Runtime-specific checks: containers running as root, mounted secrets in environment variables, missing network policies, privileged containers, host namespace sharing, missing resource limits, outdated images. Implemented as a plugin on the dynamic-runtime track with RiskActive safety class and needs_confirmation=true (since it accesses live infrastructure). Emits Graph output with NodeKindService/NodeKindResource nodes representing cluster topology. Produces findings for runtime misconfigurations and Enrichments linking runtime state to existing IaC findings (drift detection). Clearly marked as optional — breaks the offline-first constraint. Requires KUBECONFIG or in-cluster auth.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
     },
     {
       "id": "remediation-plugin:-deterministic-code-fixers-with-policy-driven-blast-radius-controls",
       "title": "Remediation plugin: deterministic code fixers with policy-driven blast-radius controls",
       "description": "Add a new remediation capability to nox via a dedicated plugin (`nox-plugin-remediate`) that extends dependency upgrades to safe, deterministic code issue remediation. Scope includes plugin tooling (`remediate.plan_code`, `remediate.apply_code`, `remediate.verify_code`), policy-driven risk and blast-radius controls (including auto-merge thresholds), and an initial phased backlog of five deterministic fixers with strict verification/rollback gates. Milestones: (0) plugin foundations and policy parser, (1) WEB-SEC-001 header middleware insertion, (2) AI-LOG-001 sensitive prompt/response log redaction, (3) SEC-003 hardcoded secret to env/config rewrite, (4) SEC-002 SQL parameterization codemods, (5) SEC-001 subprocess hardening codemods. Each fixer must meet acceptance criteria: deterministic output, idempotence, bounded change surface, golden fixtures, mandatory re-scan evidence, and rollback on verify failure.",
-      "requirements": []
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "mcp-tool-poisoning-detection",
+      "title": "MCP Tool Poisoning Detection",
+      "description": "Detect malicious instructions embedded in MCP tool metadata — the signature MCP attack (OWASP MCP03). Analyze tool descriptions, input schemas, and tool return values for: imperative injection phrases (e.g. 'ignore previous instructions', 'do not tell the user'), hidden/zero-width unicode, exfiltration verbs targeting secrets/files/credentials, and instructions that target the host model rather than the human operator. Reuses existing AI-PI prompt-injection heuristics. New rule IDs MCP-009..MCP-0xx in core/analyzers/ai. Closes the highest-signal gap vs Snyk Agent Scan and Aguara, both of which detect tool poisoning today while Nox only flags missing descriptions.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "mcp-rug-pull-detection",
+      "title": "MCP Rug Pull Detection",
+      "description": "Detect post-install tool drift ('rug pull', OWASP MCP04). Hash MCP tool descriptions and schemas at first observation, persist to .nox/ state, and flag when a tool's definition changes after approval — the classic supply-chain trust-after-install attack. Reuses Nox's existing atomic-write content-hash state infrastructure (cache.go/state.go). Emits findings on drift with before/after hashes. Matches Snyk's 'tool pinning' and Aguara's rug-pull layer while staying fully offline and deterministic.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "mcp-authorization-and-token-safety-rules",
+      "title": "MCP Authorization and Token Safety Rules",
+      "description": "Close the MCP07 (insufficient authN/authZ) gap, anchored to the official MCP spec's normative MUST/SHOULD security clauses. New rules detecting: token passthrough (server accepting tokens not issued to it — explicitly forbidden), confused-deputy OAuth proxy patterns (static client ID + dynamic registration), SSRF during OAuth metadata discovery (cloud metadata 169.254.169.254, private IP ranges, DNS-rebinding/redirect chains), and session-id weaknesses (deterministic IDs, sessions-used-for-auth, missing user binding). Rules cite spec sections for defensibility.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "mcp-shadow-server-and-allowlist-rules",
+      "title": "MCP Shadow Server and Allowlist Rules",
+      "description": "Close the MCP09 (shadow/rogue server) gap. Detect MCP server configs lacking cryptographic identity verification, missing server allowlisting, and cross-server tool shadowing (a server redefining a tool name already provided by another, enabling override/escalation). Flag configs that trust unverified/unpinned remote servers. Static analysis over multi-client config inventory.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "owasp-mcp-top-10-compliance-mapping",
+      "title": "OWASP MCP Top 10 Compliance Mapping",
+      "description": "Map every MCP and AI rule to OWASP MCP Top 10 (MCP01-MCP10), the MCP-38 academic taxonomy, and the official MCP spec MUST/SHOULD clauses. Wire control IDs into core/compliance data and emit them as SARIF rule tags/properties so GitHub Code Scanning and registries see standards alignment. Table stakes for registry embedding and enterprise credibility — Aguara already maps to OWASP. Add a compliance framework entry 'owasp-mcp-top-10'.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "multi-client-mcp-config-discovery",
+      "title": "Multi-Client MCP Config Discovery",
+      "description": "Expand discovery beyond mcp.json and claude_desktop_config.json to the 17+ MCP client config locations used by Cursor, VS Code, Windsurf, Cline, Continue, Gemini CLI, Zed, and others (platform-specific paths on macOS/Linux/Windows). Enables 'scan my whole machine for MCP servers' — the entry-point UX that Snyk Agent Scan and Aguara already provide. Pure discovery.go work plus a client-config registry. Price of entry for default-scanner status.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "zero-telemetry-positioning-and-guarantee",
+      "title": "Zero Telemetry Positioning and Guarantee",
+      "description": "Weaponize the offline-first, no-telemetry, vendor-neutral wedge against the now-commercial Snyk Agent Scan (which phones home to Invariant's API and needs a Snyk token for some scans). Add an enforced offline guarantee: a test/CI gate asserting the scan path makes zero network calls, a --offline assertion, and prominent README/docs positioning ('The MCP scanner that never sees your code. No API. No token. No telemetry. Deterministic.'). The verifiable engineering parts (network-call assertion test, offline flag) are tracked here; messaging accompanies.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "mcp-distribution-and-catalog-embedding",
+      "title": "MCP Distribution and Catalog Embedding",
+      "description": "Win the embedding layer that makes a scanner 'default'. Dogfood Nox across the owner's own projects (Obvia, agent-go, Mnemos, Chronos, Praxis, statekit, Relicta) and publish findings as credibility content. Ship a one-command 'scan-before-publish' MCP workflow and GitHub Action variant focused on MCP servers. Pursue embedding in a trusted distribution layer (Docker MCP Catalog security tier or a downstream MCP registry's security check). Distribution/partnership track that converts capability into category ownership.",
+      "requirements": [],
+      "source": {}
     }
   ],
   "constraints": [],

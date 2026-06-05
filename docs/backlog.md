@@ -216,3 +216,51 @@ Live cluster scanning via kubectl/Kubernetes API access. Compares running worklo
 Add a new remediation capability to nox via a dedicated plugin (`nox-plugin-remediate`) that extends dependency upgrades to safe, deterministic code issue remediation. Scope includes plugin tooling (`remediate.plan_code`, `remediate.apply_code`, `remediate.verify_code`), policy-driven risk and blast-radius controls (including auto-merge thresholds), and an initial phased backlog of five deterministic fixers with strict verification/rollback gates. Milestones: (0) plugin foundations and policy parser, (1) WEB-SEC-001 header middleware insertion, (2) AI-LOG-001 sensitive prompt/response log redaction, (3) SEC-003 hardcoded secret to env/config rewrite, (4) SEC-002 SQL parameterization codemods, (5) SEC-001 subprocess hardening codemods. Each fixer must meet acceptance criteria: deterministic output, idempotence, bounded change surface, golden fixtures, mandatory re-scan evidence, and rollback on verify failure.
 
 ---
+
+## MCP Tool Poisoning Detection
+
+Detect malicious instructions embedded in MCP tool metadata — the signature MCP attack (OWASP MCP03). Analyze tool descriptions, input schemas, and tool return values for: imperative injection phrases (e.g. 'ignore previous instructions', 'do not tell the user'), hidden/zero-width unicode, exfiltration verbs targeting secrets/files/credentials, and instructions that target the host model rather than the human operator. Reuses existing AI-PI prompt-injection heuristics. New rule IDs MCP-009..MCP-0xx in core/analyzers/ai. Closes the highest-signal gap vs Snyk Agent Scan and Aguara, both of which detect tool poisoning today while Nox only flags missing descriptions.
+
+---
+
+## MCP Rug Pull Detection
+
+Detect post-install tool drift ('rug pull', OWASP MCP04). Hash MCP tool descriptions and schemas at first observation, persist to .nox/ state, and flag when a tool's definition changes after approval — the classic supply-chain trust-after-install attack. Reuses Nox's existing atomic-write content-hash state infrastructure (cache.go/state.go). Emits findings on drift with before/after hashes. Matches Snyk's 'tool pinning' and Aguara's rug-pull layer while staying fully offline and deterministic.
+
+---
+
+## MCP Authorization and Token Safety Rules
+
+Close the MCP07 (insufficient authN/authZ) gap, anchored to the official MCP spec's normative MUST/SHOULD security clauses. New rules detecting: token passthrough (server accepting tokens not issued to it — explicitly forbidden), confused-deputy OAuth proxy patterns (static client ID + dynamic registration), SSRF during OAuth metadata discovery (cloud metadata 169.254.169.254, private IP ranges, DNS-rebinding/redirect chains), and session-id weaknesses (deterministic IDs, sessions-used-for-auth, missing user binding). Rules cite spec sections for defensibility.
+
+---
+
+## MCP Shadow Server and Allowlist Rules
+
+Close the MCP09 (shadow/rogue server) gap. Detect MCP server configs lacking cryptographic identity verification, missing server allowlisting, and cross-server tool shadowing (a server redefining a tool name already provided by another, enabling override/escalation). Flag configs that trust unverified/unpinned remote servers. Static analysis over multi-client config inventory.
+
+---
+
+## OWASP MCP Top 10 Compliance Mapping
+
+Map every MCP and AI rule to OWASP MCP Top 10 (MCP01-MCP10), the MCP-38 academic taxonomy, and the official MCP spec MUST/SHOULD clauses. Wire control IDs into core/compliance data and emit them as SARIF rule tags/properties so GitHub Code Scanning and registries see standards alignment. Table stakes for registry embedding and enterprise credibility — Aguara already maps to OWASP. Add a compliance framework entry 'owasp-mcp-top-10'.
+
+---
+
+## Multi-Client MCP Config Discovery
+
+Expand discovery beyond mcp.json and claude_desktop_config.json to the 17+ MCP client config locations used by Cursor, VS Code, Windsurf, Cline, Continue, Gemini CLI, Zed, and others (platform-specific paths on macOS/Linux/Windows). Enables 'scan my whole machine for MCP servers' — the entry-point UX that Snyk Agent Scan and Aguara already provide. Pure discovery.go work plus a client-config registry. Price of entry for default-scanner status.
+
+---
+
+## Zero Telemetry Positioning and Guarantee
+
+Weaponize the offline-first, no-telemetry, vendor-neutral wedge against the now-commercial Snyk Agent Scan (which phones home to Invariant's API and needs a Snyk token for some scans). Add an enforced offline guarantee: a test/CI gate asserting the scan path makes zero network calls, a --offline assertion, and prominent README/docs positioning ('The MCP scanner that never sees your code. No API. No token. No telemetry. Deterministic.'). The verifiable engineering parts (network-call assertion test, offline flag) are tracked here; messaging accompanies.
+
+---
+
+## MCP Distribution and Catalog Embedding
+
+Win the embedding layer that makes a scanner 'default'. Dogfood Nox across the owner's own projects (Obvia, agent-go, Mnemos, Chronos, Praxis, statekit, Relicta) and publish findings as credibility content. Ship a one-command 'scan-before-publish' MCP workflow and GitHub Action variant focused on MCP servers. Pursue embedding in a trusted distribution layer (Docker MCP Catalog security tier or a downstream MCP registry's security check). Distribution/partnership track that converts capability into category ownership.
+
+---
