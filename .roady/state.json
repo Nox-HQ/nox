@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 186,
+  "version": 188,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -702,8 +702,14 @@
       "elapsed_minutes": 0
     },
     "task-72": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Integration contract docs/mcp-registry-integration.md (cosign-verified image, --network=none offline scan, exit-code gate, SARIF schema) + outreach draft docs/mcp-catalog-outreach-draft.md (targets: Docker MCP Catalog, official registry, aggregators). Sending is user-gated."
+      ],
+      "started_at": "2026-06-05T13:11:20.370468+02:00",
+      "completed_at": "2026-06-05T13:11:25.789637+02:00",
       "elapsed_minutes": 0
     },
     "task-73": {
@@ -747,5 +753,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T13:07:40.02616+02:00"
+  "updated_at": "2026-06-05T13:11:25.789639+02:00"
 }
