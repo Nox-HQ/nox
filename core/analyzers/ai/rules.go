@@ -87,7 +87,9 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AI-006", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			// nox:ignore AI-006 -- rule definition, not a real finding
-			pattern:     `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
+			// \b before the noun group avoids substring matches like
+			// "availablePrompts" (a menu of names, not logged content).
+			pattern:     `(?i)(log|logger|logging|print|console\.log|fmt\.Print)\S*\(.*?\b(prompt|system_message|completion|response\.text|response\.content|chat_response)`,
 			description: "Prompt or LLM response logged without redaction",
 			cwe:         "CWE-532", keywords: []string{"prompt", "completion", "response.text", "response.content"},
 			ignoreFilePatterns: []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
@@ -1018,7 +1020,8 @@ func builtinAIRules() []*rules.Rule {
 // separately by the scan.generated_paths filter.
 func applyAINoiseGlobs(out []*rules.Rule) {
 	noisy := map[string]bool{
-		"AI-006": true, "AI-008": true, "AI-026": true, "AI-036": true, "AI-039": true,
+		"AI-006": true, "AI-008": true, "AI-026": true, "AI-030": true,
+		"AI-036": true, "AI-039": true,
 	}
 	globs := []string{
 		"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*",
