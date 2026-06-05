@@ -1435,3 +1435,15 @@ func TestAllAIRules_Compile(t *testing.T) {
 		}
 	}
 }
+
+func TestAI009_IgnoresLiteralEval(t *testing.T) {
+	a := NewAnalyzer()
+	// ast.literal_eval is a safe parser, not code execution — must not fire.
+	if r, _ := a.ScanFile("x.py", []byte(`result = ast.literal_eval(model_output)`)); findingWithRule(r, "AI-009") != nil {
+		t.Error("AI-009 false-positive on ast.literal_eval")
+	}
+	// Real exec of LLM output must still fire.
+	if r, _ := a.ScanFile("x.py", []byte(`exec(llm_output)`)); findingWithRule(r, "AI-009") == nil {
+		t.Error("AI-009 must fire on exec(llm_output)")
+	}
+}

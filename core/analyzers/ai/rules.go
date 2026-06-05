@@ -127,7 +127,9 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AI-009", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
 			// nox:ignore AI-009 -- rule definition, not a real finding
-			pattern:     `(?i)(eval|exec)\s*\(.*?(response|completion|output|generated|llm_output|model_output)`,
+			// \b before the verb avoids matching safe parsers like Python's
+			// ast.literal_eval (the "_eval" has no word boundary).
+			pattern:     `(?i)\b(?:eval|exec)\s*\(.*?(?:response|completion|output|generated|llm_output|model_output)`,
 			description: "LLM output passed to code execution function",
 			cwe:         "CWE-94", keywords: []string{"eval(", "exec("},
 			tags: []string{"ai", "output-handling", "code-execution"},
