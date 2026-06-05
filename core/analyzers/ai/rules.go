@@ -843,7 +843,12 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-011", severity: findings.SeverityCritical, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(?:read|cat|exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)`,
+			// Two arms: (1) an exfiltration verb (send/upload/leak/…) targeting
+			// any secret noun; (2) a passive read/cat targeting only a sensitive
+			// FILE path. Bare "read secrets" is excluded — it matches legitimate
+			// local secrets-config loading (temper/nomi dogfood FPs) rather than
+			// exfiltration, which always pairs a read with a send or an SSH/.env path.
+			pattern:     `(?i)(?:(?:exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)|(?:read|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd))`,
 			description: "MCP tool metadata stages credential/secret exfiltration (tool poisoning)",
 			cwe:         "CWE-77", keywords: []string{"id_rsa", ".ssh", ".env", "exfiltrate", "credentials", "api key", "secrets", "access token"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
@@ -921,8 +926,13 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-019", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(?:fetch|callback|redirect|webhook|discovery|oauth)[\s\S]{0,80}https?://(?:127\.0\.0\.1|0\.0\.0\.0|localhost|10\.\d{1,3}\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)`,
-			description: "MCP fetch/OAuth-discovery target points at a private or loopback address (SSRF)",
+			// Loopback (localhost/127.0.0.1) is intentionally excluded: it is
+			// overwhelmingly legitimate local dev (dev webhook servers, local
+			// proxies, devtools), as the roady/tokenops/scout dogfood FPs showed.
+			// Private ranges and link-local remain — those are the real SSRF
+			// pivots toward internal services and cloud metadata.
+			pattern:     `(?i)(?:fetch|callback|redirect|webhook|discovery|oauth)[\s\S]{0,80}https?://(?:10\.\d{1,3}\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)`,
+			description: "MCP fetch/OAuth-discovery target points at a private or link-local address (SSRF)",
 			cwe:         "CWE-918", keywords: []string{"fetch", "callback", "redirect", "webhook", "discovery", "oauth"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.json", "*.yaml", "*.yml", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "ssrf", "owasp-mcp07"},

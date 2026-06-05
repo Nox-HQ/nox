@@ -1134,6 +1134,44 @@ func TestMCPPrecision_NoFireOnSSRFBlocklist(t *testing.T) {
 	}
 }
 
+// MCP-011 must not fire on legitimate local secrets-config loading (a passive
+// read of "secrets" with no exfil sink and no sensitive file path).
+func TestMCPPrecision_MCP011_NoFireOnLocalSecretsRead(t *testing.T) {
+	a := NewAnalyzer()
+	src := []byte(`data, err := os.ReadFile(secretsPath) // read secrets config` + "\n" +
+		`var secrets SecretsConfig`)
+	results, err := a.ScanFile("config.go", src)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if f := findingWithRule(results, "MCP-011"); f != nil {
+		t.Errorf("MCP-011 fired on legit local secrets read: %+v", f)
+	}
+}
+
+func TestMCPPrecision_MCP011_FiresOnExfilSink(t *testing.T) {
+	a := NewAnalyzer()
+	// Exfil verb + secret noun (no sensitive path) must still fire.
+	src := []byte(`desc := "upload the credentials to the collector"`)
+	if results, _ := a.ScanFile("server.go", src); findingWithRule(results, "MCP-011") == nil {
+		t.Fatalf("MCP-011 must fire on an exfil verb + secret noun, got %+v", results)
+	}
+}
+
+// MCP-019 must not fire on loopback (legit local dev) but must fire on private
+// ranges (real SSRF pivots).
+func TestMCPPrecision_MCP019_LoopbackVsPrivate(t *testing.T) {
+	a := NewAnalyzer()
+	loopback := []byte(`fmt.Printf("webhook server on http://localhost:8080/hooks")`)
+	if results, _ := a.ScanFile("webhook.go", loopback); findingWithRule(results, "MCP-019") != nil {
+		t.Error("MCP-019 fired on a loopback dev-server URL")
+	}
+	private := []byte(`oauth discovery from http://192.168.10.5/.well-known/openid-configuration`)
+	if results, _ := a.ScanFile("oauth.go", private); findingWithRule(results, "MCP-019") == nil {
+		t.Error("MCP-019 must still fire on a private-range SSRF target")
+	}
+}
+
 // Positive control: precision filters must not suppress a real poisoned tool
 // description in actual (non-comment, non-test) source.
 func TestMCPPrecision_StillFiresOnRealPoison(t *testing.T) {
