@@ -157,6 +157,9 @@ run_scan() {
   if [[ -n "${INPUT_CHANGED_SINCE:-}" ]]; then
     extra_args+=(--changed-since "${INPUT_CHANGED_SINCE}")
   fi
+  if [[ "${INPUT_OFFLINE:-false}" == "true" ]]; then
+    extra_args+=(--offline)
+  fi
   "${install_dir}/nox" --format "${scan_format}" --output "${output_dir}" -q scan "${scan_path}" "${extra_args[@]}" || exit_code=$?
 
   # Set outputs.

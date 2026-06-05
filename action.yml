@@ -54,6 +54,10 @@ inputs:
     description: 'Scan only files changed since this git ref (e.g. origin/main). Empty = full scan.'
     required: false
     default: ''
+  offline:
+    description: 'Guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry).'
+    required: false
+    default: 'false'
 
 outputs:
   findings-count:
@@ -88,4 +92,5 @@ runs:
         INPUT_SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
         INPUT_VEX: ${{ inputs.vex }}
         INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
+        INPUT_OFFLINE: ${{ inputs.offline }}
       run: bash "${{ github.action_path }}/action.sh"

@@ -1,0 +1,57 @@
+name: MCP Security
+
+# Scan an MCP server before it ships. Run on every PR and on the release
+# tag so a poisoned tool description, leaked credential, rug-pulled
+# definition, or shadowed tool can never reach a published version.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  nox-mcp:
+    name: Nox MCP Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan MCP server (offline, fail on high)
+        id: nox
+        uses: nox-hq/nox@v1
+        with:
+          path: .
+          format: sarif
+          output: nox-out
+          # Block the merge / release on any High+ finding. MCP tool
+          # poisoning (MCP-009..014), rug-pull (MCP-015), auth/SSRF
+          # (MCP-016..021), and shadowing (MCP-022..024) are High+.
+          severity-threshold: high
+          fail-on-findings: true
+          # Zero network: no API, no token, no telemetry. Your server
+          # config and source never leave the runner.
+          offline: true
+          pr-comment: ${{ github.event_name == 'pull_request' }}
+          min-severity: high
+
+      - name: Upload SARIF to Code Scanning
+        if: always() && steps.nox.outputs.sarif-file != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.nox.outputs.sarif-file }}
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nox-mcp-findings
+          path: nox-out/
+          retention-days: 30
