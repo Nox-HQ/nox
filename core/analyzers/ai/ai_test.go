@@ -1187,6 +1187,49 @@ func TestMCPPrecision_StillFiresOnRealPoison(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// AI rule pattern-bug regressions (surfaced scanning top public MCP servers)
+// ---------------------------------------------------------------------------
+
+func TestAI033_RequiresFilterContext(t *testing.T) {
+	a := NewAnalyzer()
+	// Bare null/false/disabled (e.g. TS type defs) must NOT fire — the old
+	// pattern lacked a group and matched these words anywhere.
+	for _, s := range []string{`type T = { enabled: false }`, `let x = null;`, `disabled = true`} {
+		if r, _ := a.ScanFile("worker-configuration.d.ts", []byte(s)); findingWithRule(r, "AI-033") != nil {
+			t.Errorf("AI-033 false-positive on %q", s)
+		}
+	}
+	// Real disabled content filter must still fire.
+	if r, _ := a.ScanFile("cfg.py", []byte(`content_filter = None`)); findingWithRule(r, "AI-033") == nil {
+		t.Error("AI-033 must fire on a disabled content filter")
+	}
+}
+
+func TestAI036_RequiresGPTPrefix(t *testing.T) {
+	a := NewAnalyzer()
+	for _, s := range []string{`version: "1.35.0"`, `const id = "abc35def"`, `count := 35`} {
+		if r, _ := a.ScanFile("app.go", []byte(s)); findingWithRule(r, "AI-036") != nil {
+			t.Errorf("AI-036 false-positive on %q", s)
+		}
+	}
+	if r, _ := a.ScanFile("app.go", []byte(`model = "gpt-3.5-turbo"`)); findingWithRule(r, "AI-036") == nil {
+		t.Error("AI-036 must fire on gpt-3.5-turbo")
+	}
+}
+
+func TestAI026_RequiresLLMToken(t *testing.T) {
+	a := NewAnalyzer()
+	// Generic logging with common words must NOT fire.
+	if r, _ := a.ScanFile("log.ts", []byte(`console.log("help message: " + content)`)); findingWithRule(r, "AI-026") != nil {
+		t.Error("AI-026 false-positive on generic console.log")
+	}
+	// Logging an actual LLM response must fire.
+	if r, _ := a.ScanFile("log.py", []byte(`print(llm_response)`)); findingWithRule(r, "AI-026") == nil {
+		t.Error("AI-026 must fire on logging an llm_response")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // MCP authorization & token safety (MCP-016..021, OWASP MCP07)
 // ---------------------------------------------------------------------------
 

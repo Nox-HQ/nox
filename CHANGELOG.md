@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MCP threat coverage mapped to the OWASP MCP Top 10.** New rules for tool
+  poisoning (MCP-009..014), rug-pull/definition drift (MCP-015, `core/mcppin`),
+  authorization & SSRF (MCP-016..021), and shadow/cross-server shadowing
+  (MCP-022..024, `core/mcpshadow`). Every MCP rule carries its OWASP MCP control
+  in SARIF (`properties.owasp-mcp`) plus a `tags[]` array.
+- **`--offline` zero-network guarantee** and `scan.generated_paths`, a
+  configurable noise filter (sensible default; `disabled`/`extend`/`override`)
+  that stops the content rule families (AI-*, MCP-*) from firing on generated
+  and vendored files (lockfiles, minified bundles, generated type defs).
+  Dependency scanning is unaffected — lockfiles are still CVE-scanned.
+- 17+ MCP client config locations are now discovered (`core/discovery/mcpclients`).
+
+### Fixed
+
+- **AI rule precision** (surfaced by scanning the top public MCP servers):
+  - `AI-033` lacked a group around its alternation and matched bare
+    `null`/`false`/`disabled` anywhere — the cause of thousands of false
+    positives on generated TypeScript type definitions.
+  - `AI-036` matched a bare `"35"` anywhere (version strings, hashes); it now
+    requires a `gpt-` prefix.
+  - `AI-026` matched any log call containing the generic words
+    `content`/`output`/`message`/`response`; it now requires an LLM-specific
+    token.
+  - `AI-006/008/026/036/039` no longer fire in test files or documentation.
+  - MCP prose rules (`MCP-009..014/018/019`) skip comments, test files, and
+    defensive contexts (e.g. an SSRF metadata IP inside a blocklist); `MCP-011`
+    needs an exfil sink or sensitive path; `MCP-019` ignores loopback.
+  - `MCP-022` is now informational (advisory posture signal, not a defect).
+- **Policy gate** no longer counts inline-suppressed or VEX-cleared findings as
+  new — a suppressed High no longer fails the gate.
+- **`analyzer_rules`** rule IDs now match wildcards (e.g. `VULN-*`); the
+  documented but unimplemented `skip_analyzer` action now works.
+
 ## [0.10.1] - 2026-05-23
 
 ### Fixed

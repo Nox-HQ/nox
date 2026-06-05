@@ -353,7 +353,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-026", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(log|print|echo|console\.log)\s*\(.*?(prompt|message|response|content|output)`,
+			// Require an LLM-specific token rather than the generic words
+			// content/output/message/response, which match any console.log.
+			pattern:     `(?i)(?:log|print|echo|console\.log)\s*\([^)]*\b(?:llm_response|chat_response|model_response|model_output|completion(?:_text)?|system_(?:prompt|message)|prompt_text|response\.(?:text|content)|chat_completion)\b`,
 			description: "LLM prompt or response logged without redaction",
 			cwe:         "CWE-532", keywords: []string{"log", "prompt", "response"},
 			tags:        []string{"ai", "privacy", "logging"},
@@ -421,7 +423,7 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-033", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(response_filter|output_filter|content_filter)\s*[:=]\s*None|null|false|disabled`,
+			pattern:     `(?i)(?:response_filter|output_filter|content_filter)\s*[:=]\s*(?:None|null|false|disabled)`,
 			description: "AI response content filtering disabled",
 			cwe:         "CWE-754", keywords: []string{"response_filter", "content_filter"},
 			tags:        []string{"ai", "safety", "content-moderation"},
@@ -448,7 +450,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-036", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(fallback|gpt-)?[_-]?3[_-]?5[_-]?(turbo)?`,
+			// Require the gpt- prefix; the old all-optional pattern matched a
+			// bare "35" anywhere (version strings, hashes, lockfiles).
+			pattern:     `(?i)gpt[-_]?3[._-]?5(?:[-_]?turbo)?`,
 			description: "Using deprecated GPT-3.5 model",
 			cwe:         "CWE-1104", keywords: []string{"gpt-3.5", "fallback"},
 			tags:        []string{"ai", "deprecation", "model-selection"},
@@ -1003,7 +1007,28 @@ func builtinAIRules() []*rules.Rule {
 	}
 
 	applyMCPProsePrecision(out)
+	applyAINoiseGlobs(out)
 	return out
+}
+
+// applyAINoiseGlobs adds test-file and documentation ignore globs to the AI
+// prose / logging / model-selection rules. Scanning the top public MCP servers
+// showed these rules firing on test fixtures, README/SKILL docs, and JSDoc —
+// never on real production AI code. Generated/vendored files are handled
+// separately by the scan.generated_paths filter.
+func applyAINoiseGlobs(out []*rules.Rule) {
+	noisy := map[string]bool{
+		"AI-006": true, "AI-008": true, "AI-026": true, "AI-036": true, "AI-039": true,
+	}
+	globs := []string{
+		"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*",
+		"*.md", "*.mdx", "*.markdown", "*.rst",
+	}
+	for _, r := range out {
+		if noisy[r.ID] {
+			r.IgnoreFilePatterns = append(r.IgnoreFilePatterns, globs...)
+		}
+	}
 }
 
 // applyMCPProsePrecision hardens the MCP prose rules against false positives
