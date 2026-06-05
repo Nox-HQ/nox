@@ -149,12 +149,14 @@ func DetectTyposquatting(name, ecosystem string, threshold int) (string, bool) {
 		return "", false
 	}
 
-	lowerName := strings.ToLower(name)
+	lowerName := normalizeDistName(name)
 
 	for _, popular := range names {
-		lowerPopular := strings.ToLower(popular)
+		lowerPopular := normalizeDistName(popular)
 
-		// Exact match — not a typosquat, it is the real package.
+		// Exact match — not a typosquat, it is the real package. Names are
+		// PEP 503-normalized so canonical variants like "huggingface_hub" vs
+		// "huggingface-hub" compare equal instead of looking like a typosquat.
 		if lowerName == lowerPopular {
 			return "", false
 		}
@@ -166,6 +168,28 @@ func DetectTyposquatting(name, ecosystem string, threshold int) (string, bool) {
 	}
 
 	return "", false
+}
+
+// normalizeDistName canonicalizes a distribution name per PEP 503: lowercase
+// and collapse any run of "-", "_", or "." to a single "-". This makes
+// equivalent spellings (huggingface_hub, huggingface-hub) compare equal.
+func normalizeDistName(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	prevSep := false
+	for _, r := range s {
+		if r == '-' || r == '_' || r == '.' {
+			if !prevSep {
+				b.WriteByte('-')
+				prevSep = true
+			}
+			continue
+		}
+		b.WriteRune(r)
+		prevSep = false
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // IsKnownMalicious checks if a package with the given name and ecosystem

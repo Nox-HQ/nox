@@ -430,3 +430,13 @@ func TestMaliciousPackagesLoaded(t *testing.T) {
 		t.Fatal("expected non-empty pypi malicious packages list")
 	}
 }
+
+func TestDetectTyposquatting_PEP503Canonical(t *testing.T) {
+	// Canonical names with underscores must NOT be flagged as typosquats of
+	// their hyphenated popular form (PEP 503 treats them as equal).
+	for _, name := range []string{"huggingface_hub", "python_pptx", "scikit_learn"} {
+		if pop, ok := DetectTyposquatting(name, "pypi", 2); ok {
+			t.Errorf("%s flagged as typosquat of %q (PEP 503 canonical, should be exact match)", name, pop)
+		}
+	}
+}
