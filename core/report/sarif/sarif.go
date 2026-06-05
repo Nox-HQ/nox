@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -71,7 +72,10 @@ type ReportingDescriptor struct {
 	Help                 *MultiformatMessage `json:"help,omitempty"`
 	HelpURI              string              `json:"helpUri,omitempty"`
 	DefaultConfiguration Configuration       `json:"defaultConfiguration"`
-	Properties           map[string]string   `json:"properties,omitempty"`
+	// Properties is a SARIF property bag. Values are typically strings (e.g.
+	// "cwe", "owasp-mcp") but "tags" is a []string so GitHub Code Scanning and
+	// registries can read rule categories from the standard taxonomy slot.
+	Properties map[string]any `json:"properties,omitempty"`
 }
 
 // MultiformatMessage is a SARIF message that can carry both plain text and
@@ -288,8 +292,20 @@ func (r *Reporter) buildCatalogFromRuleSet() (catalog []ReportingDescriptor, ind
 			},
 		}
 
-		if len(rule.Metadata) > 0 {
-			desc.Properties = rule.Metadata
+		props := make(map[string]any, len(rule.Metadata)+2)
+		for k, v := range rule.Metadata {
+			props[k] = v
+		}
+		// Surface OWASP MCP Top 10 control mapping for standards alignment.
+		if control := compliance.ControlForRule(rule.ID, rule.Tags); control != "" {
+			props["owasp-mcp"] = control
+		}
+		// Emit rule tags in the standard SARIF taxonomy slot.
+		if len(rule.Tags) > 0 {
+			props["tags"] = rule.Tags
+		}
+		if len(props) > 0 {
+			desc.Properties = props
 		}
 
 		// Populate help text from Remediation for GitHub Code Scanning.

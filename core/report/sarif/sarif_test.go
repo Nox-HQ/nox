@@ -344,6 +344,48 @@ func TestRuleCatalogPopulatedFromRuleSet(t *testing.T) {
 	}
 }
 
+func TestRuleCatalog_OWASPMCPMappingAndTags(t *testing.T) {
+	rs := rules.NewRuleSet()
+	rs.Add(&rules.Rule{
+		ID:          "MCP-009",
+		Version:     "1.0",
+		Description: "Tool poisoning",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceMedium,
+		MatcherType: "regex",
+		Pattern:     "x",
+		Tags:        []string{"ai", "mcp", "owasp-mcp03"},
+		Metadata:    map[string]string{"cwe": "CWE-77"},
+	})
+	r := NewReporter("0.1.0", rs)
+
+	data, err := r.Generate(findings.NewFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	var report Report
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	props := report.Runs[0].Tool.Driver.Rules[0].Properties
+	if props["owasp-mcp"] != "MCP03" {
+		t.Errorf("expected owasp-mcp = MCP03, got %v", props["owasp-mcp"])
+	}
+	tags, ok := props["tags"].([]any)
+	if !ok {
+		t.Fatalf("expected tags to be a JSON array, got %T", props["tags"])
+	}
+	found := false
+	for _, tg := range tags {
+		if tg == "owasp-mcp03" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected tags to include owasp-mcp03, got %v", tags)
+	}
+}
+
 func TestRuleCatalogHasHelpAndHelpURI(t *testing.T) {
 	rs := sampleRuleSet()
 	r := NewReporter("0.1.0", rs)

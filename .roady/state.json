@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 172,
+  "version": 174,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -654,8 +654,14 @@
       "elapsed_minutes": 2
     },
     "task-69": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "core/compliance OWASP MCP Top 10 framework + rule-\u003econtrol mapping (test-enforced over catalog); SARIF emits owasp-mcp + tags array; tests green"
+      ],
+      "started_at": "2026-06-05T11:21:02.419725+02:00",
+      "completed_at": "2026-06-05T11:21:06.091539+02:00",
       "elapsed_minutes": 0
     },
     "task-7": {
@@ -701,5 +707,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T11:17:11.073697+02:00"
+  "updated_at": "2026-06-05T11:21:06.09154+02:00"
 }
