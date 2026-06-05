@@ -5,6 +5,8 @@
 package findings
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -22,6 +24,15 @@ const (
 	SeverityLow      Severity = "low"
 	SeverityInfo     Severity = "info"
 )
+
+// IsValid reports whether s is one of the defined severity levels.
+func (s Severity) IsValid() bool {
+	switch s {
+	case SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo:
+		return true
+	}
+	return false
+}
 
 // Status indicates the disposition of a finding relative to baselines and
 // inline suppressions.
@@ -58,6 +69,15 @@ const (
 	ConfidenceLow    Confidence = "low"
 )
 
+// IsValid reports whether c is one of the defined confidence levels.
+func (c Confidence) IsValid() bool {
+	switch c {
+	case ConfidenceHigh, ConfidenceMedium, ConfidenceLow:
+		return true
+	}
+	return false
+}
+
 // Location pinpoints where a finding was detected within a source file. The
 // fields map directly to the SARIF physicalLocation / region model so that
 // report generation can consume them without translation.
@@ -67,6 +87,16 @@ type Location struct {
 	EndLine     int
 	StartColumn int
 	EndColumn   int
+}
+
+// Normalized returns a copy of the location with a sane EndLine: a zero or
+// out-of-order EndLine is set to StartLine so consumers always see a valid
+// range (StartLine <= EndLine).
+func (l Location) Normalized() Location {
+	if l.EndLine == 0 || l.EndLine < l.StartLine {
+		l.EndLine = l.StartLine
+	}
+	return l
 }
 
 // Finding is a single security observation produced by an analyzer. It is the
@@ -81,6 +111,40 @@ type Finding struct {
 	Fingerprint string
 	Metadata    map[string]string
 	Status      Status `json:"Status,omitempty"`
+}
+
+// NewFinding constructs a Finding with a normalized location. It is the
+// preferred way to create findings: the location range is made valid and the
+// caller's severity/confidence are used as-is (validate with Validate). Fields
+// remain public for ergonomic construction; this factory centralizes the
+// normalization that FindingSet.Add also applies.
+func NewFinding(ruleID string, severity Severity, confidence Confidence, loc Location, message string) Finding {
+	return Finding{
+		RuleID:     ruleID,
+		Severity:   severity,
+		Confidence: confidence,
+		Location:   loc.Normalized(),
+		Message:    message,
+	}
+}
+
+// Validate reports the first invariant a finding violates, or nil if it is
+// well-formed: a rule ID, a valid severity and confidence, and a sane line
+// range. Useful as a guard in tests and at analyzer boundaries.
+func (f Finding) Validate() error {
+	if f.RuleID == "" {
+		return errors.New("finding: empty RuleID")
+	}
+	if !f.Severity.IsValid() {
+		return fmt.Errorf("finding %s: invalid severity %q", f.RuleID, f.Severity)
+	}
+	if !f.Confidence.IsValid() {
+		return fmt.Errorf("finding %s: invalid confidence %q", f.RuleID, f.Confidence)
+	}
+	if f.Location.StartLine < 0 || (f.Location.EndLine != 0 && f.Location.EndLine < f.Location.StartLine) {
+		return fmt.Errorf("finding %s: invalid line range %d-%d", f.RuleID, f.Location.StartLine, f.Location.EndLine)
+	}
+	return nil
 }
 
 // FindingSet is an ordered, deduplicated collection of findings. It is the

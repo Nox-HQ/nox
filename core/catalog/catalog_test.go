@@ -2,6 +2,8 @@ package catalog
 
 import (
 	"testing"
+
+	"github.com/nox-hq/nox/core/findings"
 )
 
 func TestCatalogContainsAllRules(t *testing.T) {
@@ -64,6 +66,17 @@ func TestCatalogLookup(t *testing.T) {
 		}
 		if meta.Description != tt.want {
 			t.Errorf("rule %s description = %q, want %q", tt.id, meta.Description, tt.want)
+		}
+	}
+}
+
+func TestCatalog_AllRulesHaveValidSeverityAndConfidence(t *testing.T) {
+	for id, meta := range Catalog() {
+		if !findings.Severity(meta.Severity).IsValid() {
+			t.Errorf("rule %s has invalid severity %q", id, meta.Severity)
+		}
+		if !findings.Confidence(meta.Confidence).IsValid() {
+			t.Errorf("rule %s has invalid confidence %q", id, meta.Confidence)
 		}
 	}
 }

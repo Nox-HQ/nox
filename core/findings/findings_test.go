@@ -895,3 +895,43 @@ func TestRemoveByRuleIDsInDirs(t *testing.T) {
 		t.Error("non-content-rule (VULN) finding in tests must be kept")
 	}
 }
+
+func TestSeverityConfidence_IsValid(t *testing.T) {
+	t.Parallel()
+	if !SeverityHigh.IsValid() || !ConfidenceLow.IsValid() {
+		t.Error("defined severity/confidence must be valid")
+	}
+	if Severity("bogus").IsValid() || Confidence("").IsValid() {
+		t.Error("undefined severity/confidence must be invalid")
+	}
+}
+
+func TestLocation_Normalized(t *testing.T) {
+	t.Parallel()
+	if got := (Location{StartLine: 5}).Normalized(); got.EndLine != 5 {
+		t.Errorf("zero EndLine should default to StartLine, got %d", got.EndLine)
+	}
+	if got := (Location{StartLine: 5, EndLine: 2}).Normalized(); got.EndLine != 5 {
+		t.Errorf("out-of-order EndLine should clamp to StartLine, got %d", got.EndLine)
+	}
+	if got := (Location{StartLine: 5, EndLine: 9}).Normalized(); got.EndLine != 9 {
+		t.Errorf("valid range must be preserved, got %d", got.EndLine)
+	}
+}
+
+func TestNewFinding_AndValidate(t *testing.T) {
+	t.Parallel()
+	f := NewFinding("SEC-001", SeverityHigh, ConfidenceMedium, Location{FilePath: "a.go", StartLine: 3}, "secret")
+	if f.Location.EndLine != 3 {
+		t.Errorf("NewFinding should normalize location, got EndLine=%d", f.Location.EndLine)
+	}
+	if err := f.Validate(); err != nil {
+		t.Errorf("well-formed finding should validate, got %v", err)
+	}
+	if (Finding{Severity: SeverityHigh, Confidence: ConfidenceLow}).Validate() == nil {
+		t.Error("empty RuleID must fail validation")
+	}
+	if (Finding{RuleID: "X", Severity: "bogus", Confidence: ConfidenceLow}).Validate() == nil {
+		t.Error("invalid severity must fail validation")
+	}
+}
