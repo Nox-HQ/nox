@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	mcp "github.com/felixgeelhaar/mcp-go"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/plugin"
+	mcp "go.klarlabs.de/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
