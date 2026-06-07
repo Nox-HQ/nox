@@ -6,15 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os/exec"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	mcp "github.com/felixgeelhaar/mcp-go"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/annotate"
@@ -30,6 +29,7 @@ import (
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/core/vex"
 	"github.com/nox-hq/nox/plugin"
+	mcp "go.klarlabs.de/mcp"
 )
 
 const (
