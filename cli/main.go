@@ -231,6 +231,30 @@ func run(args []string) int {
 	}
 }
 
+// parseInterspersed parses fs from args where flags may appear before AND
+// after positional arguments. The stdlib flag package stops at the first
+// non-flag token, so a flag placed after the path (e.g. "scan . -offline")
+// would otherwise be silently dropped (#103). After each positional we
+// re-parse the remainder, so every flag is honored regardless of position.
+// Returns the positional arguments in order.
+func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			return positionals, err
+		}
+		if fs.NArg() == 0 {
+			return positionals, nil
+		}
+		positionals = append(positionals, fs.Arg(0))
+		rest = fs.Args()[1:]
+		if len(rest) == 0 {
+			return positionals, nil
+		}
+	}
+}
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -240,8 +264,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noOSVFlag     bool
 	)
 	var (
-		vexFlag        string
-		tfPlanFlag     string
+		vexFlag    string
+		tfPlanFlag string
 	)
 	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
 	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
@@ -268,7 +292,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v1 unless NOX_FINGERPRINT_VERSION is set.")
-	if err := scanFS.Parse(args); err != nil {
+	positionals, err := parseInterspersed(scanFS, args)
+	if err != nil {
 		return 2
 	}
 	// Wire fingerprint version: explicit flag wins, then env var (handled
@@ -286,11 +311,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return 2
 	}
 
-	if scanFS.NArg() == 0 {
+	if len(positionals) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: nox scan <path> [flags]")
 		return 2
 	}
-	target := scanFS.Arg(0)
+	target := positionals[0]
 
 	// Load project config for output defaults.
 	cfg, err := nox.LoadScanConfig(target)
