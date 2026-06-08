@@ -4,6 +4,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -323,6 +324,27 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// Phase 2c: Run configured analysis plugins (taint, SAST, …) declared in
+	// .nox.yaml plugins.required and merge their findings in BEFORE refinement,
+	// so plugin findings are fingerprinted and baseline-matched like any other.
+	// The hook is nil unless the CLI registered it (avoids a core→plugin import
+	// cycle). Plugin failures are non-fatal — the built-in scan still completes.
+	var pluginEnrichments []findings.Enrichment
+	var pluginGraphs []graph.Graph
+	if ScanPluginHook != nil && len(cfg.Plugins.Required) > 0 {
+		out, hookErr := ScanPluginHook(ctx, target, cfg.Plugins.Required)
+		if hookErr != nil {
+			slog.WarnContext(ctx, "analysis plugins failed; continuing with built-in findings only", "error", hookErr)
+		}
+		if out != nil {
+			for i := range out.Findings {
+				allFindings.Add(out.Findings[i])
+			}
+			pluginEnrichments = out.Enrichments
+			pluginGraphs = out.Graphs
+		}
+	}
+
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,
 	// baseline matching, and VEX.
@@ -333,6 +355,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 
 	return &ScanResult{
 		Findings:     allFindings,
+		Enrichments:  pluginEnrichments,
+		Graphs:       pluginGraphs,
 		Inventory:    inventory,
 		AIInventory:  aiInventory,
 		PolicyResult: policyResult,
