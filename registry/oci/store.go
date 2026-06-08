@@ -278,8 +278,10 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 			}
 		}
 		installed.ExtractDir = extractDir
-		// Look for a binary with the plugin base name in the extracted directory.
-		installed.BinaryPath = filepath.Join(extractDir, filepath.Base(name))
+		// Locate the actual executable: the binary is often named after the
+		// plugin's repo (e.g. "nox-plugin-taint-analysis"), not its short
+		// registry name, so a fixed base-name guess misses it.
+		installed.BinaryPath = findPluginBinary(extractDir, name)
 
 	case FormatRawBinary:
 		if err := SetExecutable(blobPath); err != nil {
