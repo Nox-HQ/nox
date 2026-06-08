@@ -69,6 +69,15 @@ func runPluginBinaries(ctx context.Context, target string, binaries []string, po
 		policy = &p
 	}
 
+	// Plugins run as subprocesses whose working directory is not guaranteed
+	// to match nox's, so a relative target (commonly ".") would make a plugin
+	// walk the wrong tree and silently find nothing. Always hand the plugin an
+	// absolute workspace root.
+	absTarget, absErr := filepath.Abs(target)
+	if absErr != nil {
+		absTarget = target
+	}
+
 	host := plugin.NewHost(plugin.WithPolicy(policy))
 	defer func() { _ = host.Close() }()
 
@@ -81,8 +90,8 @@ func runPluginBinaries(ctx context.Context, target string, binaries []string, po
 	// Run the analysis `scan` tool across every plugin that declares it.
 	// workspace_root is passed both as the host workspace argument and in the
 	// input map, since plugins read it from req.Input["workspace_root"].
-	input := map[string]any{"workspace_root": target}
-	responses, err := host.InvokeAll(ctx, "scan", input, target)
+	input := map[string]any{"workspace_root": absTarget}
+	responses, err := host.InvokeAll(ctx, "scan", input, absTarget)
 	if err != nil {
 		return nil, fmt.Errorf("invoking analysis plugins: %w", err)
 	}
