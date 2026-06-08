@@ -16,9 +16,10 @@ type PluginScanOutput struct {
 	Graphs      []graph.Graph
 }
 
-// ScanPluginHook, when set, runs the analysis plugins listed in a project's
-// .nox.yaml plugins.required and returns their findings, enrichments and
-// graphs so the scan pipeline can merge them with the built-in analyzers.
+// ScanPluginHook runs the analysis plugins listed in a project's .nox.yaml
+// plugins.required and returns their findings, enrichments and graphs so the
+// scan pipeline can merge them with the built-in analyzers. It is nil unless
+// the CLI registers an implementation.
 //
 // It is a package-level hook rather than a direct call because running a
 // plugin needs the plugin host and the installed-plugin state, which live in
