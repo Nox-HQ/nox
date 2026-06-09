@@ -629,3 +629,22 @@ func TestStoreFetchWithMirror(t *testing.T) {
 		t.Errorf("PluginName = %q, want %q", installed.PluginName, "test/plugin")
 	}
 }
+
+func TestDeriveChecksumsURL(t *testing.T) {
+	const base = "https://github.com/x/y/releases/download/v1/checksums.txt"
+	tests := []struct {
+		name, bundleURL, sigURL, want string
+	}{
+		{"sigstore bundle (cosign v3.10+/v4)", base + ".sigstore.json", "", base},
+		{"legacy sig.bundle", base + ".sig.bundle", "", base},
+		{"legacy detached signature", "", base + ".sig", base},
+		{"bundle wins over sig", base + ".sigstore.json", base + ".sig", base},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deriveChecksumsURL(tt.bundleURL, tt.sigURL); got != tt.want {
+				t.Errorf("deriveChecksumsURL(%q,%q) = %q, want %q", tt.bundleURL, tt.sigURL, got, tt.want)
+			}
+		})
+	}
+}
