@@ -351,7 +351,13 @@ func dropPolicyLevelViolations(in []trust.Violation) []trust.Violation {
 // resolve to the same `checksums.txt`.
 func deriveChecksumsURL(bundleURL, sigURL string) string {
 	if bundleURL != "" {
-		return strings.TrimSuffix(bundleURL, ".sig.bundle")
+		// The bundle is named "<checksums>.<suffix>". cosign v3.10+/v4 emit
+		// ".sigstore.json"; older releases emit ".sig.bundle". Strip whichever
+		// is present so the real checksums file is fetched as the signed
+		// artifact — otherwise cosign verifies the signature against the
+		// bundle itself and reports "invalid signature".
+		u := strings.TrimSuffix(bundleURL, ".sigstore.json")
+		return strings.TrimSuffix(u, ".sig.bundle")
 	}
 	return strings.TrimSuffix(sigURL, ".sig")
 }
