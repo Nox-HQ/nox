@@ -155,6 +155,74 @@
           ],
           "minimum_nox_version": "0.6.0",
           "changelog_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/blob/main/CHANGELOG.md"
+        },
+        {
+          "version": "0.6.6",
+          "api_version": "v1",
+          "published_at": "2026-06-09T00:00:00.000000Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "scan"
+          ],
+          "artifacts": [
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/nox-plugin-taint-analysis_0.6.6_linux_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:24e62ac79071b27830885872b16969758f3d4f65a487b658a5fd03b4592274c0",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/nox-plugin-taint-analysis_0.6.6_linux_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:db61a67c2905f94b20dbc047d9fa3acb950bd3b2368b157335c2bd25162c51a8",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/nox-plugin-taint-analysis_0.6.6_darwin_amd64.tar.gz",
+              "size": 0,
+              "digest": "sha256:78cb2f45a950d5f5411e9b16a5e783bdaa61f1f80d6ced873f8fe6be86833aef",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/nox-plugin-taint-analysis_0.6.6_darwin_arm64.tar.gz",
+              "size": 0,
+              "digest": "sha256:25e88d2610afc28bdb72b02aa808f399442a1e41816973b96252bc92f23fd70f",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/nox-plugin-taint-analysis_0.6.6_windows_amd64.zip",
+              "size": 0,
+              "digest": "sha256:1e2fa10989e9211916851d6195052dbfa8ce3692aaf3d5469bcc400d59b96230",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.6.6/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ],
+          "minimum_nox_version": "0.6.0",
+          "changelog_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/blob/main/CHANGELOG.md"
         }
       ],
       "track": "core-analysis",
