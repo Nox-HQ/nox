@@ -1,0 +1,44 @@
+# nox security scan for GitLab CI/CD.
+#
+# Runs the nox container image, fails the pipeline on high+ findings, and
+# publishes the SARIF + JSON reports as artifacts. On merge requests it scans
+# only the diff against the target branch for fast feedback; on the default
+# branch it scans the whole repo.
+#
+# Pin the image to a release tag (e.g. ghcr.io/nox-hq/nox:v1.2.0) rather than
+# :latest for reproducible runs.
+
+stages:
+  - security
+
+nox-scan:
+  stage: security
+  image:
+    name: ghcr.io/nox-hq/nox:latest
+    entrypoint: [""]
+  variables:
+    # Full git history so --changed-since can diff against the target branch.
+    GIT_DEPTH: "0"
+  script:
+    - |
+      ARGS="--format sarif,json --output nox-out --severity-threshold high"
+      # Honour a committed OpenVEX waiver document if present.
+      if [ -f vex.json ]; then
+        ARGS="$ARGS --vex vex.json --fail-on-unwaived"
+      fi
+      # On a merge request, scan only the changed files vs the target branch.
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch --depth=50 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        ARGS="$ARGS --changed-since origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      fi
+      nox scan $ARGS .
+  artifacts:
+    when: always
+    paths:
+      - nox-out/results.sarif
+      - nox-out/findings.json
+    expire_in: 1 week
+  rules:
+    # Run on merge requests and on the default branch.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
