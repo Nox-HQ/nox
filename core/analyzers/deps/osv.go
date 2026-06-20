@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -167,13 +168,20 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 
 		resp, err := client.Do(req)
 		if err != nil {
-			// Network error — degrade gracefully.
+			// Network error — degrade gracefully, but say so: a silent empty
+			// result is indistinguishable from "no vulnerabilities found".
+			slog.WarnContext(ctx, "OSV query failed; dependency vulnerabilities may be under-reported",
+				"error", err, "queries", len(queries))
 			return result, nil
 		}
 
 		vulns, decodeErr := decodeBatchResponse(resp)
 		_ = resp.Body.Close()
 		if decodeErr != nil {
+			// Non-200 status or undecodable body — same risk: don't report a
+			// clean scan when the lookup actually failed.
+			slog.WarnContext(ctx, "OSV query returned an error; dependency vulnerabilities may be under-reported",
+				"error", decodeErr, "queries", len(queries))
 			return result, nil
 		}
 
