@@ -7,9 +7,9 @@ import (
 	"log"
 	"strings"
 
-	plannerllm "github.com/felixgeelhaar/agent-go/contrib/planner-llm"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/sdk"
+	plannerllm "go.klarlabs.de/agent/contrib/planner-llm"
 )
 
 const attackAnalysisSystemPrompt = `You are a red team security analyst. You analyze attack chains and generate sophisticated attack path assessments.

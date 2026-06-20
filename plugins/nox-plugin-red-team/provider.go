@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	plannerllm "github.com/felixgeelhaar/agent-go/contrib/planner-llm"
-	"github.com/felixgeelhaar/agent-go/contrib/planner-llm/providers"
+	plannerllm "go.klarlabs.de/agent/contrib/planner-llm"
+	"go.klarlabs.de/agent/contrib/planner-llm/providers"
 )
 
 // resolveProvider creates an LLM provider from NOX_AI_* environment variables.
