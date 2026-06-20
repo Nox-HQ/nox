@@ -2013,3 +2013,46 @@ func TestHandleListFindings_Pagination(t *testing.T) {
 		t.Errorf("expected empty final page, got %+v", beyond)
 	}
 }
+
+func TestHandleSummary(t *testing.T) {
+	// Before any scan.
+	s := New("0.1.0", nil)
+	if r, _ := s.handleSummary(context.Background(), emptyInput{}); !strings.HasPrefix(r, "Error:") {
+		t.Fatal("expected error before scan")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir, "secrets.env", "A=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	out, err := s.handleSummary(context.Background(), emptyInput{})
+	if err != nil || strings.HasPrefix(out, "Error:") {
+		t.Fatalf("summary failed: %v / %s", err, out)
+	}
+	var sum struct {
+		ActiveFindings int            `json:"active_findings"`
+		TotalFindings  int            `json:"total_findings"`
+		BySeverity     map[string]int `json:"by_severity"`
+		ByFamily       map[string]int `json:"by_family"`
+	}
+	if err := json.Unmarshal([]byte(out), &sum); err != nil {
+		t.Fatalf("summary not valid JSON: %v\n%s", err, out)
+	}
+	if sum.ActiveFindings < 2 {
+		t.Fatalf("expected >=2 active findings, got %d", sum.ActiveFindings)
+	}
+	if sum.ByFamily["secrets"] < 2 {
+		t.Errorf("expected secrets family count >=2, got %v", sum.ByFamily)
+	}
+	// counts must sum to active total.
+	sevSum := 0
+	for _, n := range sum.BySeverity {
+		sevSum += n
+	}
+	if sevSum != sum.ActiveFindings {
+		t.Errorf("severity counts %d != active findings %d", sevSum, sum.ActiveFindings)
+	}
+}
