@@ -1947,3 +1947,69 @@ func TestProjectResourceDashboard_AfterScan(t *testing.T) {
 		t.Fatalf("expected HTML content")
 	}
 }
+
+func TestHandleListFindings_Pagination(t *testing.T) {
+	dir := t.TempDir()
+	// Several distinct secrets across rules → several findings to page through.
+	// AWS keys are AKIA + 16 chars from [A-Z2-7]; use two valid, distinct ones
+	// plus a private-key header.
+	writeFile(t, dir, "secrets.env",
+		"A=AKIAIOSFODNN7EXAMPLE\nB=AKIAWXYZ234567ABCDEF\n")
+	writeFile(t, dir, "id_rsa",
+		"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+
+	s := New("0.1.0", nil)
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	type page struct {
+		Total, Offset, Limit, Returned int
+		HasMore                        bool                     `json:"has_more"`
+		Findings                       []map[string]interface{} `json:"findings"`
+	}
+	get := func(limit, offset int) page {
+		out, err := s.handleListFindings(context.Background(),
+			listFindingsInput{Limit: float64(limit), Offset: float64(offset)})
+		if err != nil || strings.HasPrefix(out, "Error:") {
+			t.Fatalf("list failed: %v / %s", err, out)
+		}
+		var p page
+		if err := json.Unmarshal([]byte(out), &p); err != nil {
+			t.Fatalf("envelope not valid JSON: %v\n%s", err, out)
+		}
+		return p
+	}
+
+	first := get(2, 0)
+	if first.Total < 3 {
+		t.Fatalf("expected >=3 findings to paginate, total=%d", first.Total)
+	}
+	if first.Returned != 2 || first.Limit != 2 || first.Offset != 0 || !first.HasMore {
+		t.Fatalf("unexpected first page: %+v", first)
+	}
+
+	second := get(2, 2)
+	if second.Total != first.Total {
+		t.Errorf("total changed across pages: %d vs %d", first.Total, second.Total)
+	}
+	if second.Offset != 2 {
+		t.Errorf("expected offset 2, got %d", second.Offset)
+	}
+	// Pages must not overlap (stable order).
+	firstIDs := map[string]bool{}
+	for _, f := range first.Findings {
+		firstIDs[f["ID"].(string)] = true
+	}
+	for _, f := range second.Findings {
+		if firstIDs[f["ID"].(string)] {
+			t.Errorf("finding %v appears on both pages", f["ID"])
+		}
+	}
+
+	// Offset past the end yields an empty page, not an error.
+	beyond := get(10, 1000)
+	if beyond.Returned != 0 || beyond.HasMore {
+		t.Errorf("expected empty final page, got %+v", beyond)
+	}
+}
