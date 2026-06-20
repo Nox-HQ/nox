@@ -1058,16 +1058,36 @@ jobs:
 
 ```yaml
 nox-scan:
-  image: golang:1.25
+  stage: security
+  image:
+    name: ghcr.io/nox-hq/nox:v1.2.0  # pin a release tag, not :latest
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"  # full history so --changed-since can diff the target branch
   script:
-    - go install github.com/nox-hq/nox/cli@latest
-    - nox scan . --format sarif,json --output results/
+    - |
+      ARGS="--format sarif,json --output nox-out --severity-threshold high"
+      [ -f vex.json ] && ARGS="$ARGS --vex vex.json --fail-on-unwaived"
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch --depth=50 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        ARGS="$ARGS --changed-since origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      fi
+      nox scan $ARGS .
   artifacts:
+    when: always
     paths:
-      - results/
-    reports:
-      sast: results/results.sarif
+      - nox-out/results.sarif
+      - nox-out/findings.json
 ```
+
+> **Note:** publish the SARIF as a plain artifact, not via
+> `artifacts:reports:sast`. GitLab's SAST report widget expects GitLab's own
+> JSON schema, not SARIF, so pointing it at `results.sarif` does not populate
+> the MR security widget. Download the artifact or feed the SARIF to a viewer.
+
+A complete, copy-paste-ready version (merge-request-scoped scanning, VEX
+waivers, gating) lives in
+[`examples/gitlab-ci/`](../examples/gitlab-ci/).
 
 ### Generic CI
 
