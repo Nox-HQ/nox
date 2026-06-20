@@ -7,8 +7,8 @@ import (
 	"log"
 	"strings"
 
-	plannerllm "github.com/felixgeelhaar/agent-go/contrib/planner-llm"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	plannerllm "go.klarlabs.de/agent/contrib/planner-llm"
 )
 
 const gapAnalysisSystemPrompt = `You are a GRC (Governance, Risk & Compliance) specialist. You analyze compliance gaps and provide prioritized remediation guidance.
