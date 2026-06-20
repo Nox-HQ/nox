@@ -35,6 +35,9 @@ import (
 const (
 	// maxOutputBytes is the maximum response size before truncation (1 MB).
 	maxOutputBytes = 1 << 20
+	// maxListLimit caps a single list_findings page so the response stays well
+	// under maxOutputBytes even with rule metadata enriched per finding.
+	maxListLimit = 500
 )
 
 // --- Input structs for typed tool handlers ---
@@ -57,6 +60,7 @@ type listFindingsInput struct {
 	Rule              string  `json:"rule,omitempty"`
 	File              string  `json:"file,omitempty"`
 	Limit             float64 `json:"limit,omitempty"`
+	Offset            float64 `json:"offset,omitempty"`
 	IncludeSuppressed bool    `json:"include_suppressed,omitempty"`
 }
 type baselineStatusInput struct {
@@ -236,7 +240,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Handler(s.handleGetFindingDetail)
 
 	srv.Tool("list_findings").
-		Description("List findings with optional severity, rule, and file filters").
+		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
 		Handler(s.handleListFindings)
 
@@ -518,7 +522,21 @@ func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (s
 		return "Error: report generation failed: " + err.Error(), nil
 	}
 
-	return truncate(string(data)), nil
+	// Never hand back a mid-structure truncation: a clipped SARIF/JSON document
+	// is unparseable and the agent has no signal that data was lost. When the
+	// full report exceeds the budget, return a structured pointer to the
+	// paginated list_findings tool instead.
+	if len(data) > maxOutputBytes {
+		notice, _ := json.MarshalIndent(map[string]any{
+			"error":       "output_too_large",
+			"total_bytes": len(data),
+			"limit_bytes": maxOutputBytes,
+			"hint":        "the full report exceeds the response budget — use list_findings with limit/offset to page through findings, or get a specific finding with get_finding_detail",
+		}, "", "  ")
+		return string(notice), nil
+	}
+
+	return string(data), nil
 }
 
 func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, error) {
@@ -607,24 +625,51 @@ func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) 
 	filter.IncludeSuppressed = input.IncludeSuppressed
 
 	filtered := store.Filter(filter)
+	total := len(filtered)
 
-	// Apply limit.
+	// Apply offset + limit so an agent can page through a large result set
+	// deterministically (findings come back in a stable sorted order). Default
+	// page size 50; capped at maxListLimit to keep one response well under the
+	// MCP output budget.
 	limit := 50
 	if input.Limit > 0 {
 		limit = int(input.Limit)
 	}
-	if len(filtered) > limit {
-		filtered = filtered[:limit]
+	if limit > maxListLimit {
+		limit = maxListLimit
 	}
+	offset := 0
+	if input.Offset > 0 {
+		offset = int(input.Offset)
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := filtered[offset:end]
 
 	// Enrich each finding with rule metadata.
 	type findingSummary struct {
 		findings.Finding
 		Rule *catalog.RuleMeta `json:"rule,omitempty"`
 	}
-	var results []findingSummary
-	for i := range filtered {
-		f := &filtered[i]
+	// Envelope carries pagination metadata so the agent knows the total and
+	// whether more pages remain — instead of silently receiving a truncated
+	// slice with no signal.
+	type listResponse struct {
+		Total    int              `json:"total"`
+		Offset   int              `json:"offset"`
+		Limit    int              `json:"limit"`
+		Returned int              `json:"returned"`
+		HasMore  bool             `json:"has_more"`
+		Findings []findingSummary `json:"findings"`
+	}
+	results := make([]findingSummary, 0, len(page))
+	for i := range page {
+		f := &page[i]
 		fs := findingSummary{Finding: *f}
 		if meta, ok := cat[f.RuleID]; ok {
 			fs.Rule = &meta
@@ -632,12 +677,21 @@ func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) 
 		results = append(results, fs)
 	}
 
-	data, err := json.MarshalIndent(results, "", "  ")
+	resp := listResponse{
+		Total:    total,
+		Offset:   offset,
+		Limit:    limit,
+		Returned: len(results),
+		HasMore:  end < total,
+		Findings: results,
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
 		return "Error: marshalling findings: " + err.Error(), nil
 	}
 
-	return truncate(string(data)), nil
+	return string(data), nil
 }
 
 // Baseline handlers.
