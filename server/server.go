@@ -63,6 +63,9 @@ type listFindingsInput struct {
 	Offset            float64 `json:"offset,omitempty"`
 	IncludeSuppressed bool    `json:"include_suppressed,omitempty"`
 }
+type findingByFingerprintInput struct {
+	Fingerprint string `json:"fingerprint"`
+}
 type baselineStatusInput struct {
 	Path string `json:"path"`
 }
@@ -248,6 +251,11 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
 		Handler(s.handleListFindings)
+
+	srv.Tool("get_finding_by_fingerprint").
+		Description("Look up a single finding by fingerprint (full or 12-char prefix) and report its current status (new / baselined / suppressed / vex_*). Use this when you already hold a fingerprint (from a prior scan or baseline entry) and just need to know whether it is still active. Returns {found:false, fingerprint} if no match.").
+		ReadOnly().
+		Handler(s.handleFindingByFingerprint)
 
 	srv.Tool("baseline_status").
 		Description("Show baseline statistics: total entries, expired count, per-severity breakdown").
@@ -669,6 +677,59 @@ func ruleFamily(ruleID string) string {
 	default:
 		return "other"
 	}
+}
+
+// handleFindingByFingerprint looks up a single finding by its fingerprint and
+// reports its current status (new / baselined / suppressed / vex_*). This is
+// the O(1)-style call an agent makes when it already holds a fingerprint (from
+// a prior scan or a baseline entry) and wants to know whether that finding is
+// still active — without pulling and searching the full findings list. Accepts
+// a full fingerprint or a unique prefix (the 12-char form used in finding IDs).
+func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFingerprintInput) (string, error) {
+	if strings.TrimSpace(input.Fingerprint) == "" {
+		return "Error: missing required argument: fingerprint", nil
+	}
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	fp := strings.TrimSpace(input.Fingerprint)
+	all := pc.result.Findings.Findings()
+	for i := range all {
+		f := &all[i]
+		if f.Fingerprint == fp || strings.HasPrefix(f.Fingerprint, fp) {
+			resp := map[string]any{
+				"found":       true,
+				"id":          f.ID,
+				"fingerprint": f.Fingerprint,
+				"rule_id":     f.RuleID,
+				"severity":    f.Severity,
+				"confidence":  f.Confidence,
+				"status":      statusOrNew(f.Status),
+				"message":     f.Message,
+				"location":    f.Location,
+			}
+			data, err := json.MarshalIndent(resp, "", "  ")
+			if err != nil {
+				return "Error: marshalling finding: " + err.Error(), nil
+			}
+			return string(data), nil
+		}
+	}
+	data, _ := json.MarshalIndent(map[string]any{
+		"found":       false,
+		"fingerprint": fp,
+	}, "", "  ")
+	return string(data), nil
+}
+
+// statusOrNew reports a finding's status, defaulting an empty status to "new".
+func statusOrNew(st findings.Status) findings.Status {
+	if st == "" {
+		return findings.StatusNew
+	}
+	return st
 }
 
 func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) (string, error) {
