@@ -2146,3 +2146,24 @@ func TestRunScanContext_CanceledContext(t *testing.T) {
 		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }
+
+func TestConfidenceMeetsThreshold(t *testing.T) {
+	cases := []struct {
+		conf, thresh findings.Confidence
+		want         bool
+	}{
+		{findings.ConfidenceHigh, findings.ConfidenceHigh, true},
+		{findings.ConfidenceMedium, findings.ConfidenceHigh, false},
+		{findings.ConfidenceLow, findings.ConfidenceHigh, false},
+		{findings.ConfidenceMedium, findings.ConfidenceMedium, true},
+		{findings.ConfidenceLow, findings.ConfidenceMedium, false},
+		{findings.ConfidenceLow, findings.ConfidenceLow, true},
+		{findings.ConfidenceHigh, findings.ConfidenceLow, true},
+		{findings.ConfidenceMedium, "", true}, // empty threshold = pass-through
+	}
+	for _, c := range cases {
+		if got := ConfidenceMeetsThreshold(c.conf, c.thresh); got != c.want {
+			t.Errorf("ConfidenceMeetsThreshold(%q,%q)=%v want %v", c.conf, c.thresh, got, c.want)
+		}
+	}
+}

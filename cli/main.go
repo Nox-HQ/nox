@@ -269,6 +269,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	)
 	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
 	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
+	var minConfidenceFlag string
+	scanFS.StringVar(&minConfidenceFlag, "min-confidence", "", "minimum confidence to report (high, medium, low); drops lower-confidence heuristic findings")
 	scanFS.BoolVar(&noOSVFlag, "no-osv", false, "disable OSV.dev vulnerability lookups (offline mode)")
 	scanFS.StringVar(&vexFlag, "vex", "", "path to OpenVEX document for vulnerability status overrides")
 	scanFS.StringVar(&tfPlanFlag, "tf-plan", "", "path to terraform plan JSON file to scan")
@@ -413,6 +415,20 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		var filtered []findings.Finding
 		for i := range activeFindings {
 			if nox.SeverityMeetsThreshold(activeFindings[i].Severity, threshold) {
+				filtered = append(filtered, activeFindings[i])
+			}
+		}
+		activeFindings = filtered
+	}
+
+	// Apply confidence threshold filtering if specified. Lets operators drop
+	// lower-confidence heuristic findings (e.g. typosquatting suspicions) while
+	// keeping high-confidence ones.
+	if minConfidenceFlag != "" {
+		threshold := findings.Confidence(minConfidenceFlag)
+		var filtered []findings.Finding
+		for i := range activeFindings {
+			if nox.ConfidenceMeetsThreshold(activeFindings[i].Confidence, threshold) {
 				filtered = append(filtered, activeFindings[i])
 			}
 		}
