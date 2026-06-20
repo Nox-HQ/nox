@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -325,6 +326,131 @@ func TestStoreFetchTrustVerification(t *testing.T) {
 	}
 }
 
+// fakeCosign installs a stub `cosign` binary on PATH that records the
+// final positional argument (the artifact-to-verify path) cosign was
+// invoked with, into recordPath. It always exits 0. Returns a cleanup
+// that restores PATH (handled by t.Setenv).
+//
+// This lets store-level tests assert WHICH bytes nox handed to cosign
+// without depending on a real keyless verification (network, Rekor,
+// trusted-root). The bug this guards against is nox passing the bundle
+// file itself as the artifact instead of the signed checksums.txt —
+// cosign then reports "invalid signature when validating ASN.1 encoded
+// signature" and the plugin is rejected as unverified.
+func fakeCosign(t *testing.T, recordArtifactArg string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cosign shim uses a POSIX shell script")
+	}
+	binDir := t.TempDir()
+	// The shim copies its last argument (the artifact path cosign is
+	// asked to verify) to recordArtifactArg, then exits 0.
+	script := "#!/bin/sh\n" +
+		"for last; do :; done\n" +
+		"cp \"$last\" \"" + recordArtifactArg + "\"\n" +
+		"exit 0\n"
+	cosignPath := filepath.Join(binDir, "cosign")
+	if err := os.WriteFile(cosignPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing fake cosign: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// TestStoreFetchCosignBundleVerifiesChecksums is a regression test for
+// the taint-analysis plugin signature-verification failure: nox shipped
+// a registry entry whose CosignBundleURL ended in ".sigstore.json"
+// (cosign v3.10+/v4 bundle naming). The buggy deriveChecksumsURL only
+// stripped ".sig.bundle", so nox downloaded the bundle and handed it to
+// `cosign verify-blob` AS THE ARTIFACT — cosign then verified the
+// signature against the bundle's own bytes and failed with "invalid
+// signature when validating ASN.1 encoded signature", leaving the
+// plugin at trust level "unverified" and breaking `nox scan` CI.
+//
+// This test exercises the full Fetch path with a ".sigstore.json"
+// bundle URL and a fake cosign that records the artifact it was asked to
+// verify. It asserts the artifact handed to cosign is the signed
+// checksums.txt (not the bundle), and that the artifact is promoted to
+// community trust.
+func TestStoreFetchCosignBundleVerifiesChecksums(t *testing.T) {
+	tarGzData := buildTarGz(t, map[string]string{"plugin": "plugin binary"})
+	digest := sha256Digest(tarGzData)
+
+	artifactName := "plugin_linux_amd64.tar.gz"
+	// GoReleaser-style checksums.txt listing the artifact with its digest.
+	checksumsContent := strings.TrimPrefix(digest, "sha256:") + "  " + artifactName + "\n"
+	// A distinctive marker so the test can prove cosign was NOT handed
+	// the bundle file (which would reproduce the original bug).
+	bundleContent := `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","sentinel":"BUNDLE-NOT-CHECKSUMS"}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/"+artifactName):
+			_, _ = w.Write(tarGzData)
+		case strings.HasSuffix(r.URL.Path, "checksums.txt.sigstore.json"):
+			_, _ = w.Write([]byte(bundleContent))
+		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
+			_, _ = w.Write([]byte(checksumsContent))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	recordPath := filepath.Join(t.TempDir(), "cosign-artifact-arg.bin")
+	fakeCosign(t, recordPath)
+
+	store := NewStore(
+		WithCacheDir(t.TempDir()),
+		WithHTTPClient(srv.Client()),
+		WithVerifier(trust.NewVerifier()),
+	)
+
+	ve := registry.VersionEntry{
+		Version:    "0.6.6",
+		APIVersion: "v1",
+		Artifacts: []registry.PlatformArtifact{
+			{
+				OS:     "linux",
+				Arch:   "amd64",
+				URL:    srv.URL + "/" + artifactName,
+				Size:   int64(len(tarGzData)),
+				Digest: digest,
+				// cosign v3.10+/v4 bundle naming — the exact shape that
+				// broke nox <= v1.1.0.
+				CosignBundleURL:          srv.URL + "/checksums.txt.sigstore.json",
+				CosignCertIdentityRegexp: "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+				CosignOIDCIssuer:         "https://token.actions.githubusercontent.com",
+			},
+		},
+	}
+
+	installed, err := store.FetchFor(context.Background(), "nox/taint-analysis", &ve, "linux", "amd64")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	// cosign must have been handed the signed checksums.txt, NOT the
+	// bundle. If deriveChecksumsURL regresses on ".sigstore.json", the
+	// recorded artifact will be the bundle JSON and this fails.
+	got, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("fake cosign did not record an artifact arg (cosign not invoked?): %v", err)
+	}
+	if strings.Contains(string(got), "BUNDLE-NOT-CHECKSUMS") {
+		t.Fatalf("cosign was handed the BUNDLE as the artifact-to-verify; "+
+			"deriveChecksumsURL failed to strip the .sigstore.json suffix.\nGot:\n%s", got)
+	}
+	if strings.TrimSpace(string(got)) != strings.TrimSpace(checksumsContent) {
+		t.Fatalf("cosign artifact = %q, want the checksums.txt content %q", got, checksumsContent)
+	}
+
+	// Verification + checksums binding both passed -> promoted to community.
+	if installed.VerifyResult.Level < trust.TrustCommunity {
+		t.Errorf("TrustLevel = %v, want >= %v; violations: %+v",
+			installed.VerifyResult.Level, trust.TrustCommunity, installed.VerifyResult.Violations)
+	}
+}
+
 func TestStoreHasAndBlobPath(t *testing.T) {
 	store := NewStore(WithCacheDir(t.TempDir()))
 
@@ -627,5 +753,24 @@ func TestStoreFetchWithMirror(t *testing.T) {
 
 	if installed.PluginName != "test/plugin" {
 		t.Errorf("PluginName = %q, want %q", installed.PluginName, "test/plugin")
+	}
+}
+
+func TestDeriveChecksumsURL(t *testing.T) {
+	const base = "https://github.com/x/y/releases/download/v1/checksums.txt"
+	tests := []struct {
+		name, bundleURL, sigURL, want string
+	}{
+		{"sigstore bundle (cosign v3.10+/v4)", base + ".sigstore.json", "", base},
+		{"legacy sig.bundle", base + ".sig.bundle", "", base},
+		{"legacy detached signature", "", base + ".sig", base},
+		{"bundle wins over sig", base + ".sigstore.json", base + ".sig", base},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deriveChecksumsURL(tt.bundleURL, tt.sigURL); got != tt.want {
+				t.Errorf("deriveChecksumsURL(%q,%q) = %q, want %q", tt.bundleURL, tt.sigURL, got, tt.want)
+			}
+		})
 	}
 }

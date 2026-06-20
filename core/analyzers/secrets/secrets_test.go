@@ -1038,3 +1038,51 @@ func TestSEC574_DescriptionFixed(t *testing.T) {
 	}
 	t.Fatal("SEC-574 not found in builtin rules")
 }
+
+// TestScanArtifacts_SkipsGeneratedFiles is a regression test: a lock file full
+// of base64 integrity hashes must NOT produce secret findings (those hashes
+// match provider-key regexes and the entropy rules, otherwise yielding
+// thousands of false positives), while a real secret in a source file next to
+// it is still detected.
+func TestScanArtifacts_SkipsGeneratedFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// A package-lock.json whose integrity hashes look like high-entropy secrets.
+	lock := `{
+  "name": "x", "lockfileVersion": 3,
+  "packages": {
+    "node_modules/a": {"version": "1.0.0", "integrity": "sha512-AIzaSyB1c3d4e5f6g7h8i9j0kLmNoPqRsTuVwXyZ1234567890abcd"},
+    "node_modules/b": {"version": "2.0.0", "integrity": "sha512-AKIAIOSFODNN7EXAMPLEq1w2e3r4t5y6u7i8o9p0aSdFgHjKlZxCvBnM"}
+  }
+}`
+	lockFile := writeFile(t, dir, "package-lock.json", lock)
+	// A real AWS key in source must still be caught.
+	srcFile := writeFile(t, dir, "config.go", "package main\n\nconst key = \"AKIAIOSFODNN7EXAMPLE\"\n")
+
+	artifacts := []discovery.Artifact{
+		{Path: "package-lock.json", AbsPath: lockFile, Type: discovery.Lockfile, Size: int64(len(lock))},
+		{Path: "config.go", AbsPath: srcFile, Type: discovery.Source, Size: 50},
+	}
+
+	fs, err := NewAnalyzer().ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, f := range fs.Findings() {
+		if f.Location.FilePath == "package-lock.json" {
+			t.Errorf("lock file should be skipped, got %s at %s:%d",
+				f.RuleID, f.Location.FilePath, f.Location.StartLine)
+		}
+	}
+	// Control: the source-file secret is still found.
+	found := false
+	for _, f := range fs.Findings() {
+		if f.Location.FilePath == "config.go" && f.RuleID == "SEC-001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected the AWS key in config.go to still be detected")
+	}
+}

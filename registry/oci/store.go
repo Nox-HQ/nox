@@ -278,8 +278,10 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 			}
 		}
 		installed.ExtractDir = extractDir
-		// Look for a binary with the plugin base name in the extracted directory.
-		installed.BinaryPath = filepath.Join(extractDir, filepath.Base(name))
+		// Locate the actual executable: the binary is often named after the
+		// plugin's repo (e.g. "nox-plugin-taint-analysis"), not its short
+		// registry name, so a fixed base-name guess misses it.
+		installed.BinaryPath = findPluginBinary(extractDir, name)
 
 	case FormatRawBinary:
 		if err := SetExecutable(blobPath); err != nil {
@@ -349,7 +351,13 @@ func dropPolicyLevelViolations(in []trust.Violation) []trust.Violation {
 // resolve to the same `checksums.txt`.
 func deriveChecksumsURL(bundleURL, sigURL string) string {
 	if bundleURL != "" {
-		return strings.TrimSuffix(bundleURL, ".sig.bundle")
+		// The bundle is named "<checksums>.<suffix>". cosign v3.10+/v4 emit
+		// ".sigstore.json"; older releases emit ".sig.bundle". Strip whichever
+		// is present so the real checksums file is fetched as the signed
+		// artifact — otherwise cosign verifies the signature against the
+		// bundle itself and reports "invalid signature".
+		u := strings.TrimSuffix(bundleURL, ".sigstore.json")
+		return strings.TrimSuffix(u, ".sig.bundle")
 	}
 	return strings.TrimSuffix(sigURL, ".sig")
 }

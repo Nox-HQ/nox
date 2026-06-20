@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -115,21 +116,41 @@ func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
 func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []Package) (map[int][]osvVuln, error) {
 	result := make(map[int][]osvVuln)
 
-	for start := 0; start < len(pkgs); start += osvBatchLimit {
-		end := start + osvBatchLimit
-		if end > len(pkgs) {
-			end = len(pkgs)
+	// Only query packages whose ecosystem OSV.dev actually understands. Other
+	// "packages" reach the inventory too — notably Docker base images (ecosystem
+	// "docker") from Dockerfile scanning — and OSV's /v1/querybatch rejects the
+	// WHOLE request with HTTP 400 if any single query carries an unknown
+	// ecosystem. That 400 was being swallowed by the graceful-degradation path
+	// below, silently dropping every real Go/npm/PyPI result in the batch. So a
+	// repo with a Dockerfile got zero dependency-CVE findings. Filter first, and
+	// remember each kept query's original index so results map back correctly.
+	type indexed struct {
+		orig int
+		pkg  Package
+	}
+	queryable := make([]indexed, 0, len(pkgs))
+	for i, p := range pkgs {
+		if _, ok := osvEcosystem(p.Ecosystem); ok {
+			queryable = append(queryable, indexed{orig: i, pkg: p})
 		}
-		batch := pkgs[start:end]
+	}
+
+	for start := 0; start < len(queryable); start += osvBatchLimit {
+		end := start + osvBatchLimit
+		if end > len(queryable) {
+			end = len(queryable)
+		}
+		batch := queryable[start:end]
 
 		queries := make([]osvQuery, len(batch))
-		for i, p := range batch {
+		for i, item := range batch {
+			eco, _ := osvEcosystem(item.pkg.Ecosystem)
 			queries[i] = osvQuery{
 				Package: osvPackage{
-					Name:      p.Name,
-					Ecosystem: ecosystemToOSV(p.Ecosystem),
+					Name:      item.pkg.Name,
+					Ecosystem: eco,
 				},
-				Version: p.Version,
+				Version: item.pkg.Version,
 			}
 		}
 
@@ -147,19 +168,26 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 
 		resp, err := client.Do(req)
 		if err != nil {
-			// Network error — degrade gracefully.
+			// Network error — degrade gracefully, but say so: a silent empty
+			// result is indistinguishable from "no vulnerabilities found".
+			slog.WarnContext(ctx, "OSV query failed; dependency vulnerabilities may be under-reported",
+				"error", err, "queries", len(queries))
 			return result, nil
 		}
 
 		vulns, decodeErr := decodeBatchResponse(resp)
 		_ = resp.Body.Close()
 		if decodeErr != nil {
+			// Non-200 status or undecodable body — same risk: don't report a
+			// clean scan when the lookup actually failed.
+			slog.WarnContext(ctx, "OSV query returned an error; dependency vulnerabilities may be under-reported",
+				"error", decodeErr, "queries", len(queries))
 			return result, nil
 		}
 
 		for i, br := range vulns {
 			if len(br.Vulns) > 0 {
-				result[start+i] = br.Vulns
+				result[batch[i].orig] = br.Vulns
 			}
 		}
 	}
@@ -244,27 +272,41 @@ func upgradeCommand(ecosystem, pkg, fixedVer string) string {
 	}
 }
 
-// ecosystemToOSV maps nox's internal ecosystem names to the ecosystem strings
-// expected by the OSV.dev API.
-func ecosystemToOSV(eco string) string {
+// osvEcosystem maps a nox internal ecosystem name to the ecosystem string
+// expected by the OSV.dev API. The bool is false when OSV has no matching
+// ecosystem (e.g. "docker" base images), so callers can skip those packages
+// rather than poisoning a batch query — OSV rejects an entire /v1/querybatch
+// request with HTTP 400 if any one query names an unknown ecosystem.
+func osvEcosystem(eco string) (string, bool) {
 	switch eco {
 	case "go":
-		return "Go"
+		return "Go", true
 	case "npm":
-		return "npm"
+		return "npm", true
 	case "pypi":
-		return "PyPI"
+		return "PyPI", true
 	case "rubygems":
-		return "RubyGems"
+		return "RubyGems", true
 	case "cargo":
-		return "crates.io"
+		return "crates.io", true
 	case "maven":
-		return "Maven"
+		return "Maven", true
 	case "gradle":
-		return "Maven"
+		return "Maven", true
 	case "nuget":
-		return "NuGet"
+		return "NuGet", true
 	default:
-		return eco
+		return "", false
 	}
+}
+
+// ecosystemToOSV maps nox's internal ecosystem names to the ecosystem strings
+// expected by the OSV.dev API, returning the input unchanged for ecosystems
+// OSV does not recognise (used only for best-effort name/version matching in
+// already-returned records, not for issuing queries).
+func ecosystemToOSV(eco string) string {
+	if osv, ok := osvEcosystem(eco); ok {
+		return osv
+	}
+	return eco
 }

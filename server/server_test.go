@@ -1947,3 +1947,169 @@ func TestProjectResourceDashboard_AfterScan(t *testing.T) {
 		t.Fatalf("expected HTML content")
 	}
 }
+
+func TestHandleListFindings_Pagination(t *testing.T) {
+	dir := t.TempDir()
+	// Several distinct secrets across rules → several findings to page through.
+	// AWS keys are AKIA + 16 chars from [A-Z2-7]; use two valid, distinct ones
+	// plus a private-key header.
+	writeFile(t, dir, "secrets.env",
+		"A=AKIAIOSFODNN7EXAMPLE\nB=AKIAWXYZ234567ABCDEF\n")
+	writeFile(t, dir, "id_rsa",
+		"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+
+	s := New("0.1.0", nil)
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	type page struct {
+		Total, Offset, Limit, Returned int
+		HasMore                        bool                     `json:"has_more"`
+		Findings                       []map[string]interface{} `json:"findings"`
+	}
+	get := func(limit, offset int) page {
+		out, err := s.handleListFindings(context.Background(),
+			listFindingsInput{Limit: float64(limit), Offset: float64(offset)})
+		if err != nil || strings.HasPrefix(out, "Error:") {
+			t.Fatalf("list failed: %v / %s", err, out)
+		}
+		var p page
+		if err := json.Unmarshal([]byte(out), &p); err != nil {
+			t.Fatalf("envelope not valid JSON: %v\n%s", err, out)
+		}
+		return p
+	}
+
+	first := get(2, 0)
+	if first.Total < 3 {
+		t.Fatalf("expected >=3 findings to paginate, total=%d", first.Total)
+	}
+	if first.Returned != 2 || first.Limit != 2 || first.Offset != 0 || !first.HasMore {
+		t.Fatalf("unexpected first page: %+v", first)
+	}
+
+	second := get(2, 2)
+	if second.Total != first.Total {
+		t.Errorf("total changed across pages: %d vs %d", first.Total, second.Total)
+	}
+	if second.Offset != 2 {
+		t.Errorf("expected offset 2, got %d", second.Offset)
+	}
+	// Pages must not overlap (stable order).
+	firstIDs := map[string]bool{}
+	for _, f := range first.Findings {
+		firstIDs[f["ID"].(string)] = true
+	}
+	for _, f := range second.Findings {
+		if firstIDs[f["ID"].(string)] {
+			t.Errorf("finding %v appears on both pages", f["ID"])
+		}
+	}
+
+	// Offset past the end yields an empty page, not an error.
+	beyond := get(10, 1000)
+	if beyond.Returned != 0 || beyond.HasMore {
+		t.Errorf("expected empty final page, got %+v", beyond)
+	}
+}
+
+func TestHandleSummary(t *testing.T) {
+	// Before any scan.
+	s := New("0.1.0", nil)
+	if r, _ := s.handleSummary(context.Background(), emptyInput{}); !strings.HasPrefix(r, "Error:") {
+		t.Fatal("expected error before scan")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir, "secrets.env", "A=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	out, err := s.handleSummary(context.Background(), emptyInput{})
+	if err != nil || strings.HasPrefix(out, "Error:") {
+		t.Fatalf("summary failed: %v / %s", err, out)
+	}
+	var sum struct {
+		ActiveFindings int            `json:"active_findings"`
+		TotalFindings  int            `json:"total_findings"`
+		BySeverity     map[string]int `json:"by_severity"`
+		ByFamily       map[string]int `json:"by_family"`
+	}
+	if err := json.Unmarshal([]byte(out), &sum); err != nil {
+		t.Fatalf("summary not valid JSON: %v\n%s", err, out)
+	}
+	if sum.ActiveFindings < 2 {
+		t.Fatalf("expected >=2 active findings, got %d", sum.ActiveFindings)
+	}
+	if sum.ByFamily["secrets"] < 2 {
+		t.Errorf("expected secrets family count >=2, got %v", sum.ByFamily)
+	}
+	// counts must sum to active total.
+	sevSum := 0
+	for _, n := range sum.BySeverity {
+		sevSum += n
+	}
+	if sevSum != sum.ActiveFindings {
+		t.Errorf("severity counts %d != active findings %d", sevSum, sum.ActiveFindings)
+	}
+}
+
+func TestHandleFindingByFingerprint(t *testing.T) {
+	s := New("0.1.0", nil)
+	// Missing arg.
+	if r, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{}); !strings.HasPrefix(r, "Error:") {
+		t.Fatal("expected error for empty fingerprint")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	// Pull one finding's fingerprint via list_findings.
+	listOut, _ := s.handleListFindings(context.Background(), listFindingsInput{})
+	var env struct {
+		Findings []struct {
+			Fingerprint string `json:"Fingerprint"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(listOut), &env); err != nil || len(env.Findings) == 0 {
+		t.Fatalf("could not get a fingerprint: %v\n%s", err, listOut)
+	}
+	fp := env.Findings[0].Fingerprint
+
+	// Full fingerprint → found.
+	out, err := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: fp})
+	if err != nil {
+		t.Fatalf("lookup error: %v", err)
+	}
+	var found struct {
+		Found  bool   `json:"found"`
+		Status string `json:"status"`
+		RuleID string `json:"rule_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &found); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, out)
+	}
+	if !found.Found || found.Status != "new" {
+		t.Errorf("expected found+new, got %+v", found)
+	}
+
+	// 12-char prefix → also found.
+	if len(fp) >= 12 {
+		out2, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: fp[:12]})
+		if !strings.Contains(out2, `"found": true`) {
+			t.Errorf("prefix lookup should find the finding: %s", out2)
+		}
+	}
+
+	// Unknown fingerprint → found:false.
+	out3, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: "deadbeefdeadbeef"})
+	if !strings.Contains(out3, `"found": false`) {
+		t.Errorf("expected found:false for unknown fp: %s", out3)
+	}
+}
