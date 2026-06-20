@@ -8,136 +8,249 @@
   "statements": [
     {
       "vulnerability": "SEC-161",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "core/analyzers/ai/aibom_polyglot.go and core/analyzers/ai/agent_lattice.go contain regex literals that match generic API-key shapes; these are detector patterns, not credentials. cli/bootstrap.go and cli/ux.go reference env-var names in user-facing notices."
     },
     {
       "vulnerability": "SEC-163",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "Detector regex patterns and code comments containing 'token'/'secret' literals — not credentials."
+      "impact_statement": "Detector regex patterns and code comments containing 'token'/'secret' literals \u2014 not credentials."
     },
     {
       "vulnerability": "SEC-506",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "server/server.go contains the function name 'handleProjectResourceAIInventory' (32 chars) plus the string 'nuget' as an ecosystem case in another function; rule fires on both via file-level keyword match. Function name is not a NuGet API key."
     },
     {
       "vulnerability": "SEC-569",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "core/analyzers/ai/aibom_polyglot.go contains 'gemini' inside a regex pattern that detects Gemini model identifiers in scanned source. Triggers Gemini-API-key false positives via file-level keyword match."
     },
     {
       "vulnerability": "SEC-574",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "server/server.go comment line contains 'are otherwise allowed' — substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
+      "impact_statement": "server/server.go comment line contains 'are otherwise allowed' \u2014 substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
     },
     {
       "vulnerability": "SEC-162",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Generic SECRET-token false positive on user-facing notice strings referencing env var names."
     },
     {
       "vulnerability": "SEC-697",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "Generic detector firing on the vex.json document itself (recursive self-eat). The waiver bundle contains 32-char hashes/IDs as part of the OpenVEX schema; not credentials."
     },
     {
       "vulnerability": "SEC-435",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json contains intentionally bad MCP configuration for documentation purposes — not shipped as a runtime asset."
+      "impact_statement": "examples/ai-app/mcp.json contains intentionally bad MCP configuration for documentation purposes \u2014 not shipped as a runtime asset."
     },
     {
       "vulnerability": "SEC-003",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
+      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo content."
     },
     {
       "vulnerability": "MCP-002",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json — intentional demo of MCP server configuration that fails MCP-002. Used to illustrate what nox catches."
+      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo of MCP server configuration that fails MCP-002. Used to illustrate what nox catches."
     },
     {
       "vulnerability": "MCP-004",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
+      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo content."
     },
     {
       "vulnerability": "AI-PI-001",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/agent.py — intentional vulnerable code used to demonstrate AI-PI-001 prompt-injection detection. Not part of the shipped scanner."
+      "impact_statement": "examples/ai-app/agent.py \u2014 intentional vulnerable code used to demonstrate AI-PI-001 prompt-injection detection. Not part of the shipped scanner."
     },
     {
       "vulnerability": "AI-PI-002",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/agent.py — intentional demo content for AI-PI-002."
+      "impact_statement": "examples/ai-app/agent.py \u2014 intentional demo content for AI-PI-002."
     },
     {
       "vulnerability": "AI-EMBED-001",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/ingest.py — intentional demo content for AI-EMBED-001."
+      "impact_statement": "examples/ai-app/ingest.py \u2014 intentional demo content for AI-EMBED-001."
     },
     {
       "vulnerability": "AI-AGENT-001",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-001 over-privilege detection."
+      "impact_statement": "examples/ai-app/tools.py \u2014 intentional demo content for AI-AGENT-001 over-privilege detection."
     },
     {
       "vulnerability": "AI-AGENT-002",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-002."
+      "impact_statement": "examples/ai-app/tools.py \u2014 intentional demo content for AI-AGENT-002."
     },
     {
       "vulnerability": "DATA-001",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/vex.json — sample VEX document containing fixture data. Not shipped as runtime content."
+      "impact_statement": "examples/ci-baseline/vex.json \u2014 sample VEX document containing fixture data. Not shipped as runtime content."
     },
     {
       "vulnerability": "IAC-013",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow shipped as documentation. Action SHA pinning is intentionally relaxed in the example to keep it readable."
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml \u2014 example workflow shipped as documentation. Action SHA pinning is intentionally relaxed in the example to keep it readable."
     },
     {
       "vulnerability": "IAC-157",
-      "products": ["github.com/nox-hq/nox"],
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow."
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml \u2014 example workflow."
+    },
+    {
+      "vulnerability": "GHSA-p782-xgp4-8hr8",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e is a superseded go.sum graph entry, not the built version: MVS selects golang.org/x/sys v0.46.0, so the vulnerable revision is never compiled in."
+    },
+    {
+      "vulnerability": "GO-2022-0493",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e is a superseded go.sum graph entry, not the built version: MVS selects golang.org/x/sys v0.46.0, so the vulnerable revision is never compiled in."
+    },
+    {
+      "vulnerability": "GO-2026-5024",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e is a superseded go.sum graph entry, not the built version: MVS selects golang.org/x/sys v0.46.0, so the vulnerable revision is never compiled in."
+    },
+    {
+      "vulnerability": "GO-2026-5025",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "GO-2026-5026",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "GO-2026-5027",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "GO-2026-5028",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "GO-2026-5029",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "GO-2026-5030",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "under_investigation",
+      "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
     }
   ]
 }
