@@ -239,6 +239,11 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		ReadOnly().
 		Handler(s.handleGetFindingDetail)
 
+	srv.Tool("summary").
+		Description("Aggregate overview of the last scan: active/total/suppressed counts and breakdowns by severity, confidence, and rule family, plus dependency and AI-component totals. Call this first to size up a scan before paging through individual findings.").
+		ReadOnly().
+		Handler(s.handleSummary)
+
 	srv.Tool("list_findings").
 		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
@@ -413,7 +418,7 @@ func (s *Server) registerResources(srv *mcp.Server) {
 		Name("Project AI Inventory").
 		Description("AI inventory for a specific project").
 		MimeType("application/json").
-		Handler(s.handleProjectResourceAIInventory) // nox:ignore SEC-659,SEC-506,SEC-574 -- function name, not a key
+		Handler(s.handleProjectResourceAIInventory) // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
 
 	srv.Resource("nox://project/{project}/dashboard").
 		Name("Project Dashboard").
@@ -599,6 +604,71 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 	}
 
 	return truncate(string(data)), nil
+}
+
+// handleSummary returns an aggregate overview of the last scan: counts by
+// severity, confidence, and rule family, plus dependency / AI-component totals.
+// This is the cheap "what am I looking at?" call an agent (or human) makes
+// before deciding whether to page through individual findings.
+func (s *Server) handleSummary(_ context.Context, _ emptyInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	active := pc.result.Findings.ActiveFindings()
+	total := len(pc.result.Findings.Findings())
+
+	bySeverity := map[string]int{}
+	byConfidence := map[string]int{}
+	byFamily := map[string]int{}
+	for i := range active {
+		f := &active[i]
+		bySeverity[string(f.Severity)]++
+		byConfidence[string(f.Confidence)]++
+		byFamily[ruleFamily(f.RuleID)]++
+	}
+
+	resp := map[string]any{
+		"active_findings": len(active),
+		"total_findings":  total,
+		"suppressed":      total - len(active),
+		"by_severity":     bySeverity,
+		"by_confidence":   byConfidence,
+		"by_family":       byFamily,
+		"dependencies":    len(pc.result.Inventory.Packages()),
+		"ai_components":   len(pc.result.AIInventory.Components),
+	}
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return "Error: marshalling summary: " + err.Error(), nil
+	}
+	return string(data), nil
+}
+
+// ruleFamily maps a rule ID (e.g. "SEC-001", "VULN-002") to its human family
+// name, used for grouping in the summary.
+func ruleFamily(ruleID string) string {
+	prefix := ruleID
+	if i := strings.IndexByte(ruleID, '-'); i >= 0 {
+		prefix = ruleID[:i]
+	}
+	switch prefix {
+	case "SEC":
+		return "secrets"
+	case "VULN":
+		return "dependencies"
+	case "IAC":
+		return "infrastructure"
+	case "CONT":
+		return "containers"
+	case "DATA":
+		return "privacy"
+	case "AI", "MCP":
+		return "ai"
+	default:
+		return "other"
+	}
 }
 
 func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) (string, error) {
@@ -1494,7 +1564,7 @@ func (s *Server) handleProjectResourceSPDX(_ context.Context, uri string, params
 	}, nil
 }
 
-func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) { // nox:ignore SEC-659,SEC-506,SEC-574 -- function name, not a key
+func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) { // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
 	path, err := s.resolveProjectPath(params)
 	if err != nil {
 		return nil, err
