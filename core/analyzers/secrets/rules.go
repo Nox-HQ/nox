@@ -3783,14 +3783,20 @@ var entropySourceFilePatterns = []string{
 	"Makefile", "*.mk",
 }
 
-// entropyIgnoreFilePatterns explicitly excludes well-known files whose
+// generatedFileIgnorePatterns explicitly excludes well-known files whose
 // content is structurally high-entropy (module checksums, lock files,
 // content-addressed IDs, agent / IDE state dirs). Matches gitleaks /
 // trufflehog / detect-secrets default behaviour and extends with
 // modern-AI-tool state directories that pile up content-addressed IDs
 // outside of source control. Operators can override via config if they
 // want to scan these.
-var entropyIgnoreFilePatterns = []string{
+//
+// This set gates the WHOLE secrets analyzer (see secrets.go: ScanArtifacts),
+// not just the entropy rules — base64 integrity hashes in a package-lock.json
+// match provider-key regexes (e.g. "Firebase / ELK / IBM API key") just as
+// readily as they trip the entropy rules, so a lockfile would otherwise
+// produce thousands of false-positive secret findings.
+var generatedFileIgnorePatterns = []string{
 	// Go module checksums.
 	"go.sum",
 	// Lock files (dependency / build).
@@ -3865,7 +3871,7 @@ func builtinEntropyRules() []*rules.Rule {
 			MatcherType:        "entropy",
 			Keywords:           []string{"=", ":", "password", "secret", "key", "token", "credential", "api_key", "private"},
 			FilePatterns:       entropySourceFilePatterns,
-			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
 			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0"},
 			Remediation:        "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
@@ -3880,7 +3886,7 @@ func builtinEntropyRules() []*rules.Rule {
 			MatcherType:        "entropy",
 			Keywords:           []string{"password", "secret", "key", "token", "credential", "api_key", "private", "auth"},
 			FilePatterns:       entropySourceFilePatterns,
-			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
 			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2", "require_context": "true"},
 			Remediation:        "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
@@ -3895,7 +3901,7 @@ func builtinEntropyRules() []*rules.Rule {
 			MatcherType:        "entropy",
 			Keywords:           []string{"key", "secret", "token", "password", "credential", "private", "auth"},
 			FilePatterns:       entropySourceFilePatterns,
-			IgnoreFilePatterns: entropyIgnoreFilePatterns,
+			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
 			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5", "require_context": "true"},
 			Remediation:        "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
