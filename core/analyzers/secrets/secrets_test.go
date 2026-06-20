@@ -1086,3 +1086,73 @@ func TestScanArtifacts_SkipsGeneratedFiles(t *testing.T) {
 		t.Error("expected the AWS key in config.go to still be detected")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Regression: broad-pattern rules must not fire on SVG base64 or lockfile
+// hashes (fixes SEC-616, SEC-692, SEC-664, SEC-590, SEC-533, SEC-455,
+// SEC-569, SEC-659, SEC-661, SEC-697).
+// ---------------------------------------------------------------------------
+
+// svgBase64Snippet simulates the kind of continuous base64-encoded PNG data
+// that appears in SVG files. The keyword for each rule is embedded somewhere
+// in the file text (as it genuinely is in ag.svg), but the 32-char
+// alphanumeric substrings inside the base64 stream should NOT produce findings
+// because they sit inside a word-boundary-free run of base64 characters.
+const svgBase64Snippet = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- fcm elk heap wave segment gemini ibm posthog split literal -->
+<image xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABDgAAAQ4CAIAAABjcvvYAAAABmJLR0QA/wD/AP+gvaeTAAAgAElEQVR4nHy96Y7kSpBmyUUeS14UGujpWrpfY2be/52qUDcjwiVyfljYiUMq7wiJhIe7RJG2fLbQSNb/9//+f2qttdZSypyz5NVau64rfrqua855HEet9et8nufZWns+n8dxHMfx999/H8dRSqGROWdrrZQyxmjtiF+/vr7mnI/Ho9b69fV1HMcYo5TSe6+1zjnHGPFgrTX+j6bGGGOMx+NxXdfr6+vz+byuq7X29fUVrcWD0QH6ED+VUq7riv971pa9gy="/>
+</svg>`
+
+func TestBroadPatternRules_NoSVGBase64FalsePositives(t *testing.T) {
+	a := NewAnalyzer()
+	rules := []string{"SEC-616", "SEC-692", "SEC-664", "SEC-590", "SEC-533", "SEC-455", "SEC-569", "SEC-659", "SEC-661", "SEC-697"}
+	results, err := a.ScanFile("dotnet/website/images/ag.svg", []byte(svgBase64Snippet))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, r := range results {
+		for _, id := range rules {
+			if r.RuleID == id {
+				t.Errorf("rule %s fired on SVG base64 content (FP regression): %s:%d", id, r.Location.FilePath, r.Location.StartLine)
+			}
+		}
+	}
+}
+
+// TestBroadPatternRules_DetectRealCredential verifies the word-boundary fix
+// does not suppress a real key presented in a typical config assignment.
+// Each 32-char token has >30% digits so isCamelOrPascalCase returns false,
+// and entropy > 3.5 so the secretShape filter passes.
+func TestBroadPatternRules_DetectRealCredential(t *testing.T) {
+	a := NewAnalyzer()
+	cases := []struct {
+		ruleID  string
+		content string
+	}{
+		{"SEC-616", `fcm_server_key = "Fcm3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
+		{"SEC-692", `elk_api_key = "Elk3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
+		{"SEC-664", `heap_api_key = "Heap3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`},
+		{"SEC-590", `wave_api_key = "Wave3r9X2lK7vQ4bP8mZ1dN6cY5h30aB"`},
+		{"SEC-455", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`},
+		{"SEC-659", `split_api_key = "Spl3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
+		{"SEC-661", `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`},
+		{"SEC-697", `literal_api_key = "Lit3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
+	}
+	for _, tc := range cases {
+		results, err := a.ScanFile("config.env", []byte(tc.content))
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", tc.ruleID, err)
+		}
+		var found bool
+		for _, r := range results {
+			if r.RuleID == tc.ruleID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s: did not fire on a real credential-shaped value; results=%+v", tc.ruleID, results)
+		}
+	}
+}

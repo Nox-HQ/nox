@@ -18,7 +18,7 @@
 # DONE 2026-06-05: deepset-ai/haystack — 12,367 findings (94% docs-website noise); 1 real low-sev (unredacted prompt log); fixed AI-009 ast.literal_eval FP
 # DONE 2026-06-05: huggingface/smolagents — 323 findings (65% from one example dir); 0 true positives; fixed VULN-002 PEP503 typosquat FP
 # DONE 2026-06-05: langchain-ai/langgraph — 134,614 findings (99.8% examples/ notebook image data + lockfile hashes); 0 true positives; fixed AI-019 DB-pipeline FP; MCP-011 docstring FP tracked
-microsoft/autogen
+# DONE 2026-06-15: microsoft/autogen — 304,629 findings (99.5% SVG/lock/notebook FPs); 1 low-sev AI-019 model-hash gap; fixed 10 broad-pattern SEC rules missing \b+secretShape
 modelcontextprotocol/servers
 openai/openai-agents-python
 phidatahq/phidata
