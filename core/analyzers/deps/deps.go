@@ -193,8 +193,8 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		ID:          "VULN-002",
 		Version:     "1.0",
 		Description: "Typosquatting: package name suspiciously similar to popular package",
-		Severity:    findings.SeverityCritical,
-		Confidence:  findings.ConfidenceMedium,
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceLow,
 		Tags:        []string{"dependency", "typosquatting", "supply-chain"},
 		Remediation: "Verify the package name is correct. The name is suspiciously similar to a popular package, which may indicate a typosquatting attack.",
 		References:  []string{"https://snyk.io/blog/typosquatting-attacks/"},
@@ -431,12 +431,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				})
 			}
 
-			// VULN-002: typosquatting detection.
-			if popularName, typosquat := DetectTyposquatting(pkg.Name, pkg.Ecosystem, 2); typosquat {
+			// VULN-002: typosquatting detection. A distance-1 (single-character)
+			// match is the high-precision signal; distance 2 collides with too
+			// many legitimate packages that merely resemble a popular name
+			// (regex/redux, parse5/parcel, h3/d3, …). This is a heuristic
+			// SUSPICION — not a confirmed malicious package (that is VULN-003) —
+			// so it is medium severity / low confidence, not a CI-blocking
+			// critical.
+			if popularName, typosquat := DetectTyposquatting(pkg.Name, pkg.Ecosystem, 1); typosquat {
 				fs.Add(findings.Finding{
 					RuleID:     "VULN-002",
-					Severity:   findings.SeverityCritical,
-					Confidence: findings.ConfidenceMedium,
+					Severity:   findings.SeverityMedium,
+					Confidence: findings.ConfidenceLow,
 					Location: findings.Location{
 						FilePath:  lockfilePath,
 						StartLine: 1,

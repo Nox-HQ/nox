@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -79,7 +81,20 @@ func CosignVerifyBlob(ctx context.Context, p CosignVerifyParams) error {
 		"--certificate-oidc-issuer", issuer,
 	}
 	if p.BundlePath != "" {
-		// New bundle format — required by cosign v4, supported by v3.10+.
+		// nox publishes plugin signatures as Sigstore v0.3 bundles
+		// (GoReleaser/cosign sign-blob --bundle). Verifying them requires
+		// `--new-bundle-format`, a flag added in cosign v2.4.0. Older
+		// cosign reads the bundle as the legacy Rekor-bundle format and
+		// fails with opaque errors ("bundle does not contain cert",
+		// "invalid signature when validating ASN.1 encoded signature").
+		// Detect that case and return an actionable error instead so an
+		// operator with a stale cosign on PATH isn't left guessing.
+		if majVal, minVal, ok := cosignVersion(ctx); ok && !supportsNewBundleFormat(majVal, minVal) {
+			return fmt.Errorf(
+				"cosign v%d.%d is too old to verify Sigstore bundles: nox requires cosign >= v2.4.0 (which added --new-bundle-format). Upgrade cosign (brew upgrade cosign, or sigstore/cosign-installer)",
+				majVal, minVal)
+		}
+		// New bundle format — required by cosign v4, supported by v2.4.0+.
 		args = append(args, "--bundle", p.BundlePath, "--new-bundle-format")
 	} else {
 		// Legacy --signature path. Cosign v4 rejects this; falls
@@ -102,4 +117,48 @@ func CosignVerifyBlob(ctx context.Context, p CosignVerifyParams) error {
 func CosignAvailable() bool {
 	_, err := exec.LookPath("cosign")
 	return err == nil
+}
+
+// cosignVersionRe extracts the GitVersion line from `cosign version`
+// output, e.g. "GitVersion:    v3.0.6" -> major 3, minor 0.
+var cosignVersionRe = regexp.MustCompile(`(?m)^GitVersion:\s*v?(\d+)\.(\d+)`)
+
+// cosignVersion shells out to `cosign version` and parses the major and
+// minor numbers. ok is false when cosign isn't on PATH, the command
+// fails, or the version can't be parsed — callers must treat !ok as
+// "unknown" and proceed (never block verification on a parse miss).
+func cosignVersion(ctx context.Context) (major, minor int, ok bool) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(vctx, "cosign", "version").CombinedOutput()
+	if err != nil {
+		return 0, 0, false
+	}
+	m := cosignVersionRe.FindStringSubmatch(string(out))
+	if len(m) != 3 {
+		return 0, 0, false
+	}
+	majVal, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	minVal, err := strconv.Atoi(m[2])
+	if err != nil {
+		return 0, 0, false
+	}
+	return majVal, minVal, true
+}
+
+// supportsNewBundleFormat reports whether a cosign version understands
+// the `--new-bundle-format` flag (added in v2.4.0). nox signs and
+// publishes Sigstore v0.3 bundles, so verification needs this flag.
+func supportsNewBundleFormat(major, minor int) bool {
+	if major > 2 {
+		return true
+	}
+	return major == 2 && minor >= 4
 }

@@ -35,6 +35,9 @@ import (
 const (
 	// maxOutputBytes is the maximum response size before truncation (1 MB).
 	maxOutputBytes = 1 << 20
+	// maxListLimit caps a single list_findings page so the response stays well
+	// under maxOutputBytes even with rule metadata enriched per finding.
+	maxListLimit = 500
 )
 
 // --- Input structs for typed tool handlers ---
@@ -57,7 +60,11 @@ type listFindingsInput struct {
 	Rule              string  `json:"rule,omitempty"`
 	File              string  `json:"file,omitempty"`
 	Limit             float64 `json:"limit,omitempty"`
+	Offset            float64 `json:"offset,omitempty"`
 	IncludeSuppressed bool    `json:"include_suppressed,omitempty"`
+}
+type findingByFingerprintInput struct {
+	Fingerprint string `json:"fingerprint"`
 }
 type baselineStatusInput struct {
 	Path string `json:"path"`
@@ -235,10 +242,20 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		ReadOnly().
 		Handler(s.handleGetFindingDetail)
 
+	srv.Tool("summary").
+		Description("Aggregate overview of the last scan: active/total/suppressed counts and breakdowns by severity, confidence, and rule family, plus dependency and AI-component totals. Call this first to size up a scan before paging through individual findings.").
+		ReadOnly().
+		Handler(s.handleSummary)
+
 	srv.Tool("list_findings").
-		Description("List findings with optional severity, rule, and file filters").
+		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
 		Handler(s.handleListFindings)
+
+	srv.Tool("get_finding_by_fingerprint").
+		Description("Look up a single finding by fingerprint (full or 12-char prefix) and report its current status (new / baselined / suppressed / vex_*). Use this when you already hold a fingerprint (from a prior scan or baseline entry) and just need to know whether it is still active. Returns {found:false, fingerprint} if no match.").
+		ReadOnly().
+		Handler(s.handleFindingByFingerprint)
 
 	srv.Tool("baseline_status").
 		Description("Show baseline statistics: total entries, expired count, per-severity breakdown").
@@ -409,7 +426,7 @@ func (s *Server) registerResources(srv *mcp.Server) {
 		Name("Project AI Inventory").
 		Description("AI inventory for a specific project").
 		MimeType("application/json").
-		Handler(s.handleProjectResourceAIInventory) // nox:ignore SEC-659,SEC-506,SEC-574 -- function name, not a key
+		Handler(s.handleProjectResourceAIInventory) // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
 
 	srv.Resource("nox://project/{project}/dashboard").
 		Name("Project Dashboard").
@@ -518,7 +535,21 @@ func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (s
 		return "Error: report generation failed: " + err.Error(), nil
 	}
 
-	return truncate(string(data)), nil
+	// Never hand back a mid-structure truncation: a clipped SARIF/JSON document
+	// is unparseable and the agent has no signal that data was lost. When the
+	// full report exceeds the budget, return a structured pointer to the
+	// paginated list_findings tool instead.
+	if len(data) > maxOutputBytes {
+		notice, _ := json.MarshalIndent(map[string]any{
+			"error":       "output_too_large",
+			"total_bytes": len(data),
+			"limit_bytes": maxOutputBytes,
+			"hint":        "the full report exceeds the response budget — use list_findings with limit/offset to page through findings, or get a specific finding with get_finding_detail",
+		}, "", "  ")
+		return string(notice), nil
+	}
+
+	return string(data), nil
 }
 
 func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, error) {
@@ -583,6 +614,124 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 	return truncate(string(data)), nil
 }
 
+// handleSummary returns an aggregate overview of the last scan: counts by
+// severity, confidence, and rule family, plus dependency / AI-component totals.
+// This is the cheap "what am I looking at?" call an agent (or human) makes
+// before deciding whether to page through individual findings.
+func (s *Server) handleSummary(_ context.Context, _ emptyInput) (string, error) {
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	active := pc.result.Findings.ActiveFindings()
+	total := len(pc.result.Findings.Findings())
+
+	bySeverity := map[string]int{}
+	byConfidence := map[string]int{}
+	byFamily := map[string]int{}
+	for i := range active {
+		f := &active[i]
+		bySeverity[string(f.Severity)]++
+		byConfidence[string(f.Confidence)]++
+		byFamily[ruleFamily(f.RuleID)]++
+	}
+
+	resp := map[string]any{
+		"active_findings": len(active),
+		"total_findings":  total,
+		"suppressed":      total - len(active),
+		"by_severity":     bySeverity,
+		"by_confidence":   byConfidence,
+		"by_family":       byFamily,
+		"dependencies":    len(pc.result.Inventory.Packages()),
+		"ai_components":   len(pc.result.AIInventory.Components),
+	}
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return "Error: marshalling summary: " + err.Error(), nil
+	}
+	return string(data), nil
+}
+
+// ruleFamily maps a rule ID (e.g. "SEC-001", "VULN-002") to its human family
+// name, used for grouping in the summary.
+func ruleFamily(ruleID string) string {
+	prefix := ruleID
+	if i := strings.IndexByte(ruleID, '-'); i >= 0 {
+		prefix = ruleID[:i]
+	}
+	switch prefix {
+	case "SEC":
+		return "secrets"
+	case "VULN":
+		return "dependencies"
+	case "IAC":
+		return "infrastructure"
+	case "CONT":
+		return "containers"
+	case "DATA":
+		return "privacy"
+	case "AI", "MCP":
+		return "ai"
+	default:
+		return "other"
+	}
+}
+
+// handleFindingByFingerprint looks up a single finding by its fingerprint and
+// reports its current status (new / baselined / suppressed / vex_*). This is
+// the O(1)-style call an agent makes when it already holds a fingerprint (from
+// a prior scan or a baseline entry) and wants to know whether that finding is
+// still active — without pulling and searching the full findings list. Accepts
+// a full fingerprint or a unique prefix (the 12-char form used in finding IDs).
+func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFingerprintInput) (string, error) {
+	if strings.TrimSpace(input.Fingerprint) == "" {
+		return "Error: missing required argument: fingerprint", nil
+	}
+	pc := s.getCache("")
+	if pc == nil {
+		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	fp := strings.TrimSpace(input.Fingerprint)
+	all := pc.result.Findings.Findings()
+	for i := range all {
+		f := &all[i]
+		if f.Fingerprint == fp || strings.HasPrefix(f.Fingerprint, fp) {
+			resp := map[string]any{
+				"found":       true,
+				"id":          f.ID,
+				"fingerprint": f.Fingerprint,
+				"rule_id":     f.RuleID,
+				"severity":    f.Severity,
+				"confidence":  f.Confidence,
+				"status":      statusOrNew(f.Status),
+				"message":     f.Message,
+				"location":    f.Location,
+			}
+			data, err := json.MarshalIndent(resp, "", "  ")
+			if err != nil {
+				return "Error: marshalling finding: " + err.Error(), nil
+			}
+			return string(data), nil
+		}
+	}
+	data, _ := json.MarshalIndent(map[string]any{
+		"found":       false,
+		"fingerprint": fp,
+	}, "", "  ")
+	return string(data), nil
+}
+
+// statusOrNew reports a finding's status, defaulting an empty status to "new".
+func statusOrNew(st findings.Status) findings.Status {
+	if st == "" {
+		return findings.StatusNew
+	}
+	return st
+}
+
 func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) (string, error) {
 	pc := s.getCache("")
 	if pc == nil {
@@ -607,24 +756,51 @@ func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) 
 	filter.IncludeSuppressed = input.IncludeSuppressed
 
 	filtered := store.Filter(filter)
+	total := len(filtered)
 
-	// Apply limit.
+	// Apply offset + limit so an agent can page through a large result set
+	// deterministically (findings come back in a stable sorted order). Default
+	// page size 50; capped at maxListLimit to keep one response well under the
+	// MCP output budget.
 	limit := 50
 	if input.Limit > 0 {
 		limit = int(input.Limit)
 	}
-	if len(filtered) > limit {
-		filtered = filtered[:limit]
+	if limit > maxListLimit {
+		limit = maxListLimit
 	}
+	offset := 0
+	if input.Offset > 0 {
+		offset = int(input.Offset)
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := filtered[offset:end]
 
 	// Enrich each finding with rule metadata.
 	type findingSummary struct {
 		findings.Finding
 		Rule *catalog.RuleMeta `json:"rule,omitempty"`
 	}
-	var results []findingSummary
-	for i := range filtered {
-		f := &filtered[i]
+	// Envelope carries pagination metadata so the agent knows the total and
+	// whether more pages remain — instead of silently receiving a truncated
+	// slice with no signal.
+	type listResponse struct {
+		Total    int              `json:"total"`
+		Offset   int              `json:"offset"`
+		Limit    int              `json:"limit"`
+		Returned int              `json:"returned"`
+		HasMore  bool             `json:"has_more"`
+		Findings []findingSummary `json:"findings"`
+	}
+	results := make([]findingSummary, 0, len(page))
+	for i := range page {
+		f := &page[i]
 		fs := findingSummary{Finding: *f}
 		if meta, ok := cat[f.RuleID]; ok {
 			fs.Rule = &meta
@@ -632,12 +808,21 @@ func (s *Server) handleListFindings(_ context.Context, input listFindingsInput) 
 		results = append(results, fs)
 	}
 
-	data, err := json.MarshalIndent(results, "", "  ")
+	resp := listResponse{
+		Total:    total,
+		Offset:   offset,
+		Limit:    limit,
+		Returned: len(results),
+		HasMore:  end < total,
+		Findings: results,
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
 		return "Error: marshalling findings: " + err.Error(), nil
 	}
 
-	return truncate(string(data)), nil
+	return string(data), nil
 }
 
 // Baseline handlers.
@@ -1440,7 +1625,7 @@ func (s *Server) handleProjectResourceSPDX(_ context.Context, uri string, params
 	}, nil
 }
 
-func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) { // nox:ignore SEC-659,SEC-506,SEC-574 -- function name, not a key
+func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) { // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
 	path, err := s.resolveProjectPath(params)
 	if err != nil {
 		return nil, err

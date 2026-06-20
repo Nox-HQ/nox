@@ -3,6 +3,7 @@ package deps
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -757,5 +758,95 @@ func TestNewAnalyzer_Defaults(t *testing.T) {
 	}
 	if a.httpClient == nil {
 		t.Error("expected default HTTP client")
+	}
+}
+
+// TestQueryOSV_SkipsUnknownEcosystem is a regression test for the bug where a
+// package with an ecosystem OSV doesn't recognise (e.g. a Docker base image,
+// ecosystem "docker") was included in the batch query. OSV's /v1/querybatch
+// rejects the ENTIRE request with HTTP 400 if any single query names an unknown
+// ecosystem, and that 400 was swallowed by graceful degradation — so a repo
+// with a Dockerfile silently lost every real Go/npm/PyPI vulnerability finding.
+func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req osvBatchRequest
+		decodeJSON(t, r, &req)
+
+		// Mimic the real OSV API: reject the whole batch if any query carries an
+		// ecosystem the API does not understand.
+		valid := map[string]bool{
+			"Go": true, "npm": true, "PyPI": true, "RubyGems": true,
+			"crates.io": true, "Maven": true, "NuGet": true,
+		}
+		for _, q := range req.Queries {
+			if !valid[q.Package.Ecosystem] {
+				http.Error(w, "invalid ecosystem", http.StatusBadRequest)
+				return
+			}
+		}
+
+		results := make([]osvBatchResult, len(req.Queries))
+		for i, q := range req.Queries {
+			if q.Package.Name == "esbuild" {
+				results[i] = osvBatchResult{Vulns: []osvVuln{{
+					ID:      "GHSA-g7r4-m6w7-qqqr",
+					Summary: "arbitrary file read in esbuild dev server",
+				}}}
+			}
+		}
+		encodeJSON(t, w, osvBatchResponse{Results: results})
+	}))
+	defer srv.Close()
+
+	// A Docker base image (unknown to OSV) mixed in with a real npm package.
+	pkgs := []Package{
+		{Name: "node", Version: "20-alpine", Ecosystem: "docker"},
+		{Name: "esbuild", Version: "0.27.7", Ecosystem: "npm"},
+	}
+
+	got, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	if err != nil {
+		t.Fatalf("queryOSV returned error: %v", err)
+	}
+
+	// The npm vuln (index 1) must be found despite the docker package (index 0).
+	vulns, ok := got[1]
+	if !ok || len(vulns) != 1 {
+		t.Fatalf("expected esbuild vuln at index 1, got %#v", got)
+	}
+	if vulns[0].ID != "GHSA-g7r4-m6w7-qqqr" {
+		t.Errorf("unexpected vuln id: %s", vulns[0].ID)
+	}
+	// The docker package must not be queried (so no index 0 result).
+	if _, exists := got[0]; exists {
+		t.Errorf("docker package should not have been queried, got result at index 0")
+	}
+}
+
+// TestQueryOSV_WarnsOnNon200 verifies that when the OSV API returns a non-200
+// status, queryOSV degrades gracefully (empty result, no error) BUT emits a
+// warning — so an OSV outage is not silently indistinguishable from a clean
+// "no known vulnerabilities" scan.
+func TestQueryOSV_WarnsOnNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	var logBuf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	got, err := queryOSV(context.Background(), srv.Client(), srv.URL,
+		[]Package{{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"}})
+	if err != nil {
+		t.Fatalf("queryOSV returned error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty result on degraded lookup, got %#v", got)
+	}
+	if logged := logBuf.String(); !strings.Contains(logged, "under-reported") || !strings.Contains(logged, "level=WARN") {
+		t.Errorf("expected a WARN about under-reporting, got: %q", logged)
 	}
 }
