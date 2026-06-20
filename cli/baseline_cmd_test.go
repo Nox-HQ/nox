@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/baseline"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 func TestRunBaseline_NoArgs(t *testing.T) {
@@ -393,5 +395,72 @@ func TestRunBaselineDiff_ReportsAddsAndPrunes(t *testing.T) {
 	got, _ := baseline.Load(baselinePath)
 	if got.Len() != 1 {
 		t.Errorf("baseline mutated by `diff`; expected 1 entry, got %d", got.Len())
+	}
+}
+
+func TestRunBaseline_Migrate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.env"),
+		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+	blPath := filepath.Join(dir, "bl.json")
+
+	// Write a baseline at V1, then restore the process default.
+	prev := findings.GetFingerprintVersion()
+	findings.SetFingerprintVersion(findings.FingerprintV1)
+	if code := runBaseline([]string{"write", "--output", blPath, dir}); code != 0 {
+		findings.SetFingerprintVersion(prev)
+		t.Fatalf("baseline write (v1) exit %d", code)
+	}
+	findings.SetFingerprintVersion(prev)
+
+	before, err := baseline.Load(blPath)
+	if err != nil || before.Len() == 0 {
+		t.Fatalf("loading v1 baseline: %v (len=%d)", err, before.Len())
+	}
+	v1fps := map[string]bool{}
+	for _, e := range before.Entries {
+		v1fps[e.Fingerprint] = true
+		if e.CreatedAt.IsZero() {
+			t.Fatal("expected created_at to be set on v1 entry")
+		}
+	}
+
+	// Migrate v1 -> v2.
+	if code := runBaseline([]string{"migrate", "--baseline", blPath, dir}); code != 0 {
+		t.Fatalf("baseline migrate exit %d", code)
+	}
+
+	after, err := baseline.Load(blPath)
+	if err != nil {
+		t.Fatalf("loading migrated baseline: %v", err)
+	}
+	if after.Len() != before.Len() {
+		t.Fatalf("entry count changed: %d -> %d", before.Len(), after.Len())
+	}
+	for _, e := range after.Entries {
+		if v1fps[e.Fingerprint] {
+			t.Errorf("fingerprint %s was not re-computed (still v1)", e.Fingerprint[:12])
+		}
+		if e.CreatedAt.IsZero() {
+			t.Error("migrate dropped created_at metadata")
+		}
+	}
+
+	// The migrated fingerprints must match a fresh v2 scan exactly, so the
+	// baseline actually suppresses those findings under the v2 default.
+	result, err := nox.RunScan(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	v2fps := map[string]bool{}
+	for _, f := range result.Findings.Findings() {
+		v2fps[f.Fingerprint] = true
+	}
+	for _, e := range after.Entries {
+		if !v2fps[e.Fingerprint] {
+			t.Errorf("migrated fingerprint %s does not match any v2 scan finding", e.Fingerprint[:12])
+		}
 	}
 }

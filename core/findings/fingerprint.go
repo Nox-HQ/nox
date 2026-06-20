@@ -9,27 +9,25 @@ import (
 	"sync/atomic"
 )
 
-// FingerprintVersion controls which fingerprint algorithm runs. Default
-// is V1 (line + path + content + rule_id) for full backwards compatibility
-// with existing baselines. V2 (path + content + rule_id, with path
-// normalised — backslash → forward-slash, leading `./` stripped, `..`
-// collapsed) drops the line number so trivial diffs — import shifts,
-// gofmt, comment edits — don't invalidate baselined findings. V2 does
-// NOT resolve a git root; producing a stable repo-root-relative path is
-// the caller's responsibility (the scan loop already does this when
-// invoked from a git working tree).
+// FingerprintVersion controls which fingerprint algorithm runs. Default is
+// V2 (path + content + rule_id, with path normalised — backslash →
+// forward-slash, leading `./` stripped, `..` collapsed). V2 drops the line
+// number so trivial diffs — import shifts, gofmt, comment edits — don't
+// invalidate baselined findings. V2 does NOT resolve a git root; producing a
+// stable repo-root-relative path is the caller's responsibility (the scan loop
+// already does this when invoked from a git working tree).
 //
-// V2 is opt-in. Switch it on via:
+// V1 (line + path + content + rule_id) is the original algorithm, retained for
+// consumers with existing V1 baselines. Pin it via:
 //
-//   - environment: NOX_FINGERPRINT_VERSION=2
-//   - Go API:      findings.SetFingerprintVersion(2)
-//   - CLI flag:    nox scan --fingerprint-version 2 (wired in cmd/)
+//   - environment: NOX_FINGERPRINT_VERSION=1
+//   - Go API:      findings.SetFingerprintVersion(1)
+//   - CLI flag:    nox scan --fingerprint-version 1
 //
-// Once a consumer opts in, every newly-computed fingerprint uses V2 and
-// the baseline file's per-entry fingerprint becomes incompatible with
-// V1 — `nox baseline update` will re-compute. Plan to run both
-// algorithms during a transition window if you can't update every
-// downstream consumer at once.
+// Upgrading from a nox that defaulted to V1: existing baseline / VEX entries
+// carry V1 fingerprints and will no longer match. Run `nox baseline migrate`
+// (re-fingerprints in place) or regenerate the baseline with
+// `nox baseline write`. See docs/migration-fingerprint-v2.md.
 type FingerprintVersion int32
 
 const (
@@ -43,9 +41,9 @@ const (
 	FingerprintV2 FingerprintVersion = 2
 
 	// DefaultFingerprintVersion is the version applied when no explicit
-	// configuration is set. Currently V1 for backwards compatibility;
-	// scheduled to flip to V2 in the next major release.
-	DefaultFingerprintVersion = FingerprintV1
+	// configuration is set. V2 (line-independent) as of v1.3.0; pin V1 via
+	// NOX_FINGERPRINT_VERSION=1 / --fingerprint-version 1 for legacy baselines.
+	DefaultFingerprintVersion = FingerprintV2
 )
 
 // fingerprintVersion holds the active algorithm. Stored as int32 so the

@@ -8,12 +8,32 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
+
+// isGeneratedSecretsPath reports whether a path is a lock file, checksum,
+// minified bundle or tool-state file that the secrets analyzer should skip
+// wholesale. It matches each glob in generatedFileIgnorePatterns against both
+// the full (slash-normalised) path and its basename, mirroring the per-rule
+// matching in core/rules/engine.go.
+func isGeneratedSecretsPath(path string) bool {
+	norm := filepath.ToSlash(path)
+	base := filepath.Base(norm)
+	for _, pattern := range generatedFileIgnorePatterns {
+		if matched, _ := filepath.Match(pattern, norm); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, base); matched {
+			return true
+		}
+	}
+	return false
+}
 
 // Analyzer wraps a rules.Engine pre-loaded with secret detection rules.
 type Analyzer struct {
@@ -97,6 +117,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	fs := findings.NewFindingSet()
 
 	for _, artifact := range artifacts {
+		// Skip lock files, checksums, minified bundles and tool state dirs
+		// wholesale: their content-addressed hashes match both the entropy
+		// rules and the provider-key regexes, producing thousands of false
+		// positives. This mirrors gitleaks / trufflehog / detect-secrets.
+		if isGeneratedSecretsPath(artifact.Path) {
+			continue
+		}
+
 		content, err := os.ReadFile(artifact.AbsPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)

@@ -728,6 +728,26 @@ func SeverityMeetsThreshold(severity, threshold findings.Severity) bool {
 	return sr <= tr
 }
 
+// ConfidenceMeetsThreshold returns true if the given confidence is at or above
+// the threshold confidence. Lower rank = more certain (high=0, medium=1, low=2).
+// An unknown/empty threshold accepts everything so callers can pass through.
+func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
+	rank := map[findings.Confidence]int{
+		findings.ConfidenceHigh:   0,
+		findings.ConfidenceMedium: 1,
+		findings.ConfidenceLow:    2,
+	}
+	tr, ok := rank[threshold]
+	if !ok {
+		return true
+	}
+	cr, ok := rank[confidence]
+	if !ok {
+		return false
+	}
+	return cr <= tr
+}
+
 // applySuppressions reads files that have findings and marks suppressed findings.
 func applySuppressions(fs *findings.FindingSet, target string) {
 	// Group findings by file.

@@ -25,7 +25,12 @@ func TestComputeFingerprint_Determinism(t *testing.T) {
 }
 
 func TestComputeFingerprint_Uniqueness(t *testing.T) {
-	t.Parallel()
+	// This test covers the V1 uniqueness axes (rule_id, file_path, start_line,
+	// content). Under the default V2 algorithm start_line is intentionally NOT
+	// an axis (line-independence is the whole point — see
+	// TestFingerprintV2_LineIndependent), so pin V1 here. Not parallel: it
+	// mutates the package-global fingerprint version.
+	withFingerprintVersion(t, FingerprintV1)
 
 	loc := Location{
 		FilePath:  "cmd/server/main.go",
