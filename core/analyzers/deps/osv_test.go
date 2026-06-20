@@ -3,6 +3,7 @@ package deps
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -819,5 +820,33 @@ func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
 	// The docker package must not be queried (so no index 0 result).
 	if _, exists := got[0]; exists {
 		t.Errorf("docker package should not have been queried, got result at index 0")
+	}
+}
+
+// TestQueryOSV_WarnsOnNon200 verifies that when the OSV API returns a non-200
+// status, queryOSV degrades gracefully (empty result, no error) BUT emits a
+// warning — so an OSV outage is not silently indistinguishable from a clean
+// "no known vulnerabilities" scan.
+func TestQueryOSV_WarnsOnNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	var logBuf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	got, err := queryOSV(context.Background(), srv.Client(), srv.URL,
+		[]Package{{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"}})
+	if err != nil {
+		t.Fatalf("queryOSV returned error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty result on degraded lookup, got %#v", got)
+	}
+	if logged := logBuf.String(); !strings.Contains(logged, "under-reported") || !strings.Contains(logged, "level=WARN") {
+		t.Errorf("expected a WARN about under-reporting, got: %q", logged)
 	}
 }
