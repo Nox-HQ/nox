@@ -293,7 +293,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	var fingerprintVersionFlag string
-	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v1 unless NOX_FINGERPRINT_VERSION is set.")
+	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
 	positionals, err := parseInterspersed(scanFS, args)
 	if err != nil {
 		return 2
