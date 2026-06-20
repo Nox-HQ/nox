@@ -20,6 +20,10 @@ var dataFS embed.FS
 var (
 	popularOnce sync.Once
 	popularPkgs map[string][]string // ecosystem → list of names
+	// popularSet is the same data as a normalized membership set per ecosystem,
+	// so DetectTyposquatting can answer "is this name itself a popular package?"
+	// in O(1) BEFORE doing any distance comparison.
+	popularSet map[string]map[string]struct{}
 )
 
 // maliciousPackages holds lazy-loaded known malicious package names per ecosystem.
@@ -32,6 +36,7 @@ var (
 // once via sync.Once to avoid repeated file I/O.
 func loadPopular() {
 	popularPkgs = make(map[string][]string)
+	popularSet = make(map[string]map[string]struct{})
 
 	files := map[string]string{
 		"npm":  "data/popular_npm.txt",
@@ -44,14 +49,17 @@ func loadPopular() {
 			continue
 		}
 		var names []string
+		set := make(map[string]struct{})
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
 			names = append(names, line)
+			set[normalizeDistName(line)] = struct{}{}
 		}
 		popularPkgs[eco] = names
+		popularSet[eco] = set
 	}
 }
 
@@ -140,7 +148,8 @@ func LevenshteinDistance(a, b string) int {
 // (npm, pypi) are checked; all others return ("", false).
 //
 // The threshold parameter controls the maximum Levenshtein distance that is
-// still considered suspicious. A value of 2 is recommended for general use.
+// still considered suspicious. A value of 2 is recommended for general use; it
+// is automatically tightened to 1 for short names (see below).
 func DetectTyposquatting(name, ecosystem string, threshold int) (string, bool) {
 	popularOnce.Do(loadPopular)
 
@@ -151,18 +160,33 @@ func DetectTyposquatting(name, ecosystem string, threshold int) (string, bool) {
 
 	lowerName := normalizeDistName(name)
 
-	for _, popular := range names {
-		lowerPopular := normalizeDistName(popular)
-
-		// Exact match — not a typosquat, it is the real package. Names are
-		// PEP 503-normalized so canonical variants like "huggingface_hub" vs
-		// "huggingface-hub" compare equal instead of looking like a typosquat.
-		if lowerName == lowerPopular {
+	// Exact match FIRST: if the package IS itself a popular package, it is not a
+	// typosquat — regardless of how close some OTHER popular name happens to be.
+	// Checking this only inside the distance loop (as before) was order-
+	// dependent: "vue" would match "vuex" at distance 1 and be flagged before
+	// the loop ever reached the exact "vue" entry. This false-positived every
+	// popular package with a near neighbour (vue, zod, ms, ajv, …).
+	if set, ok := popularSet[ecosystem]; ok {
+		if _, isPopular := set[lowerName]; isPopular {
 			return "", false
 		}
+	}
 
+	// Short names have many spurious neighbours at distance 2 (e.g. "abc" is
+	// distance 2 from hundreds of three-letter names). Require an exact single-
+	// character typo for short names to keep precision high.
+	effThreshold := threshold
+	if len(lowerName) <= 4 && effThreshold > 1 {
+		effThreshold = 1
+	}
+
+	for _, popular := range names {
+		lowerPopular := normalizeDistName(popular)
+		if lowerName == lowerPopular {
+			continue
+		}
 		dist := LevenshteinDistance(lowerName, lowerPopular)
-		if dist > 0 && dist <= threshold {
+		if dist > 0 && dist <= effThreshold {
 			return popular, true
 		}
 	}

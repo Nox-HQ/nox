@@ -231,6 +231,30 @@ func run(args []string) int {
 	}
 }
 
+// parseInterspersed parses fs from args where flags may appear before AND
+// after positional arguments. The stdlib flag package stops at the first
+// non-flag token, so a flag placed after the path (e.g. "scan . -offline")
+// would otherwise be silently dropped (#103). After each positional we
+// re-parse the remainder, so every flag is honored regardless of position.
+// Returns the positional arguments in order.
+func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			return positionals, err
+		}
+		if fs.NArg() == 0 {
+			return positionals, nil
+		}
+		positionals = append(positionals, fs.Arg(0))
+		rest = fs.Args()[1:]
+		if len(rest) == 0 {
+			return positionals, nil
+		}
+	}
+}
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -240,11 +264,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noOSVFlag     bool
 	)
 	var (
-		vexFlag        string
-		tfPlanFlag     string
+		vexFlag    string
+		tfPlanFlag string
 	)
 	scanFS.BoolVar(&stagedFlag, "staged", false, "scan only git-staged files (index content)")
 	scanFS.StringVar(&thresholdFlag, "severity-threshold", "", "minimum severity to report (critical, high, medium, low)")
+	var minConfidenceFlag string
+	scanFS.StringVar(&minConfidenceFlag, "min-confidence", "", "minimum confidence to report (high, medium, low); drops lower-confidence heuristic findings")
 	scanFS.BoolVar(&noOSVFlag, "no-osv", false, "disable OSV.dev vulnerability lookups (offline mode)")
 	scanFS.StringVar(&vexFlag, "vex", "", "path to OpenVEX document for vulnerability status overrides")
 	scanFS.StringVar(&tfPlanFlag, "tf-plan", "", "path to terraform plan JSON file to scan")
@@ -267,8 +293,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	var fingerprintVersionFlag string
-	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v1 unless NOX_FINGERPRINT_VERSION is set.")
-	if err := scanFS.Parse(args); err != nil {
+	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
+	positionals, err := parseInterspersed(scanFS, args)
+	if err != nil {
 		return 2
 	}
 	// Wire fingerprint version: explicit flag wins, then env var (handled
@@ -286,11 +313,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return 2
 	}
 
-	if scanFS.NArg() == 0 {
+	if len(positionals) == 0 {
 		fmt.Fprintln(os.Stderr, "Usage: nox scan <path> [flags]")
 		return 2
 	}
-	target := scanFS.Arg(0)
+	target := positionals[0]
 
 	// Load project config for output defaults.
 	cfg, err := nox.LoadScanConfig(target)
@@ -388,6 +415,20 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		var filtered []findings.Finding
 		for i := range activeFindings {
 			if nox.SeverityMeetsThreshold(activeFindings[i].Severity, threshold) {
+				filtered = append(filtered, activeFindings[i])
+			}
+		}
+		activeFindings = filtered
+	}
+
+	// Apply confidence threshold filtering if specified. Lets operators drop
+	// lower-confidence heuristic findings (e.g. typosquatting suspicions) while
+	// keeping high-confidence ones.
+	if minConfidenceFlag != "" {
+		threshold := findings.Confidence(minConfidenceFlag)
+		var filtered []findings.Finding
+		for i := range activeFindings {
+			if nox.ConfidenceMeetsThreshold(activeFindings[i].Confidence, threshold) {
 				filtered = append(filtered, activeFindings[i])
 			}
 		}

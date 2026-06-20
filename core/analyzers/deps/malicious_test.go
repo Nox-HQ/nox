@@ -440,3 +440,20 @@ func TestDetectTyposquatting_PEP503Canonical(t *testing.T) {
 		}
 	}
 }
+
+// TestDetectTyposquatting_PopularNotFlagged is a regression test: popular
+// packages that happen to sit within edit distance of ANOTHER popular package
+// (vue↔vuex, etc.) must not be flagged as typosquats, and short names must not
+// false-positive at distance 2 — while a genuine typo is still caught.
+func TestDetectTyposquatting_PopularNotFlagged(t *testing.T) {
+	// These are themselves popular npm packages; none is a typosquat.
+	for _, name := range []string{"vue", "zod", "ms", "ajv", "react", "lodash", "express"} {
+		if popular, ok := DetectTyposquatting(name, "npm", 2); ok {
+			t.Errorf("%q flagged as typosquat of %q, but it is a popular package itself", name, popular)
+		}
+	}
+	// A genuine one-character typo of a popular package is still detected.
+	if _, ok := DetectTyposquatting("expres", "npm", 2); !ok {
+		t.Error("expected 'expres' to be flagged as a typosquat of 'express'")
+	}
+}
