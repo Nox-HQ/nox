@@ -94,6 +94,41 @@ jobs:
             echo "coverctl not available, skipping badge update"
           fi
 
+  plugins:
+    name: Plugin ${{ matrix.plugin }}
+    runs-on: ubuntu-latest
+    # Each plugin is its own Go module that builds against the SDK via a local
+    # `replace github.com/nox-hq/nox => ../..`. Nothing else in CI builds them,
+    # so they silently rot when the SDK's transitive deps move (go.mod goes
+    # stale). This matrix builds + tests every plugin and fails if its go.mod
+    # isn't tidy — keeping all plugins installable.
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin:
+          - nox-plugin-ai-eval
+          - nox-plugin-grc
+          - nox-plugin-k8s-runtime
+          - nox-plugin-reachability
+          - nox-plugin-red-team
+          - nox-plugin-remediate
+          - nox-plugin-taint-analysis
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build, test, and check go.mod is tidy
+        working-directory: plugins/${{ matrix.plugin }}
+        run: |
+          go build ./...
+          go test ./...
+          go mod tidy
+          git diff --exit-code go.mod go.sum \
+            || { echo "::error::plugins/${{ matrix.plugin }} go.mod/go.sum is not tidy — run 'go mod tidy' in that directory"; exit 1; }
+
   build:
     name: Build & Scan
     runs-on: ubuntu-latest
