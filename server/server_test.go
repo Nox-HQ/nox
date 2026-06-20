@@ -2056,3 +2056,60 @@ func TestHandleSummary(t *testing.T) {
 		t.Errorf("severity counts %d != active findings %d", sevSum, sum.ActiveFindings)
 	}
 }
+
+func TestHandleFindingByFingerprint(t *testing.T) {
+	s := New("0.1.0", nil)
+	// Missing arg.
+	if r, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{}); !strings.HasPrefix(r, "Error:") {
+		t.Fatal("expected error for empty fingerprint")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
+		t.Fatalf("scan failed: %v / %s", err, r)
+	}
+
+	// Pull one finding's fingerprint via list_findings.
+	listOut, _ := s.handleListFindings(context.Background(), listFindingsInput{})
+	var env struct {
+		Findings []struct {
+			Fingerprint string `json:"Fingerprint"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(listOut), &env); err != nil || len(env.Findings) == 0 {
+		t.Fatalf("could not get a fingerprint: %v\n%s", err, listOut)
+	}
+	fp := env.Findings[0].Fingerprint
+
+	// Full fingerprint → found.
+	out, err := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: fp})
+	if err != nil {
+		t.Fatalf("lookup error: %v", err)
+	}
+	var found struct {
+		Found  bool   `json:"found"`
+		Status string `json:"status"`
+		RuleID string `json:"rule_id"`
+	}
+	if err := json.Unmarshal([]byte(out), &found); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, out)
+	}
+	if !found.Found || found.Status != "new" {
+		t.Errorf("expected found+new, got %+v", found)
+	}
+
+	// 12-char prefix → also found.
+	if len(fp) >= 12 {
+		out2, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: fp[:12]})
+		if !strings.Contains(out2, `"found": true`) {
+			t.Errorf("prefix lookup should find the finding: %s", out2)
+		}
+	}
+
+	// Unknown fingerprint → found:false.
+	out3, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: "deadbeefdeadbeef"})
+	if !strings.Contains(out3, `"found": false`) {
+		t.Errorf("expected found:false for unknown fp: %s", out3)
+	}
+}
