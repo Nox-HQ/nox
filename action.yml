@@ -46,6 +46,10 @@ inputs:
     description: 'Filter findings to those at or above this severity (critical, high, medium, low). Empty = no filter.'
     required: false
     default: ''
+  min-confidence:
+    description: 'Filter findings to those at or above this confidence (high, medium, low). Drops lower-confidence heuristic findings. Empty = no filter.'
+    required: false
+    default: ''
   vex:
     description: 'Path to OpenVEX waiver document (skips VEX-not-affected findings)'
     required: false
@@ -90,6 +94,7 @@ runs:
         INPUT_MAX_COMMENTS: ${{ inputs.max-comments }}
         INPUT_MIN_SEVERITY: ${{ inputs.min-severity }}
         INPUT_SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        INPUT_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
         INPUT_VEX: ${{ inputs.vex }}
         INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
         INPUT_OFFLINE: ${{ inputs.offline }}

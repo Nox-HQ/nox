@@ -151,6 +151,9 @@ run_scan() {
   if [[ -n "${INPUT_SEVERITY_THRESHOLD:-}" ]]; then
     extra_args+=(--severity-threshold "${INPUT_SEVERITY_THRESHOLD}")
   fi
+  if [[ -n "${INPUT_MIN_CONFIDENCE:-}" ]]; then
+    extra_args+=(--min-confidence "${INPUT_MIN_CONFIDENCE}")
+  fi
   if [[ -n "${INPUT_VEX:-}" ]]; then
     extra_args+=(--vex "${INPUT_VEX}")
   fi
