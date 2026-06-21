@@ -794,7 +794,7 @@
     },
     {
       "name": "nox/policy-gate",
-      "description": "Policy evaluation and CI gate (pass/fail) \u2014 severity thresholds, rule allowlists, finding budgets (5 rules)",
+      "description": "[DEPRECATED] Policy evaluation and CI gate (pass/fail) \u2014 severity thresholds, rule allowlists, finding budgets (5 rules)",
       "homepage": "https://github.com/Nox-HQ/nox-plugin-policy-gate",
       "repository": "https://github.com/Nox-HQ/nox-plugin-policy-gate",
       "license": "Apache-2.0",
@@ -871,11 +871,13 @@
             }
           ]
         }
-      ]
+      ],
+      "deprecated": true,
+      "deprecation_note": "Superseded by core: policy.fail_on / --severity-threshold / --fail-on-unwaived"
     },
     {
       "name": "nox/baseline-mgmt",
-      "description": "Finding baseline snapshots, diff, triage \u2014 brownfield migration enabler (4 rules)",
+      "description": "[DEPRECATED] Finding baseline snapshots, diff, triage \u2014 brownfield migration enabler (4 rules)",
       "homepage": "https://github.com/Nox-HQ/nox-plugin-baseline-mgmt",
       "repository": "https://github.com/Nox-HQ/nox-plugin-baseline-mgmt",
       "license": "Apache-2.0",
@@ -953,7 +955,9 @@
             }
           ]
         }
-      ]
+      ],
+      "deprecated": true,
+      "deprecation_note": "Superseded by core: nox baseline write/update/diff/migrate + nox vex"
     },
     {
       "name": "nox/depconfusion",
