@@ -8,7 +8,7 @@ import (
 )
 
 // fakeResolver returns scripted latest tag/sha per repo. tagSHA resolves an
-// arbitrary tag to a deterministic pseudo-SHA (tag "vN" -> "shaOf-vN...").
+// arbitrary tag to a deterministic 40-hex SHA (its digits, 'a'-padded).
 type fakeResolver map[string][2]string // repo -> {tag, sha}
 
 func (f fakeResolver) latest(repo string) (tag, sha string, err error) {
@@ -23,9 +23,14 @@ func (f fakeResolver) tagSHA(repo, tag string) (sha string, err error) {
 	if _, ok := f[repo]; !ok {
 		return "", os.ErrNotExist
 	}
-	// 40-hex deterministic SHA derived from the tag name.
-	base := "shaof" + strings.NewReplacer(".", "", "v", "").Replace(tag)
-	return (base + strings.Repeat("0", 40))[:40], nil
+	// Deterministic, valid 40-hex SHA from the tag's digits, 'a'-padded.
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, tag)
+	return (digits + strings.Repeat("a", 40))[:40], nil
 }
 
 func writeWFPin(t *testing.T, root, name, body string) string {

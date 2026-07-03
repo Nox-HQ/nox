@@ -134,10 +134,11 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 			continue
 		}
 
-		// A mutable ref (a tag like @v7, not a 40-hex SHA) must be pinned to a
-		// SHA even when it already tracks the latest version — that is the
-		// whole point of pinning (supply-chain immutability). An already-SHA
-		// ref only needs touching when it is genuinely outdated.
+		// A mutable ref (a tag like @v7, i.e. not a hex commit SHA per isSHA)
+		// must be pinned to a SHA even when it already tracks the latest
+		// version — that is the whole point of pinning (supply-chain
+		// immutability). An already-SHA ref only needs touching when it is
+		// genuinely outdated.
 		mutable := !isSHA(p.ref)
 		outdated := versionLess(cur, l.tag)
 		sameMajor := majorComponent(cur) == majorComponent(l.tag)
