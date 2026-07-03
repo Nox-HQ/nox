@@ -140,7 +140,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
 		fmt.Fprintf(os.Stderr, "  vex <cmd>        OpenVEX waiver document tools (vex init)\n")
 		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
-		fmt.Fprintf(os.Stderr, "  fix              Apply OSV fixed_in remediation upgrades\n")
+		fmt.Fprintf(os.Stderr, "  fix              Apply OSV dep upgrades (--actions also bumps GitHub Actions pins)\n")
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates\n")

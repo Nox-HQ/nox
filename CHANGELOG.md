@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`nox fix` remediates GitHub Actions pins.** `--actions` (alongside the
+  package-dependency pass) or `--actions-only` scans `.github/workflows` and
+  `.github/actions`, resolves each `uses:` action to its latest release via the
+  GitHub API, and rewrites outdated pins to `@<sha> # <tag>` (SHA-pinned, best
+  practice). Major-version jumps are skipped unless `--include-major`; branch
+  pins (e.g. `@main` reusable workflows) are left alone. Needs `GITHUB_TOKEN`.
+  This lets nox own dependency *and* CI-action remediation, replacing dependabot.
+
 ## [0.11.0] - 2026-06-05
 
 ### Added

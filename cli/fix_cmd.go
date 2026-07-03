@@ -27,15 +27,49 @@ func runFix(args []string) int {
 		dryRun       bool
 		includeMajor bool
 		manifestRoot string
+		doActions    bool
+		onlyActions  bool
 	)
 	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
 	fs.BoolVar(&dryRun, "dry-run", false, "print actions without applying them")
 	fs.BoolVar(&includeMajor, "include-major", false, "apply upgrades that cross a major version boundary")
 	fs.StringVar(&manifestRoot, "root", ".", "directory containing the project's manifest (go.mod)")
+	fs.BoolVar(&doActions, "actions", false, "also upgrade outdated GitHub Actions pins in .github/workflows (needs GITHUB_TOKEN)")
+	fs.BoolVar(&onlyActions, "actions-only", false, "only upgrade GitHub Actions pins; skip the package-dependency pass")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
+	// GitHub Actions remediation runs independently of findings.json — it
+	// scans the workflows directly and pins each `uses:` to the latest release.
+	if onlyActions {
+		return actionsExit(runActionsFix(manifestRoot, dryRun, includeMajor, newGithubResolver()))
+	}
+
+	code := runDepsFix(inputPath, manifestRoot, dryRun, includeMajor)
+	if doActions {
+		if ac := actionsExit(runActionsFix(manifestRoot, dryRun, includeMajor, newGithubResolver())); ac != 0 {
+			code = ac
+		}
+	}
+	return code
+}
+
+// actionsExit maps the actions-fix counters to a process exit code: non-zero
+// only when a rewrite failed (an already-latest or unresolved pin is fine).
+func actionsExit(applied, skipped, failed int) int {
+	if failed > 0 {
+		return 1
+	}
+	if applied == 0 && skipped == 0 {
+		fmt.Println("nox fix: no GitHub Actions pins found to check.")
+	}
+	return 0
+}
+
+// runDepsFix applies OSV package-dependency upgrades from a scan's
+// findings.json (the original nox fix behavior).
+func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	raw, err := os.ReadFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", inputPath, err)
