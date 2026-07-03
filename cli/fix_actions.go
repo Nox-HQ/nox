@@ -69,10 +69,11 @@ func isSHA(ref string) bool {
 }
 
 // actionResolver returns the latest release tag and its commit SHA for an
-// action repo. Injected so the planning/rewrite logic is testable without
-// the network.
+// action repo, and the commit SHA a specific tag resolves to. Injected so the
+// planning/rewrite logic is testable without the network.
 type actionResolver interface {
 	latest(repo string) (tag, sha string, err error)
+	tagSHA(repo, tag string) (sha string, err error)
 }
 
 // runActionsFix scans workflows under root, rewrites outdated action pins to
@@ -84,7 +85,7 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 		return 0, 0, 0
 	}
 
-	// Resolve each unique repo once.
+	// Resolve each unique repo's latest release once.
 	type latest struct {
 		tag, sha string
 		ok       bool
@@ -102,6 +103,22 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 		cache[repo] = l
 		return l
 	}
+	// Resolve a specific tag's commit SHA once (for SHA-pinning a mutable tag
+	// in place when the latest release is a major we won't jump to).
+	tagCache := map[string]string{}
+	resolveTag := func(repo, tag string) string {
+		key := repo + "@" + tag
+		if s, seen := tagCache[key]; seen {
+			return s
+		}
+		sha, err := r.tagSHA(repo, tag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warn: resolve %s@%s: %v\n", repo, tag, err)
+			sha = ""
+		}
+		tagCache[key] = sha
+		return sha
+	}
 
 	// Group rewrites per file so each file is read/written once.
 	perFile := map[string][]rewrite{}
@@ -116,18 +133,61 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 			skipped++
 			continue
 		}
-		if !versionLess(cur, l.tag) {
-			skipped++ // already latest (or ahead)
-			continue
-		}
-		if !includeMajor && majorComponent(cur) != majorComponent(l.tag) {
+
+		// A mutable ref (a tag like @v7, i.e. not a hex commit SHA per isSHA)
+		// must be pinned to a SHA even when it already tracks the latest
+		// version — that is the whole point of pinning (supply-chain
+		// immutability). An already-SHA ref only needs touching when it is
+		// genuinely outdated.
+		mutable := !isSHA(p.ref)
+		outdated := versionLess(cur, l.tag)
+		sameMajor := majorComponent(cur) == majorComponent(l.tag)
+
+		var tag, sha, why string
+		switch {
+		case outdated && (includeMajor || sameMajor):
+			// Upgrade to the latest release, SHA-pinned.
+			tag, sha, why = l.tag, l.sha, fmt.Sprintf("%s -> %s", cur, l.tag)
+		case outdated && mutable:
+			// Newer major exists but we won't jump it; still SHA-pin the
+			// mutable tag in place at its current major.
+			if s := resolveTag(p.repo, p.ref); s != "" {
+				tag, sha, why = p.ref, s, fmt.Sprintf("pin %s (major %d held; latest %s)", p.ref, majorComponent(cur), l.tag)
+			} else {
+				fmt.Printf("skip (major): %s %s -> %s (use --include-major)\n", p.full, cur, l.tag)
+				skipped++
+				continue
+			}
+		case outdated:
+			// Already SHA-pinned, newer major available — hold without flag.
 			fmt.Printf("skip (major): %s %s -> %s (use --include-major)\n", p.full, cur, l.tag)
 			skipped++
 			continue
+		case mutable && sameMajor:
+			// Up to date but mutable → SHA-pin to the same-major latest.
+			tag, sha, why = l.tag, l.sha, fmt.Sprintf("pin %s", cur)
+		case mutable:
+			// Up to date, mutable, latest is a different (older) major line —
+			// pin the tag to its own SHA without changing the version.
+			if s := resolveTag(p.repo, p.ref); s != "" {
+				tag, sha, why = p.ref, s, fmt.Sprintf("pin %s", p.ref)
+			} else {
+				skipped++
+				continue
+			}
+		default:
+			// Already SHA-pinned and up to date — nothing to do.
+			skipped++
+			continue
 		}
-		newLine := fmt.Sprintf("%s@%s # %s", p.full, l.sha, l.tag)
+
+		if sha == p.ref {
+			skipped++ // already pinned to this exact SHA
+			continue
+		}
+		newLine := fmt.Sprintf("%s@%s # %s", p.full, sha, tag)
 		perFile[p.file] = append(perFile[p.file], rewrite{lineNo: p.lineNo, prefix: p.prefix, newRest: newLine})
-		fmt.Printf("plan: %s %s -> %s (%s)\n", p.full, cur, l.tag, short(l.sha))
+		fmt.Printf("plan: %s %s (%s)\n", p.full, why, short(sha))
 	}
 
 	if dryRun {
