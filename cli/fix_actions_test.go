@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// fakeResolver returns scripted latest tag/sha per repo.
+// fakeResolver returns scripted latest tag/sha per repo. tagSHA resolves an
+// arbitrary tag to a deterministic pseudo-SHA (tag "vN" -> "shaOf-vN...").
 type fakeResolver map[string][2]string // repo -> {tag, sha}
 
 func (f fakeResolver) latest(repo string) (tag, sha string, err error) {
@@ -15,6 +17,15 @@ func (f fakeResolver) latest(repo string) (tag, sha string, err error) {
 		return "", "", os.ErrNotExist
 	}
 	return v[0], v[1], nil
+}
+
+func (f fakeResolver) tagSHA(repo, tag string) (sha string, err error) {
+	if _, ok := f[repo]; !ok {
+		return "", os.ErrNotExist
+	}
+	// 40-hex deterministic SHA derived from the tag name.
+	base := "shaof" + strings.NewReplacer(".", "", "v", "").Replace(tag)
+	return (base + strings.Repeat("0", 40))[:40], nil
 }
 
 func writeWFPin(t *testing.T, root, name, body string) string {
@@ -83,12 +94,12 @@ func TestRunActionsFix_RewritesOutdated(t *testing.T) {
 func TestRunActionsFix_SkipsUpToDateAndMajor(t *testing.T) {
 	root := t.TempDir()
 	writeWFPin(t, root, "ci.yml", `steps:
-  - uses: actions/checkout@sha11111111111111111111111111111111111111 # v4.3.0
-  - uses: actions/setup-go@sha22222222222222222222222222222222222222 # v5.0.0
+  - uses: actions/checkout@1111111111111111111111111111111111111111 # v4.3.0
+  - uses: actions/setup-go@2222222222222222222222222222222222222222 # v5.0.0
 `)
 	res := fakeResolver{
-		"actions/checkout": {"v4.3.0", "same"},     // already latest → skip
-		"actions/setup-go": {"v6.0.0", "newmajor"}, // major jump → skip w/o flag
+		"actions/checkout": {"v4.3.0", "1111111111111111111111111111111111111111"}, // SHA-pinned + latest → skip
+		"actions/setup-go": {"v6.0.0", "3333333333333333333333333333333333333333"}, // major jump → skip w/o flag
 	}
 	applied, skipped, failed := runActionsFix(root, true, false, res)
 	if applied != 0 || failed != 0 || skipped != 2 {
@@ -98,6 +109,37 @@ func TestRunActionsFix_SkipsUpToDateAndMajor(t *testing.T) {
 	applied, _, _ = runActionsFix(root, true, true, res)
 	if applied != 1 {
 		t.Errorf("with --include-major want applied=1, got %d", applied)
+	}
+}
+
+func TestRunActionsFix_PinsMutableTags(t *testing.T) {
+	root := t.TempDir()
+	p := writeWFPin(t, root, "ci.yml", `steps:
+  - uses: actions/checkout@v7
+  - uses: actions/setup-node@v6
+  - uses: octo/legacy@v2
+`)
+	res := fakeResolver{
+		// same major as the pinned mutable tag → pin to the latest release SHA
+		"actions/checkout":   {"v7.0.0", "1111111111111111111111111111111111111111"},
+		"actions/setup-node": {"v6.4.0", "2222222222222222222222222222222222222222"},
+		// newer major than the pin → hold the major, but SHA-pin @v2 in place
+		"octo/legacy": {"v4.0.0", "9999999999999999999999999999999999999999"},
+	}
+	applied, skipped, failed := runActionsFix(root, false, false, res)
+	if applied != 3 || failed != 0 {
+		t.Fatalf("applied=%d skipped=%d failed=%d, want applied=3", applied, skipped, failed)
+	}
+	got, _ := os.ReadFile(p)
+	// octo/legacy@v2 keeps the v2 comment but is now pinned to v2's own SHA.
+	legacySHA, _ := res.tagSHA("octo/legacy", "v2")
+	want := `steps:
+  - uses: actions/checkout@1111111111111111111111111111111111111111 # v7.0.0
+  - uses: actions/setup-node@2222222222222222222222222222222222222222 # v6.4.0
+  - uses: octo/legacy@` + legacySHA + ` # v2
+`
+	if string(got) != want {
+		t.Errorf("mutable-tag pinning wrong:\n%s", got)
 	}
 }
 

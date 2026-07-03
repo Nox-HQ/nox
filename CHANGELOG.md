@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-03
+
+### Changed
+
+- **`nox fix --actions` now SHA-pins mutable tag refs, not just outdated ones.**
+  A `uses: owner/action@v7` that already tracks the latest release is still a
+  mutable ref — a supply-chain risk and a frequent PR-review flag. `--actions`
+  now rewrites any tag ref to `@<sha> # <tag>`, pinning to the same-major latest
+  release (or to the tag's own commit when a newer major is being held back).
+  Already-SHA-pinned, up-to-date refs remain untouched, so remediation PRs are
+  no longer blocked by "still using a mutable tag" review comments. Behavior for
+  the dependency pass (default `nox fix`) is unchanged.
+
 ## [1.4.0] - 2026-07-03
 
 ### Added
