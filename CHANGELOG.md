@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OWASP Top 10 for Agentic Applications (ASI01–ASI10) mapping.** Findings
+  against agentic surfaces now carry their `owasp-asi*` control (in SARIF
+  `properties.tags` and finding metadata), the way they already carry OWASP LLM
+  and MCP Top 10 tags. Mapped: ASI01 Agent Goal Hijack (AGENT-001/004, prompt-
+  injection rules), ASI02 Tool Misuse (AGENT-002/003, tool-exposure rules), ASI03
+  Identity & Privilege Abuse (MCP authz/SSRF), ASI04 Agentic Supply Chain (MCP
+  tool-poisoning, rug-pull, shadow servers, model supply chain), ASI05 Unexpected
+  Code Execution. Runtime/multi-agent categories nox can't statically detect
+  (ASI06/07/08) are deliberately left unmapped rather than over-claimed.
 - **Per-severity policy budgets (`policy.budget`).** The gate can now tolerate a
   bounded amount of new debt per severity before failing — e.g. `budget: {medium:
   5, low: 20}` fails only on the 6th new medium while still failing on any new

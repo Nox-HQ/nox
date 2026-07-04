@@ -1,6 +1,58 @@
 package ai
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// The AGENT/AI/MCP rules that map to the OWASP Top 10 for Agentic Applications
+// must carry the corresponding owasp-asi* tag (flows into SARIF for Code
+// Scanning + GRC). Spot-check one rule per mapped category.
+func TestASIMapping(t *testing.T) {
+	rs := builtinAIRules()
+	byID := map[string][]string{}
+	for _, r := range rs {
+		byID[r.ID] = r.Tags
+	}
+
+	want := map[string]string{
+		"AGENT-001": "owasp-asi01", // Agent Goal Hijack
+		"AGENT-003": "owasp-asi02", // Tool Misuse
+		"MCP-018":   "owasp-asi03", // Identity & Privilege Abuse (SSRF)
+		"MCP-009":   "owasp-asi04", // Agentic Supply Chain (tool poisoning)
+		"AI-009":    "owasp-asi05", // Unexpected Code Execution
+	}
+	for id, tag := range want {
+		tags, ok := byID[id]
+		if !ok {
+			t.Errorf("rule %s not found", id)
+			continue
+		}
+		if !hasTag(tags, tag) {
+			t.Errorf("rule %s missing %s tag; got %v", id, tag, tags)
+		}
+	}
+
+	// A non-agentic rule must not be force-tagged with an ASI category.
+	for _, r := range rs {
+		if r.ID == "AI-006" { // insecure logging — not a category we map
+			for _, tg := range r.Tags {
+				if strings.HasPrefix(tg, "owasp-asi") {
+					t.Errorf("AI-006 should not carry an ASI tag, got %q", tg)
+				}
+			}
+		}
+	}
+}
+
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}
 
 // The unsafe-output-handling rules (AI-009/012/015/018) target real code sinks,
 // but they must not fire on documentation that *quotes* those sinks — a

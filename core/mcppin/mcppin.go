@@ -278,6 +278,7 @@ func driftFinding(path, server, oldHash, newHash string) findings.Finding {
 			"old_hash":    oldHash,
 			"new_hash":    newHash,
 			"owasp-mcp":   "MCP04",
+			"owasp-asi":   "ASI04",
 			"detector":    "rug-pull",
 			"remediation": "Diff the MCP server definition against its approved state. Confirm the command, arguments, environment, and any embedded tool definitions are still what you reviewed. Re-approve only after verifying the change is legitimate.",
 		},
