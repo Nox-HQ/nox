@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`scan.exclude` is now a hard exclude that survives `--changed-since`.** Since
+  the tracked-file fix (#142), a file listed in `scan.exclude` that was also
+  git-tracked got re-scanned — the tracked-file override treated the config
+  exclude like a `.gitignore` pattern. So an explicit exclusion (e.g. a
+  rule-definition file full of expected-false-positive patterns) was silently
+  ignored in `--changed-since` scans, which is what failed nox's own PR gate on
+  every rule change. Config excludes are now a separate hard rule the tracked
+  override never resurrects.
 - **Unsafe-output-handling rules no longer fire on documentation.** AI-009/012/
   015/018 (eval/exec, DB query, `innerHTML`, file path from LLM output) target
   real code sinks but matched prose in docs that *quote* those sinks — most
