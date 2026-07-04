@@ -6,6 +6,65 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 )
 
+// newN returns n new findings of the given severity.
+func newN(sev findings.Severity, n int) []findings.Finding {
+	ff := make([]findings.Finding, n)
+	for i := range ff {
+		ff[i] = findings.Finding{RuleID: "SEC-001", Severity: sev, Status: findings.StatusNew}
+	}
+	return ff
+}
+
+func TestEvaluate_Budget(t *testing.T) {
+	cases := []struct {
+		name     string
+		cfg      Config
+		findings []findings.Finding
+		wantPass bool
+	}{
+		{
+			name:     "within medium budget passes",
+			cfg:      Config{FailOn: findings.SeverityMedium, Budget: map[findings.Severity]int{findings.SeverityMedium: 5}},
+			findings: newN(findings.SeverityMedium, 5),
+			wantPass: true,
+		},
+		{
+			name:     "over medium budget fails",
+			cfg:      Config{FailOn: findings.SeverityMedium, Budget: map[findings.Severity]int{findings.SeverityMedium: 5}},
+			findings: newN(findings.SeverityMedium, 6),
+			wantPass: false,
+		},
+		{
+			name: "budgeted medium ok but any new high still fails (default 0)",
+			cfg:  Config{FailOn: findings.SeverityMedium, Budget: map[findings.Severity]int{findings.SeverityMedium: 5}},
+			findings: append(newN(findings.SeverityMedium, 2),
+				findings.Finding{RuleID: "SEC-002", Severity: findings.SeverityHigh, Status: findings.StatusNew}),
+			wantPass: false,
+		},
+		{
+			name:     "below fail_on is never gated regardless of budget",
+			cfg:      Config{FailOn: findings.SeverityHigh, Budget: map[findings.Severity]int{findings.SeverityMedium: 0}},
+			findings: newN(findings.SeverityMedium, 20),
+			wantPass: true,
+		},
+		{
+			name:     "empty budget reproduces the old gate (any new high fails)",
+			cfg:      Config{FailOn: findings.SeverityHigh},
+			findings: newN(findings.SeverityHigh, 1),
+			wantPass: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Evaluate(tc.cfg, tc.findings)
+			if r.Pass != tc.wantPass {
+				t.Errorf("Pass = %v, want %v (%s)", r.Pass, tc.wantPass, r.Summary)
+			}
+		})
+	}
+}
+
 func TestEvaluate_AllNewAboveThreshold(t *testing.T) {
 	cfg := Config{FailOn: findings.SeverityHigh}
 	ff := []findings.Finding{

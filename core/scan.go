@@ -531,13 +531,21 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 // evaluatePolicy runs the configured fail-on / baseline policy gate over the
 // refined findings. It returns nil when no policy is configured. Stage 4.
 func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet) *policy.Result {
-	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" {
+	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" && len(cfg.Policy.Budget) == 0 {
 		return nil
+	}
+	var budget map[findings.Severity]int
+	if len(cfg.Policy.Budget) > 0 {
+		budget = make(map[findings.Severity]int, len(cfg.Policy.Budget))
+		for sev, n := range cfg.Policy.Budget {
+			budget[findings.Severity(sev)] = n
+		}
 	}
 	policyCfg := policy.Config{
 		FailOn:       findings.Severity(cfg.Policy.FailOn),
 		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
 		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
+		Budget:       budget,
 	}
 	return policy.Evaluate(policyCfg, allFindings.Findings())
 }

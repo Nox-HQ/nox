@@ -26,6 +26,11 @@ type Config struct {
 	FailOn       findings.Severity `yaml:"fail_on"`
 	WarnOn       findings.Severity `yaml:"warn_on"`
 	BaselineMode BaselineMode      `yaml:"baseline_mode"`
+	// Budget is a per-severity allowance for NEW findings: the gate tolerates up
+	// to Budget[severity] new findings of that severity before failing. Absent
+	// entries default to 0 (fail on the first), so an empty Budget reproduces
+	// the pre-budget max-severity gate exactly.
+	Budget map[findings.Severity]int `yaml:"budget"`
 }
 
 // Result holds the outcome of a policy evaluation.
@@ -70,17 +75,22 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 		}
 	}
 
-	// Check new findings against fail threshold.
-	if cfg.FailOn != "" {
-		maxNew := maxSeverity(r.New)
-		if maxNew != "" && meetsThreshold(maxNew, cfg.FailOn) {
+	// Check new findings against the fail threshold, honoring per-severity
+	// budgets. A severity is gated when there is no explicit threshold (every
+	// new finding gated) or the severity meets fail_on. A gated severity fails
+	// only once its new-finding count exceeds its budget (default 0). With an
+	// empty budget this is identical to the previous "any new finding at/above
+	// fail_on fails" gate.
+	for sev, n := range severityCounts(r.New) {
+		gated := cfg.FailOn == "" || meetsThreshold(sev, cfg.FailOn)
+		if gated && n > cfg.Budget[sev] {
 			r.Pass = false
 			r.ExitCode = 1
+			if cfg.Budget[sev] > 0 {
+				r.Warnings = append(r.Warnings, fmt.Sprintf(
+					"%d new %s finding(s) exceed the budget of %d", n, sev, cfg.Budget[sev]))
+			}
 		}
-	} else if len(r.New) > 0 {
-		// No explicit threshold: any new finding fails.
-		r.Pass = false
-		r.ExitCode = 1
 	}
 
 	// Handle baselined findings per mode.
@@ -139,6 +149,16 @@ func meetsThreshold(severity, threshold findings.Severity) bool {
 }
 
 // maxSeverity returns the most severe severity in the given findings.
+// severityCounts tallies findings by severity, so the gate can compare each
+// severity's count against its budget.
+func severityCounts(ff []findings.Finding) map[findings.Severity]int {
+	counts := make(map[findings.Severity]int)
+	for i := range ff {
+		counts[ff[i].Severity]++
+	}
+	return counts
+}
+
 func maxSeverity(ff []findings.Finding) findings.Severity {
 	best := findings.Severity("")
 	bestRank := 999
