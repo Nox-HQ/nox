@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **AI-governance frameworks: NIST AI RMF 1.0, ISO/IEC 42001, and the EU AI
+  Act.** Maps the AI/agent/MCP rule families (AI-*, AI-PI-*, AI-EMBED-*, AGENT-*,
+  MCP-*) to the AI-specific governance standards a static scanner can evidence —
+  e.g. EU AI Act Art.14 (human oversight) ← AGENT-002, Art.15.5 (cybersecurity /
+  resilience to manipulation) ← AGENT-001/003 + MCP tool-poisoning, NIST AI RMF
+  MEASURE-2.7 (adversarial security) ← the prompt-injection rules. Process-only
+  controls with no automatable check keep an empty mapping so coverage reflects
+  reality. 12 → 15 frameworks.
+
 ## [0.2.0] - 2026-02-24
 
 ### Added
