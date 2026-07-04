@@ -2,9 +2,11 @@ package discovery
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // LoadGitignore reads ignore patterns from the standard set of locations git
@@ -48,16 +50,21 @@ func LoadGitignore(root string) ([]string, error) {
 		patterns = append(patterns, p...)
 	}
 
-	// .git/info/exclude lives only at the repo root.
+	// info/exclude lives at the repo root. In a linked worktree `.git` is a
+	// gitdir-pointer file (not a directory), and git keeps info/exclude in the
+	// shared common dir — so resolve the real path rather than blindly joining
+	// `.git/info/exclude`, which would ENOTDIR and discard every pattern above.
 	gitInfoDir := absTarget
 	if repoRoot != "" {
 		gitInfoDir = repoRoot
 	}
-	p, err := loadIgnoreFile(filepath.Join(gitInfoDir, ".git", "info", "exclude"))
-	if err != nil {
-		return nil, err
+	if excludePath := gitInfoExcludePath(gitInfoDir); excludePath != "" {
+		p, err := loadIgnoreFile(excludePath)
+		if err != nil {
+			return nil, err
+		}
+		patterns = append(patterns, p...)
 	}
-	patterns = append(patterns, p...)
 
 	if globalPath := globalGitignorePath(); globalPath != "" {
 		gp, err := loadIgnoreFile(globalPath)
@@ -85,6 +92,63 @@ func findRepoRoot(absStart string) string {
 		}
 		abs = parent
 	}
+}
+
+// gitInfoExcludePath resolves the path to git's info/exclude file for the
+// repository rooted at repoRoot, handling both shapes of `.git`:
+//
+//   - a directory (normal checkout): <repoRoot>/.git/info/exclude
+//   - a file (linked worktree or submodule): the file holds a
+//     `gitdir: <path>` pointer. git stores info/exclude in the repo's shared
+//     *common* dir, which <gitdir>/commondir points to, so all worktrees see
+//     the same excludes. Falls back to <gitdir>/info/exclude when no
+//     commondir marker is present.
+//
+// Returns "" when there is no `.git` entry, leaving the caller to load only
+// the .gitignore/.noxignore chain.
+func gitInfoExcludePath(repoRoot string) string {
+	gitPath := filepath.Join(repoRoot, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return ""
+	}
+	if info.IsDir() {
+		return filepath.Join(gitPath, "info", "exclude")
+	}
+
+	// `.git` is a file: follow the gitdir pointer, then the commondir.
+	gitDir := parseGitdirPointer(gitPath)
+	if gitDir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(repoRoot, gitDir)
+	}
+	commonDir := gitDir
+	if data, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
+		if cd := strings.TrimSpace(string(data)); cd != "" {
+			if !filepath.IsAbs(cd) {
+				cd = filepath.Join(gitDir, cd)
+			}
+			commonDir = filepath.Clean(cd)
+		}
+	}
+	return filepath.Join(commonDir, "info", "exclude")
+}
+
+// parseGitdirPointer reads a `.git` pointer file and returns the gitdir path
+// it names, or "" if the file is unreadable or malformed.
+func parseGitdirPointer(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(data))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(line, prefix))
 }
 
 // ancestorChain returns the directories between absRoot and absLeaf,
@@ -135,7 +199,11 @@ func LoadNestedGitignore(dir string) ([]string, error) {
 func loadIgnoreFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		// A missing file — or a path whose parent turned out to be a file
+		// rather than a directory (ENOTDIR: e.g. `.git/info/exclude` in a
+		// worktree where `.git` is a gitdir pointer) — simply contributes no
+		// patterns. Anything else is a real error worth surfacing.
+		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 			return nil, nil
 		}
 		return nil, err
