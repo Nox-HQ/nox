@@ -1091,10 +1091,10 @@ func builtinAIRules() []*rules.Rule {
 // output-handling rules (AI-009/012/015/018 — eval/exec, DB query, innerHTML,
 // file path from LLM output) fire on documentation that *quotes* those code
 // sinks. A markdown file can't execute, so a match there is always a doc
-// example, never a real vulnerability — most visibly nox's own CHANGELOG entry
-// `cursor.execute("SELECT " + completion)` tripping AI-012 on every PR that
-// edits it. Generated/vendored files are handled separately by the
-// scan.generated_paths filter.
+// example, never a real vulnerability — most visibly nox's own CHANGELOG prose
+// (which quotes a SQL-execute sink when documenting a past AI-012 precision
+// fix) tripped AI-012 on every PR that edits the changelog. Generated/vendored
+// files are handled separately by the scan.generated_paths filter.
 func applyAINoiseGlobs(out []*rules.Rule) {
 	noisy := map[string]bool{
 		"AI-006": true, "AI-008": true, "AI-026": true, "AI-030": true,
