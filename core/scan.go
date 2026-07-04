@@ -102,6 +102,13 @@ type ScanOptions struct {
 	// NoRespectGitignore disables .gitignore handling. When true, every
 	// file under the target is walked regardless of ignore rules.
 	NoRespectGitignore bool
+
+	// TrackedOnly restricts the scan to files git tracks (`git ls-files`),
+	// excluding untracked working-tree files (scratch files, build output,
+	// un-added drafts) and submodule contents. Use it to scan exactly what is
+	// committed — the same set a reviewer sees — for reproducible CI gates.
+	// Ignored outside a git repository.
+	TrackedOnly bool
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -383,9 +390,23 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 		}
 	}
 
+	// --tracked-only: restrict the walk to git-tracked files by seeding the
+	// allow-list with `git ls-files`. Untracked working-tree files and
+	// submodule contents (gitlinks, not listed) are excluded. Best-effort:
+	// outside a git repo this errors and the full walk proceeds.
+	if opts.TrackedOnly {
+		if tracked, err := git.TrackedFiles(target); err == nil {
+			walker.IncludePaths = make(map[string]bool, len(tracked))
+			for _, f := range tracked {
+				walker.IncludePaths[f] = true
+			}
+		}
+	}
+
 	// When --changed-since is set, resolve the diff and wire it into the
 	// walker as an allow-list BEFORE walking. Pushing this down avoids walking
-	// unchanged subtrees in large monorepos.
+	// unchanged subtrees in large monorepos. (Changed files are a subset of
+	// tracked files, so this correctly narrows a --tracked-only scan further.)
 	if opts.ChangedSince != "" {
 		changed, err := git.ChangedFilesSince(target, opts.ChangedSince)
 		if err != nil {

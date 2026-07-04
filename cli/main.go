@@ -280,6 +280,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noCacheFlag           bool
 		changedSinceFlag      string
 		noRespectGitignoreFlg bool
+		trackedOnlyFlag       bool
 		noAutoInstallFlg      bool
 		failOnUnwaivedFlg     bool
 		offlineFlag           bool
@@ -289,6 +290,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
+	scanFS.BoolVar(&trackedOnlyFlag, "tracked-only", false, "scan only git-tracked files (git ls-files); exclude untracked working-tree files and submodule contents")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
@@ -384,6 +386,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			NoCache:            noCacheFlag,
 			ChangedSince:       changedSinceFlag,
 			NoRespectGitignore: noRespectGitignoreFlg,
+			TrackedOnly:        trackedOnlyFlag,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
