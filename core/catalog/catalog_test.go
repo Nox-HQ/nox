@@ -9,16 +9,18 @@ import (
 func TestCatalogContainsAllRules(t *testing.T) {
 	cat := Catalog()
 
-	// We expect 1538 built-in rules across all analyzers
+	// We expect 1542 built-in rules across all analyzers
 	// (SEC + DATA + AI + IAC + VULN). AI includes AI-PI-* (LLM01),
-	// AI-EMBED-* (LLM06), and MCP-* families: MCP-001..008 (server
+	// AI-EMBED-* (LLM06), MCP-* families: MCP-001..008 (server
 	// hardening), MCP-009..014 (tool poisoning, OWASP MCP03),
 	// MCP-016..021 (authorization & token safety, OWASP MCP07), and
-	// MCP-022 (shadow/remote server, OWASP MCP09). MCP-015 (rug pull,
+	// MCP-022 (shadow/remote server, OWASP MCP09); and AGENT-001..004
+	// (agent-config artifacts: rule-file injection, permission bypass,
+	// wildcard tool grants, exfiltration directives). MCP-015 (rug pull,
 	// core/mcppin) and MCP-023/024 (shadowing, core/mcpshadow) are
 	// emitted relationally outside the regex engine.
-	if got := len(cat); got != 1538 {
-		t.Errorf("Catalog() returned %d rules, want 1538", got)
+	if got := len(cat); got != 1542 {
+		t.Errorf("Catalog() returned %d rules, want 1542", got)
 	}
 }
 

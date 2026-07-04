@@ -1000,6 +1000,63 @@ func builtinAIRules() []*rules.Rule {
 			remediation:  "A remote MCP server has no cryptographic identity in the protocol — a rogue or hijacked endpoint can impersonate it (shadow server). Pin the server to a verified host, prefer signed/pinned local installs, and maintain an explicit allowlist of trusted server identities rather than trusting any reachable URL.",
 			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
 		},
+
+		// -----------------------------------------------------------------
+		// Agent-config artifacts (AGENT-001..004). The files that steer a
+		// coding agent — Cursor rules, CLAUDE.md/AGENTS.md, Claude Code
+		// skills, and the settings that grant tool permissions — are an
+		// execution surface, not just docs: a poisoned rule file or an
+		// over-broad permission grant silently changes what the agent will
+		// run, read, and exfiltrate. filePatterns are scoped to the exact
+		// agent-config filenames (never *.go / *.md broadly) so these never
+		// fire on ordinary source or documentation.
+		// -----------------------------------------------------------------
+		{
+			id: "AGENT-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// nox:ignore AGENT-001 -- rule definition, not a real finding
+			pattern:     `(?i)\b(ignore|disregard|forget|override|bypass)\b[^\n]{0,50}\b(previous|prior|earlier|above|all|system|safety|your)\b[^\n]{0,30}\b(instruction|prompt|rule|guardrail|guideline|constraint|direction|restriction)s?\b`,
+			description: "Instruction-override / prompt-injection directive in an agent rules file",
+			cwe:         "CWE-1427", keywords: []string{"ignore", "disregard", "forget", "override", "bypass"},
+			filePatterns:       []string{".cursorrules", ".clinerules", ".windsurfrules", "*.mdc", "CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md", "skill.md", "copilot-instructions.md"},
+			ignoreFilePatterns: []string{"testdata/*", "*_test.go"},
+			tags:               []string{"ai", "agent-config", "prompt-injection", "owasp-llm01"},
+			remediation:        "An agent instruction file tells the coding agent to override its own prior/system/safety instructions — the signature of a prompt-injection or jailbreak payload embedded in a rules file. Remove the override directive. Agent rules should add constraints, never instruct the agent to discard them.",
+			references:         []string{"https://cwe.mitre.org/data/definitions/1427.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AGENT-002", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			// nox:ignore AGENT-002 -- rule definition, not a real finding
+			pattern:     `(?i)("?(dangerouslySkipPermissions|bypassPermissions|enableAllProjectMcpServers|autoApprove|skipConfirmation|disableSafeMode)"?\s*[:=]\s*true|"defaultMode"\s*:\s*"bypassPermissions"|--dangerously-skip-permissions|--yolo\b)`,
+			description: "Agent settings disable the human-in-the-loop permission gate",
+			cwe:         "CWE-250", keywords: []string{"dangerouslyskippermissions", "bypasspermissions", "enableallprojectmcpservers", "autoapprove", "skipconfirmation", "disablesafemode", "--dangerously-skip-permissions", "--yolo"},
+			filePatterns: []string{"settings.json", "settings.local.json", "*.json", "*.toml", "*.mcp.json"},
+			tags:         []string{"ai", "agent-config", "excessive-agency", "human-in-the-loop"},
+			remediation:  "This setting lets the agent execute tools without human confirmation (bypass-permissions / auto-approve). Committing it to a repo makes every collaborator's agent auto-run tool calls. Remove it and keep an explicit per-tool approval policy; grant standing approval only to narrowly-scoped, read-only tools.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
+		},
+		{
+			id: "AGENT-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// nox:ignore AGENT-003 -- rule definition, not a real finding
+			pattern:     `(?i)"(bash|shell|sh|zsh|execute|exec|run|write|edit|webfetch|fetch)\s*\(\s*\*\s*\)"`,
+			description: "Agent permission grants a tool with an unrestricted wildcard argument",
+			cwe:         "CWE-284", keywords: []string{"bash(", "shell(", "execute(", "exec(", "run(", "write(", "webfetch(", "fetch("},
+			filePatterns: []string{"settings.json", "settings.local.json", "*.json", "*.mcp.json", "mcp.json"},
+			tags:         []string{"ai", "agent-config", "excessive-agency", "owasp-llm07"},
+			remediation:  "A permission entry like \"Bash(*)\" grants the agent an unrestricted tool (any shell command, any URL, any path). Replace the wildcard with an explicit allowlist of exact commands/paths the agent needs (e.g. \"Bash(go test:*)\"), following least privilege.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
+		},
+		{
+			id: "AGENT-004", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// nox:ignore AGENT-004 -- rule definition, not a real finding
+			pattern:     `(?i)((do\s*not|don't|never)\s+(tell|inform|reveal|disclose|mention|notify|warn|alert)\s+(the\s+)?(user|human|operator|developer|owner)|\b(exfiltrate|leak)\b|\b(send|post|upload|forward|transmit)\b[^\n]{0,40}(https?://|webhook|api[_-]?key|secret|token|credential))`,
+			description: "Data-exfiltration or concealment directive in an agent rules file",
+			cwe:         "CWE-1427", keywords: []string{"do not tell", "don't tell", "never tell", "do not inform", "never reveal", "without telling", "exfiltrate", "leak", "webhook", "send", "post", "upload", "forward", "transmit"},
+			filePatterns:       []string{".cursorrules", ".clinerules", ".windsurfrules", "*.mdc", "CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md", "skill.md", "copilot-instructions.md"},
+			ignoreFilePatterns: []string{"testdata/*", "*_test.go"},
+			tags:               []string{"ai", "agent-config", "prompt-injection", "exfiltration", "owasp-llm01"},
+			remediation:        "An agent rules file instructs the agent to hide actions from the user or to send data to an external sink — the signature of a data-exfiltration or rug-pull payload. Remove the directive; legitimate agent rules never tell the agent to conceal behaviour from its operator.",
+			references:         []string{"https://cwe.mitre.org/data/definitions/1427.html"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))
