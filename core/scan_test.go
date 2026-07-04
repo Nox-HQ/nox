@@ -1862,6 +1862,52 @@ const apiKey = "AKIAIOSFODNN7EXAMPLE"
 
 // initGitRepo creates a git repo with an initial commit containing the given
 // files. Each key in files is a relative path and each value is the content.
+// TestRunScanWithOptions_TrackedOnly verifies that --tracked-only scans only
+// git-tracked files: an untracked working-tree file (scratch, build output, an
+// un-added draft) is excluded, while committed files are still scanned. This
+// makes a CI gate reproducible — it sees exactly what a reviewer sees.
+func TestRunScanWithOptions_TrackedOnly(t *testing.T) {
+	t.Parallel()
+
+	const secret = "package main\nconst key = \"AKIAIOSFODNN7EXAMPLE\"\n"
+	dir := initGitRepo(t, map[string]string{"tracked.go": secret})
+
+	// An untracked working-tree file with its own secret.
+	if err := os.WriteFile(filepath.Join(dir, "untracked.go"), []byte(secret), 0o644); err != nil {
+		t.Fatalf("writing untracked file: %v", err)
+	}
+
+	scanned := func(res *ScanResult, name string) bool {
+		for _, f := range res.Findings.Findings() {
+			if strings.HasSuffix(f.Location.FilePath, name) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A default scan sees both the tracked and the untracked file.
+	full, err := RunScanWithOptions(dir, ScanOptions{})
+	if err != nil {
+		t.Fatalf("full scan: %v", err)
+	}
+	if !scanned(full, "untracked.go") {
+		t.Fatal("default scan should include the untracked file (sanity check)")
+	}
+
+	// --tracked-only drops the untracked file but keeps the tracked one.
+	tracked, err := RunScanWithOptions(dir, ScanOptions{TrackedOnly: true})
+	if err != nil {
+		t.Fatalf("tracked-only scan: %v", err)
+	}
+	if scanned(tracked, "untracked.go") {
+		t.Error("tracked-only scan must exclude the untracked working-tree file")
+	}
+	if !scanned(tracked, "tracked.go") {
+		t.Error("tracked-only scan must still include the tracked file")
+	}
+}
+
 func initGitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 

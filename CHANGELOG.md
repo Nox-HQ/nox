@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox scan --tracked-only`.** Restricts the scan to git-tracked files
+  (`git ls-files`), excluding untracked working-tree files (scratch files, build
+  output, un-added drafts) and submodule contents. Scans exactly what is
+  committed — the same set a reviewer sees — so a CI gate is reproducible and
+  doesn't flag a developer's local scratch file. Ignored outside a git repo.
 - **Agent-config artifact scanning (`AGENT-001..004`).** The files that steer a
   coding agent are an execution surface, not just docs — a poisoned rule file or
   an over-broad permission grant silently changes what the agent runs, reads, and
