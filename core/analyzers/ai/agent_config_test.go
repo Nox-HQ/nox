@@ -45,6 +45,36 @@ func TestASIMapping(t *testing.T) {
 	}
 }
 
+// Every rule scoped to *.ts / *.js must also cover the module + JSX variants,
+// so a React/Next.js AI app's .tsx/.jsx (where prompts are built and the model
+// is called) isn't silently skipped.
+func TestJSTSVariantExpansion(t *testing.T) {
+	pairs := map[string][]string{
+		"*.ts": {"*.tsx", "*.mts", "*.cts"},
+		"*.js": {"*.jsx", "*.mjs", "*.cjs"},
+	}
+	has := func(s []string, v string) bool {
+		for _, x := range s {
+			if x == v {
+				return true
+			}
+		}
+		return false
+	}
+	for _, r := range builtinAIRules() {
+		for base, vs := range pairs {
+			if !has(r.FilePatterns, base) {
+				continue
+			}
+			for _, v := range vs {
+				if !has(r.FilePatterns, v) {
+					t.Errorf("rule %s targets %s but not %s: %v", r.ID, base, v, r.FilePatterns)
+				}
+			}
+		}
+	}
+}
+
 func hasTag(tags []string, want string) bool {
 	for _, t := range tags {
 		if t == want {

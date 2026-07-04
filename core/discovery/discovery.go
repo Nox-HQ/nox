@@ -109,18 +109,25 @@ var containerNames = map[string]bool{
 
 // sourceExtensions maps file extensions to the Source artifact type.
 var sourceExtensions = map[string]bool{
-	".go":   true,
-	".py":   true,
-	".js":   true,
-	".ts":   true,
-	".rb":   true,
-	".java": true,
-	".rs":   true,
-	".c":    true,
-	".cpp":  true,
-	".h":    true,
-	".cs":   true,
-	".sh":   true,
+	".go": true,
+	".py": true,
+	// JavaScript / TypeScript and their module + JSX variants. The React/Next
+	// AI-app frontend keeps its LLM calls and prompt construction in .tsx/.jsx,
+	// so omitting them left that code unclassified (and unscanned by
+	// source-gated rules).
+	".js": true, ".jsx": true, ".mjs": true, ".cjs": true,
+	".ts": true, ".tsx": true, ".mts": true, ".cts": true,
+	".rb":    true,
+	".java":  true,
+	".kt":    true,
+	".swift": true,
+	".php":   true,
+	".rs":    true,
+	".c":     true,
+	".cpp":   true,
+	".h":     true,
+	".cs":    true,
+	".sh":    true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

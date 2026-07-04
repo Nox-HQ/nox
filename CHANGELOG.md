@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Broader language coverage: JS/TS module + JSX variants, plus Kotlin, Swift,
+  PHP.** `.tsx`/`.jsx`/`.mjs`/`.cjs`/`.mts`/`.cts` are now classified as source,
+  and every rule scoped to `*.ts`/`*.js` is auto-expanded to the variants — so a
+  React/Next.js AI app's `.tsx` components (where prompts are built and the model
+  is called) are scanned instead of silently skipped. `.kt`/`.swift`/`.php` join
+  the source set too.
 - **OWASP Top 10 for Agentic Applications (ASI01–ASI10) mapping.** Findings
   against agentic surfaces now carry their `owasp-asi*` control (in SARIF
   `properties.tags` and finding metadata), the way they already carry OWASP LLM
