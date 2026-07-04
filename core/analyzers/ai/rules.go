@@ -1082,7 +1082,42 @@ func builtinAIRules() []*rules.Rule {
 	applyMCPProsePrecision(out)
 	applyAINoiseGlobs(out)
 	applyASIMapping(out)
+	expandJSTSFilePatterns(out)
 	return out
+}
+
+// expandJSTSFilePatterns broadens every rule that targets `*.ts` or `*.js` to
+// also match the module and JSX variants (`*.tsx`/`*.mts`/`*.cts`,
+// `*.jsx`/`*.mjs`/`*.cjs`). filepath.Match treats these as distinct globs, so a
+// rule scoped to `*.ts` would silently skip a Next.js `.tsx` component — exactly
+// where an AI app builds prompts and calls the model. Centralising the expansion
+// keeps the per-rule filePatterns lists short and guarantees new rules inherit
+// the variants. Idempotent: a rule that already lists a variant is unchanged.
+func expandJSTSFilePatterns(out []*rules.Rule) {
+	variants := map[string][]string{
+		"*.ts": {"*.tsx", "*.mts", "*.cts"},
+		"*.js": {"*.jsx", "*.mjs", "*.cjs"},
+	}
+	for _, r := range out {
+		if len(r.FilePatterns) == 0 {
+			continue // no glob → already fires on every file
+		}
+		have := make(map[string]bool, len(r.FilePatterns))
+		for _, p := range r.FilePatterns {
+			have[p] = true
+		}
+		for base, vs := range variants {
+			if !have[base] {
+				continue
+			}
+			for _, v := range vs {
+				if !have[v] {
+					r.FilePatterns = append(r.FilePatterns, v)
+					have[v] = true
+				}
+			}
+		}
+	}
 }
 
 // applyASIMapping tags rules with their OWASP Top 10 for Agentic Applications
