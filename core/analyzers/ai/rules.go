@@ -1081,7 +1081,45 @@ func builtinAIRules() []*rules.Rule {
 
 	applyMCPProsePrecision(out)
 	applyAINoiseGlobs(out)
+	applyASIMapping(out)
 	return out
+}
+
+// applyASIMapping tags rules with their OWASP Top 10 for Agentic Applications
+// (ASI01–ASI10, Dec 2025) category, so findings against agentic surfaces carry
+// the agentic-security control the way they already carry OWASP LLM / MCP Top
+// 10 tags. The tag flows into SARIF `properties.tags` for Code Scanning and
+// downstream GRC. Only the categories nox has defensible static coverage for
+// are mapped — memory poisoning, inter-agent comms, and cascading failures
+// (ASI06/07/08) are runtime/multi-agent concerns nox doesn't statically detect,
+// so they are deliberately left unmapped rather than over-claimed.
+func applyASIMapping(out []*rules.Rule) {
+	asi := map[string]string{
+		// ASI01 Agent Goal Hijack — prompt injection / instruction manipulation.
+		"AGENT-001": "owasp-asi01", "AGENT-004": "owasp-asi01",
+		"AI-001": "owasp-asi01", "AI-002": "owasp-asi01", "AI-003": "owasp-asi01",
+		"AI-010":    "owasp-asi01",
+		"AI-PI-001": "owasp-asi01", "AI-PI-002": "owasp-asi01", "AI-PI-003": "owasp-asi01",
+		"AI-PI-004": "owasp-asi01", "AI-PI-005": "owasp-asi01", "AI-PI-006": "owasp-asi01",
+		// ASI02 Tool Misuse & Exploitation — unsafe / over-broad tool use.
+		"AGENT-002": "owasp-asi02", "AGENT-003": "owasp-asi02",
+		"AI-004": "owasp-asi02", "AI-005": "owasp-asi02", "AI-011": "owasp-asi02",
+		// ASI03 Identity & Privilege Abuse — authz, tokens, sessions, SSRF.
+		"MCP-016": "owasp-asi03", "MCP-017": "owasp-asi03", "MCP-018": "owasp-asi03",
+		"MCP-019": "owasp-asi03", "MCP-020": "owasp-asi03", "MCP-021": "owasp-asi03",
+		// ASI04 Agentic Supply Chain — poisoned tools, servers, models.
+		"AI-008": "owasp-asi04", "MCP-007": "owasp-asi04",
+		"MCP-009": "owasp-asi04", "MCP-010": "owasp-asi04", "MCP-011": "owasp-asi04",
+		"MCP-012": "owasp-asi04", "MCP-013": "owasp-asi04", "MCP-014": "owasp-asi04",
+		"MCP-022": "owasp-asi04",
+		// ASI05 Unexpected Code Execution — LLM output → code/shell execution.
+		"AI-009": "owasp-asi05", "MCP-001": "owasp-asi05",
+	}
+	for _, r := range out {
+		if tag, ok := asi[r.ID]; ok {
+			r.Tags = append(r.Tags, tag)
+		}
+	}
 }
 
 // applyAINoiseGlobs adds test-file and documentation ignore globs to the AI

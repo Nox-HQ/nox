@@ -113,6 +113,7 @@ func detectServerShadowing(servers []Server) []findings.Finding {
 					"cwe":       "CWE-300",
 					"server":    name,
 					"owasp-mcp": "MCP09",
+					"owasp-asi": "ASI04",
 					"detector":  "server-shadowing",
 				},
 			})
@@ -159,6 +160,7 @@ func detectToolShadowing(servers []Server) []findings.Finding {
 					"cwe":       "CWE-300",
 					"tool":      tool,
 					"owasp-mcp": "MCP09",
+					"owasp-asi": "ASI04",
 					"detector":  "tool-shadowing",
 				},
 			})
