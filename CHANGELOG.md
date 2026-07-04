@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Agent-config artifact scanning (`AGENT-001..004`).** The files that steer a
+  coding agent are an execution surface, not just docs — a poisoned rule file or
+  an over-broad permission grant silently changes what the agent runs, reads, and
+  exfiltrates. nox now scans Cursor/Cline rules (`.cursorrules`, `*.mdc`),
+  `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`, Claude Code skills (`SKILL.md`), and agent
+  settings (`.claude/settings.json`), classifying them as AI components. New
+  rules: **AGENT-001** instruction-override / prompt-injection directives in a
+  rules file (OWASP LLM01), **AGENT-002** settings that disable the
+  human-in-the-loop permission gate (`bypassPermissions`, `--dangerously-skip-permissions`,
+  `autoApprove`), **AGENT-003** wildcard tool grants (`"Bash(*)"`), and
+  **AGENT-004** exfiltration / concealment directives. filePatterns are scoped to
+  exact agent-config filenames (never `*.go`/`*.md` broadly), so ordinary source
+  and documentation are untouched. (#145)
+
 ### Fixed
 
 - **Tracked files under a gitignored directory are now scanned.** git never

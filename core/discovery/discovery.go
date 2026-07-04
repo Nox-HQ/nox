@@ -199,6 +199,36 @@ func isAIComponent(name, normalised string) bool {
 	if containsSegment(normalised, "prompts") || containsSegment(normalised, "agents") {
 		return true
 	}
+	if isAgentConfig(name, normalised) {
+		return true
+	}
+	return false
+}
+
+// agentConfigNames are the fixed-name files that steer a coding agent — its
+// rules, manifest, skills, and permission settings. They are an execution
+// surface (a poisoned rule or an over-broad permission grant changes what the
+// agent runs), so nox treats them as AI components and scans them (AGENT-*).
+var agentConfigNames = map[string]bool{
+	".cursorrules": true, ".clinerules": true, ".windsurfrules": true,
+	"CLAUDE.md": true, "AGENTS.md": true, "GEMINI.md": true,
+	"SKILL.md": true, "skill.md": true, "copilot-instructions.md": true,
+}
+
+// isAgentConfig reports whether a file is an agent-configuration artifact: a
+// fixed-name rules/manifest/skill file, a Cursor `.mdc` rule, or a settings
+// file living under a `.claude` or `.cursor` directory.
+func isAgentConfig(name, normalised string) bool {
+	if agentConfigNames[name] {
+		return true
+	}
+	if strings.HasSuffix(name, ".mdc") {
+		return true
+	}
+	if (name == "settings.json" || name == "settings.local.json") &&
+		(containsSegment(normalised, ".claude") || containsSegment(normalised, ".cursor")) {
+		return true
+	}
 	return false
 }
 
