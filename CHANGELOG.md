@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-04
+
+### Fixed
+
+- **`.gitignore` is now honored when scanning from inside a git worktree.** In a
+  linked worktree (and submodule) `.git` is a gitdir-pointer *file*, not a
+  directory, so loading `.git/info/exclude` failed with `ENOTDIR` — an error
+  that discarded every pattern already read from `.gitignore`, leaving the
+  walker with zero ignore rules. A scan run from a worktree therefore found
+  strictly more than the same HEAD scanned from the real checkout (a
+  `mobile/`-ignored subtree reappeared: 721 vs 640 findings), so a baseline
+  written from a plain directory never matched a worktree rescan. `info/exclude`
+  is now resolved via the worktree's commondir (git shares it across worktrees),
+  and a non-directory path component contributes no patterns instead of nuking
+  the set. Dir and worktree scans of the same HEAD are now identical. (#140)
+
 ## [1.4.1] - 2026-07-03
 
 ### Changed

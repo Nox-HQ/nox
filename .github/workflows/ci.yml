@@ -11,10 +11,12 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    # No paths-ignore here: branch protection requires the reusable CI's
+    # status checks (Lint/Test/Build/Security), and a docs-only PR that skips
+    # the whole workflow never reports them — so the PR is unmergeable forever
+    # (the required checks never arrive). Running CI on docs PRs is cheap (no
+    # code changed → cache hits) and keeps them mergeable without an admin
+    # override. push-to-main below still skips docs, saving minutes on merges.
   # Weekly dependency-CVE audit — replaces Dependabot security scanning with
   # nox's own OSV lookups. Catches newly-disclosed CVEs in existing deps that
   # the PR gate (changed-files only) would miss.
