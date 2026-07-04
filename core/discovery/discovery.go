@@ -232,6 +232,26 @@ func dirContainsAnyIncluded(relDir string, include map[string]bool) bool {
 	return false
 }
 
+// dirContainsAnyTracked reports whether any tracked path is at or under the
+// given directory (relative, slash-separated). Used to keep the walker from
+// pruning an ignored directory that still holds git-tracked files. The root
+// ("" / ".") contains every tracked path.
+func dirContainsAnyTracked(relDir string, tracked map[string]bool) bool {
+	if len(tracked) == 0 {
+		return false
+	}
+	if relDir == "" || relDir == "." {
+		return true
+	}
+	prefix := relDir + "/"
+	for p := range tracked {
+		if p == relDir || strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // Walker recursively discovers and classifies files under Root.
 type Walker struct {
 	// Root is the directory to walk.
@@ -251,6 +271,13 @@ type Walker struct {
 	// also short-circuits directory descent when no included path lives
 	// under the current directory.
 	IncludePaths map[string]bool
+	// TrackedPaths holds the files git tracks (relative to Root, slash-
+	// separated). git never ignores a tracked file, so a path in this set
+	// is scanned even when a .gitignore pattern matches it — and an ignored
+	// directory is still descended into when it contains a tracked file.
+	// Empty (the default) means "no git context", so ignore rules apply as
+	// before.
+	TrackedPaths map[string]bool
 }
 
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
@@ -315,10 +342,19 @@ func (w *Walker) Walk() ([]Artifact, error) {
 			}
 
 			if w.isIgnored(absRoot, path, rel, nestedPatterns) {
+				relSlash := filepath.ToSlash(rel)
 				if info.IsDir() {
-					return filepath.SkipDir
+					// Prune an ignored directory — unless it holds a tracked
+					// file. git never ignores a tracked file, so we must
+					// descend to reach one (e.g. a repo that .gitignores
+					// `mobile/` but commits sources into it).
+					if !dirContainsAnyTracked(relSlash, w.TrackedPaths) {
+						return filepath.SkipDir
+					}
+				} else if !w.TrackedPaths[relSlash] {
+					// Skip an ignored file unless it is tracked.
+					return nil
 				}
-				return nil
 			}
 		}
 

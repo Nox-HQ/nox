@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tracked files under a gitignored directory are now scanned.** git never
+  ignores a file it already tracks, even when a `.gitignore` pattern matches it
+  — but nox applied ignore patterns purely from the filesystem and skipped them,
+  a scanner blind spot for any repo that gitignores a directory yet commits
+  sources into it (e.g. pet-medical ignores `mobile/` but tracks ~80 files under
+  it, none of which were scanned — a committed secret there would go undetected).
+  The scan now consults `git ls-files`: a tracked path is scanned even under an
+  ignored directory, while genuinely-ignored (untracked) files stay skipped.
+  Outside a git repo, behavior is unchanged. Note: repos with tracked files
+  under ignored directories will see new findings on the next scan and should
+  refresh their baseline. (#142)
+
 ## [1.4.2] - 2026-07-04
 
 ### Fixed

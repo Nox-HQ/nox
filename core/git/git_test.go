@@ -174,6 +174,50 @@ func TestStagedContent_SubDir(t *testing.T) {
 	}
 }
 
+func TestTrackedFiles(t *testing.T) {
+	dir := setupGitRepo(t) // starts with a tracked README.md
+
+	// A directory ignored by .gitignore, but with a file force-added (tracked).
+	writeFile(t, filepath.Join(dir, ".gitignore"), "mobile/\n")
+	if err := os.MkdirAll(filepath.Join(dir, "mobile"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "mobile", "app.go"), "package m")
+	writeFile(t, filepath.Join(dir, "mobile", "ignored.go"), "package m")
+	run(t, dir, "git", "add", ".gitignore", "README.md")
+	run(t, dir, "git", "add", "-f", "mobile/app.go") // force-track despite ignore
+	run(t, dir, "git", "commit", "-m", "add tracked file under ignored dir")
+
+	tracked, err := TrackedFiles(dir)
+	if err != nil {
+		t.Fatalf("TrackedFiles: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range tracked {
+		got[f] = true
+	}
+	// The force-added file is tracked even though mobile/ is gitignored —
+	// this is exactly what git ls-files reports, and why the scanner must
+	// cover it (#142).
+	if !got["mobile/app.go"] {
+		t.Errorf("expected tracked mobile/app.go, got %v", tracked)
+	}
+	if !got[".gitignore"] || !got["README.md"] {
+		t.Errorf("expected .gitignore and README.md tracked, got %v", tracked)
+	}
+	if got["mobile/ignored.go"] {
+		t.Error("mobile/ignored.go was never added — it must not be tracked")
+	}
+}
+
+func TestTrackedFiles_InvalidRepo(t *testing.T) {
+	dir := t.TempDir()
+	_, err := TrackedFiles(dir)
+	if err == nil {
+		t.Fatal("expected error for non-git directory, got nil")
+	}
+}
+
 // setupGitRepo creates a temp dir with a git repo and an initial commit.
 func setupGitRepo(t *testing.T) string {
 	t.Helper()

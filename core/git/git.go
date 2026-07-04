@@ -92,6 +92,22 @@ func StagedContent(repoRoot, path string) ([]byte, error) {
 	return []byte(out), nil
 }
 
+// TrackedFiles returns the paths of every file tracked by git under dir,
+// relative to dir and slash-separated. These are the files git considers part
+// of the repository — and git never ignores a tracked file, even when a
+// .gitignore pattern matches it. Callers use this so the scanner still covers
+// sources committed into an otherwise-ignored directory (e.g. a repo that
+// .gitignores `mobile/` but commits code into it). `-z` avoids git's path
+// quoting so names with special characters round-trip. Best-effort: returns an
+// error when dir is not a git working tree.
+func TrackedFiles(dir string) ([]string, error) {
+	out, err := runGit(dir, "ls-files", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	return splitZero(out), nil
+}
+
 func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -108,4 +124,14 @@ func splitLines(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
+}
+
+// splitZero splits NUL-separated git output (from `-z`) into paths, dropping
+// the trailing empty element after the final NUL.
+func splitZero(s string) []string {
+	s = strings.TrimRight(s, "\x00")
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\x00")
 }
