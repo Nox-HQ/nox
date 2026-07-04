@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox baseline init` — one-command adoption for a debt-laden repo.** Scans,
+  records every current finding as accepted baseline debt (reported by
+  severity), and prints the "gate the change, not the history" policy to add
+  (`fail_on` + `baseline_mode: warn`). Refuses to clobber an existing baseline
+  (use `update`, or `--force`). See the new `docs/adoption.md`, which ties
+  together `baseline init`, per-severity budgets, `--tracked-only`, and
+  `--offline` into a five-minute adoption path.
 - **Broader language coverage: JS/TS module + JSX variants, plus Kotlin, Swift,
   PHP.** `.tsx`/`.jsx`/`.mjs`/`.cjs`/`.mts`/`.cts` are now classified as source,
   and every rule scoped to `*.ts`/`*.js` is auto-expanded to the variants — so a

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	nox "github.com/nox-hq/nox/core"
@@ -14,7 +15,7 @@ import (
 
 func runBaseline(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox baseline <write|update|add|diff|show|migrate> [path]")
+		fmt.Fprintln(os.Stderr, "Usage: nox baseline <init|write|update|add|diff|show|migrate> [path]")
 		return 2
 	}
 
@@ -22,6 +23,8 @@ func runBaseline(args []string) int {
 	remaining := args[1:]
 
 	switch subcommand {
+	case "init":
+		return baselineInit(remaining)
 	case "write":
 		return baselineWrite(remaining)
 	case "update":
@@ -36,7 +39,7 @@ func runBaseline(args []string) int {
 		return baselineMigrate(remaining)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown baseline subcommand: %s\n", subcommand)
-		fmt.Fprintln(os.Stderr, "Usage: nox baseline <write|update|add|diff|show|migrate> [path]")
+		fmt.Fprintln(os.Stderr, "Usage: nox baseline <init|write|update|add|diff|show|migrate> [path]")
 		return 2
 	}
 }
@@ -181,6 +184,90 @@ func pruneNote(prune bool, unmatched int) string {
 		return " (kept; use --prune to drop)"
 	}
 	return ""
+}
+
+// baselineInit is the one-command adoption entry point for a repo with existing
+// security debt: it scans, records every current finding as accepted baseline
+// debt, and prints the "gate the change, not the history" policy to add. Unlike
+// `write`, it refuses to clobber an existing baseline (use `update`), and it
+// reports the debt by severity so the operator sees what they're accepting.
+func baselineInit(args []string) int {
+	fs := flag.NewFlagSet("baseline init", flag.ContinueOnError)
+	var outputPath string
+	var force bool
+	fs.StringVar(&outputPath, "output", "", "baseline file path (default: .nox/baseline.json)")
+	fs.BoolVar(&force, "force", false, "recreate the baseline even if one already exists")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	target := "."
+	if fs.NArg() > 0 {
+		target = fs.Arg(0)
+	}
+	if outputPath == "" {
+		outputPath = baseline.DefaultPath(target)
+	}
+
+	if !force {
+		if _, err := os.Stat(outputPath); err == nil {
+			fmt.Fprintf(os.Stderr, "baseline already exists at %s — use `nox baseline update` to refresh it, or `--force` to recreate.\n", outputPath)
+			return 2
+		}
+	}
+
+	result, err := nox.RunScan(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
+		return 2
+	}
+
+	ff := result.Findings.Findings()
+	bl := &baseline.Baseline{}
+	entries := baseline.FromFindings(ff)
+	for i := range entries {
+		bl.Add(&entries[i])
+	}
+	if err := bl.Save(outputPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: writing baseline: %v\n", err)
+		return 2
+	}
+
+	counts := map[findings.Severity]int{}
+	for i := range ff {
+		counts[ff[i].Severity]++
+	}
+	fmt.Printf("baseline: recorded %d existing findings as accepted debt in %s\n", bl.Len(), outputPath)
+	if bd := severityBreakdown(counts); bd != "" {
+		fmt.Printf("  by severity: %s\n", bd)
+	}
+	fmt.Print(`
+Next — gate the change, not the history. Add to .nox.yaml:
+
+  policy:
+    fail_on: high        # new high/critical findings fail the gate
+    baseline_mode: warn  # the recorded debt above only warns, never fails
+
+Commit the baseline so CI shares it. From now on, new findings gate; the
+existing debt does not. Burn it down with ` + "`nox baseline update`" + ` as you fix.
+`)
+	return 0
+}
+
+// severityBreakdown formats per-severity counts in severity order, e.g.
+// "2 critical, 11 high, 40 medium".
+func severityBreakdown(counts map[findings.Severity]int) string {
+	order := []findings.Severity{
+		findings.SeverityCritical, findings.SeverityHigh,
+		findings.SeverityMedium, findings.SeverityLow, findings.SeverityInfo,
+	}
+	var parts []string
+	for _, s := range order {
+		if n := counts[s]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, s))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func baselineWrite(args []string) int {

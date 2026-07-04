@@ -24,6 +24,34 @@ func TestRunBaseline_UnknownSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunBaseline_Init(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+	blPath := filepath.Join(dir, "bl.json")
+
+	if code := runBaseline([]string{"init", "--output", blPath, dir}); code != 0 {
+		t.Fatalf("init exit code = %d, want 0", code)
+	}
+	bl, err := baseline.Load(blPath)
+	if err != nil {
+		t.Fatalf("loading baseline: %v", err)
+	}
+	if bl.Len() == 0 {
+		t.Fatal("expected init to record findings as baseline debt")
+	}
+
+	// A second init must refuse rather than clobber an existing baseline.
+	if code := runBaseline([]string{"init", "--output", blPath, dir}); code == 0 {
+		t.Error("second init should refuse when a baseline already exists")
+	}
+	// --force recreates it.
+	if code := runBaseline([]string{"init", "--force", "--output", blPath, dir}); code != 0 {
+		t.Errorf("init --force exit code = %d, want 0", code)
+	}
+}
+
 func TestRunBaseline_Write(t *testing.T) {
 	dir := t.TempDir()
 
