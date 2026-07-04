@@ -79,6 +79,15 @@ type PolicySettings struct {
 	BaselineMode string `yaml:"baseline_mode"`
 	BaselinePath string `yaml:"baseline_path"`
 	VEXPath      string `yaml:"vex_path"`
+	// Budget is a per-severity allowance for NEW findings: the gate tolerates
+	// up to Budget[severity] new findings of that severity before failing. It
+	// refines fail_on — a severity at/above the fail threshold with a budget of
+	// N fails only on the N+1th new finding; severities without an entry default
+	// to 0 (fail on the first, the pre-budget behaviour). Lets a team accept a
+	// bounded amount of debt ("up to 5 new mediums, zero new highs") without
+	// baselining every finding. Keys are severity names (critical/high/medium/
+	// low/info).
+	Budget map[string]int `yaml:"budget"`
 }
 
 // ComplianceSettings controls compliance framework filtering.

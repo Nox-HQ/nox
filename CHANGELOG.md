@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-severity policy budgets (`policy.budget`).** The gate can now tolerate a
+  bounded amount of new debt per severity before failing — e.g. `budget: {medium:
+  5, low: 20}` fails only on the 6th new medium while still failing on any new
+  high/critical. It refines `fail_on`: a severity at/above the threshold with no
+  budget entry defaults to 0 (fail on the first, unchanged), so an empty budget
+  reproduces the previous gate exactly. Lets a team adopt a strict threshold on a
+  debt-laden repo without baselining every finding.
 - **Proof-of-offline attestation in the report.** `findings.json` meta now
   carries an `"offline"` boolean recording whether the scan ran under the
   zero-network guarantee (`nox scan --offline`: no OSV, no API, no token, no
