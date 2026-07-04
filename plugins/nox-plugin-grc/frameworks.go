@@ -146,6 +146,50 @@ var frameworks = []Framework{
 			{ID: "SI.L1-3.14.1", Description: "Flaw remediation", Priority: "high", NoxRules: []string{"VULN-001", "VULN-002"}},
 		},
 	},
+	// ----------------------------------------------------------------------
+	// AI-governance frameworks. These map the AI/agent/MCP rule families
+	// (AI-*, AI-PI-*, AI-EMBED-*, AGENT-*, MCP-*) to the emerging AI-specific
+	// governance standards — the controls a static scanner can meaningfully
+	// evidence. Process/organizational controls with no automatable check keep
+	// an empty NoxRules list so coverage reflects reality, not aspiration.
+	// ----------------------------------------------------------------------
+	{
+		ID: "nist-ai-rmf", Name: "NIST AI RMF 1.0", Threshold: 55,
+		Controls: []Control{
+			{ID: "GOVERN-1.1", Description: "Legal/regulatory requirements and AI policies", Priority: "high", NoxRules: []string{}},
+			{ID: "MAP-4.1", Description: "AI supply chain risks are identified", Priority: "high", NoxRules: []string{"AI-008", "MCP-007", "MCP-022"}},
+			{ID: "MEASURE-2.6", Description: "AI system safety is evaluated", Priority: "high", NoxRules: []string{"AGENT-002", "AGENT-004"}},
+			{ID: "MEASURE-2.7", Description: "AI security and resilience (adversarial/prompt injection)", Priority: "high", NoxRules: []string{"AI-001", "AI-002", "AI-003", "AI-PI-001", "AI-PI-002", "AGENT-001", "MCP-009", "MCP-010", "MCP-011"}},
+			{ID: "MEASURE-2.8", Description: "Transparency and accountability (interaction logging)", Priority: "medium", NoxRules: []string{"AI-006", "AI-007"}},
+			{ID: "MEASURE-2.10", Description: "Privacy risk of the AI system", Priority: "high", NoxRules: []string{"AI-EMBED-002", "DATA-001"}},
+			{ID: "MANAGE-2.1", Description: "Resources for risk treatment (vulnerabilities)", Priority: "medium", NoxRules: []string{"VULN-001", "VULN-002"}},
+			{ID: "MANAGE-4.1", Description: "Post-deployment monitoring (component drift)", Priority: "medium", NoxRules: []string{"MCP-015"}},
+		},
+	},
+	{
+		ID: "iso42001", Name: "ISO/IEC 42001", Threshold: 55,
+		Controls: []Control{
+			{ID: "A.6.2.2", Description: "AI system requirements and specification", Priority: "medium", NoxRules: []string{}},
+			{ID: "A.6.2.4", Description: "AI system verification and validation", Priority: "high", NoxRules: []string{"AI-001", "AI-002", "AI-003", "AI-PI-001", "AGENT-001"}},
+			{ID: "A.6.2.6", Description: "AI system deployment (access and permissions)", Priority: "high", NoxRules: []string{"AGENT-002", "AGENT-003", "AI-004", "AI-005"}},
+			{ID: "A.6.2.8", Description: "AI system event logging", Priority: "medium", NoxRules: []string{"AI-006", "AI-007"}},
+			{ID: "A.7.4", Description: "Quality of data for AI systems", Priority: "high", NoxRules: []string{"AI-EMBED-002", "DATA-001"}},
+			{ID: "A.9.2", Description: "Responsible use of AI systems", Priority: "medium", NoxRules: []string{"AGENT-004"}},
+			{ID: "A.10.2", Description: "Third-party and supplier relationships", Priority: "high", NoxRules: []string{"AI-008", "MCP-007", "MCP-015", "MCP-022"}},
+			{ID: "A.8.25", Description: "Secure development lifecycle", Priority: "medium", NoxRules: []string{"VULN-001", "TAINT-001"}},
+		},
+	},
+	{
+		ID: "eu-ai-act", Name: "EU AI Act", Threshold: 55,
+		Controls: []Control{
+			{ID: "Art.9", Description: "Risk management system", Priority: "high", NoxRules: []string{"VULN-001", "AI-008"}},
+			{ID: "Art.10", Description: "Data and data governance", Priority: "high", NoxRules: []string{"AI-EMBED-002", "DATA-001"}},
+			{ID: "Art.12", Description: "Record-keeping and logging", Priority: "medium", NoxRules: []string{"AI-006", "AI-007"}},
+			{ID: "Art.14", Description: "Human oversight", Priority: "high", NoxRules: []string{"AGENT-002"}},
+			{ID: "Art.15.1", Description: "Accuracy and robustness", Priority: "high", NoxRules: []string{"AI-001", "AI-002", "AI-003", "AI-PI-001", "AI-PI-002"}},
+			{ID: "Art.15.5", Description: "Cybersecurity and resilience to manipulation", Priority: "high", NoxRules: []string{"AGENT-001", "AGENT-003", "AGENT-004", "AI-009", "MCP-009", "MCP-010", "MCP-016", "MCP-017", "VULN-001"}},
+		},
+	},
 }
 
 // frameworksByName provides lookup by framework ID.

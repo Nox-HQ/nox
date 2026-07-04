@@ -126,14 +126,50 @@ func TestEvidenceNoEvidence(t *testing.T) {
 }
 
 func TestFrameworksByName(t *testing.T) {
-	expected := []string{"soc2", "iso27001", "gdpr", "fedramp-low", "fedramp-moderate", "fedramp-high", "hipaa", "pci-dss", "nist-800-53", "nist-csf", "cis-v8", "cmmc"}
+	expected := []string{"soc2", "iso27001", "gdpr", "fedramp-low", "fedramp-moderate", "fedramp-high", "hipaa", "pci-dss", "nist-800-53", "nist-csf", "cis-v8", "cmmc", "nist-ai-rmf", "iso42001", "eu-ai-act"}
 	for _, id := range expected {
 		if _, ok := frameworksByName[id]; !ok {
 			t.Errorf("framework %q not found in frameworksByName", id)
 		}
 	}
-	if len(frameworksByName) != 12 {
-		t.Errorf("expected 12 frameworks, got %d", len(frameworksByName))
+	if len(frameworksByName) != 15 {
+		t.Errorf("expected 15 frameworks, got %d", len(frameworksByName))
+	}
+}
+
+// The AI-governance frameworks must actually map to the AI/agent rule families
+// (not just be empty shells) — e.g. EU AI Act Art.14 "human oversight" should be
+// evidenced by AGENT-002 (agent settings that disable the human-in-the-loop
+// gate). Guards against the mapping silently referencing rules that don't exist.
+func TestAIGovernanceFrameworksMapAgentRules(t *testing.T) {
+	controlHasRule := func(fwID, ctrlID, ruleID string) bool {
+		fw, ok := frameworksByName[fwID]
+		if !ok {
+			return false
+		}
+		for _, c := range fw.Controls {
+			if c.ID != ctrlID {
+				continue
+			}
+			for _, r := range c.NoxRules {
+				if r == ruleID {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	cases := []struct{ fw, ctrl, rule string }{
+		{"eu-ai-act", "Art.14", "AGENT-002"},        // human oversight
+		{"eu-ai-act", "Art.15.5", "AGENT-001"},      // cybersecurity / manipulation
+		{"iso42001", "A.6.2.6", "AGENT-003"},        // deployment access controls
+		{"nist-ai-rmf", "MEASURE-2.7", "AI-PI-001"}, // adversarial security
+	}
+	for _, tc := range cases {
+		if !controlHasRule(tc.fw, tc.ctrl, tc.rule) {
+			t.Errorf("%s control %s should map to %s", tc.fw, tc.ctrl, tc.rule)
+		}
 	}
 }
 
