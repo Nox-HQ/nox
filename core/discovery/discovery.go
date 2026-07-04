@@ -315,6 +315,12 @@ type Walker struct {
 	// Empty (the default) means "no git context", so ignore rules apply as
 	// before.
 	TrackedPaths map[string]bool
+	// ExcludePatterns are hard, explicit exclusions (from `scan.exclude` in
+	// config): paths the user has said to never scan. Unlike gitignore
+	// patterns, these are NOT overridden by TrackedPaths — a tracked file that
+	// matches an exclude is still skipped, because the user asked for it
+	// (e.g. a rule-definition file full of expected-false-positive patterns).
+	ExcludePatterns []string
 }
 
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
@@ -369,6 +375,17 @@ func (w *Walker) Walk() ([]Artifact, error) {
 		// Always skip .git directories.
 		if info.IsDir() && info.Name() == ".git" {
 			return filepath.SkipDir
+		}
+
+		// Hard config excludes (scan.exclude) win unconditionally — they are
+		// explicit "never scan this" rules, so the tracked-file override that
+		// applies to .gitignore does NOT apply here. Checked before gitignore
+		// and before IncludePaths so it holds even under --changed-since.
+		if len(w.ExcludePatterns) > 0 && IsIgnored(filepath.ToSlash(rel), w.ExcludePatterns) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		if w.RespectGitignore {

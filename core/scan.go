@@ -376,7 +376,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // excluded artifact types. It is stage 1 of the scan pipeline.
 func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
 	walker := discovery.NewWalker(target)
-	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
+	// scan.exclude is a HARD exclude (explicit "never scan this"), kept separate
+	// from .gitignore so the tracked-file override does not resurrect it — a
+	// tracked file the user excluded (e.g. a rule-definition file) stays
+	// excluded, including under --changed-since.
+	walker.ExcludePatterns = cfg.Scan.Exclude
 	if opts.NoRespectGitignore {
 		walker.RespectGitignore = false
 	} else if tracked, err := git.TrackedFiles(target); err == nil {

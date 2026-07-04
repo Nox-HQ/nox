@@ -472,6 +472,40 @@ func TestLoadGitignore_WorktreeGitFile(t *testing.T) {
 	}
 }
 
+// A config `scan.exclude` (ExcludePatterns) is a HARD exclude: it must win even
+// over a tracked file, unlike a .gitignore pattern. Regression for the #142
+// tracked-override resurrecting excluded-but-tracked files (e.g. nox's own
+// rule-definition files, which are tracked and listed in scan.exclude but were
+// re-scanned under --changed-since, failing the PR gate).
+func TestWalker_ExcludePatternsWinOverTracked(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "rules.go"), "package x // excluded despite tracked")
+	mustWrite(t, filepath.Join(root, "app.go"), "package x")
+
+	w := NewWalker(root)
+	w.ExcludePatterns = []string{"rules.go"}
+	// Both files are tracked — the exclude must still drop rules.go.
+	w.TrackedPaths = map[string]bool{"rules.go": true, "app.go": true}
+
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	have := map[string]bool{}
+	for _, a := range arts {
+		have[a.Path] = true
+	}
+	if have["rules.go"] {
+		t.Error("scan.exclude must skip a tracked file (hard exclude wins over the tracked-file override)")
+	}
+	if !have["app.go"] {
+		t.Error("app.go should still be scanned")
+	}
+}
+
 // Regression for #142: git never ignores a *tracked* file, even when a
 // .gitignore pattern matches it. A repo that .gitignores a directory but
 // commits sources into it (pet-medical: `mobile/` ignored, ~80 tracked
