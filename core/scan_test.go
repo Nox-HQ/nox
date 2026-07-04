@@ -1908,6 +1908,39 @@ func TestRunScanWithOptions_TrackedOnly(t *testing.T) {
 	}
 }
 
+// TestRunScan_SingleFileTarget verifies `nox scan path/to/file` scans just that
+// file — loading config from the file's directory (not `file/.nox.yaml`) and
+// producing findings for the file. This is the basis for fast pre-commit hooks
+// and editor integrations. Previously a file target failed on config loading
+// and the walker skipped its own root, yielding nothing.
+func TestRunScan_SingleFileTarget(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "app.py")
+	if err := os.WriteFile(file, []byte("import os\neval(response)\nkey = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+	// A sibling file that must NOT be scanned when a single file is targeted.
+	if err := os.WriteFile(filepath.Join(dir, "other.py"), []byte("key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+		t.Fatalf("writing sibling: %v", err)
+	}
+
+	result, err := RunScan(file)
+	if err != nil {
+		t.Fatalf("RunScan(file): %v", err)
+	}
+	ff := result.Findings.Findings()
+	if len(ff) == 0 {
+		t.Fatal("expected findings for the single file")
+	}
+	for _, f := range ff {
+		if strings.Contains(f.Location.FilePath, "other.py") {
+			t.Errorf("single-file scan must not include the sibling other.py: %s", f.Location.FilePath)
+		}
+	}
+}
+
 func initGitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 

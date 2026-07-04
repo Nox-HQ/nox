@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox scan <file>` scans a single file.** A file target used to fail (it
+  looked for `<file>/.nox.yaml` and the walker skipped its own root, finding
+  nothing). Now it loads config from the file's directory and scans just that
+  file — the basis for fast pre-commit hooks and editor integrations.
 - **`scan.exclude` is now a hard exclude that survives `--changed-since`.** Since
   the tracked-file fix (#142), a file listed in `scan.exclude` that was also
   git-tracked got re-scanned — the tracked-file override treated the config

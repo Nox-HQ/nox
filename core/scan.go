@@ -139,7 +139,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, err
 	}
 
-	// Load project config.
+	// Load project config (LoadScanConfig resolves a single-file target to its
+	// directory, so `nox scan path/file.py` finds the project .nox.yaml).
 	cfg, err := LoadScanConfig(target)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
@@ -375,6 +376,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // optionally restricting to files changed since a git ref, and filtering out
 // excluded artifact types. It is stage 1 of the scan pipeline.
 func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
+	// A single-file target scans exactly that file — the walker skips its own
+	// root, so pointing it at a file would yield nothing. The user named the
+	// file explicitly, so gitignore/scan.exclude do not apply.
+	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		return singleFileArtifacts(target, cfg)
+	}
+
 	walker := discovery.NewWalker(target)
 	// scan.exclude is a HARD exclude (explicit "never scan this"), kept separate
 	// from .gitignore so the tracked-file override does not resurrect it — a
@@ -427,11 +435,41 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 		return nil, err
 	}
 
-	var excludeArtifactTypes []string
+	return filterArtifactsByType(artifacts, excludeArtifactTypes(cfg)), nil
+}
+
+// excludeArtifactTypes flattens the configured artifact-type exclusions.
+func excludeArtifactTypes(cfg *ScanConfig) []string {
+	var out []string
 	for _, et := range cfg.Scan.ExcludeArtifactTypes {
-		excludeArtifactTypes = append(excludeArtifactTypes, et.ArtifactTypes...)
+		out = append(out, et.ArtifactTypes...)
 	}
-	return filterArtifactsByType(artifacts, excludeArtifactTypes), nil
+	return out
+}
+
+// singleFileArtifacts classifies one explicitly-named file into a single
+// artifact for `nox scan <file>` (fast pre-commit hooks, editor integrations).
+// The user named the file, so gitignore and scan.exclude do not apply; only the
+// configured artifact-type exclusions do.
+func singleFileArtifacts(path string, cfg *ScanConfig) ([]discovery.Artifact, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	reg := discovery.NewClassifierRegistry()
+	reg.Register(&discovery.DefaultClassifier{})
+	rel := filepath.Base(path)
+	art := discovery.Artifact{
+		Path:    filepath.ToSlash(rel),
+		AbsPath: abs,
+		Type:    reg.Classify(rel, info),
+		Size:    info.Size(),
+	}
+	return filterArtifactsByType([]discovery.Artifact{art}, excludeArtifactTypes(cfg)), nil
 }
 
 // refineFindings applies all post-analysis transformations to the merged
