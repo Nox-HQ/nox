@@ -252,6 +252,12 @@ type ExplainSettings struct {
 // LoadScanConfig reads .nox.yaml from root and returns the parsed config.
 // If the file does not exist, a zero-value ScanConfig is returned with no error.
 func LoadScanConfig(root string) (*ScanConfig, error) {
+	// A single-file target loads config from the file's directory, so
+	// `nox scan path/to/file.py` finds the project .nox.yaml instead of
+	// looking for `file.py/.nox.yaml`.
+	if info, err := os.Stat(root); err == nil && !info.IsDir() {
+		root = filepath.Dir(root)
+	}
 	path := filepath.Join(root, ".nox.yaml")
 
 	data, err := os.ReadFile(path)
