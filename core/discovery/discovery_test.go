@@ -412,6 +412,66 @@ func TestWalker_RespectsRepoRootGitignoreFromSubTarget(t *testing.T) {
 	}
 }
 
+// Regression for #140: in a linked git worktree, `.git` is a gitdir-pointer
+// *file*, not a directory. Joining `.git/info/exclude` onto it yielded an
+// ENOTDIR error that LoadGitignore propagated — discarding every pattern it
+// had already collected from `.gitignore` (a bare `return nil, err`). The
+// walker then saw zero ignore patterns and scanned the whole tree, so a scan
+// run from a worktree found strictly more than the same scan from the real
+// checkout. LoadGitignore must resolve info/exclude via the worktree's
+// commondir (git shares it across worktrees) and still return the
+// `.gitignore` patterns.
+func TestLoadGitignore_WorktreeGitFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	// The real checkout: `.git` is a directory with info/exclude.
+	main := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(main, ".git", "info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(main, ".git", "info", "exclude"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A linked worktree: `.git` is a file pointing at the per-worktree
+	// gitdir, which carries a `commondir` back to the main `.git`.
+	wt := t.TempDir()
+	gitDir := filepath.Join(main, ".git", "worktrees", "wt")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "commondir"), []byte("../..\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The worktree's checked-out `.gitignore` (a tracked file).
+	if err := os.WriteFile(filepath.Join(wt, ".gitignore"), []byte("mobile/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	patterns, err := LoadGitignore(wt)
+	if err != nil {
+		t.Fatalf("LoadGitignore from worktree: %v", err)
+	}
+	var haveMobile, haveTmp bool
+	for _, p := range patterns {
+		switch p {
+		case "mobile/":
+			haveMobile = true
+		case "*.tmp":
+			haveTmp = true
+		}
+	}
+	if !haveMobile {
+		t.Errorf("worktree scan dropped the .gitignore `mobile/` pattern (got %v) — a worktree would scan more than the real checkout", patterns)
+	}
+	if !haveTmp {
+		t.Errorf("worktree scan did not resolve info/exclude via commondir (got %v)", patterns)
+	}
+}
+
 // Regression for #83: --changed-since must short-circuit the file
 // walk, not just filter the artifact list afterwards. The walker now
 // accepts an IncludePaths allow-list and skips directories that don't
