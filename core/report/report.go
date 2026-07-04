@@ -25,6 +25,12 @@ type Meta struct {
 	GeneratedAt   string `json:"generated_at"`
 	ToolName      string `json:"tool_name"`
 	ToolVersion   string `json:"tool_version"`
+	// Offline records whether the scan ran under the zero-network guarantee
+	// (`nox scan --offline`): no OSV lookups, no API, no token, no telemetry.
+	// It is the proof-of-offline attestation a reviewer can read straight from
+	// the artifact — "this report was produced without the scanner touching the
+	// network" — backed by the enforced egress test, not just a claim.
+	Offline bool `json:"offline"`
 }
 
 // JSONReport is the top-level structure serialized to JSON. It pairs report
@@ -37,6 +43,9 @@ type JSONReport struct {
 // JSONReporter produces deterministic JSON output from a FindingSet.
 type JSONReporter struct {
 	ToolVersion string
+	// Offline is recorded in the report Meta as the proof-of-offline
+	// attestation. Set it to the scan's `--offline` state before Generate.
+	Offline bool
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -65,6 +74,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 			ToolName:      "nox",
 			ToolVersion:   r.ToolVersion,
+			Offline:       r.Offline,
 		},
 		Findings: f,
 	}
