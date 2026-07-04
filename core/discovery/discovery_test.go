@@ -472,6 +472,77 @@ func TestLoadGitignore_WorktreeGitFile(t *testing.T) {
 	}
 }
 
+// Regression for #142: git never ignores a *tracked* file, even when a
+// .gitignore pattern matches it. A repo that .gitignores a directory but
+// commits sources into it (pet-medical: `mobile/` ignored, ~80 tracked
+// files under it) must still have those tracked files scanned. The walker
+// honors TrackedPaths: a tracked file under an ignored dir is scanned, the
+// ignored dir is descended into to reach it, but a genuinely-ignored
+// (untracked) sibling stays skipped and an ignored dir with no tracked
+// descendant is still pruned.
+func TestWalker_ScansTrackedFilesUnderIgnoredDir(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("mobile/\nbuild/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// mobile/ is ignored but two files under it are tracked; a third is not.
+	mustWrite(t, filepath.Join(root, "mobile", "app.go"), "package m")         // tracked
+	mustWrite(t, filepath.Join(root, "mobile", "sub", "util.go"), "package s") // tracked (nested)
+	mustWrite(t, filepath.Join(root, "mobile", "generated.go"), "package m")   // ignored + untracked
+	// build/ is ignored and holds no tracked files → must stay pruned.
+	mustWrite(t, filepath.Join(root, "build", "out.go"), "package b")
+	// a normal tracked file outside any ignore.
+	mustWrite(t, filepath.Join(root, "src", "main.go"), "package main")
+
+	w := NewWalker(root)
+	w.TrackedPaths = map[string]bool{
+		"mobile/app.go":      true,
+		"mobile/sub/util.go": true,
+		"src/main.go":        true,
+	}
+	arts, err := w.Walk()
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	have := map[string]bool{}
+	for _, a := range arts {
+		have[a.Path] = true
+	}
+
+	for _, want := range []string{"mobile/app.go", "mobile/sub/util.go", "src/main.go"} {
+		if !have[want] {
+			t.Errorf("tracked file %q under an ignored dir should be scanned; got %v", want, keys(have))
+		}
+	}
+	if have["mobile/generated.go"] {
+		t.Error("mobile/generated.go is ignored and untracked — it should not be scanned")
+	}
+	if have["build/out.go"] {
+		t.Error("build/ is ignored with no tracked files — it should stay pruned")
+	}
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 // Regression for #83: --changed-since must short-circuit the file
 // walk, not just filter the artifact list afterwards. The walker now
 // accepts an IncludePaths allow-list and skips directories that don't

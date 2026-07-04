@@ -372,6 +372,15 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 	walker.IgnorePatterns = append(walker.IgnorePatterns, cfg.Scan.Exclude...)
 	if opts.NoRespectGitignore {
 		walker.RespectGitignore = false
+	} else if tracked, err := git.TrackedFiles(target); err == nil {
+		// git never ignores a tracked file, so a source committed into an
+		// otherwise-ignored directory (e.g. `mobile/` in .gitignore) must still
+		// be scanned. Best-effort: outside a git repo this errors and the walker
+		// applies ignore rules as before.
+		walker.TrackedPaths = make(map[string]bool, len(tracked))
+		for _, f := range tracked {
+			walker.TrackedPaths[f] = true
+		}
 	}
 
 	// When --changed-since is set, resolve the diff and wire it into the
