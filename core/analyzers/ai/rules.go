@@ -1085,14 +1085,23 @@ func builtinAIRules() []*rules.Rule {
 }
 
 // applyAINoiseGlobs adds test-file and documentation ignore globs to the AI
-// prose / logging / model-selection rules. Scanning the top public MCP servers
-// showed these rules firing on test fixtures, README/SKILL docs, and JSDoc —
-// never on real production AI code. Generated/vendored files are handled
-// separately by the scan.generated_paths filter.
+// prose / logging / model-selection rules, plus the unsafe-output-handling
+// rules. Scanning the top public MCP servers showed the prose/logging rules
+// firing on test fixtures, README/SKILL docs, and JSDoc; and the
+// output-handling rules (AI-009/012/015/018 — eval/exec, DB query, innerHTML,
+// file path from LLM output) fire on documentation that *quotes* those code
+// sinks. A markdown file can't execute, so a match there is always a doc
+// example, never a real vulnerability — most visibly nox's own CHANGELOG prose
+// (which quotes a SQL-execute sink when documenting a past AI-012 precision
+// fix) tripped AI-012 on every PR that edits the changelog. Generated/vendored
+// files are handled separately by the scan.generated_paths filter.
 func applyAINoiseGlobs(out []*rules.Rule) {
 	noisy := map[string]bool{
 		"AI-006": true, "AI-008": true, "AI-026": true, "AI-030": true,
 		"AI-036": true, "AI-039": true, "AI-042": true,
+		// Unsafe-output-handling rules: real code sinks, but they match prose
+		// in docs that quote the sink. Skip docs/tests, keep real source.
+		"AI-009": true, "AI-012": true, "AI-015": true, "AI-018": true,
 	}
 	globs := []string{
 		"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js", "testdata/*",

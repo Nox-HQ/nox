@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Unsafe-output-handling rules no longer fire on documentation.** AI-009/012/
+  015/018 (eval/exec, DB query, `innerHTML`, file path from LLM output) target
+  real code sinks but matched prose in docs that *quote* those sinks — most
+  visibly nox's own CHANGELOG entry `cursor.execute("SELECT " + completion)`,
+  which tripped AI-012 (high) and failed the PR gate on every change that edited
+  the changelog. A markdown file can't execute, so these rules now skip docs and
+  test files (joining the existing prose/logging noise-glob set); real source is
+  unaffected.
 - **Tracked files under a gitignored directory are now scanned.** git never
   ignores a file it already tracks, even when a `.gitignore` pattern matches it
   — but nox applied ignore patterns purely from the filesystem and skipped them,

@@ -2,6 +2,36 @@ package ai
 
 import "testing"
 
+// The unsafe-output-handling rules (AI-009/012/015/018) target real code sinks,
+// but they must not fire on documentation that *quotes* those sinks — a
+// markdown file can't execute. Regression for the AI-012 false positive on
+// nox's own CHANGELOG (`cursor.execute("SELECT " + completion)`), which failed
+// the PR gate on every change that touched the changelog.
+func TestOutputHandlingRules_SkipDocsNotCode(t *testing.T) {
+	a := NewAnalyzer()
+	const sink = "result = cursor.execute(\"SELECT \" + completion)\n"
+
+	// Real Python code: AI-012 must still fire.
+	code, err := a.ScanFile("db.py", []byte(sink))
+	if err != nil {
+		t.Fatalf("ScanFile(code): %v", err)
+	}
+	if findingWithRule(code, "AI-012") == nil {
+		t.Error("AI-012 must still fire on a real code sink")
+	}
+
+	// Same text quoted in a changelog: no output-handling rule may fire.
+	doc, err := a.ScanFile("CHANGELOG.md", []byte("- Fixed: `"+sink+"` patterns still fire.\n"))
+	if err != nil {
+		t.Fatalf("ScanFile(doc): %v", err)
+	}
+	for _, id := range []string{"AI-009", "AI-012", "AI-015", "AI-018"} {
+		if findingWithRule(doc, id) != nil {
+			t.Errorf("%s fired on markdown prose quoting a code sink (false positive)", id)
+		}
+	}
+}
+
 // The AGENT-* family scans agent-configuration artifacts (Cursor/Cline rules,
 // CLAUDE.md/AGENTS.md, Claude Code skills, and the settings that grant tool
 // permissions). Each rule must fire on a malicious sample in a real
