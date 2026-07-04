@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Proof-of-offline attestation in the report.** `findings.json` meta now
+  carries an `"offline"` boolean recording whether the scan ran under the
+  zero-network guarantee (`nox scan --offline`: no OSV, no API, no token, no
+  telemetry). A reviewer or CISO can confirm straight from the artifact that the
+  scanner never touched the network — backed by the enforced egress test
+  (`TestOSVDisabled_NoNetworkEgress`), not just a claim. `--offline` also prints
+  an `[offline]` confirmation line. This is the differentiator vs. LLM-powered
+  scanners that ship your code to a model provider.
 - **`nox scan --tracked-only`.** Restricts the scan to git-tracked files
   (`git ls-files`), excluding untracked working-tree files (scratch files, build
   output, un-added drafts) and submodule contents. Scans exactly what is

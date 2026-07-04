@@ -98,6 +98,41 @@ func TestGenerateContainsCorrectMeta(t *testing.T) {
 	}
 }
 
+func TestGenerateOfflineAttestation(t *testing.T) {
+	// Default: a reporter records offline=false, so an artifact never over-claims
+	// a zero-network scan that wasn't one.
+	def, err := NewJSONReporter("1.0.0").Generate(sampleFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	var defReport JSONReport
+	if err := json.Unmarshal(def, &defReport); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if defReport.Meta.Offline {
+		t.Error("default reporter must record offline=false")
+	}
+
+	// With Offline set, the attestation appears in the artifact so a reviewer
+	// can confirm the scan touched no network straight from findings.json.
+	r := NewJSONReporter("1.0.0")
+	r.Offline = true
+	data, err := r.Generate(sampleFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	var report JSONReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !report.Meta.Offline {
+		t.Error("offline reporter must record offline=true in meta")
+	}
+	if !bytes.Contains(data, []byte(`"offline": true`)) {
+		t.Errorf("findings.json meta must carry the offline attestation; got: %s", data)
+	}
+}
+
 func TestGenerateSortsFindingsDeterministically(t *testing.T) {
 	r := NewJSONReporter("0.1.0")
 	// Findings are added in reverse order (rule-002 before rule-001).

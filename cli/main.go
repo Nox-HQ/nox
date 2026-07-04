@@ -454,6 +454,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if summary := familySummary(activeFindings); summary != "" {
 			fmt.Printf("[families] %s\n", summary)
 		}
+		if offlineFlag {
+			fmt.Println("[offline] zero-network guarantee: no OSV, no API, no token, no telemetry (recorded in findings.json meta)")
+		}
 	}
 
 	// Generate reports.
@@ -467,6 +470,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		case "json":
 			path := filepath.Join(outputDir, "findings.json")
 			r := report.NewJSONReporter(version)
+			r.Offline = offlineFlag
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
