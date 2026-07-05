@@ -478,6 +478,29 @@ nox fix --content --write
 choice (a UID, a pinned digest, an allowlist, a rotated secret) are never
 touched. It previews the diff and applies nothing without `--write`.
 
+### variants
+
+Report first-party code that reproduces the root-cause pattern of a known CVE —
+variants a version-based SCA can't see because there's no vulnerable dependency,
+just the same insecure shape written locally. Deterministic and offline.
+
+```bash
+# Scan the current tree for every known CVE variant
+nox variants .
+
+# Only Log4Shell-style variants
+nox variants CVE-2021-44228 .
+
+# List the built-in signatures without scanning
+nox variants --list
+```
+
+Ships signatures for Log4Shell (CVE-2021-44228), PyYAML full-loader
+(CVE-2020-14343), tar `extractall` without a filter (CVE-2007-4559), Zip Slip
+(CVE-2018-1002200), Jinja SSTI (CVE-2019-10906), and `child_process` shell
+interpolation (CVE-2021-21315). The same `VARIANT-*` findings also appear in a
+normal `nox scan`. Exit code is `1` when variants are found, `0` when clean.
+
 ### serve
 
 Start an MCP (Model Context Protocol) server on stdio.

@@ -21,7 +21,10 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 - **Prompt injection** at the call site (AI-PI-*, OWASP LLM01)
 - **Embedding leakage** when secrets / PII land in vector stores (AI-EMBED-*, LLM06)
 - **Agent over-privilege** when `file_read` + `http_request` live in the same agent context (AI-AGENT-*, LLM07)
-- **Agent-config execution surface** (AGENT-001..004) — the files that steer a coding agent are code: injection directives in `.cursorrules`/`CLAUDE.md`/skills, permission-bypass (`bypassPermissions`, `--dangerously-skip-permissions`), wildcard tool grants (`"Bash(*)"`), and exfiltration directives in `.claude/settings.json`
+- **Agent-config execution surface** (AGENT-001..006) — the files that steer a coding agent are code: injection directives in `.cursorrules`/`CLAUDE.md`/skills, permission-bypass (`bypassPermissions`, `--dangerously-skip-permissions`), wildcard tool grants (`"Bash(*)"`), exfiltration directives in `.claude/settings.json`, unauthenticated **A2A agent cards** (`agent.json` with an empty/`none` security scheme, ASI07), and **DXT desktop-extension** manifests that interpolate `${user_config.*}` into a server command (ASI02)
+- **Slopsquatting / hallucinated packages** (SLOP-001) — source imports of a package that exists in no manifest, no standard library, and no local module: the surface an attacker slopsquats after an LLM invents the name. Deterministic, offline, Python + JS/TS
+- **CVE variants in your own code** (`nox variants`, VARIANT-*) — first-party code that reproduces the root cause of a known CVE (Log4Shell, Zip Slip, PyYAML full-loader, tar path traversal, SSTI, shell interpolation) even when no vulnerable dependency is present
+- **Unverifiable dependency provenance** (PROV-001/002, OWASP ASI04 / SLSA) — dependencies pulled from a VCS/URL/tarball instead of a signed registry, or a VCS dep pinned to a mutable branch/tag instead of an immutable commit SHA
 - **OWASP Top 10 for Agentic Applications (ASI01–ASI10)** mapping on findings, alongside the LLM and MCP Top 10 — traceable from static rule to runtime attack to GRC evidence
 - **Full MCP threat coverage** mapped to the OWASP MCP Top 10 — server hardening (MCP-001..008), tool poisoning (MCP-009..014, MCP03), rug-pull / definition drift (MCP-015, MCP04), authn/authz & SSRF (MCP-016..021, MCP07), shadow & cross-server tool shadowing (MCP-022..024, MCP09)
 - **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
@@ -100,8 +103,10 @@ nox serve --allowed-paths /path/to/project
 `nox lsp` runs a Language Server over stdio, publishing findings as inline
 diagnostics — squiggles, hover, the Problems panel — on open and save.
 Deterministic and offline: it runs the local `nox` binary, no code leaves your
-machine. The VS Code extension in [`editors/vscode`](editors/vscode) is a thin
-client over it; a JetBrains plugin is the same shape.
+machine. Thin clients over it ship for **VS Code**
+([`editors/vscode`](editors/vscode)) and **JetBrains** IDEs
+([`editors/jetbrains`](editors/jetbrains) — IntelliJ IDEA Ultimate, GoLand,
+PyCharm Professional, WebStorm, …; LSP4IJ for the Community editions).
 
 ```bash
 nox lsp    # spoken by the editor extension; not run by hand
@@ -204,6 +209,21 @@ Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, G
 - Graceful degradation on network errors (offline-first)
 - Disable with `--no-osv` flag or `scan.osv.disabled: true` in `.nox.yaml`
 - Vulnerability data enriches CycloneDX and SPDX SBOM output
+
+### Supply-chain integrity (deterministic, offline)
+
+Beyond version-based SCA, nox flags supply-chain risks that have no CVE — the
+insecure *shape*, not a known-bad version:
+
+| Rule | Description |
+|------|-------------|
+| SLOP-001 | Imported package is not declared in any manifest, standard library, or local module — a hallucinated / slopsquatted package (Python + JS/TS) |
+| VARIANT-001..006 | First-party code reproducing a known-CVE root cause (Log4Shell, PyYAML full-loader, tar path traversal, Zip Slip, SSTI, shell interpolation). See `nox variants` |
+| PROV-001 | Dependency from a non-registry source (VCS/URL/tarball) — provenance cannot be verified (ASI04 / SLSA) |
+| PROV-002 | VCS dependency pinned to a mutable ref instead of an immutable commit SHA |
+
+All four never contact a registry. `nox variants [CVE-ID] [path]` reports CVE
+variants directly; `nox variants --list` enumerates the signatures.
 
 ### Data Protection (12 rules)
 

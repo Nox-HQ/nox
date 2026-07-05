@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-05
+
+### Added
+
+- **Slopsquatting / hallucinated-package detection (`SLOP-001`).** A new
+  deterministic, offline analyzer flags source-code imports of a package that is
+  not declared in any dependency manifest, is not a language standard-library
+  module, and is not a first-party local module — the *slopsquatting* attack
+  surface (an LLM hallucinates a plausible package name, a developer installs it,
+  and an attacker who pre-registered the name runs code). Covers Python
+  (`.py`/`.pyi`) and JS/TS (`.js/.jsx/.mjs/.cjs/.ts/.tsx/.mts/.cts`), with
+  embedded stdlib/builtin lists, an import→distribution name map
+  (`yaml`→`pyyaml`, `cv2`→`opencv-python`, …) and PEP 503 normalization to keep
+  false positives low. Declared set parsed from `package.json`,
+  `package-lock.json`, `requirements*.txt`, `pyproject.toml` (PEP 621 + Poetry),
+  and `Pipfile`. Never contacts a registry. Tagged `owasp-asi04` / `owasp-llm03`.
+- **CVE-variant detection + `nox variants`.** A new analyzer flags first-party
+  code that reproduces the root-cause pattern of a known CVE — variants a
+  version-based SCA can't see because there's no vulnerable dependency, just the
+  same insecure shape written locally. Ships signatures for Log4Shell JNDI
+  (CVE-2021-44228), PyYAML full-loader (CVE-2020-14343), tar `extractall` without
+  filter (CVE-2007-4559), Zip Slip (CVE-2018-1002200), Jinja SSTI
+  (CVE-2019-10906), and `child_process` shell interpolation (CVE-2021-21315),
+  each with a safe-form exclusion. `nox variants [CVE-ID] [path]` reports variants
+  (optionally filtered to one CVE); `nox variants --list` enumerates the
+  signatures.
+- **Dependency-provenance checks (`PROV-001`/`PROV-002`).** A new deterministic,
+  offline analyzer for the supply-chain provenance gap a version-based SCA
+  misses (OWASP ASI04 / SLSA): `PROV-001` flags a dependency pulled from a VCS
+  repo, raw URL, or tarball instead of a signed registry; `PROV-002` flags a VCS
+  dependency pinned to a mutable ref (branch/tag) instead of an immutable commit
+  SHA. Parses `package.json` and `requirements*.txt`; registry ranges and
+  `#sha256=` hash-verified URLs never fire. Live sigstore/SLSA attestation
+  verification needs the network and is left to an opt-in plugin — this analyzer
+  makes no network call.
+- **Agent-config coverage for A2A and DXT (`AGENT-005`/`AGENT-006`).** `AGENT-005`
+  (ASI07) flags an A2A agent card (`agent.json` / `.well-known/agent.json`) that
+  declares an empty or `none` security scheme while advertising skills — an
+  unauthenticated inter-agent endpoint. `AGENT-006` (ASI02) flags a DXT
+  desktop-extension manifest (`manifest.json` / `*.dxt`) that interpolates a
+  `${user_config.*}` value into the server executable or a shell `-c` string —
+  command injection at launch. Both are scoped to avoid false positives (a
+  populated `securitySchemes` block and a `${user_config.x}` passed as a discrete
+  argv element are silent).
+- **JetBrains plugin (`editors/jetbrains`).** A thin client over the `nox lsp`
+  language server for IntelliJ IDEA Ultimate, GoLand, PyCharm Professional,
+  WebStorm, and the other paid JetBrains IDEs (platform LSP API, 2023.2+), with a
+  documented LSP4IJ path for the free Community editions. Mirrors the VS Code
+  extension: deterministic, offline diagnostics on open/save.
+- **Optional LLM-triage plugin (`nox-plugin-llm-triage`).** An opt-in escape
+  hatch for teams that want an LLM's judgment on top of the deterministic core:
+  it consumes the scan's findings, sends each plus a code snippet to an
+  OpenAI-compatible chat endpoint, and attaches a true/false-positive verdict as
+  an enrichment on the original finding. It never changes or gates the scan
+  result. Active egress — refuses to run without `authorize: true`. The core
+  stays deterministic and offline whether or not it is installed.
+
 ## [1.5.0] - 2026-07-05
 
 ### Added
