@@ -113,6 +113,16 @@ jobs:
       - name: Build binary
         run: make build
 
+      - name: SAST precision gate
+        # The honest precision harness as a real check. Reuses the nox binary
+        # `make build` just produced, scans the labeled corpus offline (no
+        # network, deterministic), and fails the build on ANY regression vs the
+        # committed snapshot — overall OR per-rule (baseline.json now records a
+        # precision/recall floor per rule). --min-precision is a second, blunt
+        # floor: no rule that fired may score below it. This is what stops the
+        # precision number from silently rotting.
+        run: ./nox bench --precision testdata/precision-suite --baseline testdata/precision-suite/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently

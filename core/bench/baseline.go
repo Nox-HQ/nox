@@ -1,6 +1,9 @@
 package bench
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // A baseline turns the honest precision number into a ratchet. Measuring
 // precision once is worth little if it can silently rot; a committed snapshot
@@ -32,11 +35,31 @@ type Baseline struct {
 	// regression: it means the scanner started inflating real issues into more
 	// duplicate findings even if precision/recall held.
 	FindingsPerIssue float64 `json:"findings_per_issue"`
+	// Rules is the per-rule precision/recall floor. An overall-only ratchet lets
+	// one rule silently regress while another improves and hides it in the
+	// average; recording a floor per rule makes each rule defend its own number.
+	// It is omitempty and nil-tolerant: a baseline.json written before this field
+	// existed simply has no `rules` section, loads fine, and skips per-rule
+	// enforcement (backward compatible). Sorted by RuleID for a stable snapshot.
+	Rules []RuleBaseline `json:"rules,omitempty"`
 }
 
-// BaselineFromReport extracts the gated metrics from a full Report.
+// RuleBaseline is the floor for a single rule: its precision and recall may not
+// drop below these recorded values. Only rules that actually fired or had
+// expectations at snapshot time are recorded — a rule the corpus never exercises
+// has no meaningful floor and would only add noise to the ratchet.
+type RuleBaseline struct {
+	RuleID    string  `json:"rule_id"`
+	Precision float64 `json:"precision"`
+	Recall    float64 `json:"recall"`
+}
+
+// BaselineFromReport extracts the gated metrics from a full Report, including
+// the per-rule floors. Only rules that were exercised (TP+FP+FN > 0) get a
+// floor: an untouched rule scores a vacuous 1.0/1.0 (see RuleMetrics.Precision)
+// and recording that would gate on precision the corpus never actually measured.
 func BaselineFromReport(r *Report) Baseline {
-	return Baseline{
+	b := Baseline{
 		Precision:        r.Overall.Precision(),
 		Recall:           r.Overall.Recall(),
 		F1:               r.Overall.F1(),
@@ -45,6 +68,19 @@ func BaselineFromReport(r *Report) Baseline {
 		FN:               r.Overall.FN,
 		FindingsPerIssue: r.Density.FindingsPerIssue(),
 	}
+	for i := range r.Rules {
+		m := &r.Rules[i]
+		if m.TP+m.FP+m.FN == 0 {
+			continue
+		}
+		b.Rules = append(b.Rules, RuleBaseline{
+			RuleID:    m.RuleID,
+			Precision: m.Precision(),
+			Recall:    m.Recall(),
+		})
+	}
+	sort.Slice(b.Rules, func(i, j int) bool { return b.Rules[i].RuleID < b.Rules[j].RuleID })
+	return b
 }
 
 // BaselineTolerance is the slack the gate allows before calling a metric change
@@ -99,6 +135,45 @@ func CompareBaseline(base, current Baseline) []Regression {
 	}
 	if current.FindingsPerIssue > base.FindingsPerIssue+baselineEpsilon {
 		out = append(out, Regression{"findings_per_issue", base.FindingsPerIssue, current.FindingsPerIssue})
+	}
+	// Per-rule floors: any individual rule whose precision OR recall dropped
+	// below its recorded floor is a regression, even when the overall numbers
+	// hold (one rule improving can mask another regressing in the average). A
+	// base with no per-rule section (a pre-schema snapshot) skips this check
+	// entirely, keeping old baselines loadable and gated only on the overall.
+	out = append(out, compareRules(base.Rules, current.Rules)...)
+	return out
+}
+
+// compareRules flags every rule whose current precision or recall fell below its
+// baseline floor. Current per-rule numbers are looked up by RuleID; a floored
+// rule that no longer appears in current (it stopped firing and had no
+// expectation) is treated as a vacuous 1.0/1.0 — its absence is not itself a
+// regression, matching how BaselineFromReport declines to floor unexercised
+// rules. The Metric name is prefixed with the rule ID so the CLI diff points at
+// the exact rule that moved.
+func compareRules(base, current []RuleBaseline) []Regression {
+	if len(base) == 0 {
+		return nil
+	}
+	byRule := make(map[string]RuleBaseline, len(current))
+	for _, r := range current {
+		byRule[r.RuleID] = r
+	}
+	var out []Regression
+	for _, b := range base {
+		cur, ok := byRule[b.RuleID]
+		if !ok {
+			// Rule no longer exercised: precision/recall are the vacuous 1.0, so
+			// they cannot fall below any floor <= 1.0.
+			cur = RuleBaseline{RuleID: b.RuleID, Precision: 1.0, Recall: 1.0}
+		}
+		if cur.Precision < b.Precision-baselineEpsilon {
+			out = append(out, Regression{b.RuleID + " precision", b.Precision, cur.Precision})
+		}
+		if cur.Recall < b.Recall-baselineEpsilon {
+			out = append(out, Regression{b.RuleID + " recall", b.Recall, cur.Recall})
+		}
 	}
 	return out
 }

@@ -49,7 +49,12 @@ fixing the false-positive classes the corpus indicted:
 
 Committed as `baseline.json`; `TestPrecisionSuiteBaseline` (in `cli/`) fails if
 any of precision/recall/F1 drops or FP / findings-per-issue rises, so the number
-can only move the right way without a human refreshing the snapshot.
+can only move the right way without a human refreshing the snapshot. The snapshot
+also records a **per-rule** precision/recall floor (the `rules` array): the
+ratchet fails if any individual rule regresses below its floor, so one rule
+rotting can no longer hide behind another improving in the overall average. The
+`rules` section is optional — a snapshot without it still loads and gates on the
+overall numbers only.
 
 ### The precise to-do list the corpus indicts
 
