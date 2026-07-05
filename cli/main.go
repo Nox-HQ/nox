@@ -143,7 +143,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  fix              Apply OSV dep upgrades (--actions also bumps GitHub Actions pins)\n")
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
-		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates\n")
+		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates (--precision <dir> scores P/R/F1 against a labeled corpus)\n")
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
