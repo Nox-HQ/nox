@@ -34,6 +34,11 @@ type Statement struct {
 	// only the StructuralEngine consults it. Absent (nil) means "unknown", which
 	// the StructuralEngine treats conservatively (the call is dangerous).
 	SinkArgs map[string]SinkArgInfo
+	// Returns are the variable names this statement returns (a `return x` or
+	// `return a, b`). Populated by the substrate so the interprocedural summary
+	// pass can decide whether a parameter flows to a function's return value.
+	// Empty for non-return statements. The intraprocedural engine ignores it.
+	Returns []string
 }
 
 // SinkArgInfo is the argument-shape evidence a substrate extracts at a specific
@@ -55,6 +60,12 @@ type SinkArgInfo struct {
 	// positional argument. For cursor.execute the SQL string is arg 0; a tainted
 	// value only in arg 1 (the params tuple) is the SAFE parameterized form.
 	FirstArgTainted bool
+	// PositionalVars lists, per positional argument slot (index 0 = first
+	// positional), the variable identifiers appearing in that slot. It lets the
+	// interprocedural summary pass map a caller's argument position to the
+	// callee's parameter of the same index. Keyword arguments are excluded (they
+	// have no fixed position). Best-effort; empty when unobserved.
+	PositionalVars [][]string
 }
 
 // Unit is a single intraprocedural scope (typically one function body) presented
@@ -65,6 +76,12 @@ type Unit struct {
 	FuncName string
 	Language string
 	Stmts    []Statement
+	// Params are the positional parameter names of this function, in declaration
+	// order, so the interprocedural summary pass can map a caller's argument
+	// position to the parameter the callee reasons over. Empty for the module
+	// unit and for functions with no parameters. The intraprocedural engine
+	// ignores it.
+	Params []string
 }
 
 // Flow is a reported source-to-sink taint path within a Unit. It is the engine's
@@ -80,6 +97,11 @@ type Flow struct {
 	FilePath   string
 	FuncName   string
 	Language   string
+	// Via names the intermediate, locally-defined functions a cross-function
+	// (interprocedural) flow passes through, from the caller toward the sink
+	// (e.g. ["wrap", "run"]). Empty for a purely intraprocedural flow. It lets a
+	// finding explain the summary-composed path. Deterministically ordered.
+	Via []string
 }
 
 // TaintEngine analyzes one intraprocedural Unit and returns the taint flows that
@@ -132,6 +154,8 @@ func NewHeuristicEngine(cat *Catalog) TaintEngine {
 }
 
 // Analyze implements TaintEngine with the documented same-scope heuristic.
+//
+//nolint:gocritic // Analyze(unit Unit) is the TaintEngine interface signature; the value parameter cannot be a pointer.
 func (e *heuristicEngine) Analyze(unit Unit) []Flow {
 	// tainted maps a tainted variable to the Source and line that introduced it.
 	type origin struct {
@@ -141,7 +165,8 @@ func (e *heuristicEngine) Analyze(unit Unit) []Flow {
 	tainted := make(map[string]origin)
 	var flows []Flow
 
-	for _, st := range unit.Stmts {
+	for i := range unit.Stmts {
+		st := unit.Stmts[i]
 		// A statement carrying a sanitizer call clears taint on its assignee.
 		// WHY conservative (any sanitizer clears): without the substrate we do
 		// not know which sink class the value will reach, so we treat any

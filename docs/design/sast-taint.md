@@ -188,10 +188,57 @@ The substrate and real engine described above now exist:
   using `Sink.RuleID`/`Sink.CWE`, located at the sink, with source/sink/class
   metadata. It is registered in `core/scan.go` like any other analyzer.
 
-Honest limits (unchanged from the design intent): intraprocedural and
-straight-line only — no cross-function/cross-file flow (that remains the
-`nox-plugin-taint-analysis` territory), no control-flow-graph/branch merging,
-no alias or container-element/field sensitivity, best-effort call-name
-normalization, and JS/TS scoped to the module unit for now (Python gets
-per-function units). These are a measurable step up from the stub, not a full
-language-semantics engine.
+Honest limits (unchanged from the design intent): straight-line only — no
+control-flow-graph/branch merging, no alias or container-element/field
+sensitivity, best-effort call-name normalization, and JS/TS scoped to the module
+unit for now (Python gets per-function units). These are a measurable step up
+from the stub, not a full language-semantics engine.
+
+## Status update: same-file interprocedural flow via function summaries
+
+The engine now joins a source in one function to a sink reached through a
+locally-defined helper in the **same file**, via **function summaries** —
+`StructuralEngine.AnalyzeFile([]Unit)` (the per-file entry point the
+`taintflow` analyzer now calls instead of the per-`Unit` `Analyze`).
+
+How it works, in three steps:
+
+1. **Summarize each function.** For every parameter *i* of a locally-defined
+   function, a summary records: `sinksArg(i)` — parameter *i* reaches a catalog
+   sink unsanitized inside the body (carrying the sink's `VulnClass`/`RuleID`/
+   `CWE`); `returnsTaintedIf(i)` — parameter *i* flows unsanitized to a `return`;
+   and `sanitizesClass(i)` — the classes parameter *i* is sanitized for on the
+   way. Summaries are computed by seeding each parameter as a synthetic source
+   and running the **same forward pass** the intraprocedural engine uses, so
+   summary semantics never diverge from intraprocedural semantics.
+2. **Iterate to a bounded fixpoint** over the file's call graph, so a helper that
+   returns its argument tainted composes with a caller that then sinks the result
+   (a two-function chain). The lattice is monotone (taint only spreads), so
+   iteration converges; it is additionally capped at the function count, so
+   recursion and mutual recursion terminate deterministically.
+3. **Apply summaries at call sites.** A call `helper(taintedVar)` whose summary
+   `sinksArg(0)` fires emits a cross-function `Flow` (with the intermediate
+   helper named in `Flow.Via`); `x = wrap(taintedVar)` whose summary
+   `returnsTaintedIf(0)` fires marks `x` tainted and propagation continues.
+   Argument→parameter binding is **positional**. The finding is located at the
+   caller's call site and its message/metadata name the helper path
+   (`via: wrap -> run`).
+
+Honest limits of the interprocedural pass (this is exactly where the cross-file
+`nox-plugin-taint-analysis` takes over):
+
+- **Same-file only.** A callee defined in another file is an *unknown callee*: we
+  never invent a sink or propagate taint through it (fail safe — no false
+  positive). Cross-**file** flow stays the taint-analysis plugin's job.
+- **Best-effort callee resolution.** A helper called by its bare local name (or a
+  chain whose suffix is a local name) resolves; a helper reached through an
+  attribute, a variable holding a function, or a decorator-rewrapped name is
+  treated as unknown.
+- **Bounded fixpoint.** Iteration is capped at the function count; a pathological
+  graph simply stops early with the summaries computed so far (fail safe).
+- **Positional binding only.** Keyword and `*args` call arguments do not bind a
+  specific parameter and are conservatively ignored for summary application
+  (never fabricated).
+- Inherits all intraprocedural limits above (no CFG/branch merging, no alias or
+  field/element sensitivity), and JS/TS remains module-scoped so its
+  interprocedural benefit is limited to Python for now.
