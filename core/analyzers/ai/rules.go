@@ -1057,6 +1057,37 @@ func builtinAIRules() []*rules.Rule {
 			remediation:        "An agent rules file instructs the agent to hide actions from the user or to send data to an external sink — the signature of a data-exfiltration or rug-pull payload. Remove the directive; legitimate agent rules never tell the agent to conceal behaviour from its operator.",
 			references:         []string{"https://cwe.mitre.org/data/definitions/1427.html"},
 		},
+		{
+			id:          "AGENT-005",
+			severity:    findings.SeverityHigh,
+			confidence:  findings.ConfidenceMedium,
+			pattern:     `(?i)"(authentication|security|securityschemes)"\s*:\s*(null|""|"none"|\[\s*\]|\{\s*\})`,
+			description: "A2A agent card exposes an inter-agent endpoint with no authentication",
+			cwe:         "CWE-306",
+			keywords:    []string{"authentication", "securityschemes", "security"},
+			// A2A agent cards are served at .well-known/agent.json (basename agent.json).
+			filePatterns: []string{"agent.json", "agent-card.json", "*.agent.json"},
+			tags:         []string{"ai", "agent-config", "a2a", "inter-agent"},
+			remediation:  "This A2A (agent-to-agent) card declares no authentication — an empty or \"none\" security scheme — while advertising skills, so any peer can invoke the agent's tools. Define a security scheme (e.g. OAuth2 or bearer) in the agent card and enforce it on the served endpoint before exposing any skill.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/306.html", "https://a2a-protocol.org/"},
+		},
+		{
+			id:         "AGENT-006",
+			severity:   findings.SeverityHigh,
+			confidence: findings.ConfidenceMedium,
+			// Fire only when a user_config value controls the executable itself
+			// ("command": "...${user_config...}") or is embedded in a shell -c
+			// string — not the documented, safe case of passing it as a discrete
+			// argv element (`"args": ["${user_config.path}"]`).
+			pattern:      `(?i)("command"\s*:\s*"[^"]*\$\{user_config\.|"-c"\s*,\s*"[^"]*\$\{user_config\.)`,
+			description:  "Desktop-extension (DXT) manifest interpolates user_config into a server command",
+			cwe:          "CWE-78",
+			keywords:     []string{"user_config", "command"},
+			filePatterns: []string{"manifest.json", "*.dxt"},
+			tags:         []string{"ai", "agent-config", "dxt", "command-injection"},
+			remediation:  "A DXT desktop-extension manifest interpolates a ${user_config.*} value into the MCP server executable or a shell -c string. A malicious or mistaken config value becomes command/shell injection when the extension launches. Pass user_config values as separate, validated argv elements or environment variables; never concatenate them into the command string or a shell invocation.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/78.html", "https://www.anthropic.com/engineering/desktop-extensions"},
+		},
 	}
 
 	out := make([]*rules.Rule, len(defs))
@@ -1137,7 +1168,7 @@ func applyASIMapping(out []*rules.Rule) {
 		"AI-PI-001": "owasp-asi01", "AI-PI-002": "owasp-asi01", "AI-PI-003": "owasp-asi01",
 		"AI-PI-004": "owasp-asi01", "AI-PI-005": "owasp-asi01", "AI-PI-006": "owasp-asi01",
 		// ASI02 Tool Misuse & Exploitation — unsafe / over-broad tool use.
-		"AGENT-002": "owasp-asi02", "AGENT-003": "owasp-asi02",
+		"AGENT-002": "owasp-asi02", "AGENT-003": "owasp-asi02", "AGENT-006": "owasp-asi02",
 		"AI-004": "owasp-asi02", "AI-005": "owasp-asi02", "AI-011": "owasp-asi02",
 		// ASI03 Identity & Privilege Abuse — authz, tokens, sessions, SSRF.
 		"MCP-016": "owasp-asi03", "MCP-017": "owasp-asi03", "MCP-018": "owasp-asi03",
@@ -1149,6 +1180,8 @@ func applyASIMapping(out []*rules.Rule) {
 		"MCP-022": "owasp-asi04",
 		// ASI05 Unexpected Code Execution — LLM output → code/shell execution.
 		"AI-009": "owasp-asi05", "MCP-001": "owasp-asi05",
+		// ASI07 Insecure Inter-Agent Communications — unauthenticated A2A.
+		"AGENT-005": "owasp-asi07",
 	}
 	for _, r := range out {
 		if tag, ok := asi[r.ID]; ok {
