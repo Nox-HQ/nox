@@ -972,3 +972,110 @@ func TestSortByPriority(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Context-gated downgrade tests
+// ---------------------------------------------------------------------------
+
+func TestSeverity_Downgraded(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in   Severity
+		want Severity
+	}{
+		{SeverityCritical, SeverityHigh},
+		{SeverityHigh, SeverityMedium},
+		{SeverityMedium, SeverityLow},
+		{SeverityLow, SeverityInfo},
+		{SeverityInfo, SeverityInfo},           // info is the floor (idempotent)
+		{Severity("bogus"), Severity("bogus")}, // unknown passes through unchanged
+	}
+	for _, tc := range cases {
+		if got := tc.in.Downgraded(); got != tc.want {
+			t.Errorf("Severity(%q).Downgraded() = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestDowngradeByRulePatternsAndPath_DowngradesAndRecords(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "AI-002", Severity: SeverityHigh, Location: Location{FilePath: "examples/foo.py", StartLine: 1}, Message: "prompt boundary"})
+
+	inExamples := func(p string) bool { return p == "examples/foo.py" }
+	n := fs.DowngradeByRulePatternsAndPath([]string{"AI-*"}, inExamples, "non-production")
+	if n != 1 {
+		t.Fatalf("downgraded count = %d, want 1", n)
+	}
+
+	f := fs.Findings()[0]
+	if f.Severity != SeverityMedium {
+		t.Errorf("severity = %q, want medium (high downgraded one level)", f.Severity)
+	}
+	if f.Metadata["original_severity"] != "high" {
+		t.Errorf("original_severity = %q, want high", f.Metadata["original_severity"])
+	}
+	if f.Metadata["context"] != "non-production" {
+		t.Errorf("context = %q, want non-production", f.Metadata["context"])
+	}
+}
+
+func TestDowngradeByRulePatternsAndPath_SkipsNonMatching(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// Production path — must not downgrade.
+	fs.Add(Finding{RuleID: "AI-002", Severity: SeverityHigh, Location: Location{FilePath: "src/foo.py", StartLine: 1}, Message: "prod"})
+	// Out-of-scope family in a non-production path — must not downgrade.
+	fs.Add(Finding{RuleID: "SEC-001", Severity: SeverityCritical, Location: Location{FilePath: "tests/foo.py", StartLine: 1}, Message: "secret"})
+
+	always := func(string) bool { return true }
+	inTests := func(p string) bool { return p == "tests/foo.py" }
+
+	if n := fs.DowngradeByRulePatternsAndPath(ContextRuleScopeFixture(), inTests, "non-production"); n != 0 {
+		t.Fatalf("SEC-001 should be out of scope, downgraded %d", n)
+	}
+	// AI-002 in src is in-scope by family but not by path.
+	if n := fs.DowngradeByRulePatternsAndPath([]string{"AI-*"}, func(p string) bool { return p == "examples/x" }, "non-production"); n != 0 {
+		t.Fatalf("AI-002 in src should not match path, downgraded %d", n)
+	}
+	// Sanity: with an always-true matcher AI-002 downgrades but SEC-001 stays out of scope.
+	if n := fs.DowngradeByRulePatternsAndPath([]string{"AI-*"}, always, "non-production"); n != 1 {
+		t.Fatalf("AI-002 should downgrade exactly once, got %d", n)
+	}
+	for _, f := range fs.Findings() {
+		if f.RuleID == "SEC-001" && f.Severity != SeverityCritical {
+			t.Errorf("SEC-001 must remain critical, got %q", f.Severity)
+		}
+	}
+}
+
+func TestDowngradeByRulePatternsAndPath_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	fs.Add(Finding{RuleID: "IAC-010", Severity: SeverityCritical, Location: Location{FilePath: "test/main.tf", StartLine: 1}, Message: "iac"})
+
+	always := func(string) bool { return true }
+	first := fs.DowngradeByRulePatternsAndPath([]string{"IAC-*"}, always, "non-production")
+	second := fs.DowngradeByRulePatternsAndPath([]string{"IAC-*"}, always, "non-production")
+	if first != 1 || second != 0 {
+		t.Fatalf("expected first=1 second=0 (idempotent), got first=%d second=%d", first, second)
+	}
+	f := fs.Findings()[0]
+	if f.Severity != SeverityHigh {
+		t.Errorf("severity = %q, want high (single downgrade only)", f.Severity)
+	}
+	if f.Metadata["original_severity"] != "critical" {
+		t.Errorf("original_severity = %q, want critical (unchanged by second pass)", f.Metadata["original_severity"])
+	}
+}
+
+// ContextRuleScopeFixture returns the in-scope code-pattern families for the
+// downgrade, mirroring core.ContextDowngradeRulePatterns without importing the
+// core package (findings must not depend on core). SEC-* is deliberately absent.
+func ContextRuleScopeFixture() []string {
+	return []string{"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*"}
+}

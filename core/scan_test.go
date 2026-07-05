@@ -139,6 +139,80 @@ const apiKey = "` + awsKey + `"
 	}
 }
 
+func TestRunScan_SASTOffSkipsLanguage(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Turn Go off; Python stays at its default (deep). Both files carry the same
+	// detectable secret, so only the Python finding must survive.
+	configContent := `scan:
+  sast:
+    languages:
+      go: off
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	awsKey := "AKIAIOSFODNN7EXAMPLE"
+	goFile := "package main\n\nconst apiKey = \"" + awsKey + "\"\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(goFile), 0o644); err != nil {
+		t.Fatalf("failed to write go file: %v", err)
+	}
+	pyFile := "api_key = \"" + awsKey + "\"\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "app.py"), []byte(pyFile), 0o644); err != nil {
+		t.Fatalf("failed to write py file: %v", err)
+	}
+
+	result, err := RunScan(tmpDir)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var goFindings, pyFindings int
+	for _, f := range result.Findings.Findings() {
+		switch f.Location.FilePath {
+		case "main.go":
+			goFindings++
+		case "app.py":
+			pyFindings++
+		}
+	}
+	if goFindings != 0 {
+		t.Errorf("go=off must yield zero findings on main.go, got %d", goFindings)
+	}
+	if pyFindings == 0 {
+		t.Error("python (default deep) must still produce findings on app.py, got none")
+	}
+
+	// The resolved profile is recorded for audit.
+	if result.SASTProfile["go"] != "off" {
+		t.Errorf("result.SASTProfile[go] = %q, want off", result.SASTProfile["go"])
+	}
+	if result.SASTProfile["python"] != "deep" {
+		t.Errorf("result.SASTProfile[python] = %q, want deep", result.SASTProfile["python"])
+	}
+}
+
+func TestRunScan_SASTInvalidDepthFailsScan(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	configContent := `scan:
+  sast:
+    languages:
+      go: shallow
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	_, err := RunScan(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for invalid SAST depth, got nil")
+	}
+}
+
 func TestRunScan_NonExistentDirectory(t *testing.T) {
 	t.Parallel()
 
@@ -2293,5 +2367,101 @@ func TestRunScan_PostScanPluginHook(t *testing.T) {
 	}
 	if !found {
 		t.Error("finding added by the post-scan hook did not reach the result")
+	}
+}
+
+// refineContextDowngradeFixture builds a finding set exercising every branch of
+// the context-gated downgrade: an in-scope code-pattern family in a
+// non-production tree (downgrades), the same family in real source (kept), an
+// out-of-scope SEC-* in tests (kept), and a VULN-* dependency fact in vendor
+// (kept).
+//
+// Paths avoid the default noise-dir names (test/, examples/, ...) because the
+// pre-existing GeneratedPaths noise filter already *removes* AI-*/MCP-* findings
+// there. We use docs/ and dist/ — non-production for the downgrade but not on
+// the noise-dir list — so the downgrade is what we observe, not the removal.
+func refineContextDowngradeFixture() *findings.FindingSet {
+	fs := findings.NewFindingSet()
+	// In-scope code-pattern family, non-production path -> downgrades.
+	fs.Add(findings.Finding{RuleID: "IAC-010", Severity: findings.SeverityHigh, Confidence: findings.ConfidenceHigh, Location: findings.Location{FilePath: "docs/main.tf", StartLine: 1}, Message: "iac misconfig in docs"})
+	// Same family + severity, real source -> kept.
+	fs.Add(findings.Finding{RuleID: "IAC-010", Severity: findings.SeverityHigh, Confidence: findings.ConfidenceHigh, Location: findings.Location{FilePath: "src/main.tf", StartLine: 1}, Message: "iac misconfig in source"})
+	// Out-of-scope family in a non-production tree -> kept (test secrets are real).
+	// SEC-* survives the noise-dir filter (that filter only drops AI-*/MCP-*), so
+	// tests/ is a valid place to assert SEC is neither removed nor downgraded.
+	fs.Add(findings.Finding{RuleID: "SEC-001", Severity: findings.SeverityCritical, Confidence: findings.ConfidenceHigh, Location: findings.Location{FilePath: "tests/creds_test.py", StartLine: 1}, Message: "hardcoded key in test"})
+	// Dependency fact in vendor/ -> kept (risk is a property of the package).
+	fs.Add(findings.Finding{RuleID: "VULN-001", Severity: findings.SeverityHigh, Confidence: findings.ConfidenceHigh, Location: findings.Location{FilePath: "vendor/x/pkg.json", StartLine: 1}, Message: "vulnerable dep"})
+	return fs
+}
+
+func findBy(fs *findings.FindingSet, ruleID, path string) *findings.Finding {
+	for i := range fs.Findings() {
+		f := fs.Findings()[i]
+		if f.RuleID == ruleID && f.Location.FilePath == path {
+			return &f
+		}
+	}
+	return nil
+}
+
+func TestRefineFindings_ContextDowngrade_Default(t *testing.T) {
+	t.Parallel()
+
+	fs := refineContextDowngradeFixture()
+	refineFindings(fs, &ScanConfig{}, ScanOptions{}, t.TempDir())
+
+	// IAC-010 in docs/ downgrades high->medium and records provenance.
+	ex := findBy(fs, "IAC-010", "docs/main.tf")
+	if ex == nil {
+		t.Fatal("IAC-010 in docs/ missing")
+	}
+	if ex.Severity != findings.SeverityMedium {
+		t.Errorf("docs IAC-010 severity = %q, want medium", ex.Severity)
+	}
+	if ex.Metadata["original_severity"] != "high" {
+		t.Errorf("docs IAC-010 original_severity = %q, want high", ex.Metadata["original_severity"])
+	}
+	if ex.Metadata["context"] != "non-production" {
+		t.Errorf("docs IAC-010 context = %q, want non-production", ex.Metadata["context"])
+	}
+
+	// IAC-010 in src/ is untouched — real shipping source.
+	src := findBy(fs, "IAC-010", "src/main.tf")
+	if src == nil || src.Severity != findings.SeverityHigh {
+		t.Errorf("src IAC-010 must stay high, got %+v", src)
+	}
+	if src != nil && src.Metadata["original_severity"] != "" {
+		t.Error("src IAC-010 must not carry original_severity")
+	}
+
+	// SEC-001 in tests/ is out of scope — a leaked key in a test is often real.
+	sec := findBy(fs, "SEC-001", "tests/creds_test.py")
+	if sec == nil || sec.Severity != findings.SeverityCritical {
+		t.Errorf("SEC-001 in tests must stay critical, got %+v", sec)
+	}
+
+	// VULN-001 in vendor/ is a dependency fact — not downgraded.
+	vuln := findBy(fs, "VULN-001", "vendor/x/pkg.json")
+	if vuln == nil || vuln.Severity != findings.SeverityHigh {
+		t.Errorf("VULN-001 in vendor must stay high, got %+v", vuln)
+	}
+}
+
+func TestRefineFindings_ContextDowngrade_Disabled(t *testing.T) {
+	t.Parallel()
+
+	fs := refineContextDowngradeFixture()
+	off := false
+	cfg := &ScanConfig{}
+	cfg.Scan.ContextDowngrade = &off
+	refineFindings(fs, cfg, ScanOptions{}, t.TempDir())
+
+	ex := findBy(fs, "IAC-010", "docs/main.tf")
+	if ex == nil || ex.Severity != findings.SeverityHigh {
+		t.Errorf("with context_downgrade:false, docs IAC-010 must stay high, got %+v", ex)
+	}
+	if ex != nil && ex.Metadata["original_severity"] != "" {
+		t.Error("disabled downgrade must not stamp original_severity")
 	}
 }

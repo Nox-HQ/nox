@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -135,7 +136,16 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
+		// Drop matches that fall inside an embedded data blob (a base64 SVG, a
+		// data: URI) in a source file — a 32-char run inside such a blob is never
+		// a real credential and is the dominant secret false-positive class. This
+		// only fires on lexable source (Python/JS/TS); comments and ordinary
+		// string literals (where a real hardcoded secret lives) are kept.
+		lang := lexctx.LangFromPath(artifact.Path)
 		for i := range results {
+			if inEmbeddedBlob(lang, content, &results[i]) {
+				continue
+			}
 			fs.Add(results[i])
 		}
 
@@ -148,4 +158,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+// inEmbeddedBlob reports whether a finding's location sits inside a data-blob
+// string literal in lexable source, using the finding's reported line/column.
+func inEmbeddedBlob(lang lexctx.Lang, content []byte, f *findings.Finding) bool {
+	if lang == lexctx.LangUnknown {
+		return false
+	}
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	end := lexctx.LineColToOffset(content, f.Location.EndLine, f.Location.EndColumn)
+	if end <= start {
+		end = start + 1
+	}
+	return lexctx.InDataBlob(lang, content, start, end)
 }

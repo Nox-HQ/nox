@@ -34,6 +34,25 @@ func (s Severity) IsValid() bool {
 	return false
 }
 
+// Downgraded returns the severity one level less severe (critical→high→
+// medium→low→info). Info is the floor and returns itself, so repeated
+// application is idempotent at the bottom. An unrecognized severity is
+// returned unchanged so callers never fabricate an invalid level.
+func (s Severity) Downgraded() Severity {
+	switch s {
+	case SeverityCritical:
+		return SeverityHigh
+	case SeverityHigh:
+		return SeverityMedium
+	case SeverityMedium:
+		return SeverityLow
+	case SeverityLow, SeverityInfo:
+		return SeverityInfo
+	default:
+		return s
+	}
+}
+
 // Status indicates the disposition of a finding relative to baselines and
 // inline suppressions.
 type Status string
@@ -471,6 +490,49 @@ func (fs *FindingSet) OverrideSeverityByRulePatternsAndPaths(rulePatterns, pathP
 			finding.Severity = severity
 		}
 	}
+}
+
+// DowngradeByRulePatternsAndPath lowers by one severity level (critical→high→
+// medium→low→info) every finding whose RuleID matches any of rulePatterns AND
+// whose FilePath satisfies pathMatch. For each finding it downgrades it records
+// the pre-downgrade severity in Metadata["original_severity"] and sets
+// Metadata["context"]=contextLabel so the change is auditable in reports and
+// diffs. It returns the number of findings downgraded.
+//
+// The path predicate is injected rather than hard-coded so the caller owns the
+// (context-specific, case-insensitive, **-spanning) glob semantics; this method
+// stays a pure severity-and-metadata transform.
+//
+// A finding already sitting at info stays at info (Downgraded is a no-op there),
+// but its audit metadata is still stamped so an operator can see the context
+// classification even when no numeric change occurred. Findings whose
+// original_severity is already recorded are skipped, keeping the operation
+// idempotent across repeated refinement passes.
+func (fs *FindingSet) DowngradeByRulePatternsAndPath(rulePatterns []string, pathMatch func(string) bool, contextLabel string) int {
+	if len(rulePatterns) == 0 || pathMatch == nil {
+		return 0
+	}
+	var count int
+	for i := range fs.items {
+		finding := &fs.items[i]
+		if _, already := finding.Metadata["original_severity"]; already {
+			continue
+		}
+		if !matchRulePatterns(finding.RuleID, rulePatterns) {
+			continue
+		}
+		if !pathMatch(finding.Location.FilePath) {
+			continue
+		}
+		if finding.Metadata == nil {
+			finding.Metadata = make(map[string]string, 2)
+		}
+		finding.Metadata["original_severity"] = string(finding.Severity)
+		finding.Metadata["context"] = contextLabel
+		finding.Severity = finding.Severity.Downgraded()
+		count++
+	}
+	return count
 }
 
 func matchRulePatterns(ruleID string, patterns []string) bool {

@@ -133,6 +133,37 @@ func TestGenerateOfflineAttestation(t *testing.T) {
 	}
 }
 
+func TestGenerateSASTLanguagesMeta(t *testing.T) {
+	// Default: no profile set, so the field is omitted from the artifact rather
+	// than emitting a null/empty object.
+	def, err := NewJSONReporter("1.0.0").Generate(sampleFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if bytes.Contains(def, []byte("sast_languages")) {
+		t.Errorf("empty profile must be omitted from meta; got: %s", def)
+	}
+
+	// With a resolved profile, the depth strategy is recorded so a reviewer can
+	// audit which languages were scanned at which depth straight from the report.
+	r := NewJSONReporter("1.0.0")
+	r.SASTLanguages = map[string]string{"python": "deep", "go": "standard", "rust": "off"}
+	data, err := r.Generate(sampleFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	var report JSONReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if report.Meta.SASTLanguages["python"] != "deep" {
+		t.Errorf("meta sast_languages[python] = %q, want deep", report.Meta.SASTLanguages["python"])
+	}
+	if report.Meta.SASTLanguages["rust"] != "off" {
+		t.Errorf("meta sast_languages[rust] = %q, want off", report.Meta.SASTLanguages["rust"])
+	}
+}
+
 func TestGenerateSortsFindingsDeterministically(t *testing.T) {
 	r := NewJSONReporter("0.1.0")
 	// Findings are added in reverse order (rule-002 before rule-001).

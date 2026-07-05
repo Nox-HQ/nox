@@ -60,6 +60,11 @@ type ScanResult struct {
 	Rules        *rules.RuleSet
 	Graphs       []graph.Graph         // relationship graphs from plugins
 	Enrichments  []findings.Enrichment // finding annotations from plugins
+	// SASTProfile records the resolved per-language SAST depth applied to this
+	// scan (language name → deep|standard|off). It is the auditable answer to
+	// "what depth did this scan give each language?" and is copied into the
+	// report meta so the decision is visible in the artifact, not just in config.
+	SASTProfile map[string]string
 }
 
 // ScanOptions holds optional parameters for RunScanWithOptions. The zero
@@ -149,11 +154,24 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Fail loudly on an invalid SAST depth (e.g. a typo) instead of silently
+	// defaulting — a misconfigured `off` that scanned anyway would be a silent
+	// security surprise.
+	if err := cfg.Scan.SAST.Validate(); err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
 	// Stage 1: Discover artifacts.
 	artifacts, err := discoverArtifacts(target, cfg, opts)
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply the per-language SAST profile: source files of a language set to
+	// "off" are dropped here, before any analyzer sees them, so they contribute
+	// no findings. Non-source artifacts always pass through. This runs on the
+	// discovered set (deterministic, input order preserved).
+	artifacts = FilterArtifactsByLanguageProfile(artifacts, cfg.Scan.SAST)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -420,6 +438,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		AIInventory:  aiInventory,
 		PolicyResult: policyResult,
 		Rules:        allRules,
+		SASTProfile:  cfg.Scan.SAST.ResolvedProfile(),
 	}, nil
 }
 
@@ -575,6 +594,26 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		if len(cs.Rules) > 0 && len(cs.Paths) > 0 {
 			allFindings.OverrideSeverityByRulePatternsAndPaths(cs.Rules, cs.Paths, findings.Severity(cs.Severity))
 		}
+	}
+
+	// Context-gated SAST severity: downgrade code-pattern findings located in
+	// non-production trees (tests, examples, docs, vendored/generated/minified
+	// code) by one level. The deterministic, path-based analogue of Snyk's
+	// reachability gating — the same finding is far less actionable in throwaway
+	// code than in shipping source. Scoped to code-pattern families only (never
+	// SEC-*/VULN-*/CONT-*/LIC-, see ContextDowngradeRulePatterns) and gated by
+	// scan.context_downgrade (default on). Runs before dedup/sort; it changes
+	// only Severity + audit Metadata, never fingerprints or ordering, so byte
+	// output stays stable apart from the intended severity change. It also runs
+	// AFTER user conditional_severity so an explicit override is the source of
+	// truth and is never silently re-downgraded (that override wins).
+	if cfg.Scan.ContextDowngradeEnabled() {
+		globs := NonProductionPathGlobs()
+		allFindings.DowngradeByRulePatternsAndPath(
+			ContextDowngradeRulePatterns(),
+			func(p string) bool { return MatchesNonProductionPath(p, globs) },
+			"non-production",
+		)
 	}
 
 	allFindings.Deduplicate()
