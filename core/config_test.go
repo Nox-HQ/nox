@@ -455,3 +455,104 @@ func TestResolveNoiseDirs(t *testing.T) {
 		t.Errorf("override_dirs should replace defaults, got %v", ovr)
 	}
 }
+
+func TestMatchesNonProductionPath(t *testing.T) {
+	t.Parallel()
+
+	globs := NonProductionPathGlobs()
+	cases := []struct {
+		path string
+		want bool
+	}{
+		// ** spans zero or more segments, at any depth.
+		{"test/a.py", true},
+		{"src/test/a.py", true},
+		{"a/b/test/c/d.py", true},
+		{"tests/foo.go", true},
+		{"pkg/tests/foo.go", true},
+		{"examples/foo.py", true},
+		{"example/foo.py", true},
+		{"deep/nested/examples/x/y.py", true},
+		{"docs/guide.md", true},
+		{"vendor/github.com/x/y.go", true},
+		{"node_modules/react/index.js", true},
+		{"web/dist/app.js", true},
+		{"out/build/thing.o", true},
+		{"pkg/generated/api.go", true},
+		{"src/__mocks__/fs.js", true},
+		{"testdata/fixture.json", true},
+		{"pkg/testdata/x.bin", true},
+		// Single-segment / basename globs.
+		{"foo_test.go", true},
+		{"pkg/handler_test.go", true},
+		{"assets/jquery.min.js", true},
+		{"a/b/c/vendor.min.js", true},
+		// Case-insensitive on segments.
+		{"Tests/Foo.go", true},
+		{"src/TEST/x.py", true},
+		{"Examples/Foo.py", true},
+		// Production paths — must NOT match.
+		{"src/foo.py", false},
+		{"internal/app/handler.go", false},
+		{"main.go", false},
+		{"cmd/nox/main.go", false},
+		// "test" only matches as a whole segment, not a substring.
+		{"src/latest/x.py", false},
+		{"src/contest.go", false},
+	}
+	for _, tc := range cases {
+		if got := MatchesNonProductionPath(tc.path, globs); got != tc.want {
+			t.Errorf("MatchesNonProductionPath(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestMatchesNonProductionPath_Empty(t *testing.T) {
+	t.Parallel()
+
+	if MatchesNonProductionPath("", NonProductionPathGlobs()) {
+		t.Error("empty path must not match")
+	}
+	if MatchesNonProductionPath("test/a.py", nil) {
+		t.Error("empty glob set must not match")
+	}
+}
+
+func TestContextDowngradeEnabled_DefaultsOn(t *testing.T) {
+	t.Parallel()
+
+	var s ScanSettings // ContextDowngrade nil
+	if !s.ContextDowngradeEnabled() {
+		t.Error("unset context_downgrade must default to enabled")
+	}
+	off := false
+	s.ContextDowngrade = &off
+	if s.ContextDowngradeEnabled() {
+		t.Error("context_downgrade:false must disable")
+	}
+	on := true
+	s.ContextDowngrade = &on
+	if !s.ContextDowngradeEnabled() {
+		t.Error("context_downgrade:true must enable")
+	}
+}
+
+func TestLoadScanConfig_ContextDowngrade(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	yaml := "scan:\n  context_downgrade: false\n"
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadScanConfig(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Scan.ContextDowngrade == nil {
+		t.Fatal("expected context_downgrade to be parsed, got nil")
+	}
+	if cfg.Scan.ContextDowngradeEnabled() {
+		t.Error("context_downgrade:false must resolve to disabled")
+	}
+}

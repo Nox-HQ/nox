@@ -745,6 +745,40 @@ scan:
 Tune precedence: `disabled` wins; otherwise `override` (if set) replaces the
 defaults; otherwise the defaults plus `extend` apply.
 
+### Context-gated severity (non-production downgrade)
+
+A code-pattern finding in test, example, docs, or vendored/generated code is far
+less actionable than the same finding in shipping source. Nox applies the
+deterministic, path-based analogue of dependency reachability gating: it
+**downgrades by one severity level** (critical→high→medium→low→info) any
+code-pattern finding whose file sits in a non-production tree.
+
+This is **on by default**. To turn it off:
+
+```yaml
+scan:
+  context_downgrade: false
+```
+
+Scope — non-production paths (case-insensitive, `**` spans any depth):
+`**/test/**`, `**/tests/**`, `*_test.*`, `**/testdata/**`, `**/example/**`,
+`**/examples/**`, `**/docs/**`, `**/vendor/**`, `**/node_modules/**`,
+`**/*.min.js`, `**/dist/**`, `**/build/**`, `**/generated/**`, `**/__mocks__/**`.
+
+Scope — rule families downgraded: the code-pattern families whose actionability
+depends on where the code ships — `AI-*`, `MCP-*`, `AGENT-*`, `IAC-*`, `TAINT-*`,
+`SLOP-*`, `VARIANT-*`. Deliberately **excluded**:
+
+- `SEC-*` — a secret committed in a test fixture is frequently a real, leaked
+  credential; it is graded by the secret, not by the file.
+- `VULN-*`, `CONT-*`, `LIC-` — dependency/container/license facts. The risk is a
+  property of the package, not of the manifest's location.
+
+Downgraded findings are auditable: the original level is preserved in
+`original_severity` and `context: non-production` is recorded in the finding
+metadata. An explicit `conditional_severity` override always wins — it runs
+first and is never re-downgraded.
+
 ### .noxignore
 
 Create a `.noxignore` file (similar to `.gitignore`) for additional exclusions:
