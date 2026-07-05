@@ -11,6 +11,25 @@ import (
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 )
 
+// Grounding contract.
+//
+// The strategic design is "deterministic-first, LLM-second": nox's core finds
+// and GROUNDS every candidate deterministically (rule ID, file, line,
+// fingerprint). This plugin only asks the LLM to CONFIRM/EXPLAIN a candidate
+// that already exists — never to discover new ones.
+//
+// Two properties enforce that the LLM can never invent a finding location:
+//
+//  1. The prompt (buildPrompt) hands the model the exact, immutable rule ID,
+//     file:line, and code snippet and instructs it to judge ONLY that finding.
+//  2. parseVerdict extracts a disposition + rationale ONLY. It never reads a
+//     file path or line from the model's reply. The resulting Verdict carries
+//     the ORIGINAL finding's fingerprint (copied from the input finding, not
+//     from the model), and emitVerdicts anchors the enrichment to that
+//     fingerprint. A model that "hallucinates" a different file/line in its
+//     prose therefore cannot create, move, or emit any finding — the only
+//     observable effect of triage is an enrichment on the pre-existing finding.
+
 // Disposition is the LLM's verdict on whether a finding is a true positive.
 type Disposition string
 
@@ -38,10 +57,29 @@ type Verdict struct {
 	Rationale   string
 }
 
-// TriageOptions bounds and configures a triage run.
+// TriageOptions bounds and configures a triage run. The routing gates
+// (MinSeverity, SkipHighConfidence, OnlyRules, SkipRules) exist so an operator
+// can spend LLM tokens only on the residual that actually needs a second
+// opinion — deterministic-high-confidence findings are already trustworthy.
 type TriageOptions struct {
 	MaxFindings int      // 0 = unlimited
 	MinSeverity Severity // findings below this are skipped
+
+	// SkipHighConfidence, when true, routes only low/medium-confidence
+	// "residual" to the LLM. ConfidenceHigh findings are already trustworthy
+	// deterministic hits, so re-judging them wastes tokens without adding
+	// signal. Findings with unspecified confidence are treated as residual
+	// (judged) so an unset field never silently drops coverage.
+	SkipHighConfidence bool
+
+	// OnlyRules, if non-empty, restricts triage to findings whose rule ID
+	// matches one of these patterns (glob or prefix — see ruleMatches). Use it
+	// to point the LLM at exactly the noisy families (e.g. "SECRET-*").
+	OnlyRules []string
+
+	// SkipRules excludes findings whose rule ID matches one of these patterns.
+	// SkipRules is applied after OnlyRules, so an exclusion always wins.
+	SkipRules []string
 }
 
 // Severity ordering for the min-severity gate.
@@ -70,18 +108,105 @@ func severityRank(s pluginv1.Severity) Severity {
 	}
 }
 
+// isHighConfidence reports whether a finding is a deterministic high-confidence
+// hit. Only CONFIDENCE_HIGH qualifies; unspecified/medium/low are residual.
+func isHighConfidence(c pluginv1.Confidence) bool {
+	return c == pluginv1.Confidence_CONFIDENCE_HIGH
+}
+
+// ruleMatches reports whether ruleID matches pattern. A pattern ending in "*"
+// is a prefix match ("SECRET-*" matches "SECRET-ENTROPY"); otherwise it is an
+// exact, case-sensitive rule ID. filepath.Match handles richer glob syntax
+// ("SEC-00?"); a malformed pattern degrades to a literal compare rather than
+// erroring, so a bad filter never aborts the run.
+func ruleMatches(ruleID, pattern string) bool {
+	if pattern == "" {
+		return false
+	}
+	if strings.HasSuffix(pattern, "*") {
+		if strings.HasPrefix(ruleID, strings.TrimSuffix(pattern, "*")) {
+			return true
+		}
+	}
+	if ok, err := filepath.Match(pattern, ruleID); err == nil && ok {
+		return true
+	}
+	return ruleID == pattern
+}
+
+// matchesAny reports whether ruleID matches any pattern in patterns.
+func matchesAny(ruleID string, patterns []string) bool {
+	for _, p := range patterns {
+		if ruleMatches(ruleID, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldTriage applies the routing gates to a single finding and reports
+// whether it should be sent to the LLM. It is the single source of truth for
+// "does this finding need a second opinion", kept pure so it is table-testable.
+func shouldTriage(f *pluginv1.Finding, opts TriageOptions) bool {
+	if severityRank(f.GetSeverity()) < opts.MinSeverity {
+		return false
+	}
+	if opts.SkipHighConfidence && isHighConfidence(f.GetConfidence()) {
+		return false
+	}
+	ruleID := f.GetRuleId()
+	if len(opts.OnlyRules) > 0 && !matchesAny(ruleID, opts.OnlyRules) {
+		return false
+	}
+	if matchesAny(ruleID, opts.SkipRules) {
+		return false
+	}
+	return true
+}
+
+// dedupeFindings collapses findings that ask the LLM the same question twice.
+// Two findings are duplicates when they share a fingerprint, or (lacking a
+// fingerprint) the same rule ID + file:line. Deterministically pre-collapsing
+// them before any LLM call saves tokens and makes the run more reproducible —
+// the LLM sees each distinct candidate exactly once, in first-seen order. The
+// input slice is not mutated.
+func dedupeFindings(findings []*pluginv1.Finding) []*pluginv1.Finding {
+	seen := make(map[string]struct{}, len(findings))
+	out := make([]*pluginv1.Finding, 0, len(findings))
+	for _, f := range findings {
+		key := f.GetFingerprint()
+		if key == "" {
+			loc := f.GetLocation()
+			key = fmt.Sprintf("%s\x00%s\x00%d", f.GetRuleId(), loc.GetFilePath(), loc.GetStartLine())
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return out
+}
+
 // triageFindings asks the LLM to judge each finding as a true or false positive,
 // returning one verdict per judged finding. It is pure with respect to I/O: the
 // LLM client and snippet reader are injected, so the same logic runs in tests
 // with a deterministic mock. It never mutates the findings.
 func triageFindings(ctx context.Context, client LLMClient, read SnippetReader, findings []*pluginv1.Finding, opts TriageOptions) ([]Verdict, error) {
+	// Deterministic pre-dedup: collapse duplicate candidates before spending a
+	// single token, so the LLM is never asked the same question twice.
+	findings = dedupeFindings(findings)
+
 	var verdicts []Verdict
 	judged := 0
 	for _, f := range findings {
 		if opts.MaxFindings > 0 && judged >= opts.MaxFindings {
 			break
 		}
-		if severityRank(f.GetSeverity()) < opts.MinSeverity {
+		// Residual-only + confidence-gated routing: skip findings that don't
+		// need an LLM (below min severity, already high-confidence, or filtered
+		// out by rule).
+		if !shouldTriage(f, opts) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -122,11 +247,20 @@ func triageFindings(ctx context.Context, client LLMClient, read SnippetReader, f
 	return verdicts, nil
 }
 
-// buildPrompt renders a deterministic triage prompt for one finding. It asks for
-// a strict, machine-parseable first line so parseVerdict is unambiguous.
+// buildPrompt renders a deterministic triage prompt for one finding. It states
+// the grounding contract explicitly — the model judges ONLY the given finding
+// at its given location and must not report any new finding or location — and
+// asks for a strict, machine-parseable first line so parseVerdict is
+// unambiguous. The rule ID, file:line, and snippet are passed as immutable
+// context; nothing in the reply is ever used to derive a finding location.
 func buildPrompt(f *pluginv1.Finding, snippet string) string {
 	var b strings.Builder
-	b.WriteString("You are a security triage assistant. Decide whether the following static-analysis finding is a TRUE POSITIVE (a real, exploitable issue) or a FALSE POSITIVE (safe in context).\n\n")
+	b.WriteString("You are a security triage assistant. You are given ONE static-analysis finding, already located by a deterministic scanner. Your ONLY job is to judge whether THIS specific finding, at THIS exact location, is a TRUE POSITIVE (a real, exploitable issue) or a FALSE POSITIVE (safe in context).\n\n")
+	b.WriteString("Rules you must follow:\n")
+	b.WriteString("- Judge only the finding below. Do NOT report new findings, new issues, or any other file or line.\n")
+	b.WriteString("- Do NOT propose a different location; the location is fixed and authoritative.\n")
+	b.WriteString("- If the given snippet is insufficient to decide, answer UNCERTAIN.\n\n")
+	b.WriteString("Finding under review (immutable):\n")
 	b.WriteString("Rule: " + f.GetRuleId() + "\n")
 	b.WriteString("Severity: " + f.GetSeverity().String() + "\n")
 	b.WriteString("Message: " + f.GetMessage() + "\n")
@@ -134,17 +268,21 @@ func buildPrompt(f *pluginv1.Finding, snippet string) string {
 		fmt.Fprintf(&b, "Location: %s:%d\n", loc.GetFilePath(), loc.GetStartLine())
 	}
 	if snippet != "" {
-		b.WriteString("\nCode context:\n```\n")
+		b.WriteString("\nCode context (the given location):\n```\n")
 		b.WriteString(snippet)
 		b.WriteString("\n```\n")
 	}
-	b.WriteString("\nAnswer with exactly one of TRUE_POSITIVE, FALSE_POSITIVE, or UNCERTAIN on the first line, then one sentence of justification on the second line.")
+	b.WriteString("\nAnswer with exactly one of TRUE_POSITIVE, FALSE_POSITIVE, or UNCERTAIN on the first line, then one sentence of justification about THIS finding on the second line.")
 	return b.String()
 }
 
-// parseVerdict extracts the disposition and rationale from the model's reply.
-// It is lenient about surrounding formatting but keys off the first recognized
-// token so an unexpected reply falls back to UNCERTAIN rather than mislabeling.
+// parseVerdict extracts the disposition and rationale from the model's reply,
+// and NOTHING ELSE. It deliberately never reads a file path or line number from
+// the reply: the finding's location is fixed by the deterministic scanner, so a
+// hallucinated location in the model's prose is inert — it can only ever land in
+// the free-text rationale, never in a finding. It is lenient about surrounding
+// formatting but keys off the first recognized token so an unexpected reply
+// falls back to UNCERTAIN rather than mislabeling.
 func parseVerdict(out string) (disposition Disposition, rationale string) {
 	upper := strings.ToUpper(out)
 	disposition = DispUncertain

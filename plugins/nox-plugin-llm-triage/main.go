@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/sdk"
@@ -78,8 +79,11 @@ func handleTriage(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToo
 	read := fileSnippetReader(workspaceRoot, 6)
 
 	verdicts, err := triageFindings(ctx, client, read, req.Findings(), TriageOptions{
-		MaxFindings: maxFindings,
-		MinSeverity: minSeverityFromInput(req.InputString("min_severity")),
+		MaxFindings:        maxFindings,
+		MinSeverity:        minSeverityFromInput(req.InputString("min_severity")),
+		SkipHighConfidence: boolInput(req.Input, "skip_high_confidence", true),
+		OnlyRules:          listInput(req.Input, "only_rules"),
+		SkipRules:          listInput(req.Input, "skip_rules"),
 	})
 	if err != nil {
 		return resp.Build(), err
@@ -116,6 +120,44 @@ func triageBody(v *Verdict) string {
 		return "LLM verdict: **" + string(v.Disposition) + "**"
 	}
 	return "LLM verdict: **" + string(v.Disposition) + "** — " + v.Rationale
+}
+
+// boolInput reads a boolean tool parameter, returning def when the key is
+// absent so a defaulted-on gate (like skip_high_confidence) stays on unless the
+// operator explicitly sets it false.
+func boolInput(input map[string]any, key string, def bool) bool {
+	if v, ok := input[key].(bool); ok {
+		return v
+	}
+	return def
+}
+
+// listInput reads a rule-pattern list parameter. It accepts either a JSON array
+// of strings or a single comma-separated string (both are common in tool
+// configs), returning nil when absent or empty so an unset filter is a no-op.
+func listInput(input map[string]any, key string) []string {
+	raw, ok := input[key]
+	if !ok {
+		return nil
+	}
+	var out []string
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				if s = strings.TrimSpace(s); s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+	case string:
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }
 
 func minSeverityFromInput(s string) Severity {
