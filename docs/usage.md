@@ -83,6 +83,18 @@ nox scan . -q
 
 # Verbose mode for debugging
 nox scan . -v
+
+# Scan a single file (fast pre-commit hooks, editor integrations)
+nox scan path/to/app.py
+
+# Scan only git-tracked files (exclude untracked scratch/build files)
+nox scan . --tracked-only
+
+# Zero-network guarantee — records "offline": true in findings.json meta
+nox scan . --offline
+
+# Order findings by priority (severity, then reachability) instead of rule/path
+nox scan . --sort priority
 ```
 
 The scan pipeline:
@@ -282,6 +294,9 @@ nox baseline <write|update|show> [path] [flags]
 **Subcommands:**
 
 ```bash
+# One-command adoption: record existing debt + print the gate-the-change policy
+nox baseline init
+
 # Write a baseline from all current findings
 nox baseline write .
 
@@ -422,6 +437,46 @@ nox completion fish | source
 # PowerShell
 nox completion powershell | Out-String | Invoke-Expression
 ```
+
+### lsp
+
+Run the nox Language Server on stdio (JSON-RPC 2.0). Editors connect to it to
+surface findings as inline diagnostics — squiggles, hover, the Problems panel —
+on open and save. Deterministic and offline: it runs the local `nox` binary; no
+code leaves the machine.
+
+```bash
+# Spoken by the editor extension over stdio; not run by hand.
+nox lsp
+```
+
+The VS Code extension in [`editors/vscode`](../editors/vscode) is a thin client
+over it (`npm install && npm run compile`, then F5 in the Extension Development
+Host). A JetBrains plugin is the same shape against the same server.
+
+### fix
+
+Generate remediations from a prior scan's `findings.json`.
+
+```bash
+# Dependency upgrades for VULN findings (applies unless --dry-run)
+nox fix
+
+# SHA-pin GitHub Actions `uses:` refs (needs GITHUB_TOKEN)
+nox fix --actions
+
+# Deterministic patches for mechanical IaC misconfigs — preview only by default
+nox fix --content
+
+# ...apply them
+nox fix --content --write
+```
+
+`--content` rewrites the flagged line to its one unambiguous secure value
+(Kubernetes hardening flips, Terraform encryption/HTTPS/ACL, Dockerfile
+`ADD`→`COPY`, …). It is template-free and uses no LLM — rules that need a value
+choice (a UID, a pinned digest, an allowlist, a rotated secret) are never
+touched. It previews the diff and applies nothing without `--write`.
 
 ### serve
 
