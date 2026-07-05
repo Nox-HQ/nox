@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,6 +13,12 @@ import (
 // The CLI package lives in ./cli, so the corpus is one directory up.
 func corpusPath() string {
 	return filepath.Join("..", "testdata", "precision-corpus")
+}
+
+// suitePath resolves the honest measurement corpus (the one with real FPs/FNs)
+// relative to the repo root.
+func suitePath() string {
+	return filepath.Join("..", "testdata", "precision-suite")
 }
 
 // TestPrecisionCorpusBaseline is a guard test: the shipped corpus is curated to
@@ -49,6 +57,106 @@ func TestPrecisionCorpusBaseline(t *testing.T) {
 	}
 }
 
+// TestPrecisionSuiteBaseline is the ratchet: it scans the honest measurement
+// suite, loads the committed baseline snapshot, and fails if any gated metric
+// regressed (precision/recall/F1 dropped, or FP / findings-per-issue rose).
+//
+// Unlike TestPrecisionCorpusBaseline (which demands a perfect 1.0 on a curated
+// fixture), this suite deliberately scores below 1.0 — it measures nox against
+// ground truth so real over-firing and recall gaps show up as a number. Pinning
+// that number here means precision can no longer silently regress: a rule change
+// that makes the suite noisier fails CI. When the suite legitimately improves,
+// this test reports the improvement and tells you to refresh baseline.json.
+func TestPrecisionSuiteBaseline(t *testing.T) {
+	dir := suitePath()
+
+	expectations, err := bench.ParseCorpus(dir)
+	if err != nil {
+		t.Fatalf("ParseCorpus(%s): %v", dir, err)
+	}
+	if len(expectations) == 0 {
+		t.Fatal("suite has no expectations; a labeled corpus must declare some")
+	}
+
+	scanFindings, err := scanCorpusFindings(dir)
+	if err != nil {
+		t.Fatalf("scanCorpusFindings(%s): %v", dir, err)
+	}
+
+	report := bench.Score(scanFindings, expectations)
+	current := bench.BaselineFromReport(&report)
+
+	base := loadBaseline(t, filepath.Join(dir, "baseline.json"))
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		for _, r := range regressions {
+			t.Errorf("suite regressed: %s", r.String())
+		}
+		t.Fatalf("precision suite regressed vs baseline.json; investigate the change or, if intended, "+
+			"regenerate the snapshot with `nox bench --precision testdata/precision-suite "+
+			"--baseline testdata/precision-suite/baseline.json` after deleting it.\n%s",
+			renderPrecisionTable(dir, &report))
+	}
+
+	if bench.Improved(base, current) {
+		t.Logf("precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f); "+
+			"refresh testdata/precision-suite/baseline.json to lock in the gain",
+			base.Precision, current.Precision, base.FP, current.FP,
+			base.FindingsPerIssue, current.FindingsPerIssue)
+	}
+}
+
+// TestBaselineGateFlow exercises the write -> compare -> regress lifecycle of
+// the --baseline gate against the curated corpus (whose score is stable at
+// 1.0). First run bootstraps the snapshot and passes; a re-run against the
+// unchanged snapshot passes; a tampered snapshot demanding a lower FP than the
+// corpus can deliver forces a regression exit.
+func TestBaselineGateFlow(t *testing.T) {
+	dir := corpusPath()
+	baseline := filepath.Join(t.TempDir(), "baseline.json")
+
+	// Absent -> written, exit 0.
+	if got := run([]string{"bench", "--precision", dir, "--baseline", baseline}); got != 0 {
+		t.Fatalf("first run (write baseline) = %d, want 0", got)
+	}
+	if _, err := os.Stat(baseline); err != nil {
+		t.Fatalf("baseline was not written: %v", err)
+	}
+
+	// Present and matching -> exit 0.
+	if got := run([]string{"bench", "--precision", dir, "--baseline", baseline}); got != 0 {
+		t.Fatalf("second run (matching baseline) = %d, want 0", got)
+	}
+
+	// Tamper: demand precision higher than the corpus can now deliver so the
+	// gate must fail.
+	tampered := bench.Baseline{Precision: 1.0, Recall: 1.0, F1: 1.0, FP: -1, FindingsPerIssue: 0}
+	data, err := json.MarshalIndent(tampered, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal tampered baseline: %v", err)
+	}
+	if err := os.WriteFile(baseline, data, 0o600); err != nil {
+		t.Fatalf("write tampered baseline: %v", err)
+	}
+	if got := run([]string{"bench", "--precision", dir, "--baseline", baseline}); got != 1 {
+		t.Fatalf("third run (regressed baseline) = %d, want 1", got)
+	}
+}
+
+// loadBaseline reads and parses a committed baseline snapshot for a test.
+func loadBaseline(t *testing.T, path string) bench.Baseline {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // test-controlled path
+	if err != nil {
+		t.Fatalf("reading baseline %s: %v", path, err)
+	}
+	var b bench.Baseline
+	if err := json.Unmarshal(data, &b); err != nil {
+		t.Fatalf("parsing baseline %s: %v", path, err)
+	}
+	return b
+}
+
 // TestRunBenchPrecisionExitCodes exercises the CLI entry point end to end,
 // including the --min-precision gate.
 func TestRunBenchPrecisionExitCodes(t *testing.T) {
@@ -65,6 +173,7 @@ func TestRunBenchPrecisionExitCodes(t *testing.T) {
 		{"gate passes at achievable threshold", []string{"bench", "--precision", dir, "--min-precision", "0.9"}, 0},
 		{"gate fails at impossible threshold", []string{"bench", "--precision", dir, "--min-precision", "1.1"}, 1},
 		{"missing corpus errors", []string{"bench", "--precision", filepath.Join(t.TempDir(), "nope")}, 2},
+		{"baseline absent is written and passes", []string{"bench", "--precision", dir, "--baseline", filepath.Join(t.TempDir(), "b.json")}, 0},
 	}
 
 	for _, tt := range tests {

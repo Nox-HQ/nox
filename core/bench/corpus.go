@@ -30,6 +30,16 @@ var docExtensions = map[string]bool{
 	".txt":      true,
 }
 
+// IsDocFile reports whether a path is a documentation file (by extension) that
+// the corpus treats as prose, not a sample. ParseCorpus already skips these when
+// gathering expectations; the scanner side uses this to drop findings on doc
+// files so a README explaining the annotation format cannot score as a false
+// positive. Exported so the CLI's scan path can apply the same rule the corpus
+// parser does, keeping both sides consistent.
+func IsDocFile(path string) bool {
+	return docExtensions[strings.ToLower(filepath.Ext(path))]
+}
+
 // ParseCorpus walks a labeled-corpus directory and returns every declared
 // expectation. Each source file is read line by line; any line carrying a
 // `nox-expect: <RuleID>` annotation yields one Expectation per listed rule,

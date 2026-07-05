@@ -21,6 +21,7 @@ package bench
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -90,9 +91,26 @@ func (m *RuleMetrics) F1() float64 {
 // either the findings or the expectations, plus an Overall roll-up. Rules is
 // sorted worst-precision-first (ties broken by rule ID) so the CLI can render
 // the rules most in need of attention at the top without re-sorting.
+//
+// Density carries the over-firing view of the same findings (see density.go):
+// per-rule precision cannot see that one issue tripped seven rules, so Density
+// re-slices by issue location to make that inflation measurable. Families groups
+// the per-rule metrics by rule-ID prefix (SEC-, AI-, TAINT-, ...) so the report
+// can surface which whole rule family is the worst precision offender.
 type Report struct {
-	Rules   []RuleMetrics `json:"rules"`
-	Overall RuleMetrics   `json:"overall"`
+	Rules    []RuleMetrics   `json:"rules"`
+	Overall  RuleMetrics     `json:"overall"`
+	Density  DensityReport   `json:"density"`
+	Families []FamilyMetrics `json:"families"`
+}
+
+// FamilyMetrics rolls the per-rule confusion counts up to a rule-ID family (the
+// prefix before the first '-', e.g. SEC, AI, TAINT). Over-firing tends to
+// cluster within a family — one secret trips many SEC- rules — so the family
+// view names the culprit group directly and is sorted worst-precision-first.
+type FamilyMetrics struct {
+	Family string `json:"family"`
+	RuleMetrics
 }
 
 // expectationKey identifies a distinct ground-truth slot. Two expectations
@@ -134,6 +152,11 @@ func Score(scanFindings []findings.Finding, expectations []Expectation) Report {
 	seen := map[string]struct{}{}
 	seenRule := func(id string) { seen[id] = struct{}{} }
 
+	// fileFP tracks false positives per file so the density view (density.go)
+	// and the per-rule view agree on the FP total by construction rather than
+	// recomputing it from a different code path.
+	fileFP := map[string]int{}
+
 	for _, e := range expectations {
 		seenRule(e.RuleID)
 	}
@@ -148,6 +171,7 @@ func Score(scanFindings []findings.Finding, expectations []Expectation) Report {
 			continue
 		}
 		fp[f.RuleID]++
+		fileFP[f.Location.FilePath]++
 	}
 
 	// Anything still remaining is a false negative.
@@ -169,7 +193,60 @@ func Score(scanFindings []findings.Finding, expectations []Expectation) Report {
 	fillDerived(&report.Overall)
 
 	sortWorstPrecisionFirst(report.Rules)
+	report.Families = rollUpFamilies(report.Rules)
+	report.Density = scoreDensity(scanFindings, expectations, fileFP)
 	return report
+}
+
+// rollUpFamilies groups per-rule metrics by family prefix (the text before the
+// first '-') and returns the aggregated confusion counts per family, sorted
+// worst-precision-first. A rule ID with no '-' is its own family. This exists so
+// the report can point at a whole misbehaving family ("SEC- over-fires") rather
+// than making a human eyeball twenty individual SEC- rows.
+func rollUpFamilies(rules []RuleMetrics) []FamilyMetrics {
+	byFamily := map[string]*FamilyMetrics{}
+	var order []string
+	for i := range rules {
+		r := &rules[i]
+		fam := familyOf(r.RuleID)
+		fm, ok := byFamily[fam]
+		if !ok {
+			fm = &FamilyMetrics{Family: fam, RuleMetrics: RuleMetrics{RuleID: fam}}
+			byFamily[fam] = fm
+			order = append(order, fam)
+		}
+		fm.TP += r.TP
+		fm.FP += r.FP
+		fm.FN += r.FN
+	}
+
+	out := make([]FamilyMetrics, 0, len(order))
+	for _, fam := range order {
+		fm := byFamily[fam]
+		fillDerived(&fm.RuleMetrics)
+		out = append(out, *fm)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := &out[i], &out[j]
+		pa, pb := a.Precision(), b.Precision()
+		if pa != pb {
+			return pa < pb
+		}
+		if a.FP != b.FP {
+			return a.FP > b.FP
+		}
+		return a.Family < b.Family
+	})
+	return out
+}
+
+// familyOf returns the rule-ID family: the substring before the first '-'. IDs
+// without a '-' are their own family so nothing is silently bucketed together.
+func familyOf(ruleID string) string {
+	if i := strings.IndexByte(ruleID, '-'); i > 0 {
+		return ruleID[:i]
+	}
+	return ruleID
 }
 
 // matchExpectation finds an unsatisfied expectation that the finding satisfies:
