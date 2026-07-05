@@ -8,6 +8,7 @@ scan:
     # (hardcoded secret, eval injection, prompt concat). The precision harness
     # scans this dir explicitly; the default self-scan must not flag them.
     - "testdata/precision-corpus/"
+    - "testdata/precision-suite/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
