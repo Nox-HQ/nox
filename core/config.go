@@ -128,6 +128,21 @@ type ScanSettings struct {
 	OSV                  OSVConfig               `yaml:"osv"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
+	SAST                 SASTConfig              `yaml:"sast"`
+}
+
+// SASTConfig declares the per-language SAST depth strategy. nox targets ~15
+// languages but shouldn't invest equal analysis depth everywhere: Python and
+// JS/TS — where AI apps and the worst false positives concentrate — earn deep
+// analysis; the rest get standard pattern coverage; a repo can turn a language
+// off entirely.
+//
+// Languages maps a canonical language name (see LanguageForExtension) to a
+// depth level: "deep" | "standard" | "off". Unlisted languages fall back to
+// DefaultLanguageDepth. See docs/sast-language-strategy.md for the rationale
+// and how each depth maps to behavior today and in future.
+type SASTConfig struct {
+	Languages map[string]string `yaml:"languages"`
 }
 
 // GeneratedPathsConfig controls the built-in noise filter that stops the

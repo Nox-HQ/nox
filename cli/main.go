@@ -479,6 +479,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r := report.NewJSONReporter(version)
 			r.Offline = offlineFlag
 			r.Prioritize = sortFlag == "priority"
+			r.SASTLanguages = result.SASTProfile
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
