@@ -1241,6 +1241,51 @@ func TestIsGeneratedContent(t *testing.T) {
 	}
 }
 
+// TestAI002_RequiresPromptContext asserts AI-002 fires on real prompt
+// concatenation but not on the same `%s … user_input` shape in a parameterised
+// SQL call (the clean_safe_db.py false positive).
+func TestAI002_RequiresPromptContext(t *testing.T) {
+	dir := t.TempDir()
+
+	// A parameterised SQL call: %s + user_input, but no prompt/LLM context.
+	safeSQL := writeFile(t, dir, "safe_db.py", `def q(user_input, db):
+    db.execute("SELECT * FROM t WHERE id = %s", (user_input,))  # parameterized
+`)
+	// A real prompt build: f-string interpolating user_input into a prompt.
+	realPrompt := writeFile(t, dir, "prompt.py", `def build(user_input, system_prompt):
+    prompt = f"{system_prompt}\nUser said: {user_input}"
+    return prompt + user_input
+`)
+
+	a := NewAnalyzer()
+	fs, _, err := a.ScanArtifacts(context.Background(), []discovery.Artifact{
+		{Path: "safe_db.py", AbsPath: safeSQL, Type: discovery.Source, Size: 100},
+		{Path: "prompt.py", AbsPath: realPrompt, Type: discovery.Source, Size: 100},
+	})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	var onSafe, onPrompt bool
+	for _, f := range fs.Findings() {
+		if f.RuleID != "AI-002" {
+			continue
+		}
+		switch f.Location.FilePath {
+		case "safe_db.py":
+			onSafe = true
+		case "prompt.py":
+			onPrompt = true
+		}
+	}
+	if onSafe {
+		t.Error("AI-002 false-positive on parameterised SQL (no prompt context)")
+	}
+	if !onPrompt {
+		t.Error("AI-002 must still fire on real prompt string concatenation")
+	}
+}
+
 func TestAI018_RequiresLLMOutputToken(t *testing.T) {
 	a := NewAnalyzer()
 	// Ordinary file I/O into a "generated"/"output" dir must NOT fire.

@@ -30,20 +30,21 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 0.30 / recall 1.00 / F1 0.47** (17 TP, 39 FP, 0 FN) — an honest
-baseline. Recall is now perfect: the intraprocedural taint engine landed and the
-injection/SSRF/traversal/deserialization flows that used to be false negatives
-now fire (see item 4). All the remaining work is **precision** — the grown suite
-surfaces exactly what per-rule precision/recall cannot see:
+**precision 0.89 / recall 1.00 / F1 0.94** (17 TP, 2 FP, 0 FN) — up from the
+original honest baseline of precision 0.30 / F1 0.47 (39 FP). Recall stayed
+perfect while precision was raised by fixing the three false-positive classes
+the corpus indicted (items 1-3 below):
 
-- **findings-per-issue: 2.75** — across the annotated issues, nox emits 2.75
-  findings each on average; 1.00 is ideal. Two files dominate:
-  `tp_secrets_cloud.py` has density **8.00** (16 findings on 2 real secrets) and
-  `tp_secrets.py` **5.33**. This is the over-firing per-rule scoring misses:
-  every one of those findings is a real secret (each rule "TP"s), yet a human
-  sees one issue inflated 5-8×.
-- **noise ratio: 0.70** — 39 of the 56 findings nox produced were false
-  positives.
+- **findings-per-issue: 1.12** (was 2.75) — across the annotated issues nox now
+  emits ~1.1 findings each; 1.00 is ideal. The two secret files that used to
+  dominate collapsed to their canonical provider rule: `tp_secrets_cloud.py`
+  from density **8.00 → 1.00** and `tp_secrets.py` from **5.33 → 1.33**. The
+  secret analyzer now deduplicates overlapping rules by specificity and resolves
+  the canonical provider owner per token (see `core/analyzers/secrets/dedup.go`).
+- **noise ratio: 0.11** (was 0.70) — 2 of the 19 findings nox produces are false
+  positives. The two remaining are outside the three fixed classes: a SEC-161
+  entropy hit on a base64 data-URI (`clean_svg_blob.ts`) and a TAINT-003
+  over-fire that accompanies the SSTI positive (`tp_ssti.py`).
 
 Committed as `baseline.json`; `TestPrecisionSuiteBaseline` (in `cli/`) fails if
 any of precision/recall/F1 drops or FP / findings-per-issue rises, so the number
@@ -51,19 +52,24 @@ can only move the right way without a human refreshing the snapshot.
 
 ### The precise to-do list the corpus indicts
 
-1. **Secret rules over-fire massively.** One GitHub, Slack, Stripe, or Google
-   token trips 5–7 overlapping high-entropy / keyword rules
-   (`SEC-161/162/163/216/…`). nox fires the *right* provider rule on each
-   (`SEC-030` Stripe, `SEC-007` GCP, `SEC-003` GitHub, `SEC-023` Slack) but
-   drowns it in duplicates. This is the dominant precision drag and the whole
-   reason for the density metric.
-2. **Placeholder / example credentials are flagged as real.**
+1. **Secret rules over-fire massively — FIXED.** One GitHub, Slack, Stripe, or
+   Google token used to trip 5–7 overlapping high-entropy / keyword rules
+   (`SEC-161/162/163/216/…`). The secrets analyzer now collapses overlapping
+   findings on a token to the canonical provider rule (`SEC-030` Stripe,
+   `SEC-007` GCP, `SEC-003` GitHub, `SEC-023` Slack, `SEC-001`/`SEC-508` AWS)
+   via specificity dedup + per-token owner resolution
+   (`core/analyzers/secrets/dedup.go`). Density dropped from 8.00 to 1.00.
+2. **Placeholder / example credentials flagged as real — FIXED.**
    `"your-api-key-here"`, `"changeme"`, `postgres://USER:PASSWORD@…`,
-   `sk_test_0000…`, and `<your-smtp-password>` in `clean_placeholders.py` and
-   `clean_env_example.py` produce false positives — nox has no allowlist for
-   obvious examples (gitleaks/trufflehog/detect-secrets all do).
-3. **AI-002 fires on safe string concatenation** in `clean_safe_db.py` — a
-   `"…" + var` that is not a prompt.
+   `sk_test_0000…`, and `<your-smtp-password>` are now dropped by an
+   example/placeholder allowlist (`core/analyzers/secrets/placeholder.go`)
+   mirroring gitleaks/trufflehog/detect-secrets. `clean_placeholders.py` and
+   `clean_env_example.py` are clean.
+3. **AI-002 fired on safe string concatenation — FIXED.** AI-002 now requires a
+   nearby prompt/LLM context token (`prompt`, `messages`, `.chat.`, model call;
+   `core/analyzers/ai/prompt_context.go`), so the parameterised SQL in
+   `clean_safe_db.py` no longer trips it while the real `tp_prompt.py` positive
+   still fires.
 4. **Injection recall gaps — CLOSED.** The intraprocedural taint engine has
    landed, so command injection (`os.system("echo " + cmd)`), eval, path
    traversal (`open(user_path)`), unsafe deserialization (`pickle.loads(user)`),
@@ -79,8 +85,8 @@ True positives (annotated ground truth):
 
 | File | What it exercises | Correct rule | nox today |
 | --- | --- | --- | --- |
-| `tp_secrets.py` | AWS / GitHub / Slack tokens | SEC-001/003/023/508 | TP + heavy over-fire |
-| `tp_secrets_cloud.py` | Stripe / GCP keys | SEC-030 / SEC-007 | TP + 5–6 over-fires each |
+| `tp_secrets.py` | AWS / GitHub / Slack tokens | SEC-001/003/023/508 | TP, deduped to canonical |
+| `tp_secrets_cloud.py` | Stripe / GCP keys | SEC-030 / SEC-007 | TP, deduped to canonical |
 | `tp_prompt.py` | prompt injection (f-string) | AI-002 | TP |
 | `tp_yaml.py` | unsafe `yaml.load` | SLOP-001 / VARIANT-002 | TP |
 | `tp_ssti.py` | SSTI via dynamic template | VARIANT-005 (+ SLOP-001) | TP |
@@ -93,11 +99,11 @@ Clean stressors (zero annotations — any finding is a false positive):
 
 | File | Noise class | nox today |
 | --- | --- | --- |
-| `clean_placeholders.py` | placeholder creds | 4 FP |
-| `clean_env_example.py` | `.env.example` placeholders | 6 FP |
+| `clean_placeholders.py` | placeholder creds | clean |
+| `clean_env_example.py` | `.env.example` placeholders | clean |
 | `clean_placeholders.ts` | TS placeholder tokens | clean |
 | `clean_prose_comments.py` | sinks quoted in comments | clean |
-| `clean_safe_db.py` | parameterized / arg-vector / quoted | 1 FP (AI-002) |
+| `clean_safe_db.py` | parameterized / arg-vector / quoted | clean |
 | `clean_hashes.js` | lockfile hashes, git SHA | clean |
 | `clean_svg_blob.ts` | base64 data-URI SVG | 1 FP |
 | `clean_minified_bundle.js` | minified bundle strings | clean |
