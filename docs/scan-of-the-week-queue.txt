@@ -18,6 +18,7 @@
 # Refill via PR when this list runs short.
 
 # ── Q3 2026 ─────────────────────────────────────────────────────
+# DONE 2026-05-04: modelcontextprotocol/python-sdk — series opener; 427 findings + 6-repo bench (anthropic-sdk-python, openai-python, agent-go, …); 0 disclosable
 # DONE 2026-05-09: anthropics/anthropic-cookbook — 1.95M findings (mostly RAG-corpus FPs); precision-tuning post
 # DONE 2026-06-05: deepset-ai/haystack — 12,367 findings (94% docs-website noise); 1 real low-sev (unredacted prompt log); fixed AI-009 ast.literal_eval FP
 # DONE 2026-06-05: huggingface/smolagents — 323 findings (65% from one example dir); 0 true positives; fixed VULN-002 PEP503 typosquat FP
