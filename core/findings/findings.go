@@ -218,6 +218,63 @@ func (fs *FindingSet) Deduplicate() {
 	fs.items = unique
 }
 
+// SuppressDuplicateVulnClass drops a finding from suppressRulePrefix when
+// another finding at the same file+line reports the same underlying vuln class
+// via its "vuln_class" metadata. It resolves cross-analyzer over-reporting:
+// when two SAST analyzers independently flag the same vulnerability at one
+// location (e.g. the taint engine's TAINT-003 SSTI sink and the variants
+// engine's VARIANT-005 SSTI CVE signature both firing on one
+// render_template_string call), the more specific signature is kept and the
+// generic taint duplicate is dropped, so the vulnerability is reported once.
+//
+// Suppression is class-scoped: a finding is only dropped when a *co-located,
+// same-class* finding from a different rule exists. It never touches a lone
+// finding and never crosses vuln classes, so it cannot hide a distinct
+// vulnerability (an XSS finding is only ever suppressed by another XSS finding
+// at the same span, which is itself reported). Deterministic and order-free.
+func (fs *FindingSet) SuppressDuplicateVulnClass(suppressRulePrefix string) {
+	// Index the vuln classes reported at each location by rules *other than* the
+	// suppressible ones, so a suppressible finding can be dropped only when an
+	// independent analyzer already covers the same class at the same span.
+	type locKey struct {
+		file string
+		line int
+	}
+	covered := make(map[locKey]map[string]struct{})
+	for i := range fs.items {
+		f := &fs.items[i]
+		if strings.HasPrefix(f.RuleID, suppressRulePrefix) {
+			continue
+		}
+		class := f.Metadata["vuln_class"]
+		if class == "" {
+			continue
+		}
+		k := locKey{f.Location.FilePath, f.Location.StartLine}
+		if covered[k] == nil {
+			covered[k] = make(map[string]struct{})
+		}
+		covered[k][class] = struct{}{}
+	}
+
+	kept := make([]Finding, 0, len(fs.items))
+	for i := range fs.items {
+		f := fs.items[i]
+		if strings.HasPrefix(f.RuleID, suppressRulePrefix) {
+			if class := f.Metadata["vuln_class"]; class != "" {
+				k := locKey{f.Location.FilePath, f.Location.StartLine}
+				if classes, ok := covered[k]; ok {
+					if _, dup := classes[class]; dup {
+						continue // another analyzer already reports this class here
+					}
+				}
+			}
+		}
+		kept = append(kept, f)
+	}
+	fs.items = kept
+}
+
 // SortDeterministic orders findings by RuleID, then FilePath, then StartLine.
 // This guarantees stable, reproducible output regardless of the order in which
 // analyzers emit their results.
