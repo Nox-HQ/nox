@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox lsp` — Language Server for editor diagnostics.** Runs a minimal LSP
+  server over stdio (JSON-RPC 2.0 with `Content-Length` framing) that scans the
+  active file on open/save and publishes nox findings as
+  `textDocument/publishDiagnostics`. Deterministic and fully offline — it just
+  runs the scanner on the one file, maps each finding's location/severity/RuleID
+  onto an LSP diagnostic (critical/high→Error, medium→Warning, low→Information,
+  info→Hint), and sorts them stably by line, column, then rule id. Hand-rolled
+  JSON-RPC (no third-party LSP library, no network); `didClose` clears
+  diagnostics and scan errors publish an empty set instead of crashing.
 - **`nox scan --sort priority` — reachability-aware finding prioritization.**
   Orders findings.json by what's most actionable — severity first, then
   reachability, then confidence — instead of the default rule/path/line order
