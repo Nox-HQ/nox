@@ -31,6 +31,7 @@ const (
 	LangUnknown Lang = iota
 	LangPython
 	LangJavaScript // JS, JSX, TS, TSX — they share comment/string/template lexing
+	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -41,6 +42,8 @@ func (l Lang) String() string {
 		return "python"
 	case LangJavaScript:
 		return "javascript"
+	case LangGo:
+		return "go"
 	default:
 		return "unknown"
 	}
@@ -62,6 +65,7 @@ var extToLang = map[string]Lang{
 	".tsx": LangJavaScript,
 	".mts": LangJavaScript,
 	".cts": LangJavaScript,
+	".go":  LangGo,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is
