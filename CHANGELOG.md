@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **VS Code extension (`editors/vscode`).** A thin client over the `nox lsp`
+  language server: surfaces nox findings inline (squiggles, hover, Problems
+  panel) as you open and save files. Deterministic and offline — it runs the
+  local `nox` binary, no code leaves the machine. Delivers the editor-integration
+  half of #47 on top of `nox lsp`; a JetBrains plugin is the same shape.
 - **Post-scan plugins run automatically in `nox scan`.** Plugins whose tools
   need the findings the scan just produced — those declaring
   `requires_scan_context` — now run as part of the pipeline (before refinement,

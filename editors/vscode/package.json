@@ -1,0 +1,62 @@
+{
+  "name": "nox",
+  "displayName": "nox — AI application security",
+  "description": "Inline nox security findings in your editor, via the nox language server. Deterministic and offline — no code leaves your machine.",
+  "version": "0.1.0",
+  "publisher": "nox-hq",
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/nox-hq/nox" },
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Linters", "Programming Languages"],
+  "activationEvents": [
+    "onLanguage:go",
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:ruby",
+    "onLanguage:java",
+    "onLanguage:kotlin",
+    "onLanguage:rust",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:csharp",
+    "onLanguage:php",
+    "onLanguage:shellscript",
+    "onLanguage:yaml",
+    "onLanguage:json",
+    "onLanguage:dockerfile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "nox",
+      "properties": {
+        "nox.path": {
+          "type": "string",
+          "default": "nox",
+          "description": "Path to the nox executable (must be on PATH, or an absolute path)."
+        },
+        "nox.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the nox language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}
