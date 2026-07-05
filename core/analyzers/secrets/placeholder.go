@@ -45,7 +45,7 @@ var placeholderTokens = []string{
 
 // placeholderWords are generic English placeholder words matched only at word
 // boundaries. They must NOT fire as bare substrings, because real token bodies
-// can contain them (the canonical AWS example key AKIAIOSFODNN7EXAMPLE ends in
+// can contain them (the canonical AWS example key AKIA...EXAMPLE ends in
 // "EXAMPLE" yet is a required true positive).
 var placeholderWords = []string{
 	"example",
