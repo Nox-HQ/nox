@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -200,6 +201,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	slopAnalyzer := slop.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	taintflowAnalyzer := taintflow.NewAnalyzer()
+	agentflowAnalyzer := agentflow.NewAnalyzer()
 	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
@@ -295,6 +297,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		},
 		func(c context.Context) error {
+			fs, err := agentflowAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
+		func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -356,6 +366,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range taintflowAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range agentflowAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 	for _, r := range provenanceAnalyzer.Rules().Rules() {
@@ -1009,6 +1022,8 @@ func analyzerRulePatterns(analyzer string) []string {
 		return []string{"VARIANT-*"}
 	case "taintflow":
 		return []string{"TAINT-*"}
+	case "agentflow":
+		return []string{"AGENTFLOW-*"}
 	case "provenance":
 		return []string{"PROV-*"}
 	default:
