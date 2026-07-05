@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "generated_at": "2026-05-03T09:45:48.672247Z",
+  "generated_at": "2026-07-05T12:51:13Z",
   "plugins": [
     {
       "name": "nox/reachability",
@@ -1684,6 +1684,87 @@
       ],
       "license": "Apache-2.0",
       "repository": "https://github.com/nox-hq/nox-plugin-remediate"
+    },
+    {
+      "name": "nox/llm-triage",
+      "description": "Optional LLM second-opinion triage. Sends each finding plus a code snippet to a configured chat endpoint and attaches a true/false-positive verdict as an enrichment. Never gates the scan; the deterministic core is unaffected.",
+      "homepage": "https://github.com/nox-hq/nox-plugin-llm-triage",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api_version": "v1",
+          "published_at": "2026-07-05T12:47:42.403805191Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "llm_triage"
+          ],
+          "artifacts": [
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/nox-plugin-llm-triage_0.1.0_linux_amd64.tar.gz",
+              "size": 4684086,
+              "digest": "sha256:efee50f1142e12c8d64d4b4c071f988cff8a0c4f564d20b7605f024449432bf4",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/nox-plugin-llm-triage_0.1.0_linux_arm64.tar.gz",
+              "size": 4273301,
+              "digest": "sha256:e647657e89ed034c296804d17e2710932ecf65ceeebe050dbf676f13d2365c71",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/nox-plugin-llm-triage_0.1.0_darwin_amd64.tar.gz",
+              "size": 4790462,
+              "digest": "sha256:9eb9524e7bfa5658977d337420392bb20ad7a7e42b0e1c3093511e5dc4efc0a5",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/nox-plugin-llm-triage_0.1.0_darwin_arm64.tar.gz",
+              "size": 4468544,
+              "digest": "sha256:068a876b01cc6fae55bfd0ca3b7e5188513067d0aff14a73411169dc90600f62",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/nox-plugin-llm-triage_0.1.0_windows_amd64.zip",
+              "size": 4824309,
+              "digest": "sha256:ace00c6a6c620839ca0152a203058ff1ba59ca8a692d3fd4c019b8cff23f3328",
+              "cosign_sig_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.1.0/checksums.txt.sig.bundle",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ],
+          "minimum_nox_version": "0.6.0",
+          "changelog_url": "https://github.com/nox-hq/nox-plugin-llm-triage/blob/main/CHANGELOG.md"
+        }
+      ],
+      "track": "dynamic-runtime",
+      "maintainers": [
+        "nox-hq"
+      ],
+      "license": "Apache-2.0",
+      "repository": "https://github.com/nox-hq/nox-plugin-llm-triage"
     }
   ]
 }
