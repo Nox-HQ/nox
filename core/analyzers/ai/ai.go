@@ -155,10 +155,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				continue
 			}
 			// AI-002 (prompt string concatenation of user input) fires on any
-			// `f"…" … user_input` / `%s … user_input`, but that shape is just as
-			// common in a parameterised SQL call as in a real prompt. Require an
-			// actual prompt/LLM context near the match so a SQL `execute("… %s",
-			// (user_input,))` isn't reported as prompt injection.
+			// interpolated-format-string-plus-user-variable shape, but that shape
+			// is just as common in a parameterised SQL call as in a real prompt.
+			// Require an actual prompt/LLM context near the match so a
+			// parameterised SQL execute call isn't reported as prompt injection.
 			if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
 				continue
 			}

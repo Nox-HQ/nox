@@ -198,8 +198,8 @@ func isPlaceholderFinding(content []byte, f *findings.Finding) bool {
 	if isPlaceholderValue(string(content[start:end])) {
 		return true
 	}
-	// Connection-string rules (SEC-430 postgres://, mysql://, …) match only the
-	// URL scheme, so the placeholder signal — a "USER:PASSWORD@" userinfo
+	// Connection-string rules (SEC-430 for postgres, mysql, … URLs) match only
+	// the URL scheme, so the placeholder signal — a user:password userinfo
 	// template — lives in the rest of the line, not the matched span. Inspect
 	// the whole source line for a credentials-in-URL placeholder.
 	if isURLCredentialPlaceholderLine(lineOf(content, f.Location.StartLine)) {
