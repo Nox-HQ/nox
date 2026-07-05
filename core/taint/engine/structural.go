@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/taint"
@@ -16,7 +17,12 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]
-		if len(d.stmts) == 0 {
+		// A named function with no statements is still kept: the interprocedural
+		// pass needs its (possibly empty) summary and parameter list so a call to
+		// it resolves as a known local callee rather than an unknown one. The
+		// module unit (funcName "") with no statements carries nothing, so it is
+		// dropped to avoid an empty analyzable scope.
+		if len(d.stmts) == 0 && d.funcName == "" {
 			continue
 		}
 		stmts := make([]taint.Statement, 0, len(d.stmts))
@@ -28,6 +34,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 			FuncName: d.funcName,
 			Language: lang.String(),
 			Stmts:    stmts,
+			Params:   append([]string(nil), d.params...),
 		})
 	}
 	return units
@@ -42,6 +49,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 		Calls:   append([]string(nil), d.calls...),
 		Reads:   append([]string(nil), d.reads...),
 		Chains:  append([]string(nil), d.chains...),
+		Returns: append([]string(nil), d.returns...),
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -51,10 +59,24 @@ func toStatement(d *stmtDraft) taint.Statement {
 				ArgCount:        a.argCount,
 				ShellTrue:       a.shellTrue,
 				FirstArgTainted: a.firstArgTainted,
+				PositionalVars:  copyPositional(a.positionalVars),
 			}
 		}
 	}
 	return st
+}
+
+// copyPositional deep-copies a per-slot positional-variable list so the
+// foundation's SinkArgInfo never aliases the extractor's internal slices.
+func copyPositional(src [][]string) [][]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([][]string, len(src))
+	for i := range src {
+		out[i] = append([]string(nil), src[i]...)
+	}
+	return out
 }
 
 // StructuralEngine is the real intraprocedural taint engine. It replaces the
@@ -100,21 +122,78 @@ func NewStructuralEngine(cat *taint.Catalog) *StructuralEngine {
 	return &StructuralEngine{cat: cat}
 }
 
-// Analyze implements taint.TaintEngine. See the StructuralEngine doc for the
-// exact propagation and sanitization semantics and their limits.
-func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
-	lang := unit.Language
+// taintInfo is a variable's taint state during a forward pass: the originating
+// source, the line it entered at, the set of vuln classes it has been SANITIZED
+// (cleared) for, and the chain of local functions its taint has flowed through
+// (via) for interprocedural provenance. A class in cleared means the variable is
+// safe for that class only.
+type taintInfo struct {
+	src     taint.Source
+	srcLine int
+	cleared map[taint.VulnClass]bool
+	// via is the nearest-caller-first chain of local helper functions whose
+	// summaries carried this taint (empty for a directly-assigned source). It
+	// feeds Flow.Via so a cross-function finding can name the path.
+	via []string
+}
 
-	// taintState maps a variable to its taint: the originating source and the set
-	// of vuln classes for which it has been SANITIZED (cleared). A class in
-	// cleared means the variable is safe for that class only.
-	type taintInfo struct {
-		src     taint.Source
-		srcLine int
-		cleared map[taint.VulnClass]bool
-	}
+// passResult is the output of a forward pass: the flows found, the final taint
+// state (for summary observation), and the variables returned by the unit.
+type passResult struct {
+	flows    []taint.Flow
+	state    map[string]taintInfo
+	returned []string
+}
+
+// Analyze implements taint.TaintEngine: intraprocedural, straight-line dataflow
+// over one Unit. It is unchanged in behavior — it runs the shared forward pass
+// with NO interprocedural summary resolution, so a call to another function is
+// just an ordinary call (its sink/source/sanitizer nature is judged by the
+// catalog only, never by a summary). See the StructuralEngine doc for semantics
+// and limits; cross-function flow is AnalyzeFile's job.
+//
+//nolint:gocritic // Analyze(unit taint.Unit) is the TaintEngine interface signature; the value parameter cannot be a pointer.
+func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
+	res := e.forwardPass(unit.Language, &unit, nil, nil)
+	sortFlows(res.flows)
+	return res.flows
+}
+
+// analyzeUnitInterproc runs the forward pass over one unit WITH interprocedural
+// summary resolution enabled, so calls to locally-defined functions apply their
+// summaries (sink-in-helper, return-taint). Flows are returned unsorted; the
+// caller dedups and sorts.
+func (e *StructuralEngine) analyzeUnitInterproc(lang string, unit *taint.Unit, summaries map[string]*funcSummary) []taint.Flow {
+	res := e.forwardPass(lang, unit, nil, summaries)
+	return res.flows
+}
+
+// forwardPass is the single, shared forward-propagation core used by BOTH the
+// intraprocedural Analyze and the interprocedural AnalyzeFile/summarize. Keeping
+// one implementation guarantees summary semantics never diverge from
+// intraprocedural semantics.
+//
+// Parameters:
+//   - seed: an optional initial taint state (used by summarize to mark a
+//     parameter tainted). nil starts clean.
+//   - summaries: when non-nil, calls to locally-defined functions apply their
+//     summaries — a summarized sink emits a cross-function Flow and a summarized
+//     tainted return propagates. When nil, no interprocedural resolution happens
+//     (pure intraprocedural behavior). Summary application reads precomputed
+//     summaries only (never re-enters a body), so recursion is handled by the
+//     bounded summary fixpoint in computeSummaries, not here.
+func (e *StructuralEngine) forwardPass(
+	lang string,
+	unit *taint.Unit,
+	seed map[string]taintInfo,
+	summaries map[string]*funcSummary,
+) passResult {
 	tainted := map[string]taintInfo{}
+	for k, v := range seed {
+		tainted[k] = cloneTaintInfo(v)
+	}
 	var flows []taint.Flow
+	var returned []string
 
 	for i := range unit.Stmts {
 		st := &unit.Stmts[i]
@@ -125,8 +204,9 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 		// rather than in a prior assignment.
 		inlineCleared := e.inlineSanitized(lang, st)
 
-		// 1) Sink check: for each call that resolves to a sink, decide whether a
-		//    tainted, class-un-sanitized value reaches it in a dangerous position.
+		// 1) Catalog sink check: for each call that resolves to a catalog sink,
+		//    decide whether a tainted, class-un-sanitized value reaches it in a
+		//    dangerous position.
 		for _, rawCall := range st.Calls {
 			sink, ok := e.resolveSink(lang, rawCall)
 			if !ok {
@@ -135,7 +215,6 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 			if !e.sinkArgIsDangerous(st, rawCall, &sink) {
 				continue // argument shape makes this call safe (parameterized, no shell)
 			}
-			// Which variables actually reach this sink call as arguments?
 			argVars := e.sinkArgVars(st, rawCall)
 			for _, v := range argVars {
 				ti, isTainted := tainted[v]
@@ -158,12 +237,26 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 					FilePath:   unit.FilePath,
 					FuncName:   unit.FuncName,
 					Language:   unit.Language,
+					Via:        append([]string(nil), ti.via...),
 				})
 				break // one flow per sink call is enough
 			}
 		}
 
-		// 2) Propagation into the assignee.
+		// 2) Interprocedural sink check: a call to a locally-defined helper whose
+		//    summary says a tainted argument reaches a sink inside it emits a
+		//    cross-function flow. Only when summary resolution is enabled.
+		if summaries != nil {
+			flows = append(flows, e.interprocSinkFlows(lang, unit, st, tainted, summaries)...)
+		}
+
+		// 3) Record returned variables (for summary observation). A return never
+		//    assigns, so it is handled before the assignment logic.
+		if len(st.Returns) > 0 {
+			returned = append(returned, st.Returns...)
+		}
+
+		// 4) Propagation into the assignee.
 		if st.Assigns == "" {
 			continue
 		}
@@ -176,12 +269,35 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 			continue
 		}
 
+		// Interprocedural return-taint: x = helper(taintedArg) where helper's
+		// summary returnsTaintedIf(i) marks x tainted, carrying the source of the
+		// tainted argument and the helper in the via chain. Checked before the
+		// generic read-propagation so a helper that LAUNDERS taint (returns clean)
+		// does not leak via a raw read of its tainted argument.
+		if summaries != nil {
+			if ti, ok := e.interprocReturnTaint(lang, st, tainted, summaries); ok {
+				tainted[st.Assigns] = ti
+				continue
+			}
+			// A lone local-helper call on the RHS (`x = helper(tainted)`) that did
+			// NOT return taint is a taint BARRIER: the helper consumed the tainted
+			// argument and returned a clean value, so x is clean — even though the
+			// raw argument read would otherwise propagate taint. This is what makes
+			// a launder-through-helper (return a constant) not over-report. Only a
+			// LONE call qualifies; a compound RHS (`x = helper(a) + tainted`) still
+			// falls through to conservative read-propagation.
+			if e.rhsIsLoneLocalCall(st, summaries) {
+				delete(tainted, st.Assigns)
+				continue
+			}
+		}
+
 		// Does the RHS read any tainted variable? If so, propagate — carrying the
-		// most-recently-introduced source and the intersection-safe cleared set.
+		// most-recently-introduced source and its cleared set.
 		var carried *taintInfo
-		for _, v := range st.Reads {
+		for _, v := range sortedReads(st.Reads) {
 			if ti, ok := tainted[v]; ok {
-				c := ti
+				c := cloneTaintInfo(ti)
 				carried = &c
 				break
 			}
@@ -202,11 +318,178 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 				cleared[class] = true
 			}
 		}
-		tainted[st.Assigns] = taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared}
+		tainted[st.Assigns] = taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via}
 	}
 
-	sortFlows(flows)
-	return flows
+	return passResult{flows: flows, state: tainted, returned: returned}
+}
+
+// interprocSinkFlows returns cross-function flows for a statement's calls to
+// locally-defined helpers whose summaries say a tainted argument reaches a sink
+// inside the helper. It maps each positional argument to the callee parameter of
+// the same index, and suppresses the flow when the helper sanitized that
+// parameter for the sink's class.
+func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st *taint.Statement, tainted map[string]taintInfo, summaries map[string]*funcSummary) []taint.Flow {
+	var out []taint.Flow
+	for _, rawCall := range sortedReads(st.Calls) {
+		sum := resolveLocalCallee(rawCall, summaries)
+		if sum == nil || len(sum.sinksArg) == 0 {
+			continue
+		}
+		info, ok := lookupSinkArg(st, rawCall)
+		if !ok {
+			continue
+		}
+		for argIdx, slotVars := range info.PositionalVars {
+			sinks, has := sum.sinksArg[argIdx]
+			if !has {
+				continue
+			}
+			for _, v := range slotVars {
+				ti, isTainted := tainted[v]
+				if !isTainted {
+					continue
+				}
+				for _, as := range sinks {
+					if ti.cleared[as.sink.VulnClass] {
+						continue // caller already sanitized for this class
+					}
+					if cls := sum.sanitizesClass[argIdx]; cls[as.sink.VulnClass] {
+						continue // helper sanitizes this parameter for this class
+					}
+					via := append(append([]string(nil), ti.via...), sum.name)
+					via = append(via, as.via...)
+					out = append(out, taint.Flow{
+						Source:     ti.src,
+						SourceLine: ti.srcLine,
+						SourceVar:  v,
+						Sink:       as.sink,
+						SinkLine:   st.Line,
+						SinkCall:   as.sink.Call,
+						FilePath:   unit.FilePath,
+						FuncName:   unit.FuncName,
+						Language:   unit.Language,
+						Via:        via,
+					})
+					break // one flow per (arg, helper) is enough
+				}
+			}
+		}
+	}
+	return out
+}
+
+// interprocReturnTaint checks whether st is `lhs = helper(args...)` for a local
+// helper whose summary returnsTaintedIf(i) with a tainted argument in position i.
+// It returns the taint state to assign to lhs (carrying the argument's source and
+// extending the via chain) and ok=true when so. A helper that sanitized the
+// parameter for all classes still returns tainted (the value is dangerous for the
+// remaining classes) — the cleared set is carried through.
+func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement, tainted map[string]taintInfo, summaries map[string]*funcSummary) (taintInfo, bool) {
+	for _, rawCall := range sortedReads(st.Calls) {
+		sum := resolveLocalCallee(rawCall, summaries)
+		if sum == nil || len(sum.returnsTaintedIf) == 0 {
+			continue
+		}
+		info, ok := lookupSinkArg(st, rawCall)
+		if !ok {
+			continue
+		}
+		for argIdx, slotVars := range info.PositionalVars {
+			if !sum.returnsTaintedIf[argIdx] {
+				continue
+			}
+			for _, v := range slotVars {
+				ti, isTainted := tainted[v]
+				if !isTainted {
+					continue
+				}
+				cleared := map[taint.VulnClass]bool{}
+				for c, val := range ti.cleared {
+					cleared[c] = val
+				}
+				for c, val := range sum.sanitizesClass[argIdx] {
+					cleared[c] = val
+				}
+				via := append(append([]string(nil), ti.via...), sum.name)
+				via = append(via, sum.returnVia[argIdx]...)
+				return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: via}, true
+			}
+		}
+	}
+	return taintInfo{}, false
+}
+
+// rhsIsLoneLocalCall reports whether st's assignment RHS is exactly a single
+// call to a locally-defined helper, with no free variable read outside that
+// call's arguments — the `x = helper(args)` shape where the helper is
+// authoritative for x's taint. It is used to treat a non-taint-returning helper
+// as a barrier. A compound RHS (multiple calls, or a bare variable read
+// alongside the call) returns false so conservative read-propagation still runs.
+func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map[string]*funcSummary) bool {
+	if len(st.Calls) != 1 {
+		return false
+	}
+	sum := resolveLocalCallee(st.Calls[0], summaries)
+	if sum == nil {
+		return false
+	}
+	// Every variable the statement reads must be an argument of the sole call;
+	// any read outside the call means the RHS is compound and taint could enter
+	// by a path the helper's summary does not cover.
+	info, ok := lookupSinkArg(st, st.Calls[0])
+	if !ok {
+		return false
+	}
+	// Permitted reads: the call's argument variables plus the callee chain's own
+	// identifiers (the callee name leaks into Reads as the head of the chain,
+	// e.g. `wrap` in `x = wrap(cmd)`; it is not a data read).
+	permitted := map[string]struct{}{}
+	for _, v := range info.TaintedArgVars {
+		permitted[v] = struct{}{}
+	}
+	for _, seg := range strings.Split(st.Calls[0], ".") {
+		permitted[seg] = struct{}{}
+	}
+	for _, r := range st.Reads {
+		if _, ok := permitted[r]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveLocalCallee resolves a raw call chain to a locally-defined function's
+// summary by matching its dotted suffixes against the summary map. Best-effort:
+// a bare local name (run, wrap) resolves; a chain whose suffix is a local name
+// also resolves. An unknown callee returns nil — we never invent a summary,
+// which keeps unknown/cross-file calls fail-safe (no false positive).
+func resolveLocalCallee(rawCall string, summaries map[string]*funcSummary) *funcSummary {
+	for _, key := range suffixKeys(rawCall) {
+		if sum, ok := summaries[key]; ok {
+			return sum
+		}
+	}
+	return summaries[rawCall]
+}
+
+// cloneTaintInfo deep-copies a taintInfo so mutation of one variable's cleared
+// set or via chain never aliases another's.
+func cloneTaintInfo(ti taintInfo) taintInfo {
+	cleared := make(map[taint.VulnClass]bool, len(ti.cleared))
+	for k, v := range ti.cleared {
+		cleared[k] = v
+	}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...)}
+}
+
+// sortedReads returns a deterministically ordered copy of a read/call slice so
+// the "first tainted read" chosen during propagation is stable across runs
+// regardless of map iteration or extractor ordering quirks.
+func sortedReads(reads []string) []string {
+	out := append([]string(nil), reads...)
+	sortStrings(out)
+	return out
 }
 
 // inlineSanitized returns, per variable, the vuln classes a sanitizer call in

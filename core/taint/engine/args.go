@@ -34,7 +34,15 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 		// must capture (subprocess.run(["ls", cmd]) is safe; subprocess.run(cmd)
 		// is not).
 		firstIsVector := idx == 0 && strings.HasPrefix(trimmed, "[")
-		for _, id := range freeIdentifiers(lang, p) {
+		slotVars := freeIdentifiers(lang, p)
+		// Record the positional slot's variables so the interprocedural pass can
+		// map argument position → callee parameter. Keyword args occupy no fixed
+		// position and are excluded, so positionalVars[i] is the i-th POSITIONAL
+		// argument's variables.
+		if !isKeywordArg(p) {
+			info.positionalVars = append(info.positionalVars, append([]string(nil), slotVars...))
+		}
+		for _, id := range slotVars {
 			if _, dup := seen[id]; !dup {
 				seen[id] = struct{}{}
 				info.taintedArgVars = append(info.taintedArgVars, id)

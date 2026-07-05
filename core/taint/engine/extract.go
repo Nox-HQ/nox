@@ -27,7 +27,11 @@ import (
 // stays an implementation detail of this package.
 type unitDraft struct {
 	funcName string
-	stmts    []stmtDraft
+	// params are the positional parameter names of the function, in declaration
+	// order. Empty for the module unit. Used by the interprocedural summary pass
+	// to map a caller argument position to the callee parameter it binds.
+	params []string
+	stmts  []stmtDraft
 }
 
 // stmtDraft is one recognized simple statement: either an assignment or a bare
@@ -45,6 +49,10 @@ type stmtDraft struct {
 	// calls.
 	chains   []string
 	sinkArgs map[string]sinkArgDraft
+	// returns are the variable names returned by a `return x` / `return a, b`
+	// statement. Empty for non-return statements. The interprocedural summary
+	// pass uses it to decide whether a parameter reaches the function's return.
+	returns []string
 }
 
 // sinkArgDraft is the internal form of taint.SinkArgInfo (see there for the
@@ -55,6 +63,10 @@ type sinkArgDraft struct {
 	argCount        int
 	shellTrue       bool
 	firstArgTainted bool
+	// positionalVars lists, per positional argument slot, the variable names in
+	// that slot (index 0 = first positional). Used by the interprocedural pass to
+	// bind a caller argument position to a callee parameter index.
+	positionalVars [][]string
 }
 
 // extractUnits parses content into unit drafts for the given language. It walks

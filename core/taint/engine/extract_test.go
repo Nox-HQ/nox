@@ -22,10 +22,10 @@ func findUnit(t *testing.T, units []unitDraft, name string) unitDraft {
 // stmtWithCall returns the first statement in u that invokes call.
 func stmtWithCall(t *testing.T, u unitDraft, call string) stmtDraft {
 	t.Helper()
-	for _, s := range u.stmts {
-		for _, c := range s.calls {
+	for i := range u.stmts {
+		for _, c := range u.stmts[i].calls {
 			if c == call {
-				return s
+				return u.stmts[i]
 			}
 		}
 	}
