@@ -32,7 +32,7 @@ func TestFindingToDiagnosticClamping(t *testing.T) {
 			StartColumn: 5, EndColumn: 5, // zero-width -> widen to StartColumn+1
 		},
 	}
-	d := findingToDiagnostic(f)
+	d := findingToDiagnostic(&f)
 	if d.Range.Start.Line != 0 || d.Range.End.Line != 0 {
 		t.Errorf("lines = %d..%d, want 0..0", d.Range.Start.Line, d.Range.End.Line)
 	}
@@ -53,7 +53,7 @@ func TestFindingToDiagnosticNegativeClampAndMultiline(t *testing.T) {
 			StartColumn: -3, EndColumn: 2, // start clamps to 0, end 2 > 0 kept
 		},
 	}
-	d := findingToDiagnostic(f)
+	d := findingToDiagnostic(&f)
 	if d.Range.Start.Line != 0 {
 		t.Errorf("start line = %d, want 0", d.Range.Start.Line)
 	}

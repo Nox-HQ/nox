@@ -53,7 +53,7 @@ func severityToLSP(s findings.Severity) int {
 // nox locations use 1-based lines and 0-based columns; LSP uses 0-based for
 // both. Negative coordinates are clamped to 0, and a non-positive-width column
 // span is widened to a single character so editors always render a mark.
-func findingToDiagnostic(f findings.Finding) Diagnostic {
+func findingToDiagnostic(f *findings.Finding) Diagnostic {
 	loc := f.Location
 
 	startLine := loc.StartLine - 1
@@ -96,7 +96,7 @@ func findingToDiagnostic(f findings.Finding) Diagnostic {
 func findingsToDiagnostics(fs []findings.Finding) []Diagnostic {
 	diags := make([]Diagnostic, 0, len(fs))
 	for i := range fs {
-		diags = append(diags, findingToDiagnostic(fs[i]))
+		diags = append(diags, findingToDiagnostic(&fs[i]))
 	}
 	sort.SliceStable(diags, func(i, j int) bool {
 		a, b := diags[i], diags[j]
