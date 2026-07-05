@@ -1,0 +1,228 @@
+// Package engine turns source files into taint Units and runs a deterministic,
+// intraprocedural, argument-aware taint analysis over them. It is the first real
+// dataflow layer above the core/taint catalog foundation: where the catalog
+// answers "is this call a source/sink/sanitizer", this package answers "does an
+// untrusted value actually reach a dangerous call in this function".
+//
+// WHY a line/statement recognizer rather than a full parser: Nox ships a single
+// static pure-Go binary with no CGo and no heavy parser dependency. A full
+// Python/JS grammar (tree-sitter et al.) is CGo or a large pure-Go port — a cost
+// the project deliberately refuses. Instead we lean on core/lexctx to see only
+// real CODE (never strings/comments) and recognize the two statement shapes that
+// carry the overwhelming majority of injection bugs: an assignment `lhs = expr`
+// and a bare call `callee(args)`. This is intraprocedural and straight-line by
+// construction; its limits are documented on StructuralEngine and are exactly
+// the boundary where the cross-file taint-analysis plugin takes over.
+package engine
+
+import (
+	"strings"
+
+	"github.com/nox-hq/nox/core/lexctx"
+)
+
+// unitDraft is the extractor's internal, pre-catalog view of one analyzable
+// scope (a function body or the module top level). It is converted to a
+// taint.Unit at the analyzer boundary. Kept unexported so the extractor's shape
+// stays an implementation detail of this package.
+type unitDraft struct {
+	funcName string
+	stmts    []stmtDraft
+}
+
+// stmtDraft is one recognized simple statement: either an assignment or a bare
+// call. It mirrors taint.Statement but stays internal so extraction can evolve
+// without touching the foundation's contract.
+type stmtDraft struct {
+	line    int
+	assigns string
+	calls   []string
+	reads   []string
+	// chains are the dotted attribute/identifier chains read on the RHS,
+	// whether or not followed by a call (e.g. "request.args", "req.query"). They
+	// let the engine recognize source ATTRIBUTES (request.args) alongside source
+	// CALLS (request.args.get) — many web sources are attribute accesses, not
+	// calls.
+	chains   []string
+	sinkArgs map[string]sinkArgDraft
+}
+
+// sinkArgDraft is the internal form of taint.SinkArgInfo (see there for the
+// per-field semantics). It records the argument-shape evidence gathered at a
+// sink call site so the engine can apply the catalog's argument notes.
+type sinkArgDraft struct {
+	taintedArgVars  []string
+	argCount        int
+	shellTrue       bool
+	firstArgTainted bool
+}
+
+// extractUnits parses content into unit drafts for the given language. It walks
+// only the code regions reported by lexctx, segments them into logical lines
+// (joining bracket/paren continuations), and recognizes assignments and calls.
+// Deterministic: same bytes in, same units out, in source order.
+func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
+	regions := lexctx.Classify(lang, content)
+
+	switch lang {
+	case lexctx.LangPython:
+		return extractPython(logicalLines(content, regions, false))
+	case lexctx.LangJavaScript:
+		// JS statements are `;`-terminated and brace-delimited; only paren/array
+		// continuations should merge physical lines, and each logical line is
+		// then split on top-level semicolons into separate statements.
+		return extractJavaScript(splitSemicolons(logicalLines(content, regions, true)))
+	default:
+		return nil
+	}
+}
+
+// logicalLine is a source line paired with the code-only text used for
+// recognition. Text has strings and comments blanked to spaces so token
+// scanning never trips on an operator or paren that lives inside a literal,
+// while byte offsets (and therefore the 1-based line number) stay aligned.
+type logicalLine struct {
+	line int    // 1-based line number where this logical line starts
+	code string // code-only text of the logical line (literals blanked)
+	raw  string // original text (used to read variable names verbatim)
+}
+
+// logicalLines splits content into logical lines: physical lines merged while
+// brackets/parens/braces are unbalanced (so a multi-line call is one unit) and
+// while a line ends in a backslash continuation. The code view blanks every
+// non-code byte to a space, preserving offsets so a call spanning a string is
+// still recognized by its code parentheses.
+func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool) []logicalLine {
+	// codeMask is content with non-code bytes replaced by spaces (newlines kept
+	// so line counting stays correct).
+	codeMask := make([]byte, len(content))
+	for i := range content {
+		if content[i] == '\n' {
+			codeMask[i] = '\n'
+			continue
+		}
+		if lexctx.KindAt(regions, i) == lexctx.KindCode {
+			codeMask[i] = content[i]
+		} else {
+			codeMask[i] = ' '
+		}
+	}
+
+	var out []logicalLine
+	lineNo := 1
+	depth := 0
+	var codeBuf, rawBuf strings.Builder
+	startLine := 1
+	flush := func() {
+		if strings.TrimSpace(codeBuf.String()) != "" || strings.TrimSpace(rawBuf.String()) != "" {
+			out = append(out, logicalLine{line: startLine, code: codeBuf.String(), raw: rawBuf.String()})
+		}
+		codeBuf.Reset()
+		rawBuf.Reset()
+	}
+
+	i := 0
+	n := len(content)
+	lineStart := true
+	for i < n {
+		// Read one physical line [i, eol).
+		eol := i
+		for eol < n && content[eol] != '\n' {
+			eol++
+		}
+		codeSeg := string(codeMask[i:eol])
+		rawSeg := string(content[i:eol])
+		if lineStart {
+			startLine = lineNo
+		}
+		codeBuf.WriteString(codeSeg)
+		rawBuf.WriteString(rawSeg)
+
+		depth += bracketDelta(codeSeg, bracesAreBlocks)
+		backslashCont := strings.HasSuffix(strings.TrimRight(codeSeg, " \t"), "\\")
+
+		if depth <= 0 && !backslashCont {
+			flush()
+			depth = 0
+			lineStart = true
+		} else {
+			// Continue onto next physical line; add a space so tokens don't glue.
+			codeBuf.WriteByte(' ')
+			rawBuf.WriteByte(' ')
+			lineStart = false
+		}
+
+		i = eol + 1
+		lineNo++
+	}
+	flush()
+	return out
+}
+
+// bracketDelta returns the net change in continuation-bracket depth for a code
+// segment. Parens and square brackets always count (a call or list spanning
+// lines is one logical line). Braces count only when bracesAreBlocks is false
+// (Python dict/set literals); for languages where `{}` delimits blocks and
+// object literals (JS), braces must NOT force line merging or an entire function
+// body would collapse into one logical line. Literals are already blanked, so
+// every bracket here is real code.
+func bracketDelta(code string, bracesAreBlocks bool) int {
+	d := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(', '[':
+			d++
+		case ')', ']':
+			d--
+		case '{':
+			if !bracesAreBlocks {
+				d++
+			}
+		case '}':
+			if !bracesAreBlocks {
+				d--
+			}
+		}
+	}
+	return d
+}
+
+// splitSemicolons splits each logical line on top-level (non-bracketed)
+// semicolons into separate logical lines, preserving the starting line number.
+// JS packs multiple statements per line (`const x = a; foo(x);`) and this makes
+// each its own recognizable statement. The code and raw views stay aligned
+// because both are sliced at the same offsets.
+func splitSemicolons(lines []logicalLine) []logicalLine {
+	var out []logicalLine
+	for _, ll := range lines {
+		depth := 0
+		start := 0
+		emit := func(end int) {
+			codeSeg := ll.code[start:end]
+			rawSeg := ll.raw[start:end]
+			if strings.TrimSpace(codeSeg) != "" || strings.TrimSpace(rawSeg) != "" {
+				out = append(out, logicalLine{line: ll.line, code: codeSeg, raw: rawSeg})
+			}
+		}
+		aligned := len(ll.code) == len(ll.raw)
+		for i := 0; i < len(ll.code); i++ {
+			switch ll.code[i] {
+			case '(', '[', '{':
+				depth++
+			case ')', ']', '}':
+				depth--
+			case ';':
+				if depth == 0 && aligned {
+					emit(i)
+					start = i + 1
+				}
+			}
+		}
+		if aligned {
+			emit(len(ll.code))
+		} else {
+			out = append(out, ll)
+		}
+	}
+	return out
+}
