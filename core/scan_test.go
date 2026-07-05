@@ -139,6 +139,80 @@ const apiKey = "` + awsKey + `"
 	}
 }
 
+func TestRunScan_SASTOffSkipsLanguage(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Turn Go off; Python stays at its default (deep). Both files carry the same
+	// detectable secret, so only the Python finding must survive.
+	configContent := `scan:
+  sast:
+    languages:
+      go: off
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	awsKey := "AKIAIOSFODNN7EXAMPLE"
+	goFile := "package main\n\nconst apiKey = \"" + awsKey + "\"\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(goFile), 0o644); err != nil {
+		t.Fatalf("failed to write go file: %v", err)
+	}
+	pyFile := "api_key = \"" + awsKey + "\"\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "app.py"), []byte(pyFile), 0o644); err != nil {
+		t.Fatalf("failed to write py file: %v", err)
+	}
+
+	result, err := RunScan(tmpDir)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var goFindings, pyFindings int
+	for _, f := range result.Findings.Findings() {
+		switch f.Location.FilePath {
+		case "main.go":
+			goFindings++
+		case "app.py":
+			pyFindings++
+		}
+	}
+	if goFindings != 0 {
+		t.Errorf("go=off must yield zero findings on main.go, got %d", goFindings)
+	}
+	if pyFindings == 0 {
+		t.Error("python (default deep) must still produce findings on app.py, got none")
+	}
+
+	// The resolved profile is recorded for audit.
+	if result.SASTProfile["go"] != "off" {
+		t.Errorf("result.SASTProfile[go] = %q, want off", result.SASTProfile["go"])
+	}
+	if result.SASTProfile["python"] != "deep" {
+		t.Errorf("result.SASTProfile[python] = %q, want deep", result.SASTProfile["python"])
+	}
+}
+
+func TestRunScan_SASTInvalidDepthFailsScan(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	configContent := `scan:
+  sast:
+    languages:
+      go: shallow
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	_, err := RunScan(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for invalid SAST depth, got nil")
+	}
+}
+
 func TestRunScan_NonExistentDirectory(t *testing.T) {
 	t.Parallel()
 

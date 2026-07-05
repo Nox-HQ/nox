@@ -47,6 +47,13 @@ type Meta struct {
 	// the artifact — "this report was produced without the scanner touching the
 	// network" — backed by the enforced egress test, not just a claim.
 	Offline bool `json:"offline"`
+	// SASTLanguages records the resolved per-language SAST depth applied to the
+	// scan (language name → deep|standard|off). It makes the depth strategy
+	// auditable straight from the artifact: a reviewer can see that, say,
+	// `go` was scanned at standard and `rust` was turned off, without
+	// re-deriving defaults from config. Omitted from JSON when empty (a scan
+	// run without a profile, e.g. history scans).
+	SASTLanguages map[string]string `json:"sast_languages,omitempty"`
 }
 
 // JSONReport is the top-level structure serialized to JSON. It pairs report
@@ -66,6 +73,10 @@ type JSONReporter struct {
 	// confidence) instead of the canonical deterministic order — the most
 	// actionable findings first, likely-false-positive unreachable vulns last.
 	Prioritize bool
+	// SASTLanguages is the resolved per-language SAST depth for this scan,
+	// recorded verbatim in the report Meta. Set it from ScanResult.SASTProfile
+	// before Generate to make the depth strategy auditable in the artifact.
+	SASTLanguages map[string]string
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -99,6 +110,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			ToolName:      "nox",
 			ToolVersion:   r.ToolVersion,
 			Offline:       r.Offline,
+			SASTLanguages: r.SASTLanguages,
 		},
 		Findings: f,
 	}
