@@ -17,6 +17,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/baseline"
@@ -177,6 +178,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	variantsAnalyzer := variants.NewAnalyzer()
+	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
 	var (
@@ -254,6 +256,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		},
+		func(c context.Context) error {
+			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
 	}
 	if err := runAnalyzerTasks(ctx, tasks, opts.Sequential); err != nil {
 		return nil, err
@@ -302,6 +312,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range variantsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range provenanceAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 
@@ -927,6 +940,8 @@ func analyzerRulePatterns(analyzer string) []string {
 		return []string{"VULN-*", "CONT-*", "LIC-*"}
 	case "variants":
 		return []string{"VARIANT-*"}
+	case "provenance":
+		return []string{"PROV-*"}
 	default:
 		return nil
 	}
