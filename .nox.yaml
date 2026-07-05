@@ -4,6 +4,10 @@ scan:
     - "dist/"
     - "registry-scaffold/"
     - "*_test.go"
+    # Intentionally-vulnerable ground-truth samples for `nox bench --precision`
+    # (hardcoded secret, eval injection, prompt concat). The precision harness
+    # scans this dir explicitly; the default self-scan must not flag them.
+    - "testdata/precision-corpus/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
