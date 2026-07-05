@@ -7,14 +7,24 @@ import (
 
 // ModelReference represents a reference to an ML model found in the codebase.
 type ModelReference struct {
-	Name       string `json:"name"`
-	Version    string `json:"version,omitempty"`
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	// License is the model family's known license (SPDX-ish or a
+	// "Proprietary (<vendor>)" marker), from a curated offline lookup. Empty
+	// when the family is unrecognized — a present value is trustworthy, not a
+	// guess. This is the AIBOM's model-license/provenance answer that a
+	// dependency SBOM misses for models pulled by name.
+	License    string `json:"license,omitempty"`
 	Registry   string `json:"registry,omitempty"`
 	Hash       string `json:"hash,omitempty"`
 	Path       string `json:"path"`
 	Line       int    `json:"line,omitempty"`
 	AuthEnvVar string `json:"auth_env_var,omitempty"`
 	Endpoint   string `json:"endpoint,omitempty"`
+	// Pinned reports whether the reference is fixed to an immutable revision or
+	// digest (a hash/commit pin), so the exact weights are reproducible — the
+	// provenance signal for "which model did we actually run".
+	Pinned bool `json:"pinned"`
 }
 
 // extractModelReferences scans file content for ML model loading patterns and
@@ -36,6 +46,8 @@ func extractModelReferences(path string, content []byte) []ModelReference {
 		// Look for revision/hash on same line
 		ref.Version = extractModelVersion(text, m[0])
 		ref.Hash = extractModelHash(text, m[0])
+		ref.License = classifyModelLicense(ref.Name)
+		ref.Pinned = ref.Hash != "" || isImmutableRevision(ref.Version)
 		refs = append(refs, ref)
 	}
 
@@ -50,6 +62,7 @@ func extractModelReferences(path string, content []byte) []ModelReference {
 		refs = append(refs, ModelReference{
 			Name:     m[1],
 			Registry: classifyModelRegistry(m[1]),
+			License:  classifyModelLicense(m[1]),
 			Path:     path,
 		})
 	}
@@ -112,8 +125,8 @@ func extractModelHash(text, context string) string {
 }
 
 func containsModel(refs []ModelReference, name string) bool {
-	for _, r := range refs {
-		if r.Name == name {
+	for i := range refs {
+		if refs[i].Name == name {
 			return true
 		}
 	}
