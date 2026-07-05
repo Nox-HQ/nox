@@ -21,10 +21,12 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 - **Prompt injection** at the call site (AI-PI-*, OWASP LLM01)
 - **Embedding leakage** when secrets / PII land in vector stores (AI-EMBED-*, LLM06)
 - **Agent over-privilege** when `file_read` + `http_request` live in the same agent context (AI-AGENT-*, LLM07)
+- **Agent-config execution surface** (AGENT-001..004) — the files that steer a coding agent are code: injection directives in `.cursorrules`/`CLAUDE.md`/skills, permission-bypass (`bypassPermissions`, `--dangerously-skip-permissions`), wildcard tool grants (`"Bash(*)"`), and exfiltration directives in `.claude/settings.json`
+- **OWASP Top 10 for Agentic Applications (ASI01–ASI10)** mapping on findings, alongside the LLM and MCP Top 10 — traceable from static rule to runtime attack to GRC evidence
 - **Full MCP threat coverage** mapped to the OWASP MCP Top 10 — server hardening (MCP-001..008), tool poisoning (MCP-009..014, MCP03), rug-pull / definition drift (MCP-015, MCP04), authn/authz & SSRF (MCP-016..021, MCP07), shadow & cross-server tool shadowing (MCP-022..024, MCP09)
 - **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
 - **Polyglot AIBOM** — Python ingest + Go service + TS frontend produce one inventory naming every model invocation, auth env var, and endpoint
-- **Verified plugin marketplace** — extension scanners (reachability, cross-file taint, k8s-runtime, red-team chains, GRC for 12 frameworks) install with one command, signed end-to-end via Sigstore
+- **Verified plugin marketplace** — extension scanners (reachability, cross-file taint, k8s-runtime, red-team chains, GRC for 15 frameworks incl. EU AI Act / ISO 42001 / NIST AI RMF) install with one command, signed end-to-end via Sigstore
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
@@ -76,7 +78,7 @@ reports/
 
 ```yaml
 # .github/workflows/security.yml
-- uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+- uses: nox-hq/nox@9133597590c30b2235093c48425c0afcecef0700 # v1.5.0
   with:
     path: '.'
     format: sarif
@@ -91,6 +93,18 @@ reports/
 
 ```bash
 nox serve --allowed-paths /path/to/project
+```
+
+### Use in your editor (LSP)
+
+`nox lsp` runs a Language Server over stdio, publishing findings as inline
+diagnostics — squiggles, hover, the Problems panel — on open and save.
+Deterministic and offline: it runs the local `nox` binary, no code leaves your
+machine. The VS Code extension in [`editors/vscode`](editors/vscode) is a thin
+client over it; a JetBrains plugin is the same shape.
+
+```bash
+nox lsp    # spoken by the editor extension; not run by hand
 ```
 
 This starts an MCP server on stdio with 10 read-only tools and 5 resources. See [MCP Server](#mcp-server) for details.
