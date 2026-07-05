@@ -20,6 +20,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
+	"github.com/nox-hq/nox/core/analyzers/taintflow"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/discovery"
@@ -198,6 +199,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	slopAnalyzer := slop.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
+	taintflowAnalyzer := taintflow.NewAnalyzer()
 	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
@@ -285,6 +287,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		},
 		func(c context.Context) error {
+			fs, err := taintflowAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
+		func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -343,6 +353,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range variantsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range taintflowAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 	for _, r := range provenanceAnalyzer.Rules().Rules() {
@@ -994,6 +1007,8 @@ func analyzerRulePatterns(analyzer string) []string {
 		return []string{"SLOP-*"}
 	case "variants":
 		return []string{"VARIANT-*"}
+	case "taintflow":
+		return []string{"TAINT-*"}
 	case "provenance":
 		return []string{"PROV-*"}
 	default:

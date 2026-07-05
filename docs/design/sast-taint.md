@@ -162,3 +162,36 @@ The stub `heuristicEngine` proves this end-to-end today with a same-scope
 forward-propagation heuristic (clearly marked `TODO(sast-taint)`): it is not real
 dataflow, but it exercises the catalog and interface so the contract is known-good
 before the substrate lands.
+
+## Status update: the structural engine is live (Python + JS/TS)
+
+The substrate and real engine described above now exist:
+
+- `core/taint/engine` — the **structural substrate** (`ExtractUnits`) and the real
+  **`StructuralEngine`**. Extraction is a pure-Go, line/statement-oriented
+  recognizer that runs over `core/lexctx` code regions (so strings and comments
+  are never mistaken for code), segments function bodies (`def` for Python) and
+  the module top level into ordered statements, recognizes assignments and bare
+  calls (including multi-line calls via bracket balancing and nested calls),
+  normalizes dotted call chains to catalog keys via longest-first **suffix
+  matching** (`flask.request.args.get` → `request.args.get`), and records
+  per-sink **argument shape** (positional arity, `shell=True`, whether taint
+  lands in the first positional argument).
+- The `StructuralEngine` does forward, straight-line, intraprocedural dataflow
+  with **class-precise sanitization** (a value `html.escape`d is XSS-safe but
+  still command-injection-tainted) and **argument-aware sink gating**
+  (parameterized `cursor.execute(sql, params)` and `subprocess.run` without
+  `shell=True`/with an arg vector do not fire). It reuses the stub's flow
+  ordering so downstream output is stable regardless of which engine ran.
+- `core/analyzers/taintflow` — the **live analyzer**. It runs the engine over
+  Source artifacts and maps each un-sanitized `Flow` to a `findings.Finding`
+  using `Sink.RuleID`/`Sink.CWE`, located at the sink, with source/sink/class
+  metadata. It is registered in `core/scan.go` like any other analyzer.
+
+Honest limits (unchanged from the design intent): intraprocedural and
+straight-line only — no cross-function/cross-file flow (that remains the
+`nox-plugin-taint-analysis` territory), no control-flow-graph/branch merging,
+no alias or container-element/field sensitivity, best-effort call-name
+normalization, and JS/TS scoped to the module unit for now (Python gets
+per-function units). These are a measurable step up from the stub, not a full
+language-semantics engine.

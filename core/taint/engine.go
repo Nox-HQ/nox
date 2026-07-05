@@ -22,6 +22,39 @@ type Statement struct {
 	Calls []string
 	// Reads are the variable names this statement references.
 	Reads []string
+	// Chains are the dotted attribute/identifier chains read in this statement
+	// (e.g. "request.args", "req.query"), populated by a richer substrate so the
+	// engine can match source ATTRIBUTES (not just source calls). The stub
+	// heuristicEngine ignores it and matches sources via Calls only.
+	Chains []string
+	// SinkArgs, when populated by a richer substrate, records per-sink-call
+	// argument shape so an argument-aware engine can suppress safe usages
+	// (a parameterized cursor.execute, a subprocess.run without shell=True). It
+	// is keyed by the normalized sink call. The stub heuristicEngine ignores it;
+	// only the StructuralEngine consults it. Absent (nil) means "unknown", which
+	// the StructuralEngine treats conservatively (the call is dangerous).
+	SinkArgs map[string]SinkArgInfo
+}
+
+// SinkArgInfo is the argument-shape evidence a substrate extracts at a specific
+// sink call site, letting the engine apply the catalog's per-sink argument notes
+// (e.g. subprocess shell=True, parameterized cursor.execute). Every field is
+// best-effort; a false/empty value means "not observed", never "proven absent".
+type SinkArgInfo struct {
+	// TaintedArgVars are the tainted variables read specifically as arguments to
+	// THIS sink call (as opposed to elsewhere in the statement). When empty the
+	// engine falls back to the statement's Reads.
+	TaintedArgVars []string
+	// ArgCount is the number of positional arguments passed to the call.
+	ArgCount int
+	// ShellTrue records that a shell=True / shell:true keyword was passed —
+	// the trigger that turns subprocess.*/spawn into a real command-injection
+	// sink. For os.system/os.popen (always shell) this is irrelevant.
+	ShellTrue bool
+	// FirstArgTainted records whether the tainted value flows into the first
+	// positional argument. For cursor.execute the SQL string is arg 0; a tainted
+	// value only in arg 1 (the params tuple) is the SAFE parameterized form.
+	FirstArgTainted bool
 }
 
 // Unit is a single intraprocedural scope (typically one function body) presented
@@ -159,7 +192,7 @@ func (e *heuristicEngine) Analyze(unit Unit) []Flow {
 		switch {
 		case sanitized:
 			delete(tainted, st.Assigns)
-		case sourceAssigned(e.cat, unit.Language, st):
+		case sourceAssigned(e.cat, unit.Language, &st):
 			src, _ := firstSource(e.cat, unit.Language, st.Calls)
 			tainted[st.Assigns] = origin{src: src, line: st.Line}
 		case reachedVia != nil:
@@ -182,7 +215,7 @@ func isAnySanitizer(cat *Catalog, lang, call string) bool {
 }
 
 // sourceAssigned reports whether st assigns from a source call.
-func sourceAssigned(cat *Catalog, lang string, st Statement) bool {
+func sourceAssigned(cat *Catalog, lang string, st *Statement) bool {
 	_, ok := firstSource(cat, lang, st.Calls)
 	return ok
 }
