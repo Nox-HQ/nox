@@ -224,6 +224,78 @@ func TestFindingSet_Deduplicate(t *testing.T) {
 	}
 }
 
+func TestFindingSet_SuppressDuplicateVulnClass(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// A variants SSTI CVE signature and a taint SSTI sink both fire on the same
+	// render_template_string line — the same vulnerability reported twice.
+	fs.Add(Finding{
+		RuleID:   "VARIANT-005",
+		Location: Location{FilePath: "app.py", StartLine: 9},
+		Message:  "SSTI variant",
+		Metadata: map[string]string{"vuln_class": "ssti"},
+	})
+	fs.Add(Finding{
+		RuleID:   "TAINT-003",
+		Location: Location{FilePath: "app.py", StartLine: 9},
+		Message:  "taint SSTI",
+		Metadata: map[string]string{"vuln_class": "ssti"},
+	})
+
+	fs.SuppressDuplicateVulnClass("TAINT-")
+
+	got := fs.Findings()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding after cross-analyzer SSTI dedup, got %d", len(got))
+	}
+	if got[0].RuleID != "VARIANT-005" {
+		t.Fatalf("expected the specific VARIANT-005 signature kept, got %q", got[0].RuleID)
+	}
+}
+
+func TestFindingSet_SuppressDuplicateVulnClass_KeepsDistinctClass(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// A taint XSS finding co-located with a variants SSTI finding must be kept:
+	// different vuln classes are different vulnerabilities.
+	fs.Add(Finding{
+		RuleID:   "VARIANT-005",
+		Location: Location{FilePath: "app.py", StartLine: 9},
+		Metadata: map[string]string{"vuln_class": "ssti"},
+	})
+	fs.Add(Finding{
+		RuleID:   "TAINT-003",
+		Location: Location{FilePath: "app.py", StartLine: 9},
+		Metadata: map[string]string{"vuln_class": "xss"},
+	})
+
+	fs.SuppressDuplicateVulnClass("TAINT-")
+
+	if len(fs.Findings()) != 2 {
+		t.Fatalf("distinct vuln classes at one span must both survive, got %d", len(fs.Findings()))
+	}
+}
+
+func TestFindingSet_SuppressDuplicateVulnClass_KeepsLoneTaint(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// A taint SSTI finding with no other analyzer covering it must be kept.
+	fs.Add(Finding{
+		RuleID:   "TAINT-003",
+		Location: Location{FilePath: "app.py", StartLine: 9},
+		Metadata: map[string]string{"vuln_class": "ssti"},
+	})
+
+	fs.SuppressDuplicateVulnClass("TAINT-")
+
+	if len(fs.Findings()) != 1 {
+		t.Fatalf("a lone taint finding must survive, got %d", len(fs.Findings()))
+	}
+}
+
 func TestFindingSet_Deduplicate_KeepsFirst(t *testing.T) {
 	t.Parallel()
 

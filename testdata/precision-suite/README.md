@@ -30,21 +30,22 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 0.89 / recall 1.00 / F1 0.94** (17 TP, 2 FP, 0 FN) — up from the
-original honest baseline of precision 0.30 / F1 0.47 (39 FP). Recall stayed
-perfect while precision was raised by fixing the three false-positive classes
-the corpus indicted (items 1-3 below):
+**precision 1.00 / recall 1.00 / F1 1.00** (17 TP, 0 FP, 0 FN) — up from the
+original honest baseline of precision 0.30 / F1 0.47 (39 FP), and from the
+interim 0.89 / F1 0.94 once the last two residual FPs were fixed (items 5–6
+below). Recall stayed perfect throughout while precision was raised only by
+fixing the false-positive classes the corpus indicted:
 
-- **findings-per-issue: 1.12** (was 2.75) — across the annotated issues nox now
-  emits ~1.1 findings each; 1.00 is ideal. The two secret files that used to
+- **findings-per-issue: 1.06** (was 2.75) — across the annotated issues nox now
+  emits ~1.06 findings each; 1.00 is ideal. The two secret files that used to
   dominate collapsed to their canonical provider rule: `tp_secrets_cloud.py`
   from density **8.00 → 1.00** and `tp_secrets.py` from **5.33 → 1.33**. The
   secret analyzer now deduplicates overlapping rules by specificity and resolves
   the canonical provider owner per token (see `core/analyzers/secrets/dedup.go`).
-- **noise ratio: 0.11** (was 0.70) — 2 of the 19 findings nox produces are false
-  positives. The two remaining are outside the three fixed classes: a SEC-161
-  entropy hit on a base64 data-URI (`clean_svg_blob.ts`) and a TAINT-003
-  over-fire that accompanies the SSTI positive (`tp_ssti.py`).
+- **noise ratio: 0.00** (was 0.70) — 0 of the 17 findings nox produces are false
+  positives. The last two (a SEC-161 entropy hit on a base64 data-URI SVG in
+  `clean_svg_blob.ts`, and a TAINT-003 over-fire accompanying the SSTI positive
+  in `tp_ssti.py`) are now fixed at the engine level (items 5–6 below).
 
 Committed as `baseline.json`; `TestPrecisionSuiteBaseline` (in `cli/`) fails if
 any of precision/recall/F1 drops or FP / findings-per-issue rises, so the number
@@ -78,6 +79,24 @@ can only move the right way without a human refreshing the snapshot.
    recall to 1.0 — the measure→build→re-measure loop working end to end. (SSTI
    via `render_template_string(... + user)`
    is *already* caught by `VARIANT-005`, so it is annotated as a true positive.)
+5. **Entropy fired inside a decoded image/SVG blob — FIXED.** The secrets
+   decode-and-scan path (`core/analyzers/secrets/decode.go`) base64-decodes
+   embedded blobs and re-scans the decoded bytes. A data-URI SVG decodes to
+   markup whose long alphanumeric runs tripped the entropy rules
+   (`SEC-161/162/163`) on `clean_svg_blob.ts`. The decode path now suppresses
+   entropy-only findings when the decoded content is itself a markup/image/data
+   blob (SVG/XML/HTML markup or an image magic header), while a real credential
+   hidden in base64 — which decodes to a bare secret, not to markup — is still
+   caught by the provider pattern rules.
+6. **Taint SSTI double-reported the variants SSTI — FIXED.** The taint engine's
+   `TAINT-003` SSTI sink and the `VARIANT-005` CVE signature both fired on the
+   same `render_template_string(... + user)` call, reporting one vulnerability
+   twice. The pipeline now drops a taint finding when another analyzer already
+   reports the same `vuln_class` at the same location
+   (`FindingSet.SuppressDuplicateVulnClass`, wired in `core/scan.go`), keeping
+   the more specific CVE signature. It is class-scoped, so it never hides a
+   distinct vulnerability — an XSS taint finding is only ever suppressed by
+   another XSS finding at the same span.
 
 ## Sample inventory
 
@@ -89,7 +108,7 @@ True positives (annotated ground truth):
 | `tp_secrets_cloud.py` | Stripe / GCP keys | SEC-030 / SEC-007 | TP, deduped to canonical |
 | `tp_prompt.py` | prompt injection (f-string) | AI-002 | TP |
 | `tp_yaml.py` | unsafe `yaml.load` | SLOP-001 / VARIANT-002 | TP |
-| `tp_ssti.py` | SSTI via dynamic template | VARIANT-005 (+ SLOP-001) | TP |
+| `tp_ssti.py` | SSTI via dynamic template | VARIANT-005 (+ SLOP-001) | TP, taint SSTI duplicate deduped |
 | `tp_injection.py` | command / eval injection | TAINT-002 / TAINT-005 | FN (recall gap) |
 | `tp_pathtrav.py` | path traversal via `open()` | TAINT-004 | FN (recall gap) |
 | `tp_deser.py` | unsafe `pickle.loads` | TAINT-005 | FN (recall gap) |
@@ -105,7 +124,7 @@ Clean stressors (zero annotations — any finding is a false positive):
 | `clean_prose_comments.py` | sinks quoted in comments | clean |
 | `clean_safe_db.py` | parameterized / arg-vector / quoted | clean |
 | `clean_hashes.js` | lockfile hashes, git SHA | clean |
-| `clean_svg_blob.ts` | base64 data-URI SVG | 1 FP |
+| `clean_svg_blob.ts` | base64 data-URI SVG | clean |
 | `clean_minified_bundle.js` | minified bundle strings | clean |
 | `clean_json_blob.py` | base64/JSON blob constant | clean |
 | `clean_identifiers.py` | UUIDs, hex colors, git SHA | clean |

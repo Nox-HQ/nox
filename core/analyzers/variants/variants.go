@@ -35,6 +35,10 @@ type signature struct {
 	Exclude     string   `json:"exclude"`
 	Remediation string   `json:"remediation"`
 	References  []string `json:"references"`
+	// VulnClass is the underlying vulnerability class (e.g. "ssti", "xss").
+	// Optional; when set it lets the pipeline dedup a signature against another
+	// analyzer's finding of the same class at the same location.
+	VulnClass string `json:"vuln_class,omitempty"`
 
 	re      *regexp.Regexp
 	exclude *regexp.Regexp
@@ -128,13 +132,17 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, content []byte
 			if s.exclude != nil && s.exclude.MatchString(line) {
 				continue
 			}
+			meta := map[string]string{"cve": s.CVE}
+			if s.VulnClass != "" {
+				meta["vuln_class"] = s.VulnClass
+			}
 			fs.Add(findings.Finding{
 				RuleID:     s.ID,
 				Severity:   findings.Severity(s.Severity),
 				Confidence: findings.Confidence(s.Confidence),
 				Location:   findings.Location{FilePath: path, StartLine: ln + 1, EndLine: ln + 1},
 				Message:    s.CVE + " variant: " + s.Title,
-				Metadata:   map[string]string{"cve": s.CVE},
+				Metadata:   meta,
 			})
 		}
 	}

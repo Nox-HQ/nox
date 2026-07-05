@@ -52,6 +52,7 @@
     "severity": "high",
     "confidence": "low",
     "exts": [".py"],
+    "vuln_class": "ssti",
     "pattern": "render_template_string\\s*\\([^)]*(\\+|%|\\.format\\(|f\")",
     "remediation": "render_template_string() built from concatenation/formatting lets attacker input reach the template compiler — the SSTI class (e.g. CVE-2019-10906). Render a static template and pass user data only as bound context variables.",
     "references": ["https://nvd.nist.gov/vuln/detail/CVE-2019-10906"]

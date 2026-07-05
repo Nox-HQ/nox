@@ -642,6 +642,13 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		)
 	}
 
+	// Drop a taint finding when another analyzer already reports the same vuln
+	// class at the same location — e.g. the taint engine's TAINT-003 SSTI sink
+	// firing on a render_template_string call that a variants CVE signature
+	// (VARIANT-005) already covers. Keeps the more specific signature; reports
+	// the vulnerability once instead of twice.
+	allFindings.SuppressDuplicateVulnClass("TAINT-")
+
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 

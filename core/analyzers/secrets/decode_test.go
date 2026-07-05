@@ -73,6 +73,51 @@ func TestDecodeAndScan_Base64WrappedAWSKey(t *testing.T) {
 	}
 }
 
+func TestDecodeAndScan_SVGBlobSuppressesEntropy(t *testing.T) {
+	// A base64 data-URI SVG whose decoded body contains long alphanumeric runs
+	// that trip the entropy rules (SEC-161/162/163). The decoded content is
+	// markup/image data, not a credential, so entropy-only findings must be
+	// dropped. This mirrors the clean_svg_blob.ts precision-suite sample.
+	a := NewAnalyzer()
+
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10AKIAIOSFODNN7EXAMPLEabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"/></svg>`
+	encoded := base64.StdEncoding.EncodeToString([]byte(svg))
+	content := []byte(`const icon = "data:image/svg+xml;base64,` + encoded + `";`)
+
+	results := DecodeAndScan(content, "icon.ts", a.engine)
+
+	for _, f := range results {
+		if isEntropyRule(f.RuleID) {
+			t.Errorf("entropy-only finding %s should be suppressed for a decoded SVG/image blob", f.RuleID)
+		}
+	}
+}
+
+func TestDecodeAndScan_RealSecretInBase64StillFound(t *testing.T) {
+	// A genuine AWS key hidden in base64 must still be caught: the decoded
+	// content is a bare credential, not an image/markup blob.
+	a := NewAnalyzer()
+
+	secret := "aws_access_key_id = AKIAIOSFODNN7EXAMPLE"
+	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
+	content := []byte("blob = " + encoded)
+
+	results := DecodeAndScan(content, "config.py", a.engine)
+
+	if len(results) == 0 {
+		t.Fatal("expected a decoded-secret finding for a real credential hidden in base64")
+	}
+	found := false
+	for _, f := range results {
+		if f.Metadata["encoding"] == "base64" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("real secret in base64 should surface as an encoded finding")
+	}
+}
+
 func TestIsPrintable(t *testing.T) {
 	tests := []struct {
 		input []byte
