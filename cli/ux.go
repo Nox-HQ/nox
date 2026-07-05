@@ -31,6 +31,8 @@ func familyOf(ruleID string) string {
 		return "License"
 	case strings.HasPrefix(ruleID, "SLOP-"):
 		return "Slopsquatting"
+	case strings.HasPrefix(ruleID, "AGENTFLOW-"):
+		return "Agentic Dataflow"
 	case strings.HasPrefix(ruleID, "AGENT-"):
 		return "Agent Config"
 	case strings.HasPrefix(ruleID, "MCP-"):
