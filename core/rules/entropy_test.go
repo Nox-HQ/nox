@@ -1009,3 +1009,30 @@ func TestIsTokenChar(t *testing.T) {
 		})
 	}
 }
+
+// Regression for #104: the generic entropy detectors must not flag
+// natural-language prose, SQL, or format-string literals — they have high
+// aggregate entropy but internal whitespace, and are not credentials. A
+// compact secret token (no whitespace) must still be detected.
+func TestEntropyMatcher_IgnoresProse(t *testing.T) {
+	m := &EntropyMatcher{}
+	rule := Rule{MatcherType: "entropy"}
+
+	prose := []string{
+		`msg := "Risk: the finding shows the 72-hour deadline may be missed (GDPR-Art-33)."`,
+		`return "the key contractual provisions obligation (DORA-Art-30)."`,
+		`pool.Exec(ctx, "ALTER ROLE lexora_app LOGIN PASSWORD 'app_pw'")`,
+		`tmpl := "judgement was not the required JSON object {judgements: [{citation, bucket}]}"`,
+	}
+	for _, line := range prose {
+		if got := m.Match([]byte(line), &rule); len(got) != 0 {
+			t.Errorf("prose flagged as secret: %q -> %+v", line, got)
+		}
+	}
+
+	// A real compact secret (no whitespace) is still caught.
+	secret := []byte(`api_key = "aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c"`)
+	if got := m.Match(secret, &rule); len(got) == 0 {
+		t.Error("a real whitespace-free high-entropy secret must still be detected")
+	}
+}

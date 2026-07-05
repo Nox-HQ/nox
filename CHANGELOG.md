@@ -103,6 +103,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Entropy secret detectors no longer flag natural-language prose (#104).**
+  The generic SEC-161 (high-entropy assignment) and SEC-163 (high-entropy hex)
+  detectors fired on long English sentences, SQL, error-message format strings,
+  and prompt templates — high *aggregate* entropy but not credentials. A compact
+  secret token (API key, hash, base64/hex blob) never contains internal
+  whitespace, so candidates with a space or tab are now rejected. On a
+  prose-heavy codebase this removes the dominant false-positive class (a real
+  case had 109 of 129 findings as prose FPs); real whitespace-free secrets are
+  still detected (the base64/hex tokenizers extract the token itself).
 - **`nox scan <file>` scans a single file.** A file target used to fail (it
   looked for `<file>/.nox.yaml` and the walker skipped its own root, finding
   nothing). Now it loads config from the file's directory and scans just that
