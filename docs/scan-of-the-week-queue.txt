@@ -20,8 +20,8 @@
 # ── Q3 2026 ─────────────────────────────────────────────────────
 # DONE 2026-05-04: modelcontextprotocol/python-sdk — series opener; 427 findings + 6-repo bench (anthropic-sdk-python, openai-python, agent-go, …); 0 disclosable
 # DONE 2026-05-09: anthropics/anthropic-cookbook — 1.95M findings (mostly RAG-corpus FPs); precision-tuning post
-# DONE 2026-06-05: deepset-ai/haystack — 12,367 findings (94% docs-website noise); 1 real low-sev (unredacted prompt log); fixed AI-009 ast.literal_eval FP
-# DONE 2026-06-05: huggingface/smolagents — 323 findings (65% from one example dir); 0 true positives; fixed VULN-002 PEP503 typosquat FP
+# DONE 2026-05-22: deepset-ai/haystack — 12,367 findings (94% docs-website noise); 1 real low-sev (unredacted prompt log); fixed AI-009 ast.literal_eval FP
+# DONE 2026-05-29: huggingface/smolagents — 323 findings (65% from one example dir); 0 true positives; fixed VULN-002 PEP503 typosquat FP
 # DONE 2026-06-05: langchain-ai/langgraph — 134,614 findings (99.8% examples/ notebook image data + lockfile hashes); 0 true positives; fixed AI-019 DB-pipeline FP; MCP-011 docstring FP tracked
 # DONE 2026-06-15: microsoft/autogen — 304,629 findings (99.5% SVG/lock/notebook FPs); 1 low-sev AI-019 model-hash gap; fixed 10 broad-pattern SEC rules missing \b+secretShape
 modelcontextprotocol/servers
