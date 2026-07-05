@@ -215,6 +215,64 @@ func (fs *FindingSet) SortDeterministic() {
 	})
 }
 
+// severityPriorityRank orders severities from most to least urgent.
+var severityPriorityRank = map[Severity]int{
+	SeverityCritical: 0, SeverityHigh: 1, SeverityMedium: 2, SeverityLow: 3, SeverityInfo: 4,
+}
+
+// confidencePriorityRank orders confidence from most to least certain.
+var confidencePriorityRank = map[Confidence]int{
+	ConfidenceHigh: 0, ConfidenceMedium: 1, ConfidenceLow: 2,
+}
+
+// reachabilityRank ranks a finding by the reachability plugin's `reachable`
+// enrichment: a confirmed-reachable finding is the most actionable, an
+// unreachable one is a likely false positive and sinks. Findings never analyzed
+// for reachability (no metadata) rank in the neutral middle, so enabling the
+// reachability plugin only ever demotes likely-FPs — it never buries a normal
+// finding beneath one.
+func reachabilityRank(f Finding) int {
+	switch f.Metadata["reachable"] {
+	case "true":
+		return 0
+	case "false":
+		return 2
+	default: // "undetermined" or absent
+		return 1
+	}
+}
+
+// SortByPriority orders findings for a human reading top-down: active findings
+// before suppressed/baselined ones, then by severity, then by reachability
+// (confirmed-reachable up, likely-false-positive unreachable down — see the
+// reachability plugin), then confidence, then a stable location tiebreak. Use
+// it for display/reporting; SortDeterministic remains the canonical order for
+// baselines and diffs.
+func (fs *FindingSet) SortByPriority() {
+	sort.SliceStable(fs.items, func(i, j int) bool {
+		a, b := fs.items[i], fs.items[j]
+		if av, bv := a.Status.IsActive(), b.Status.IsActive(); av != bv {
+			return av // active first
+		}
+		if ar, br := severityPriorityRank[a.Severity], severityPriorityRank[b.Severity]; ar != br {
+			return ar < br
+		}
+		if ar, br := reachabilityRank(a), reachabilityRank(b); ar != br {
+			return ar < br
+		}
+		if ac, bc := confidencePriorityRank[a.Confidence], confidencePriorityRank[b.Confidence]; ac != bc {
+			return ac < bc
+		}
+		if a.Location.FilePath != b.Location.FilePath {
+			return a.Location.FilePath < b.Location.FilePath
+		}
+		if a.Location.StartLine != b.Location.StartLine {
+			return a.Location.StartLine < b.Location.StartLine
+		}
+		return a.RuleID < b.RuleID
+	})
+}
+
 // RemoveByRuleIDs removes all findings whose RuleID matches any of the given IDs.
 func (fs *FindingSet) RemoveByRuleIDs(ids []string) {
 	if len(ids) == 0 {

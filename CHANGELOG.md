@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox scan --sort priority` — reachability-aware finding prioritization.**
+  Orders findings.json by what's most actionable — severity first, then
+  reachability, then confidence — instead of the default rule/path/line order
+  that buries criticals. Paired with the reachability plugin (which enriches
+  VULN findings with a `reachable` flag), a confirmed-reachable vuln rises and a
+  likely-false-positive *unreachable* one sinks to the bottom, so the report
+  leads with real risk. Deterministic (stable location tiebreak); the default
+  order is unchanged, preserving baselines and diffs.
 - **`nox fix --content` — deterministic patches for mechanical misconfigurations.**
   Reads `findings.json` and rewrites the flagged line to its one unambiguous
   secure value: Kubernetes hardening flips (`privileged: true`→`false`,
