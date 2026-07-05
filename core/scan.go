@@ -353,6 +353,18 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// Post-scan (context) plugins — e.g. reachability — need the findings the
+	// scan just produced, so they run here, after the built-in analyzers and
+	// the scan-tool plugins but before refinement, so their findings and
+	// enrichments are deduped, suppressed, and policy-gated like any other.
+	if PostScanPluginHook != nil && len(cfg.Plugins.Required) > 0 {
+		postResult := &ScanResult{Findings: allFindings, Inventory: inventory, AIInventory: aiInventory}
+		if hookErr := PostScanPluginHook(ctx, postResult, target, cfg.Plugins.Required); hookErr != nil {
+			slog.WarnContext(ctx, "post-scan plugins failed; continuing with findings so far", "error", hookErr)
+		}
+		pluginEnrichments = append(pluginEnrichments, postResult.Enrichments...)
+	}
+
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,
 	// baseline matching, and VEX.

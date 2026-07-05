@@ -30,3 +30,15 @@ type PluginScanOutput struct {
 // nil, nil) and must never panic: a plugin failure is reported as a non-fatal
 // error and the built-in scan still completes.
 var ScanPluginHook func(ctx context.Context, target string, required []string) (*PluginScanOutput, error)
+
+// PostScanPluginHook runs the "post-scan" plugin tools — those declaring
+// requires_scan_context=true — which need the findings the core scan just
+// produced. The reachability plugin is the canonical case: it classifies the
+// VULN findings against the workspace's imports (reachable / unreachable /
+// undetermined). Implementations enrich the given ScanResult IN PLACE (adding
+// findings and enrichments) using the plugin host's InvokePostScan.
+//
+// It runs before refinement so its findings are deduped, suppressed, and
+// policy-gated like any other. Same import-cycle rationale, nil-safety, and
+// non-fatal-failure contract as ScanPluginHook; the CLI registers it.
+var PostScanPluginHook func(ctx context.Context, result *ScanResult, target string, required []string) error

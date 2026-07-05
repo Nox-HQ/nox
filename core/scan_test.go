@@ -2246,3 +2246,52 @@ func TestConfidenceMeetsThreshold(t *testing.T) {
 		}
 	}
 }
+
+// TestRunScan_PostScanPluginHook verifies the post-scan hook (which runs
+// context-requiring plugins like reachability that need the scan's findings)
+// fires when plugins are required, and that a finding it adds flows through the
+// rest of the pipeline into the result.
+func TestRunScan_PostScanPluginHook(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"),
+		[]byte("plugins:\n  required:\n    - nox/reachability\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app.py"), []byte("x = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	var gotRequired []string
+	PostScanPluginHook = func(_ context.Context, result *ScanResult, _ string, required []string) error {
+		called = true
+		gotRequired = required
+		result.Findings.Add(findings.Finding{
+			RuleID: "REACH-001", Severity: findings.SeverityInfo, Confidence: findings.ConfidenceHigh,
+			Message: "unreachable (test)", Location: findings.Location{FilePath: "app.py", StartLine: 1},
+			Metadata: map[string]string{"reachable": "false"},
+		})
+		return nil
+	}
+	defer func() { PostScanPluginHook = nil }()
+
+	res, err := RunScan(dir)
+	if err != nil {
+		t.Fatalf("RunScan: %v", err)
+	}
+	if !called {
+		t.Fatal("post-scan hook was not called despite plugins.required being set")
+	}
+	if len(gotRequired) != 1 || gotRequired[0] != "nox/reachability" {
+		t.Errorf("hook got required=%v, want [nox/reachability]", gotRequired)
+	}
+	found := false
+	for _, f := range res.Findings.Findings() {
+		if f.RuleID == "REACH-001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("finding added by the post-scan hook did not reach the result")
+	}
+}

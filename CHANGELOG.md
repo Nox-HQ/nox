@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Post-scan plugins run automatically in `nox scan`.** Plugins whose tools
+  need the findings the scan just produced — those declaring
+  `requires_scan_context` — now run as part of the pipeline (before refinement,
+  so their findings are deduped, suppressed, and policy-gated). The reachability
+  plugin is the motivating case: listed in `plugins.required`, it now classifies
+  the scan's vulnerabilities as reachable / unreachable / undetermined without a
+  separate manual `nox plugin call`, feeding the `--sort priority` deprioritization
+  of likely-false-positive unreachable vulns.
 - **`nox lsp` — Language Server for editor diagnostics.** Runs a minimal LSP
   server over stdio (JSON-RPC 2.0 with `Content-Length` framing) that scans the
   active file on open/save and publishes nox findings as
