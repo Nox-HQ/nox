@@ -182,6 +182,54 @@
         {"call": "url.parse", "neutralizes": ["ssrf"], "note": "parse step for host allowlisting"},
         {"call": "new URL", "neutralizes": ["ssrf"], "note": "parse step; pair with a host allowlist decision"}
       ]
+    },
+    "go": {
+      "comment": "Go source/sink/sanitizer model. Sinks come in two shapes: package-qualified (exec.Command, os.ReadFile, http.Get, gob.NewDecoder, template.Parse) matched on the full dotted chain, and methods on a value whose receiver name varies (.Query/.Exec/.Decode) matched on the method suffix via the engine's suffixKeys fallback. See docs/design/go-taint.md for the precision trade of method-suffix matching and the AST-only (no go/types) scope.",
+      "sources": [
+        {"call": "URL.Query.Get", "kind": "http_query"},
+        {"call": "r.URL.Query", "kind": "http_query"},
+        {"call": "r.URL.RawQuery", "kind": "http_query"},
+        {"call": "r.FormValue", "kind": "http_body"},
+        {"call": "r.PostFormValue", "kind": "http_body"},
+        {"call": "r.PostForm.Get", "kind": "http_body"},
+        {"call": "r.Form.Get", "kind": "http_body"},
+        {"call": "r.Header.Get", "kind": "http_header"},
+        {"call": "r.Body", "kind": "http_body"},
+        {"call": "request.Body", "kind": "http_body"},
+        {"call": "req.Body", "kind": "http_body"},
+        {"call": "os.Args", "kind": "argv"}
+      ],
+      "sinks": [
+        {"call": "exec.Command", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "dangerous when a tainted value is interpolated into a string command, e.g. sh -c"},
+        {"call": "exec.CommandContext", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "db.Query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "safe when the tainted value is passed as a placeholder arg ($1/?) rather than concatenated into the query string"},
+        {"call": "db.QueryContext", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "db.QueryRow", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "db.QueryRowContext", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "db.Exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "db.ExecContext", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "os.Open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "os.OpenFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "os.ReadFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "ioutil.ReadFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "http.Get", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "http.Post", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "http.Head", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "http.NewRequest", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "gob.NewDecoder", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "gob-decoding untrusted bytes (e.g. r.Body) is an RCE/DoS vector"},
+        {"call": "yaml.Unmarshal", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "template.New.Parse", "vuln_class": "ssti", "cwe": "CWE-1336", "rule_id": "TAINT-003", "note": "parsing a tainted string as a text/template enables server-side template injection"},
+        {"call": "template.Parse", "vuln_class": "ssti", "cwe": "CWE-1336", "rule_id": "TAINT-003"},
+        {"call": "template.Must", "vuln_class": "ssti", "cwe": "CWE-1336", "rule_id": "TAINT-003"}
+      ],
+      "sanitizers": [
+        {"call": "filepath.Clean", "neutralizes": ["path_traversal"], "note": "canonicalizes; must be paired with a prefix/allow-base check"},
+        {"call": "filepath.Base", "neutralizes": ["path_traversal"]},
+        {"call": "url.QueryEscape", "neutralizes": ["ssrf", "xss"]},
+        {"call": "url.PathEscape", "neutralizes": ["ssrf", "xss"]},
+        {"call": "strconv.Atoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes injection metacharacters"},
+        {"call": "strconv.ParseInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]}
+      ]
     }
   }
 }
