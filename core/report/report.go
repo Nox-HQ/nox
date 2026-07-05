@@ -6,10 +6,26 @@ package report
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/nox-hq/nox/core/findings"
 )
+
+// GeneratedAt returns the report timestamp. It honors SOURCE_DATE_EPOCH (the
+// reproducible-builds standard: a Unix timestamp in seconds) so a scan can
+// produce byte-identical output across runs — the proof-of-determinism a
+// reviewer or CI cache can rely on. Without it, the current time is used.
+// Shared by the JSON and SBOM reporters so every timestamped artifact honors
+// the same reproducibility switch.
+func GeneratedAt() string {
+	if e := os.Getenv("SOURCE_DATE_EPOCH"); e != "" {
+		if secs, err := strconv.ParseInt(e, 10, 64); err == nil {
+			return time.Unix(secs, 0).UTC().Format(time.RFC3339)
+		}
+	}
+	return time.Now().UTC().Format(time.RFC3339)
+}
 
 // Reporter defines the contract for serializing a FindingSet into a byte
 // representation. Each output format (JSON, SARIF, SBOM, etc.) implements
@@ -79,7 +95,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 	report := JSONReport{
 		Meta: Meta{
 			SchemaVersion: "1.0.0",
-			GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
+			GeneratedAt:   GeneratedAt(),
 			ToolName:      "nox",
 			ToolVersion:   r.ToolVersion,
 			Offline:       r.Offline,

@@ -101,7 +101,12 @@ func StagedContent(repoRoot, path string) ([]byte, error) {
 // quoting so names with special characters round-trip. Best-effort: returns an
 // error when dir is not a git working tree.
 func TrackedFiles(dir string) ([]string, error) {
-	out, err := runGit(dir, "ls-files", "-z")
+	// --recurse-submodules lists tracked files inside initialized submodules too,
+	// with paths relative to the superproject. Without it, tracked-only scans
+	// would skip submodule content that a normal filesystem walk does traverse
+	// (the walker only skips `.git` directories, and a submodule root carries a
+	// `.git` *file*), leaving the two scan sets inconsistent.
+	out, err := runGit(dir, "ls-files", "-z", "--recurse-submodules")
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
