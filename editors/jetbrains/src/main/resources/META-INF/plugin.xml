@@ -1,0 +1,28 @@
+<idea-plugin>
+    <id>dev.nox.jetbrains</id>
+    <name>nox</name>
+    <vendor url="https://github.com/nox-hq/nox">nox</vendor>
+
+    <description><![CDATA[
+        Surfaces <a href="https://github.com/nox-hq/nox">nox</a> security findings
+        inline in JetBrains IDEs — squiggly underlines on the offending line,
+        hover for the rule and message, and entries in the Problems view.
+        <br/><br/>
+        <b>Deterministic and offline.</b> It runs the local <code>nox</code> binary
+        over the <code>nox lsp</code> language server (JSON-RPC over stdio); no code
+        leaves your machine and no model is called. On open and save the server
+        scans that file and publishes diagnostics.
+        <br/><br/>
+        Requires the <code>nox</code> binary on your PATH (<code>brew install nox</code>),
+        or set the <code>NOX_PATH</code> environment variable.
+    ]]></description>
+
+    <!-- The platform LSP API lives in the paid IDEs. -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lsp</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <platform.lsp.serverSupportProvider
+            implementation="dev.nox.lsp.NoxLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>
