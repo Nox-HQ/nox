@@ -46,6 +46,10 @@ type JSONReporter struct {
 	// Offline is recorded in the report Meta as the proof-of-offline
 	// attestation. Set it to the scan's `--offline` state before Generate.
 	Offline bool
+	// Prioritize orders findings by priority (severity, then reachability, then
+	// confidence) instead of the canonical deterministic order — the most
+	// actionable findings first, likely-false-positive unreachable vulns last.
+	Prioritize bool
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -58,7 +62,11 @@ func NewJSONReporter(version string) *JSONReporter {
 // pretty-printed JSON with 2-space indentation. The output is stable across
 // runs given the same input findings (aside from the GeneratedAt timestamp).
 func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
-	fs.SortDeterministic()
+	if r.Prioritize {
+		fs.SortByPriority()
+	} else {
+		fs.SortDeterministic()
+	}
 
 	f := fs.Findings()
 

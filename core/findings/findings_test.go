@@ -940,3 +940,35 @@ func TestNewFinding_AndValidate(t *testing.T) {
 		t.Error("invalid severity must fail validation")
 	}
 }
+
+// TestSortByPriority orders the most actionable findings first: severity, then
+// reachability (confirmed-reachable up, likely-false-positive unreachable
+// down), then confidence, with a stable location tiebreak.
+func TestSortByPriority(t *testing.T) {
+	fs := NewFindingSet()
+	mk := func(id string, sev Severity, reachable string) Finding {
+		f := Finding{RuleID: id, Severity: sev, Confidence: ConfidenceHigh, Status: StatusNew,
+			Location: Location{FilePath: "a.go", StartLine: 1}, Message: id}
+		if reachable != "" {
+			f.Metadata = map[string]string{"reachable": reachable}
+		}
+		return f
+	}
+	// Added out of priority order on purpose.
+	fs.Add(mk("VULN-low", SeverityLow, ""))
+	fs.Add(mk("VULN-crit-unreach", SeverityCritical, "false"))
+	fs.Add(mk("VULN-crit-reach", SeverityCritical, "true"))
+	fs.Add(mk("VULN-high", SeverityHigh, ""))
+
+	fs.SortByPriority()
+	got := make([]string, 0, 4)
+	for _, f := range fs.Findings() {
+		got = append(got, f.RuleID)
+	}
+	want := []string{"VULN-crit-reach", "VULN-crit-unreach", "VULN-high", "VULN-low"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("priority order = %v, want %v", got, want)
+		}
+	}
+}

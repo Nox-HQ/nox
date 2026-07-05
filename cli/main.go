@@ -284,6 +284,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noAutoInstallFlg      bool
 		failOnUnwaivedFlg     bool
 		offlineFlag           bool
+		sortFlag              string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -294,6 +295,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
+	scanFS.StringVar(&sortFlag, "sort", "deterministic", "findings.json order: 'deterministic' (rule/path/line) or 'priority' (severity, then reachability, then confidence — most actionable first)")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
 	positionals, err := parseInterspersed(scanFS, args)
@@ -471,6 +473,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			path := filepath.Join(outputDir, "findings.json")
 			r := report.NewJSONReporter(version)
 			r.Offline = offlineFlag
+			r.Prioritize = sortFlag == "priority"
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
