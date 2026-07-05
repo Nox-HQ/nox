@@ -84,6 +84,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// continuations should merge physical lines, and each logical line is
 		// then split on top-level semicolons into separate statements.
 		return extractJavaScript(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangGo:
+		// Go gets an AST-precise extractor (go/parser) rather than the lexctx line
+		// recognizer: nox is itself Go, so the pure-Go stdlib parser is free,
+		// precise, and deterministic. See extract_go.go / docs/design/go-taint.md.
+		return extractGo(content)
 	default:
 		return nil
 	}
