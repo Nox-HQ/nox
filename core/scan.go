@@ -596,6 +596,26 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		}
 	}
 
+	// Context-gated SAST severity: downgrade code-pattern findings located in
+	// non-production trees (tests, examples, docs, vendored/generated/minified
+	// code) by one level. The deterministic, path-based analogue of Snyk's
+	// reachability gating — the same finding is far less actionable in throwaway
+	// code than in shipping source. Scoped to code-pattern families only (never
+	// SEC-*/VULN-*/CONT-*/LIC-, see ContextDowngradeRulePatterns) and gated by
+	// scan.context_downgrade (default on). Runs before dedup/sort; it changes
+	// only Severity + audit Metadata, never fingerprints or ordering, so byte
+	// output stays stable apart from the intended severity change. It also runs
+	// AFTER user conditional_severity so an explicit override is the source of
+	// truth and is never silently re-downgraded (that override wins).
+	if cfg.Scan.ContextDowngradeEnabled() {
+		globs := NonProductionPathGlobs()
+		allFindings.DowngradeByRulePatternsAndPath(
+			ContextDowngradeRulePatterns(),
+			func(p string) bool { return MatchesNonProductionPath(p, globs) },
+			"non-production",
+		)
+	}
+
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 

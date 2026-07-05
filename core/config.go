@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -129,6 +130,14 @@ type ScanSettings struct {
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
 	SAST                 SASTConfig              `yaml:"sast"`
+	// ContextDowngrade gates the context-gated SAST severity refinement: a
+	// code-pattern finding (AI-*, MCP-*, AGENT-*, IAC-*, TAINT-*, SLOP-*,
+	// VARIANT-*) located in a non-production tree (tests, examples, docs,
+	// vendored/generated/minified code) is dropped one severity level, since
+	// the same pattern in throwaway code is far less actionable than in
+	// shipping source. It is a *bool so the absent/zero case can default to
+	// enabled (parity with auto_install): nil ⇒ on, set false ⇒ off.
+	ContextDowngrade *bool `yaml:"context_downgrade"`
 }
 
 // SASTConfig declares the per-language SAST depth strategy. nox targets ~15
@@ -143,6 +152,123 @@ type ScanSettings struct {
 // and how each depth maps to behavior today and in future.
 type SASTConfig struct {
 	Languages map[string]string `yaml:"languages"`
+}
+
+// ContextDowngradeEnabled reports whether context-gated severity downgrading is
+// active. It defaults to true when unset in .nox.yaml so noise reduction is on
+// out of the box; `scan.context_downgrade: false` opts out.
+func (s *ScanSettings) ContextDowngradeEnabled() bool {
+	if s.ContextDowngrade == nil {
+		return true
+	}
+	return *s.ContextDowngrade
+}
+
+// NonProductionPathGlobs is the built-in set of path globs that mark a file as
+// non-production context for the context-gated severity downgrade. Matching is
+// case-insensitive on path segments (see MatchesNonProductionPath); `**` spans
+// zero or more path segments so a tree matches at any depth. The set covers the
+// four classic "not shipping source" buckets: test code, examples, docs, and
+// vendored/generated/minified/build output.
+func NonProductionPathGlobs() []string {
+	return []string{
+		"**/test/**", "**/tests/**", "*_test.*",
+		"**/testdata/**",
+		"**/example/**", "**/examples/**",
+		"**/docs/**",
+		"**/vendor/**", "**/node_modules/**",
+		"**/*.min.js",
+		"**/dist/**", "**/build/**",
+		"**/generated/**", "**/__mocks__/**",
+	}
+}
+
+// ContextDowngradeRulePatterns is the set of rule-ID families the context
+// downgrade applies to — the *code-pattern* families whose actionability
+// genuinely depends on where the code ships:
+//
+//   - AI-*, MCP-*, AGENT-* — AI/agent/tool-wiring patterns
+//   - IAC-*                — infrastructure-as-code misconfigurations
+//   - TAINT-*              — dataflow/taint findings
+//   - SLOP-*               — AI-generated-code smells
+//   - VARIANT-*            — variant/anti-pattern matches
+//
+// It deliberately EXCLUDES:
+//
+//   - SEC-*                — a secret in a test file is frequently a real,
+//     committed credential (test fixtures leak prod keys); downgrading it
+//     would bury genuine exposure. Secrets are graded by the secret itself,
+//     not by the file it sits in.
+//   - VULN-*, CONT-*, LIC- — dependency/container/license facts. A vulnerable
+//     or wrongly-licensed dependency is exploitable/non-compliant regardless
+//     of whether the manifest importing it lives under tests/ or examples/;
+//     the risk is a property of the package, not the call site.
+func ContextDowngradeRulePatterns() []string {
+	return []string{
+		"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*",
+	}
+}
+
+// MatchesNonProductionPath reports whether path matches any of the given globs
+// under the context-downgrade matching rules. It is a robust, filepath-style
+// matcher: paths are normalized to forward slashes, matching is
+// case-insensitive on every segment, and a `**` glob segment spans zero or more
+// path segments so `**/test/**` matches `test/a.py`, `src/test/a.py`, and
+// `a/b/test/c/d.py` alike. A single `*` matches within one segment via
+// filepath.Match (so `*_test.*` and `**/*.min.js` work). Returns false for an
+// empty path or empty glob set.
+func MatchesNonProductionPath(path string, globs []string) bool {
+	if path == "" || len(globs) == 0 {
+		return false
+	}
+	lower := strings.ToLower(filepath.ToSlash(path))
+	segs := strings.Split(lower, "/")
+	base := segs[len(segs)-1]
+	for _, g := range globs {
+		lg := strings.ToLower(g)
+		gsegs := strings.Split(lg, "/")
+		if matchGlobSegments(segs, gsegs) {
+			return true
+		}
+		// A single-segment glob with no `**` (e.g. `*_test.*`, `*.min.js`) is a
+		// basename pattern: match it against the final path segment at any depth,
+		// mirroring the base-name fallback used elsewhere in the pipeline.
+		if len(gsegs) == 1 && !strings.Contains(lg, "**") {
+			if ok, _ := filepath.Match(lg, base); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchGlobSegments matches pre-split, lower-cased path segments against
+// pre-split glob segments, treating `**` as "zero or more segments" and
+// delegating single-segment matching (including `*`) to filepath.Match. It runs
+// a small recursive backtracking match — glob depth is tiny (a handful of
+// segments) so this is effectively linear in path length.
+func matchGlobSegments(path, glob []string) bool {
+	// Both exhausted ⇒ match; a trailing `**` still matches the empty tail.
+	if len(glob) == 0 {
+		return len(path) == 0
+	}
+	if glob[0] == "**" {
+		// `**` consumes zero segments (skip it) or one segment (advance path).
+		if matchGlobSegments(path, glob[1:]) {
+			return true
+		}
+		if len(path) > 0 {
+			return matchGlobSegments(path[1:], glob[1:]) || matchGlobSegments(path[1:], glob)
+		}
+		return false
+	}
+	if len(path) == 0 {
+		return false
+	}
+	if ok, _ := filepath.Match(glob[0], path[0]); !ok {
+		return false
+	}
+	return matchGlobSegments(path[1:], glob[1:])
 }
 
 // GeneratedPathsConfig controls the built-in noise filter that stops the
