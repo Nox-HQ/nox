@@ -44,10 +44,12 @@ func runBenchPrecision(args []string) int {
 		corpusDir    string
 		jsonOut      bool
 		minPrecision float64
+		baselineFile string
 	)
 	fs.StringVar(&corpusDir, "precision", "", "path to a labeled precision corpus (directory of samples with inline nox-expect annotations)")
 	fs.BoolVar(&jsonOut, "json", false, "emit the report as JSON instead of a table")
 	fs.Float64Var(&minPrecision, "min-precision", -1, "fail (exit 1) if any rule that fired scores below this precision (0..1); default off")
+	fs.StringVar(&baselineFile, "baseline", "", "snapshot file: written if absent, else compared (exit 1 on regression)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -96,7 +98,78 @@ func runBenchPrecision(args []string) int {
 			return 1
 		}
 	}
+
+	if baselineFile != "" {
+		if code := runBaselineGate(baselineFile, &report); code != 0 {
+			return code
+		}
+	}
 	return 0
+}
+
+// runBaselineGate implements the ratchet. When the snapshot file is absent it
+// writes the current metrics and returns success (bootstrapping a new baseline).
+// When present it compares and returns non-zero on any regression, printing a
+// clear diff of what moved the wrong way. A legitimate improvement passes but
+// prints a hint to refresh the snapshot so the ratchet keeps tightening.
+func runBaselineGate(path string, report *bench.Report) int {
+	current := bench.BaselineFromReport(report)
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if writeErr := writeBaseline(path, current); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "error: writing baseline %s: %v\n", path, writeErr)
+			return 2
+		}
+		fmt.Fprintf(os.Stderr, "baseline written: %s (precision %.3f, recall %.3f, F1 %.3f, FP %d, findings/issue %.2f)\n",
+			path, current.Precision, current.Recall, current.F1, current.FP, current.FindingsPerIssue)
+		return 0
+	}
+
+	base, err := readBaseline(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: reading baseline %s: %v\n", path, err)
+		return 2
+	}
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		fmt.Fprintf(os.Stderr, "\nbaseline gate FAILED: %d metric(s) regressed vs %s\n", len(regressions), path)
+		for i := range regressions {
+			fmt.Fprintf(os.Stderr, "  %s\n", regressions[i].String())
+		}
+		fmt.Fprintln(os.Stderr, "fix the regression, or if this change is intended, refresh the baseline by deleting it and re-running.")
+		return 1
+	}
+
+	if bench.Improved(base, current) {
+		fmt.Fprintf(os.Stderr, "\nbaseline PASSED and improved: precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f\n",
+			base.Precision, current.Precision, base.FP, current.FP, base.FindingsPerIssue, current.FindingsPerIssue)
+		fmt.Fprintln(os.Stderr, "refresh the baseline (delete and re-run, or commit the new snapshot) to lock in the gain.")
+	}
+	return 0
+}
+
+// writeBaseline serialises a baseline snapshot as indented JSON with a trailing
+// newline so the committed file is diff-friendly.
+func writeBaseline(path string, b bench.Baseline) error {
+	data, err := json.MarshalIndent(b, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644) //nolint:gosec // a metrics snapshot is not sensitive
+}
+
+// readBaseline loads and parses a baseline snapshot file.
+func readBaseline(path string) (bench.Baseline, error) {
+	var b bench.Baseline
+	data, err := os.ReadFile(path) //nolint:gosec // operator-supplied path, not user input
+	if err != nil {
+		return b, err
+	}
+	if err := json.Unmarshal(data, &b); err != nil {
+		return b, err
+	}
+	return b, nil
 }
 
 // scanCorpusFindings runs an offline scan over the corpus and returns its
@@ -113,6 +186,15 @@ func scanCorpusFindings(corpusDir string) ([]findings.Finding, error) {
 	for i := range all {
 		f := all[i]
 		f.Location.FilePath = relToCorpus(corpusDir, f.Location.FilePath)
+		// Drop findings on documentation files. ParseCorpus never gathers
+		// expectations from docs (the suite README explains the annotation
+		// format and contains example rule IDs), so a finding on a doc file has
+		// no expectation to match and would score as a false positive purely
+		// because the scanner read the README. Both sides must treat docs the
+		// same way for the score to be honest.
+		if bench.IsNonSample(f.Location.FilePath) {
+			continue
+		}
 		out = append(out, f)
 	}
 	return out, nil
@@ -168,5 +250,55 @@ func renderPrecisionTable(corpusDir string, report *bench.Report) string {
 	_, _ = fmt.Fprintf(tw, "OVERALL\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\n",
 		o.TP, o.FP, o.FN, o.Precision(), o.Recall(), o.F1())
 	_ = tw.Flush() //nolint:errcheck // strings.Builder never errors on write
+
+	renderFamilyTable(&b, report)
+	renderDensityTable(&b, report)
 	return b.String()
+}
+
+// renderFamilyTable prints the per-family roll-up (worst precision first) so a
+// human sees "the SEC family is the precision drag" without scanning twenty
+// individual rows. Only shown when more than one family is present, otherwise it
+// is redundant with the per-rule table.
+func renderFamilyTable(b *strings.Builder, report *bench.Report) {
+	if len(report.Families) <= 1 {
+		return
+	}
+	fmt.Fprintf(b, "\nBy rule family (worst precision first)\n\n")
+	tw := tabwriter.NewWriter(b, 0, 2, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "FAMILY\tTP\tFP\tFN\tPRECISION\tRECALL\tF1")
+	for i := range report.Families {
+		f := &report.Families[i]
+		_, _ = fmt.Fprintf(tw, "%s-*\t%d\t%d\t%d\t%.3f\t%.3f\t%.3f\n",
+			f.Family, f.TP, f.FP, f.FN, f.Precision(), f.Recall(), f.F1())
+	}
+	_ = tw.Flush() //nolint:errcheck // strings.Builder never errors on write
+}
+
+// renderDensityTable prints the over-firing view: the headline findings-per-issue
+// and noise-ratio numbers, then a per-file table sorted worst-noise-first so the
+// loudest samples (clean files with FPs, then most-inflated issues) sit at the
+// top. This is the metric per-rule precision cannot show.
+func renderDensityTable(b *strings.Builder, report *bench.Report) {
+	d := &report.Density
+	fmt.Fprintf(b, "\nOver-firing / finding density\n")
+	fmt.Fprintf(b, "  findings-per-issue: %.2f  (%d findings across %d annotated issues; 1.00 is ideal)\n",
+		d.FindingsPerIssue(), d.FindingsAtIssues, d.TotalIssues)
+	fmt.Fprintf(b, "  noise ratio:        %.2f  (%d of %d total findings were false positives)\n\n",
+		d.NoiseRatio(), d.FP, d.TotalFindings)
+
+	tw := tabwriter.NewWriter(b, 0, 2, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "FILE\tKIND\tISSUES\tFINDINGS\tDENSITY\tFP")
+	for i := range d.Files {
+		f := &d.Files[i]
+		kind := "tp"
+		density := fmt.Sprintf("%.2f", f.Density())
+		if f.Clean {
+			kind = "clean"
+			density = "-" // density is undefined for a file with no issues
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%s\t%d\n",
+			f.FilePath, kind, f.Issues, f.Findings, density, f.FP)
+	}
+	_ = tw.Flush() //nolint:errcheck // strings.Builder never errors on write
 }
