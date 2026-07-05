@@ -192,7 +192,7 @@ func scanCorpusFindings(corpusDir string) ([]findings.Finding, error) {
 		// no expectation to match and would score as a false positive purely
 		// because the scanner read the README. Both sides must treat docs the
 		// same way for the score to be honest.
-		if bench.IsDocFile(f.Location.FilePath) {
+		if bench.IsNonSample(f.Location.FilePath) {
 			continue
 		}
 		out = append(out, f)

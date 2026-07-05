@@ -40,6 +40,21 @@ func IsDocFile(path string) bool {
 	return docExtensions[strings.ToLower(filepath.Ext(path))]
 }
 
+// harnessArtifacts are files that live in a corpus directory but are the
+// harness's own output, not labeled samples — a finding on them must never
+// score. baseline.json is the committed ratchet snapshot; because it sits inside
+// the scanned corpus dir, scanning it would otherwise self-inflict a false
+// positive (its JSON body contains rule IDs and sample paths).
+var harnessArtifacts = map[string]bool{"baseline.json": true}
+
+// IsNonSample reports whether a corpus-directory path is a documentation file or
+// a harness artifact rather than a labeled sample. Both the corpus parser (when
+// gathering expectations) and the scan side (when scoring findings) use it so
+// the two stay consistent and neither docs nor the baseline snapshot can score.
+func IsNonSample(path string) bool {
+	return IsDocFile(path) || harnessArtifacts[filepath.Base(path)]
+}
+
 // ParseCorpus walks a labeled-corpus directory and returns every declared
 // expectation. Each source file is read line by line; any line carrying a
 // `nox-expect: <RuleID>` annotation yields one Expectation per listed rule,

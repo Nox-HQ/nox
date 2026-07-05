@@ -30,17 +30,19 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 0.24 / recall 0.71 / F1 0.36** (12 TP, 38 FP, 5 FN) — an honest
-baseline. The grown suite also surfaces the metric per-rule precision/recall
-cannot see:
+**precision 0.30 / recall 1.00 / F1 0.47** (17 TP, 39 FP, 0 FN) — an honest
+baseline. Recall is now perfect: the intraprocedural taint engine landed and the
+injection/SSRF/traversal/deserialization flows that used to be false negatives
+now fire (see item 4). All the remaining work is **precision** — the grown suite
+surfaces exactly what per-rule precision/recall cannot see:
 
-- **findings-per-issue: 2.38** — across the 16 annotated issues, nox emits 2.38
+- **findings-per-issue: 2.75** — across the annotated issues, nox emits 2.75
   findings each on average; 1.00 is ideal. Two files dominate:
   `tp_secrets_cloud.py` has density **8.00** (16 findings on 2 real secrets) and
   `tp_secrets.py` **5.33**. This is the over-firing per-rule scoring misses:
   every one of those findings is a real secret (each rule "TP"s), yet a human
   sees one issue inflated 5-8×.
-- **noise ratio: 0.76** — 38 of the 50 findings nox produced were false
+- **noise ratio: 0.70** — 39 of the 56 findings nox produced were false
   positives.
 
 Committed as `baseline.json`; `TestPrecisionSuiteBaseline` (in `cli/`) fails if
@@ -62,12 +64,13 @@ can only move the right way without a human refreshing the snapshot.
    obvious examples (gitleaks/trufflehog/detect-secrets all do).
 3. **AI-002 fires on safe string concatenation** in `clean_safe_db.py` — a
    `"…" + var` that is not a prompt.
-4. **Injection recall gaps** (`TAINT-002`/`004`/`005`/`006` FNs): command
-   injection (`os.system("echo " + cmd)`), eval, path traversal
-   (`open(user_path)`), unsafe deserialization (`pickle.loads(user)`), and SSRF
-   (`requests.get(user_url)`) are all missed. These are the intraprocedural
-   taint engine's target; the annotations are the regression target and flip to
-   true positives when it lands. (SSTI via `render_template_string(... + user)`
+4. **Injection recall gaps — CLOSED.** The intraprocedural taint engine has
+   landed, so command injection (`os.system("echo " + cmd)`), eval, path
+   traversal (`open(user_path)`), unsafe deserialization (`pickle.loads(user)`),
+   and SSRF (`requests.get(user_url)`) now fire as `TAINT-002/005/...`. Those
+   annotations flipped from false negatives to true positives, taking suite
+   recall to 1.0 — the measure→build→re-measure loop working end to end. (SSTI
+   via `render_template_string(... + user)`
    is *already* caught by `VARIANT-005`, so it is annotated as a true positive.)
 
 ## Sample inventory
