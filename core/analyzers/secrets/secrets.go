@@ -39,6 +39,10 @@ func isGeneratedSecretsPath(path string) bool {
 // Analyzer wraps a rules.Engine pre-loaded with secret detection rules.
 type Analyzer struct {
 	engine *rules.Engine
+	// spec maps rule ID → specificity tier, used to collapse the
+	// provider-rule-vs-generic-rule pileup on a single token (see dedup.go).
+	// Built once at construction from the loaded rule set's structure.
+	spec map[string]int
 }
 
 // NewAnalyzer creates an Analyzer with built-in secret detection rules loaded
@@ -50,6 +54,7 @@ func NewAnalyzer() *Analyzer {
 	}
 	return &Analyzer{
 		engine: rules.NewEngine(rs),
+		spec:   specificityByRule(rs.Rules()),
 	}
 }
 
@@ -136,14 +141,29 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
+		// Collapse the provider-rule-vs-generic-rule pileup: when several
+		// secret rules match the SAME token span on a line, keep only the
+		// most-specific (provider) finding and drop the generic entropy/keyword
+		// duplicates. This is the dominant precision drag on real secrets — one
+		// GitHub/Slack/Stripe token otherwise emits 5-8 findings.
+		results = dedupBySpecificity(results, a.spec, content)
+
 		// Drop matches that fall inside an embedded data blob (a base64 SVG, a
 		// data: URI) in a source file — a 32-char run inside such a blob is never
 		// a real credential and is the dominant secret false-positive class. This
 		// only fires on lexable source (Python/JS/TS); comments and ordinary
 		// string literals (where a real hardcoded secret lives) are kept.
+		//
+		// Also drop obvious documentation placeholders ("your-api-key-here",
+		// "changeme", "<...>", "postgres://USER:PASSWORD@host", all-x/all-zero
+		// masks) — these are not live credentials and mirror the
+		// gitleaks/trufflehog/detect-secrets example allowlists.
 		lang := lexctx.LangFromPath(artifact.Path)
 		for i := range results {
 			if inEmbeddedBlob(lang, content, &results[i]) {
+				continue
+			}
+			if isPlaceholderFinding(content, &results[i]) {
 				continue
 			}
 			fs.Add(results[i])
@@ -158,6 +178,48 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+// isPlaceholderFinding reports whether a finding's matched value is an obvious
+// documentation placeholder that should be dropped. The finding may carry the
+// matched value in Metadata; otherwise we reconstruct it from content using the
+// finding's byte offsets (start..end via the location's line/column).
+func isPlaceholderFinding(content []byte, f *findings.Finding) bool {
+	if f.Metadata != nil {
+		if v, ok := f.Metadata["match"]; ok && v != "" {
+			return isPlaceholderValue(v)
+		}
+	}
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	end := lexctx.LineColToOffset(content, f.Location.EndLine, f.Location.EndColumn)
+	if end <= start || end > len(content) {
+		return false
+	}
+	if isPlaceholderValue(string(content[start:end])) {
+		return true
+	}
+	// Connection-string rules (SEC-430 for postgres, mysql, … URLs) match only
+	// the URL scheme, so the placeholder signal — a user:password userinfo
+	// template — lives in the rest of the line, not the matched span. Inspect
+	// the whole source line for a credentials-in-URL placeholder.
+	if isURLCredentialPlaceholderLine(lineOf(content, f.Location.StartLine)) {
+		return true
+	}
+	return false
+}
+
+// lineOf returns the 1-based source line (without the trailing newline) from
+// content, or "" if the line number is out of range.
+func lineOf(content []byte, line int) string {
+	if line < 1 {
+		return ""
+	}
+	start := lexctx.LineColToOffset(content, line, 1)
+	end := lexctx.LineColToOffset(content, line+1, 1)
+	if end <= start || end > len(content) {
+		end = len(content)
+	}
+	return string(content[start:end])
 }
 
 // inEmbeddedBlob reports whether a finding's location sits inside a data-blob

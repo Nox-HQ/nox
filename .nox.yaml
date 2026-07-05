@@ -17,6 +17,13 @@ scan:
     - "core/analyzers/secrets/rules.go"
     - "core/analyzers/iac/rules*.go"
     - "core/analyzers/ai/rules.go"
+    # Pattern-vocabulary files: provider-prefix owner table, placeholder/example
+    # token allowlist, and LLM prompt-context tokens. Like rules.go they must
+    # name the literal patterns they match against, so the self-scan flags them
+    # (Go is not yet lexctx-classified, so comments/constants aren't suppressed).
+    - "core/analyzers/secrets/dedup.go"
+    - "core/analyzers/secrets/placeholder.go"
+    - "core/analyzers/ai/prompt_context.go"
     - "registry/trust/signature.go"
     - "cli/plugin_cmd.go"
     # CI workflows and action scripts contain pinned commit SHAs, GITHUB_TOKEN refs, and Actions expressions (false positives)
