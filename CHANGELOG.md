@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox fix --content` — deterministic patches for mechanical misconfigurations.**
+  Reads `findings.json` and rewrites the flagged line to its one unambiguous
+  secure value: Kubernetes hardening flips (`privileged: true`→`false`,
+  `runAsNonRoot: false`→`true`, hostNetwork/hostPID/hostIPC/allowPrivilegeEscalation/
+  automountServiceAccountToken, readOnlyRootFilesystem), Terraform
+  (`storage_encrypted`/`enable_https_traffic_only`, `protocol "HTTP"`→`"HTTPS"`,
+  `acl "public-read"`→`"private"`), CI (`continue-on-error: true`→`false`), and
+  Dockerfile `ADD`→`COPY`. Template-free and no LLM — only rules with a single
+  correct answer are fixed; anything needing a choice (a UID, a pinned digest, an
+  allowlist, a rotated secret) is deliberately never touched. Previews the diff
+  by default and applies nothing; `--content --write` applies.
 - **`nox baseline init` — one-command adoption for a debt-laden repo.** Scans,
   records every current finding as accepted baseline debt (reported by
   severity), and prints the "gate the change, not the history" policy to add

@@ -29,6 +29,8 @@ func runFix(args []string) int {
 		manifestRoot string
 		doActions    bool
 		onlyActions  bool
+		doContent    bool
+		write        bool
 	)
 	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
 	fs.BoolVar(&dryRun, "dry-run", false, "print actions without applying them")
@@ -36,8 +38,16 @@ func runFix(args []string) int {
 	fs.StringVar(&manifestRoot, "root", ".", "directory containing the project's manifest (go.mod)")
 	fs.BoolVar(&doActions, "actions", false, "also upgrade outdated GitHub Actions pins in .github/workflows (needs GITHUB_TOKEN)")
 	fs.BoolVar(&onlyActions, "actions-only", false, "only upgrade GitHub Actions pins; skip the package-dependency pass")
+	fs.BoolVar(&doContent, "content", false, "generate deterministic patches for mechanical IAC misconfigurations (previews the diff; add --write to apply)")
+	fs.BoolVar(&write, "write", false, "with --content: apply the patches instead of only previewing them")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	// Content-rule fixing is a distinct mode: it reads findings.json and
+	// rewrites the flagged lines with their one unambiguous secure value.
+	if doContent {
+		return runContentFix(inputPath, write)
 	}
 
 	// GitHub Actions remediation runs independently of findings.json — it
