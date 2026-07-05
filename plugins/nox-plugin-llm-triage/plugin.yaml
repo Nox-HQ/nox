@@ -1,0 +1,7 @@
+name: nox-plugin-llm-triage
+version: 0.1.0
+track: dynamic-runtime
+description: Optional LLM second-opinion triage. Sends each finding plus a code snippet to a configured chat endpoint and attaches a true/false-positive verdict as an enrichment. Never gates the scan; the deterministic core is unaffected.
+tools:
+  - name: llm_triage
+    description: Send each finding + code snippet to a chat endpoint and attach a true/false-positive verdict (active, egress of source, needs confirmation)
