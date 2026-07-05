@@ -210,6 +210,38 @@ func TestTrackedFiles(t *testing.T) {
 	}
 }
 
+// TestTrackedFiles_Submodules verifies tracked-only scans reach into an
+// initialized submodule (roadmap 1.2). Without --recurse-submodules, git
+// ls-files reports the submodule only as a gitlink, so its scannable content
+// would be invisible to a tracked-only scan even though a normal walk sees it.
+func TestTrackedFiles_Submodules(t *testing.T) {
+	// A separate repo that will become the submodule.
+	subRemote := t.TempDir()
+	run(t, subRemote, "git", "init", "-b", "main")
+	run(t, subRemote, "git", "config", "user.email", "test@test.com")
+	run(t, subRemote, "git", "config", "user.name", "Test")
+	writeFile(t, filepath.Join(subRemote, "lib.go"), "package lib")
+	run(t, subRemote, "git", "add", ".")
+	run(t, subRemote, "git", "commit", "-m", "sub initial")
+
+	super := setupGitRepo(t)
+	// Local submodule add needs protocol.file.allow=always on modern git.
+	run(t, super, "git", "-c", "protocol.file.allow=always", "submodule", "add", subRemote, "vendor/sub")
+	run(t, super, "git", "commit", "-m", "add submodule")
+
+	tracked, err := TrackedFiles(super)
+	if err != nil {
+		t.Fatalf("TrackedFiles: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range tracked {
+		got[f] = true
+	}
+	if !got["vendor/sub/lib.go"] {
+		t.Errorf("expected submodule file vendor/sub/lib.go in tracked set, got %v", tracked)
+	}
+}
+
 func TestTrackedFiles_InvalidRepo(t *testing.T) {
 	dir := t.TempDir()
 	_, err := TrackedFiles(dir)

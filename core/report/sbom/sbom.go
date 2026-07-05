@@ -9,9 +9,9 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/report"
 )
 
 // ---------------------------------------------------------------------------
@@ -185,13 +185,13 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		}
 	}
 
-	report := CDXReport{
+	doc := CDXReport{
 		BOMFormat:    "CycloneDX",
 		SpecVersion:  "1.5",
 		SerialNumber: "urn:uuid:nox-scan",
 		Version:      1,
 		Metadata: CDXMetadata{
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			Timestamp: report.GeneratedAt(),
 			Tools: []CDXTool{
 				{
 					Vendor:  "nox",
@@ -204,7 +204,7 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		Vulnerabilities: cdxVulns,
 	}
 
-	return json.MarshalIndent(report, "", "  ")
+	return json.MarshalIndent(doc, "", "  ")
 }
 
 // WriteToFile generates the CycloneDX report and writes it to the given path.
@@ -369,7 +369,7 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 		Name:              "nox-scan",
 		DocumentNamespace: "https://github.com/nox-hq/nox/scans",
 		CreationInfo: SPDXCreationInfo{
-			Created:  time.Now().UTC().Format(time.RFC3339),
+			Created:  report.GeneratedAt(),
 			Creators: []string{fmt.Sprintf("Tool: nox-%s", r.ToolVersion)},
 		},
 		Packages:      spdxPkgs,
