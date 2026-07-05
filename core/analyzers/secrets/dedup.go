@@ -312,6 +312,77 @@ func ownersForValue(value string) map[string]struct{} {
 	return nil
 }
 
+// isBareProviderPrefix reports whether a finding matched only a provider prefix
+// (e.g. `glpat-`, `sk_live_`) with no credential body following it — the shape a
+// pattern-vocabulary file has when it names the prefixes its rules detect
+// (`{"glpat-", ...}`, `// prefix (ghp_, xoxb-, sk_live_, ...)`). A live token
+// always carries a 20+ char high-entropy body; a match that is the bare prefix,
+// immediately followed by a non-token-body byte, is a reference, not a secret.
+//
+// This runs AFTER dedupBySpecificity, so on a real token the precise owner rule
+// (which requires the body) has already claimed the span and the bare-prefix
+// alias is gone — a surviving bare-prefix match therefore never coincides with a
+// real credential.
+func isBareProviderPrefix(content []byte, f *findings.Finding) bool {
+	value := matchedValue(content, f)
+	v := strings.TrimLeft(value, `"'`)
+	if v == "" {
+		return false
+	}
+	prefix, ok := recognisedProviderPrefix(v)
+	if !ok {
+		return false
+	}
+	// The match must be ONLY the prefix (no body captured in the span).
+	if v != prefix {
+		return false
+	}
+	// Inspect the source bytes immediately after the match: if a token body of
+	// credential-length characters follows, this is a real (unquoted) token and
+	// must be kept. A boundary (quote, comma, brace, space, end of line) means
+	// the prefix stands alone as vocabulary.
+	end := lexctx.LineColToOffset(content, f.Location.EndLine, f.Location.EndColumn)
+	return !tokenBodyFollows(content, end)
+}
+
+// recognisedProviderPrefix returns the longest canonicalOwners prefix that v
+// starts with, or ("", false) if none matches.
+func recognisedProviderPrefix(v string) (string, bool) {
+	for i := range canonicalOwners {
+		if strings.HasPrefix(v, canonicalOwners[i].prefix) {
+			return canonicalOwners[i].prefix, true
+		}
+	}
+	return "", false
+}
+
+// barePrefixBodyThreshold is the run length of token-body characters that, if
+// present immediately after a provider prefix, marks a real credential rather
+// than a bare-prefix reference. Provider tokens carry 20+ body chars.
+const barePrefixBodyThreshold = 20
+
+// tokenBodyFollows reports whether content at offset begins a run of at least
+// barePrefixBodyThreshold token-body characters (alphanumerics plus `-`/`_`,
+// the alphabet real provider tokens draw from).
+func tokenBodyFollows(content []byte, offset int) bool {
+	run := 0
+	for i := offset; i < len(content) && run < barePrefixBodyThreshold; i++ {
+		if !isTokenBodyByte(content[i]) {
+			break
+		}
+		run++
+	}
+	return run >= barePrefixBodyThreshold
+}
+
+// isTokenBodyByte reports whether c can appear in a provider-token body.
+func isTokenBodyByte(c byte) bool {
+	return c == '-' || c == '_' ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9')
+}
+
 // specificityOf returns the specificity tier for a rule ID.
 func specificityOf(ruleID string, spec map[string]int) int {
 	if s, ok := spec[ruleID]; ok {

@@ -163,6 +163,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if inEmbeddedBlob(lang, content, &results[i]) {
 				continue
 			}
+			// Drop a bare provider-prefix match with no token body — the literal
+			// `"glpat-"` or the `sk_live_` inside a `// prefix (ghp_, sk_live_, …)`
+			// comment that a pattern-vocabulary file must name. A live credential
+			// always carries a 20+ char high-entropy body; a match that is only the
+			// prefix is a reference, never a leaked secret. This is deliberately
+			// narrower than dropping every comment/string match: a FULL token in a
+			// comment (a genuinely leaked credential) is still kept, because its
+			// matched value is more than the bare prefix.
+			if isBareProviderPrefix(content, &results[i]) {
+				continue
+			}
 			if isPlaceholderFinding(content, &results[i]) {
 				continue
 			}
