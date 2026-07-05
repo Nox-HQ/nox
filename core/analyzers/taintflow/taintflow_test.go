@@ -140,6 +140,57 @@ func TestAnalyzerDeterministicAcrossFiles(t *testing.T) {
 	}
 }
 
+func TestAnalyzerInterproceduralCommandInjection(t *testing.T) {
+	// Cross-function: the sink lives in a helper, the tainted value is produced in
+	// the handler and handed to the helper. The finding must fire and its metadata
+	// must record the interprocedural path through the helper.
+	dir := t.TempDir()
+	art := writeArtifact(t, dir, "app.py", `def run(c):
+    os.system(c)
+
+def handler():
+    cmd = request.args.get("x")
+    run(cmd)
+`)
+	a := NewAnalyzer()
+	fs, err := a.ScanArtifacts(context.Background(), []discovery.Artifact{art})
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+	items := fs.Findings()
+	if len(items) != 1 || items[0].RuleID != "TAINT-002" {
+		t.Fatalf("want one TAINT-002 finding, got %+v", items)
+	}
+	f := items[0]
+	if f.Metadata["interprocedural"] != "true" {
+		t.Errorf("interprocedural metadata = %q, want true", f.Metadata["interprocedural"])
+	}
+	if f.Metadata["via"] != "run" {
+		t.Errorf("via metadata = %q, want run", f.Metadata["via"])
+	}
+	// The finding is located at the call site (line 6, `run(cmd)`) — the
+	// actionable line in the caller where untrusted data is handed to the helper.
+	// The message and `via` metadata name the helper whose body holds the sink.
+	if f.Location.StartLine != 6 {
+		t.Errorf("sink line = %d, want 6 (the run(cmd) call site)", f.Location.StartLine)
+	}
+}
+
+func TestAnalyzerInterproceduralSanitizedNoFinding(t *testing.T) {
+	// The helper sanitizes its argument before the sink: no finding.
+	dir := t.TempDir()
+	art := writeArtifact(t, dir, "app.py", `def run(c):
+    os.system(shlex.quote(c))
+
+def handler():
+    cmd = request.args.get("x")
+    run(cmd)
+`)
+	if ids := scan(t, art); len(ids) != 0 {
+		t.Fatalf("want no findings (sanitized in helper), got %v", ids)
+	}
+}
+
 func TestAnalyzerRules(t *testing.T) {
 	rs := NewAnalyzer().Rules()
 	want := map[string]bool{"TAINT-001": false, "TAINT-002": false, "TAINT-005": false}

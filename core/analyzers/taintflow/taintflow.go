@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -147,11 +148,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // does not double-report.
 func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.Lang, content []byte) {
 	units := engine.ExtractUnits(path, lang, content)
-	for i := range units {
-		flows := a.eng.Analyze(units[i])
-		for j := range flows {
-			fs.Add(a.toFinding(&flows[j]))
-		}
+	// AnalyzeFile runs the whole file at once so it can join a source in one
+	// function to a sink reached through a locally-defined helper (SAME-FILE
+	// interprocedural flow via function summaries), in addition to the
+	// intraprocedural flows Analyze finds. It de-duplicates a source→sink pair
+	// reachable both ways, so a purely intraprocedural bug is still reported once.
+	flows := a.eng.AnalyzeFile(units)
+	for j := range flows {
+		fs.Add(a.toFinding(&flows[j]))
 	}
 }
 
@@ -161,10 +165,36 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.La
 // source line.
 func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 	sink := flow.Sink
-	msg := fmt.Sprintf(
-		"Untrusted input (%s via %q) reaches %s sink %q without sanitization — %s.",
-		flow.Source.Kind, flow.SourceVar, sink.VulnClass, sink.Call, sink.CWE,
-	)
+	var msg string
+	if len(flow.Via) > 0 {
+		// Cross-function flow: name the intermediate helper(s) so triage can follow
+		// the path from the caller's source through the summarized helper(s) to the
+		// sink.
+		msg = fmt.Sprintf(
+			"Untrusted input (%s via %q) reaches %s sink %q through %s without sanitization — %s.",
+			flow.Source.Kind, flow.SourceVar, sink.VulnClass, sink.Call,
+			viaPath(flow.Via), sink.CWE,
+		)
+	} else {
+		msg = fmt.Sprintf(
+			"Untrusted input (%s via %q) reaches %s sink %q without sanitization — %s.",
+			flow.Source.Kind, flow.SourceVar, sink.VulnClass, sink.Call, sink.CWE,
+		)
+	}
+	meta := map[string]string{
+		"cwe":         sink.CWE,
+		"vuln_class":  string(sink.VulnClass),
+		"sink":        sink.Call,
+		"source_kind": string(flow.Source.Kind),
+		"source_call": flow.Source.Call,
+		"source_var":  flow.SourceVar,
+		"source_line": fmt.Sprintf("%d", flow.SourceLine),
+		"function":    flow.FuncName,
+	}
+	if len(flow.Via) > 0 {
+		meta["interprocedural"] = "true"
+		meta["via"] = strings.Join(flow.Via, " -> ")
+	}
 	return findings.Finding{
 		RuleID:     sink.RuleID,
 		Severity:   severityForClass(sink.VulnClass),
@@ -174,16 +204,17 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 			StartLine: flow.SinkLine,
 			EndLine:   flow.SinkLine,
 		},
-		Message: msg,
-		Metadata: map[string]string{
-			"cwe":         sink.CWE,
-			"vuln_class":  string(sink.VulnClass),
-			"sink":        sink.Call,
-			"source_kind": string(flow.Source.Kind),
-			"source_call": flow.Source.Call,
-			"source_var":  flow.SourceVar,
-			"source_line": fmt.Sprintf("%d", flow.SourceLine),
-			"function":    flow.FuncName,
-		},
+		Message:  msg,
+		Metadata: meta,
 	}
+}
+
+// viaPath renders a cross-function path for a finding message, e.g.
+// `helper "wrap" -> "run"` for a two-hop chain.
+func viaPath(via []string) string {
+	quoted := make([]string, len(via))
+	for i, v := range via {
+		quoted[i] = fmt.Sprintf("%q", v)
+	}
+	return "helper " + strings.Join(quoted, " -> ")
 }
