@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/sdk"
@@ -134,6 +135,13 @@ func handleAIEval(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToo
 		fb.WithMetadata("http_status", fmt.Sprintf("%d", v.Status))
 		fb.WithMetadata("response_excerpt", v.Body)
 		fb.WithMetadata("cwe", cwe)
+		// OWASP LLM/ASI control tags, comma-joined under a single
+		// `owasp` metadata key (the convention used by the AI analyzer
+		// findings in core). Mirrors the static rules so a runtime
+		// finding surfaces the same owasp-llm* / owasp-asi* controls.
+		if tags := owaspTags(v.Entry.Kind); len(tags) > 0 {
+			fb.WithMetadata("owasp", strings.Join(tags, ","))
+		}
 		fb.Done()
 	}
 
