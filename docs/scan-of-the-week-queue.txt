@@ -1,5 +1,9 @@
 # Scan-of-the-week rotation queue.
 #
+# Process: see docs/scan-of-the-week.md (runbook). The scan session is
+# network-restricted, so the target is PRE-CLONED and nox scans a local
+# path fully offline (--offline) — no egress-policy change needed (#136).
+#
 # Bi-weekly cadence, alphabetical-first selection. The /schedule
 # job pops the top non-comment line, runs `nox scan` on the repo,
 # writes a draft post to nox-hq.dev/src/content/blog/, then strikes
