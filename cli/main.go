@@ -212,6 +212,8 @@ func run(args []string) int {
 		return runInstallHook(remaining[1:])
 	case "fix":
 		return runFix(remaining[1:])
+	case "variants":
+		return runVariants(remaining[1:])
 	case "doctor":
 		return runDoctor(remaining[1:])
 	case "agent-graph":

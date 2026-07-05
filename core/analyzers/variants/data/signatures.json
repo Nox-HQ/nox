@@ -1,0 +1,70 @@
+[
+  {
+    "id": "VARIANT-001",
+    "cve": "CVE-2021-44228",
+    "title": "Log4Shell-style JNDI lookup in a loggable string (remote code execution)",
+    "severity": "critical",
+    "confidence": "high",
+    "exts": [],
+    "pattern": "(?i)\\$\\{jndi:(ldap|ldaps|rmi|dns|iiop|nis|corba|nds):",
+    "remediation": "A ${jndi:...} lookup string reaches a logging/interpolation sink — the Log4Shell class of bug. Remove the attacker-controllable JNDI lookup, disable message-lookup interpolation, and upgrade the logging library past the patched version.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2021-44228"]
+  },
+  {
+    "id": "VARIANT-002",
+    "cve": "CVE-2020-14343",
+    "title": "PyYAML full-loader deserialization (arbitrary object construction)",
+    "severity": "high",
+    "confidence": "medium",
+    "exts": [".py"],
+    "pattern": "\\byaml\\.load\\s*\\(",
+    "exclude": "(?i)Loader\\s*=\\s*(yaml\\.)?(Safe|Base|CSafe)",
+    "remediation": "yaml.load() without a safe Loader constructs arbitrary Python objects from untrusted YAML — the CVE-2020-14343 class. Use yaml.safe_load() or pass Loader=yaml.SafeLoader.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2020-14343"]
+  },
+  {
+    "id": "VARIANT-003",
+    "cve": "CVE-2007-4559",
+    "title": "Tar extraction without member filtering (path traversal / arbitrary write)",
+    "severity": "high",
+    "confidence": "medium",
+    "exts": [".py"],
+    "pattern": "\\.extractall\\s*\\(",
+    "exclude": "(?i)filter\\s*=",
+    "remediation": "tarfile.extractall() without a filter follows '../' and absolute paths in archive members, writing outside the target directory (CVE-2007-4559 / the 'tarbomb' class). Pass filter='data' (Python 3.12+) or validate each member's path before extraction.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2007-4559"]
+  },
+  {
+    "id": "VARIANT-004",
+    "cve": "CVE-2018-1002200",
+    "title": "Zip Slip: archive entry name used directly in a file path (arbitrary write)",
+    "severity": "high",
+    "confidence": "medium",
+    "exts": [".java", ".kt"],
+    "pattern": "new\\s+File\\s*\\([^)]*\\.getName\\s*\\(\\s*\\)",
+    "remediation": "A zip/archive entry's getName() is concatenated into a File path without canonicalization — the Zip Slip class (CVE-2018-1002200). Resolve the target path and verify it stays within the intended directory (canonicalPath startsWith destDir) before writing.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2018-1002200"]
+  },
+  {
+    "id": "VARIANT-005",
+    "cve": "CVE-2019-10906",
+    "title": "Server-side template injection via dynamic template string (Jinja/SSTI class)",
+    "severity": "high",
+    "confidence": "low",
+    "exts": [".py"],
+    "pattern": "render_template_string\\s*\\([^)]*(\\+|%|\\.format\\(|f\")",
+    "remediation": "render_template_string() built from concatenation/formatting lets attacker input reach the template compiler — the SSTI class (e.g. CVE-2019-10906). Render a static template and pass user data only as bound context variables.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2019-10906"]
+  },
+  {
+    "id": "VARIANT-006",
+    "cve": "CVE-2021-21315",
+    "title": "Command injection via interpolated shell string in child_process (systeminformation class)",
+    "severity": "critical",
+    "confidence": "medium",
+    "exts": [".js", ".ts"],
+    "pattern": "\\bexec\\s*\\(\\s*`[^`]*\\$\\{",
+    "remediation": "child_process.exec() with a template-literal that interpolates a variable passes the value through a shell — the command-injection class (e.g. CVE-2021-21315). Use execFile()/spawn() with an argument array, and validate/allowlist the interpolated value.",
+    "references": ["https://nvd.nist.gov/vuln/detail/CVE-2021-21315"]
+  }
+]
