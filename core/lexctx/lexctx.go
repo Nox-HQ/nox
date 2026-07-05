@@ -207,6 +207,33 @@ func SuppressNonCode(lang Lang, content []byte, matchStart, matchEnd int) bool {
 	}
 }
 
+// InDataBlob reports whether the match [matchStart,matchEnd) lies entirely
+// inside a data-blob string literal (a long/base64 or data: URI string) — the
+// class that produces the overwhelming majority of secret and pattern false
+// positives (a 32-char alphanumeric run inside an embedded base64 SVG). Unlike
+// SuppressNonCode, it does NOT drop comment matches: a credential written in a
+// comment is often a real leaked secret, so the secrets analyzer must keep it.
+// Use this for secret detection; use SuppressNonCode for code-pattern families
+// where a match in a comment is never executable and is safe to drop.
+func InDataBlob(lang Lang, content []byte, matchStart, matchEnd int) bool {
+	if lang == LangUnknown {
+		return false
+	}
+	if matchEnd <= matchStart || matchStart < 0 || matchEnd > len(content) {
+		return false
+	}
+	regions := Classify(lang, content)
+	idx := regionIndexAt(regions, matchStart)
+	if idx < 0 {
+		return false
+	}
+	r := regions[idx]
+	if r.End < matchEnd { // straddles into code — keep, never hide a real finding
+		return false
+	}
+	return r.Kind == KindString && isStringBlob(content, r)
+}
+
 // blobThreshold is the string length (in bytes, excluding delimiters) above
 // which a string literal is considered a data blob rather than an ordinary
 // literal. Real hardcoded secrets and config values are short; base64 payloads,

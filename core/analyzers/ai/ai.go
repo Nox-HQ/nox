@@ -14,6 +14,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -100,6 +101,21 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	return a.engine.ScanFile(path, content)
 }
 
+// suppressNonCode reports whether an AI/MCP pattern finding sits in a comment
+// or a data-blob string in lexable source — noise, since such a match is not
+// executing code. Returns false for unknown languages (never over-suppress).
+func suppressNonCode(lang lexctx.Lang, content []byte, f *findings.Finding) bool {
+	if lang == lexctx.LangUnknown {
+		return false
+	}
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	end := lexctx.LineColToOffset(content, f.Location.EndLine, f.Location.EndColumn)
+	if end <= start {
+		end = start + 1
+	}
+	return lexctx.SuppressNonCode(lang, content, start, end)
+}
+
 // ScanArtifacts reads each artifact file from disk, scans it for AI security
 // issues, and collects findings. It also builds an AI component inventory from
 // artifacts classified as AIComponent.
@@ -127,7 +143,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
+		// Drop matches that land in a comment or a data-blob string in lexable
+		// source: an AI/MCP code pattern quoted in a comment or embedded in a
+		// base64 blob is not executing code, so it's noise (this is the AI-012
+		// -on-changelog-prose false-positive class). Unlike the secrets analyzer,
+		// comments are dropped here because a code pattern in a comment is never a
+		// real code path.
+		lang := lexctx.LangFromPath(artifact.Path)
 		for i := range results {
+			if suppressNonCode(lang, content, &results[i]) {
+				continue
+			}
 			fs.Add(results[i])
 		}
 
