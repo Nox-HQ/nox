@@ -13,7 +13,10 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
+	"github.com/nox-hq/nox/core/analyzers/slop"
+	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -51,6 +54,9 @@ func allRuleSets() []*rules.RuleSet {
 		ai.NewAnalyzer().Rules(),
 		iac.NewAnalyzer().Rules(),
 		deps.NewAnalyzer(deps.WithOSVDisabled()).Rules(),
+		slop.NewAnalyzer().Rules(),
+		variants.NewAnalyzer().Rules(),
+		provenance.NewAnalyzer().Rules(),
 	}
 }
 

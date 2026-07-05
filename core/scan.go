@@ -17,7 +17,10 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
+	"github.com/nox-hq/nox/core/analyzers/slop"
+	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -175,6 +178,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
+	slopAnalyzer := slop.NewAnalyzer()
+	variantsAnalyzer := variants.NewAnalyzer()
+	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
 	var (
@@ -244,6 +250,30 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			mu.Unlock()
 			return nil
 		},
+		func(c context.Context) error {
+			fs, err := slopAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
+		func(c context.Context) error {
+			fs, err := variantsAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
+		func(c context.Context) error {
+			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
 	}
 	if err := runAnalyzerTasks(ctx, tasks, opts.Sequential); err != nil {
 		return nil, err
@@ -289,6 +319,15 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range depsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range slopAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range variantsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range provenanceAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 
@@ -912,6 +951,12 @@ func analyzerRulePatterns(analyzer string) []string {
 		return []string{"DATA-*"}
 	case "deps":
 		return []string{"VULN-*", "CONT-*", "LIC-*"}
+	case "slop":
+		return []string{"SLOP-*"}
+	case "variants":
+		return []string{"VARIANT-*"}
+	case "provenance":
+		return []string{"PROV-*"}
 	default:
 		return nil
 	}

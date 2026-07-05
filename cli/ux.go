@@ -23,8 +23,16 @@ func familyOf(ruleID string) string {
 		return "Container"
 	case strings.HasPrefix(ruleID, "VULN-"):
 		return "Dependencies"
+	case strings.HasPrefix(ruleID, "VARIANT-"):
+		return "CVE Variants"
+	case strings.HasPrefix(ruleID, "PROV-"):
+		return "Provenance"
 	case strings.HasPrefix(ruleID, "LIC-"):
 		return "License"
+	case strings.HasPrefix(ruleID, "SLOP-"):
+		return "Slopsquatting"
+	case strings.HasPrefix(ruleID, "AGENT-"):
+		return "Agent Config"
 	case strings.HasPrefix(ruleID, "MCP-"):
 		return "MCP Hardening"
 	case strings.HasPrefix(ruleID, "AI-PI-"):
