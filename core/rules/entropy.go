@@ -124,6 +124,13 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 			if isLikelyNotSecret(c.text) {
 				continue
 			}
+			// Subresource Integrity (SRI) hashes — a base64 digest prefixed by
+			// its algorithm (sha256-/sha384-/sha512-) in HTML/JSX/struct tags —
+			// are public integrity values, not credentials. Skip a candidate
+			// whose base64 body is immediately preceded by an SRI prefix.
+			if isSRIIntegrityHash(lineStr, c.col) {
+				continue
+			}
 			entropy := ShannonEntropy(c.text)
 			if entropy >= effective {
 				results = append(results, MatchResult{
@@ -349,6 +356,44 @@ func isLikelyNotSecret(s string) bool {
 	}
 
 	return false
+}
+
+// sriPrefixes are the algorithm labels that precede the base64 body of a
+// Subresource Integrity hash, e.g. sha384-<base64>.
+var sriPrefixes = []string{"sha256-", "sha384-", "sha512-"}
+
+// isSRIIntegrityHash reports whether the candidate string beginning at the
+// given 1-based column in line is the base64 body of a Subresource Integrity
+// (SRI) hash — i.e. immediately preceded by an SRI algorithm prefix such as
+// "sha384-". Such hashes are public content digests, never secrets, so they
+// must not fire the entropy detectors. The prefix must be a whole token: the
+// character before it (if any) must not be alphanumeric, so "mysha384-…" (a
+// coincidental substring) is not treated as SRI.
+func isSRIIntegrityHash(line string, col int) bool {
+	// col is 1-based; the candidate starts at byte index col-1.
+	start := col - 1
+	if start < 0 || start > len(line) {
+		return false
+	}
+	prefixRegion := strings.ToLower(line[:start])
+	for _, p := range sriPrefixes {
+		if !strings.HasSuffix(prefixRegion, p) {
+			continue
+		}
+		before := len(prefixRegion) - len(p)
+		if before == 0 {
+			return true
+		}
+		if b := prefixRegion[before-1]; !isAlphaNum(b) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAlphaNum reports whether b is an ASCII letter or digit.
+func isAlphaNum(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // isAllHex returns true if every character in s is a hexadecimal digit.

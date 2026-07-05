@@ -225,6 +225,47 @@ func TestEntropyMatcher_Base64Blob(t *testing.T) {
 	}
 }
 
+// TestEntropyMatcher_SkipsSRIIntegrityHash verifies that a Subresource
+// Integrity (SRI) hash — a public, base64-encoded content digest prefixed by
+// its algorithm (sha256-/sha384-/sha512-) — does not fire the entropy rules.
+// SRI hashes are integrity values embedded in HTML/JSX/struct tags, not
+// credentials; flagging them is the same false-positive class as lockfile
+// hashes and git SHAs (precision-suite clean_identifiers.go).
+func TestEntropyMatcher_SkipsSRIIntegrityHash(t *testing.T) {
+	m := &EntropyMatcher{}
+	// The base64 body carries a '+' and '/', high entropy, and secret-context
+	// keyword "integrity" on the line — exactly the shape that used to fire.
+	content := []byte("\tIntegrity string // sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8w\n")
+	rule := Rule{MatcherType: "entropy", Metadata: map[string]string{"entropy_threshold": "5.0"}}
+
+	if results := m.Match(content, &rule); len(results) != 0 {
+		t.Fatalf("expected no matches for SRI integrity hash, got %d: %+v", len(results), results)
+	}
+}
+
+// TestIsSRIIntegrityHashLine covers the SRI-prefix recognition helper directly.
+func TestIsSRIIntegrityHashLine(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		col  int // 1-based column of the candidate within line
+		want bool
+	}{
+		{"sha384", "x = sha384-oqVuAfXRKap7fdgcCY5uykM6", 12, true},
+		{"sha256", "integrity=\"sha256-AbCdEf0123456789+/xyz\"", 19, true},
+		{"sha512", "  sha512-ZZZ0123456789abcdefGHIJ", 10, true},
+		{"no-prefix", "key = oqVuAfXRKap7fdgcCY5uykM6", 7, false},
+		{"unrelated-word", "mysha384-oqVuAfXRKap7fdgcCY5", 10, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isSRIIntegrityHash(tt.line, tt.col); got != tt.want {
+				t.Fatalf("isSRIIntegrityHash(%q, %d) = %v, want %v", tt.line, tt.col, got, tt.want)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // EntropyMatcher: hex string detection
 // ---------------------------------------------------------------------------
