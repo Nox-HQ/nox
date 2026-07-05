@@ -149,6 +149,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
+		fmt.Fprintf(os.Stderr, "  lsp              Start LSP server on stdio (publishes findings as editor diagnostics)\n")
 		fmt.Fprintf(os.Stderr, "  registry         Manage plugin registries\n")
 		fmt.Fprintf(os.Stderr, "  plugin           Manage and invoke plugins\n")
 		fmt.Fprintf(os.Stderr, "  version          Print version and exit\n\n")
@@ -185,6 +186,8 @@ func run(args []string) int {
 		return runBadge(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
+	case "lsp":
+		return runLSP(remaining[1:])
 	case "registry":
 		return runRegistry(remaining[1:])
 	case "plugin":
