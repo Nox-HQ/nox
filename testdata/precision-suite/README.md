@@ -6,6 +6,13 @@ ground truth** — what a *correct* scanner should do — so real false positive
 and false negatives surface as a number below 1.0. That is the point: a corpus
 that always scores 1.0 measures nothing.
 
+The corpus spans **Python, JS/TS, and Go** (`clean_*.{py,js,ts,go}` /
+`tp_*.{py,go}`). Go samples were added once `lexctx` began classifying Go
+(#197): nox is now measured in its own language for the first time. Doing so
+honestly *lowered* recall — the Go taint classes are genuine false negatives
+today (nox's taint catalog only models python/javascript) — which is exactly
+the corpus doing its job. See "Go coverage gaps" below.
+
 Run it:
 
 ```
@@ -16,36 +23,51 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 
 ## Ground-truth philosophy
 
-- **Clean samples** (`clean_*.{py,js,ts}`) carry **no** `nox-expect` annotation:
-  any finding on them is a false positive. They deliberately contain the noise
-  that broad rules trip on — an embedded base64 SVG, a minified JS bundle, a
-  JSON/base64 blob in a `.py`, UUIDs/hex colors/git SHAs, lockfile-style hashes,
-  code sinks quoted in comments, `.env.example` placeholders, and safe
-  (sanitized/parameterized) code.
-- **True-positive samples** (`tp_*.{py}`) annotate the rule(s) a correct scanner
-  *should* fire, per line. Where nox fires *more* (over-firing) those extra
-  findings score as false positives; where it fires *nothing* (a recall gap)
-  the annotation scores as a false negative.
+- **Clean samples** (`clean_*.{py,js,ts,go}`) carry **no** `nox-expect`
+  annotation: any finding on them is a false positive. They deliberately contain
+  the noise that broad rules trip on — an embedded base64 SVG, a minified JS
+  bundle, a JSON/base64 blob in a `.py`, a base64 data-URI in a Go raw string,
+  UUIDs/hex colors/git SHAs, lockfile-style hashes and SRI integrity hashes,
+  code sinks quoted in comments, `.env.example` placeholders, a
+  `DO NOT EDIT` generated-code banner, and safe (sanitized/parameterized) code.
+- **True-positive samples** (`tp_*.{py,go}`) annotate the rule(s) a correct
+  scanner *should* fire, per line. Where nox fires *more* (over-firing) those
+  extra findings score as false positives; where it fires *nothing* (a recall
+  gap) the annotation scores as a false negative.
 
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 1.00 / recall 1.00 / F1 1.00** (17 TP, 0 FP, 0 FN) — up from the
-original honest baseline of precision 0.30 / F1 0.47 (39 FP), and from the
-interim 0.89 / F1 0.94 once the last two residual FPs were fixed (items 5–6
-below). Recall stayed perfect throughout while precision was raised only by
-fixing the false-positive classes the corpus indicted:
+**precision 1.00 / recall 0.79 / F1 0.88** (23 TP, 0 FP, 6 FN). Precision is
+still perfect — every finding nox emits is a true positive — but recall dropped
+from the Python/JS-only 1.00 the moment realistic **Go** samples were added:
+nox's taint engine has no Go language model yet, so the six Go injection /
+traversal / SSRF / deserialization / SSTI positives are honest false negatives
+(see "Go coverage gaps" below). This is the corpus working as designed — adding
+a language nox can't fully see makes the number tell the truth rather than
+flatter it.
 
-- **findings-per-issue: 1.06** (was 2.75) — across the annotated issues nox now
-  emits ~1.06 findings each; 1.00 is ideal. The two secret files that used to
-  dominate collapsed to their canonical provider rule: `tp_secrets_cloud.py`
-  from density **8.00 → 1.00** and `tp_secrets.py` from **5.33 → 1.33**. The
-  secret analyzer now deduplicates overlapping rules by specificity and resolves
-  the canonical provider owner per token (see `core/analyzers/secrets/dedup.go`).
-- **noise ratio: 0.00** (was 0.70) — 0 of the 17 findings nox produces are false
-  positives. The last two (a SEC-161 entropy hit on a base64 data-URI SVG in
-  `clean_svg_blob.ts`, and a TAINT-003 over-fire accompanying the SSTI positive
-  in `tp_ssti.py`) are now fixed at the engine level (items 5–6 below).
+For reference, the earlier Python/JS-only journey: precision rose from an
+original honest baseline of 0.30 / F1 0.47 (39 FP), through an interim
+0.89 / F1 0.94, to 1.00 / F1 1.00 — raised only by fixing the false-positive
+classes the corpus indicted (items 1–6 below), never by curating it.
+
+- **findings-per-issue: 0.85** — across the annotated issues nox emits ~0.85
+  findings each (below 1.00 because the six Go FNs contribute an annotated issue
+  with zero findings). On the Python secret files that once dominated, density
+  collapsed to canonical: `tp_secrets_cloud.py` from **8.00 → 1.00** and
+  `tp_secrets.py` from **5.33 → 1.33**, via specificity dedup + per-token owner
+  resolution (`core/analyzers/secrets/dedup.go`). The Go secret files
+  (`tp_secrets.go`, `tp_secrets_cloud.go`) each score density 1.00 — the
+  language-agnostic secret regexes resolve cleanly on Go too.
+- **noise ratio: 0.00** — 0 of the findings nox produces are false positives.
+  The Go clean-stressors added here (a base64 data-URI in a Go raw string, an
+  SRI integrity hash, a generated-code banner, placeholder creds) are all clean.
+  The one Go FP the corpus surfaced — a **SEC-161** entropy hit on the SRI
+  `sha384-…` integrity hash in `clean_identifiers.go` — was fixed at the engine
+  level: the entropy matcher now recognizes and skips SRI hashes
+  (`core/rules/entropy.go`, `isSRIIntegrityHash`), the same "public digest, not
+  a secret" class as the existing git-SHA / checksum suppressions.
 
 Committed as `baseline.json`; `TestPrecisionSuiteBaseline` (in `cli/`) fails if
 any of precision/recall/F1 drops or FP / findings-per-issue rises, so the number
@@ -105,7 +127,7 @@ overall numbers only.
 
 ## Sample inventory
 
-True positives (annotated ground truth):
+True positives — Python / JS (annotated ground truth):
 
 | File | What it exercises | Correct rule | nox today |
 | --- | --- | --- | --- |
@@ -114,10 +136,24 @@ True positives (annotated ground truth):
 | `tp_prompt.py` | prompt injection (f-string) | AI-002 | TP |
 | `tp_yaml.py` | unsafe `yaml.load` | SLOP-001 / VARIANT-002 | TP |
 | `tp_ssti.py` | SSTI via dynamic template | VARIANT-005 (+ SLOP-001) | TP, taint SSTI duplicate deduped |
-| `tp_injection.py` | command / eval injection | TAINT-002 / TAINT-005 | FN (recall gap) |
-| `tp_pathtrav.py` | path traversal via `open()` | TAINT-004 | FN (recall gap) |
-| `tp_deser.py` | unsafe `pickle.loads` | TAINT-005 | FN (recall gap) |
-| `tp_ssrf.py` | SSRF via `requests.get` | TAINT-006 (+ SLOP-001) | FN (recall gap) |
+| `tp_injection.py` | command / eval injection | TAINT-002 / TAINT-005 | TP (taint engine) |
+| `tp_pathtrav.py` | path traversal via `open()` | TAINT-004 | TP (taint engine) |
+| `tp_deser.py` | unsafe `pickle.loads` | TAINT-005 | TP (taint engine) |
+| `tp_ssrf.py` | SSRF via `requests.get` | TAINT-006 (+ SLOP-001) | TP (taint engine) |
+
+True positives — Go (annotated ground truth; nox is measured in its own
+language for the first time):
+
+| File | What it exercises | Correct rule | nox today |
+| --- | --- | --- | --- |
+| `tp_secrets.go` | AWS / GitHub / Slack tokens in Go literals | SEC-001/003/023/508 | TP, deduped to canonical |
+| `tp_secrets_cloud.go` | Stripe / GCP keys in Go consts | SEC-030 / SEC-007 | TP, deduped to canonical |
+| `tp_cmdinjection.go` | `exec.Command("sh","-c",…)` | TAINT-002 | **FN** (no Go taint model) |
+| `tp_sqlinjection.go` | `db.Query("… '" + input)` | TAINT-001 | **FN** (no Go taint model) |
+| `tp_pathtraversal.go` | `os.ReadFile(filepath.Join(base, input))` | TAINT-004 | **FN** (no Go taint model) |
+| `tp_ssrf.go` | `http.Get(userURL)` | TAINT-006 | **FN** (no Go taint model) |
+| `tp_deserialization.go` | `gob.NewDecoder(r.Body).Decode` | TAINT-005 | **FN** (no Go taint model) |
+| `tp_ssti.go` | `text/template` parse of user input | TAINT-003 | **FN** (no Go taint model) |
 
 Clean stressors (zero annotations — any finding is a false positive):
 
@@ -133,8 +169,39 @@ Clean stressors (zero annotations — any finding is a false positive):
 | `clean_minified_bundle.js` | minified bundle strings | clean |
 | `clean_json_blob.py` | base64/JSON blob constant | clean |
 | `clean_identifiers.py` | UUIDs, hex colors, git SHA | clean |
+| `clean_rawstring_blob.go` | base64 data-URI in a Go raw string | clean (blob gating) |
+| `clean_safe_db.go` | `$1` parameterized query, arg-vector exec, allowlist | clean |
+| `clean_placeholders.go` | placeholder creds + `os.Getenv` | clean |
+| `clean_generated.go` | `DO NOT EDIT` banner, descriptor bytes, struct tags | clean |
+| `clean_identifiers.go` | UUID, git SHA, hex colors, **SRI integrity hash** | clean (SRI fix) |
 
 Grow this corpus over time; the honest way to raise the number is to fix the
 rules the corpus indicts, not to curate the corpus to pass. When a rule fix
 legitimately improves the score, `TestPrecisionSuiteBaseline` tells you to
 refresh `baseline.json`.
+
+## Go coverage gaps — the next indictment
+
+Adding realistic Go samples is the whole point of measuring nox in its own
+language: it surfaced **six honest false negatives**. nox's taint catalog
+(`core/taint/data/catalog.json`) models sources/sinks for **python and
+javascript only** — there is no `go` language entry — so every Go dataflow
+vulnerability is currently missed. The secret regexes are language-agnostic and
+already fire on Go, so Go secrets are true positives; only the taint-dependent
+classes are gaps. What a correct scanner should catch that nox misses today:
+
+| Vuln class | Go sink (sample) | Should fire | CWE |
+| --- | --- | --- | --- |
+| Command injection | `exec.Command("sh","-c", userInput)` | TAINT-002 | CWE-78 |
+| SQL injection | `db.Query("… WHERE x='" + userInput + "'")` | TAINT-001 | CWE-89 |
+| Path traversal | `os.ReadFile(filepath.Join(base, userInput))` | TAINT-004 | CWE-22 |
+| SSRF | `http.Get(userURL)` | TAINT-006 | CWE-918 |
+| Unsafe deserialization | `gob.NewDecoder(r.Body).Decode(&v)` | TAINT-005 | CWE-502 |
+| SSTI | `text/template … Parse(userInput)` | TAINT-003 | CWE-1336 |
+
+Closing these is a separate, larger effort — it needs a Go source/sink/sanitizer
+model in the taint catalog plus Go-aware dataflow (the mirror of the Python
+taint work that flipped `tp_injection.py` & friends from FN to TP). This corpus
+already carries the annotated ground truth, so the day a Go taint model lands,
+these six flip to true positives and recall climbs back toward 1.00 — the
+measure → build → re-measure loop, now extended to Go.
