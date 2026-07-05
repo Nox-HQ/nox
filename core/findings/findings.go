@@ -231,7 +231,7 @@ var confidencePriorityRank = map[Confidence]int{
 // for reachability (no metadata) rank in the neutral middle, so enabling the
 // reachability plugin only ever demotes likely-FPs — it never buries a normal
 // finding beneath one.
-func reachabilityRank(f Finding) int {
+func reachabilityRank(f *Finding) int {
 	switch f.Metadata["reachable"] {
 	case "true":
 		return 0
@@ -257,7 +257,7 @@ func (fs *FindingSet) SortByPriority() {
 		if ar, br := severityPriorityRank[a.Severity], severityPriorityRank[b.Severity]; ar != br {
 			return ar < br
 		}
-		if ar, br := reachabilityRank(a), reachabilityRank(b); ar != br {
+		if ar, br := reachabilityRank(&a), reachabilityRank(&b); ar != br {
 			return ar < br
 		}
 		if ac, bc := confidencePriorityRank[a.Confidence], confidencePriorityRank[b.Confidence]; ac != bc {
