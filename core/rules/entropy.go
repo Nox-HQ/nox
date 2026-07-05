@@ -274,6 +274,19 @@ func extractRegexCandidates(line string, re *regexp.Regexp, minLen int, addFn fu
 // git SHAs, Go import paths, file paths, camelCase identifiers, version
 // strings, and other patterns that would cause false positives.
 func isLikelyNotSecret(s string) bool {
+	// Natural-language prose, SQL, error-message format strings, and prompt
+	// templates contain internal whitespace; a compact secret token — API key,
+	// token, hash, base64/hex blob — never does. This is the dominant
+	// false-positive source for the generic entropy detectors on prose-heavy
+	// codebases: a 120-char English sentence has high aggregate entropy but is
+	// not a credential (#104). Real base64/hex secrets are still caught, because
+	// the base64/hex tokenizers extract the token itself (no surrounding
+	// whitespace) — only the whole-string quoted/assignment candidates carry
+	// prose, and a real secret in a quoted string is the compact token anyway.
+	if strings.ContainsAny(s, " \t") {
+		return true
+	}
+
 	// URLs starting with http:// or https://.
 	lower := strings.ToLower(s)
 	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
