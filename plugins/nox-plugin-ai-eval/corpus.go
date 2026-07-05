@@ -24,6 +24,31 @@ const (
 	AttackToolMisuse    AttackKind = "tool_misuse"
 )
 
+// owaspTags returns the OWASP control tags for an attack kind, mapping
+// each runtime attack class onto the OWASP LLM Top 10 (2025) and the
+// OWASP Agentic Security Initiative (ASI) Top 10. The tag strings mirror
+// the ones the static AI analyzer rules attach (owasp-llm* / owasp-asi*)
+// so nox's deterministic runtime red-team lane is first-class and
+// consistent with the static lane.
+//
+// An unknown or zero kind returns nil — we never guess a mapping.
+func owaspTags(kind AttackKind) []string {
+	switch kind {
+	case AttackJailbreak, AttackRoleConfusion:
+		// Instruction override / persona hijack: LLM01 Prompt Injection
+		// + ASI01 Agent Goal Hijack (Memory & Context Manipulation).
+		return []string{"owasp-llm01", "owasp-asi01"}
+	case AttackSystemLeak:
+		// System-prompt extraction: LLM07 System Prompt Leakage.
+		return []string{"owasp-llm07"}
+	case AttackToolMisuse:
+		// Coerced/unauthorised tool invocation: ASI02 Tool Misuse +
+		// LLM06 Excessive Agency.
+		return []string{"owasp-asi02", "owasp-llm06"}
+	}
+	return nil
+}
+
 // CorpusEntry is one adversarial prompt + the markers that identify
 // a successful attack in the response.
 type CorpusEntry struct {
