@@ -154,6 +154,11 @@ var sourceExtensions = map[string]bool{
 	// scan_elixir + engine extract_elixir + the catalog `elixir` block).
 	".ex":  true,
 	".exs": true,
+	// Clojure source and ClojureScript / cross-platform variants. One taint
+	// module (lexctx scan_clojure + engine extract_clojure + catalog `clojure`).
+	".clj":  true,
+	".cljs": true,
+	".cljc": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

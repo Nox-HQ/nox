@@ -48,6 +48,7 @@ const (
 	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
 	LangDart       // Dart — //, ///, NESTED /*…*/, '…'/"…" ($var/${…} interp), '''…'''/"""…""" (multiline), r'…'/r"…" raw (no interp)
 	LangElixir     // Elixir — # comments (no block comments), "…" (#{…} interp), '…' charlist, """…"""/'''…''' heredocs, ~s()/~r()/~w() sigils, ?c char code
+	LangClojure    // Clojure — ; comments, "…" (Java escapes), #"…" regex, \c char literals; s-expression Lisp
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -92,6 +93,8 @@ func (l Lang) String() string {
 		return "dart"
 	case LangElixir:
 		return "elixir"
+	case LangClojure:
+		return "clojure"
 	default:
 		return "unknown"
 	}
@@ -162,6 +165,10 @@ var extToLang = map[string]Lang{
 	".dart": LangDart,
 	".ex":   LangElixir,
 	".exs":  LangElixir,
+	".clj":  LangClojure,
+	".cljs": LangClojure,
+	".cljc": LangClojure,
+	".edn":  LangClojure,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

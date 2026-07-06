@@ -5332,6 +5332,234 @@
           "note": "Path.expand normalizes .. segments against a base (used with a fixed root)"
         }
       ]
+    },
+    "clojure": {
+      "sources": [
+        {
+          "call": ":params",
+          "kind": "http_query",
+          "note": "Ring request :params (query + form params); keyword-access (:params req)"
+        },
+        {
+          "call": "params",
+          "kind": "http_query",
+          "note": "Ring :params keyword-access, colon stripped by the extractor"
+        },
+        {
+          "call": ":query-string",
+          "kind": "http_query",
+          "note": "Ring request :query-string"
+        },
+        {
+          "call": "query-string",
+          "kind": "http_query"
+        },
+        {
+          "call": ":form-params",
+          "kind": "http_body",
+          "note": "Ring request :form-params"
+        },
+        {
+          "call": "form-params",
+          "kind": "http_body"
+        },
+        {
+          "call": ":body",
+          "kind": "http_body",
+          "note": "Ring request body stream/string"
+        },
+        {
+          "call": ":headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "System/getenv",
+          "kind": "env",
+          "note": "process environment variable"
+        },
+        {
+          "call": "getenv",
+          "kind": "env"
+        },
+        {
+          "call": "*command-line-args*",
+          "kind": "argv",
+          "note": "command-line arguments seq"
+        },
+        {
+          "call": "read-line",
+          "kind": "stdin",
+          "note": "reads a line of untrusted stdin"
+        }
+      ],
+      "sinks": [
+        {
+          "call": "clojure.java.shell/sh",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "clojure.java.shell/sh runs the argument vector as a command; a tainted word is command injection. Keyed on the qualified and aliased shell/sh (NOT bare `sh`, which the arg-shape switch treats as a -c-gated interpreter)"
+        },
+        {
+          "call": "shell/sh",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "aliased clojure.java.shell/sh"
+        },
+        {
+          "call": ".exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "(.exec (Runtime/getRuntime) cmd) runs a tainted OS command"
+        },
+        {
+          "call": "Runtime/exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "eval executes its argument as Clojure code"
+        },
+        {
+          "call": "load-string",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "load-string reads and evaluates a whole program string"
+        },
+        {
+          "call": "read-string",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "read-string parses untrusted input; with *read-eval* the #= reader can execute"
+        },
+        {
+          "call": "clojure.java.jdbc/query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "safe with a parameterized [\"... ?\" v] vector (value is a bind arg, not in the SQL string); a string-concat query interpolates the taint into arg 0"
+        },
+        {
+          "call": "jdbc/query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "aliased clojure.java.jdbc/query"
+        },
+        {
+          "call": "clojure.java.jdbc/execute!",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "jdbc/execute!",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "next.jdbc/execute!",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "slurp",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "slurp of a tainted path reads an attacker-chosen file (slurp of a URL is SSRF instead — an ambiguity the recognizer cannot resolve; documented FN)"
+        },
+        {
+          "call": "clojure.java.io/reader",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "io/reader",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "io/file",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "clj-http.client/get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "clj-http fetches a tainted URL — SSRF regardless of validation"
+        },
+        {
+          "call": "client/get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "aliased clj-http.client/get"
+        },
+        {
+          "call": "client/post",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "http/get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        }
+      ],
+      "sanitizers": [
+        {
+          "call": "Integer/parseInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "code_injection",
+            "path_traversal"
+          ],
+          "note": "Integer/parseInt coerces to a number, stripping all injection metacharacters"
+        },
+        {
+          "call": "Integer/valueOf",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "code_injection",
+            "path_traversal"
+          ]
+        },
+        {
+          "call": "parse-long",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "code_injection",
+            "path_traversal"
+          ],
+          "note": "clojure.core/parse-long coerces to a Long or nil"
+        }
+      ]
     }
   }
 }
