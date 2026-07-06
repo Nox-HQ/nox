@@ -9,7 +9,7 @@ import "strings"
 // injection bugs:
 //
 //   - an assignment `NAME=value` (no whitespace around `=`, no `$` on the LHS),
-//     whose RHS `$var` / `${var}` / `$(...)` / `` `...` `` reads are surfaced,
+//     whose RHS `$var` / `${var}` / `$(...)` / “ `...` “ reads are surfaced,
 //     and whose positional-parameter / read-var / CGI-env reads resolve as
 //     catalog SOURCES; and
 //   - a command call `cmd arg1 arg2 …` (space-separated, paren-less) whose first
@@ -226,7 +226,7 @@ func shellAssignment(ll logicalLine) (stmtDraft, bool) {
 // code line. The `=` must be immediately preceded by a bare identifier and NOT
 // be `==`, `+=`, or preceded by whitespace (a `cmd = x` is a command, not an
 // assignment, in shell). Only the FIRST word may be an assignment.
-func splitShellAssignment(code string) (string, int, bool) {
+func splitShellAssignment(code string) (name string, valueStart int, ok bool) {
 	i := 0
 	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
 		i++
@@ -238,7 +238,7 @@ func splitShellAssignment(code string) (string, int, bool) {
 	for i < len(code) && isShellIdentByte(code[i]) {
 		i++
 	}
-	name := code[start:i]
+	name = code[start:i]
 	// A `local`/`export` prefix was already skipped as structural; here the name
 	// must be immediately followed by `=` (no space) and not `==`/`+=`.
 	if i >= len(code) || code[i] != '=' {
@@ -271,12 +271,21 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 		i++
 	}
 	calleeStart := i
-	for i < len(code) && isShellCommandByte(code[i]) {
+	var callee string
+	if i < len(code) && code[i] == '.' && (i+1 >= len(code) || code[i+1] == ' ' || code[i+1] == '\t') {
+		// The `.` builtin (POSIX alias for `source`): a lone `.` command word
+		// followed by whitespace. Recognize it as the callee `.` so a tainted
+		// `. "$path"` resolves the path-traversal sink.
+		callee = "."
 		i++
-	}
-	callee := code[calleeStart:i]
-	if callee == "" || !isShellIdentStart(callee[0]) {
-		return stmtDraft{}, false
+	} else {
+		for i < len(code) && isShellCommandByte(code[i]) {
+			i++
+		}
+		callee = code[calleeStart:i]
+		if callee == "" || !isShellIdentStart(callee[0]) {
+			return stmtDraft{}, false
+		}
 	}
 	// Normalize a leading `command`/`builtin`/`exec` wrapper to its target so
 	// `command eval x` still resolves eval.
@@ -627,7 +636,7 @@ func skipShellLeadingAssignments(code string) int {
 		for j < len(code) && isShellIdentByte(code[j]) {
 			j++
 		}
-		if j < len(code) && code[j] == '=' && !(j+1 < len(code) && code[j+1] == '=') {
+		if j < len(code) && code[j] == '=' && (j+1 >= len(code) || code[j+1] != '=') {
 			// It is an env-assignment prefix; skip the whole `NAME=word` token.
 			k := j + 1
 			for k < len(code) && code[k] != ' ' && code[k] != '\t' {

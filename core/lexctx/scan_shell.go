@@ -20,7 +20,7 @@ package lexctx
 //     escapes the next byte.
 //   - ANSI-C strings `$'...'` — backslash escapes (\n, \t, \') are honored; the
 //     whole body is string (no interpolation).
-//   - backtick `` `...` `` and `$(...)` command substitution in CODE context —
+//   - backtick “ `...` “ and `$(...)` command substitution in CODE context —
 //     their inner text is code (it is a command line, not a literal). The taint
 //     layer treats the substitution as a command-execution carrier.
 //   - heredocs `<<EOF`, `<<'EOF'`, `<<"EOF"`, and the dash form `<<-EOF` (which
@@ -150,7 +150,7 @@ func scanShellSingleQuote(content []byte, start int) int {
 }
 
 // scanShellAnsiCString returns the offset just past a `$'...'` ANSI-C string
-// opening at start (content[start]=='$', content[start+1]=='\''). Backslash
+// opening at start (content[start]=='$', content[start+1]=='\”). Backslash
 // escapes the next byte (so `\'` does not close the string). Unterminated runs
 // to EOF.
 func scanShellAnsiCString(content []byte, start int) int {

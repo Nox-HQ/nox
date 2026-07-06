@@ -188,6 +188,18 @@ jobs:
         # be silently hidden and no new Kotlin false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-kotlin --baseline testdata/precision-suite-kotlin/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — shell
+        # Same honest ratchet, scoped to the shell/bash taint suite (lexctx
+        # scan_shell + engine extract_shell + the catalog `shell` block). Shell
+        # has the LOWEST recall of any supported language by design — its
+        # paren-less, word-splitting, dynamically-constructed command grammar is
+        # more than a flat per-line recognizer can follow, so the suite carries
+        # honest false negatives (see testdata/precision-suite-shell/README.md).
+        # This gate therefore defends PRECISION (>= 0.90) — quoted/validated
+        # scripts must not FP — and pins the committed baseline so the known FNs
+        # cannot be silently hidden and no new shell false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-shell --baseline testdata/precision-suite-shell/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
