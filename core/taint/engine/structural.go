@@ -618,6 +618,14 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 			return false
 		}
 		return true
+	case "printf", "vprintf":
+		// C/C++ format-string sink (CWE-134): the vulnerability is a TAINTED FORMAT
+		// STRING — `printf(user)` — not a tainted VALUE with a fixed format —
+		// `printf("%s", user)`, which is SAFE. For printf the format is the first
+		// argument, so danger requires the taint to be in arg 0. A fixed format
+		// literal (arg 0 is a string literal, blanked in the code view) leaves
+		// FirstArgTainted false and is correctly suppressed.
+		return info.FirstArgTainted
 	default:
 		return true
 	}

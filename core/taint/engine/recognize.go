@@ -15,6 +15,7 @@ const (
 	langRuby
 	langRust
 	langCSharp
+	langCPP
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -127,6 +128,12 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// C# declarations put a type (or `var`) before the name.
 			if lang == langCSharp {
 				left = stripCSharpDeclType(left)
+			}
+			// C/C++ declarations put a type before the name, possibly with
+			// pointer/reference sigils (`char *user`, `const std::string& s`) or
+			// `auto`. Strip the type so the bare declared name is the LHS.
+			if lang == langCPP {
+				left = stripCPPDeclType(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right

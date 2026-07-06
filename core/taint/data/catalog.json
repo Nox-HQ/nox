@@ -1825,6 +1825,65 @@
         {"call": "int.TryParse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"]},
         {"call": "Path.GetFileName", "neutralizes": ["path_traversal"], "note": "strips directory components; pair with an allow-base check"}
       ]
+    },
+    "cpp": {
+      "comment": "C/C++ taint model: INJECTION-CLASS dataflow only (command injection, path traversal, format string, SSRF, SQLi). Memory-safety bugs (buffer overflow strcpy/strcat/sprintf/gets -> CWE-120/787, use-after-free, OOB) are a DIFFERENT analysis than source->sink taint and are OUT OF SCOPE for this engine — see testdata/precision-suite-cpp/README.md. Call keys are the short/bare form; the extractor normalizes C++ `::` to `.` and the engine suffix-matches, so `system` matches `std::system` and `getenv` matches `std::getenv`.",
+      "sources": [
+        {"call": "getenv", "kind": "environment"},
+        {"call": "secure_getenv", "kind": "environment"},
+        {"call": "fgets", "kind": "stdin"},
+        {"call": "gets", "kind": "stdin"},
+        {"call": "gets_s", "kind": "stdin"},
+        {"call": "scanf", "kind": "stdin"},
+        {"call": "fscanf", "kind": "file"},
+        {"call": "sscanf", "kind": "user_input"},
+        {"call": "getline", "kind": "stdin"},
+        {"call": "read", "kind": "user_input"},
+        {"call": "recv", "kind": "network"},
+        {"call": "recvfrom", "kind": "network"},
+        {"call": "fread", "kind": "file"},
+        {"call": "cin.getline", "kind": "stdin"},
+        {"call": "getenv_s", "kind": "environment"}
+      ],
+      "sinks": [
+        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "system(3) runs its argument through /bin/sh -c; a tainted command string is CWE-78. The classic shape is system(strcat(cmd, argv[1]))"},
+        {"call": "popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "popen opens a pipe to a shell command; a tainted command string is command injection"},
+        {"call": "execl", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "execlp", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "execle", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "execv", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "execvp", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "execvpe", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "fopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "opening a file at a tainted path enables ../ directory traversal; sanitize with realpath + a base-prefix check"},
+        {"call": "freopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "open64", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "openat", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "ifstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "std::ifstream(tainted path) is a path-traversal read sink (matches std.ifstream after :: normalization)"},
+        {"call": "ofstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "fstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "printf", "vuln_class": "code_injection", "cwe": "CWE-134", "rule_id": "TAINT-005", "note": "FORMAT-STRING (CWE-134): mapped to the TAINT-005 code-injection rule id (no dedicated CWE-134 class). The vuln is a TAINTED FORMAT argument — printf(user) — which the engine gates on FirstArgTainted; printf(\"%s\", user) with a fixed format is SAFE and does not fire"},
+        {"call": "vprintf", "vuln_class": "code_injection", "cwe": "CWE-134", "rule_id": "TAINT-005", "note": "format-string via a tainted format arg; gated on FirstArgTainted"},
+        {"call": "mysql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "mysql_query with a tainted, concatenated SQL string is SQLi; use prepared statements (mysql_stmt_prepare) instead"},
+        {"call": "mysql_real_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "PQexec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "libpq PQexec with a tainted query string is SQLi; use PQexecParams with $N placeholders"},
+        {"call": "sqlite3_exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "curl_easy_setopt", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "curl_easy_setopt(h, CURLOPT_URL, tainted) fetches an attacker-controlled URL — SSRF; validate the host against an allow-list first"}
+      ],
+      "sanitizers": [
+        {"call": "realpath", "neutralizes": ["path_traversal"], "note": "canonicalizes the path; must be paired with a base-prefix/allow-list check to actually contain traversal"},
+        {"call": "basename", "neutralizes": ["path_traversal"], "note": "strips directory components, leaving the final path element"},
+        {"call": "atoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes every injection metacharacter"},
+        {"call": "atol", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "atoll", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "strtol", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "strtoul", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "strtoll", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "stoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "std::stoi numeric coercion"},
+        {"call": "mysql_real_escape_string", "neutralizes": ["sql_injection"], "note": "escapes SQL metacharacters for a MySQL string literal"},
+        {"call": "PQescapeLiteral", "neutralizes": ["sql_injection"]},
+        {"call": "curl_easy_escape", "neutralizes": ["ssrf"], "note": "URL-encodes a component; does not by itself validate the host"}
+      ]
     }
   }
 }
