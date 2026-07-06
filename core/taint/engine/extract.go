@@ -128,6 +128,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangPerl:
+		// Perl uses the line/statement RECOGNIZER (no CGo interpreter). Statements
+		// are `;`-terminated and sub bodies are brace-delimited, so — like PHP/JS —
+		// only paren/bracket continuations merge physical lines and each logical
+		// line is split on top-level semicolons. Perl's dynamic dispatch, sigil
+		// magic, and context-sensitive syntax make line recognition coarse; see
+		// extract_perl.go for the honest limits (recall is moderate by design).
+		return extractPerl(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

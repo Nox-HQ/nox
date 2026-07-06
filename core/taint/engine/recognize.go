@@ -16,6 +16,7 @@ const (
 	langRust
 	langCSharp
 	langCPP
+	langPerl
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -135,6 +136,13 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langCPP {
 				left = stripCPPDeclType(left)
 			}
+			// Perl `my` / `our` / `local` binding keywords precede the name (the `$`
+			// sigil is already stripped by normalization, leaving `my  x`). A list
+			// assignment `my ($a, $b) = @_` is not a simple-ident LHS and is left to
+			// fail isSimpleIdent below (we do not track list-destructuring taint).
+			if lang == langPerl {
+				left = stripPerlDeclKeyword(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -149,6 +157,24 @@ func stripDeclKeyword(left string) string {
 	for _, kw := range []string{"const ", "let ", "var "} {
 		if strings.HasPrefix(left, kw) {
 			return strings.TrimSpace(strings.TrimPrefix(left, kw))
+		}
+	}
+	return left
+}
+
+// stripPerlDeclKeyword removes a leading `my` / `our` / `local` binding keyword
+// from a Perl assignment LHS, leaving the bare declared name. After sigil
+// normalization the LHS reads `my  cmd` (sigil blanked to a space), so the
+// keyword and any surrounding whitespace are trimmed. A plain reassignment
+// (`cmd = e`, no keyword) is returned unchanged.
+func stripPerlDeclKeyword(left string) string {
+	left = strings.TrimSpace(left)
+	for _, kw := range []string{"my", "our", "local"} {
+		if left == kw {
+			return ""
+		}
+		if strings.HasPrefix(left, kw+" ") || strings.HasPrefix(left, kw+"\t") {
+			return strings.TrimSpace(left[len(kw):])
 		}
 	}
 	return left

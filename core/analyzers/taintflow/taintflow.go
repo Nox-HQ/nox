@@ -132,7 +132,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		lang := lexctx.LangFromPath(art.Path)
 		if lang == lexctx.LangUnknown {
-			continue // engine supports Python, JS/TS, Go, and Ruby
+			continue // unsupported language: skip (LangFromPath gates the set)
 		}
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
