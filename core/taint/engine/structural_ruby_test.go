@@ -61,6 +61,15 @@ end
 			want: "TAINT-002",
 		},
 		{
+			name: "command injection via %x percent-literal",
+			src: `def handle
+  target = params[:target]
+  out = %x(ls #{target})
+end
+`,
+			want: "TAINT-002",
+		},
+		{
 			name: "sql injection via ActiveRecord where string interp",
 			src: `def handle
   id = params[:id]

@@ -194,6 +194,22 @@ func TestRubyPercentQ(t *testing.T) {
 	}
 }
 
+// TestRubyPercentQInterpolation: an interpolating `%Q(...)` emits its `#{}`
+// field as code while the surrounding literal stays string; a non-interpolating
+// `%q(...)` keeps `#{}` as literal string.
+func TestRubyPercentQInterpolation(t *testing.T) {
+	src := "a = %Q(id=#{user_var})\nb = %q(id=#{not_code})\nSECRET = 1"
+	if k := kindOfSubstring(t, LangRuby, src, `user_var`); k != KindCode {
+		t.Errorf("%%Q interpolation field should be code, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangRuby, src, `not_code`); k != KindString {
+		t.Errorf("%%q (non-interpolating) #{} must stay string, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangRuby, src, `SECRET = 1`); k != KindCode {
+		t.Errorf("code after percent literals should be code, got %v", k)
+	}
+}
+
 // TestRubyDataBlobInHeredocSuppressed proves the payoff: a long base64/data-URI
 // payload inside a Ruby heredoc is a blob (suppressed), while a short secret in
 // an ordinary string is NOT (kept).

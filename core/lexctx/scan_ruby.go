@@ -397,13 +397,19 @@ func isPercentDelim(c byte) bool {
 }
 
 // scanRubyPercentLiteral returns the offset just past a percent-literal opening
-// at start. It emits the whole literal (delimiters and body) as string via b.
-// Paired-bracket delimiters nest; non-bracket delimiters close on the same byte.
-// Backslash escapes the delimiter. An unterminated literal runs to EOF.
+// at start. It emits the literal (delimiters and body) as string via b, EXCEPT
+// that in an INTERPOLATING variant (`%Q`, `%x`, `%r`, `%W`, `%I`, and the bare
+// `%(...)`) each `#{ ... }` field is emitted as code — a tainted value spliced
+// into `%x(ls #{path})` lives in a real expression, exactly like a double-quoted
+// string. The non-interpolating variants (`%q`, `%w`, `%i`, `%s`) keep the whole
+// body as string. Paired-bracket delimiters nest; a backslash escapes the
+// delimiter. An unterminated literal runs to EOF.
 func scanRubyPercentLiteral(content []byte, start int, b *regionBuilder) int {
 	n := len(content)
 	j := start + 1
+	interp := true // bare `%(...)` interpolates
 	if j < n && isPercentTypeLetter(content[j]) {
+		interp = isInterpolatingPercentType(content[j])
 		j++
 	}
 	if j >= n {
@@ -415,10 +421,19 @@ func scanRubyPercentLiteral(content []byte, start int, b *regionBuilder) int {
 	nested := open != closeByte
 	depth := 1
 	i := j + 1
+	runStart := start // string run begins at the '%' (delimiters are string)
 	for i < n {
 		c := content[i]
 		if c == '\\' {
 			i += 2
+			continue
+		}
+		if interp && c == '#' && i+1 < n && content[i+1] == '{' {
+			b.emit(runStart, i, KindString)
+			fieldEnd := scanRubyInterpField(content, i+1)
+			b.emit(i, fieldEnd, KindCode)
+			i = fieldEnd
+			runStart = i
 			continue
 		}
 		if nested && c == open {
@@ -426,14 +441,25 @@ func scanRubyPercentLiteral(content []byte, start int, b *regionBuilder) int {
 		} else if c == closeByte {
 			depth--
 			if depth == 0 {
-				b.emit(start, i+1, KindString)
+				b.emit(runStart, i+1, KindString)
 				return i + 1
 			}
 		}
 		i++
 	}
-	b.emit(start, n, KindString)
+	b.emit(runStart, n, KindString)
 	return n
+}
+
+// isInterpolatingPercentType reports whether a percent-literal type letter marks
+// an interpolating literal (uppercase W/I/Q, plus x and r) versus a
+// non-interpolating one (lowercase q/w/i/s).
+func isInterpolatingPercentType(c byte) bool {
+	switch c {
+	case 'Q', 'W', 'I', 'x', 'r':
+		return true
+	}
+	return false
 }
 
 // percentCloser returns the closing delimiter for a percent-literal opener. For

@@ -242,3 +242,22 @@ Honest limits of the interprocedural pass (this is exactly where the cross-file
 - Inherits all intraprocedural limits above (no CFG/branch merging, no alias or
   field/element sensitivity), and JS/TS remains module-scoped so its
   interprocedural benefit is limited to Python for now.
+
+## Status update: Ruby support (line recognizer)
+
+Ruby joins Python and JS/TS on the **lexctx line/statement recognizer** path
+(pure-Go, no CGo, no tree-sitter). `core/lexctx/scan_ruby.go` classifies Ruby
+code/string/comment (incl. `#{}` interpolation as code, heredocs, `%w/%q`
+literals, `=begin/=end`, and regex-vs-division disambiguation);
+`core/taint/engine/extract_ruby.go` recognizes `def` params, assignments,
+explicit `return`, `params[:x]` hash-index sources, and — the Ruby-specific
+shapes — paren-less calls (`system "..."`), backtick/`%x` command literals,
+`::` scope resolution, and no-arg sink methods (`.html_safe`). The catalog's
+`ruby` block adds sources/sinks/sanitizers across TAINT-001..006.
+
+Measured on `testdata/precision-suite-ruby`: **precision 1.00 / recall 0.875 /
+F1 0.933** (14 TP, 0 FP, 2 FN). The two recall gaps are honest and documented
+(`render inline:` template injection — indistinguishable from auto-escaped
+`render plain:` by call name; cross-method flow through an `@ivar` — outside the
+local-summary interprocedural model). Ruby inherits every intraprocedural limit
+above and is module/`def`-scoped like Python.
