@@ -10,6 +10,7 @@ type langKind int
 const (
 	langPython langKind = iota
 	langJavaScript
+	langPHP
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false

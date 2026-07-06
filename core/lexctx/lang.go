@@ -32,6 +32,7 @@ const (
 	LangPython
 	LangJavaScript // JS, JSX, TS, TSX — they share comment/string/template lexing
 	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
+	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -44,6 +45,8 @@ func (l Lang) String() string {
 		return "javascript"
 	case LangGo:
 		return "go"
+	case LangPHP:
+		return "php"
 	default:
 		return "unknown"
 	}
@@ -54,18 +57,20 @@ func (l Lang) String() string {
 // comment and string lexing is identical for our purposes — we only need to
 // know "is this cursor inside code" and the grammars agree on that.
 var extToLang = map[string]Lang{
-	".py":  LangPython,
-	".pyi": LangPython,
-	".pyw": LangPython,
-	".js":  LangJavaScript,
-	".jsx": LangJavaScript,
-	".mjs": LangJavaScript,
-	".cjs": LangJavaScript,
-	".ts":  LangJavaScript,
-	".tsx": LangJavaScript,
-	".mts": LangJavaScript,
-	".cts": LangJavaScript,
-	".go":  LangGo,
+	".py":    LangPython,
+	".pyi":   LangPython,
+	".pyw":   LangPython,
+	".js":    LangJavaScript,
+	".jsx":   LangJavaScript,
+	".mjs":   LangJavaScript,
+	".cjs":   LangJavaScript,
+	".ts":    LangJavaScript,
+	".tsx":   LangJavaScript,
+	".mts":   LangJavaScript,
+	".cts":   LangJavaScript,
+	".go":    LangGo,
+	".php":   LangPHP,
+	".phtml": LangPHP,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is

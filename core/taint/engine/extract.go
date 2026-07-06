@@ -89,6 +89,13 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// recognizer: nox is itself Go, so the pure-Go stdlib parser is free,
 		// precise, and deterministic. See extract_go.go / docs/design/go-taint.md.
 		return extractGo(content)
+	case lexctx.LangPHP:
+		// PHP uses the line/statement recognizer like Python/JS: statements are
+		// `;`-terminated and bodies are brace-delimited, so paren/array
+		// continuations merge physical lines and each logical line is split on
+		// top-level semicolons. lexctx has already blanked the HTML template shell
+		// (non-code), so only real <?php … ?> code reaches the recognizer.
+		return extractPHP(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

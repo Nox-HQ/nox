@@ -230,6 +230,60 @@
         {"call": "strconv.Atoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes injection metacharacters"},
         {"call": "strconv.ParseInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]}
       ]
+    },
+    "php": {
+      "comment": "PHP source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_php.go). Superglobals ($_GET/$_POST/…) are ARRAY-INDEX source reads, captured as bare chains with the leading `$` stripped (so `$_GET['x']` reads source `_GET`). Method calls on a value ($pdo->query, $mysqli->query) are normalized to a dotted chain (pdo.query, mysqli.query) so the engine's suffixKeys fallback matches the method suffix regardless of the receiver variable name. Rule IDs mirror the shared TAINT-00x space.",
+      "sources": [
+        {"call": "_GET", "kind": "http_query"},
+        {"call": "_POST", "kind": "http_body"},
+        {"call": "_REQUEST", "kind": "http_body"},
+        {"call": "_COOKIE", "kind": "http_header"},
+        {"call": "_SERVER", "kind": "http_header"},
+        {"call": "_FILES", "kind": "http_body"},
+        {"call": "php://input", "kind": "http_body"}
+      ],
+      "sinks": [
+        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "shell_exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "passthru", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "proc_open", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "mysqli_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "mysql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "mysqli.query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "method call $mysqli->query normalized to mysqli.query; matched by the .query suffix"},
+        {"call": "pdo.query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "$pdo->query with an interpolated/concatenated string is injectable"},
+        {"call": "pdo.exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "include", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "dynamic include/require of a tainted path is LFI/RFI"},
+        {"call": "include_once", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "require", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "require_once", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "fopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "readfile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "file_get_contents", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "local path read; a tainted URL argument is SSRF (see the ssrf catalog note), a tainted local path is traversal"},
+        {"call": "curl_exec", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "unserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "echo", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "reflected XSS when unescaped tainted data is echoed into the HTML response"},
+        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
+        {"call": "printf", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
+        {"call": "eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005"},
+        {"call": "assert", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "assert() on a string argument evaluates it as PHP"},
+        {"call": "create_function", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005"}
+      ],
+      "sanitizers": [
+        {"call": "mysqli_real_escape_string", "neutralizes": ["sql_injection"]},
+        {"call": "mysql_real_escape_string", "neutralizes": ["sql_injection"]},
+        {"call": "pdo.prepare", "neutralizes": ["sql_injection"], "note": "prepared statement with placeholders; the value binds via ->execute, never the SQL string"},
+        {"call": "htmlspecialchars", "neutralizes": ["xss"]},
+        {"call": "htmlentities", "neutralizes": ["xss"]},
+        {"call": "intval", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"], "note": "numeric coercion removes injection metacharacters"},
+        {"call": "floatval", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"]},
+        {"call": "basename", "neutralizes": ["path_traversal"]},
+        {"call": "realpath", "neutralizes": ["path_traversal"], "note": "canonicalizes; must be paired with an allow-base prefix check"},
+        {"call": "filter_var", "neutralizes": ["xss", "ssrf", "path_traversal"], "note": "validation/sanitization filter; class depends on the FILTER_* used"},
+        {"call": "escapeshellarg", "neutralizes": ["command_injection"]},
+        {"call": "escapeshellcmd", "neutralizes": ["command_injection"]}
+      ]
     }
   }
 }
