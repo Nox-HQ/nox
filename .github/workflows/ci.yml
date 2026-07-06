@@ -231,6 +231,18 @@ jobs:
         # floor at 0.90 so Swift taint precision cannot silently rot.
         run: ./nox bench --precision testdata/precision-suite-swift --baseline testdata/precision-suite-swift/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — objc
+        # Same honest ratchet, scoped to the Objective-C taint suite (lexctx
+        # scan_objc + engine extract_objc + the catalog `objc` block). Objective-C
+        # bracket message sends `[recv sel:arg]` are rewritten to dotted calls
+        # `recv.sel(arg)` so the recognizer/catalog match on the selector suffix.
+        # Objective-C recall is held below 1.0 by one documented false negative
+        # (an NSTask `arguments` PROPERTY assignment the line recognizer cannot bind
+        # — see testdata/precision-suite-objc/README.md), so this gate defends
+        # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
+        # be silently hidden and no new Objective-C false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-objc --baseline testdata/precision-suite-objc/baseline.json --min-precision 0.90
+
       - name: SAST precision gate — lua
         # Same honest ratchet, scoped to the Lua taint suite (lexctx scan_lua +
         # engine extract_lua + the catalog `lua` block). Lua uses the flat
@@ -240,6 +252,36 @@ jobs:
         # scripts must not FP — and pins the committed baseline so no new Lua false
         # positive can creep in and no recall regression can be silently hidden.
         run: ./nox bench --precision testdata/precision-suite-lua --baseline testdata/precision-suite-lua/baseline.json --min-precision 0.90
+
+      - name: SAST precision gate — clojure
+        # Same honest ratchet, scoped to the Clojure taint suite (lexctx
+        # scan_clojure + engine extract_clojure + the catalog `clojure` block).
+        # Clojure has the LOWEST recall of any supported language by design — it is a
+        # Lisp (prefix s-expressions `(fn arg …)`, `(let [x v] …)`), the furthest of
+        # any language from the assignment/call model the engine was built for, so
+        # the paren-aware FORM recognizer catches only the idiomatic binding + call
+        # shapes; threading macros (`->`, `->>`), `apply`, and other higher-order
+        # dispatch reorder the sink's argument position beyond what it can follow, so
+        # the suite carries honest false negatives (see
+        # testdata/precision-suite-clojure/README.md). This gate therefore defends
+        # PRECISION (>= 0.90) — parameterized jdbc vectors and Integer/parseInt
+        # coercions must not FP — and pins the committed baseline so the known FNs
+        # cannot be silently hidden and no new Clojure false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-clojure --baseline testdata/precision-suite-clojure/baseline.json --min-precision 0.90
+
+      - name: SAST precision gate — elixir
+        # Same honest ratchet, scoped to the Elixir taint suite (lexctx
+        # scan_elixir + engine extract_elixir + the catalog `elixir` block).
+        # Elixir recall is intentionally below 1.0 — its two dominant dataflow
+        # idioms, the pipe operator `|>` and pattern matching, are more than a
+        # flat per-line recognizer can follow, so the suite carries two
+        # documented honest false negatives (a multi-stage pipe and a
+        # destructuring pattern match, see testdata/precision-suite-elixir/
+        # README.md). This gate therefore defends PRECISION (>= 0.90) — validated
+        # and parameterized code must not FP — and pins the committed baseline so
+        # the known FNs cannot be silently hidden and no new Elixir false positive
+        # can creep in.
+        run: ./nox bench --precision testdata/precision-suite-elixir --baseline testdata/precision-suite-elixir/baseline.json --min-precision 0.90
 
       - name: SAST precision gate — dart
         # Same honest ratchet, scoped to the Dart taint suite (lexctx scan_dart +

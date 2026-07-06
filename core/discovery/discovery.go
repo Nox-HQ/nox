@@ -107,13 +107,6 @@ var containerNames = map[string]bool{
 	"docker-compose.yaml": true,
 }
 
-// sourceNames contains exact, extension-less file names that carry source code.
-// A Jenkins pipeline lives in a `Jenkinsfile` (Groovy) with no extension, so an
-// extension-only lookup misses it; Classify consults this by base name.
-var sourceNames = map[string]bool{
-	"Jenkinsfile": true,
-}
-
 // sourceExtensions maps file extensions to the Source artifact type.
 var sourceExtensions = map[string]bool{
 	".go": true,
@@ -143,19 +136,41 @@ var sourceExtensions = map[string]bool{
 	".pl": true, ".pm": true, ".cgi": true, ".t": true,
 	".scala": true,
 	".sc":    true,
-	".ps1":   true,
-	".psm1":  true,
-	".psd1":  true,
+	// Objective-C / Objective-C++ translation units. Headers (.h/.hh/.hpp) are
+	// already covered by the C/C++ set above and stay under that lexer; only the
+	// implementation files carry the objc taint module (lexctx scan_objc + engine
+	// extract_objc + the catalog `objc` block).
+	".m":    true,
+	".mm":   true,
+	".ps1":  true,
+	".psm1": true,
+	".psd1": true,
 	// Lua translation units. One taint module (lexctx scan_lua + engine
 	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
 	// embedded config.
 	".lua":  true,
 	".dart": true,
-	// Groovy source and Gradle build scripts (one taint module: lexctx scan_groovy
-	// + engine extract_groovy + the catalog `groovy` block). The extension-less
-	// Jenkinsfile is classified below by exact name.
+	// Elixir source (.ex) and script (.exs) files. One taint module (lexctx
+	// scan_elixir + engine extract_elixir + the catalog `elixir` block).
+	".ex":  true,
+	".exs": true,
+	// Clojure source and ClojureScript / cross-platform variants. One taint
+	// module (lexctx scan_clojure + engine extract_clojure + catalog `clojure`).
+	".clj":  true,
+	".cljs": true,
+	".cljc": true,
+	// Groovy source and Gradle build scripts (lexctx scan_groovy + engine
+	// extract_groovy + catalog `groovy`). The extension-less Jenkinsfile is
+	// classified by exact name via sourceNames below.
 	".groovy": true,
 	".gradle": true,
+}
+
+// sourceNames contains exact, extension-less file names that carry source code.
+// A Jenkins pipeline lives in a `Jenkinsfile` (Groovy) with no extension, so an
+// extension-only lookup misses it; Classify consults this by base name.
+var sourceNames = map[string]bool{
+	"Jenkinsfile": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
@@ -207,13 +222,13 @@ func (d *DefaultClassifier) Classify(path string, _ os.FileInfo) ArtifactType {
 		return Config
 	}
 
-	// Source by extension.
-	if sourceExtensions[ext] {
+	// Source by exact name (extension-less source files, e.g. Jenkinsfile).
+	if sourceNames[name] {
 		return Source
 	}
 
-	// Source by exact name (extension-less source files, e.g. Jenkinsfile).
-	if sourceNames[name] {
+	// Source by extension.
+	if sourceExtensions[ext] {
 		return Source
 	}
 
