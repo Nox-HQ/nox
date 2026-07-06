@@ -16,6 +16,8 @@ scan:
     - "testdata/precision-suite-csharp/"
     - "testdata/precision-suite-cpp/"
     - "testdata/precision-suite-perl/"
+    - "testdata/precision-suite-scala/"
+    - "testdata/precision-suite-kotlin/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"

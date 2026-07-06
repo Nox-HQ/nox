@@ -134,6 +134,8 @@ var sourceExtensions = map[string]bool{
 	// Perl translation units, modules, CGI scripts, and test scripts. One taint
 	// module (lexctx scan_perl + engine extract_perl + catalog `perl` block).
 	".pl": true, ".pm": true, ".cgi": true, ".t": true,
+	".scala": true,
+	".sc":    true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

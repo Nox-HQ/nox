@@ -136,6 +136,21 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// magic, and context-sensitive syntax make line recognition coarse; see
 		// extract_perl.go for the honest limits (recall is moderate by design).
 		return extractPerl(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangScala:
+		// Scala is brace-delimited like Java/C#: braces delimit blocks (so a method
+		// body is not collapsed into one logical line) and paren/bracket
+		// continuations merge physical lines. Statements are newline-terminated but
+		// a `;` may pack several onto one line, so — like Java — each logical line is
+		// split on top-level semicolons. It recognizes `def` headers for per-method
+		// units. See extract_scala.go.
+		return extractScala(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangKotlin:
+		// Kotlin is brace-delimited like Java/JS: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Kotlin statements are usually newline-terminated (semicolons optional),
+		// so the split only affects the rare `a; b` line; it recognizes `fun`
+		// headers for per-function units. See extract_kotlin.go.
+		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

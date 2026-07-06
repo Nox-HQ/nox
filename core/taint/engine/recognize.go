@@ -17,6 +17,8 @@ const (
 	langCSharp
 	langCPP
 	langPerl
+	langScala
+	langKotlin
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -142,6 +144,16 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// fail isSimpleIdent below (we do not track list-destructuring taint).
 			if lang == langPerl {
 				left = stripPerlDeclKeyword(left)
+			}
+			// Scala `val` / `var` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`val x: String = ...`).
+			if lang == langScala {
+				left = stripScalaValKeyword(left)
+			}
+			// Kotlin `val`/`var` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`val x: String = ...`).
+			if lang == langKotlin {
+				left = stripKotlinDeclType(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right

@@ -39,6 +39,8 @@ const (
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
 	LangPerl       // Perl — #, POD =pod…=cut, "…"/'…', `…`, q()/qq()/qw()/qx(), heredocs, m//, s///
+	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
+	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -65,6 +67,10 @@ func (l Lang) String() string {
 		return "cpp"
 	case LangPerl:
 		return "perl"
+	case LangScala:
+		return "scala"
+	case LangKotlin:
+		return "kotlin"
 	default:
 		return "unknown"
 	}
@@ -98,21 +104,25 @@ var extToLang = map[string]Lang{
 	// C and C++ share comment/string lexing and dangerous-API surface, so one
 	// lexer serves every dialect extension. Headers (.h/.hpp/.hh/.hxx) carry the
 	// same code as their translation units.
-	".c":   LangCPP,
-	".h":   LangCPP,
-	".cc":  LangCPP,
-	".cpp": LangCPP,
-	".cxx": LangCPP,
-	".c++": LangCPP,
-	".hpp": LangCPP,
-	".hh":  LangCPP,
-	".hxx": LangCPP,
-	".ipp": LangCPP,
-	".inl": LangCPP,
-	".pl":  LangPerl,
-	".pm":  LangPerl,
-	".cgi": LangPerl,
-	".t":   LangPerl,
+	".c":     LangCPP,
+	".h":     LangCPP,
+	".cc":    LangCPP,
+	".cpp":   LangCPP,
+	".cxx":   LangCPP,
+	".c++":   LangCPP,
+	".hpp":   LangCPP,
+	".hh":    LangCPP,
+	".hxx":   LangCPP,
+	".ipp":   LangCPP,
+	".inl":   LangCPP,
+	".pl":    LangPerl,
+	".pm":    LangPerl,
+	".cgi":   LangPerl,
+	".t":     LangPerl,
+	".scala": LangScala,
+	".sc":    LangScala,
+	".kt":    LangKotlin,
+	".kts":   LangKotlin,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
