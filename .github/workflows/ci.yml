@@ -123,6 +123,14 @@ jobs:
         # precision number from silently rotting.
         run: ./nox bench --precision testdata/precision-suite --baseline testdata/precision-suite/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — java
+        # The Java taint corpus gates independently of the Python/JS/Go suite:
+        # the Java samples (Runtime.exec / Statement.executeQuery / new File /
+        # URL.openStream / ObjectInputStream.readObject / response writer) and
+        # their clean stressors live in their own dir with their own baseline, so
+        # a regression in the Java lexer, extractor, or catalog fails here.
+        run: ./nox bench --precision testdata/precision-suite-java --baseline testdata/precision-suite-java/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
