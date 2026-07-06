@@ -38,6 +38,7 @@ const (
 	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
+	LangPerl       // Perl — #, POD =pod…=cut, "…"/'…', `…`, q()/qq()/qw()/qx(), heredocs, m//, s///
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -62,6 +63,8 @@ func (l Lang) String() string {
 		return "csharp"
 	case LangCPP:
 		return "cpp"
+	case LangPerl:
+		return "perl"
 	default:
 		return "unknown"
 	}
@@ -106,6 +109,10 @@ var extToLang = map[string]Lang{
 	".hxx": LangCPP,
 	".ipp": LangCPP,
 	".inl": LangCPP,
+	".pl":  LangPerl,
+	".pm":  LangPerl,
+	".cgi": LangPerl,
+	".t":   LangPerl,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
