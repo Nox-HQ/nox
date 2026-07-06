@@ -67,7 +67,11 @@ func isKeyword(s string) bool {
 		"guard", "defer", "fileprivate", "open", "mutating", "nonmutating",
 		"convenience", "required", "dynamic", "lazy", "weak", "unowned",
 		"protocol", "extension", "typealias", "associatedtype", "inout",
-		"some", "any", "throws", "rethrows", "willSet", "didSet", "get", "set":
+		"some", "any", "throws", "rethrows", "willSet", "didSet", "get", "set",
+		// Perl declaration/control keywords (superset is harmless: these are never
+		// taint-carrying variable names). `my`/`our`/`local` are binding keywords;
+		// `sub`/`package`/`qw`/`wantarray` must never be read as a variable.
+		"my", "our", "local", "sub", "package", "qw", "wantarray":
 		return true
 	}
 	return false

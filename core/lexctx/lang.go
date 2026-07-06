@@ -38,6 +38,7 @@ const (
 	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
+	LangPerl       // Perl — #, POD =pod…=cut, "…"/'…', `…`, q()/qq()/qw()/qx(), heredocs, m//, s///
 	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
 	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
@@ -65,6 +66,8 @@ func (l Lang) String() string {
 		return "csharp"
 	case LangCPP:
 		return "cpp"
+	case LangPerl:
+		return "perl"
 	case LangScala:
 		return "scala"
 	case LangKotlin:
@@ -115,6 +118,10 @@ var extToLang = map[string]Lang{
 	".hxx":   LangCPP,
 	".ipp":   LangCPP,
 	".inl":   LangCPP,
+	".pl":    LangPerl,
+	".pm":    LangPerl,
+	".cgi":   LangPerl,
+	".t":     LangPerl,
 	".scala": LangScala,
 	".sc":    LangScala,
 	".kt":    LangKotlin,
