@@ -241,6 +241,22 @@ jobs:
         # positive can creep in and no recall regression can be silently hidden.
         run: ./nox bench --precision testdata/precision-suite-lua --baseline testdata/precision-suite-lua/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — clojure
+        # Same honest ratchet, scoped to the Clojure taint suite (lexctx
+        # scan_clojure + engine extract_clojure + the catalog `clojure` block).
+        # Clojure has the LOWEST recall of any supported language by design — it is a
+        # Lisp (prefix s-expressions `(fn arg …)`, `(let [x v] …)`), the furthest of
+        # any language from the assignment/call model the engine was built for, so
+        # the paren-aware FORM recognizer catches only the idiomatic binding + call
+        # shapes; threading macros (`->`, `->>`), `apply`, and other higher-order
+        # dispatch reorder the sink's argument position beyond what it can follow, so
+        # the suite carries honest false negatives (see
+        # testdata/precision-suite-clojure/README.md). This gate therefore defends
+        # PRECISION (>= 0.90) — parameterized jdbc vectors and Integer/parseInt
+        # coercions must not FP — and pins the committed baseline so the known FNs
+        # cannot be silently hidden and no new Clojure false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-clojure --baseline testdata/precision-suite-clojure/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
