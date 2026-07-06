@@ -1928,6 +1928,64 @@
         {"call": "getName", "neutralizes": ["path_traversal"], "note": "new File(path).getName strips directory components; pair with an allow-base check"},
         {"call": "getFileName", "neutralizes": ["path_traversal"], "note": "Paths.get(path).getFileName strips directory components"}
       ]
+    },
+    "kotlin": {
+      "comment": "Kotlin source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Kotlin runs on the JVM, so its dangerous APIs are the Java ones (Runtime.exec, JDBC executeQuery, java.io.File, URL.openStream, ObjectInputStream.readObject) plus the Android idioms (intent.getStringExtra source, SQLiteDatabase.rawQuery sink). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .exec, .readText, .openStream, .rawQuery). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (scope-function/lambda chains the flat recognizer cannot follow). See core/taint/engine/extract_kotlin.go.",
+      "sources": [
+        {"call": "request.getParameter", "kind": "http_query"},
+        {"call": "request.getParameterValues", "kind": "http_query"},
+        {"call": "request.getQueryString", "kind": "http_query"},
+        {"call": "request.getHeader", "kind": "http_header"},
+        {"call": "request.getHeaders", "kind": "http_header"},
+        {"call": "request.getCookies", "kind": "http_header"},
+        {"call": "request.getInputStream", "kind": "http_body"},
+        {"call": "request.getReader", "kind": "http_body"},
+        {"call": "req.getParameter", "kind": "http_query"},
+        {"call": "req.getHeader", "kind": "http_header"},
+        {"call": "getParameter", "kind": "http_query"},
+        {"call": "getQueryString", "kind": "http_query"},
+        {"call": "intent.getStringExtra", "kind": "http_query"},
+        {"call": "intent.getData", "kind": "http_query"},
+        {"call": "getStringExtra", "kind": "http_query"},
+        {"call": "System.getenv", "kind": "env"},
+        {"call": "System.getProperty", "kind": "env"}
+      ],
+      "sinks": [
+        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"},
+        {"call": "ProcessBuilder", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"},
+        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation or a template string with a $-interpolated value"},
+        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
+        {"call": "rawQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Android SQLiteDatabase.rawQuery(sql, args) with a tainted, non-parameterized SQL string is SQL injection"},
+        {"call": "execSQL", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Android SQLiteDatabase.execSQL(sql) — matched on the method suffix"},
+        {"call": "createQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "JPA/Hibernate/Exposed createQuery(hql) with a tainted string is HQL injection"},
+        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path) opens a file named by input — matched on the File constructor name"},
+        {"call": "FileInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "FileInputStream(path)"},
+        {"call": "readText", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path).readText() reads a file named by tainted input — matched on the .readText method suffix"},
+        {"call": "readBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path).readBytes() — matched on the method suffix"},
+        {"call": "readLines", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
+        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "URL(u).openConnection() — matched on the method suffix"},
+        {"call": "ObjectInputStream.readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"},
+        {"call": "readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "ObjectInputStream.readObject() — matched on the method suffix"},
+        {"call": "write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .write(taintedHtml) reflects unescaped input — reflected XSS"},
+        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response.getWriter().print(taintedHtml) — reflected XSS"},
+        {"call": "println", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .println(taintedHtml) — reflected XSS"}
+      ],
+      "sanitizers": [
+        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
+        {"call": "toInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toInt() numeric coercion removes injection metacharacters (throws on non-numeric input)"},
+        {"call": "toIntOrNull", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toIntOrNull() numeric coercion"},
+        {"call": "toLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toLong() numeric coercion"},
+        {"call": "toLongOrNull", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "escapeHtml4", "neutralizes": ["xss"], "note": "Apache Commons StringEscapeUtils.escapeHtml4 — matched on the method suffix"},
+        {"call": "forHtml", "neutralizes": ["xss"], "note": "OWASP Encoder.forHtml — matched on the method suffix"},
+        {"call": "htmlEscape", "neutralizes": ["xss"], "note": "Spring HtmlUtils.htmlEscape"},
+        {"call": "name", "neutralizes": ["path_traversal"], "note": "File(path).name returns the last path component only, stripping directory traversal — matched on the .name accessor when used call-shaped"},
+        {"call": "getName", "neutralizes": ["path_traversal"], "note": "FilenameUtils.getName / File.getName strips path components"},
+        {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
+      ]
     }
   }
 }

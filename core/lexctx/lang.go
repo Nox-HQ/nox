@@ -39,6 +39,7 @@ const (
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
 	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
+	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -65,6 +66,8 @@ func (l Lang) String() string {
 		return "cpp"
 	case LangScala:
 		return "scala"
+	case LangKotlin:
+		return "kotlin"
 	default:
 		return "unknown"
 	}
@@ -111,6 +114,8 @@ var extToLang = map[string]Lang{
 	".inl":   LangCPP,
 	".scala": LangScala,
 	".sc":    LangScala,
+	".kt":    LangKotlin,
+	".kts":   LangKotlin,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
