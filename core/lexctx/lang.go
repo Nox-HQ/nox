@@ -38,6 +38,7 @@ const (
 	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
+	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
 	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
 )
 
@@ -63,6 +64,8 @@ func (l Lang) String() string {
 		return "csharp"
 	case LangCPP:
 		return "cpp"
+	case LangScala:
+		return "scala"
 	case LangKotlin:
 		return "kotlin"
 	default:
@@ -98,19 +101,21 @@ var extToLang = map[string]Lang{
 	// C and C++ share comment/string lexing and dangerous-API surface, so one
 	// lexer serves every dialect extension. Headers (.h/.hpp/.hh/.hxx) carry the
 	// same code as their translation units.
-	".c":   LangCPP,
-	".h":   LangCPP,
-	".cc":  LangCPP,
-	".cpp": LangCPP,
-	".cxx": LangCPP,
-	".c++": LangCPP,
-	".hpp": LangCPP,
-	".hh":  LangCPP,
-	".hxx": LangCPP,
-	".ipp": LangCPP,
-	".inl": LangCPP,
-	".kt":  LangKotlin,
-	".kts": LangKotlin,
+	".c":     LangCPP,
+	".h":     LangCPP,
+	".cc":    LangCPP,
+	".cpp":   LangCPP,
+	".cxx":   LangCPP,
+	".c++":   LangCPP,
+	".hpp":   LangCPP,
+	".hh":    LangCPP,
+	".hxx":   LangCPP,
+	".ipp":   LangCPP,
+	".inl":   LangCPP,
+	".scala": LangScala,
+	".sc":    LangScala,
+	".kt":    LangKotlin,
+	".kts":   LangKotlin,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

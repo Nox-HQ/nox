@@ -129,8 +129,10 @@ var sourceExtensions = map[string]bool{
 	".c": true, ".h": true,
 	".cpp": true, ".cc": true, ".cxx": true, ".c++": true,
 	".hpp": true, ".hh": true, ".hxx": true, ".ipp": true, ".inl": true,
-	".cs": true,
-	".sh": true,
+	".cs":    true,
+	".scala": true,
+	".sc":    true,
+	".sh":    true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
