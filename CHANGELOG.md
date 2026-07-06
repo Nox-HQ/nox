@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Restored the `nox scan --baseline <path>` flag** as an optional override.
+  It was removed in favour of auto-discovering `.nox/baseline.json`, which is a
+  good default but a breaking change on its own: a workflow still passing
+  `-baseline` errored (exit 2), and under a `nox scan … || true` pipeline that
+  silently disabled scanning. Auto-discovery remains the default; when set, the
+  flag (and its config equivalent `policy.baseline_path`) points the baseline at
+  a non-default location — an explicit flag takes precedence over config. An
+  unrecognized `scan` flag now prints an actionable hint (`run 'nox scan -h'`)
+  instead of a bare parser error, so a removed/typo'd flag can't quietly become
+  a silent-disable trap again.
+
 ## [1.7.0] - 2026-07-06
 
 This release turns nox's SAST layer from a 3-language proof of concept into a

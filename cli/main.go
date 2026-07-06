@@ -295,6 +295,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
 	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
+	var baselineFlag string
+	scanFS.StringVar(&baselineFlag, "baseline", "", "path to the baseline file whose fingerprints mark known findings as suppressed (default: auto-discover .nox/baseline.json, or .nox.yaml policy.baseline_path)")
 	scanFS.BoolVar(&noRespectGitignoreFlg, "no-respect-gitignore", false, "scan paths matched by .gitignore (default: skip them)")
 	scanFS.BoolVar(&trackedOnlyFlag, "tracked-only", false, "scan only git-tracked files (git ls-files); exclude untracked working-tree files and submodule contents")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
@@ -305,6 +307,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
 	positionals, err := parseInterspersed(scanFS, args)
 	if err != nil {
+		// flag.ErrHelp means the user asked for -h/--help; the flag package
+		// already printed usage, so exit quietly. For a genuine unknown/removed
+		// flag, add an actionable hint — a bare "flag provided but not defined"
+		// swallowed by a `nox scan … || true` pipeline is how scanning silently
+		// stops after an upgrade. Point at -h and the baseline default so the
+		// once-removed `-baseline` flag never becomes a silent-disable trap again.
+		if err != flag.ErrHelp {
+			fmt.Fprintln(os.Stderr, "nox scan: unrecognized flag. Run 'nox scan -h' for the supported flags.")
+			fmt.Fprintln(os.Stderr, "Note: the baseline is auto-discovered at .nox/baseline.json — override it with '--baseline <path>' if needed.")
+		}
 		return 2
 	}
 	// Wire fingerprint version: explicit flag wins, then env var (handled
@@ -394,6 +406,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			ChangedSince:       changedSinceFlag,
 			NoRespectGitignore: noRespectGitignoreFlg,
 			TrackedOnly:        trackedOnlyFlag,
+			BaselinePath:       baselineFlag,
 		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
