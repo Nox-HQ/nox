@@ -71,7 +71,12 @@ func isKeyword(s string) bool {
 		// Perl declaration/control keywords (superset is harmless: these are never
 		// taint-carrying variable names). `my`/`our`/`local` are binding keywords;
 		// `sub`/`package`/`qw`/`wantarray` must never be read as a variable.
-		"my", "our", "local", "sub", "package", "qw", "wantarray":
+		"my", "our", "local", "sub", "package", "qw", "wantarray",
+		// Lua keywords (superset is harmless: these are never taint-carrying
+		// variable names). `local`, `then`, `end`, `nil`, `until`, `not`, `and`,
+		// `or`, `in`, `do`, `else`, `function` are already covered above; add the
+		// rest.
+		"elseif", "repeat", "goto":
 		return true
 	}
 	return false
