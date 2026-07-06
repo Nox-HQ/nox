@@ -59,10 +59,18 @@ func isKeyword(s string) bool {
 		"long", "short", "double", "float", "decimal", "object", "string?",
 		"switch", "case", "default", "throw", "catch", "foreach", "do",
 		"override", "virtual", "abstract", "sealed", "partial",
+		// Swift keywords/modifiers that appear as bare tokens in headers and
+		// statements. `let`, `var`, `func`, `class`, `static`, `case`, `default`,
+		// `do`, `nil`, `self`, `super`, `throw`, `enum`, `struct` are already
+		// covered above; add the rest. Treating a keyword as a non-variable only
+		// avoids a spurious read of it.
+		"guard", "defer", "fileprivate", "open", "mutating", "nonmutating",
+		"convenience", "required", "dynamic", "lazy", "weak", "unowned",
+		"protocol", "extension", "typealias", "associatedtype", "inout",
+		"some", "any", "throws", "rethrows", "willSet", "didSet", "get", "set",
 		// Perl declaration/control keywords (superset is harmless: these are never
 		// taint-carrying variable names). `my`/`our`/`local` are binding keywords;
-		// `sub`/`elsif`/`unless`/`foreach`/`my`/`qw` and friends must never be read
-		// as a variable. `use`/`package`/`require` are already covered above.
+		// `sub`/`package`/`qw`/`wantarray` must never be read as a variable.
 		"my", "our", "local", "sub", "package", "qw", "wantarray":
 		return true
 	}

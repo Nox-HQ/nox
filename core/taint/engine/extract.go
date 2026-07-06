@@ -151,6 +151,12 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
 		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangSwift:
+		// Swift is brace-delimited like C#/JS: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Like C# it recognizes `func` headers for per-function units (and their
+		// internal parameter binding names). See extract_swift.go.
+		return extractSwift(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

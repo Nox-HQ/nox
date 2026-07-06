@@ -19,6 +19,7 @@ const (
 	langPerl
 	langScala
 	langKotlin
+	langSwift
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -154,6 +155,11 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// annotation on the binding (`val x: String = ...`).
 			if lang == langKotlin {
 				left = stripKotlinDeclType(left)
+			}
+			// Swift `let` / `var` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`let x: String = ...`).
+			if lang == langSwift {
+				left = stripSwiftLetKeyword(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right
