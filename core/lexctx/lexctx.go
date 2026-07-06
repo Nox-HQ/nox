@@ -63,6 +63,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanCSharp(content)
 	case LangCPP:
 		return scanCPP(content)
+	case LangKotlin:
+		return scanKotlin(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}

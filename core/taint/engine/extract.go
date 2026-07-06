@@ -128,6 +128,13 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangKotlin:
+		// Kotlin is brace-delimited like Java/JS: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Kotlin statements are usually newline-terminated (semicolons optional),
+		// so the split only affects the rare `a; b` line; it recognizes `fun`
+		// headers for per-function units. See extract_kotlin.go.
+		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

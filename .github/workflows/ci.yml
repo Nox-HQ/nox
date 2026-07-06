@@ -172,6 +172,15 @@ jobs:
         # FN cannot be silently hidden and no new C/C++ false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-cpp --baseline testdata/precision-suite-cpp/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — kotlin
+        # Same honest ratchet, scoped to the Kotlin taint suite (lexctx scan_kotlin
+        # + engine extract_kotlin + the catalog `kotlin` block). Kotlin recall is
+        # intentionally below 1.0 (one documented scope-function false negative —
+        # see testdata/precision-suite-kotlin/README.md), so this gate defends
+        # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
+        # be silently hidden and no new Kotlin false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-kotlin --baseline testdata/precision-suite-kotlin/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
