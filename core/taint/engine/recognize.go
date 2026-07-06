@@ -13,6 +13,8 @@ const (
 	langPHP
 	langJava
 	langRuby
+	langRust
+	langCSharp
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -117,6 +119,15 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langJava {
 				left = stripJavaDeclType(left)
 			}
+			// Rust `let` / `let mut` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`let x: String = ...`).
+			if lang == langRust {
+				left = stripRustLetKeyword(left)
+			}
+			// C# declarations put a type (or `var`) before the name.
+			if lang == langCSharp {
+				left = stripCSharpDeclType(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -134,6 +145,61 @@ func stripDeclKeyword(left string) string {
 		}
 	}
 	return left
+}
+
+// stripRustLetKeyword removes a leading `let ` / `let mut ` binding keyword and
+// any `: Type` annotation from a Rust assignment LHS, leaving the bare binding
+// name. `let x = e`, `let mut x = e`, and `let x: String = e` all yield `x`.
+// A non-`let` LHS (a reassignment `x = e`) is returned with only the annotation
+// stripped, so `x: T = e` still resolves to `x` (rare, but harmless).
+func stripRustLetKeyword(left string) string {
+	left = strings.TrimSpace(left)
+	if strings.HasPrefix(left, "let ") {
+		left = strings.TrimSpace(strings.TrimPrefix(left, "let "))
+		if strings.HasPrefix(left, "mut ") {
+			left = strings.TrimSpace(strings.TrimPrefix(left, "mut "))
+		}
+	}
+	// Drop a `: Type` annotation on the binding (`x: String` -> `x`).
+	if i := strings.IndexByte(left, ':'); i >= 0 {
+		left = strings.TrimSpace(left[:i])
+	}
+	return left
+}
+
+// stripCSharpDeclType reduces a C# assignment LHS to its bare variable name by
+// dropping a leading type (or `var`) declaration. A C# local declaration reads
+// `<type> name = expr` — e.g. `var name`, `string user`, `SqlCommand cmd`,
+// `List<int> xs`, `byte[] data`, `IEnumerable<string> rows`. The variable name
+// is the LAST whitespace-separated token; everything before it is the type
+// (possibly with generic/array brackets, already balanced in the code view).
+// A single bare token (`name`) is returned unchanged — it is a plain
+// reassignment, not a declaration. Best-effort and deterministic: an
+// unrecognizable LHS falls through to isSimpleIdent, which rejects it safely.
+func stripCSharpDeclType(left string) string {
+	left = strings.TrimSpace(left)
+	// Find the last top-level space (not inside <...> or [...]) — the boundary
+	// between the type and the variable name.
+	depth := 0
+	lastSpace := -1
+	for i := 0; i < len(left); i++ {
+		switch left[i] {
+		case '<', '[', '(':
+			depth++
+		case '>', ']', ')':
+			if depth > 0 {
+				depth--
+			}
+		case ' ', '\t':
+			if depth == 0 {
+				lastSpace = i
+			}
+		}
+	}
+	if lastSpace < 0 {
+		return left // bare identifier: a plain reassignment
+	}
+	return strings.TrimSpace(left[lastSpace+1:])
 }
 
 // callChain is a recognized call: its normalized callee key, the code-view

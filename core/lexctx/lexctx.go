@@ -57,6 +57,10 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanJava(content)
 	case LangRuby:
 		return scanRuby(content)
+	case LangRust:
+		return scanRust(content)
+	case LangCSharp:
+		return scanCSharp(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}

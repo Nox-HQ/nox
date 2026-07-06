@@ -35,6 +35,8 @@ const (
 	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
 	LangJava       // Java — //, /*…*/, /**…*/, "…", """…""" (text block), '…' (char)
 	LangRuby       // Ruby — #, =begin/=end, '…', "…" (#{} interp), `…`, %w/%q, heredocs
+	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
+	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -53,6 +55,10 @@ func (l Lang) String() string {
 		return "java"
 	case LangRuby:
 		return "ruby"
+	case LangRust:
+		return "rust"
+	case LangCSharp:
+		return "csharp"
 	default:
 		return "unknown"
 	}
@@ -81,6 +87,8 @@ var extToLang = map[string]Lang{
 	".rb":      LangRuby,
 	".rake":    LangRuby,
 	".gemspec": LangRuby,
+	".rs":      LangRust,
+	".cs":      LangCSharp,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

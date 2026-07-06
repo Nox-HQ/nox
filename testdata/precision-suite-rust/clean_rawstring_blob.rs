@@ -1,0 +1,15 @@
+// Clean: a base64 data-URI image embedded in a raw string literal (r#"..."#) —
+// the single most common secret/pattern false-positive carrier. lexctx
+// classifies the whole raw string as a data blob, so pattern matches inside it
+// are suppressed. A correct scanner emits nothing; any finding here is a false
+// positive.
+
+// A raw string carries the blob verbatim (no escaping), spanning as one string.
+const LOGO_PNG: &str = r#"data:image/png;base64,iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"#;
+
+// A raw byte-string form of a short opaque token — still data, not a live secret.
+const SIGNATURE: &[u8] = br#"AKIAIOSFODNN7EXAMPLEKEYNOTREAL0000"#;
+
+fn logo() -> &'static str {
+    LOGO_PNG
+}

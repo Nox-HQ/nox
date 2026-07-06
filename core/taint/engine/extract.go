@@ -107,6 +107,20 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// braces must NOT force line-merging, matching the JS convention. Ruby
 		// statements are newline-terminated, so no semicolon split is needed.
 		return extractRuby(logicalLines(content, regions, true))
+	case lexctx.LangRust:
+		// Rust uses the line/statement RECOGNIZER (like Python/JS, NOT a real
+		// parser — only Go gets go/ast). Braces delimit blocks (so a function body
+		// is not collapsed into one logical line) and statements are `;`-terminated,
+		// so — like JS — only paren/bracket continuations merge physical lines and
+		// each logical line is split on top-level semicolons. Ownership, Result/`?`
+		// unwrapping, iterator chains, and macro sinks make line recognition coarse;
+		// see extract_rust.go for the honest limits.
+		return extractRust(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangCSharp:
+		// C# is brace-delimited like JS: paren/array continuations merge physical
+		// lines, then each logical line splits on top-level semicolons into
+		// statements. Unlike JS it recognizes method headers for per-method units.
+		return extractCSharp(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

@@ -145,6 +145,22 @@ jobs:
         # Ruby taint rule that fired may score below it.
         run: ./nox bench --precision testdata/precision-suite-ruby --baseline testdata/precision-suite-ruby/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — rust
+        # Same honest ratchet, scoped to the dedicated Rust corpus. Rust recall
+        # is intentionally the lowest of the supported languages (one documented
+        # web-extractor false negative — see testdata/precision-suite-rust/
+        # README.md), so this gate defends PRECISION (>= 0.90) and pins the
+        # committed baseline so the known FN cannot be silently hidden and no new
+        # Rust false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-rust --baseline testdata/precision-suite-rust/baseline.json --min-precision 0.90
+
+      - name: SAST precision gate — csharp
+        # Same honest ratchet, scoped to the C# taint suite (lexctx scan_csharp +
+        # engine extract_csharp + the catalog `csharp` block). Fails on any
+        # regression vs the committed C# snapshot and holds the per-rule precision
+        # floor at 0.90 so C# taint precision cannot silently rot.
+        run: ./nox bench --precision testdata/precision-suite-csharp --baseline testdata/precision-suite-csharp/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
