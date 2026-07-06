@@ -140,11 +140,11 @@ var sourceExtensions = map[string]bool{
 	// already covered by the C/C++ set above and stay under that lexer; only the
 	// implementation files carry the objc taint module (lexctx scan_objc + engine
 	// extract_objc + the catalog `objc` block).
-	".m":   true,
-	".mm":  true,
-	".ps1": true,
-	".psm1":  true,
-	".psd1":  true,
+	".m":    true,
+	".mm":   true,
+	".ps1":  true,
+	".psm1": true,
+	".psd1": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
