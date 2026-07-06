@@ -45,6 +45,7 @@ const (
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
 	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
+	LangElixir     // Elixir — # comments (no block comments), "…" (#{…} interp), '…' charlist, """…"""/'''…''' heredocs, ~s()/~r()/~w() sigils (uppercase = no interp), ?c char code
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -83,6 +84,8 @@ func (l Lang) String() string {
 		return "swift"
 	case LangLua:
 		return "lua"
+	case LangElixir:
+		return "elixir"
 	default:
 		return "unknown"
 	}
@@ -142,6 +145,10 @@ var extToLang = map[string]Lang{
 	".psd1":  LangPowerShell,
 	".swift": LangSwift,
 	".lua":   LangLua,
+	// Elixir source (.ex) and script (.exs) files share one lexer/extractor/catalog
+	// block since they carry identical syntax and dangerous-API surface.
+	".ex":  LangElixir,
+	".exs": LangElixir,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

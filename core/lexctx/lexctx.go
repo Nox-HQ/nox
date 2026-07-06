@@ -77,6 +77,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanSwift(content)
 	case LangLua:
 		return scanLua(content)
+	case LangElixir:
+		return scanElixir(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}
