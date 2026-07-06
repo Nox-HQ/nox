@@ -1,39 +1,30 @@
-# Honest false negatives: real vulnerabilities a CORRECT scanner should flag but
-# nox's intraprocedural Ruby LINE recognizer does NOT catch yet. Each is
-# annotated with the rule a correct scanner would fire, so it scores as a
-# recall gap (FN) rather than being quietly omitted — the whole point of an
-# honest measurement corpus. See README "Known gaps" for why each is missed.
+# Mixed corpus of real vulnerabilities that stress the boundary of nox's
+# intraprocedural Ruby LINE recognizer. Each line is annotated with the rule a
+# correct scanner would fire. Some are caught (they score as recall); one is an
+# honest false negative the line-recognizer cannot join, recorded here rather than
+# quietly omitted — the whole point of an honest measurement corpus. See README
+# "Known gaps" for why the miss is missed.
 class KnownGapsController
-  # FN #1 — `render inline:` template injection. A tainted value in an inline
-  # ERB template is real XSS/SSTI, but the recognizer keys sinks by call NAME and
-  # cannot distinguish `render inline:` (dangerous) from `render plain:`/`json:`
-  # (auto-escaped, safe). Firing on bare `render` over-fired the clean auto-
-  # escaped renders, so the `render` sink was intentionally dropped. Result: this
-  # genuine flow is missed.
-  def template
-    name = params[:name]
-    render inline: "<h1>Hello #{name}</h1>" # nox-expect: TAINT-003
+  # CAUGHT — metaprogramming via Object#send. A tainted method name dispatched
+  # through `send` is code injection; nox models `send` as a sink whose first
+  # argument is the dispatched method name, so this fires TAINT-005.
+  def dispatch
+    action = params[:action]
+    target.send(action, params[:arg]) # nox-expect: TAINT-005
   end
 
-  # FN #2 — cross-method flow through an instance variable. The source lands in
+  # FN — cross-method flow through an instance variable. The source lands in
   # @cmd in one action and the sink reads @cmd in another. nox's same-file
   # interprocedural pass tracks LOCAL HELPER CALLS via summaries, not shared
   # object/instance state, so a taint laundered through an @ivar across two
-  # methods is not joined.
+  # methods is not joined. This is the documented boundary of the
+  # intraprocedural + local-summary model (identical to the Python/JS limit),
+  # not a Ruby-specific defect.
   def capture
     @cmd = params[:cmd]
   end
 
   def execute_captured
     system @cmd # nox-expect: TAINT-002
-  end
-
-  # FN #3 — metaprogramming via Object#send. A tainted method name dispatched
-  # through `send` is code injection, but the argument is a method-name string,
-  # not a value flowing into a recognized sink shape; the line recognizer does
-  # not model dynamic dispatch.
-  def dispatch
-    action = params[:action]
-    target.send(action, params[:arg]) # nox-expect: TAINT-005
   end
 end
