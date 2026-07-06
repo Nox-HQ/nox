@@ -136,16 +136,26 @@ var sourceExtensions = map[string]bool{
 	".pl": true, ".pm": true, ".cgi": true, ".t": true,
 	".scala": true,
 	".sc":    true,
-	".ps1":   true,
-	".psm1":  true,
-	".psd1":  true,
+	// Objective-C / Objective-C++ translation units. Headers (.h/.hh/.hpp) are
+	// already covered by the C/C++ set above and stay under that lexer; only the
+	// implementation files carry the objc taint module (lexctx scan_objc + engine
+	// extract_objc + the catalog `objc` block).
+	".m":    true,
+	".mm":   true,
+	".ps1":  true,
+	".psm1": true,
+	".psd1": true,
 	// Lua translation units. One taint module (lexctx scan_lua + engine
 	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
 	// embedded config.
-	".lua": true,
-	// Clojure and its dialects: .clj (JVM), .cljs (ClojureScript), .cljc (portable).
-	// One taint module (lexctx scan_clojure + engine extract_clojure + the catalog
-	// `clojure` block) serves all three. .edn is data (config), classified elsewhere.
+	".lua":  true,
+	".dart": true,
+	// Elixir source (.ex) and script (.exs) files. One taint module (lexctx
+	// scan_elixir + engine extract_elixir + the catalog `elixir` block).
+	".ex":  true,
+	".exs": true,
+	// Clojure source and ClojureScript / cross-platform variants. One taint
+	// module (lexctx scan_clojure + engine extract_clojure + catalog `clojure`).
 	".clj":  true,
 	".cljs": true,
 	".cljc": true,

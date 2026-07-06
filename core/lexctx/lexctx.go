@@ -75,10 +75,16 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanPowerShell(content)
 	case LangSwift:
 		return scanSwift(content)
+	case LangObjC:
+		return scanObjC(content)
 	case LangLua:
 		return scanLua(content)
 	case LangClojure:
 		return scanClojure(content)
+	case LangElixir:
+		return scanElixir(content)
+	case LangDart:
+		return scanDart(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}

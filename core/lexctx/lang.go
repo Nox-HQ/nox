@@ -44,8 +44,11 @@ const (
 	LangShell      // Shell/Bash — # comments, '…' (literal), "…" ($var/$(…) interp), $'…' (ANSI-C), `…`, $(…), heredocs
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
+	LangObjC       // Objective-C — C lexing plus @"…" NSString literals; //, /*…*/, "…", 'c', #… preprocessor, \ line-splice
 	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
-	LangClojure    // Clojure — ; line comments, "…" (Java-style escapes), #"…" regex, \c / \newline char literals, #_ discard
+	LangDart       // Dart — //, ///, NESTED /*…*/, '…'/"…" ($var/${…} interp), '''…'''/"""…""" (multiline), r'…'/r"…" raw (no interp)
+	LangElixir     // Elixir — # comments (no block comments), "…" (#{…} interp), '…' charlist, """…"""/'''…''' heredocs, ~s()/~r()/~w() sigils, ?c char code
+	LangClojure    // Clojure — ; comments, "…" (Java escapes), #"…" regex, \c char literals; s-expression Lisp
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -82,8 +85,14 @@ func (l Lang) String() string {
 		return "powershell"
 	case LangSwift:
 		return "swift"
+	case LangObjC:
+		return "objc"
 	case LangLua:
 		return "lua"
+	case LangDart:
+		return "dart"
+	case LangElixir:
+		return "elixir"
 	case LangClojure:
 		return "clojure"
 	default:
@@ -144,10 +153,18 @@ var extToLang = map[string]Lang{
 	".psm1":  LangPowerShell,
 	".psd1":  LangPowerShell,
 	".swift": LangSwift,
-	".lua":   LangLua,
-	// Clojure and its dialects: .clj (JVM), .cljs (ClojureScript), .cljc (portable),
-	// plus .edn (Extensible Data Notation) which shares the same reader lexing
-	// (strings, `;` comments, `\c` chars) so one scanner serves them all.
+	// Objective-C / Objective-C++ translation units. Only `.m` and `.mm` map to
+	// LangObjC — a `.h` header is shared C/C++/ObjC surface and stays LangCPP
+	// (mapped above) so the C/C++ lexer keeps owning it; overriding `.h` here
+	// would clobber every C and C++ header. ObjC lexing is C plus `@"…"` NSString
+	// literals, so the C-derived scanner handles a `.h` acceptably either way, but
+	// the conservative choice is to leave headers with the incumbent C/C++ lexer.
+	".m":    LangObjC,
+	".mm":   LangObjC,
+	".lua":  LangLua,
+	".dart": LangDart,
+	".ex":   LangElixir,
+	".exs":  LangElixir,
 	".clj":  LangClojure,
 	".cljs": LangClojure,
 	".cljc": LangClojure,

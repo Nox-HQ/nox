@@ -76,7 +76,29 @@ func isKeyword(s string) bool {
 		// variable names). `local`, `then`, `end`, `nil`, `until`, `not`, `and`,
 		// `or`, `in`, `do`, `else`, `function` are already covered above; add the
 		// rest.
-		"elseif", "repeat", "goto":
+		"elseif", "repeat", "goto",
+		// Dart keywords/modifiers and common built-in type names that appear as
+		// bare tokens in declarations and headers. `var`, `final`, `const`, `class`,
+		// `if`, `for`, `while`, `return`, `void`, `int`, `bool`, `double`, `null`,
+		// `true`, `false`, `this`, `super`, `new`, `try`, `catch`, `switch`, `case`,
+		// `default`, `import`, `enum`, `throw`, `async`, `await`, `dynamic` (=type)
+		// are already covered above. Add the Dart-specific rest; treating a keyword
+		// or a type name as a non-variable only avoids a spurious read of it.
+		// NOTE: Dart's CONTEXTUAL keywords (`on`, `library`, `part`, `show`, `hide`,
+		// `num`) are deliberately NOT listed — they are built-in identifiers that are
+		// valid variable/function names both in Dart and in every other language, so
+		// putting them in this SHARED set silently suppresses real reads (a function
+		// named `show`, a var named `on`) across all languages.
+		"late", "factory", "extends", "implements", "mixin",
+		"deferred", "covariant", "rethrow",
+		"String", "List", "Map", "Set", "Future", "Stream", "Object",
+		"Function", "Never", "Uri",
+		// Elixir keywords/macros that appear as bare tokens in headers and blocks.
+		// `def`/`fn`/`case`/`do`/`end`/`nil`/`true`/`false`/`for`/`with`/`import`/
+		// `use`/`raise` are already covered above; add the rest.
+		"defp", "defmodule", "defmacro", "defmacrop", "defstruct", "defprotocol",
+		"defimpl", "cond", "receive", "after", "quote",
+		"unquote", "alias", "require", "defdelegate", "defguard":
 		return true
 	}
 	return false
