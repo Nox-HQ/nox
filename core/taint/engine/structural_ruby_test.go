@@ -123,6 +123,24 @@ end
 `,
 			want: "TAINT-003",
 		},
+		{
+			name: "ssti/xss via render inline: interpolation",
+			src: `def show
+  name = params[:name]
+  render inline: "<h1>Hello #{name}</h1>"
+end
+`,
+			want: "TAINT-003",
+		},
+		{
+			name: "ssti/xss via render text: interpolation",
+			src: `def show
+  val = params[:v]
+  render text: "Value: #{val}"
+end
+`,
+			want: "TAINT-003",
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -181,6 +199,31 @@ end
   raw = params[:name]
   safe = CGI.escapeHTML(raw)
   out = safe.html_safe
+end
+`,
+		},
+		{
+			name: "render plain: is auto-escaped (no ssti sink)",
+			src: `def show
+  output = params[:o]
+  render plain: output
+end
+`,
+		},
+		{
+			name: "render json: is auto-escaped (no ssti sink)",
+			src: `def show
+  data = params[:d]
+  render json: data
+end
+`,
+		},
+		{
+			name: "render inline: sanitized with html_escape stays clean",
+			src: `def show
+  raw = params[:name]
+  name = CGI.escapeHTML(raw)
+  render inline: "<h1>Hello #{name}</h1>"
 end
 `,
 		},

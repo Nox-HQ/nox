@@ -1523,6 +1523,13 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "template body built from tainted data enables injection"
+        },
+        {
+          "call": "render_inline",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "render inline:/text: builds an unescaped ERB template body from tainted data (SSTI/XSS); render plain:/json:/:template are auto-escaped and safe. Synthetic callee emitted by the Ruby recognizer only for the inline:/interpolated-text: keyword form."
         }
       ],
       "sanitizers": [
