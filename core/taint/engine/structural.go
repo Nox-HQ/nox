@@ -606,7 +606,15 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// tainted value as a bind parameter (2nd positional) instead of
 		// interpolating it into the SQL string (1st positional). Safe only when
 		// there is a 2nd+ positional arg AND the taint is not in the SQL string.
-		"Repo.query", "Repo.query!":
+		"Repo.query", "Repo.query!",
+		// Dart sqflite: `db.rawQuery("... ?", [id])` / `db.execute("... ?", [id])`
+		// pass the tainted value as the arguments list (2nd positional) with a `?`
+		// placeholder in the SQL string (1st positional) — the safe parameterized
+		// form. A tainted value only in the SQL string (1st positional, no args
+		// list) is the injection. Sink Calls are single-token (rawQuery/execute/…),
+		// so canonicalSuffix keys on them directly. (`execute` is already a case
+		// above, shared with the Ruby/DBI parameterized-query form.)
+		"rawQuery", "rawInsert", "rawUpdate", "rawDelete":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional

@@ -24,6 +24,7 @@ const (
 	langSwift
 	langLua
 	langElixir
+	langDart
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -171,6 +172,12 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// fail isSimpleIdent below (we do not track list-destructuring taint).
 			if lang == langLua {
 				left = stripLuaLocalKeyword(left)
+			}
+			// Dart declarations use a `var`/`final`/`const` keyword or a leading
+			// type (`String x = ...`, `final String x = ...`). Strip them so the
+			// bare declared name is the LHS.
+			if lang == langDart {
+				left = stripDartDeclType(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right

@@ -91,6 +91,9 @@ var extensionLanguages = map[string]string{
 	".inl":   "cpp",
 	".cs":    "csharp",
 	".sh":    "shell",
+	// Objective-C / Objective-C++ implementation files (headers stay C/C++).
+	".m":  "objc",
+	".mm": "objc",
 }
 
 // LanguageForExtension returns the canonical language name for a file path
