@@ -397,7 +397,18 @@ func (ex *goExtractor) collectExpr(st *stmtDraft, e ast.Expr) {
 		return
 	case *ast.CallExpr:
 		callee := renderCallChain(x.Fun)
-		if callee != "" {
+		// A raw `.Write` XSS-to-response sink (w.Write([]byte(...))) fires only on the
+		// reflected-HTML shape: a tainted value combined with a string LITERAL in the
+		// write argument (an HTML concatenation "<b>"+user+"</b>"). A bare write of a
+		// precomputed value — w.Write(out) where out is command/file output — is NOT
+		// reflected XSS (that value is already reported at its own upstream sink), so
+		// the callee is not registered as a sink here. This gate keeps the injection
+		// samples (tp_cmdinjection/pathtraversal/… all end in w.Write(out)) from
+		// double-firing an XSS false positive while w.Write([]byte("…"+user)) still
+		// fires. The fmt.Fprint*/io.WriteString string-writers and template.HTML
+		// bypass need no literal gate — a tainted string reaching them IS reflected
+		// content — so they always register and are gated only by taint.
+		if callee != "" && (!isGoRawWriteSink(callee) || xssWriteArgIsHTML(x)) {
 			st.calls = appendUnique(st.calls, callee)
 			st.sinkArgs[callee] = ex.callArgInfo(x)
 		}
@@ -625,6 +636,56 @@ func chainHead(chain string) string {
 func isStringLiteral(e ast.Expr) bool {
 	lit, ok := e.(*ast.BasicLit)
 	return ok && lit.Kind == token.STRING
+}
+
+// isGoRawWriteSink reports whether a rendered callee chain is a raw byte `.Write`
+// on a response writer (w.Write, rw.Write, …). Matched on the `.Write` suffix so an
+// aliased writer name still resolves. This is the only XSS-write sink whose danger
+// is gated on a co-located string literal (a bare w.Write(out) of precomputed bytes
+// is not reflected XSS); the fmt.Fprint*/io.WriteString string-writers are not
+// gated, and template.HTML is an unconditional bypass sink.
+func isGoRawWriteSink(callee string) bool {
+	return strings.HasSuffix(callee, ".Write")
+}
+
+// xssWriteArgIsHTML reports whether a write call carries the reflected-HTML shape:
+// a string LITERAL appears somewhere in its arguments (a format string like
+// "<div>%s</div>" or an HTML concatenation "<b>"+user+"</b>", including inside a
+// []byte(...) conversion). A bare write of a single precomputed value — w.Write(out)
+// — has no literal and is not treated as XSS. Deterministic, AST-only.
+func xssWriteArgIsHTML(call *ast.CallExpr) bool {
+	for _, arg := range call.Args {
+		if exprContainsStringLiteral(arg) {
+			return true
+		}
+	}
+	return false
+}
+
+// exprContainsStringLiteral reports whether an expression tree contains a string
+// basic literal, descending concatenations, conversions ([]byte(...)), and the
+// usual wrappers. It does not descend into nested unrelated calls' arguments
+// beyond the conversion/format spine we care about — a string literal anywhere in
+// the write argument's own spine is enough to mark it HTML-shaped.
+func exprContainsStringLiteral(e ast.Expr) bool {
+	switch x := e.(type) {
+	case *ast.BasicLit:
+		return x.Kind == token.STRING
+	case *ast.BinaryExpr:
+		return exprContainsStringLiteral(x.X) || exprContainsStringLiteral(x.Y)
+	case *ast.ParenExpr:
+		return exprContainsStringLiteral(x.X)
+	case *ast.CallExpr:
+		// Descend a conversion / wrapping call ([]byte("<b>"+user+"</b>"),
+		// string(...)) so a literal inside the converted expression counts.
+		for _, a := range x.Args {
+			if exprContainsStringLiteral(a) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 // isCompositeVector reports whether an expression is a composite literal such as

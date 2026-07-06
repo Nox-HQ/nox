@@ -143,6 +143,81 @@ func run(dir string) {
 	}
 }
 
+// TestStructuralGoXSSToResponse covers the three reflected-XSS-to-response shapes:
+// fmt.Fprintf of an interpolated tainted value, w.Write of a []byte HTML concat,
+// and the template.HTML auto-escape bypass. Each must fire TAINT-003 (xss).
+func TestStructuralGoXSSToResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "fmt.Fprintf interpolates tainted value into HTML",
+			src: `package web
+func greet(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	fmt.Fprintf(w, "<div>Hello, %s</div>", name)
+}`,
+		},
+		{
+			name: "w.Write of []byte HTML concat",
+			src: `package web
+func greet(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	_, _ = w.Write([]byte("<b>" + user + "</b>"))
+}`,
+		},
+		{
+			name: "io.WriteString of tainted value",
+			src: `package web
+func greet(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	_, _ = io.WriteString(w, user)
+}`,
+		},
+		{
+			name: "template.HTML auto-escape bypass",
+			src: `package web
+func greet(w http.ResponseWriter, r *http.Request) {
+	comment := r.URL.Query().Get("comment")
+	t := template.Must(template.New("c").Parse("<p>{{.}}</p>"))
+	_ = t.Execute(w, template.HTML(comment))
+}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ids := analyzeGoFile(t, tt.src)
+			found := false
+			for _, id := range ids {
+				if id == "TAINT-003" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("xss-to-response: got %v, want TAINT-003", ids)
+			}
+		})
+	}
+}
+
+// TestStructuralGoSafeAutoescapeStaysClean guards clean_html_autoescape.go: safe
+// html/template rendering — user data passed as a plain struct field to
+// Execute, which contextually auto-escapes — must fire NOTHING. Execute is not
+// modeled as a sink; only the template.HTML bypass and raw writes are.
+func TestStructuralGoSafeAutoescapeStaysClean(t *testing.T) {
+	src := `package web
+var page = template.Must(template.New("page").Parse("<h1>{{.Name}}</h1>"))
+func render(w http.ResponseWriter, r *http.Request) {
+	data := struct{ Name string }{Name: r.URL.Query().Get("name")}
+	_ = page.Execute(w, data)
+}`
+	ids := analyzeGoFile(t, src)
+	if len(ids) != 0 {
+		t.Errorf("safe auto-escape: want zero findings, got %v", ids)
+	}
+}
+
 // TestStructuralGoContainerTaint covers container-level taint: a request value
 // stashed into a map value (m["c"]=user) then read back at the command sink
 // (m["c"]) must fire TAINT-002. The extractor attributes the index assignment to

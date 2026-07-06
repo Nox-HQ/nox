@@ -297,3 +297,91 @@ func runSafe(r *http.Request) {
 		t.Errorf("t.Count=strconv.Atoi(...) calls = %v, want to include strconv.Atoi", st.calls)
 	}
 }
+
+// TestExtractGoFprintfSinkArg covers the reflected-XSS-via-fmt.Fprintf shape:
+// fmt.Fprintf(w, "<div>%s</div>", name) — the callee renders to fmt.Fprintf and
+// the tainted interpolation variable name is captured as a tainted arg var (the
+// writer w is the first positional arg, name a later one).
+func TestExtractGoFprintfSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	fmt.Fprintf(w, "<div>%s</div>", name)
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "fmt.Fprintf")
+	if !containsStr(sink.reads, "name") {
+		t.Errorf("fmt.Fprintf reads = %v, want to include name", sink.reads)
+	}
+	info, ok := sink.sinkArgs["fmt.Fprintf"]
+	if !ok {
+		t.Fatalf("no sinkArg for fmt.Fprintf: %+v", sink.sinkArgs)
+	}
+	if !containsStr(info.taintedArgVars, "name") {
+		t.Errorf("fmt.Fprintf taintedArgVars = %v, want to include name", info.taintedArgVars)
+	}
+}
+
+// TestExtractGoWriteBytesSinkArg covers w.Write([]byte("<b>"+user+"</b>")): the
+// callee renders to w.Write and the tainted concat variable user is captured even
+// though it is nested inside a []byte(...) conversion of a string concatenation.
+func TestExtractGoWriteBytesSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import "net/http"
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	_, _ = w.Write([]byte("<b>" + user + "</b>"))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "w.Write")
+	if !containsStr(sink.reads, "user") {
+		t.Errorf("w.Write reads = %v, want to include user", sink.reads)
+	}
+	info := sink.sinkArgs["w.Write"]
+	if !containsStr(info.taintedArgVars, "user") {
+		t.Errorf("w.Write taintedArgVars = %v, want to include user", info.taintedArgVars)
+	}
+}
+
+// TestExtractGoTemplateHTMLBypassSinkArg covers the auto-escape bypass shape:
+// t.Execute(w, template.HTML(comment)). The nested template.HTML call must be
+// captured as its own sink call with the tainted variable comment as an arg — so
+// the catalog can flag template.HTML(tainted) as an XSS sink independent of the
+// enclosing Execute (which is NOT a sink).
+func TestExtractGoTemplateHTMLBypassSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import (
+	"html/template"
+	"net/http"
+)
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	comment := r.URL.Query().Get("comment")
+	t := template.Must(template.New("c").Parse("<p>{{.}}</p>"))
+	_ = t.Execute(w, template.HTML(comment))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "template.HTML")
+	info, ok := sink.sinkArgs["template.HTML"]
+	if !ok {
+		t.Fatalf("no sinkArg for template.HTML: %+v", sink.sinkArgs)
+	}
+	if !containsStr(info.taintedArgVars, "comment") {
+		t.Errorf("template.HTML taintedArgVars = %v, want to include comment", info.taintedArgVars)
+	}
+}
