@@ -1119,7 +1119,7 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "writing a tainted value as HTML to an http.ResponseWriter (the first arg is the writer) reflects unescaped markup into the response — reflected XSS. Safe html/template Execute is NOT modeled as a sink; only raw writes and the template.HTML bypass are."
+          "note": "tainted value written to an http.ResponseWriter (first arg is the writer); html/template Execute is intentionally not a sink"
         },
         {
           "call": "fmt.Fprint",
@@ -1138,21 +1138,21 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "w.Write([]byte(...tainted HTML...)) on a response writer emits unescaped bytes — reflected XSS"
+          "note": "response-writer byte write; gated in extract_go on a co-located string literal (the HTML-concat shape)"
         },
         {
           "call": "io.WriteString",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "io.WriteString(w, tainted) writes an unescaped tainted string to the response writer"
+          "note": "tainted string written to the response writer"
         },
         {
           "call": "template.HTML",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "template.HTML(tainted) is the html/template auto-escape bypass: it marks a tainted string as trusted HTML, so contextual escaping is skipped and the value reaches the response unescaped — reflected XSS. Distinct from safe html/template interpolation, which is not a sink."
+          "note": "the html/template auto-escape bypass; distinct from safe html/template interpolation, which is not a sink"
         }
       ],
       "sanitizers": [

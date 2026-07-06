@@ -109,16 +109,61 @@ same-file limits:
   chain suffix; a package imported under a *different* local name than its suffix
   (rare) would be missed.
 - **Inherited from the engine:** intraprocedural + same-file interprocedural only,
-  straight-line (no CFG/branch merging), no alias or field/element sensitivity.
+  straight-line (no CFG/branch merging), no alias analysis. Container taint is
+  tracked at the **container level** (see below), not per key/element.
+
+### XSS-to-response sinks (reflected XSS, CWE-79)
+
+Tainted request data written as HTML to an `http.ResponseWriter` fires `TAINT-003`
+(xss). The sinks, all AST-recognized on the call-chain suffix:
+
+- `fmt.Fprintf` / `fmt.Fprint` / `fmt.Fprintln` and `io.WriteString` — the first
+  argument is the writer; a tainted value among the args is reflected content. No
+  literal gate: a tainted string reaching a string-writer IS reflected output.
+- `w.Write([]byte("<b>"+user+"</b>"))` — a raw byte write. This one **is** gated
+  on a co-located string **literal** in the write argument (the reflected-HTML
+  concat shape). A bare `w.Write(out)` of a precomputed value — e.g. command or
+  file output — is *not* reflected XSS (that value is already reported at its own
+  upstream sink), so it does not fire. This gate is what stops the injection
+  samples (all of which end in `w.Write(out)`) from double-firing an XSS false
+  positive. It lives in `extract_go.go` (`isGoRawWriteSink` / `xssWriteArgIsHTML`),
+  keeping the change Go-local.
+- `template.HTML(tainted)` — the `html/template` **auto-escape bypass**. Converting
+  a tainted string to `template.HTML` marks it as trusted HTML, so contextual
+  escaping is skipped and it reaches the response unescaped. Modeled as an
+  unconditional sink.
+
+Crucially, safe `html/template` interpolation (`tmpl.Execute(w, structData)`) is
+**not** a sink: `Execute`/`ExecuteTemplate` auto-escape their inputs, so the
+guardrail `clean_html_autoescape.go` stays clean. Only the raw-write paths and the
+`template.HTML` bypass are sinks.
+
+### Container-level taint (index / field / element)
+
+An assignment whose LHS is an index (`m["c"] = v`), selector (`obj.Field = v`),
+star, or paren target attributes taint to the **base identifier** (`m`, `obj`), so
+a tainted RHS taints the whole container (`lhsAssignedName` in `extract_go.go`).
+A later read of any element of that container is then treated as tainted, so
+`m["c"] = user; exec.Command("sh","-c", m["c"])` fires. This is a sound
+over-approximation at the **container level, not the key level**: writing one key
+taints the container, so a read of a *different, clean* key of the same container
+is also treated as tainted. Key/element-level precision would tighten this at some
+risk to recall and is not modeled. The change is Go-local (`extract_go.go` only);
+the shared `StructuralEngine` is untouched, and per-class sanitizer clearing still
+holds (a value sanitized into a local before the field write stays clean, so
+`clean_field_safe.go` fires nothing).
 
 ### Vuln classes covered / not covered
 
 Covered (fire on the precision corpus): command injection (`exec.Command`),
 SQL injection (`.Query`/`.Exec` concatenation), path traversal
 (`os.ReadFile`/`os.Open`), SSRF (`http.Get`/`http.Post`), unsafe deserialization
-(`gob.NewDecoder`, `yaml.Unmarshal`), SSTI (`text/template` `.Parse`).
+(`gob.NewDecoder`, `yaml.Unmarshal`), SSTI (`text/template` `.Parse`), reflected
+XSS-to-response (`fmt.Fprintf`/`w.Write`/`template.HTML`; see above), and
+container-level taint through maps / slices / struct fields (see above).
 
-Not yet covered (honest): XSS via `html/template` misuse beyond auto-escaping,
-taint through struct fields / maps / slices (no field sensitivity), taint laundered
-through `fmt.Sprintf` into a struct then sunk, cross-file flow (the taint-analysis
-plugin's territory), and reflection-based sinks.
+Not yet covered (honest): key/element-level container precision (only
+container-level today), type-based confirmation that a `.Write`/`.Query` receiver
+is the expected type (AST-only, matched by method name), taint laundered through
+`fmt.Sprintf` into a struct then sunk across statements, cross-file flow (the
+taint-analysis plugin's territory), and reflection-based sinks.
