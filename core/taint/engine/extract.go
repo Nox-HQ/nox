@@ -128,6 +128,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangScala:
+		// Scala is brace-delimited like Java/C#: braces delimit blocks (so a method
+		// body is not collapsed into one logical line) and paren/bracket
+		// continuations merge physical lines. Statements are newline-terminated but
+		// a `;` may pack several onto one line, so — like Java — each logical line is
+		// split on top-level semicolons. It recognizes `def` headers for per-method
+		// units. See extract_scala.go.
+		return extractScala(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

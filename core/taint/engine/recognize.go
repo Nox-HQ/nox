@@ -16,6 +16,7 @@ const (
 	langRust
 	langCSharp
 	langCPP
+	langScala
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -134,6 +135,11 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// `auto`. Strip the type so the bare declared name is the LHS.
 			if lang == langCPP {
 				left = stripCPPDeclType(left)
+			}
+			// Scala `val` / `var` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`val x: String = ...`).
+			if lang == langScala {
+				left = stripScalaValKeyword(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right

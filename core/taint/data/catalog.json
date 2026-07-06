@@ -1884,6 +1884,50 @@
         {"call": "PQescapeLiteral", "neutralizes": ["sql_injection"]},
         {"call": "curl_easy_escape", "neutralizes": ["ssrf"], "note": "URL-encodes a component; does not by itself validate the host"}
       ]
+    },
+    "scala": {
+      "comment": "Scala source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/object-qualified calls matched on the full dotted chain (Files.readAllBytes, Source.fromFile), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .execute, .openStream, .exec). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (fluent iterator chains and the postfix `.!` process operator the flat recognizer cannot follow). The Slick `sql\"...\"` and Anorm `SQL(\"...\")` string interpolators are recognized as calls named `sql`/`SQL`. See core/taint/engine/extract_scala.go.",
+      "sources": [
+        {"call": "request.getQueryString", "kind": "http_query"},
+        {"call": "request.queryString", "kind": "http_query"},
+        {"call": "request.body", "kind": "http_body"},
+        {"call": "getQueryString", "kind": "http_query", "note": "Play request.getQueryString(\"id\") — matched on the method suffix"},
+        {"call": "queryString", "kind": "http_query", "note": "Play request.queryString attribute — matched on the suffix"},
+        {"call": "params", "kind": "http_query", "note": "Play/Scalatra route params(\"id\") / params attribute"},
+        {"call": "getParameter", "kind": "http_query", "note": "servlet-style request.getParameter reused by some Scala web stacks"}
+      ],
+      "sinks": [
+        {"call": "Process", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "scala.sys.process.Process(cmd) / Process(Seq(...)) runs an external process; dangerous when a tainted command string is interpolated"},
+        {"call": "Runtime.exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix"},
+        {"call": ".!", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "the scala.sys.process postfix `!` operator (\"cmd\".! / Seq(...).!) executes a command; recognized specially by the extractor when a tainted command value is its receiver"},
+        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation/interpolation"},
+        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
+        {"call": "sql", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Slick's sql\"...\" string interpolator: a tainted value spliced with $var is interpolated into the query text (the safe form binds via $bind on a typed value / #${} is the raw-splice danger). Recognized as a call named `sql`."},
+        {"call": "SQL", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Anorm SQL(\"...\") built from a tainted concatenated string; the safe form uses named {placeholders} bound via on(...)"},
+        {"call": "Source.fromFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "scala.io.Source.fromFile(path) opens a file named by input"},
+        {"call": "fromFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Source.fromFile — matched on the method suffix"},
+        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new File(path) / File(path) opens a file named by input — matched on the File constructor name"},
+        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Files.readAllBytes(Paths.get(path)) — matched on the method suffix"},
+        {"call": "Files.readAllLines", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is not catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
+        {"call": "fromURL", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "scala.io.Source.fromURL(u) fetches an attacker-controlled URL"},
+        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "ObjectInputStream", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "new ObjectInputStream(bytesFromInput) over attacker-controlled bytes primes a native-serialization RCE; the tainted bytes enter at construction, which is where this is keyed. The trailing .readObject() takes no tainted argument (its receiver is the stream, not the bytes), so keying on the constructor — not the read method — reports the flow exactly once per site and avoids double-counting `new ObjectInputStream(blob).readObject()`."},
+        {"call": "Html", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "play.twirl.api.Html(taintedHtml) marks a tainted string as trusted HTML, bypassing Twirl auto-escaping — reflected XSS. Safe when the value is HTML-escaped first."},
+        {"call": "Html.apply", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"}
+      ],
+      "sanitizers": [
+        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
+        {"call": "toInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "\"str\".toInt numeric coercion removes injection metacharacters (throws on non-numeric)"},
+        {"call": "toLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"]},
+        {"call": "escapeHtml", "neutralizes": ["xss"], "note": "Apache Commons StringEscapeUtils.escapeHtml4 / Play's HtmlFormat.escape output-encodes markup"},
+        {"call": "escapeHtml4", "neutralizes": ["xss"]},
+        {"call": "getName", "neutralizes": ["path_traversal"], "note": "new File(path).getName strips directory components; pair with an allow-base check"},
+        {"call": "getFileName", "neutralizes": ["path_traversal"], "note": "Paths.get(path).getFileName strips directory components"}
+      ]
     }
   }
 }
