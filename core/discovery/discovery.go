@@ -143,6 +143,10 @@ var sourceExtensions = map[string]bool{
 	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
 	// embedded config.
 	".lua": true,
+	// Elixir source (.ex) and script (.exs) files. One taint module (lexctx
+	// scan_elixir + engine extract_elixir + the catalog `elixir` block).
+	".ex":  true,
+	".exs": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
