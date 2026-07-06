@@ -143,6 +143,12 @@ var sourceExtensions = map[string]bool{
 	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
 	// embedded config.
 	".lua": true,
+	// Clojure and its dialects: .clj (JVM), .cljs (ClojureScript), .cljc (portable).
+	// One taint module (lexctx scan_clojure + engine extract_clojure + the catalog
+	// `clojure` block) serves all three. .edn is data (config), classified elsewhere.
+	".clj":  true,
+	".cljs": true,
+	".cljc": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
