@@ -231,6 +231,18 @@ jobs:
         # floor at 0.90 so Swift taint precision cannot silently rot.
         run: ./nox bench --precision testdata/precision-suite-swift --baseline testdata/precision-suite-swift/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — objc
+        # Same honest ratchet, scoped to the Objective-C taint suite (lexctx
+        # scan_objc + engine extract_objc + the catalog `objc` block). Objective-C
+        # bracket message sends `[recv sel:arg]` are rewritten to dotted calls
+        # `recv.sel(arg)` so the recognizer/catalog match on the selector suffix.
+        # Objective-C recall is held below 1.0 by one documented false negative
+        # (an NSTask `arguments` PROPERTY assignment the line recognizer cannot bind
+        # — see testdata/precision-suite-objc/README.md), so this gate defends
+        # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
+        # be silently hidden and no new Objective-C false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-objc --baseline testdata/precision-suite-objc/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently

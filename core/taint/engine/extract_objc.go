@@ -145,9 +145,9 @@ func isObjCStructuralLine(trimmed string) bool {
 // objcMethodHeader returns the method name and its positional parameter binding
 // names when trimmed is an Objective-C method DEFINITION header:
 //
-//	- (ReturnType)selector
-//	- (ReturnType)selectorWith:(T)arg andThis:(U)other
-//	+ (instancetype)classMethod:(T)arg
+//   - (ReturnType)selector
+//   - (ReturnType)selectorWith:(T)arg andThis:(U)other
+//   - (instancetype)classMethod:(T)arg
 //
 // The method name is the FIRST selector keyword (`selectorWith` above) — the same
 // suffix a rewritten call `[obj selectorWith:x andThis:y]` keys on. Each
@@ -372,7 +372,7 @@ func innermostMessageSend(code string) (open, closeIdx int) {
 // group), letting the caller blank the brackets and move on. The receiver is the
 // leading primary expression; the selector keywords are folded so the callee is
 // `recv.firstKeyword` and the arguments are gathered positionally.
-func rewriteOneSend(code, raw string, open, closeIdx int, aligned bool) (string, string, bool) {
+func rewriteOneSend(code, raw string, open, closeIdx int, aligned bool) (newCode, newRaw string, ok bool) {
 	inner := code[open+1 : closeIdx]
 	// An `@[...]`/`@{...}` collection literal is not a message send: the byte
 	// before `[` is `@`. innermostMessageSend already skips subscripts; guard the
@@ -389,8 +389,8 @@ func rewriteOneSend(code, raw string, open, closeIdx int, aligned bool) (string,
 		return "", "", false
 	}
 	selBody := inner[selStart:]
-	callee, argSpans, ok := parseSelectorCall(selBody, selStart)
-	if !ok {
+	callee, argSpans, parsed := parseSelectorCall(selBody, selStart)
+	if !parsed {
 		return "", "", false
 	}
 
@@ -412,8 +412,8 @@ func rewriteOneSend(code, raw string, open, closeIdx int, aligned bool) (string,
 		return b.String()
 	}
 
-	newCode := code[:open] + buildRepl(code) + code[closeIdx+1:]
-	newRaw := raw
+	newCode = code[:open] + buildRepl(code) + code[closeIdx+1:]
+	newRaw = raw
 	if aligned {
 		newRaw = raw[:open] + buildRepl(raw) + raw[closeIdx+1:]
 	}
@@ -511,19 +511,20 @@ func parseSelectorCall(selBody string, baseOffset int) (callee string, argSpans 
 		}
 		argStart := i
 		depth := 0
-		for i < n {
-			c := selBody[i]
-			if c == '(' || c == '[' || c == '{' {
+		done := false
+		for i < n && !done {
+			switch c := selBody[i]; {
+			case c == '(' || c == '[' || c == '{':
 				depth++
-			} else if c == ')' || c == ']' || c == '}' {
+			case c == ')' || c == ']' || c == '}':
 				depth--
-			} else if depth == 0 && (c == ' ' || c == '\t') {
-				// Look ahead: is the next token a `keyword:` (start of the next arg)?
-				if isNextKeywordArg(selBody, i) {
-					break
-				}
+			case depth == 0 && (c == ' ' || c == '\t') && isNextKeywordArg(selBody, i):
+				// A whitespace boundary before the next `keyword:` ends this argument.
+				done = true
 			}
-			i++
+			if !done {
+				i++
+			}
 		}
 		argEnd := i
 		argSpans = append(argSpans, [2]int{baseOffset + argStart, baseOffset + argEnd})
