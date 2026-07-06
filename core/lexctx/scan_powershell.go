@@ -130,14 +130,15 @@ func scanPSSingleQuote(content []byte, start int) int {
 }
 
 // scanPSDoubleQuote classifies a double-quoted string opening at start, emitting
-// the literal parts as string and each interpolation — `$( ... )` subexpression,
-// `${ ... }` braced variable, and a bare `$var` — treated appropriately. The
-// backtick escapes the next byte (so "`\"" does not close the string), and a
-// DOUBLED quote (`""`) is a literal quote. `$(...)` fields are emitted as CODE
-// (a real expression); a simple `$var` / `${name}` stays inside the string span
-// (its value is data, and modeling it as code would fragment the region without
-// catching a call). It returns the offset just past the closing quote (or a
-// newline / EOF for an unterminated string).
+// the literal parts as string and each interpolation as CODE: a `$( ... )`
+// subexpression, a `${ ... }` braced variable, and a bare `$var` (and `$a.b`
+// property access). Emitting the interpolated expression as code mirrors the
+// Ruby `#{}` and Python f-string scanners — a tainted value spliced via
+// "id=$id" lives in a real expression the taint engine must see. The backtick
+// escapes the next byte (so "`\"" does not close the string, and "`$" is a
+// literal dollar, not an interpolation), and a DOUBLED quote (`""`) is a literal
+// quote. It returns the offset just past the closing quote (or a newline / EOF
+// for an unterminated string).
 func scanPSDoubleQuote(content []byte, start int, b *regionBuilder) int {
 	n := len(content)
 	bodyStart := start + 1
@@ -148,15 +149,19 @@ func scanPSDoubleQuote(content []byte, start int, b *regionBuilder) int {
 		c := content[i]
 		switch {
 		case c == '`':
-			i += 2 // backtick escapes the next byte (including a quote)
+			i += 2 // backtick escapes the next byte (including a quote or `$`)
 			continue
-		case c == '$' && i+1 < n && content[i+1] == '(':
-			// `$( ... )` subexpression: flush the string run, emit the field as code.
-			b.emit(runStart, i, KindString)
-			fieldEnd := scanPSSubexpr(content, i+1)
-			b.emit(i, fieldEnd, KindCode)
-			i = fieldEnd
-			runStart = i
+		case c == '$' && i+1 < n:
+			// An interpolation: `$( ... )`, `${ ... }`, or a bare `$var`/`$a.b`.
+			fieldEnd := scanPSInterpolation(content, i)
+			if fieldEnd > i {
+				b.emit(runStart, i, KindString)
+				b.emit(i, fieldEnd, KindCode)
+				i = fieldEnd
+				runStart = i
+				continue
+			}
+			i++
 			continue
 		case c == '"':
 			if i+1 < n && content[i+1] == '"' {
@@ -173,6 +178,63 @@ func scanPSDoubleQuote(content []byte, start int, b *regionBuilder) int {
 	}
 	b.emit(runStart, n, KindString)
 	return n
+}
+
+// scanPSInterpolation returns the offset just past a PowerShell interpolation
+// beginning at content[dollar] == '$', or dollar itself when the `$` does not
+// start an interpolation (e.g. a trailing `$` or `$` before a non-identifier).
+// It recognizes three forms:
+//
+//   - `$( ... )` subexpression — balanced parentheses.
+//   - `${ ... }` braced variable — to the matching `}`.
+//   - `$var` / `$var.prop` — an identifier run with dotted property access.
+//
+// The `$env:NAME` provider form is read as `$env` (the `:NAME` provider suffix
+// stays in the surrounding string, which is harmless: the `env` variable read is
+// what the source model keys on).
+func scanPSInterpolation(content []byte, dollar int) int {
+	n := len(content)
+	if dollar+1 >= n {
+		return dollar
+	}
+	switch content[dollar+1] {
+	case '(':
+		return scanPSSubexpr(content, dollar+1)
+	case '{':
+		// `${ ... }` braced variable to the matching '}'.
+		for j := dollar + 2; j < n; j++ {
+			if content[j] == '}' {
+				return j + 1
+			}
+			if content[j] == '\n' {
+				return j
+			}
+		}
+		return n
+	}
+	// Bare `$var` (letters/digits/underscore), with optional `.prop` chains.
+	j := dollar + 1
+	if !isInterpIdentByte(content[j]) {
+		return dollar // `$` not followed by an identifier: not an interpolation
+	}
+	for j < n && isInterpIdentByte(content[j]) {
+		j++
+	}
+	// Consume `.prop` chains (property access), but not a trailing `.` alone.
+	for j+1 < n && content[j] == '.' && isInterpIdentByte(content[j+1]) {
+		j++ // consume '.'
+		for j < n && isInterpIdentByte(content[j]) {
+			j++
+		}
+	}
+	return j
+}
+
+// isInterpIdentByte reports whether b can appear in a bare `$var` interpolation
+// name (letters, digits, underscore).
+func isInterpIdentByte(b byte) bool {
+	return b == '_' ||
+		(b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 // scanPSSubexpr returns the offset just past a `$( ... )` subexpression whose
@@ -278,19 +340,24 @@ func scanPSHereString(content []byte, start int, interp bool, b *regionBuilder) 
 		for lineEnd < n && content[lineEnd] != '\n' {
 			lineEnd++
 		}
-		// For an interpolating here-string, emit `$( ... )` fields on this line as
-		// code. `${ ... }` and bare `$var` stay string (data), matching the
-		// double-quoted-string policy.
+		// For an interpolating here-string, emit each interpolation ($(...), ${...},
+		// bare $var) on this line as code, mirroring the double-quoted-string policy.
 		if interp {
 			j := lineStart
 			for j < lineEnd {
-				if content[j] == '$' && j+1 < n && content[j+1] == '(' {
-					b.emit(runStart, j, KindString)
-					fieldEnd := scanPSSubexpr(content, j+1)
-					b.emit(j, fieldEnd, KindCode)
-					runStart = fieldEnd
-					j = fieldEnd
+				if content[j] == '`' {
+					j += 2 // backtick escapes the next byte
 					continue
+				}
+				if content[j] == '$' {
+					fieldEnd := scanPSInterpolation(content, j)
+					if fieldEnd > j {
+						b.emit(runStart, j, KindString)
+						b.emit(j, fieldEnd, KindCode)
+						runStart = fieldEnd
+						j = fieldEnd
+						continue
+					}
 				}
 				j++
 			}

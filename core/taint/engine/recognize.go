@@ -18,6 +18,7 @@ const (
 	langCPP
 	langScala
 	langKotlin
+	langPowerShell
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false

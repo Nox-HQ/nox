@@ -133,6 +133,9 @@ var sourceExtensions = map[string]bool{
 	".scala": true,
 	".sc":    true,
 	".sh":    true,
+	".ps1":   true,
+	".psm1":  true,
+	".psd1":  true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
