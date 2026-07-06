@@ -12,6 +12,7 @@ const (
 	langJavaScript
 	langPHP
 	langJava
+	langRust
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -116,6 +117,11 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langJava {
 				left = stripJavaDeclType(left)
 			}
+			// Rust `let` / `let mut` binding keywords, plus a trailing `: Type`
+			// annotation on the binding (`let x: String = ...`).
+			if lang == langRust {
+				left = stripRustLetKeyword(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -131,6 +137,26 @@ func stripDeclKeyword(left string) string {
 		if strings.HasPrefix(left, kw) {
 			return strings.TrimSpace(strings.TrimPrefix(left, kw))
 		}
+	}
+	return left
+}
+
+// stripRustLetKeyword removes a leading `let ` / `let mut ` binding keyword and
+// any `: Type` annotation from a Rust assignment LHS, leaving the bare binding
+// name. `let x = e`, `let mut x = e`, and `let x: String = e` all yield `x`.
+// A non-`let` LHS (a reassignment `x = e`) is returned with only the annotation
+// stripped, so `x: T = e` still resolves to `x` (rare, but harmless).
+func stripRustLetKeyword(left string) string {
+	left = strings.TrimSpace(left)
+	if strings.HasPrefix(left, "let ") {
+		left = strings.TrimSpace(strings.TrimPrefix(left, "let "))
+		if strings.HasPrefix(left, "mut ") {
+			left = strings.TrimSpace(strings.TrimPrefix(left, "mut "))
+		}
+	}
+	// Drop a `: Type` annotation on the binding (`x: String` -> `x`).
+	if i := strings.IndexByte(left, ':'); i >= 0 {
+		left = strings.TrimSpace(left[:i])
 	}
 	return left
 }

@@ -40,7 +40,12 @@ func isKeyword(s string) bool {
 		"raise", "pass", "break", "continue", "and", "or", "not", "in", "is",
 		"lambda", "global", "nonlocal", "assert", "del", "async", "await",
 		"True", "False", "None", "const", "let", "var", "function", "new",
-		"typeof", "instanceof", "true", "false", "null", "undefined", "this":
+		"typeof", "instanceof", "true", "false", "null", "undefined", "this",
+		// Rust keywords (superset is harmless: these are never variable names).
+		// `let`, `as`, `None` are already covered by the Python/JS set above.
+		"mut", "fn", "match", "loop", "move", "ref", "impl", "trait",
+		"struct", "enum", "mod", "pub", "use", "crate", "self", "super", "where",
+		"unsafe", "extern", "dyn", "type", "static", "Ok", "Err", "Some":
 		return true
 	}
 	return false
