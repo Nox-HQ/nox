@@ -121,6 +121,13 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// lines, then each logical line splits on top-level semicolons into
 		// statements. Unlike JS it recognizes method headers for per-method units.
 		return extractCSharp(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangCPP:
+		// C/C++ is brace-delimited and `;`-terminated like C#: paren/array
+		// continuations merge physical lines, then each logical line splits on
+		// top-level semicolons into statements. Function definitions are recognized
+		// for per-function units (with params), and `::` is normalized to `.` inside
+		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
+		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

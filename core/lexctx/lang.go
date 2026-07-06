@@ -37,6 +37,7 @@ const (
 	LangRuby       // Ruby — #, =begin/=end, '…', "…" (#{} interp), `…`, %w/%q, heredocs
 	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
+	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -59,6 +60,8 @@ func (l Lang) String() string {
 		return "rust"
 	case LangCSharp:
 		return "csharp"
+	case LangCPP:
+		return "cpp"
 	default:
 		return "unknown"
 	}
@@ -89,6 +92,20 @@ var extToLang = map[string]Lang{
 	".gemspec": LangRuby,
 	".rs":      LangRust,
 	".cs":      LangCSharp,
+	// C and C++ share comment/string lexing and dangerous-API surface, so one
+	// lexer serves every dialect extension. Headers (.h/.hpp/.hh/.hxx) carry the
+	// same code as their translation units.
+	".c":   LangCPP,
+	".h":   LangCPP,
+	".cc":  LangCPP,
+	".cpp": LangCPP,
+	".cxx": LangCPP,
+	".c++": LangCPP,
+	".hpp": LangCPP,
+	".hh":  LangCPP,
+	".hxx": LangCPP,
+	".ipp": LangCPP,
+	".inl": LangCPP,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

@@ -123,11 +123,14 @@ var sourceExtensions = map[string]bool{
 	".swift": true,
 	".php":   true,
 	".rs":    true,
-	".c":     true,
-	".cpp":   true,
-	".h":     true,
-	".cs":    true,
-	".sh":    true,
+	// C and C++ dialect extensions (translation units and headers). One taint
+	// module (lexctx scan_cpp + engine extract_cpp + catalog `cpp` block) serves
+	// every dialect since they share lexing and dangerous-API surface.
+	".c": true, ".h": true,
+	".cpp": true, ".cc": true, ".cxx": true, ".c++": true,
+	".hpp": true, ".hh": true, ".hxx": true, ".ipp": true, ".inl": true,
+	".cs": true,
+	".sh": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

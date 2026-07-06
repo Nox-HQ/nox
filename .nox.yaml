@@ -14,6 +14,7 @@ scan:
     - "testdata/precision-suite-ruby/"
     - "testdata/precision-suite-rust/"
     - "testdata/precision-suite-csharp/"
+    - "testdata/precision-suite-cpp/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
