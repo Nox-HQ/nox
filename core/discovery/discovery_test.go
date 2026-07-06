@@ -125,6 +125,9 @@ func TestDefaultClassifier_Source(t *testing.T) {
 		"main.go", "app.py", "index.js", "handler.ts", "gem.rb",
 		"App.java", "lib.rs", "main.c", "engine.cpp", "header.h",
 		"Program.cs", "build.sh",
+		// Groovy source, a non-manifest Gradle script, and the extension-less
+		// Jenkins pipeline file (classified as source by exact name).
+		"Report.groovy", "settings.gradle", "Jenkinsfile", "ci/Jenkinsfile",
 	}
 
 	for _, name := range sources {

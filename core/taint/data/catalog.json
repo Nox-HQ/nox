@@ -1621,7 +1621,7 @@
       ]
     },
     "php": {
-      "comment": "PHP source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_php.go). Superglobals ($_GET/$_POST/\u2026) are ARRAY-INDEX source reads, captured as bare chains with the leading `$` stripped (so `$_GET['x']` reads source `_GET`). Method calls on a value ($pdo->query, $mysqli->query) are normalized to a dotted chain (pdo.query, mysqli.query) so the engine's suffixKeys fallback matches the method suffix regardless of the receiver variable name. Rule IDs mirror the shared TAINT-00x space.",
+      "comment": "PHP source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_php.go). Superglobals ($_GET/$_POST/…) are ARRAY-INDEX source reads, captured as bare chains with the leading `$` stripped (so `$_GET['x']` reads source `_GET`). Method calls on a value ($pdo->query, $mysqli->query) are normalized to a dotted chain (pdo.query, mysqli.query) so the engine's suffixKeys fallback matches the method suffix regardless of the receiver variable name. Rule IDs mirror the shared TAINT-00x space.",
       "sources": [
         {
           "call": "_GET",
@@ -1906,7 +1906,7 @@
       ]
     },
     "java": {
-      "comment": "Java source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes, matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (Files.readAllBytes, ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies \u2014 matched by METHOD-NAME suffix (.executeQuery, .println, .exec, .start). Method-suffix matching is imprecise on purpose: it is AST-only, so a .executeQuery on a non-JDBC object still matches. This is the same precision trade documented for Go's method sinks; the corpus README records the resulting honest FNs (chained fluent calls the flat recognizer cannot follow). See core/taint/engine/extract_java.go.",
+      "comment": "Java source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes, matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (Files.readAllBytes, ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .println, .exec, .start). Method-suffix matching is imprecise on purpose: it is AST-only, so a .executeQuery on a non-JDBC object still matches. This is the same precision trade documented for Go's method sinks; the corpus README records the resulting honest FNs (chained fluent calls the flat recognizer cannot follow). See core/taint/engine/extract_java.go.",
       "sources": [
         {
           "call": "request.getParameter",
@@ -1971,7 +1971,7 @@
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command \u2014 matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
+          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
         },
         {
           "call": "ProcessBuilder",
@@ -1985,7 +1985,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.executeQuery(sql) \u2014 safe only when the SQL is a constant/parameterized query, not a tainted concatenation"
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation"
         },
         {
           "call": "executeUpdate",
@@ -1998,7 +1998,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.execute(sql) \u2014 matched on the method suffix"
+          "note": "Statement.execute(sql) — matched on the method suffix"
         },
         {
           "call": "createQuery",
@@ -2012,7 +2012,7 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "new File(path) opens a file named by input \u2014 matched on the File constructor name"
+          "note": "new File(path) opens a file named by input — matched on the File constructor name"
         },
         {
           "call": "Files.readAllBytes",
@@ -2044,14 +2044,14 @@
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "new URL(u).openStream() fetches an attacker-controlled URL \u2014 matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+          "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
         },
         {
           "call": "openConnection",
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "new URL(u).openConnection() \u2014 matched on the method suffix"
+          "note": "new URL(u).openConnection() — matched on the method suffix"
         },
         {
           "call": "ObjectInputStream.readObject",
@@ -2065,7 +2065,7 @@
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
           "rule_id": "TAINT-005",
-          "note": "ObjectInputStream.readObject() \u2014 matched on the method suffix"
+          "note": "ObjectInputStream.readObject() — matched on the method suffix"
         },
         {
           "call": "ScriptEngine.eval",
@@ -2079,14 +2079,14 @@
           "vuln_class": "code_injection",
           "cwe": "CWE-95",
           "rule_id": "TAINT-005",
-          "note": "ScriptEngine.eval(script) \u2014 matched on the method suffix"
+          "note": "ScriptEngine.eval(script) — matched on the method suffix"
         },
         {
           "call": "println",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "response.getWriter().println(taintedHtml) reflects unescaped input \u2014 reflected XSS"
+          "note": "response.getWriter().println(taintedHtml) reflects unescaped input — reflected XSS"
         },
         {
           "call": "print",
@@ -2099,7 +2099,7 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "response writer .write(taintedHtml) \u2014 reflected XSS"
+          "note": "response writer .write(taintedHtml) — reflected XSS"
         }
       ],
       "sanitizers": [
@@ -2147,7 +2147,7 @@
           "neutralizes": [
             "xss"
           ],
-          "note": "OWASP Encoder.forHtml \u2014 matched on the method suffix"
+          "note": "OWASP Encoder.forHtml — matched on the method suffix"
         },
         {
           "call": "FilenameUtils.getName",
@@ -2166,7 +2166,7 @@
       ]
     },
     "rust": {
-      "comment": "Rust source/sink/sanitizer model. Calls are matched in the extractor's NORMALIZED dotted form: the Rust line recognizer rewrites the `::` path separator to `.` and drops the `!` on macro invocations, so `std::env::var` is keyed `env.var`, `Command::new` is `Command.new`, and `sqlx::query!` is `sqlx.query`. Method calls whose receiver varies (`.arg`/`.args` on a Command builder, `.bind` on a query) are matched on the bare method suffix via the engine's suffixKeys fallback. Rust recognition is COARSER than Python/JS/Go (no real parser \u2014 only Go gets go/ast): ownership/moves, Result/`?` unwrapping, iterator chains, and macro expansion are invisible to the recognizer, so Rust recall is expected to be the lowest of the supported languages. See testdata/precision-suite-rust/README.md for the measured gaps. The web-extractor sources (`web.Query`/`web.Form`/`web.Json`/`web.Path` for actix, bare `Query`/`Form`/`Json`/`Path` for axum) are matched not only as constructor calls but also as PARAMETER TYPES: extract_rust.go seeds a function parameter whose type is one of these extractors as tainted-on-entry (via a synthetic `binding = <source>()` statement), because a `web::Query<Params>` handler argument is untrusted input even though it never appears as a source call.",
+      "comment": "Rust source/sink/sanitizer model. Calls are matched in the extractor's NORMALIZED dotted form: the Rust line recognizer rewrites the `::` path separator to `.` and drops the `!` on macro invocations, so `std::env::var` is keyed `env.var`, `Command::new` is `Command.new`, and `sqlx::query!` is `sqlx.query`. Method calls whose receiver varies (`.arg`/`.args` on a Command builder, `.bind` on a query) are matched on the bare method suffix via the engine's suffixKeys fallback. Rust recognition is COARSER than Python/JS/Go (no real parser — only Go gets go/ast): ownership/moves, Result/`?` unwrapping, iterator chains, and macro expansion are invisible to the recognizer, so Rust recall is expected to be the lowest of the supported languages. See testdata/precision-suite-rust/README.md for the measured gaps. The web-extractor sources (`web.Query`/`web.Form`/`web.Json`/`web.Path` for actix, bare `Query`/`Form`/`Json`/`Path` for axum) are matched not only as constructor calls but also as PARAMETER TYPES: extract_rust.go seeds a function parameter whose type is one of these extractors as tainted-on-entry (via a synthetic `binding = <source>()` statement), because a `web::Query<Params>` handler argument is untrusted input even though it never appears as a source call.",
       "sources": [
         {
           "call": "env.args",
@@ -2254,7 +2254,7 @@
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) \u2014 the tainted value flows through .arg into the shell"
+          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into the shell"
         },
         {
           "call": "args",
@@ -2386,7 +2386,7 @@
           "neutralizes": [
             "sql_injection"
           ],
-          "note": "sqlx bind parameters ($1/?) \u2014 the value is passed to the driver as data, never concatenated into SQL"
+          "note": "sqlx bind parameters ($1/?) — the value is passed to the driver as data, never concatenated into SQL"
         },
         {
           "call": "file_name",
@@ -2431,7 +2431,7 @@
             "code_injection",
             "ssrf"
           ],
-          "note": "str::parse::<i64>() etc. \u2014 numeric/typed coercion removes injection metacharacters"
+          "note": "str::parse::<i64>() etc. — numeric/typed coercion removes injection metacharacters"
         }
       ]
     },
@@ -2675,7 +2675,7 @@
       ]
     },
     "cpp": {
-      "comment": "C/C++ taint model: INJECTION-CLASS dataflow only (command injection, path traversal, format string, SSRF, SQLi). Memory-safety bugs (buffer overflow strcpy/strcat/sprintf/gets -> CWE-120/787, use-after-free, OOB) are a DIFFERENT analysis than source->sink taint and are OUT OF SCOPE for this engine \u2014 see testdata/precision-suite-cpp/README.md. Call keys are the short/bare form; the extractor normalizes C++ `::` to `.` and the engine suffix-matches, so `system` matches `std::system` and `getenv` matches `std::getenv`.",
+      "comment": "C/C++ taint model: INJECTION-CLASS dataflow only (command injection, path traversal, format string, SSRF, SQLi). Memory-safety bugs (buffer overflow strcpy/strcat/sprintf/gets -> CWE-120/787, use-after-free, OOB) are a DIFFERENT analysis than source->sink taint and are OUT OF SCOPE for this engine — see testdata/precision-suite-cpp/README.md. Call keys are the short/bare form; the extractor normalizes C++ `::` to `.` and the engine suffix-matches, so `system` matches `std::system` and `getenv` matches `std::getenv`.",
       "sources": [
         {
           "call": "getenv",
@@ -2844,7 +2844,7 @@
           "vuln_class": "code_injection",
           "cwe": "CWE-134",
           "rule_id": "TAINT-005",
-          "note": "FORMAT-STRING (CWE-134): mapped to the TAINT-005 code-injection rule id (no dedicated CWE-134 class). The vuln is a TAINTED FORMAT argument \u2014 printf(user) \u2014 which the engine gates on FirstArgTainted; printf(\"%s\", user) with a fixed format is SAFE and does not fire"
+          "note": "FORMAT-STRING (CWE-134): mapped to the TAINT-005 code-injection rule id (no dedicated CWE-134 class). The vuln is a TAINTED FORMAT argument — printf(user) — which the engine gates on FirstArgTainted; printf(\"%s\", user) with a fixed format is SAFE and does not fire"
         },
         {
           "call": "vprintf",
@@ -2884,7 +2884,7 @@
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "curl_easy_setopt(h, CURLOPT_URL, tainted) fetches an attacker-controlled URL \u2014 SSRF; validate the host against an allow-list first"
+          "note": "curl_easy_setopt(h, CURLOPT_URL, tainted) fetches an attacker-controlled URL — SSRF; validate the host against an allow-list first"
         }
       ],
       "sanitizers": [
@@ -2990,7 +2990,7 @@
       ]
     },
     "scala": {
-      "comment": "Scala source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/object-qualified calls matched on the full dotted chain (Files.readAllBytes, Source.fromFile), and (2) methods on a value whose receiver name varies \u2014 matched by METHOD-NAME suffix (.executeQuery, .execute, .openStream, .exec). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (fluent iterator chains and the postfix `.!` process operator the flat recognizer cannot follow). The Slick `sql\"...\"` and Anorm `SQL(\"...\")` string interpolators are recognized as calls named `sql`/`SQL`. See core/taint/engine/extract_scala.go.",
+      "comment": "Scala source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/object-qualified calls matched on the full dotted chain (Files.readAllBytes, Source.fromFile), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .execute, .openStream, .exec). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (fluent iterator chains and the postfix `.!` process operator the flat recognizer cannot follow). The Slick `sql\"...\"` and Anorm `SQL(\"...\")` string interpolators are recognized as calls named `sql`/`SQL`. See core/taint/engine/extract_scala.go.",
       "sources": [
         {
           "call": "request.getQueryString",
@@ -3007,12 +3007,12 @@
         {
           "call": "getQueryString",
           "kind": "http_query",
-          "note": "Play request.getQueryString(\"id\") \u2014 matched on the method suffix"
+          "note": "Play request.getQueryString(\"id\") — matched on the method suffix"
         },
         {
           "call": "queryString",
           "kind": "http_query",
-          "note": "Play request.queryString attribute \u2014 matched on the suffix"
+          "note": "Play request.queryString attribute — matched on the suffix"
         },
         {
           "call": "params",
@@ -3044,7 +3044,7 @@
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Runtime.getRuntime().exec(cmd) \u2014 matched on the .exec method suffix"
+          "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix"
         },
         {
           "call": ".!",
@@ -3058,7 +3058,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.executeQuery(sql) \u2014 safe only when the SQL is a constant/parameterized query, not a tainted concatenation/interpolation"
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation/interpolation"
         },
         {
           "call": "executeUpdate",
@@ -3071,7 +3071,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.execute(sql) \u2014 matched on the method suffix"
+          "note": "Statement.execute(sql) — matched on the method suffix"
         },
         {
           "call": "sql",
@@ -3099,14 +3099,14 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "Source.fromFile \u2014 matched on the method suffix"
+          "note": "Source.fromFile — matched on the method suffix"
         },
         {
           "call": "File",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "new File(path) / File(path) opens a file named by input \u2014 matched on the File constructor name"
+          "note": "new File(path) / File(path) opens a file named by input — matched on the File constructor name"
         },
         {
           "call": "Files.readAllBytes",
@@ -3119,7 +3119,7 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "Files.readAllBytes(Paths.get(path)) \u2014 matched on the method suffix"
+          "note": "Files.readAllBytes(Paths.get(path)) — matched on the method suffix"
         },
         {
           "call": "Files.readAllLines",
@@ -3132,7 +3132,7 @@
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "new URL(u).openStream() fetches an attacker-controlled URL \u2014 matched on the .openStream method suffix. The URL constructor itself is not catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+          "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is not catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
         },
         {
           "call": "fromURL",
@@ -3152,14 +3152,14 @@
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
           "rule_id": "TAINT-005",
-          "note": "new ObjectInputStream(bytesFromInput) over attacker-controlled bytes primes a native-serialization RCE; the tainted bytes enter at construction, which is where this is keyed. The trailing .readObject() takes no tainted argument (its receiver is the stream, not the bytes), so keying on the constructor \u2014 not the read method \u2014 reports the flow exactly once per site and avoids double-counting `new ObjectInputStream(blob).readObject()`."
+          "note": "new ObjectInputStream(bytesFromInput) over attacker-controlled bytes primes a native-serialization RCE; the tainted bytes enter at construction, which is where this is keyed. The trailing .readObject() takes no tainted argument (its receiver is the stream, not the bytes), so keying on the constructor — not the read method — reports the flow exactly once per site and avoids double-counting `new ObjectInputStream(blob).readObject()`."
         },
         {
           "call": "Html",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "play.twirl.api.Html(taintedHtml) marks a tainted string as trusted HTML, bypassing Twirl auto-escaping \u2014 reflected XSS. Safe when the value is HTML-escaped first."
+          "note": "play.twirl.api.Html(taintedHtml) marks a tainted string as trusted HTML, bypassing Twirl auto-escaping — reflected XSS. Safe when the value is HTML-escaped first."
         },
         {
           "call": "Html.apply",
@@ -3225,7 +3225,7 @@
       ]
     },
     "kotlin": {
-      "comment": "Kotlin source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Kotlin runs on the JVM, so its dangerous APIs are the Java ones (Runtime.exec, JDBC executeQuery, java.io.File, URL.openStream, ObjectInputStream.readObject) plus the Android idioms (intent.getStringExtra source, SQLiteDatabase.rawQuery sink). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies \u2014 matched by METHOD-NAME suffix (.executeQuery, .exec, .readText, .openStream, .rawQuery). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (scope-function/lambda chains the flat recognizer cannot follow). See core/taint/engine/extract_kotlin.go.",
+      "comment": "Kotlin source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Kotlin runs on the JVM, so its dangerous APIs are the Java ones (Runtime.exec, JDBC executeQuery, java.io.File, URL.openStream, ObjectInputStream.readObject) plus the Android idioms (intent.getStringExtra source, SQLiteDatabase.rawQuery sink). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .exec, .readText, .openStream, .rawQuery). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (scope-function/lambda chains the flat recognizer cannot follow). See core/taint/engine/extract_kotlin.go.",
       "sources": [
         {
           "call": "request.getParameter",
@@ -3302,7 +3302,7 @@
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command \u2014 matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
+          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
         },
         {
           "call": "ProcessBuilder",
@@ -3316,7 +3316,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.executeQuery(sql) \u2014 safe only when the SQL is a constant/parameterized query, not a tainted concatenation or a template string with a $-interpolated value"
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation or a template string with a $-interpolated value"
         },
         {
           "call": "executeUpdate",
@@ -3329,7 +3329,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Statement.execute(sql) \u2014 matched on the method suffix"
+          "note": "Statement.execute(sql) — matched on the method suffix"
         },
         {
           "call": "rawQuery",
@@ -3343,7 +3343,7 @@
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
-          "note": "Android SQLiteDatabase.execSQL(sql) \u2014 matched on the method suffix"
+          "note": "Android SQLiteDatabase.execSQL(sql) — matched on the method suffix"
         },
         {
           "call": "createQuery",
@@ -3357,7 +3357,7 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "File(path) opens a file named by input \u2014 matched on the File constructor name"
+          "note": "File(path) opens a file named by input — matched on the File constructor name"
         },
         {
           "call": "FileInputStream",
@@ -3371,14 +3371,14 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "File(path).readText() reads a file named by tainted input \u2014 matched on the .readText method suffix"
+          "note": "File(path).readText() reads a file named by tainted input — matched on the .readText method suffix"
         },
         {
           "call": "readBytes",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "File(path).readBytes() \u2014 matched on the method suffix"
+          "note": "File(path).readBytes() — matched on the method suffix"
         },
         {
           "call": "readLines",
@@ -3397,14 +3397,14 @@
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "URL(u).openStream() fetches an attacker-controlled URL \u2014 matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+          "note": "URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
         },
         {
           "call": "openConnection",
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "URL(u).openConnection() \u2014 matched on the method suffix"
+          "note": "URL(u).openConnection() — matched on the method suffix"
         },
         {
           "call": "ObjectInputStream.readObject",
@@ -3418,28 +3418,28 @@
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
           "rule_id": "TAINT-005",
-          "note": "ObjectInputStream.readObject() \u2014 matched on the method suffix"
+          "note": "ObjectInputStream.readObject() — matched on the method suffix"
         },
         {
           "call": "write",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "response writer .write(taintedHtml) reflects unescaped input \u2014 reflected XSS"
+          "note": "response writer .write(taintedHtml) reflects unescaped input — reflected XSS"
         },
         {
           "call": "print",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "response.getWriter().print(taintedHtml) \u2014 reflected XSS"
+          "note": "response.getWriter().print(taintedHtml) — reflected XSS"
         },
         {
           "call": "println",
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
-          "note": "response writer .println(taintedHtml) \u2014 reflected XSS"
+          "note": "response writer .println(taintedHtml) — reflected XSS"
         }
       ],
       "sanitizers": [
@@ -3494,14 +3494,14 @@
           "neutralizes": [
             "xss"
           ],
-          "note": "Apache Commons StringEscapeUtils.escapeHtml4 \u2014 matched on the method suffix"
+          "note": "Apache Commons StringEscapeUtils.escapeHtml4 — matched on the method suffix"
         },
         {
           "call": "forHtml",
           "neutralizes": [
             "xss"
           ],
-          "note": "OWASP Encoder.forHtml \u2014 matched on the method suffix"
+          "note": "OWASP Encoder.forHtml — matched on the method suffix"
         },
         {
           "call": "htmlEscape",
@@ -3515,7 +3515,7 @@
           "neutralizes": [
             "path_traversal"
           ],
-          "note": "File(path).name returns the last path component only, stripping directory traversal \u2014 matched on the .name accessor when used call-shaped"
+          "note": "File(path).name returns the last path component only, stripping directory traversal — matched on the .name accessor when used call-shaped"
         },
         {
           "call": "getName",
@@ -3833,7 +3833,7 @@
           "vuln_class": "ssrf",
           "cwe": "CWE-918",
           "rule_id": "TAINT-006",
-          "note": "session.dataTask(with: tainted URL/request) \u2014 fetching an attacker-controlled URL is SSRF; folded from the with: label so it does not collide with unrelated .with(...) calls"
+          "note": "session.dataTask(with: tainted URL/request) — fetching an attacker-controlled URL is SSRF; folded from the with: label so it does not collide with unrelated .with(...) calls"
         },
         {
           "call": "dataTask",
@@ -3872,7 +3872,7 @@
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
           "rule_id": "TAINT-005",
-          "note": "receiver-varies NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(tainted) \u2014 non-secure unarchiving of attacker bytes is an RCE vector; the secure NSSecureCoding form (unarchivedObject(ofClass:from:) requiring secure coding) is the safe path"
+          "note": "receiver-varies NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(tainted) — non-secure unarchiving of attacker bytes is an RCE vector; the secure NSSecureCoding form (unarchivedObject(ofClass:from:) requiring secure coding) is the safe path"
         },
         {
           "call": "unarchiveObject.with",
@@ -4202,7 +4202,7 @@
       ]
     },
     "powershell": {
-      "comment": "PowerShell source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_powershell.go). PowerShell shapes are normalized before recognition: the `$` variable sigil is stripped (like PHP), the static-member `::` becomes `.` with the `[Namespace.Type]` accelerator unwrapped (so `[IO.File]::ReadAllText` keys as `IO.File.ReadAllText`, matched by the `.ReadAllText` suffix), a `[int]`/`[long]` cast becomes an `int(...)`/`long(...)` sanitizer call, the `$env:` provider becomes a bare `env` read, and \u2014 CRUCIALLY \u2014 a cmdlet's `Verb-Noun` hyphen is normalized to an UNDERSCORE (`Invoke-Expression` -> `Invoke_Expression`) because the shared identifier scanner treats `-` as an operator. Every hyphenated cmdlet key below therefore uses the underscore form. Paren-less cmdlet calls (`Get-Content $p`) are wrapped into `Get_Content($p)`, and the call operator `& $cmd` is modeled as the synthetic sink `InvokeOperator`. Rule IDs mirror the shared TAINT-00x space. PowerShell recall is moderate (pipelines, splatting, and paren-less pipeline arguments are only partially modeled) \u2014 see testdata/precision-suite-powershell/README.md.",
+      "comment": "PowerShell source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_powershell.go). PowerShell shapes are normalized before recognition: the `$` variable sigil is stripped (like PHP), the static-member `::` becomes `.` with the `[Namespace.Type]` accelerator unwrapped (so `[IO.File]::ReadAllText` keys as `IO.File.ReadAllText`, matched by the `.ReadAllText` suffix), a `[int]`/`[long]` cast becomes an `int(...)`/`long(...)` sanitizer call, the `$env:` provider becomes a bare `env` read, and — CRUCIALLY — a cmdlet's `Verb-Noun` hyphen is normalized to an UNDERSCORE (`Invoke-Expression` -> `Invoke_Expression`) because the shared identifier scanner treats `-` as an operator. Every hyphenated cmdlet key below therefore uses the underscore form. Paren-less cmdlet calls (`Get-Content $p`) are wrapped into `Get_Content($p)`, and the call operator `& $cmd` is modeled as the synthetic sink `InvokeOperator`. Rule IDs mirror the shared TAINT-00x space. PowerShell recall is moderate (pipelines, splatting, and paren-less pipeline arguments are only partially modeled) — see testdata/precision-suite-powershell/README.md.",
       "sources": [
         {
           "call": "args",
@@ -4249,7 +4249,7 @@
           "vuln_class": "code_injection",
           "cwe": "CWE-95",
           "rule_id": "TAINT-005",
-          "note": "Invoke-Expression (iex) evaluates a string as PowerShell code \u2014 the canonical PowerShell code-injection sink"
+          "note": "Invoke-Expression (iex) evaluates a string as PowerShell code — the canonical PowerShell code-injection sink"
         },
         {
           "call": "iex",
@@ -4325,7 +4325,7 @@
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "[IO.File]::ReadAllText($p) shaped to IO.File.ReadAllText \u2014 matched on the .ReadAllText suffix"
+          "note": "[IO.File]::ReadAllText($p) shaped to IO.File.ReadAllText — matched on the .ReadAllText suffix"
         },
         {
           "call": "ReadAllBytes",
@@ -4429,7 +4429,7 @@
           "neutralizes": [
             "sql_injection"
           ],
-          "note": "receiver-varies $cmd.Parameters.AddWithValue(...) \u2014 matched on the method suffix"
+          "note": "receiver-varies $cmd.Parameters.AddWithValue(...) — matched on the method suffix"
         },
         {
           "call": "Split_Path",
@@ -4612,32 +4612,401 @@
     },
     "lua": {
       "sources": [
-        {"call": "arg", "kind": "argv", "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled"},
-        {"call": "os.getenv", "kind": "env", "note": "process environment variable, attacker-influenceable"},
-        {"call": "io.read", "kind": "stdin", "note": "a line/number read from stdin is untrusted input"},
-        {"call": "ngx.var", "kind": "http_query", "note": "OpenResty request variable (ngx.var.arg_x, ngx.var.uri, ...) carries untrusted request data"},
-        {"call": "ngx.req.get_uri_args", "kind": "http_query", "note": "OpenResty parsed query-string arguments"},
-        {"call": "ngx.req.get_post_args", "kind": "http_body", "note": "OpenResty parsed request-body arguments"},
-        {"call": "ngx.req.get_headers", "kind": "http_header", "note": "OpenResty request headers"}
+        {
+          "call": "arg",
+          "kind": "argv",
+          "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled"
+        },
+        {
+          "call": "os.getenv",
+          "kind": "env",
+          "note": "process environment variable, attacker-influenceable"
+        },
+        {
+          "call": "io.read",
+          "kind": "stdin",
+          "note": "a line/number read from stdin is untrusted input"
+        },
+        {
+          "call": "ngx.var",
+          "kind": "http_query",
+          "note": "OpenResty request variable (ngx.var.arg_x, ngx.var.uri, ...) carries untrusted request data"
+        },
+        {
+          "call": "ngx.req.get_uri_args",
+          "kind": "http_query",
+          "note": "OpenResty parsed query-string arguments"
+        },
+        {
+          "call": "ngx.req.get_post_args",
+          "kind": "http_body",
+          "note": "OpenResty parsed request-body arguments"
+        },
+        {
+          "call": "ngx.req.get_headers",
+          "kind": "http_header",
+          "note": "OpenResty request headers"
+        }
       ],
       "sinks": [
-        {"call": "os.execute", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "os.execute runs its argument through the system shell; a tainted command string is command injection"},
-        {"call": "io.popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "io.popen spawns a shell pipeline from its argument; a tainted command is command injection"},
-        {"call": "loadstring", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "loadstring compiles its string argument as Lua code; a tainted string is code injection"},
-        {"call": "load", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "load compiles a string (or chunk) as Lua code; a tainted string is code injection"},
-        {"call": "loadfile", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "loadfile compiles the file at a tainted path as Lua code (attacker-chosen chunk)"},
-        {"call": "dofile", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "dofile loads and runs the file at a tainted path as Lua code"},
-        {"call": "io.open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "io.open of a tainted path enables path traversal (../ escapes the intended directory)"},
-        {"call": "db.exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "lsqlite3 db:exec runs a SQL string; a tainted value concatenated into it is SQL injection"},
-        {"call": "conn.execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "luasql connection:execute runs a SQL string with no bind parameters; a tainted value concatenated into it is SQL injection"},
-        {"call": "http.request", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "LuaSocket http.request of a tainted URL enables SSRF"},
-        {"call": "httpc.request_uri", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "lua-resty-http request_uri of a tainted URL enables SSRF"},
-        {"call": "sock.connect", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "connecting a socket to a tainted host/port enables SSRF"}
+        {
+          "call": "os.execute",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "os.execute runs its argument through the system shell; a tainted command string is command injection"
+        },
+        {
+          "call": "io.popen",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "io.popen spawns a shell pipeline from its argument; a tainted command is command injection"
+        },
+        {
+          "call": "loadstring",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "loadstring compiles its string argument as Lua code; a tainted string is code injection"
+        },
+        {
+          "call": "load",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "load compiles a string (or chunk) as Lua code; a tainted string is code injection"
+        },
+        {
+          "call": "loadfile",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "loadfile compiles the file at a tainted path as Lua code (attacker-chosen chunk)"
+        },
+        {
+          "call": "dofile",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "dofile loads and runs the file at a tainted path as Lua code"
+        },
+        {
+          "call": "io.open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "io.open of a tainted path enables path traversal (../ escapes the intended directory)"
+        },
+        {
+          "call": "db.exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "lsqlite3 db:exec runs a SQL string; a tainted value concatenated into it is SQL injection"
+        },
+        {
+          "call": "conn.execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "luasql connection:execute runs a SQL string with no bind parameters; a tainted value concatenated into it is SQL injection"
+        },
+        {
+          "call": "http.request",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "LuaSocket http.request of a tainted URL enables SSRF"
+        },
+        {
+          "call": "httpc.request_uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "lua-resty-http request_uri of a tainted URL enables SSRF"
+        },
+        {
+          "call": "sock.connect",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "connecting a socket to a tainted host/port enables SSRF"
+        }
       ],
       "sanitizers": [
-        {"call": "tonumber", "neutralizes": ["command_injection", "code_injection", "path_traversal", "sql_injection", "ssrf"], "note": "tonumber coerces the value to a number (or nil), stripping every injection metacharacter"},
-        {"call": "ngx.quote_sql_str", "neutralizes": ["sql_injection"], "note": "OpenResty escapes and quotes a value for safe SQL interpolation"},
-        {"call": "escape", "neutralizes": ["sql_injection"], "note": "a luasql/driver escape helper quotes a value for safe SQL interpolation"}
+        {
+          "call": "tonumber",
+          "neutralizes": [
+            "command_injection",
+            "code_injection",
+            "path_traversal",
+            "sql_injection",
+            "ssrf"
+          ],
+          "note": "tonumber coerces the value to a number (or nil), stripping every injection metacharacter"
+        },
+        {
+          "call": "ngx.quote_sql_str",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "OpenResty escapes and quotes a value for safe SQL interpolation"
+        },
+        {
+          "call": "escape",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "a luasql/driver escape helper quotes a value for safe SQL interpolation"
+        }
+      ]
+    },
+    "groovy": {
+      "comment": "Groovy source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo parser). Groovy runs on the JVM, so it shares much of Java's dangerous-API surface, but its idioms differ: command execution is the String receiver method \"cmd\".execute() (keyed on the .execute method suffix), Jenkins pipeline steps sh/bat run shell commands, and SQL uses groovy.sql.Sql (rows/executeQuery/firstRow/eachRow). GString interpolation \"...${x}...\" is the dominant injection carrier; lexctx emits the ${} hole as CODE so the tainted expression is visible. Sinks are matched via the engine's suffixKeys fallback: package/class-qualified calls on the full chain (Eval.me, GroovyShell.evaluate) and value-method calls by METHOD-NAME suffix (.execute, .rows, .text). Method-suffix matching is imprecise on purpose (AST-only); the corpus README records the resulting honest FNs (closure/DSL laundering the flat recognizer cannot follow). See core/taint/engine/extract_groovy.go.",
+      "sources": [
+        {
+          "call": "params",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameterValues",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getInputStream",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.getReader",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "System.getenv",
+          "kind": "env"
+        },
+        {
+          "call": "System.getProperty",
+          "kind": "env"
+        },
+        {
+          "call": "args",
+          "kind": "cli_arg"
+        }
+      ],
+      "sinks": [
+        {
+          "call": "execute",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "\"cmd\".execute() runs an external command via the String.execute() extension — matched on the .execute method suffix; the idiomatic Groovy shell-out."
+        },
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix."
+        },
+        {
+          "call": "ProcessBuilder",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "new ProcessBuilder(cmd).start() runs an external process with a tainted command."
+        },
+        {
+          "call": "sh",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Jenkins pipeline `sh` step executes a shell command line; a tainted GString is command injection."
+        },
+        {
+          "call": "bat",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Jenkins pipeline `bat` step executes a Windows batch command line with a tainted string."
+        },
+        {
+          "call": "Eval.me",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "groovy.util.Eval.me(script) evaluates arbitrary Groovy — RCE with a tainted script."
+        },
+        {
+          "call": "evaluate",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "GroovyShell.evaluate(script) / script.evaluate(...) executes a tainted Groovy string — matched on the .evaluate method suffix."
+        },
+        {
+          "call": "GroovyShell.evaluate",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "new GroovyShell().evaluate(script) executes arbitrary Groovy code."
+        },
+        {
+          "call": "rows",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "groovy.sql.Sql.rows(query) — safe only when the query is a constant or a parameterized GString/placeholder, not a tainted concatenation. Matched on the .rows suffix."
+        },
+        {
+          "call": "executeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.executeQuery(sql) / Statement.executeQuery(sql) with a tainted string is SQL injection."
+        },
+        {
+          "call": "firstRow",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.firstRow(query) — matched on the .firstRow suffix."
+        },
+        {
+          "call": "eachRow",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.eachRow(query){...} — matched on the .eachRow suffix."
+        },
+        {
+          "call": "File",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path) opens a file named by input — matched on the File constructor name."
+        },
+        {
+          "call": "readLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path).readLines() reads an attacker-named file — matched on the .readLines suffix."
+        },
+        {
+          "call": "getText",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path).getText() / file.text reads an attacker-named file — matched on the .getText suffix."
+        },
+        {
+          "call": "FileInputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new FileInputStream(path) opens an attacker-named file."
+        },
+        {
+          "call": "openStream",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openStream() / url.text fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor is not catalogued (constructing a URL performs no request); keying on the fetch method avoids double-reporting the same flow."
+        },
+        {
+          "call": "openConnection",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openConnection() — matched on the method suffix."
+        },
+        {
+          "call": "toURL",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "u.toURL().text / u.toURL().openStream() fetches a tainted URL — matched on the .toURL suffix."
+        }
+      ],
+      "sanitizers": [
+        {
+          "call": "toInteger",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "Groovy String.toInteger() numeric coercion removes injection metacharacters."
+        },
+        {
+          "call": "Integer.parseInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "numeric coercion removes injection metacharacters."
+        },
+        {
+          "call": "toLong",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "escapeHtml4",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Apache Commons StringEscapeUtils.escapeHtml4."
+        },
+        {
+          "call": "encodeAsHTML",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Grails codec obj.encodeAsHTML() HTML-escapes for safe output."
+        },
+        {
+          "call": "forHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder.forHtml — matched on the method suffix."
+        },
+        {
+          "call": "getName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "FilenameUtils.getName(path) strips directory components."
+        }
       ]
     }
   }

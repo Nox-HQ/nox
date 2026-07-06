@@ -609,7 +609,12 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// list) is the injection. Sink Calls are single-token (rawQuery/execute/…),
 		// so canonicalSuffix keys on them directly. (`execute` is already a case
 		// above, shared with the Ruby/DBI parameterized-query form.)
-		"rawQuery", "rawInsert", "rawUpdate", "rawDelete":
+		"rawQuery", "rawInsert", "rawUpdate", "rawDelete",
+		// Groovy groovy.sql.Sql: a parameterized query passes the bind values as a
+		// list/varargs in the 2nd+ positional slot — `sql.rows("... = ?", [id])` /
+		// `sql.executeQuery("... = ?", [id])` — rather than interpolating the tainted
+		// value into the SQL string (1st positional). Matched on the method suffix.
+		"rows", "executeQuery", "firstRow", "eachRow":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional
@@ -641,12 +646,18 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// as a %q SANITIZER, not a sink, so it never resolves here for shell.)
 		return info.FirstArgTainted
 	case "sh", "bash":
-		// A shell interpreter is a command-injection sink ONLY in the
-		// `sh -c "$user"` / `bash -c "$user"` shape, where a tainted string is
-		// executed as a command line. The extractor flags `-c` via ShellTrue. A
-		// bare `bash script.sh` (running a file) carries no `-c` and is NOT a
-		// command-injection sink, so quoted/validated invocations do not FP.
-		return info.ShellTrue
+		// Two sink families share the `sh`/`bash` key:
+		//   - The shell/bash INTERPRETER `sh -c "$user"` / `bash -c "$user"`, a
+		//     command-injection sink where a tainted string is run as a command
+		//     line. The extractor flags `-c` via ShellTrue; a bare `bash script.sh`
+		//     (running a file) carries no `-c` and is not a sink.
+		//   - The Jenkins pipeline `sh("cmd ${x}")` / `bat("cmd ${x}")` STEP, whose
+		//     sole (first) argument IS the command line executed by a shell — so a
+		//     tainted first argument is command injection regardless of any `-c`.
+		// Firing on ShellTrue OR a tainted first argument covers both without a
+		// language discriminator: a quoted/validated shell file invocation leaves
+		// both false and is still suppressed.
+		return info.ShellTrue || info.FirstArgTainted
 	default:
 		return true
 	}
