@@ -32,6 +32,18 @@ func extractCSharp(lines []logicalLine) []unitDraft {
 			continue
 		}
 
+		// A `return ...;` line is a statement, never a declaration header — check it
+		// first so a `return new Foo(x)` is not misread as a header named `Foo`.
+		if st, ok := csharpReturnStatement(ll); ok {
+			cur.stmts = append(cur.stmts, st)
+			depth += braceDelta(trimmed)
+			if methodDepth >= 0 && depth <= methodDepth {
+				cur = module
+				methodDepth = -1
+			}
+			continue
+		}
+
 		// A method header opens a new unit. It must be recognized BEFORE the
 		// generic statement recognizer so the header identifiers (method name,
 		// parameters) are never read as a data-flow call. A header may or may not
@@ -49,9 +61,7 @@ func extractCSharp(lines []logicalLine) []unitDraft {
 		// Recognize a statement in the current scope before adjusting depth, so a
 		// statement on the same logical line as its braces is still captured.
 		if !isCSharpStructuralLine(trimmed) {
-			if st, ok := csharpReturnStatement(ll); ok {
-				cur.stmts = append(cur.stmts, st)
-			} else if st, ok := recognizeStatement(langCSharp, ll); ok {
+			if st, ok := recognizeStatement(langCSharp, ll); ok {
 				cur.stmts = append(cur.stmts, st)
 			}
 		}

@@ -35,6 +35,11 @@ func suiteJavaPath() string {
 	return filepath.Join("..", "testdata", "precision-suite-java")
 }
 
+// csharpSuitePath resolves the C#-specific honest measurement corpus.
+func csharpSuitePath() string {
+	return filepath.Join("..", "testdata", "precision-suite-csharp")
+}
+
 // TestPrecisionCorpusBaseline is a guard test: the shipped corpus is curated to
 // score a perfect 1.0/1.0/1.0. If a rule change makes nox miss a labeled
 // finding (recall drops) or fire on a clean sample (precision drops), this test
@@ -208,6 +213,63 @@ func TestPrecisionSuiteBaselineJava(t *testing.T) {
 			"refresh testdata/precision-suite-java/baseline.json to lock in the gain",
 			base.Precision, current.Precision, base.FP, current.FP,
 			base.FindingsPerIssue, current.FindingsPerIssue)
+	}
+}
+
+// TestPrecisionSuiteBaselineCSharp is the C# ratchet: it scans the C# honest
+// measurement suite, loads its committed baseline snapshot, and fails if any
+// gated metric regressed. It is the analog of TestPrecisionSuiteBaseline for the
+// C# language block (lexctx scan_csharp + engine extract_csharp + the catalog
+// `csharp` sinks), so a change that makes C# taint analysis noisier or miss a
+// labeled flow fails CI. When the suite legitimately improves it reports the gain
+// and tells you to refresh baseline.json.
+func TestPrecisionSuiteBaselineCSharp(t *testing.T) {
+	dir := csharpSuitePath()
+
+	expectations, err := bench.ParseCorpus(dir)
+	if err != nil {
+		t.Fatalf("ParseCorpus(%s): %v", dir, err)
+	}
+	if len(expectations) == 0 {
+		t.Fatal("C# suite has no expectations; a labeled corpus must declare some")
+	}
+
+	scanFindings, err := scanCorpusFindings(dir)
+	if err != nil {
+		t.Fatalf("scanCorpusFindings(%s): %v", dir, err)
+	}
+
+	report := bench.Score(scanFindings, expectations)
+	current := bench.BaselineFromReport(&report)
+
+	base := loadBaseline(t, filepath.Join(dir, "baseline.json"))
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		for _, r := range regressions {
+			t.Errorf("C# suite regressed: %s", r.String())
+		}
+		t.Fatalf("C# precision suite regressed vs baseline.json; investigate the change or, if intended, "+
+			"regenerate the snapshot with `nox bench --precision testdata/precision-suite-csharp "+
+			"--baseline testdata/precision-suite-csharp/baseline.json` after deleting it.\n%s",
+			renderPrecisionTable(dir, &report))
+	}
+
+	// This corpus is engineered to score a clean 1.0/1.0: every clean stressor
+	// must stay silent and every annotated flow must fire. Assert that directly so
+	// a precision or recall break is unmissable, not just a baseline drift.
+	if report.Overall.FP != 0 {
+		t.Errorf("C# suite produced %d false positive(s); precision broken:\n%s",
+			report.Overall.FP, renderPrecisionTable(dir, &report))
+	}
+	if report.Overall.FN != 0 {
+		t.Errorf("C# suite produced %d false negative(s); recall broken:\n%s",
+			report.Overall.FN, renderPrecisionTable(dir, &report))
+	}
+
+	if bench.Improved(base, current) {
+		t.Logf("C# precision suite IMPROVED vs baseline.json; refresh "+
+			"testdata/precision-suite-csharp/baseline.json to lock in the gain (precision %.3f->%.3f, FP %d->%d)",
+			base.Precision, current.Precision, base.FP, current.FP)
 	}
 }
 
