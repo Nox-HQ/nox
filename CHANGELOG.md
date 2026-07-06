@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-06
+
+This release turns nox's SAST layer from a 3-language proof of concept into a
+**21-language deterministic taint engine**, and raises measured precision from
+0.30 to 1.00 on an honest, self-defending corpus.
+
+### Added
+
+- **Real SAST taint analysis across 21 languages.** A pure-Go `lexctx` lexical
+  classifier plus an intraprocedural (and same-file interprocedural) dataflow
+  engine track untrusted input from sources to dangerous sinks, honoring
+  per-vuln-class sanitizers. Covered: Python, JavaScript/TypeScript, Go, PHP,
+  Java, C#, Rust, Ruby, C/C++, Scala, Kotlin, Perl, Swift, PowerShell, Shell,
+  Lua, Dart, Objective-C, Elixir, Clojure, and Groovy. Go uses the stdlib
+  `go/ast` parser (pure-Go, no CGo); every other language uses a deterministic
+  line/statement recognizer — no tree-sitter, no native dependencies, single
+  static binary. Vulnerability classes: SQL injection (`TAINT-001`), command
+  injection (`TAINT-002`), XSS (`TAINT-003`), path traversal (`TAINT-004`),
+  unsafe deserialization / code injection (`TAINT-005`), and SSRF
+  (`TAINT-006`). Memory-safety bugs are explicitly out of scope for the taint
+  model (a different analysis).
+- **Interprocedural taint (same-file).** Function summaries propagate taint
+  across helper calls within a file (`source() -> wrap() -> os.system()` is
+  caught through the wrapper), with the call path named in finding metadata.
+- **`agentflow` analyzer for agentic dataflow.** `AGENTFLOW-001` flags untrusted
+  input reaching an LLM prompt (OWASP ASI01 / CWE-1427); `AGENTFLOW-002` flags
+  LLM output flowing into a dangerous sink (ASI02 / CWE-77).
+- **Honest SAST precision harness.** `nox bench --precision <dir>` scores a
+  labeled corpus against ground truth (per-rule and overall precision/recall/F1,
+  findings-per-issue density, noise ratio). A ratchet with per-rule floors, an
+  anti-cheat self-test (the corpus provably cannot fake a perfect score), a
+  determinism guard, and a CI precision gate keep the number honest on every PR.
+
+### Changed
+
+- **SAST precision raised from 0.30 to 1.00** by fixing six false-positive
+  classes at the engine level (not by curating the corpus): secret over-firing
+  (specificity dedup + canonical-owner resolution), placeholder/example-credential
+  allowlisting, an AI-002 prompt-context gate, decoded-base64-blob entropy
+  suppression, a cross-analyzer same-vuln-class dedup, and SRI-hash recognition.
+- `lexctx` now classifies Go source, activating comment/string/data-blob
+  false-positive suppression for `.go` files.
+
+### Fixed
+
+- Removed a set of contextual/common-word keywords (`show`, `hide`, `on`,
+  `part`, `num`) from the shared identifier-keyword set where they silently
+  suppressed real variable/function reads across languages.
+
+### Plugins
+
+- **nox-plugin-llm-triage grounding.** The optional LLM triage layer is passed
+  an immutable rule ID / file:line / snippet and may only return a verdict and
+  rationale — it can never invent or relocate a finding.
+
 ## [1.6.0] - 2026-07-05
 
 ### Added
