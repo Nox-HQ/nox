@@ -110,6 +110,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// unwrapping, iterator chains, and macro sinks make line recognition coarse;
 		// see extract_rust.go for the honest limits.
 		return extractRust(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangCSharp:
+		// C# is brace-delimited like JS: paren/array continuations merge physical
+		// lines, then each logical line splits on top-level semicolons into
+		// statements. Unlike JS it recognizes method headers for per-method units.
+		return extractCSharp(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

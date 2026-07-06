@@ -45,7 +45,16 @@ func isKeyword(s string) bool {
 		// `let`, `as`, `None` are already covered by the Python/JS set above.
 		"mut", "fn", "match", "loop", "move", "ref", "impl", "trait",
 		"struct", "enum", "mod", "pub", "use", "crate", "self", "super", "where",
-		"unsafe", "extern", "dyn", "type", "static", "Ok", "Err", "Some":
+		"unsafe", "extern", "dyn", "type", "static", "Ok", "Err", "Some",
+		// C# keywords/modifiers and common built-in type names that appear as bare
+		// tokens in declarations and headers. Treating a type name as a
+		// non-variable is safe: a type is never a taint-carrying value, so
+		// excluding it only avoids a spurious "read" of a type name.
+		"public", "private", "protected", "internal", "readonly",
+		"using", "namespace", "void", "string", "int", "bool", "byte", "char",
+		"long", "short", "double", "float", "decimal", "object", "string?",
+		"switch", "case", "default", "throw", "catch", "foreach", "do",
+		"override", "virtual", "abstract", "sealed", "partial":
 		return true
 	}
 	return false
