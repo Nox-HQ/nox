@@ -78,11 +78,58 @@ func extractPowerShell(lines []logicalLine) []unitDraft {
 		}
 	}
 
+	// A module-scope `param(...)` block declares the SCRIPT's parameters, which are
+	// bound from the (untrusted) command line — so a read of one is an untrusted
+	// source, exactly like $args. Promote such reads on the module unit's
+	// statements now that its full parameter set is known. Function parameters are
+	// NOT promoted: a function argument may be a trusted, locally-derived value, so
+	// tainting every function parameter would over-report.
+	if len(module.params) > 0 {
+		scriptParams := make(map[string]bool, len(module.params))
+		for _, p := range module.params {
+			scriptParams[p] = true
+		}
+		for i := range module.stmts {
+			promoteScriptParamSources(&module.stmts[i], scriptParams)
+		}
+	}
+
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// psScriptParamSource is the sentinel chain promoted onto any statement that
+// reads a script-level parameter. The catalog lists it as a source (kind argv),
+// so resolveSource fires on the sentinel and taints the statement's assignee.
+// A sentinel is used because script parameter NAMES are arbitrary (the catalog
+// cannot enumerate them); resolveSource only needs a matching chain to mark the
+// statement a source — the tainted variable is always the assignment LHS.
+const psScriptParamSource = "PSScriptParameter"
+
+// promoteScriptParamSources adds the psScriptParamSource sentinel to any
+// statement that reads a script-level param name, so a top-level
+// `param($Formula)` value read resolves as an untrusted source (like $args) and
+// taints the assignee.
+func promoteScriptParamSources(st *stmtDraft, scriptParams map[string]bool) {
+	for _, r := range st.reads {
+		if !scriptParams[r] {
+			continue
+		}
+		already := false
+		for _, ch := range st.chains {
+			if ch == psScriptParamSource {
+				already = true
+				break
+			}
+		}
+		if !already {
+			st.chains = append(st.chains, psScriptParamSource)
+		}
+		return
+	}
 }
 
 // langPowerShell is the recognizer's PowerShell dialect. Its assignment/keyword
@@ -153,30 +200,31 @@ func isPowerShellStructuralLine(code string) bool {
 // in by powerShellParamBlock. Returns ("", nil, false) for anything else.
 func powerShellFuncHeader(code string) (name string, params []string, ok bool) {
 	rest := strings.TrimSpace(code)
-	// A `filter`/`function` keyword introduces a named scope.
+	// A `function`/`filter`/`workflow` keyword introduces a named scope.
 	for _, kw := range []string{"function ", "filter ", "workflow "} {
-		if strings.HasPrefix(rest, kw) {
-			rest = strings.TrimSpace(strings.TrimPrefix(rest, kw))
-			// Name runs to the first '{', '(', or whitespace.
-			nameEnd := len(rest)
-			for i := 0; i < len(rest); i++ {
-				if rest[i] == '{' || rest[i] == '(' || rest[i] == ' ' || rest[i] == '\t' {
-					nameEnd = i
-					break
-				}
-			}
-			name = strings.TrimSpace(rest[:nameEnd])
-			if name == "" {
-				return "", nil, false
-			}
-			// An inline parameter list `(...)` after the name.
-			if paren := strings.IndexByte(rest, '('); paren >= 0 {
-				if closeParen := matchParen(rest, paren); closeParen > paren {
-					params = parsePowerShellParams(rest[paren+1 : closeParen])
-				}
-			}
-			return name, params, true
+		if !strings.HasPrefix(rest, kw) {
+			continue
 		}
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, kw))
+		// Name runs to the first '{', '(', or whitespace.
+		nameEnd := len(rest)
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == '{' || rest[i] == '(' || rest[i] == ' ' || rest[i] == '\t' {
+				nameEnd = i
+				break
+			}
+		}
+		name = strings.TrimSpace(rest[:nameEnd])
+		if name == "" {
+			return "", nil, false
+		}
+		// An inline parameter list `(...)` after the name.
+		if paren := strings.IndexByte(rest, '('); paren >= 0 {
+			if closeParen := matchParen(rest, paren); closeParen > paren {
+				params = parsePowerShellParams(rest[paren+1 : closeParen])
+			}
+		}
+		return name, params, true
 	}
 	return "", nil, false
 }

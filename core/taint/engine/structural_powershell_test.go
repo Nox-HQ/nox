@@ -66,6 +66,11 @@ func TestStructuralPowerShellTruePositives(t *testing.T) {
 			src:    "$e = $env:PAYLOAD\nInvoke-Expression $e\n",
 			wantID: "TAINT-005",
 		},
+		{
+			name:   "script param source into Get-Content",
+			src:    "param([string]$Path)\n$p = $Path\nGet-Content $p\n",
+			wantID: "TAINT-004",
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -99,6 +104,10 @@ func TestStructuralPowerShellCleanStaysClean(t *testing.T) {
 		{
 			name: "no source: constant command is safe",
 			src:  "$name = \"report.txt\"\nGet-Content $name\n",
+		},
+		{
+			name: "function parameter is not treated as a script source",
+			src:  "function Read-Report ($ReportPath) {\n  Get-Content $ReportPath\n}\n",
 		},
 	}
 	for _, tt := range tests {

@@ -72,7 +72,7 @@ func TestPowerShellBlockCommentNotNested(t *testing.T) {
 }
 
 // TestPowerShellSingleQuoteNoInterp: a single-quoted string does NOT interpolate,
-// so a `$var` inside stays string, and a doubled quote `''` is a literal quote
+// so a `$var` inside stays string, and a doubled quote `”` is a literal quote
 // that does not close the string.
 func TestPowerShellSingleQuoteNoInterp(t *testing.T) {
 	src := "$s = 'it''s a $var literal' ; $SECRET = 1"

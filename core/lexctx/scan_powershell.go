@@ -12,7 +12,7 @@ package lexctx
 //     PowerShell (the first `#>` closes), matching how the Go/C-style block
 //     comment scanners behave; the first close wins.
 //   - single-quoted strings `'...'` — no interpolation; the only escape is a
-//     doubled quote `''` (PowerShell's literal-quote escape), so `'it''s'` is one
+//     doubled quote `”` (PowerShell's literal-quote escape), so `'it”s'` is one
 //     string.
 //   - double-quoted strings `"..."` — interpolate `$var`, `${var name}`, and
 //     `$( ... )` subexpressions, whose replacement bytes are emitted as CODE (a
@@ -106,7 +106,7 @@ func scanPSBlockComment(content []byte, start int) int {
 
 // scanPSSingleQuote returns the offset just past a single-quoted string opening
 // at start. PowerShell single-quoted strings do not interpolate and have no
-// backslash/backtick escaping; the only escape is a DOUBLED quote (`''`), which
+// backslash/backtick escaping; the only escape is a DOUBLED quote (`”`), which
 // stays inside the literal. A single quote that is not doubled closes the
 // string. Single-quoted strings do not span newlines, so a newline defensively
 // closes an unterminated literal so a stray quote cannot swallow real code.
