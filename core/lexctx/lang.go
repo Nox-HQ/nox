@@ -49,6 +49,7 @@ const (
 	LangDart       // Dart — //, ///, NESTED /*…*/, '…'/"…" ($var/${…} interp), '''…'''/"""…""" (multiline), r'…'/r"…" raw (no interp)
 	LangElixir     // Elixir — # comments (no block comments), "…" (#{…} interp), '…' charlist, """…"""/'''…''' heredocs, ~s()/~r()/~w() sigils, ?c char code
 	LangClojure    // Clojure — ; comments, "…" (Java escapes), #"…" regex, \c char literals; s-expression Lisp
+	LangGroovy     // Groovy — //, /*…*/ (non-nesting), "…" ($var/${…} GString), '…' (plain), """…"""/'''…''' (multiline), /…/ slashy (regex), $/…/$ dollar-slashy
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -95,6 +96,8 @@ func (l Lang) String() string {
 		return "elixir"
 	case LangClojure:
 		return "clojure"
+	case LangGroovy:
+		return "groovy"
 	default:
 		return "unknown"
 	}
@@ -159,24 +162,27 @@ var extToLang = map[string]Lang{
 	// would clobber every C and C++ header. ObjC lexing is C plus `@"…"` NSString
 	// literals, so the C-derived scanner handles a `.h` acceptably either way, but
 	// the conservative choice is to leave headers with the incumbent C/C++ lexer.
-	".m":    LangObjC,
-	".mm":   LangObjC,
-	".lua":  LangLua,
-	".dart": LangDart,
-	".ex":   LangElixir,
-	".exs":  LangElixir,
-	".clj":  LangClojure,
-	".cljs": LangClojure,
-	".cljc": LangClojure,
-	".edn":  LangClojure,
+	".m":      LangObjC,
+	".mm":     LangObjC,
+	".lua":    LangLua,
+	".dart":   LangDart,
+	".ex":     LangElixir,
+	".exs":    LangElixir,
+	".clj":    LangClojure,
+	".cljs":   LangClojure,
+	".cljc":   LangClojure,
+	".edn":    LangClojure,
+	".groovy": LangGroovy,
+	".gradle": LangGroovy,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
 // Gemfile / Rakefile carry Ruby code but have no `.rb` extension, so an
 // extension-only lookup misses them; LangFromPath consults this by base name.
 var filenameToLang = map[string]Lang{
-	"Gemfile":  LangRuby,
-	"Rakefile": LangRuby,
+	"Gemfile":     LangRuby,
+	"Rakefile":    LangRuby,
+	"Jenkinsfile": LangGroovy,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is

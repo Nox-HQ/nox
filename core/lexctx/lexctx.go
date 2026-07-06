@@ -85,6 +85,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanElixir(content)
 	case LangDart:
 		return scanDart(content)
+	case LangGroovy:
+		return scanGroovy(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}

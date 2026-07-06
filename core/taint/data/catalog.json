@@ -5560,6 +5560,253 @@
           "note": "clojure.core/parse-long coerces to a Long or nil"
         }
       ]
+    },
+    "groovy": {
+      "comment": "Groovy source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo parser). Groovy runs on the JVM, so it shares much of Java's dangerous-API surface, but its idioms differ: command execution is the String receiver method \"cmd\".execute() (keyed on the .execute method suffix), Jenkins pipeline steps sh/bat run shell commands, and SQL uses groovy.sql.Sql (rows/executeQuery/firstRow/eachRow). GString interpolation \"...${x}...\" is the dominant injection carrier; lexctx emits the ${} hole as CODE so the tainted expression is visible. Sinks are matched via the engine's suffixKeys fallback: package/class-qualified calls on the full chain (Eval.me, GroovyShell.evaluate) and value-method calls by METHOD-NAME suffix (.execute, .rows, .text). Method-suffix matching is imprecise on purpose (AST-only); the corpus README records the resulting honest FNs (closure/DSL laundering the flat recognizer cannot follow). See core/taint/engine/extract_groovy.go.",
+      "sources": [
+        {
+          "call": "params",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameterValues",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getInputStream",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.getReader",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "System.getenv",
+          "kind": "env"
+        },
+        {
+          "call": "System.getProperty",
+          "kind": "env"
+        },
+        {
+          "call": "args",
+          "kind": "cli_arg"
+        }
+      ],
+      "sinks": [
+        {
+          "call": "execute",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "\"cmd\".execute() runs an external command via the String.execute() extension — matched on the .execute method suffix; the idiomatic Groovy shell-out."
+        },
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix."
+        },
+        {
+          "call": "ProcessBuilder",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "new ProcessBuilder(cmd).start() runs an external process with a tainted command."
+        },
+        {
+          "call": "sh",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Jenkins pipeline `sh` step executes a shell command line; a tainted GString is command injection."
+        },
+        {
+          "call": "bat",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Jenkins pipeline `bat` step executes a Windows batch command line with a tainted string."
+        },
+        {
+          "call": "Eval.me",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "groovy.util.Eval.me(script) evaluates arbitrary Groovy — RCE with a tainted script."
+        },
+        {
+          "call": "evaluate",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "GroovyShell.evaluate(script) / script.evaluate(...) executes a tainted Groovy string — matched on the .evaluate method suffix."
+        },
+        {
+          "call": "GroovyShell.evaluate",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "new GroovyShell().evaluate(script) executes arbitrary Groovy code."
+        },
+        {
+          "call": "rows",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "groovy.sql.Sql.rows(query) — safe only when the query is a constant or a parameterized GString/placeholder, not a tainted concatenation. Matched on the .rows suffix."
+        },
+        {
+          "call": "executeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.executeQuery(sql) / Statement.executeQuery(sql) with a tainted string is SQL injection."
+        },
+        {
+          "call": "firstRow",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.firstRow(query) — matched on the .firstRow suffix."
+        },
+        {
+          "call": "eachRow",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Sql.eachRow(query){...} — matched on the .eachRow suffix."
+        },
+        {
+          "call": "File",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path) opens a file named by input — matched on the File constructor name."
+        },
+        {
+          "call": "readLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path).readLines() reads an attacker-named file — matched on the .readLines suffix."
+        },
+        {
+          "call": "getText",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path).getText() / file.text reads an attacker-named file — matched on the .getText suffix."
+        },
+        {
+          "call": "FileInputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new FileInputStream(path) opens an attacker-named file."
+        },
+        {
+          "call": "openStream",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openStream() / url.text fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor is not catalogued (constructing a URL performs no request); keying on the fetch method avoids double-reporting the same flow."
+        },
+        {
+          "call": "openConnection",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openConnection() — matched on the method suffix."
+        },
+        {
+          "call": "toURL",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "u.toURL().text / u.toURL().openStream() fetches a tainted URL — matched on the .toURL suffix."
+        }
+      ],
+      "sanitizers": [
+        {
+          "call": "toInteger",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "Groovy String.toInteger() numeric coercion removes injection metacharacters."
+        },
+        {
+          "call": "Integer.parseInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "numeric coercion removes injection metacharacters."
+        },
+        {
+          "call": "toLong",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "escapeHtml4",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Apache Commons StringEscapeUtils.escapeHtml4."
+        },
+        {
+          "call": "encodeAsHTML",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Grails codec obj.encodeAsHTML() HTML-escapes for safe output."
+        },
+        {
+          "call": "forHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder.forHtml — matched on the method suffix."
+        },
+        {
+          "call": "getName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "FilenameUtils.getName(path) strips directory components."
+        }
+      ]
     }
   }
 }

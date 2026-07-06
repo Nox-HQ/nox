@@ -221,6 +221,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// brace-delimited, so it recognizes headers for per-function units (with
 		// params). See extract_dart.go.
 		return extractDart(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangGroovy:
+		// Groovy is brace-delimited like Java/Kotlin/Groovy-on-the-JVM: paren/array
+		// continuations merge physical lines, then each logical line splits on
+		// top-level semicolons. Groovy statements are usually newline-terminated
+		// (semicolons optional), so the split only affects the rare `a; b` line; it
+		// recognizes `def`/typed method headers for per-method units. See
+		// extract_groovy.go.
+		return extractGroovy(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

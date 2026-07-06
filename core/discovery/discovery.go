@@ -159,6 +159,18 @@ var sourceExtensions = map[string]bool{
 	".clj":  true,
 	".cljs": true,
 	".cljc": true,
+	// Groovy source and Gradle build scripts (lexctx scan_groovy + engine
+	// extract_groovy + catalog `groovy`). The extension-less Jenkinsfile is
+	// classified by exact name via sourceNames below.
+	".groovy": true,
+	".gradle": true,
+}
+
+// sourceNames contains exact, extension-less file names that carry source code.
+// A Jenkins pipeline lives in a `Jenkinsfile` (Groovy) with no extension, so an
+// extension-only lookup misses it; Classify consults this by base name.
+var sourceNames = map[string]bool{
+	"Jenkinsfile": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.
@@ -208,6 +220,11 @@ func (d *DefaultClassifier) Classify(path string, _ os.FileInfo) ArtifactType {
 	}
 	if strings.HasPrefix(name, ".env") {
 		return Config
+	}
+
+	// Source by exact name (extension-less source files, e.g. Jenkinsfile).
+	if sourceNames[name] {
+		return Source
 	}
 
 	// Source by extension.

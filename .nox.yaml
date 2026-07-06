@@ -26,6 +26,7 @@ scan:
     - "testdata/precision-suite-clojure/"
     - "testdata/precision-suite-elixir/"
     - "testdata/precision-suite-dart/"
+    - "testdata/precision-suite-groovy/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
