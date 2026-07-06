@@ -75,6 +75,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanPowerShell(content)
 	case LangSwift:
 		return scanSwift(content)
+	case LangObjC:
+		return scanObjC(content)
 	case LangLua:
 		return scanLua(content)
 	case LangDart:
