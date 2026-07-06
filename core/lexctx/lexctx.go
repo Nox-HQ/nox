@@ -77,6 +77,10 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanSwift(content)
 	case LangObjC:
 		return scanObjC(content)
+	case LangLua:
+		return scanLua(content)
+	case LangDart:
+		return scanDart(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}

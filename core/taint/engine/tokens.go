@@ -71,7 +71,23 @@ func isKeyword(s string) bool {
 		// Perl declaration/control keywords (superset is harmless: these are never
 		// taint-carrying variable names). `my`/`our`/`local` are binding keywords;
 		// `sub`/`package`/`qw`/`wantarray` must never be read as a variable.
-		"my", "our", "local", "sub", "package", "qw", "wantarray":
+		"my", "our", "local", "sub", "package", "qw", "wantarray",
+		// Lua keywords (superset is harmless: these are never taint-carrying
+		// variable names). `local`, `then`, `end`, `nil`, `until`, `not`, `and`,
+		// `or`, `in`, `do`, `else`, `function` are already covered above; add the
+		// rest.
+		"elseif", "repeat", "goto",
+		// Dart keywords/modifiers and common built-in type names that appear as
+		// bare tokens in declarations and headers. `var`, `final`, `const`, `class`,
+		// `if`, `for`, `while`, `return`, `void`, `int`, `bool`, `double`, `null`,
+		// `true`, `false`, `this`, `super`, `new`, `try`, `catch`, `switch`, `case`,
+		// `default`, `import`, `enum`, `throw`, `async`, `await`, `dynamic` (=type)
+		// are already covered above. Add the Dart-specific rest; treating a keyword
+		// or a type name as a non-variable only avoids a spurious read of it.
+		"late", "factory", "extends", "implements", "mixin",
+		"on", "library", "part", "show", "hide", "deferred", "covariant", "rethrow",
+		"num", "String", "List", "Map", "Set", "Future", "Stream", "Object",
+		"Function", "Never", "Uri":
 		return true
 	}
 	return false

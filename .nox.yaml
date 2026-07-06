@@ -22,6 +22,8 @@ scan:
     - "testdata/precision-suite-powershell/"
     - "testdata/precision-suite-swift/"
     - "testdata/precision-suite-objc/"
+    - "testdata/precision-suite-lua/"
+    - "testdata/precision-suite-dart/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"

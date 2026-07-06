@@ -145,6 +145,11 @@ var sourceExtensions = map[string]bool{
 	".ps1":  true,
 	".psm1": true,
 	".psd1": true,
+	// Lua translation units. One taint module (lexctx scan_lua + engine
+	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
+	// embedded config.
+	".lua":  true,
+	".dart": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

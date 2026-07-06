@@ -22,6 +22,8 @@ const (
 	langShell
 	langPowerShell
 	langSwift
+	langLua
+	langDart
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -163,6 +165,19 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langSwift {
 				left = stripSwiftLetKeyword(left)
 			}
+			// Lua `local` binding keyword precedes the name (`local x = e`). A plain
+			// reassignment (`x = e`, no keyword) is returned unchanged. A multiple
+			// assignment `local a, b = f()` is not a simple-ident LHS and is left to
+			// fail isSimpleIdent below (we do not track list-destructuring taint).
+			if lang == langLua {
+				left = stripLuaLocalKeyword(left)
+			}
+			// Dart declarations use a `var`/`final`/`const` keyword or a leading
+			// type (`String x = ...`, `final String x = ...`). Strip them so the
+			// bare declared name is the LHS.
+			if lang == langDart {
+				left = stripDartDeclType(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -196,6 +211,20 @@ func stripPerlDeclKeyword(left string) string {
 		if strings.HasPrefix(left, kw+" ") || strings.HasPrefix(left, kw+"\t") {
 			return strings.TrimSpace(left[len(kw):])
 		}
+	}
+	return left
+}
+
+// stripLuaLocalKeyword removes a leading `local ` binding keyword from a Lua
+// assignment LHS, leaving the bare declared name. `local x = e` yields `x`; a
+// plain reassignment `x = e` is returned unchanged.
+func stripLuaLocalKeyword(left string) string {
+	left = strings.TrimSpace(left)
+	if left == "local" {
+		return ""
+	}
+	if strings.HasPrefix(left, "local ") || strings.HasPrefix(left, "local\t") {
+		return strings.TrimSpace(left[len("local"):])
 	}
 	return left
 }

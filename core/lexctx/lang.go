@@ -45,6 +45,8 @@ const (
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
 	LangObjC       // Objective-C — C lexing plus @"…" NSString literals; //, /*…*/, "…", 'c', #… preprocessor, \ line-splice
+	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
+	LangDart       // Dart — //, ///, NESTED /*…*/, '…'/"…" ($var/${…} interp), '''…'''/"""…""" (multiline), r'…'/r"…" raw (no interp)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -83,6 +85,10 @@ func (l Lang) String() string {
 		return "swift"
 	case LangObjC:
 		return "objc"
+	case LangLua:
+		return "lua"
+	case LangDart:
+		return "dart"
 	default:
 		return "unknown"
 	}
@@ -147,8 +153,10 @@ var extToLang = map[string]Lang{
 	// would clobber every C and C++ header. ObjC lexing is C plus `@"…"` NSString
 	// literals, so the C-derived scanner handles a `.h` acceptably either way, but
 	// the conservative choice is to leave headers with the incumbent C/C++ lexer.
-	".m":  LangObjC,
-	".mm": LangObjC,
+	".m":    LangObjC,
+	".mm":   LangObjC,
+	".lua":  LangLua,
+	".dart": LangDart,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.

@@ -183,6 +183,24 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// shared recognizer, and recognizes both C function and ObjC method
 		// definitions for per-scope units. See extract_objc.go.
 		return extractObjC(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangLua:
+		// Lua uses the line/statement RECOGNIZER (no CGo interpreter). `{}` are
+		// table constructors, NOT statement bodies — function/if/for bodies are
+		// delimited by keywords and closed by `end` — so braces must NOT force
+		// line-merging (a function body would collapse into one logical line);
+		// only paren/bracket continuations merge physical lines. Statements are
+		// newline-terminated, but a `;` may separate several on one line, so the
+		// logical lines are also split on top-level semicolons. A per-line
+		// normalization rewrites the `obj:method()` method-call colon to `.` so
+		// the shared recognizer and catalog suffix-matching see `obj.method`.
+		return extractLua(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangDart:
+		// Dart is brace-delimited like Java/Kotlin: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Dart statements are `;`-terminated and method/function bodies are
+		// brace-delimited, so it recognizes headers for per-function units (with
+		// params). See extract_dart.go.
+		return extractDart(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
