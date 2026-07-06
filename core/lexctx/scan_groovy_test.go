@@ -26,10 +26,14 @@ func TestScanGroovy(t *testing.T) {
 	if k := kindOfSubstring(t, LangGroovy, src, `block s3cr3t comment`); k != KindComment {
 		t.Errorf("block comment should be comment, got %v", k)
 	}
-	// A GString interpolation `${user}` stays inside the string region — the whole
-	// literal is one string (the safe degrade).
-	if k := kindOfSubstring(t, LangGroovy, src, `hello ${user} s3cr3t`); k != KindString {
-		t.Errorf("GString body incl. interpolation should be string, got %v", k)
+	// A GString's literal parts are string, but its `${...}` interpolation hole is
+	// emitted as CODE (like Swift's `\(…)`) so a tainted value spliced through it is
+	// visible to the taint engine.
+	if k := kindOfSubstring(t, LangGroovy, src, `hello `); k != KindString {
+		t.Errorf("GString literal prefix should be string, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangGroovy, src, `user`); k != KindCode {
+		t.Errorf("GString ${...} interpolation expression should be code, got %v", k)
 	}
 	if k := kindOfSubstring(t, LangGroovy, src, `plain s3cr3t here`); k != KindString {
 		t.Errorf("single-quoted plain string should be string, got %v", k)
@@ -127,6 +131,34 @@ func TestGroovyDollarSlashy(t *testing.T) {
 	}
 	if k := kindOfSubstring(t, LangGroovy, src, `def after = 2`); k != KindCode {
 		t.Errorf("code after `/$` should be code, got %v", k)
+	}
+}
+
+// TestGroovyBareVarInterpolation: a bare `$var` GString interpolation emits the
+// identifier as CODE (so the taint engine reads it) while the surrounding literal
+// stays string; a plain single-quoted string does NOT interpolate.
+func TestGroovyBareVarInterpolation(t *testing.T) {
+	src := "def a = \"run $cmd now\"\ndef b = 'literal $cmd here'\n"
+	if k := kindOfSubstring(t, LangGroovy, src, `run `); k != KindString {
+		t.Errorf("GString literal prefix should be string, got %v", k)
+	}
+	// The `$cmd` identifier (after the `$`) is code — first occurrence is on line 1.
+	if k := kindOfSubstring(t, LangGroovy, src, `cmd`); k != KindCode {
+		t.Errorf("bare $var interpolation identifier should be code, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangGroovy, src, `literal $cmd here`); k != KindString {
+		t.Errorf("plain single-quoted string must NOT interpolate (all string), got %v", k)
+	}
+}
+
+// TestGroovySlashyInterpolation: a slashy string interpolates `${...}` as code.
+func TestGroovySlashyInterpolation(t *testing.T) {
+	src := "def re = /prefix-${host}-suffix/\n"
+	if k := kindOfSubstring(t, LangGroovy, src, `prefix-`); k != KindString {
+		t.Errorf("slashy literal part should be string, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangGroovy, src, `host`); k != KindCode {
+		t.Errorf("slashy ${...} interpolation expression should be code, got %v", k)
 	}
 }
 

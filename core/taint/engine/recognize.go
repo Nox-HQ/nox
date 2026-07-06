@@ -24,6 +24,7 @@ const (
 	langSwift
 	langLua
 	langDart
+	langGroovy
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -177,6 +178,12 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// bare declared name is the LHS.
 			if lang == langDart {
 				left = stripDartDeclType(left)
+			}
+			// Groovy declarations use `def name`, a bare typed `Type name`, or a
+			// plain reassignment `name`. Strip the `def`/type so the bare declared
+			// name is the LHS.
+			if lang == langGroovy {
+				left = stripGroovyDeclType(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right
