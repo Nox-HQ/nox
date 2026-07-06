@@ -186,6 +186,13 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// normalization rewrites the `obj:method()` method-call colon to `.` so
 		// the shared recognizer and catalog suffix-matching see `obj.method`.
 		return extractLua(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangDart:
+		// Dart is brace-delimited like Java/Kotlin: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Dart statements are `;`-terminated and method/function bodies are
+		// brace-delimited, so it recognizes headers for per-function units (with
+		// params). See extract_dart.go.
+		return extractDart(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

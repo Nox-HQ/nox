@@ -142,7 +142,8 @@ var sourceExtensions = map[string]bool{
 	// Lua translation units. One taint module (lexctx scan_lua + engine
 	// extract_lua + catalog `lua` block) serves scripts, OpenResty handlers, and
 	// embedded config.
-	".lua": true,
+	".lua":  true,
+	".dart": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

@@ -241,6 +241,17 @@ jobs:
         # positive can creep in and no recall regression can be silently hidden.
         run: ./nox bench --precision testdata/precision-suite-lua --baseline testdata/precision-suite-lua/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — dart
+        # Same honest ratchet, scoped to the Dart taint suite (lexctx scan_dart +
+        # engine extract_dart + the catalog `dart` block). Dart's dominant injection
+        # carrier is string interpolation '$userInput' / '${expr}', which lexctx
+        # classifies as CODE; the arg-shape check keeps a parameterized sqflite
+        # rawQuery('… ?', [id]) and an int.parse-coerced value from false-positiving.
+        # Fails on any regression vs the committed Dart snapshot (including the one
+        # documented field-laundered SSRF false negative) and holds the per-rule
+        # precision floor at 0.90 so Dart taint precision cannot silently rot.
+        run: ./nox bench --precision testdata/precision-suite-dart --baseline testdata/precision-suite-dart/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
