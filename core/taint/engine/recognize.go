@@ -10,6 +10,7 @@ type langKind int
 const (
 	langPython langKind = iota
 	langJavaScript
+	langPHP
 	langJava
 )
 

@@ -51,6 +51,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanJavaScript(content)
 	case LangGo:
 		return scanGo(content)
+	case LangPHP:
+		return scanPHP(content)
 	case LangJava:
 		return scanJava(content)
 	default:
