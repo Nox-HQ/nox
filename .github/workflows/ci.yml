@@ -172,6 +172,13 @@ jobs:
         # FN cannot be silently hidden and no new C/C++ false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-cpp --baseline testdata/precision-suite-cpp/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — scala
+        # Same honest ratchet, scoped to the Scala taint suite (lexctx scan_scala +
+        # engine extract_scala + the catalog `scala` block). Fails on any
+        # regression vs the committed Scala snapshot and holds the per-rule
+        # precision floor at 0.90 so Scala taint precision cannot silently rot.
+        run: ./nox bench --precision testdata/precision-suite-scala --baseline testdata/precision-suite-scala/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
