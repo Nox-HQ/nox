@@ -284,6 +284,57 @@
         {"call": "escapeshellarg", "neutralizes": ["command_injection"]},
         {"call": "escapeshellcmd", "neutralizes": ["command_injection"]}
       ]
+    },
+    "java": {
+      "comment": "Java source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes, matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (Files.readAllBytes, ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .println, .exec, .start). Method-suffix matching is imprecise on purpose: it is AST-only, so a .executeQuery on a non-JDBC object still matches. This is the same precision trade documented for Go's method sinks; the corpus README records the resulting honest FNs (chained fluent calls the flat recognizer cannot follow). See core/taint/engine/extract_java.go.",
+      "sources": [
+        {"call": "request.getParameter", "kind": "http_query"},
+        {"call": "request.getParameterValues", "kind": "http_query"},
+        {"call": "request.getQueryString", "kind": "http_query"},
+        {"call": "request.getHeader", "kind": "http_header"},
+        {"call": "request.getHeaders", "kind": "http_header"},
+        {"call": "request.getCookies", "kind": "http_header"},
+        {"call": "request.getInputStream", "kind": "http_body"},
+        {"call": "request.getReader", "kind": "http_body"},
+        {"call": "req.getParameter", "kind": "http_query"},
+        {"call": "req.getHeader", "kind": "http_header"},
+        {"call": "getParameter", "kind": "http_query"},
+        {"call": "getQueryString", "kind": "http_query"},
+        {"call": "System.getenv", "kind": "env"},
+        {"call": "System.getProperty", "kind": "env"}
+      ],
+      "sinks": [
+        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"},
+        {"call": "ProcessBuilder", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "new ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"},
+        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation"},
+        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
+        {"call": "createQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "JPA/Hibernate Session.createQuery(hql) with a tainted string is HQL injection"},
+        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new File(path) opens a file named by input — matched on the File constructor name"},
+        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "Files.newInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "Files.readString", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "FileInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new FileInputStream(path)"},
+        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
+        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openConnection() — matched on the method suffix"},
+        {"call": "ObjectInputStream.readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"},
+        {"call": "readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "ObjectInputStream.readObject() — matched on the method suffix"},
+        {"call": "ScriptEngine.eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "evaluating a tainted script string executes arbitrary code"},
+        {"call": "eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "ScriptEngine.eval(script) — matched on the method suffix"},
+        {"call": "println", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response.getWriter().println(taintedHtml) reflects unescaped input — reflected XSS"},
+        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
+        {"call": "write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .write(taintedHtml) — reflected XSS"}
+      ],
+      "sanitizers": [
+        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
+        {"call": "Integer.parseInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes injection metacharacters"},
+        {"call": "Long.parseLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
+        {"call": "StringEscapeUtils.escapeHtml4", "neutralizes": ["xss"]},
+        {"call": "Encoder.forHtml", "neutralizes": ["xss"], "note": "OWASP Java Encoder"},
+        {"call": "forHtml", "neutralizes": ["xss"], "note": "OWASP Encoder.forHtml — matched on the method suffix"},
+        {"call": "FilenameUtils.getName", "neutralizes": ["path_traversal"], "note": "Apache Commons FilenameUtils strips path components"},
+        {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
+      ]
     }
   }
 }

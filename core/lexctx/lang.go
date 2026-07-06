@@ -33,6 +33,7 @@ const (
 	LangJavaScript // JS, JSX, TS, TSX — they share comment/string/template lexing
 	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
 	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
+	LangJava       // Java — //, /*…*/, /**…*/, "…", """…""" (text block), '…' (char)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -47,6 +48,8 @@ func (l Lang) String() string {
 		return "go"
 	case LangPHP:
 		return "php"
+	case LangJava:
+		return "java"
 	default:
 		return "unknown"
 	}
@@ -71,6 +74,7 @@ var extToLang = map[string]Lang{
 	".go":    LangGo,
 	".php":   LangPHP,
 	".phtml": LangPHP,
+	".java":  LangJava,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is

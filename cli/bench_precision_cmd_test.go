@@ -28,6 +28,13 @@ func suitePathPHP() string {
 	return filepath.Join("..", "testdata", "precision-suite-php")
 }
 
+// suiteJavaPath resolves the Java-only honest measurement corpus relative to the
+// repo root. It lives in its own directory so the Java taint samples and their
+// baseline gate independently of the Python/JS/Go suite.
+func suiteJavaPath() string {
+	return filepath.Join("..", "testdata", "precision-suite-java")
+}
+
 // TestPrecisionCorpusBaseline is a guard test: the shipped corpus is curated to
 // score a perfect 1.0/1.0/1.0. If a rule change makes nox miss a labeled
 // finding (recall drops) or fire on a clean sample (precision drops), this test
@@ -153,6 +160,52 @@ func TestPrecisionSuiteBaselinePHP(t *testing.T) {
 	if bench.Improved(base, current) {
 		t.Logf("PHP precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f); "+
 			"refresh testdata/precision-suite-php/baseline.json to lock in the gain",
+			base.Precision, current.Precision, base.FP, current.FP,
+			base.FindingsPerIssue, current.FindingsPerIssue)
+	}
+}
+
+// TestPrecisionSuiteBaselineJava is the Java-suite ratchet: it scans the
+// Java-only honest measurement corpus, loads its committed baseline snapshot, and
+// fails if any gated metric regressed. It mirrors TestPrecisionSuiteBaseline for
+// the dedicated Java corpus, so a change to the Java lexer, extractor, or catalog
+// that makes the suite noisier (or drops a true positive) fails CI. When the Java
+// suite legitimately improves, this test reports it and tells you to refresh
+// testdata/precision-suite-java/baseline.json.
+func TestPrecisionSuiteBaselineJava(t *testing.T) {
+	dir := suiteJavaPath()
+
+	expectations, err := bench.ParseCorpus(dir)
+	if err != nil {
+		t.Fatalf("ParseCorpus(%s): %v", dir, err)
+	}
+	if len(expectations) == 0 {
+		t.Fatal("Java suite has no expectations; a labeled corpus must declare some")
+	}
+
+	scanFindings, err := scanCorpusFindings(dir)
+	if err != nil {
+		t.Fatalf("scanCorpusFindings(%s): %v", dir, err)
+	}
+
+	report := bench.Score(scanFindings, expectations)
+	current := bench.BaselineFromReport(&report)
+
+	base := loadBaseline(t, filepath.Join(dir, "baseline.json"))
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		for _, r := range regressions {
+			t.Errorf("Java suite regressed: %s", r.String())
+		}
+		t.Fatalf("Java precision suite regressed vs baseline.json; investigate the change or, if intended, "+
+			"regenerate the snapshot with `nox bench --precision testdata/precision-suite-java "+
+			"--baseline testdata/precision-suite-java/baseline.json` after deleting it.\n%s",
+			renderPrecisionTable(dir, &report))
+	}
+
+	if bench.Improved(base, current) {
+		t.Logf("Java precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f); "+
+			"refresh testdata/precision-suite-java/baseline.json to lock in the gain",
 			base.Precision, current.Precision, base.FP, current.FP,
 			base.FindingsPerIssue, current.FindingsPerIssue)
 	}

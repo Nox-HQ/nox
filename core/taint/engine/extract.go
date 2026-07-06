@@ -96,6 +96,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// top-level semicolons. lexctx has already blanked the HTML template shell
 		// (non-code), so only real <?php … ?> code reaches the recognizer.
 		return extractPHP(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangJava:
+		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
+		// brace-delimited and `;`-terminated like JS, so it shares the
+		// logicalLines/splitSemicolons segmentation. See extract_java.go.
+		return extractJava(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
