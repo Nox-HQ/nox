@@ -73,6 +73,30 @@ func TestStructuralCPPTruePositives(t *testing.T) {
 }`,
 			wantID: "TAINT-006",
 		},
+		{
+			// Canonical C command-injection: taint from getenv flows into cmd via the
+			// strcat out-parameter builder, then into system.
+			name: "command injection via system(strcat(cmd, getenv))",
+			src: `void run(void) {
+    char *arg = getenv("ARG");
+    char cmd[256];
+    strcpy(cmd, "tool ");
+    strcat(cmd, arg);
+    system(cmd);
+}`,
+			wantID: "TAINT-002",
+		},
+		{
+			// Buffer-writing input source: fgets writes untrusted bytes into buf,
+			// which flows into system.
+			name: "command injection via system(fgets buffer)",
+			src: `void run(void) {
+    char buf[128];
+    fgets(buf, sizeof(buf), stdin);
+    system(buf);
+}`,
+			wantID: "TAINT-002",
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
