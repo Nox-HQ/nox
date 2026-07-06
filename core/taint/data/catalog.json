@@ -1986,6 +1986,56 @@
         {"call": "getName", "neutralizes": ["path_traversal"], "note": "FilenameUtils.getName / File.getName strips path components"},
         {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
       ]
+    },
+    "swift": {
+      "sources": [
+        {"call": "CommandLine.arguments", "kind": "argv"},
+        {"call": "ProcessInfo.processInfo.environment", "kind": "env"},
+        {"call": "URLComponents.queryItems", "kind": "http_query"},
+        {"call": "req.query", "kind": "http_query"},
+        {"call": "req.parameters", "kind": "http_query"},
+        {"call": "request.query", "kind": "http_query"},
+        {"call": "request.parameters", "kind": "http_query"},
+        {"call": "textField.text", "kind": "http_body"},
+        {"call": "readLine", "kind": "stdin"}
+      ],
+      "sinks": [
+        {"call": "Process.launch", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "a Process whose arguments/launchPath are built from a tainted string is a command-injection vector; safe with a fixed launchPath and an allow-listed argument array"},
+        {"call": "Process.run", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "Process", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "constructing a Foundation Process with a tainted command string"},
+        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "the C system() call hands its argument to /bin/sh -c"},
+        {"call": "sqlite3_exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "sqlite3_exec runs a raw SQL string; safe only when values are bound via sqlite3_bind rather than concatenated"},
+        {"call": "sqlite3_prepare_v2", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "preparing a SQL string interpolated with a tainted value is SQL injection; parameterize with sqlite3_bind placeholders instead"},
+        {"call": "prepare", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "receiver-varies db.prepare(tainted SQL) (SQLite.swift / GRDB); safe when the SQL is static and values are bound"},
+        {"call": "FileManager.contents", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "String.contentsOfFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "String(contentsOfFile: tainted) reads a file from a possibly tainted path; the extractor folds the discriminating label so a plain String(x) conversion never matches. Safe when the path's lastPathComponent is validated against an allow-base"},
+        {"call": "contentsOfFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "the folded-label suffix also matches FileManager/NSString .init(contentsOfFile:) receiver-varying forms"},
+        {"call": "Data.contentsOf", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Data(contentsOf: tainted URL/path) reads arbitrary file contents when the path is attacker-controlled; folded from Data(contentsOf:)"},
+        {"call": "String.contentsOf", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "URLSession.dataTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "dataTask.with", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "session.dataTask(with: tainted URL/request) — fetching an attacker-controlled URL is SSRF; folded from the with: label so it does not collide with unrelated .with(...) calls"},
+        {"call": "dataTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies session.dataTask(with: tainted URL/request)"},
+        {"call": "URL.string", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "URL(string: tainted) that then drives a request is SSRF; folded from the string: label so URL(fileURLWithPath:) for a bundled resource does not match. Neutralized by a validated-host allow-list / percent-encoding on the path component"},
+        {"call": "NSKeyedUnarchiver.unarchiveObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "NSKeyedUnarchiver.unarchiveTopLevelObjectWithData", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "unarchiveTopLevelObjectWithData", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(tainted) — non-secure unarchiving of attacker bytes is an RCE vector; the secure NSSecureCoding form (unarchivedObject(ofClass:from:) requiring secure coding) is the safe path"},
+        {"call": "unarchiveObject.with", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "NSKeyedUnarchiver.unarchiveObject(with: tainted); folded from the with: label"},
+        {"call": "unarchiveObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies NSKeyedUnarchiver.unarchiveObject(ofType:from:)/legacy unarchiveObject(data:) forms"},
+        {"call": "WKWebView.loadHTMLString", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "loading un-escaped tainted HTML into a WKWebView reflects it as XSS; safe when HTML-escaped first"},
+        {"call": "loadHTMLString", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "receiver-varies webView.loadHTMLString(tainted, baseURL:)"}
+      ],
+      "sanitizers": [
+        {"call": "sqlite3_bind_text", "neutralizes": ["sql_injection"], "note": "binding values as parameters keeps them out of the SQL text"},
+        {"call": "sqlite3_bind_int", "neutralizes": ["sql_injection"]},
+        {"call": "sqlite3_bind", "neutralizes": ["sql_injection"]},
+        {"call": "bind", "neutralizes": ["sql_injection"], "note": "receiver-varies statement.bind(tainted) placeholder binding (SQLite.swift / GRDB)"},
+        {"call": "Int", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "Int(tainted) numeric coercion removes injection metacharacters (nil on non-numeric input)"},
+        {"call": "lastPathComponent", "neutralizes": ["path_traversal"], "note": "URL(string:).lastPathComponent strips directory components; pair with an allow-base check"},
+        {"call": "addingPercentEncoding", "neutralizes": ["ssrf"], "note": "percent-encoding a component keeps it from altering the URL host/path"},
+        {"call": "escapeHTML", "neutralizes": ["xss"], "note": "HTML entity-escaping neutralizes reflected XSS"},
+        {"call": "htmlEscape", "neutralizes": ["xss"]},
+        {"call": "addingPercentEncodingForHTML", "neutralizes": ["xss"]}
+      ]
     }
   }
 }

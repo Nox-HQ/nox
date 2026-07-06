@@ -89,7 +89,7 @@ func TestExtractSwiftReturnStatement(t *testing.T) {
 `)
 	units := extractUnits(lexctx.LangSwift, src)
 	u := findUnit(t, units, "load")
-	sink := stmtWithCall(t, u, "String")
+	sink := stmtWithCall(t, u, "String.contentsOfFile")
 	if !containsStr(sink.returns, "p") {
 		t.Errorf("returns = %v, want to include p", sink.returns)
 	}
@@ -124,7 +124,7 @@ func TestExtractSwiftMethodSuffix(t *testing.T) {
 `)
 	units := extractUnits(lexctx.LangSwift, src)
 	u := findUnit(t, units, "f")
-	st := stmtWithCall(t, u, "session.dataTask")
+	st := stmtWithCall(t, u, "session.dataTask.with")
 	if !containsStr(st.reads, "req") {
 		t.Errorf("reads = %v, want to include req", st.reads)
 	}
@@ -144,6 +144,55 @@ func TestExtractSwiftModifiersHeader(t *testing.T) {
 	}
 	if !containsStr(u.params, "label") {
 		t.Errorf("params = %v, want to include label (internal name after external `name`)", u.params)
+	}
+}
+
+// TestExtractSwiftLabelFold pins the precision-critical normalization: a
+// discriminating first-argument label is folded into the callee so the catalog
+// keys on the dangerous file/URL/HTML form (`String.contentsOfFile`,
+// `Data.contentsOf`, `URL.string`, `dataTask.with`) while a plain conversion
+// (`String(x)`) or a safe local-file initializer (`URL(fileURLWithPath:)`) does
+// NOT collide with a sink key.
+func TestExtractSwiftLabelFold(t *testing.T) {
+	cases := []struct {
+		src      string
+		wantCall string
+	}{
+		{"func f(_ p: String) {\n let d = String(contentsOfFile: p)\n}\n", "String.contentsOfFile"},
+		{"func f(_ u: URL) {\n let d = Data(contentsOf: u)\n}\n", "Data.contentsOf"},
+		{"func f(_ s: String) {\n let u = URL(string: s)\n}\n", "URL.string"},
+		{"func f(_ r: URLRequest) {\n let t = session.dataTask(with: r)\n}\n", "session.dataTask.with"},
+	}
+	for _, tc := range cases {
+		units := extractUnits(lexctx.LangSwift, []byte(tc.src))
+		u := findUnit(t, units, "f")
+		found := false
+		for i := range u.stmts {
+			if containsStr(u.stmts[i].calls, tc.wantCall) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("src %q: want folded call %q in some statement, got units %+v", tc.src, tc.wantCall, u.stmts)
+		}
+	}
+
+	// A plain String(x) conversion must NOT fold to a sink form.
+	units := extractUnits(lexctx.LangSwift, []byte("func f(_ x: Int) {\n let s = String(x)\n}\n"))
+	u := findUnit(t, units, "f")
+	for i := range u.stmts {
+		if containsStr(u.stmts[i].calls, "String.contentsOfFile") {
+			t.Errorf("plain String(x) must not fold to a path-traversal sink: %+v", u.stmts[i])
+		}
+	}
+	// URL(fileURLWithPath:) is the safe local-file form: label is NOT
+	// discriminating, so the callee stays `URL` (not the SSRF `URL.string`).
+	units = extractUnits(lexctx.LangSwift, []byte("func f(_ p: String) {\n let u = URL(fileURLWithPath: p)\n}\n"))
+	u = findUnit(t, units, "f")
+	for i := range u.stmts {
+		if containsStr(u.stmts[i].calls, "URL.string") {
+			t.Errorf("URL(fileURLWithPath:) must not fold to the SSRF URL.string sink: %+v", u.stmts[i])
+		}
 	}
 }
 

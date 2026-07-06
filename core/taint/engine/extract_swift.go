@@ -68,7 +68,7 @@ func extractSwift(lines []logicalLine) []unitDraft {
 		}
 
 		if !isSwiftStructuralLine(trimmed) {
-			if st, ok := recognizeStatement(langSwift, ll); ok {
+			if st, ok := recognizeStatement(langSwift, normalizeSwift(ll)); ok {
 				cur.stmts = append(cur.stmts, st)
 			}
 		}
@@ -217,7 +217,7 @@ func swiftReturnStatement(ll logicalLine) (stmtDraft, bool) {
 			exprRaw = blankRange(exprRaw, kw, kw+len("return"))
 		}
 	}
-	inner := logicalLine{line: ll.line, code: exprCode, raw: exprRaw}
+	inner := normalizeSwift(logicalLine{line: ll.line, code: exprCode, raw: exprRaw})
 	st, ok := recognizeStatement(langSwift, inner)
 	if !ok {
 		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
@@ -225,6 +225,86 @@ func swiftReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
 	return st, true
+}
+
+// swiftDiscriminatingLabels are the first-argument labels that make an otherwise
+// generic Swift initializer/method DANGEROUS. Folding the label into the callee
+// (`String(contentsOfFile:` -> `String.contentsOfFile(`) lets the catalog key on
+// the precise, file/URL/HTML-reading form and NOT on the ubiquitous safe forms
+// (`String(x)` conversion, `URL(fileURLWithPath:)` for a bundled resource, etc.).
+// This is the Swift analogue of Rust's `::`->`.` normalization: it turns a
+// label-discriminated call into a plain dotted call the shared recognizer and the
+// catalog both understand, keyed identically. Precision-critical — without it a
+// bare `String(taintedVar)` would false-positive as a path-traversal sink.
+var swiftDiscriminatingLabels = map[string]bool{
+	"contentsOfFile": true, // String(contentsOfFile:) / FileManager file read
+	"contentsOf":     true, // Data(contentsOf:) / String(contentsOf:) reads a URL/file
+	"string":         true, // URL(string:) — the SSRF-relevant remote-URL form
+	"with":           true, // session.dataTask(with:) / NSKeyedUnarchiver(with:)
+}
+
+// normalizeSwift folds a discriminating first-argument label into the callee for
+// the initializer/method forms whose danger depends on that label, so the shared
+// recognizer sees a plain dotted call the catalog keys on. `String(contentsOfFile:
+// p)` becomes `String.contentsOfFile(p)`, `Data(contentsOf: u)` becomes
+// `Data.contentsOf(u)`, `URL(string: s)` becomes `URL.string(s)`, and
+// `session.dataTask(with: r)` becomes `session.dataTask.with(r)` (whose suffix
+// keys still include `dataTask`). The rewrite swaps `(` for `.` and the label's
+// `:` for `(`, preserving byte length so the code/raw views stay aligned to each
+// other (all recognizeStatement/argInfo need). Applied to BOTH views.
+func normalizeSwift(ll logicalLine) logicalLine {
+	code := normalizeSwiftText(ll.code)
+	raw := ll.raw
+	if len(raw) == len(ll.code) {
+		raw = normalizeSwiftText(ll.raw)
+	}
+	return logicalLine{line: ll.line, code: code, raw: raw}
+}
+
+// normalizeSwiftText applies the label-fold rewrite to one view. It scans for an
+// identifier immediately followed by `(` and then `label:`; when the label is
+// discriminating it rewrites `ident(label:` to `ident.label(`. Length-preserving.
+func normalizeSwiftText(s string) string {
+	b := []byte(s)
+	n := len(b)
+	for i := 0; i < n; i++ {
+		if b[i] != '(' {
+			continue
+		}
+		// The `(` must immediately follow an identifier byte (a call, not a group).
+		if i == 0 || !isIdentPart(b[i-1]) {
+			continue
+		}
+		// Read the label identifier right after `(`.
+		j := i + 1
+		for j < n && (b[j] == ' ' || b[j] == '\t') {
+			j++
+		}
+		labelStart := j
+		for j < n && isIdentPart(b[j]) {
+			j++
+		}
+		if j == labelStart || j >= n {
+			continue
+		}
+		// A label is `ident:` — the next non-space byte must be a single ':' NOT
+		// followed by another ':' (so a ternary/type is not mistaken for a label).
+		k := j
+		for k < n && (b[k] == ' ' || b[k] == '\t') {
+			k++
+		}
+		if k >= n || b[k] != ':' {
+			continue
+		}
+		label := string(b[labelStart:j])
+		if !swiftDiscriminatingLabels[label] {
+			continue
+		}
+		// Rewrite: `(` -> `.` at i, and the label's `:` -> `(` at k.
+		b[i] = '.'
+		b[k] = '('
+	}
+	return string(b)
 }
 
 // stripSwiftLetKeyword removes a leading `let ` / `var ` binding keyword and any
