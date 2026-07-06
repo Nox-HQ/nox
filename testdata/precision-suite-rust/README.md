@@ -20,17 +20,20 @@ nox bench --precision testdata/precision-suite-rust --baseline testdata/precisio
 ```
 RULE       TP  FP  FN  PRECISION  RECALL  F1
 TAINT-001  1   0   0   1.000      1.000   1.000
-TAINT-002  1   0   1   1.000      0.500   0.667
+TAINT-002  2   0   0   1.000      1.000   1.000
 TAINT-004  1   0   0   1.000      1.000   1.000
 TAINT-005  1   0   0   1.000      1.000   1.000
 TAINT-006  1   0   0   1.000      1.000   1.000
-OVERALL    5   0   1   1.000      0.833   0.909
+OVERALL    6   0   0   1.000      1.000   1.000
 ```
 
-**Precision 1.00 / recall 0.83 / F1 0.909** (5 TP, 0 FP, 1 FN). Precision is
+**Precision 1.00 / recall 1.00 / F1 1.00** (6 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits on this corpus is a true positive, and no
-`clean_*` sample false-positives. Recall is **0.83, the lowest of nox's
-supported languages, by design and honestly** — see the gap below.
+`clean_*` sample false-positives. Recall reached 1.00 once the last documented
+false negative (a web-framework **extractor parameter** as an untrusted source)
+was closed — see "The closed gap" below. The recall lift was won without any
+precision loss: `clean_typed_param.rs` proves an ordinary typed parameter is
+still not treated as a source.
 
 ## Ground-truth philosophy
 
@@ -52,6 +55,7 @@ untrusted input) reaching a **sink** with no sanitizer on the path:
 | Sample | Class | Rule | Sink idiom |
 |---|---|---|---|
 | `tp_cmdinjection.rs` | command injection | TAINT-002 | `Command::new("sh").arg("-c").arg(format!(…, user))` |
+| `tp_cmdinjection_extractor.rs` | command injection | TAINT-002 | `web::Query<_>` extractor param → `Command::new("sh").arg("-c").arg(&query.cmd)` |
 | `tp_sqlinjection.rs` | SQL injection | TAINT-001 | `sqlx::query(&format!("… {} …", id))` |
 | `tp_pathtraversal.rs` | path traversal | TAINT-004 | `std::fs::read(user_path)` |
 | `tp_ssrf.rs` | SSRF | TAINT-006 | `reqwest::get(&user_url)` |
@@ -60,28 +64,38 @@ untrusted input) reaching a **sink** with no sanitizer on the path:
 The `clean_*` counterparts prove each is suppressed when made safe:
 `clean_safe_db.rs` (sqlx `.bind()` parameterization), `clean_parse_id.rs`
 (`str::parse::<i64>()` numeric coercion), `clean_safe_path.rs`
-(`Path::file_name()` component-stripping).
+(`Path::file_name()` component-stripping), and `clean_typed_param.rs` (an
+ordinary `i64` / `&Config` parameter is **not** a source, so the
+extractor-parameter modeling does not over-taint normal parameters).
 
-## The honest gap (false negative) — why Rust recall is the lowest
+## The closed gap — extractor-parameter-as-source
 
-`tp_cmdinjection_extractor.rs` is a **labeled FN**: a genuine command-injection
-bug nox's Rust model does **not** catch. It is kept in the corpus, not deleted —
-inflating recall by removing a hard TP would defeat the point of an honest
-measurement suite.
+`tp_cmdinjection_extractor.rs` was the suite's **labeled false negative**: a
+genuine command-injection bug where the untrusted value arrives as a
+web-framework **extractor parameter** — `async fn run(query: web::Query<Params>)`
+(actix) or the destructured `Query(params): Query<Params>` (axum) — rather than
+as a source **call**. nox's taint model introduces taint from source *calls* and
+attribute chains; a function parameter's *type* was never a source, so
+`query.cmd` was never marked tainted and the sink did not fire.
 
-The idiom is a standard actix-web handler where the untrusted value arrives as a
-destructured **extractor parameter** — `async fn run(query: web::Query<Params>)`
-— rather than as a source **call**. nox's taint model (Python/JS/Go/Rust alike)
-introduces taint from source *calls* and attribute chains, never from a function
-parameter's *type*, so `query.cmd` is never marked tainted and the sink does not
-fire. Closing it needs parameter-as-source modeling for web extractors — future
-work, not a curation trick.
+It is now **caught**. `core/taint/engine/extract_rust.go` seeds any parameter
+whose type is a known untrusted-input extractor — actix `web::Query<_>` /
+`web::Form<_>` / `web::Json<_>` / `web::Path<_>`, and the bare axum `Query<_>` /
+`Form<_>` / `Json<_>` / `Path<_>` — as tainted-on-entry, by emitting a synthetic
+`binding = <extractor-source>()` statement the engine already understands. Both
+the named (`query: web::Query<_>`) and the destructured (`Query(params): …`)
+shapes are handled, binding the value actually used. The shared `StructuralEngine`
+is untouched — the change is Rust-local, in the extractor and the `rust` catalog
+block. Only these specific extractor wrappers seed taint: a plain typed parameter
+does not, which `clean_typed_param.rs` verifies.
 
-## Why Rust recall is structurally lower than Python/JS/Go
+## Remaining recognizer limits (honest, still un-modeled)
 
 nox's Rust extractor (`core/taint/engine/extract_rust.go`) is a **line/statement
-recognizer**, not a real parser — only Go gets `go/ast`. That, plus Rust's
-richer surface, makes line recognition coarse in ways that cost recall:
+recognizer**, not a real parser — only Go gets `go/ast`. Rust's richer surface
+still makes line recognition coarse in ways that can cost recall on idioms this
+suite does not yet exercise. These are documented honestly so recall of 1.00 on
+*this* corpus is not mistaken for perfect coverage of all Rust:
 
 - **Ownership & moves.** A value moved into a closure, borrowed as `&x`, or
   `.clone()`d is not tracked as a distinct binding, so taint can be lost across a
@@ -98,13 +112,15 @@ richer surface, makes line recognition coarse in ways that cost recall:
   `println!` are macros the recognizer cannot expand. It matches the macro
   **call** by name (the extractor normalizes `name!(` → `name(` and `::` → `.`),
   but a value that only becomes dangerous *inside* the expansion is missed.
-- **Parameter-as-source.** As above — web-framework extractor parameters are
-  untrusted but are not source calls, the single largest recall gap here.
+- **Extractor coverage is a fixed list.** Parameter-as-source seeding recognizes
+  the actix/axum `Query`/`Form`/`Json`/`Path` wrappers; a custom `FromRequest`
+  extractor or a less-common framework type is not seeded, so its parameter is
+  not tainted. Extending the list is a catalog + recognizer change, not a
+  structural one.
 
 These are the same "recognizer, not a parser" limits documented for Python/JS,
-amplified by Rust's ownership/Result/macro idioms — which is why recall is
-expected to sit below the other languages and why the FN above is honest rather
-than a bug to paper over.
+amplified by Rust's ownership/Result/macro idioms. They are why the suite keeps
+measuring against ground truth rather than assuming full coverage.
 
 ## Regeneration
 

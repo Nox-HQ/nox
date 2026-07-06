@@ -1,17 +1,18 @@
-// Command injection via a web-framework EXTRACTOR parameter — an HONEST FALSE
-// NEGATIVE nox's Rust model does not catch (recall gap, documented in README).
+// Command injection via a web-framework EXTRACTOR parameter — a TRUE POSITIVE
+// nox's Rust model now catches (previously the suite's honest false negative).
 //
 // This is a real, idiomatic actix-web handler: the untrusted input arrives as a
-// destructured `web::Query(params)` PARAMETER, not as a source CALL. nox's taint
-// model (Python/JS/Go/Rust alike) introduces taint from source CALLS and
-// attribute chains, never from a function parameter's TYPE — so `params.cmd`
-// here is never marked tainted, and the Command::new(...).arg(...) sink below
-// does not fire. A correct scanner SHOULD fire TAINT-002; nox misses it.
+// `web::Query<Params>` PARAMETER, not as a source CALL. nox's taint model
+// introduces taint from source CALLS and attribute chains; on top of that, the
+// Rust extractor (core/taint/engine/extract_rust.go) now seeds a parameter whose
+// TYPE is a web extractor (web::Query/Form/Json/Path, or the bare axum forms) as
+// tainted-on-entry via a synthetic `binding = <source>()` statement. So
+// `query.cmd` here IS marked tainted, and the Command::new(...).arg(...) sink
+// below fires TAINT-002 — matching a correct scanner.
 //
-// It is kept in the corpus as a labeled FN (not deleted to inflate recall): the
-// annotation scores as a false negative, which is exactly the honest signal the
-// suite exists to surface. Closing it needs parameter-as-source modeling for
-// web extractors — future work, not a curation trick.
+// Only these specific extractor wrappers seed taint; a plain typed parameter
+// (`id: i64`, `cfg: &Config`) never does — see clean_typed_param.rs, the
+// precision guardrail proving normal parameters are not over-tainted.
 use actix_web::web;
 use std::process::Command;
 
