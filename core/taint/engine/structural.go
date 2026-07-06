@@ -592,7 +592,11 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 	switch canonicalSuffix(sink.Call) {
 	case "cursor.execute", "cursor.executemany", "connection.execute",
 		"db.execute", "session.execute", "connection.query", "db.query",
-		"pool.query", "sequelize.query":
+		"pool.query", "sequelize.query",
+		// Ruby ActiveRecord / raw-SQL: a placeholder query passes the tainted
+		// value as a bind parameter (2nd+ positional) rather than interpolating it
+		// into the SQL string (1st positional), e.g. `where("id = ?", id)`.
+		"where", "find_by_sql", "exec_query", "execute":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional

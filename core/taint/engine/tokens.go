@@ -40,7 +40,12 @@ func isKeyword(s string) bool {
 		"raise", "pass", "break", "continue", "and", "or", "not", "in", "is",
 		"lambda", "global", "nonlocal", "assert", "del", "async", "await",
 		"True", "False", "None", "const", "let", "var", "function", "new",
-		"typeof", "instanceof", "true", "false", "null", "undefined", "this":
+		"typeof", "instanceof", "true", "false", "null", "undefined", "this",
+		// Ruby keywords (superset; harmless for Python/JS since these names are
+		// not valid identifiers there either or are already covered above).
+		"end", "do", "then", "begin", "ensure", "rescue", "when", "case",
+		"unless", "until", "elsif", "nil", "self", "module", "next", "redo",
+		"retry", "super", "__FILE__", "__LINE__":
 		return true
 	}
 	return false

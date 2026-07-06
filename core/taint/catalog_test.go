@@ -57,7 +57,7 @@ func TestIsSource(t *testing.T) {
 		{"js env source", "javascript", "process.env", true},
 		{"ts alias resolves to js", "typescript", "req.query", true},
 		{"js alias short form", "js", "req.query", true},
-		{"unknown language", "ruby", "params", false},
+		{"unknown language", "cobol", "params", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -135,7 +135,7 @@ func TestIsSanitizer(t *testing.T) {
 		{"js parseInt defuses cmdi", "javascript", "parseInt", VulnCommandInjection, true},
 		{"ts alias resolves", "typescript", "DOMPurify.sanitize", VulnXSS, true},
 		{"not a sanitizer", "python", "os.system", VulnCommandInjection, false},
-		{"unknown language", "ruby", "escape", VulnXSS, false},
+		{"unknown language", "cobol", "escape", VulnXSS, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

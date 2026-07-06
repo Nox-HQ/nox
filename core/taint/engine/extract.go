@@ -101,6 +101,12 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// brace-delimited and `;`-terminated like JS, so it shares the
 		// logicalLines/splitSemicolons segmentation. See extract_java.go.
 		return extractJava(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangRuby:
+		// Ruby uses the lexctx line/statement recognizer like Python. Its `{}` are
+		// block/hash delimiters (not statement bodies — those are `def...end`), so
+		// braces must NOT force line-merging, matching the JS convention. Ruby
+		// statements are newline-terminated, so no semicolon split is needed.
+		return extractRuby(logicalLines(content, regions, true))
 	default:
 		return nil
 	}
