@@ -119,6 +119,13 @@ type ScanOptions struct {
 	// committed — the same set a reviewer sees — for reproducible CI gates.
 	// Ignored outside a git repository.
 	TrackedOnly bool
+
+	// BaselinePath overrides the baseline file location for suppression
+	// matching. When empty, the scan uses .nox.yaml's policy.baseline_path,
+	// and if that is also empty, auto-discovers .nox/baseline.json under the
+	// target. The CLI --baseline flag sets this; an explicit override always
+	// takes precedence over the config value.
+	BaselinePath string
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -669,8 +676,13 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		}
 	}
 
-	// Baseline matching.
-	baselinePath := cfg.Policy.BaselinePath
+	// Baseline matching. An explicit --baseline override (opts.BaselinePath)
+	// wins over .nox.yaml's policy.baseline_path; when neither is set the
+	// baseline is auto-discovered at .nox/baseline.json under the target.
+	baselinePath := opts.BaselinePath
+	if baselinePath == "" {
+		baselinePath = cfg.Policy.BaselinePath
+	}
 	if baselinePath == "" {
 		baselinePath = baseline.DefaultPath(target)
 	} else if !filepath.IsAbs(baselinePath) {
