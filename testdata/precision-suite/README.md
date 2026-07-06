@@ -41,14 +41,23 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 1.00 / recall 1.00 / F1 1.00** (29 TP, 0 FP, 0 FN). Precision is
-perfect — every finding nox emits is a true positive — and recall is back to
-1.00: the six Go injection / traversal / SSRF / deserialization / SSTI positives
-now fire as `TAINT-001..006` thanks to the Go taint model (see "Go coverage"
-below). The earlier honest dip to recall 0.79 the moment realistic **Go** samples
-were added was the corpus working as designed — it named six real false negatives,
-and closing them (building the engine, not curating the corpus) is what moved the
-number back.
+**precision 1.00 / recall 0.89 / F1 0.94** (31 TP, 0 FP, 4 FN). Precision is
+still perfect — every finding nox emits is a true positive, and both new clean
+stressors (`clean_html_autoescape.go`, `clean_field_safe.go`) fire nothing — but
+recall dropped from 1.00 to 0.89 the moment a second Go tier landed: five new Go
+samples (`tp_xss_response.go`, `tp_field_taint.go`, `tp_container_taint.go` plus
+the two clean guardrails) named **four honest false negatives** the variable-level
+Go engine misses. That drop is the corpus doing its job — it is the next
+indictment, and closing it (building the engine, not curating the corpus) is the
+next build phase. See "Go coverage" below for the exact FN list and the engine
+capability each one demands.
+
+For the historical record, recall was previously 1.00: the six Go injection /
+traversal / SSRF / deserialization / SSTI positives fire as `TAINT-001..006`
+thanks to the first Go taint model (see "Go coverage" below). The earlier honest
+dip to recall 0.79 the moment the *first* realistic **Go** samples were added was
+the same mechanism — it named six real false negatives, and closing them moved the
+number back to 1.00, until this second tier reopened it to 0.89.
 
 For reference, the earlier journey: precision rose from an original honest
 baseline of 0.30 / F1 0.47 (39 FP), through an interim 0.89 / F1 0.94, to
@@ -57,9 +66,11 @@ the corpus indicted (items 1–6 below), never by curating it. Recall then dippe
 to 0.79 when Go samples landed (six honest FNs) and returned to 1.00 once the Go
 taint model closed them.
 
-- **findings-per-issue: 1.07** — across the annotated issues nox emits ~1.07
-  findings each (the Go secret files fire the language-agnostic secret regexes
-  slightly above 1.00; the taint classes are all exactly 1.00). On the Python
+- **findings-per-issue: 0.94** — across the annotated issues nox emits ~0.94
+  findings each; it is now *below* 1.00 because the four Go tier-2 false negatives
+  (three XSS-to-response, one map-value taint) contribute annotated issues with
+  zero findings. The Go secret files fire the language-agnostic secret regexes
+  slightly above 1.00; the caught taint classes are all exactly 1.00. On the Python
   secret files that once dominated, density
   collapsed to canonical: `tp_secrets_cloud.py` from **8.00 → 1.00** and
   `tp_secrets.py` from **5.33 → 1.33**, via specificity dedup + per-token owner
@@ -164,6 +175,9 @@ language for the first time):
 | `tp_ssrf.go` | `http.Get(userURL)` | TAINT-006 | TP (Go taint model) |
 | `tp_deserialization.go` | `gob.NewDecoder(r.Body).Decode` | TAINT-005 | TP (Go taint model) |
 | `tp_ssti.go` | `text/template` parse of user input | TAINT-003 | TP (Go taint model) |
+| `tp_xss_response.go` | reflected XSS to `http.ResponseWriter` (Fprintf / Write / `template.HTML`) | TAINT-003 (xss, CWE-79) | **FN** — no Go XSS-to-response sink |
+| `tp_field_taint.go` | cmd injection laundered through a struct field | TAINT-002 | TP (variable-level engine happens to reach it) |
+| `tp_container_taint.go` | cmd injection through a map value **and** a slice element | TAINT-002 (×2) | slice = TP, **map value = FN** (no container sensitivity) |
 
 Clean stressors (zero annotations — any finding is a false positive):
 
@@ -184,6 +198,8 @@ Clean stressors (zero annotations — any finding is a false positive):
 | `clean_placeholders.go` | placeholder creds + `os.Getenv` | clean |
 | `clean_generated.go` | `DO NOT EDIT` banner, descriptor bytes, struct tags | clean |
 | `clean_identifiers.go` | UUID, git SHA, hex colors, **SRI integrity hash** | clean (SRI fix) |
+| `clean_html_autoescape.go` | `html/template` context-aware auto-escaping of user data | clean (correct escaping → not a sink) |
+| `clean_field_safe.go` | struct field sanitized (`strconv.Atoi`, `filepath.Base`) before the sink | clean (sanitizer recognized) |
 
 Grow this corpus over time; the honest way to raise the number is to fix the
 rules the corpus indicts, not to curate the corpus to pass. When a rule fix
@@ -211,12 +227,33 @@ in Go today:
 | Unsafe deserialization | `gob.NewDecoder(r.Body).Decode(&v)` | TAINT-005 | CWE-502 |
 | SSTI | `text/template … Parse(userInput)` | TAINT-003 | CWE-1336 |
 
-Still open (honest, the next indictment when a sample lands): XSS via `html/template`
-misuse beyond auto-escaping, taint laundered through struct fields / maps / slices
-(no field sensitivity), and reflection-based sinks — the same class of limits the
-Python/JS engine has. The extraction is AST-precise but stays **AST-only** (no
-`go/types`): method sinks like `.Query`/`.Exec`/`.Decode` are matched by method
-name, not by proving the receiver's type. Cross-file Go flow remains the
-taint-analysis plugin's territory. This corpus carries the annotated ground truth,
-so the day a new Go gap gets a sample, the number will tell the truth again — the
-measure → build → re-measure loop, now running on Go.
+### Go coverage — next gaps (the tier-2 samples that are FN today)
+
+A second tier of Go samples now carries these gaps as annotated ground truth, so
+they show up as concrete false negatives (recall 0.89) rather than prose. This is
+the precise target list for the next build phase:
+
+| Sample (line) | What flows | Fires? | Engine capability the next build must add |
+| --- | --- | --- | --- |
+| `tp_xss_response.go` — `greetPrintf` (`fmt.Fprintf(w, "<div>%s</div>", name)`) | request query → response writer as HTML | **FN** | an **XSS-to-response sink**: model `http.ResponseWriter` written via `fmt.Fprintf`/`w.Write` of concatenated/interpolated HTML as a `TAINT-003` xss sink (CWE-79) |
+| `tp_xss_response.go` — `greetWrite` (`w.Write([]byte("<b>"+user+"</b>"))`) | request form value → `w.Write` as HTML | **FN** | same XSS-to-response sink (the `[]byte("…"+user)` HTML-concat form) |
+| `tp_xss_response.go` — `greetAutoescapeBypass` (`template.HTML(comment)`) | request query → `html/template` via the `template.HTML()` escape hatch | **FN** | recognize `template.HTML(tainted)` as an **auto-escape-bypass** xss sink, distinct from safe `html/template` interpolation (which `clean_html_autoescape.go` guards must stay clean) |
+| `tp_container_taint.go` — `runMap` (`m["c"]=user; …m["c"]`) | request value → **map value** → command sink | **FN** | **container sensitivity**: propagate taint through `m[k] = tainted` index-assignment and read it back at `m[k]` |
+
+Two closely-related flows are *already caught* by the variable-level engine, and
+their annotations score as TP — recorded here so the next build does not
+"re-fix" them: `tp_field_taint.go` (`Cmd{Arg: r.FormValue("c")}` then
+`req.Arg` at the sink — the source call inlined on the struct-literal statement
+reaches the sink) and `tp_container_taint.go` — `runSlice`
+(`args := []string{user}` then `args[0]` — the whole `args` variable is tainted,
+so the index read still references a tainted identifier). Field sensitivity and
+slice-element precision would make these *robustly* correct, but they are not FN
+today.
+
+Other still-open limits (no sample yet, the next indictment when one lands):
+reflection-based sinks, and cross-file Go flow (the taint-analysis plugin's
+territory). The extraction is AST-precise but stays **AST-only** (no `go/types`):
+method sinks like `.Query`/`.Exec`/`.Decode` are matched by method name, not by
+proving the receiver's type. This corpus carries the annotated ground truth, so
+the day a gap gets a sample, the number tells the truth — the measure → build →
+re-measure loop, now running on Go.
