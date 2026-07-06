@@ -58,7 +58,12 @@ func isKeyword(s string) bool {
 		"using", "namespace", "void", "string", "int", "bool", "byte", "char",
 		"long", "short", "double", "float", "decimal", "object", "string?",
 		"switch", "case", "default", "throw", "catch", "foreach", "do",
-		"override", "virtual", "abstract", "sealed", "partial":
+		"override", "virtual", "abstract", "sealed", "partial",
+		// Perl declaration/control keywords (superset is harmless: these are never
+		// taint-carrying variable names). `my`/`our`/`local` are binding keywords;
+		// `sub`/`elsif`/`unless`/`foreach`/`my`/`qw` and friends must never be read
+		// as a variable. `use`/`package`/`require` are already covered above.
+		"my", "our", "local", "sub", "package", "qw", "wantarray":
 		return true
 	}
 	return false
