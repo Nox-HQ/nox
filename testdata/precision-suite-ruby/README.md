@@ -31,12 +31,12 @@ nox bench --precision testdata/precision-suite-ruby --baseline testdata/precisio
 ## What this corpus reveals
 
 As committed, `nox bench --precision testdata/precision-suite-ruby` scores
-**precision 1.00 / recall 0.875 / F1 0.933** (14 TP, 0 FP, 2 FN). Precision is
+**precision 1.00 / recall 0.941 / F1 0.970** (16 TP, 0 FP, 1 FN). Precision is
 perfect — every finding nox emits on Ruby is a true positive, and every clean
-stressor stays clean. Recall is honestly below 1.0: two genuine flows are missed
+stressor stays clean. Recall is honestly below 1.0: one genuine flow is missed
 because the Ruby extractor is a **line/statement recognizer**, not a full parser
-(pure-Go, no CGo, no tree-sitter, by design). Those gaps are annotated in
-`tp_known_fns.rb` so they score as recall, not silence.
+(pure-Go, no CGo, no tree-sitter, by design). That gap is annotated in
+`tp_known_fns.rb` so it scores as recall, not silence.
 
 ### Caught (true positives)
 
@@ -48,7 +48,7 @@ because the Ruby extractor is a **line/statement recognizer**, not a full parser
 | SSRF | TAINT-006 | CWE-918 | `Net::HTTP.get(URI(url))`, `URI.open(url)` |
 | Unsafe deserialization | TAINT-005 | CWE-502 | `Marshal.load`, `YAML.load` (unsafe loader) |
 | Code injection | TAINT-005 | CWE-95 | `eval(...)`, `Object#send(tainted_name, ...)` |
-| XSS | TAINT-003 | CWE-79 | `tainted.html_safe` |
+| XSS | TAINT-003 | CWE-79 | `tainted.html_safe`, `render inline:`/`text:` (interpolated) |
 
 ### Clean (no false positives)
 
@@ -61,33 +61,48 @@ Every `clean_*.rb` sample stays clean, including the SAFE counterpart of each
 - `File.basename` before `File.read`
 - `YAML.safe_load` instead of `YAML.load`
 - `CGI.escapeHTML` before `.html_safe`
+- auto-escaped `render plain:` / `render json:` / `render :template` /
+  `render template:` (vs the unescaped `render inline:` / `text:` that DO fire)
 - placeholder creds, base64 data-URI heredocs, `%w[]` arrays, public checksums,
   a generated-code banner
 
+## Closed gap — `render inline:` template injection (TAINT-003)
+
+Previously an honest FN, now caught (`tp_render_inline.rb`). A tainted value
+interpolated into an **inline ERB template** (`render inline:`) or a raw text
+body (`render text:`) is real XSS/SSTI — Rails renders it WITHOUT the automatic
+output escaping a normal view gives you. The obstacle was that the catalog keys
+sinks by call *name* and a bare `render` sink over-fired on the safe auto-escaped
+renders (`render plain:` / `render json:` / `render :template`).
+
+The fix is a **co-located-keyword gate** in the Ruby recognizer
+(`extract_ruby.go`), analogous to how the Go XSS `w.Write` sink is gated on a
+co-located string literal: `render` is recognized as an XSS sink (via the
+synthetic `render_inline` catalog callee) ONLY when the call carries an `inline:`
+or interpolated `text:` keyword argument in the same statement; the tainted
+arguments are the variables interpolated into that keyword's value. The safe
+forms carry no such keyword, so they synthesize no sink and stay clean (see
+`clean_render.rb`). A constant inline body (`render inline: "<h1>static</h1>"`)
+registers the sink but has no tainted read, so it correctly does not flow.
+
 ## Known gaps (honest false negatives)
 
-Recall is 0.875, not 1.0. The two misses in `tp_known_fns.rb` are real bugs a
+Recall is 0.941, not 1.0. The one miss in `tp_known_fns.rb` is a real bug a
 correct scanner should flag; nox's line recognizer does not, and we record that
 rather than hide it:
 
-1. **`render inline:` template injection (TAINT-003).** A tainted value in an
-   inline ERB template is real XSS/SSTI. The catalog keys sinks by call *name*
-   and cannot distinguish `render inline:` (dangerous) from `render plain:` /
-   `render json:` (auto-escaped, safe). A bare `render` sink over-fired on the
-   safe auto-escaped renders (5 false positives), so it was intentionally
-   dropped — trading one recall gap for zero false positives, the right call for
-   a precision-first tool. Closing this needs keyword-argument awareness
-   (`inline:` vs `plain:`) in the recognizer.
-
-2. **Cross-method flow through an instance variable (TAINT-002).** A source that
+1. **Cross-method flow through an instance variable (TAINT-002).** A source that
    lands in `@cmd` in one action and is read by a sink in another action is a
    real flow, but nox's same-file interprocedural pass tracks **local helper
    calls** via function summaries, not shared object/instance state, so an
-   `@ivar` laundered across two methods is not joined. This is the documented
-   boundary of the intraprocedural + local-summary model (identical to the
-   Python/JS limit), not a Ruby-specific defect.
+   `@ivar` laundered across two methods is not joined. Closing it soundly needs
+   object-scoped ivar taint shared across methods of the same class — a
+   cross-method boundary the intraprocedural + local-summary model does not cross
+   (identical to the Python/JS limit), not a Ruby-specific defect. Forcing it
+   with a text heuristic risks precision (conditional/reassigned ivars, method
+   ordering), so it is left as a documented FN rather than faked.
 
-Both are the "measure → build → re-measure" loop working as intended: the corpus
+This is the "measure → build → re-measure" loop working as intended: the corpus
 names the gaps as numbers so future work on the recognizer can be measured
 against them. **Samples are never edited to fake the score** — the engine is
 built to catch what it honestly can, and the rest is recorded as recall.

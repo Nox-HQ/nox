@@ -130,3 +130,87 @@ end
 		t.Errorf("no User.where call found in %+v", u.stmts)
 	}
 }
+
+// TestExtractRubyRenderInlineSink: `render inline: "...#{x}..."` synthesizes a
+// `render_inline` sink call whose tainted argument is the interpolated variable,
+// so an SSTI/XSS flow is recognized. The safe auto-escaped forms (`render plain:`,
+// `render json:`, `render :template`) must NOT synthesize the sink.
+func TestExtractRubyRenderInlineSink(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		wantSink bool
+		wantRead string
+	}{
+		{
+			name:     "render inline with interpolation",
+			line:     `render inline: "<h1>Hello #{name}</h1>"`,
+			wantSink: true,
+			wantRead: "name",
+		},
+		{
+			name:     "render inline paren form",
+			line:     `render(inline: "<h1>#{name}</h1>")`,
+			wantSink: true,
+			wantRead: "name",
+		},
+		{
+			name:     "render text with interpolation",
+			line:     `render text: "Value: #{val}"`,
+			wantSink: true,
+			wantRead: "val",
+		},
+		{
+			name:     "render plain is safe (no sink)",
+			line:     `render plain: output`,
+			wantSink: false,
+		},
+		{
+			name:     "render json is safe (no sink)",
+			line:     `render json: data`,
+			wantSink: false,
+		},
+		{
+			name:     "render template symbol is safe (no sink)",
+			line:     `render :show`,
+			wantSink: false,
+		},
+		{
+			name:     "render inline without interpolation (constant, no read)",
+			line:     `render inline: "<h1>static</h1>"`,
+			wantSink: true, // sink present but no tainted read → won't flow
+			wantRead: "",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			src := []byte("def show\n  name = params[:name]\n  val = params[:v]\n  output = params[:o]\n  data = params[:d]\n  " + tt.line + "\nend\n")
+			units := extractUnits(lexctx.LangRuby, src)
+			u := findUnit(t, units, "show")
+			var sink stmtDraft
+			for i := range u.stmts {
+				for _, c := range u.stmts[i].calls {
+					if c == renderInlineSink {
+						sink = u.stmts[i]
+					}
+				}
+			}
+			hasSink := sink.line != 0
+			if hasSink != tt.wantSink {
+				t.Fatalf("render_inline sink present = %v, want %v (stmts: %+v)", hasSink, tt.wantSink, u.stmts)
+			}
+			if tt.wantSink && tt.wantRead != "" {
+				found := false
+				for _, r := range sink.reads {
+					if r == tt.wantRead {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("render_inline sink reads = %v, want to include %q", sink.reads, tt.wantRead)
+				}
+			}
+		})
+	}
+}
