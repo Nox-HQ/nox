@@ -96,15 +96,21 @@ func TestSwiftInterpretedEscapedQuote(t *testing.T) {
 	}
 }
 
-// TestSwiftStringInterpolation: `\(expr)` is an interpolation hole. It is kept
-// as STRING conservatively — a match hiding inside an expression hole is never
-// surfaced as a false positive, which is the safe degrade for the classifier.
-// Crucially the `)` of the hole must not be mistaken for the string's close, so
-// the trailing code stays code.
+// TestSwiftStringInterpolation: `\(expr)` is an interpolation hole whose CONTENTS
+// are emitted as CODE — a tainted value spliced via "id=\(userInput)" lives in a
+// real expression the taint engine must see (the dominant SQL/command-injection
+// carrier in Swift). The surrounding literal text stays string, and crucially the
+// `)` of the hole must not be mistaken for the string's close.
 func TestSwiftStringInterpolation(t *testing.T) {
 	src := `let s = "hi \(name) and \(other)" ; let SECRET = 1`
-	if k := kindOfSubstring(t, LangSwift, src, `name`); k != KindString {
-		t.Errorf("interpolation hole is kept as string, got %v", k)
+	if k := kindOfSubstring(t, LangSwift, src, `name`); k != KindCode {
+		t.Errorf("interpolation hole contents should be code, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangSwift, src, `other`); k != KindCode {
+		t.Errorf("second interpolation hole contents should be code, got %v", k)
+	}
+	if k := kindOfSubstring(t, LangSwift, src, `hi `); k != KindString {
+		t.Errorf("literal text between holes should be string, got %v", k)
 	}
 	if k := kindOfSubstring(t, LangSwift, src, `SECRET`); k != KindCode {
 		t.Errorf("code after an interpolated string should be code, got %v", k)
@@ -169,8 +175,8 @@ func TestSwiftRawStringMultiHash(t *testing.T) {
 // paren must not be read as code and the string ends at `"#`.
 func TestSwiftRawStringInterpolation(t *testing.T) {
 	src := `let r = #"hi \#(name) x"# ; let SECRET = 1`
-	if k := kindOfSubstring(t, LangSwift, src, `name`); k != KindString {
-		t.Errorf("raw-string interpolation hole is kept as string, got %v", k)
+	if k := kindOfSubstring(t, LangSwift, src, `name`); k != KindCode {
+		t.Errorf("raw-string interpolation hole contents should be code, got %v", k)
 	}
 	if k := kindOfSubstring(t, LangSwift, src, `SECRET`); k != KindCode {
 		t.Errorf("code after a raw string with interpolation should be code, got %v", k)

@@ -11,27 +11,30 @@ package lexctx
 //     (scanSwiftBlockComment tracks depth).
 //
 //   - Ordinary strings `"..."`: backslash escapes (`\"`, `\\`) and STRING
-//     INTERPOLATION `\(expr)`. The interpolation expression may itself contain
-//     parentheses and nested strings, so the scanner balances `(`…`)` inside the
-//     hole (skipping nested string literals) rather than stopping at the first
-//     `)` — otherwise a `\(f(x))` hole would be mis-terminated. Swift ordinary
-//     strings do not span lines, so a newline defensively ends the scan.
+//     INTERPOLATION `\(expr)`. The literal parts are emitted as STRING and each
+//     `\(...)` interpolation field is emitted as CODE — because a tainted value
+//     spliced via "id=\(userInput)" lives in a real expression the taint engine
+//     must see (this is the dominant SQL/command-injection carrier in Swift, the
+//     analogue of Ruby's `#{...}`). The field scanner balances parentheses and
+//     skips nested strings so a `\(f(x))` hole is not mis-terminated. Swift
+//     ordinary strings do not span lines, so a newline defensively ends the scan.
 //
 //   - Multiline strings `"""..."""`: opened by three double-quotes, closed by the
-//     next `"""`, span many lines, and treat interior single `"` and `//` as
-//     literal. They also honor `\(...)` interpolation and `\` escapes.
+//     next `"""`, span many lines, treat interior single `"` and `//` as literal,
+//     and honor `\(...)` interpolation (emitted as code) and `\` escapes.
 //
 //   - Raw strings `#"..."#`, `##"..."##`, … (N `#`s): NO backslash escapes — a
 //     `\` is a literal byte — terminated only by `"` followed by the SAME number
 //     of `#`s (an interior `"#` with too few hashes stays inside). Raw strings
-//     interpolate with `\#(...)` (one extra `#` per opening hash); the hole is
-//     kept inside the string with balanced parens. A raw string may combine with
-//     the multiline form (`#"""..."""#`), which this scanner also recognizes.
-//     Swift has no character literal (a `Character` is written as a String), so
-//     there is no `'...'` rune/char case.
+//     interpolate with `\#(...)` (one extra `#` per opening hash), whose field is
+//     likewise emitted as code. A raw string may combine with the multiline form
+//     (`#"""..."""#`), which this scanner also recognizes. Swift has no character
+//     literal (a `Character` is written as a String), so there is no `'...'` case.
 //
-// Like the other scanners it emits strictly increasing, contiguous spans into a
-// regionBuilder so the returned regions are gap-free and cover [0, len(content)).
+// The string scanners emit into the regionBuilder directly (like the Ruby/Python
+// f-string scanners) because interpolation splits a string region into
+// string/code sub-runs. All spans are strictly increasing and contiguous so the
+// returned regions are gap-free and cover [0, len(content)).
 func scanSwift(content []byte) []Region {
 	var b regionBuilder
 	i := 0
@@ -50,18 +53,12 @@ func scanSwift(content []byte) []Region {
 			b.emit(i, end, KindComment)
 			i = end
 		case c == '#' && swiftRawStringPrefix(content, i):
-			end := scanSwiftRawString(content, i)
-			b.emit(i, end, KindString)
-			i = end
+			i = scanSwiftRawString(content, i, &b)
 		case c == '"' && i+2 < n && content[i+1] == '"' && content[i+2] == '"':
 			// Multiline string `"""..."""` (ordinary, hash count 0).
-			end := scanSwiftMultiline(content, i+3, 0)
-			b.emit(i, end, KindString)
-			i = end
+			i = scanSwiftMultiline(content, i, 0, &b)
 		case c == '"':
-			end := scanSwiftInterpreted(content, i+1, 0)
-			b.emit(i, end, KindString)
-			i = end
+			i = scanSwiftInterpreted(content, i, 0, &b)
 		default:
 			b.emit(i, i+1, KindCode)
 			i++
@@ -99,10 +96,10 @@ func scanSwiftBlockComment(content []byte, bodyStart int) int {
 }
 
 // swiftRawStringPrefix reports whether the byte at start begins a raw-string
-// prefix `#"` or `##`…`"` — i.e. one or more `#` followed by a `"` (for the
-// single-line form) or by `"""` (for the multiline raw form). It is the
-// disambiguator that stops an ordinary `#` (an attribute/directive marker such
-// as `#if`, `#selector`) from being scanned as a raw string.
+// prefix `#"` or `##`…`"` — i.e. one or more `#` followed by a `"` (single-line)
+// or `"""` (multiline raw). It is the disambiguator that stops an ordinary `#`
+// (an attribute/directive marker such as `#if`, `#selector`) from being scanned
+// as a raw string.
 func swiftRawStringPrefix(content []byte, start int) bool {
 	n := len(content)
 	if start >= n || content[start] != '#' {
@@ -115,14 +112,15 @@ func swiftRawStringPrefix(content []byte, start int) bool {
 	return i < n && content[i] == '"'
 }
 
-// scanSwiftRawString returns the offset just past a raw string literal opening at
-// content[start] (which must satisfy swiftRawStringPrefix). It counts the N `#`s,
-// then dispatches to the multiline raw form when the opening quote run is `"""`,
-// otherwise the single-line raw form. No backslash escapes are processed; `\#(…)`
-// interpolation (one `#` per opening hash) is kept inside the string with
-// balanced parens. Termination is `"` (single-line) or `"""` (multiline)
-// followed by exactly N `#`s.
-func scanSwiftRawString(content []byte, start int) int {
+// scanSwiftRawString classifies a raw string literal opening at content[start]
+// (which must satisfy swiftRawStringPrefix), emitting literal runs as string and
+// each `\#(…)` interpolation field (one `#` per opening hash) as code. It counts
+// the N `#`s, dispatches to the multiline raw form on a `"""` opener, else the
+// single-line raw form. No backslash escapes are processed (a `\` not starting a
+// matching-hash interpolation is literal). Termination is `"` (single-line) or
+// `"""` (multiline) followed by exactly N `#`s. Returns the offset just past the
+// literal (or EOF).
+func scanSwiftRawString(content []byte, start int, b *regionBuilder) int {
 	n := len(content)
 	i := start
 	hashes := 0
@@ -132,90 +130,181 @@ func scanSwiftRawString(content []byte, start int) int {
 	}
 	// content[i] is the opening '"'. A `"""` run opens the multiline raw form.
 	if i+2 < n && content[i] == '"' && content[i+1] == '"' && content[i+2] == '"' {
-		return scanSwiftMultiline(content, i+3, hashes)
+		return scanSwiftMultiline(content, start, hashes, b)
 	}
-	// Single-line raw string: body begins after the single opening quote.
-	i++ // past opening quote
+	// Single-line raw string: the opener run [start, i+1) (hashes + one quote) is
+	// string; the body begins after the opening quote.
+	bodyStart := i + 1
+	b.emit(start, bodyStart, KindString)
+	i = bodyStart
+	runStart := bodyStart
 	for i < n {
-		if content[i] == '"' {
-			// A candidate close: require exactly `hashes` trailing '#'.
-			if swiftHashRun(content, i+1, hashes) {
-				return i + 1 + hashes
-			}
-			i++
+		if content[i] == '"' && swiftHashRun(content, i+1, hashes) {
+			end := i + 1 + hashes
+			b.emit(runStart, end, KindString)
+			return end
+		}
+		if content[i] == '\\' && swiftInterpStart(content, i, hashes) {
+			b.emit(runStart, i, KindString)
+			fieldEnd := swiftEmitInterpolation(content, i, hashes, b)
+			i = fieldEnd
+			runStart = i
 			continue
 		}
-		if content[i] == '\\' && swiftRawInterpStart(content, i, hashes) {
-			// `\#(…)` interpolation hole: skip it (balanced) so its `)` and any
-			// nested `"` are not read as a close.
-			i = skipSwiftInterpolation(content, i+1+hashes)
-			continue
-		}
-		// Raw strings do not span physical lines in single-line form.
-		if content[i] == '\n' {
+		if content[i] == '\n' { // single-line raw string does not span lines
+			b.emit(runStart, i, KindString)
 			return i
 		}
 		i++
 	}
+	b.emit(runStart, n, KindString)
 	return n
 }
 
-// scanSwiftInterpreted returns the offset just past an ordinary interpreted
-// string literal whose body begins at bodyStart (the byte after the opening
-// `"`). Backslash escapes are honored, `\(…)` interpolation holes are skipped
-// with balanced parens, and — because a non-multiline Swift string may not span
-// a line — a newline defensively ends the scan so a runaway quote cannot swallow
-// real code. hashes is 0 for ordinary strings (kept for signature symmetry with
-// the raw/multiline forms).
-func scanSwiftInterpreted(content []byte, bodyStart, hashes int) int {
+// scanSwiftInterpreted classifies an ordinary interpreted string literal opening
+// at content[start] (content[start] is the opening `"`), emitting literal runs as
+// string and each `\(…)` interpolation field as code. Backslash escapes are
+// honored; a newline defensively ends the scan (a non-multiline Swift string may
+// not span a line) so a runaway quote cannot swallow real code. hashes is 0 for
+// ordinary strings. Returns the offset just past the literal (or EOF).
+func scanSwiftInterpreted(content []byte, start, hashes int, b *regionBuilder) int {
 	n := len(content)
+	bodyStart := start + 1
+	b.emit(start, bodyStart, KindString)
 	i := bodyStart
+	runStart := bodyStart
 	for i < n {
-		switch content[i] {
-		case '\\':
+		c := content[i]
+		if c == '\\' {
 			if swiftInterpStart(content, i, hashes) {
-				i = skipSwiftInterpolation(content, i+1+hashes)
+				b.emit(runStart, i, KindString)
+				fieldEnd := swiftEmitInterpolation(content, i, hashes, b)
+				i = fieldEnd
+				runStart = i
 				continue
 			}
 			i += 2 // ordinary escape
+			continue
+		}
+		if c == '"' {
+			b.emit(runStart, i+1, KindString)
+			return i + 1
+		}
+		if c == '\n' {
+			b.emit(runStart, i, KindString)
+			return i
+		}
+		i++
+	}
+	b.emit(runStart, n, KindString)
+	return n
+}
+
+// scanSwiftMultiline classifies a multiline string opening at content[start]. For
+// the ordinary form (hashes 0) content[start] is the first of the opening `"""`;
+// for the raw multiline form (hashes > 0) content[start] is the first `#` and the
+// opener is `#…"""`. It is closed by `"""` followed by exactly `hashes` trailing
+// `#`s, spans many lines, treats interior single/double `"` and `//` as literal,
+// and emits `\(…)` interpolation fields as code (backslash escapes honored for
+// the ordinary form; a `\` is literal for the raw form except a matching-hash
+// interpolation). Returns the offset just past the literal (or EOF).
+func scanSwiftMultiline(content []byte, start, hashes int, b *regionBuilder) int {
+	n := len(content)
+	// The opener is `#…` (hashes) + `"""`; emit it as string and set the body.
+	bodyStart := start + hashes + 3
+	if bodyStart > n {
+		bodyStart = n
+	}
+	b.emit(start, bodyStart, KindString)
+	i := bodyStart
+	runStart := bodyStart
+	for i < n {
+		if content[i] == '"' && i+2 < n && content[i+1] == '"' && content[i+2] == '"' &&
+			swiftHashRun(content, i+3, hashes) {
+			end := i + 3 + hashes
+			b.emit(runStart, end, KindString)
+			return end
+		}
+		if content[i] == '\\' {
+			if swiftInterpStart(content, i, hashes) {
+				b.emit(runStart, i, KindString)
+				fieldEnd := swiftEmitInterpolation(content, i, hashes, b)
+				i = fieldEnd
+				runStart = i
+				continue
+			}
+			if hashes == 0 {
+				i += 2 // ordinary escape consumes the next byte
+				continue
+			}
+		}
+		i++
+	}
+	b.emit(runStart, n, KindString)
+	return n
+}
+
+// swiftEmitInterpolation emits a `\(…)` (or `\#…(…)`) interpolation field opening
+// at content[start] (content[start] is the `\`) as a single CODE region and
+// returns the offset just past the closing `)`. It balances parentheses inside
+// the hole and skips nested string literals so a `)` inside `\(f(g(x)))` or an
+// inner string does not close the field early. An unterminated field runs to EOF.
+func swiftEmitInterpolation(content []byte, start, hashes int, b *regionBuilder) int {
+	// The `(` sits after `\` + `hashes` `#`s.
+	open := start + 1 + hashes
+	end := scanSwiftInterpField(content, open)
+	b.emit(start, end, KindCode)
+	return end
+}
+
+// scanSwiftInterpField returns the offset just past a `(...)` interpolation field
+// whose opening `(` is at content[open]. It balances parentheses and skips nested
+// string literals (so their quotes/parens are not miscounted). An unterminated
+// field runs to EOF.
+func scanSwiftInterpField(content []byte, open int) int {
+	n := len(content)
+	i := open
+	if i >= n || content[i] != '(' {
+		return i
+	}
+	depth := 0
+	for i < n {
+		switch content[i] {
+		case '(':
+			depth++
+			i++
+		case ')':
+			depth--
+			i++
+			if depth == 0 {
+				return i
+			}
+		case '"':
+			i = skipSwiftNestedString(content, i)
+		default:
+			i++
+		}
+	}
+	return n
+}
+
+// skipSwiftNestedString returns the offset just past a nested double-quoted
+// string inside an interpolation field, honoring backslash escapes and ending at
+// EOF or a newline. Nested interpolations inside it are not separately classified
+// (they stay inside the outer code field, which is harmless — the whole field is
+// already code).
+func skipSwiftNestedString(content []byte, start int) int {
+	n := len(content)
+	i := start + 1
+	for i < n {
+		switch content[i] {
+		case '\\':
+			i += 2
 			continue
 		case '"':
 			return i + 1
 		case '\n':
 			return i
-		}
-		i++
-	}
-	return n
-}
-
-// scanSwiftMultiline returns the offset just past a multiline string whose body
-// begins at bodyStart (just after the opening `"""`). It is closed by the next
-// `"""` followed by exactly `hashes` trailing `#`s (0 for the ordinary multiline
-// form). Interior single/double `"`, `//`, and — for the ordinary form —
-// backslash escapes and `\(…)` interpolation are all handled; the literal spans
-// many lines. For the raw multiline form (hashes > 0) backslashes are literal
-// except a `\###(…)`-style interpolation with the matching hash count.
-func scanSwiftMultiline(content []byte, bodyStart, hashes int) int {
-	n := len(content)
-	i := bodyStart
-	for i < n {
-		if content[i] == '"' && i+2 < n && content[i+1] == '"' && content[i+2] == '"' {
-			if swiftHashRun(content, i+3, hashes) {
-				return i + 3 + hashes
-			}
-		}
-		if content[i] == '\\' {
-			if swiftInterpStart(content, i, hashes) {
-				i = skipSwiftInterpolation(content, i+1+hashes)
-				continue
-			}
-			// A raw multiline string (hashes > 0) treats a lone `\` as literal;
-			// an ordinary multiline string consumes the escaped byte.
-			if hashes == 0 {
-				i += 2
-				continue
-			}
 		}
 		i++
 	}
@@ -240,54 +329,9 @@ func swiftInterpStart(content []byte, i, hashes int) bool {
 	return j < n && content[j] == '('
 }
 
-// swiftRawInterpStart is swiftInterpStart specialized for the raw single-line
-// scanner's readability; it reports a `\#…(` interpolation with `hashes` hashes.
-func swiftRawInterpStart(content []byte, i, hashes int) bool {
-	return swiftInterpStart(content, i, hashes)
-}
-
-// skipSwiftInterpolation returns the offset just past a `\(...)` interpolation
-// hole whose OPENING `(` is at content[open]. It balances parentheses so a
-// nested call `f(g(x))` does not end the hole early, and skips nested string
-// literals inside the hole so a `)` inside an inner string is not counted.
-// Everything inside the hole remains classified as STRING by the caller (the
-// conservative, safe-degrade choice for the classifier). An unterminated hole
-// runs to EOF.
-func skipSwiftInterpolation(content []byte, open int) int {
-	n := len(content)
-	i := open
-	if i >= n || content[i] != '(' {
-		return i
-	}
-	depth := 0
-	for i < n {
-		switch content[i] {
-		case '(':
-			depth++
-			i++
-		case ')':
-			depth--
-			i++
-			if depth == 0 {
-				return i
-			}
-		case '"':
-			// Skip a nested string literal inside the interpolation expression so
-			// its parens/quotes are not miscounted. Multiline nested strings are
-			// rare inside a hole; the single-line skip is sufficient and safe.
-			i = scanSwiftInterpreted(content, i+1, 0)
-		default:
-			i++
-		}
-	}
-	return n
-}
-
-// swiftHashRun reports whether content has exactly `hashes` `#` bytes starting at
-// start (used to confirm a raw string's closing hash count matches its opener).
-// A run of MORE than `hashes` still matches — only the required count must be
-// present — mirroring Swift, where trailing `#`s beyond the opener's count are
-// outside the literal.
+// swiftHashRun reports whether content has at least `hashes` `#` bytes starting
+// at start (used to confirm a raw string's closing hash count matches its
+// opener). hashes == 0 always matches.
 func swiftHashRun(content []byte, start, hashes int) bool {
 	n := len(content)
 	if hashes == 0 {

@@ -159,6 +159,7 @@ func swiftFuncHeader(trimmed string) (name string, params []string, ok bool) {
 //   - `_ name: T`   — no external label; internal binding `name`.
 //   - `to name: T`  — external label `to`; internal binding `name`.
 //   - `name: T`     — label and binding are both `name`.
+//
 // The binding is therefore the LAST identifier of the label/name run before the
 // `:`. `inout`/`isolated` markers and a `= default` are dropped. A `variadic`
 // `Type...` and complex patterns degrade safely (a missed parameter only weakens
@@ -296,8 +297,7 @@ func normalizeSwiftText(s string) string {
 		if k >= n || b[k] != ':' {
 			continue
 		}
-		label := string(b[labelStart:j])
-		if !swiftDiscriminatingLabels[label] {
+		if !swiftDiscriminatingLabels[string(b[labelStart:j])] {
 			continue
 		}
 		// Rewrite: `(` -> `.` at i, and the label's `:` -> `(` at k.

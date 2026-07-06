@@ -188,6 +188,17 @@ jobs:
         # be silently hidden and no new Kotlin false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-kotlin --baseline testdata/precision-suite-kotlin/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — swift
+        # Same honest ratchet, scoped to the Swift taint suite (lexctx scan_swift
+        # + engine extract_swift + the catalog `swift` block). Swift's dominant
+        # injection carrier is string interpolation "\(userInput)", which lexctx
+        # classifies as CODE; the extractor's label-fold keeps a plain String(x)
+        # conversion from colliding with the file-read sink. Fails on any
+        # regression vs the committed Swift snapshot (including the one documented
+        # property-assignment false negative) and holds the per-rule precision
+        # floor at 0.90 so Swift taint precision cannot silently rot.
+        run: ./nox bench --precision testdata/precision-suite-swift --baseline testdata/precision-suite-swift/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently

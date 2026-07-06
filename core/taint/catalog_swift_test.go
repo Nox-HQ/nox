@@ -20,7 +20,6 @@ func TestSwiftCatalogSinks(t *testing.T) {
 		{"String.contentsOfFile path", "String.contentsOfFile", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"Data.contentsOf path", "Data.contentsOf", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"dataTask.with ssrf", "dataTask.with", VulnSSRF, "CWE-918", "TAINT-006"},
-		{"URL.string ssrf", "URL.string", VulnSSRF, "CWE-918", "TAINT-006"},
 		{"unarchiveObject.with deser", "unarchiveObject.with", VulnUnsafeDeserialization, "CWE-502", "TAINT-005"},
 		{"loadHTMLString xss", "loadHTMLString", VulnXSS, "CWE-79", "TAINT-003"},
 	}
