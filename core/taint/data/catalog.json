@@ -1986,6 +1986,46 @@
         {"call": "getName", "neutralizes": ["path_traversal"], "note": "FilenameUtils.getName / File.getName strips path components"},
         {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
       ]
+    },
+    "shell": {
+      "sources": [
+        {"call": "$1", "kind": "argv"},
+        {"call": "$2", "kind": "argv"},
+        {"call": "$3", "kind": "argv"},
+        {"call": "$4", "kind": "argv"},
+        {"call": "$5", "kind": "argv"},
+        {"call": "$6", "kind": "argv"},
+        {"call": "$7", "kind": "argv"},
+        {"call": "$8", "kind": "argv"},
+        {"call": "$9", "kind": "argv"},
+        {"call": "$@", "kind": "argv"},
+        {"call": "$*", "kind": "argv"},
+        {"call": "$#", "kind": "argv"},
+        {"call": "read", "kind": "stdin", "note": "the variable read populates carries untrusted stdin"},
+        {"call": "REPLY", "kind": "stdin", "note": "bare `read` populates $REPLY"},
+        {"call": "QUERY_STRING", "kind": "http_query", "note": "CGI query string environment variable"},
+        {"call": "CONTENT_LENGTH", "kind": "http_body"},
+        {"call": "PATH_INFO", "kind": "http_query"},
+        {"call": "REQUEST_URI", "kind": "http_query"},
+        {"call": "HTTP_USER_AGENT", "kind": "http_header"},
+        {"call": "HTTP_COOKIE", "kind": "http_header"},
+        {"call": "HTTP_REFERER", "kind": "http_header"},
+        {"call": "REMOTE_ADDR", "kind": "http_header"}
+      ],
+      "sinks": [
+        {"call": "eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "eval re-parses its argument as shell code; even a quoted \"$user\" is executed, so quoting never neutralizes eval"},
+        {"call": "source", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "sourcing a tainted path executes an attacker-chosen script; quoting does not stop traversal"},
+        {"call": ".", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "the `.` builtin is `source`; a tainted path loads an attacker script"},
+        {"call": "bash", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "bash -c \"$user\" runs the tainted string as a command line"},
+        {"call": "sh", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "sh -c \"$user\" runs the tainted string as a command line"},
+        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "exec of a tainted command string"},
+        {"call": "curl", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "curl of a tainted URL enables SSRF regardless of quoting"},
+        {"call": "wget", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "wget of a tainted URL enables SSRF regardless of quoting"}
+      ],
+      "sanitizers": [
+        {"call": "printf", "neutralizes": ["command_injection", "code_injection"], "note": "printf %q quotes a value safely for shell reuse"},
+        {"call": "basename", "neutralizes": ["path_traversal"], "note": "basename strips directory components"}
+      ]
     }
   }
 }

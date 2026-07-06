@@ -624,8 +624,16 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// `printf("%s", user)`, which is SAFE. For printf the format is the first
 		// argument, so danger requires the taint to be in arg 0. A fixed format
 		// literal (arg 0 is a string literal, blanked in the code view) leaves
-		// FirstArgTainted false and is correctly suppressed.
+		// FirstArgTainted false and is correctly suppressed. (Shell uses `printf`
+		// as a %q SANITIZER, not a sink, so it never resolves here for shell.)
 		return info.FirstArgTainted
+	case "sh", "bash":
+		// A shell interpreter is a command-injection sink ONLY in the
+		// `sh -c "$user"` / `bash -c "$user"` shape, where a tainted string is
+		// executed as a command line. The extractor flags `-c` via ShellTrue. A
+		// bare `bash script.sh` (running a file) carries no `-c` and is NOT a
+		// command-injection sink, so quoted/validated invocations do not FP.
+		return info.ShellTrue
 	default:
 		return true
 	}

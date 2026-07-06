@@ -143,6 +143,16 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
 		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangShell:
+		// Shell is command-oriented and paren-less. Statements are newline- or
+		// `;`-terminated; `{}`/`()` delimit function bodies (not continuations), so
+		// braces are treated as blocks (like Ruby). A dedicated recognizer handles
+		// shell's `var=value` assignments and space-separated command calls — the
+		// shared paren/comma recognizer does not fit shell syntax. See
+		// extract_shell.go for the honest limits (recall is the lowest of any
+		// language: word-splitting and dynamic constructs a flat recognizer cannot
+		// follow).
+		return extractShell(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
