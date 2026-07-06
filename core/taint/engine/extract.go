@@ -89,6 +89,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// recognizer: nox is itself Go, so the pure-Go stdlib parser is free,
 		// precise, and deterministic. See extract_go.go / docs/design/go-taint.md.
 		return extractGo(content)
+	case lexctx.LangJava:
+		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
+		// brace-delimited and `;`-terminated like JS, so it shares the
+		// logicalLines/splitSemicolons segmentation. See extract_java.go.
+		return extractJava(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

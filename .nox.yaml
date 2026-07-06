@@ -9,6 +9,7 @@ scan:
     # scans this dir explicitly; the default self-scan must not flag them.
     - "testdata/precision-corpus/"
     - "testdata/precision-suite/"
+    - "testdata/precision-suite-java/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"

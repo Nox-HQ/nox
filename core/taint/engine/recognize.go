@@ -10,6 +10,7 @@ type langKind int
 const (
 	langPython langKind = iota
 	langJavaScript
+	langJava
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -107,6 +108,12 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// JS declaration keywords.
 			if lang == langJavaScript {
 				left = stripDeclKeyword(left)
+			}
+			// Java variable declarations put a type before the name
+			// (`String user = ...`, `final int n = ...`, `Map<String,String> m = ...`).
+			// Strip the leading type/modifiers so the bare declared name is the LHS.
+			if lang == langJava {
+				left = stripJavaDeclType(left)
 			}
 			if isSimpleIdent(left) {
 				return left, right
