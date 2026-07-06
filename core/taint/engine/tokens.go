@@ -92,7 +92,13 @@ func isKeyword(s string) bool {
 		"late", "factory", "extends", "implements", "mixin",
 		"deferred", "covariant", "rethrow",
 		"String", "List", "Map", "Set", "Future", "Stream", "Object",
-		"Function", "Never", "Uri":
+		"Function", "Never", "Uri",
+		// Elixir keywords/macros that appear as bare tokens in headers and blocks.
+		// `def`/`fn`/`case`/`do`/`end`/`nil`/`true`/`false`/`for`/`with`/`import`/
+		// `use`/`raise` are already covered above; add the rest.
+		"defp", "defmodule", "defmacro", "defmacrop", "defstruct", "defprotocol",
+		"defimpl", "cond", "receive", "after", "quote",
+		"unquote", "alias", "require", "defdelegate", "defguard":
 		return true
 	}
 	return false

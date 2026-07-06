@@ -79,6 +79,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanObjC(content)
 	case LangLua:
 		return scanLua(content)
+	case LangElixir:
+		return scanElixir(content)
 	case LangDart:
 		return scanDart(content)
 	default:

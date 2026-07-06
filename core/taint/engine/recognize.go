@@ -23,6 +23,7 @@ const (
 	langPowerShell
 	langSwift
 	langLua
+	langElixir
 	langDart
 )
 

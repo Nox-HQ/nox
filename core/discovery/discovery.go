@@ -150,6 +150,10 @@ var sourceExtensions = map[string]bool{
 	// embedded config.
 	".lua":  true,
 	".dart": true,
+	// Elixir source (.ex) and script (.exs) files. One taint module (lexctx
+	// scan_elixir + engine extract_elixir + the catalog `elixir` block).
+	".ex":  true,
+	".exs": true,
 }
 
 // configExtensions maps file extensions to the Config artifact type.

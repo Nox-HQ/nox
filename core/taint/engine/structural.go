@@ -602,6 +602,11 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// bind argument (2nd+ positional), not interpolated into the SQL string
 		// (1st positional). A bare `do`/`prepare` chain reduces to these suffixes.
 		"dbh.do", "dbh.prepare", "dbh.selectrow_array",
+		// Elixir Ecto raw SQL: `Repo.query("SELECT ... $1", [id])` passes the
+		// tainted value as a bind parameter (2nd positional) instead of
+		// interpolating it into the SQL string (1st positional). Safe only when
+		// there is a 2nd+ positional arg AND the taint is not in the SQL string.
+		"Repo.query", "Repo.query!",
 		// Dart sqflite: `db.rawQuery("... ?", [id])` / `db.execute("... ?", [id])`
 		// pass the tainted value as the arguments list (2nd positional) with a `?`
 		// placeholder in the SQL string (1st positional) — the safe parameterized

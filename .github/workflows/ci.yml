@@ -253,6 +253,20 @@ jobs:
         # positive can creep in and no recall regression can be silently hidden.
         run: ./nox bench --precision testdata/precision-suite-lua --baseline testdata/precision-suite-lua/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — elixir
+        # Same honest ratchet, scoped to the Elixir taint suite (lexctx
+        # scan_elixir + engine extract_elixir + the catalog `elixir` block).
+        # Elixir recall is intentionally below 1.0 — its two dominant dataflow
+        # idioms, the pipe operator `|>` and pattern matching, are more than a
+        # flat per-line recognizer can follow, so the suite carries two
+        # documented honest false negatives (a multi-stage pipe and a
+        # destructuring pattern match, see testdata/precision-suite-elixir/
+        # README.md). This gate therefore defends PRECISION (>= 0.90) — validated
+        # and parameterized code must not FP — and pins the committed baseline so
+        # the known FNs cannot be silently hidden and no new Elixir false positive
+        # can creep in.
+        run: ./nox bench --precision testdata/precision-suite-elixir --baseline testdata/precision-suite-elixir/baseline.json --min-precision 0.90
+
       - name: SAST precision gate — dart
         # Same honest ratchet, scoped to the Dart taint suite (lexctx scan_dart +
         # engine extract_dart + the catalog `dart` block). Dart's dominant injection

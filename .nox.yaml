@@ -23,6 +23,7 @@ scan:
     - "testdata/precision-suite-swift/"
     - "testdata/precision-suite-objc/"
     - "testdata/precision-suite-lua/"
+    - "testdata/precision-suite-elixir/"
     - "testdata/precision-suite-dart/"
     - ".relicta/"
     - ".cover/"
