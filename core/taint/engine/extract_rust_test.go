@@ -174,6 +174,112 @@ fn f(url: String) {
 	}
 }
 
+// extractorSeedFor returns the synthetic source-seed statement the extractor
+// emits for a web-extractor parameter binding `name` (assigns == name and a
+// catalog-source call), or nil if none was emitted. The seed lets the engine
+// treat the parameter as tainted-on-entry.
+func extractorSeedFor(u unitDraft, name string) *stmtDraft {
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name && len(u.stmts[i].calls) > 0 {
+			return &u.stmts[i]
+		}
+	}
+	return nil
+}
+
+// TestExtractRustExtractorParamActix: an actix handler whose parameter type is a
+// `web::Query<_>` extractor seeds the binding as a taint source. The synthetic
+// seed statement assigns the binding and carries a catalog source call
+// (normalized `web.Query`).
+func TestExtractRustExtractorParamActix(t *testing.T) {
+	src := []byte(`
+async fn run(query: web::Query<Params>) {
+    let _ = query.cmd;
+}
+`)
+	units := extractUnits(lexctx.LangRust, src)
+	u := findUnit(t, units, "run")
+	if len(u.params) != 1 || u.params[0] != "query" {
+		t.Fatalf("params = %v, want [query]", u.params)
+	}
+	seed := extractorSeedFor(u, "query")
+	if seed == nil {
+		t.Fatalf("no extractor seed statement for `query` in %+v", u.stmts)
+	}
+	if seed.calls[0] != "web.Query" {
+		t.Errorf("seed call = %q, want web.Query", seed.calls[0])
+	}
+}
+
+// TestExtractRustExtractorParamAxumDestructured: an axum handler whose parameter
+// is the destructured `Query(params): Query<Params>` form seeds the INNER
+// binding `params` (the value actually used), not the type name.
+func TestExtractRustExtractorParamAxumDestructured(t *testing.T) {
+	src := []byte(`
+async fn run(Query(params): Query<Params>) {
+    let _ = params.cmd;
+}
+`)
+	units := extractUnits(lexctx.LangRust, src)
+	u := findUnit(t, units, "run")
+	seed := extractorSeedFor(u, "params")
+	if seed == nil {
+		t.Fatalf("no extractor seed statement for `params` in %+v (params=%v)", u.stmts, u.params)
+	}
+	if seed.calls[0] != "Query" {
+		t.Errorf("seed call = %q, want Query", seed.calls[0])
+	}
+}
+
+// TestExtractRustExtractorParamForms covers the other actix/axum extractor
+// wrappers (Form/Json/Path) in both the named and destructured shapes.
+func TestExtractRustExtractorParamForms(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		binding  string
+		wantCall string
+	}{
+		{"actix web::Form", "async fn h(form: web::Form<P>) {}", "form", "web.Form"},
+		{"actix web::Json", "async fn h(body: web::Json<P>) {}", "body", "web.Json"},
+		{"actix web::Path", "async fn h(p: web::Path<String>) {}", "p", "web.Path"},
+		{"axum Json destructured", "async fn h(Json(payload): Json<P>) {}", "payload", "Json"},
+		{"axum Path destructured", "async fn h(Path(id): Path<String>) {}", "id", "Path"},
+		{"axum Form named", "async fn h(form: Form<P>) {}", "form", "Form"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			units := extractUnits(lexctx.LangRust, []byte("\n"+tc.src+"\n"))
+			u := findUnit(t, units, "h")
+			seed := extractorSeedFor(u, tc.binding)
+			if seed == nil {
+				t.Fatalf("no extractor seed for %q in %+v", tc.binding, u.stmts)
+			}
+			if seed.calls[0] != tc.wantCall {
+				t.Errorf("seed call = %q, want %q", seed.calls[0], tc.wantCall)
+			}
+		})
+	}
+}
+
+// TestExtractRustNonExtractorParamNoSeed is the precision guardrail: a normal
+// typed parameter (`id: i64`, `cfg: &Config`) must NOT be seeded as a source, or
+// nox would false-positive on every function. No seed statement is emitted.
+func TestExtractRustNonExtractorParamNoSeed(t *testing.T) {
+	src := []byte(`
+async fn run(id: i64, cfg: &Config, name: String) {
+    let _ = id;
+}
+`)
+	units := extractUnits(lexctx.LangRust, src)
+	u := findUnit(t, units, "run")
+	for _, p := range []string{"id", "cfg", "name"} {
+		if seed := extractorSeedFor(u, p); seed != nil {
+			t.Errorf("param %q was seeded as a source (%+v); non-extractor params must not taint", p, seed)
+		}
+	}
+}
+
 // firstAssign is a tiny test helper returning the first statement's assigns
 // (or "" when there are none) for clearer failure messages.
 func firstAssign(u unitDraft) string {

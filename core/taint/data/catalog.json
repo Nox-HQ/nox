@@ -1726,7 +1726,7 @@
       ]
     },
     "rust": {
-      "comment": "Rust source/sink/sanitizer model. Calls are matched in the extractor's NORMALIZED dotted form: the Rust line recognizer rewrites the `::` path separator to `.` and drops the `!` on macro invocations, so `std::env::var` is keyed `env.var`, `Command::new` is `Command.new`, and `sqlx::query!` is `sqlx.query`. Method calls whose receiver varies (`.arg`/`.args` on a Command builder, `.bind` on a query) are matched on the bare method suffix via the engine's suffixKeys fallback. Rust recognition is COARSER than Python/JS/Go (no real parser — only Go gets go/ast): ownership/moves, Result/`?` unwrapping, iterator chains, and macro expansion are invisible to the recognizer, so Rust recall is expected to be the lowest of the supported languages. See testdata/precision-suite-rust/README.md for the measured gaps.",
+      "comment": "Rust source/sink/sanitizer model. Calls are matched in the extractor's NORMALIZED dotted form: the Rust line recognizer rewrites the `::` path separator to `.` and drops the `!` on macro invocations, so `std::env::var` is keyed `env.var`, `Command::new` is `Command.new`, and `sqlx::query!` is `sqlx.query`. Method calls whose receiver varies (`.arg`/`.args` on a Command builder, `.bind` on a query) are matched on the bare method suffix via the engine's suffixKeys fallback. Rust recognition is COARSER than Python/JS/Go (no real parser — only Go gets go/ast): ownership/moves, Result/`?` unwrapping, iterator chains, and macro expansion are invisible to the recognizer, so Rust recall is expected to be the lowest of the supported languages. See testdata/precision-suite-rust/README.md for the measured gaps. The web-extractor sources (`web.Query`/`web.Form`/`web.Json`/`web.Path` for actix, bare `Query`/`Form`/`Json`/`Path` for axum) are matched not only as constructor calls but also as PARAMETER TYPES: extract_rust.go seeds a function parameter whose type is one of these extractors as tainted-on-entry (via a synthetic `binding = <source>()` statement), because a `web::Query<Params>` handler argument is untrusted input even though it never appears as a source call.",
       "sources": [
         {"call": "env.args", "kind": "argv"},
         {"call": "std.env.args", "kind": "argv"},
@@ -1735,8 +1735,11 @@
         {"call": "web.Query", "kind": "http_query"},
         {"call": "web.Path", "kind": "http_query"},
         {"call": "web.Form", "kind": "http_body"},
+        {"call": "web.Json", "kind": "http_body"},
         {"call": "Query", "kind": "http_query"},
         {"call": "Path", "kind": "http_query"},
+        {"call": "Form", "kind": "http_body"},
+        {"call": "Json", "kind": "http_body"},
         {"call": "req.body", "kind": "http_body"},
         {"call": "request.body", "kind": "http_body"},
         {"call": "body.text", "kind": "http_body"},
