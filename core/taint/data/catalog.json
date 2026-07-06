@@ -4517,11 +4517,11 @@
           "note": "File.open of a tainted path enables directory traversal"
         },
         {
-          "call": "File.stream!",
+          "call": "File.stream",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
-          "note": "File.stream! of a tainted path enables directory traversal"
+          "note": "File.stream! of a tainted path enables directory traversal (bang normalized to File.stream)"
         },
         {
           "call": "HTTPoison.get",

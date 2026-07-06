@@ -15,7 +15,7 @@ package lexctx
 //     value spliced via "id=#{conn.params}" lives in a real expression).
 //   - single-quoted charlists `'...'` — same escape/interpolation rules as double
 //     quotes (Elixir charlists interpolate); the body is string, `#{}` is code.
-//   - triple-quoted heredocs `"""..."""` and `'''...'''` — the body from the line
+//   - triple-quoted heredocs `"""..."""` and `”'...”'` — the body from the line
 //     after the opening delimiter to the closing delimiter line is string;
 //     `#{}` interpolation inside is code (heredocs interpolate like their
 //     single-line counterpart unless the sigil form suppresses it).
@@ -151,7 +151,7 @@ func scanElixirInterpolated(content []byte, start int, closeByte byte, interp bo
 }
 
 // scanElixirHeredoc classifies a triple-quoted heredoc opening at start with
-// quote byte q (`"` for `"""`, `'` for `'''`). The opener line (the `"""` and any
+// quote byte q (`"` for `"""`, `'` for `”'`). The opener line (the `"""` and any
 // trailing code up to the newline) is emitted as code; the body — from the next
 // line to the closing `"""` line — is string, with `#{}` interpolation fields
 // emitted as code; the closing delimiter line is code. An unterminated heredoc
@@ -273,7 +273,7 @@ func isElixirSigilStart(content []byte, i int) bool {
 		return false
 	}
 	c := content[j]
-	if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+	if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
 		return false
 	}
 	// Elixir sigil names are a single letter (custom multi-letter sigils exist in

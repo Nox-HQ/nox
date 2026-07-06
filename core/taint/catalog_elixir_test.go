@@ -26,7 +26,7 @@ func TestElixirCatalogSinks(t *testing.T) {
 		{"fragment sqli", "fragment", VulnSQLInjection, "CWE-89", "TAINT-001"},
 		{"File.read path", "File.read", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"File.open path", "File.open", VulnPathTraversal, "CWE-22", "TAINT-004"},
-		{"File.stream! path", "File.stream!", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"File.stream path (bang normalized)", "File.stream", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"HTTPoison.get ssrf", "HTTPoison.get", VulnSSRF, "CWE-918", "TAINT-006"},
 		{"httpc.request ssrf", "httpc.request", VulnSSRF, "CWE-918", "TAINT-006"},
 		{"Finch.build ssrf", "Finch.build", VulnSSRF, "CWE-918", "TAINT-006"},

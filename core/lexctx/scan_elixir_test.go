@@ -115,7 +115,7 @@ func TestElixirHeredoc(t *testing.T) {
 	}
 }
 
-// TestElixirCharlistHeredoc: a `'''...'''` charlist heredoc body is string.
+// TestElixirCharlistHeredoc: a `”'...”'` charlist heredoc body is string.
 func TestElixirCharlistHeredoc(t *testing.T) {
 	src := "doc = '''\nBLOB line SECRET\n'''\nafter = 1"
 	if k := kindOfSubstring(t, LangElixir, src, `BLOB line SECRET`); k != KindString {

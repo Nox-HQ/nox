@@ -269,9 +269,47 @@ func isElixirStructuralLine(trimmed string) bool {
 func shapeElixirLine(ll logicalLine) logicalLine {
 	code := stripElixirErlangColon(ll.code)
 	raw := stripElixirErlangColon(ll.raw)
+	code = stripElixirBangCall(code)
+	raw = stripElixirBangCall(raw)
 	code, raw = desugarElixirPipe(code, raw)
 	code, raw = addElixirParenlessCallParens(code, raw)
 	return logicalLine{line: ll.line, code: code, raw: raw}
+}
+
+// stripElixirBangCall blanks a `!` or `?` that suffixes a CALL name — a `!`/`?`
+// that immediately precedes a `(` (or a `(` after intervening spaces) — to a
+// space, so the shared call recognizer (which stops an identifier at `!`/`?`)
+// sees the bare `File.stream` / `Repo.query` chain and resolves it against the
+// catalog. Elixir's bang (`File.read!`) and question (`String.valid?`) methods
+// are a naming convention, not a distinct dangerous operation, so the catalog
+// keys the base name and both forms resolve to it. Width is preserved (one byte
+// becomes one space), so the code and raw views stay aligned. A standalone `!x`
+// (boolean not) is untouched because it is not followed by `(` right after the
+// operator's operand — only a `name!(` / `name?(` shape is rewritten.
+func stripElixirBangCall(s string) string {
+	if !strings.ContainsAny(s, "!?") {
+		return s
+	}
+	b := []byte(s)
+	for i := 0; i < len(b); i++ {
+		if b[i] != '!' && b[i] != '?' {
+			continue
+		}
+		// The byte before must be an identifier byte (the method name), so a bare
+		// `!expr` (not) or a standalone `?c` char is not touched.
+		if i == 0 || !isIdentPart(b[i-1]) {
+			continue
+		}
+		// The next non-space byte must be `(` (a call).
+		j := i + 1
+		for j < len(b) && (b[j] == ' ' || b[j] == '\t') {
+			j++
+		}
+		if j < len(b) && b[j] == '(' {
+			b[i] = ' '
+		}
+	}
+	return string(b)
 }
 
 // stripElixirErlangColon rewrites an Erlang-module atom chain `:mod.fun` to
@@ -325,7 +363,7 @@ func stripElixirErlangColon(s string) string {
 // identically so they stay aligned; if the rewrite would break alignment it is
 // skipped (returning the inputs unchanged) so the recognizer never sees a
 // mismatched pair.
-func desugarElixirPipe(code, raw string) (string, string) {
+func desugarElixirPipe(code, raw string) (newCode, newRaw string) {
 	pipe := elixirTopLevelPipe(code)
 	if pipe < 0 {
 		return code, raw
@@ -335,10 +373,11 @@ func desugarElixirPipe(code, raw string) (string, string) {
 	rhs := code[rhsStart:]
 	// The RHS must be a call `callee(args)` or a paren-less callee. Locate the
 	// callee head and its argument list.
-	newCode, ok := rewritePipeStage(lhs, rhs)
+	rewritten, ok := rewritePipeStage(lhs, rhs)
 	if !ok {
 		return code, raw
 	}
+	newCode = rewritten
 	// Apply the SAME structural rewrite to the raw view by reconstructing it from
 	// the raw halves, so both views carry the piped value identically. When raw is
 	// not aligned to code we fall back to the code rewrite for both (argument
@@ -370,18 +409,18 @@ func rewritePipeStage(lhs, rhs string) (string, bool) {
 	if strings.HasPrefix(afterTrim, "(") {
 		// Parenthesized call: insert `lhs, ` (or just `lhs`) as the first argument.
 		open := strings.IndexByte(afterTrim, '(')
-		close := matchParen(afterTrim, open)
-		if close < 0 {
+		closeIdx := matchParen(afterTrim, open)
+		if closeIdx < 0 {
 			return "", false
 		}
-		inner := strings.TrimSpace(afterTrim[open+1 : close])
+		inner := strings.TrimSpace(afterTrim[open+1 : closeIdx])
 		var newInner string
 		if inner == "" {
 			newInner = lhs
 		} else {
 			newInner = lhs + ", " + inner
 		}
-		rebuilt := pad + head + "(" + newInner + ")" + afterTrim[close+1:]
+		rebuilt := pad + head + "(" + newInner + ")" + afterTrim[closeIdx+1:]
 		return rebuilt, true
 	}
 	// Paren-less callee: `x |> f` → `f(x)`. Any trailing text after the head is
@@ -419,7 +458,7 @@ func elixirTopLevelPipe(code string) int {
 // assignment or a parenthesized call, the head is a bare function / dotted chain,
 // and the first argument token can begin an argument. Both views are transformed
 // identically to stay aligned.
-func addElixirParenlessCallParens(code, raw string) (string, string) {
+func addElixirParenlessCallParens(code, raw string) (newCode, newRaw string) {
 	if hasTopLevelAssign(code) {
 		return code, raw
 	}
@@ -447,9 +486,9 @@ func addElixirParenlessCallParens(code, raw string) (string, string) {
 	for end > argStart && (code[end-1] == ' ' || code[end-1] == '\t') {
 		end--
 	}
-	newCode := code[:argStart] + "(" + code[argStart:end] + ")" + code[end:]
+	newCode = code[:argStart] + "(" + code[argStart:end] + ")" + code[end:]
 	if len(raw) == len(code) {
-		newRaw := raw[:argStart] + "(" + raw[argStart:end] + ")" + raw[end:]
+		newRaw = raw[:argStart] + "(" + raw[argStart:end] + ")" + raw[end:]
 		return newCode, newRaw
 	}
 	return newCode, raw
