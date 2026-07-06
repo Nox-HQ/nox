@@ -11,6 +11,7 @@ scan:
     - "testdata/precision-suite/"
     - "testdata/precision-suite-php/"
     - "testdata/precision-suite-java/"
+    - "testdata/precision-suite-rust/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
