@@ -12,6 +12,7 @@ const (
 	langJavaScript
 	langPHP
 	langJava
+	langCSharp
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false
@@ -116,6 +117,10 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langJava {
 				left = stripJavaDeclType(left)
 			}
+			// C# declarations put a type (or `var`) before the name.
+			if lang == langCSharp {
+				left = stripCSharpDeclType(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -133,6 +138,41 @@ func stripDeclKeyword(left string) string {
 		}
 	}
 	return left
+}
+
+// stripCSharpDeclType reduces a C# assignment LHS to its bare variable name by
+// dropping a leading type (or `var`) declaration. A C# local declaration reads
+// `<type> name = expr` — e.g. `var name`, `string user`, `SqlCommand cmd`,
+// `List<int> xs`, `byte[] data`, `IEnumerable<string> rows`. The variable name
+// is the LAST whitespace-separated token; everything before it is the type
+// (possibly with generic/array brackets, already balanced in the code view).
+// A single bare token (`name`) is returned unchanged — it is a plain
+// reassignment, not a declaration. Best-effort and deterministic: an
+// unrecognizable LHS falls through to isSimpleIdent, which rejects it safely.
+func stripCSharpDeclType(left string) string {
+	left = strings.TrimSpace(left)
+	// Find the last top-level space (not inside <...> or [...]) — the boundary
+	// between the type and the variable name.
+	depth := 0
+	lastSpace := -1
+	for i := 0; i < len(left); i++ {
+		switch left[i] {
+		case '<', '[', '(':
+			depth++
+		case '>', ']', ')':
+			if depth > 0 {
+				depth--
+			}
+		case ' ', '\t':
+			if depth == 0 {
+				lastSpace = i
+			}
+		}
+	}
+	if lastSpace < 0 {
+		return left // bare identifier: a plain reassignment
+	}
+	return strings.TrimSpace(left[lastSpace+1:])
 }
 
 // callChain is a recognized call: its normalized callee key, the code-view

@@ -40,7 +40,16 @@ func isKeyword(s string) bool {
 		"raise", "pass", "break", "continue", "and", "or", "not", "in", "is",
 		"lambda", "global", "nonlocal", "assert", "del", "async", "await",
 		"True", "False", "None", "const", "let", "var", "function", "new",
-		"typeof", "instanceof", "true", "false", "null", "undefined", "this":
+		"typeof", "instanceof", "true", "false", "null", "undefined", "this",
+		// C# keywords/modifiers and common built-in type names that appear as bare
+		// tokens in declarations and headers. Treating a type name as a
+		// non-variable is safe: a type is never a taint-carrying value, so
+		// excluding it only avoids a spurious "read" of a type name.
+		"public", "private", "protected", "internal", "static", "readonly",
+		"using", "namespace", "void", "string", "int", "bool", "byte", "char",
+		"long", "short", "double", "float", "decimal", "object", "string?",
+		"switch", "case", "default", "throw", "catch", "foreach", "do",
+		"override", "virtual", "abstract", "sealed", "partial":
 		return true
 	}
 	return false

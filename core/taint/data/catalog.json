@@ -335,6 +335,52 @@
         {"call": "FilenameUtils.getName", "neutralizes": ["path_traversal"], "note": "Apache Commons FilenameUtils strips path components"},
         {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
       ]
+    },
+    "csharp": {
+      "sources": [
+        {"call": "Request.QueryString", "kind": "http_query"},
+        {"call": "Request.Form", "kind": "http_body"},
+        {"call": "Request.Params", "kind": "http_query"},
+        {"call": "Request.Headers", "kind": "http_header"},
+        {"call": "Request.Cookies", "kind": "http_header"},
+        {"call": "Request.Item", "kind": "http_query"},
+        {"call": "Console.ReadLine", "kind": "stdin"}
+      ],
+      "sinks": [
+        {"call": "Process.Start", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "dangerous when a tainted value is passed to cmd.exe /c or a shell-style command string"},
+        {"call": "ProcessStartInfo", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "a ProcessStartInfo built from a tainted Arguments/FileName string is a command-injection vector"},
+        {"call": "SqlCommand", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "safe when values are bound via SqlParameter / Parameters.Add rather than concatenated into the CommandText"},
+        {"call": "ExecuteReader", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "ExecuteNonQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "ExecuteScalar", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "File.ReadAllText", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "File.ReadAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "File.Open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "FileStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "StreamReader", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "WebClient.DownloadString", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "DownloadString", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies WebClient.DownloadString(tainted url)"},
+        {"call": "HttpClient.GetAsync", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "GetAsync", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies HttpClient.GetAsync(tainted url)"},
+        {"call": "WebRequest.Create", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "BinaryFormatter.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "BinaryFormatter.Deserialize on attacker-controlled bytes is a well-known RCE vector"},
+        {"call": "Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies BinaryFormatter/JavaScriptSerializer/LosFormatter .Deserialize(tainted); the safe generic JsonSerializer.Deserialize<T>()/DeserializeObject<T>() forms carry a type argument between the chain and '(', so the line recognizer does not read them as a call and they never match this bare key"},
+        {"call": "JavaScriptSerializer.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "LosFormatter.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "Response.Write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "writing an un-encoded tainted value to the HTML response reflects it as XSS; safe when HtmlEncode'd first"},
+        {"call": "HttpResponse.Write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"}
+      ],
+      "sanitizers": [
+        {"call": "SqlParameter", "neutralizes": ["sql_injection"], "note": "binding values as parameters keeps them out of the SQL text"},
+        {"call": "Parameters.Add", "neutralizes": ["sql_injection"]},
+        {"call": "Parameters.AddWithValue", "neutralizes": ["sql_injection"]},
+        {"call": "HttpUtility.HtmlEncode", "neutralizes": ["xss"]},
+        {"call": "WebUtility.HtmlEncode", "neutralizes": ["xss"]},
+        {"call": "AntiXss.HtmlEncode", "neutralizes": ["xss"]},
+        {"call": "int.Parse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "numeric coercion removes injection metacharacters"},
+        {"call": "int.TryParse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"]},
+        {"call": "Path.GetFileName", "neutralizes": ["path_traversal"], "note": "strips directory components; pair with an allow-base check"}
+      ]
     }
   }
 }

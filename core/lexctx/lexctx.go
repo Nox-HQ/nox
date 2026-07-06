@@ -55,6 +55,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanPHP(content)
 	case LangJava:
 		return scanJava(content)
+	case LangCSharp:
+		return scanCSharp(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}
