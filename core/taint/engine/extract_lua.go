@@ -66,21 +66,29 @@ var luaSources = map[string]bool{
 // promoteLuaSources adds every Lua bare-read source on a statement to its chains,
 // so an indexed CLI-argument source (`arg[1]`) resolves as a catalog source
 // exactly like a source CALL (`os.getenv`) or an attribute chain (`ngx.var`) does.
-// Idempotent and order-stable.
+// It also promotes the OpenResty request-variable PREFIX `ngx.var`: the idiom is
+// `ngx.var.remote_addr` / `ngx.var.arg_name`, whose full dotted chain has the
+// source as a PREFIX (not a suffix), so the shared suffix-matching would miss it —
+// this adds the bare `ngx.var` chain so the catalog source resolves. Idempotent
+// and order-stable.
 func promoteLuaSources(st *stmtDraft) {
-	for _, r := range st.reads {
-		if !luaSources[r] {
-			continue
-		}
-		already := false
+	addChain := func(name string) {
 		for _, ch := range st.chains {
-			if ch == r {
-				already = true
-				break
+			if ch == name {
+				return
 			}
 		}
-		if !already {
-			st.chains = append(st.chains, r)
+		st.chains = append(st.chains, name)
+	}
+	for _, r := range st.reads {
+		if luaSources[r] {
+			addChain(r)
+		}
+	}
+	for _, ch := range st.chains {
+		if strings.HasPrefix(ch, "ngx.var.") {
+			addChain("ngx.var")
+			break
 		}
 	}
 }

@@ -3834,6 +3834,36 @@
         {"call": "printf", "neutralizes": ["command_injection", "code_injection"], "note": "printf %q quotes a value safely for shell reuse"},
         {"call": "basename", "neutralizes": ["path_traversal"], "note": "basename strips directory components"}
       ]
+    },
+    "lua": {
+      "sources": [
+        {"call": "arg", "kind": "argv", "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled"},
+        {"call": "os.getenv", "kind": "env", "note": "process environment variable, attacker-influenceable"},
+        {"call": "io.read", "kind": "stdin", "note": "a line/number read from stdin is untrusted input"},
+        {"call": "ngx.var", "kind": "http_query", "note": "OpenResty request variable (ngx.var.arg_x, ngx.var.uri, ...) carries untrusted request data"},
+        {"call": "ngx.req.get_uri_args", "kind": "http_query", "note": "OpenResty parsed query-string arguments"},
+        {"call": "ngx.req.get_post_args", "kind": "http_body", "note": "OpenResty parsed request-body arguments"},
+        {"call": "ngx.req.get_headers", "kind": "http_header", "note": "OpenResty request headers"}
+      ],
+      "sinks": [
+        {"call": "os.execute", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "os.execute runs its argument through the system shell; a tainted command string is command injection"},
+        {"call": "io.popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "io.popen spawns a shell pipeline from its argument; a tainted command is command injection"},
+        {"call": "loadstring", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "loadstring compiles its string argument as Lua code; a tainted string is code injection"},
+        {"call": "load", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "load compiles a string (or chunk) as Lua code; a tainted string is code injection"},
+        {"call": "loadfile", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "loadfile compiles the file at a tainted path as Lua code (attacker-chosen chunk)"},
+        {"call": "dofile", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "dofile loads and runs the file at a tainted path as Lua code"},
+        {"call": "io.open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "io.open of a tainted path enables path traversal (../ escapes the intended directory)"},
+        {"call": "db.exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "lsqlite3 db:exec runs a SQL string; a tainted value concatenated into it is SQL injection"},
+        {"call": "conn.execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "luasql connection:execute runs a SQL string with no bind parameters; a tainted value concatenated into it is SQL injection"},
+        {"call": "http.request", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "LuaSocket http.request of a tainted URL enables SSRF"},
+        {"call": "httpc.request_uri", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "lua-resty-http request_uri of a tainted URL enables SSRF"},
+        {"call": "sock.connect", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "connecting a socket to a tainted host/port enables SSRF"}
+      ],
+      "sanitizers": [
+        {"call": "tonumber", "neutralizes": ["command_injection", "code_injection", "path_traversal", "sql_injection", "ssrf"], "note": "tonumber coerces the value to a number (or nil), stripping every injection metacharacter"},
+        {"call": "ngx.quote_sql_str", "neutralizes": ["sql_injection"], "note": "OpenResty escapes and quotes a value for safe SQL interpolation"},
+        {"call": "escape", "neutralizes": ["sql_injection"], "note": "a luasql/driver escape helper quotes a value for safe SQL interpolation"}
+      ]
     }
   }
 }
