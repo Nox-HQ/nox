@@ -1623,368 +1623,2133 @@
     "php": {
       "comment": "PHP source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_php.go). Superglobals ($_GET/$_POST/…) are ARRAY-INDEX source reads, captured as bare chains with the leading `$` stripped (so `$_GET['x']` reads source `_GET`). Method calls on a value ($pdo->query, $mysqli->query) are normalized to a dotted chain (pdo.query, mysqli.query) so the engine's suffixKeys fallback matches the method suffix regardless of the receiver variable name. Rule IDs mirror the shared TAINT-00x space.",
       "sources": [
-        {"call": "_GET", "kind": "http_query"},
-        {"call": "_POST", "kind": "http_body"},
-        {"call": "_REQUEST", "kind": "http_body"},
-        {"call": "_COOKIE", "kind": "http_header"},
-        {"call": "_SERVER", "kind": "http_header"},
-        {"call": "_FILES", "kind": "http_body"},
-        {"call": "php://input", "kind": "http_body"}
+        {
+          "call": "_GET",
+          "kind": "http_query"
+        },
+        {
+          "call": "_POST",
+          "kind": "http_body"
+        },
+        {
+          "call": "_REQUEST",
+          "kind": "http_body"
+        },
+        {
+          "call": "_COOKIE",
+          "kind": "http_header"
+        },
+        {
+          "call": "_SERVER",
+          "kind": "http_header"
+        },
+        {
+          "call": "_FILES",
+          "kind": "http_body"
+        },
+        {
+          "call": "php://input",
+          "kind": "http_body"
+        }
       ],
       "sinks": [
-        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "shell_exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "passthru", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "proc_open", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "mysqli_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "mysql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "mysqli.query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "method call $mysqli->query normalized to mysqli.query; matched by the .query suffix"},
-        {"call": "pdo.query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "$pdo->query with an interpolated/concatenated string is injectable"},
-        {"call": "pdo.exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "include", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "dynamic include/require of a tainted path is LFI/RFI"},
-        {"call": "include_once", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "require", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "require_once", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "fopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "readfile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "file_get_contents", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "local path read; a tainted URL argument is SSRF (see the ssrf catalog note), a tainted local path is traversal"},
-        {"call": "curl_exec", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "unserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
-        {"call": "echo", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "reflected XSS when unescaped tainted data is echoed into the HTML response"},
-        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
-        {"call": "printf", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
-        {"call": "eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005"},
-        {"call": "assert", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "assert() on a string argument evaluates it as PHP"},
-        {"call": "create_function", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005"}
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "system",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "shell_exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "passthru",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "popen",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "proc_open",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "mysqli_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysql_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "method call $mysqli->query normalized to mysqli.query; matched by the .query suffix"
+        },
+        {
+          "call": "pdo.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "$pdo->query with an interpolated/concatenated string is injectable"
+        },
+        {
+          "call": "pdo.exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "include",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "dynamic include/require of a tainted path is LFI/RFI"
+        },
+        {
+          "call": "include_once",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "require",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "require_once",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fopen",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "readfile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "file_get_contents",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "local path read; a tainted URL argument is SSRF (see the ssrf catalog note), a tainted local path is traversal"
+        },
+        {
+          "call": "curl_exec",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "unserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "echo",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "reflected XSS when unescaped tainted data is echoed into the HTML response"
+        },
+        {
+          "call": "print",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "printf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "assert",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "assert() on a string argument evaluates it as PHP"
+        },
+        {
+          "call": "create_function",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005"
+        }
       ],
       "sanitizers": [
-        {"call": "mysqli_real_escape_string", "neutralizes": ["sql_injection"]},
-        {"call": "mysql_real_escape_string", "neutralizes": ["sql_injection"]},
-        {"call": "pdo.prepare", "neutralizes": ["sql_injection"], "note": "prepared statement with placeholders; the value binds via ->execute, never the SQL string"},
-        {"call": "htmlspecialchars", "neutralizes": ["xss"]},
-        {"call": "htmlentities", "neutralizes": ["xss"]},
-        {"call": "intval", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"], "note": "numeric coercion removes injection metacharacters"},
-        {"call": "floatval", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"]},
-        {"call": "basename", "neutralizes": ["path_traversal"]},
-        {"call": "realpath", "neutralizes": ["path_traversal"], "note": "canonicalizes; must be paired with an allow-base prefix check"},
-        {"call": "filter_var", "neutralizes": ["xss", "ssrf", "path_traversal"], "note": "validation/sanitization filter; class depends on the FILTER_* used"},
-        {"call": "escapeshellarg", "neutralizes": ["command_injection"]},
-        {"call": "escapeshellcmd", "neutralizes": ["command_injection"]}
+        {
+          "call": "mysqli_real_escape_string",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "mysql_real_escape_string",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "pdo.prepare",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "prepared statement with placeholders; the value binds via ->execute, never the SQL string"
+        },
+        {
+          "call": "htmlspecialchars",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "htmlentities",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "intval",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf"
+          ],
+          "note": "numeric coercion removes injection metacharacters"
+        },
+        {
+          "call": "floatval",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf"
+          ]
+        },
+        {
+          "call": "basename",
+          "neutralizes": [
+            "path_traversal"
+          ]
+        },
+        {
+          "call": "realpath",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "canonicalizes; must be paired with an allow-base prefix check"
+        },
+        {
+          "call": "filter_var",
+          "neutralizes": [
+            "xss",
+            "ssrf",
+            "path_traversal"
+          ],
+          "note": "validation/sanitization filter; class depends on the FILTER_* used"
+        },
+        {
+          "call": "escapeshellarg",
+          "neutralizes": [
+            "command_injection"
+          ]
+        },
+        {
+          "call": "escapeshellcmd",
+          "neutralizes": [
+            "command_injection"
+          ]
+        }
       ]
     },
     "java": {
       "comment": "Java source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes, matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (Files.readAllBytes, ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .println, .exec, .start). Method-suffix matching is imprecise on purpose: it is AST-only, so a .executeQuery on a non-JDBC object still matches. This is the same precision trade documented for Go's method sinks; the corpus README records the resulting honest FNs (chained fluent calls the flat recognizer cannot follow). See core/taint/engine/extract_java.go.",
       "sources": [
-        {"call": "request.getParameter", "kind": "http_query"},
-        {"call": "request.getParameterValues", "kind": "http_query"},
-        {"call": "request.getQueryString", "kind": "http_query"},
-        {"call": "request.getHeader", "kind": "http_header"},
-        {"call": "request.getHeaders", "kind": "http_header"},
-        {"call": "request.getCookies", "kind": "http_header"},
-        {"call": "request.getInputStream", "kind": "http_body"},
-        {"call": "request.getReader", "kind": "http_body"},
-        {"call": "req.getParameter", "kind": "http_query"},
-        {"call": "req.getHeader", "kind": "http_header"},
-        {"call": "getParameter", "kind": "http_query"},
-        {"call": "getQueryString", "kind": "http_query"},
-        {"call": "System.getenv", "kind": "env"},
-        {"call": "System.getProperty", "kind": "env"}
+        {
+          "call": "request.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameterValues",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getHeaders",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getCookies",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getInputStream",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.getReader",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "System.getenv",
+          "kind": "env"
+        },
+        {
+          "call": "System.getProperty",
+          "kind": "env"
+        }
       ],
       "sinks": [
-        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"},
-        {"call": "ProcessBuilder", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "new ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"},
-        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation"},
-        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
-        {"call": "createQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "JPA/Hibernate Session.createQuery(hql) with a tainted string is HQL injection"},
-        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new File(path) opens a file named by input — matched on the File constructor name"},
-        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "Files.newInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "Files.readString", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "FileInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new FileInputStream(path)"},
-        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
-        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openConnection() — matched on the method suffix"},
-        {"call": "ObjectInputStream.readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"},
-        {"call": "readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "ObjectInputStream.readObject() — matched on the method suffix"},
-        {"call": "ScriptEngine.eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "evaluating a tainted script string executes arbitrary code"},
-        {"call": "eval", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "ScriptEngine.eval(script) — matched on the method suffix"},
-        {"call": "println", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response.getWriter().println(taintedHtml) reflects unescaped input — reflected XSS"},
-        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"},
-        {"call": "write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .write(taintedHtml) — reflected XSS"}
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
+        },
+        {
+          "call": "ProcessBuilder",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "new ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"
+        },
+        {
+          "call": "executeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation"
+        },
+        {
+          "call": "executeUpdate",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.execute(sql) — matched on the method suffix"
+        },
+        {
+          "call": "createQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JPA/Hibernate Session.createQuery(hql) with a tainted string is HQL injection"
+        },
+        {
+          "call": "File",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path) opens a file named by input — matched on the File constructor name"
+        },
+        {
+          "call": "Files.readAllBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.newInputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.readString",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileInputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new FileInputStream(path)"
+        },
+        {
+          "call": "openStream",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+        },
+        {
+          "call": "openConnection",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openConnection() — matched on the method suffix"
+        },
+        {
+          "call": "ObjectInputStream.readObject",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"
+        },
+        {
+          "call": "readObject",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "ObjectInputStream.readObject() — matched on the method suffix"
+        },
+        {
+          "call": "ScriptEngine.eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "evaluating a tainted script string executes arbitrary code"
+        },
+        {
+          "call": "eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "ScriptEngine.eval(script) — matched on the method suffix"
+        },
+        {
+          "call": "println",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response.getWriter().println(taintedHtml) reflects unescaped input — reflected XSS"
+        },
+        {
+          "call": "print",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response writer .write(taintedHtml) — reflected XSS"
+        }
       ],
       "sanitizers": [
-        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
-        {"call": "Integer.parseInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes injection metacharacters"},
-        {"call": "Long.parseLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "StringEscapeUtils.escapeHtml4", "neutralizes": ["xss"]},
-        {"call": "Encoder.forHtml", "neutralizes": ["xss"], "note": "OWASP Java Encoder"},
-        {"call": "forHtml", "neutralizes": ["xss"], "note": "OWASP Encoder.forHtml — matched on the method suffix"},
-        {"call": "FilenameUtils.getName", "neutralizes": ["path_traversal"], "note": "Apache Commons FilenameUtils strips path components"},
-        {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
+        {
+          "call": "prepareStatement",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"
+        },
+        {
+          "call": "Integer.parseInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "numeric coercion removes injection metacharacters"
+        },
+        {
+          "call": "Long.parseLong",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "StringEscapeUtils.escapeHtml4",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "Encoder.forHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder"
+        },
+        {
+          "call": "forHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Encoder.forHtml — matched on the method suffix"
+        },
+        {
+          "call": "FilenameUtils.getName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "Apache Commons FilenameUtils strips path components"
+        },
+        {
+          "call": "normalize",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        }
       ]
     },
     "rust": {
       "comment": "Rust source/sink/sanitizer model. Calls are matched in the extractor's NORMALIZED dotted form: the Rust line recognizer rewrites the `::` path separator to `.` and drops the `!` on macro invocations, so `std::env::var` is keyed `env.var`, `Command::new` is `Command.new`, and `sqlx::query!` is `sqlx.query`. Method calls whose receiver varies (`.arg`/`.args` on a Command builder, `.bind` on a query) are matched on the bare method suffix via the engine's suffixKeys fallback. Rust recognition is COARSER than Python/JS/Go (no real parser — only Go gets go/ast): ownership/moves, Result/`?` unwrapping, iterator chains, and macro expansion are invisible to the recognizer, so Rust recall is expected to be the lowest of the supported languages. See testdata/precision-suite-rust/README.md for the measured gaps. The web-extractor sources (`web.Query`/`web.Form`/`web.Json`/`web.Path` for actix, bare `Query`/`Form`/`Json`/`Path` for axum) are matched not only as constructor calls but also as PARAMETER TYPES: extract_rust.go seeds a function parameter whose type is one of these extractors as tainted-on-entry (via a synthetic `binding = <source>()` statement), because a `web::Query<Params>` handler argument is untrusted input even though it never appears as a source call.",
       "sources": [
-        {"call": "env.args", "kind": "argv"},
-        {"call": "std.env.args", "kind": "argv"},
-        {"call": "env.var", "kind": "env"},
-        {"call": "std.env.var", "kind": "env"},
-        {"call": "web.Query", "kind": "http_query"},
-        {"call": "web.Path", "kind": "http_query"},
-        {"call": "web.Form", "kind": "http_body"},
-        {"call": "web.Json", "kind": "http_body"},
-        {"call": "Query", "kind": "http_query"},
-        {"call": "Path", "kind": "http_query"},
-        {"call": "Form", "kind": "http_body"},
-        {"call": "Json", "kind": "http_body"},
-        {"call": "req.body", "kind": "http_body"},
-        {"call": "request.body", "kind": "http_body"},
-        {"call": "body.text", "kind": "http_body"},
-        {"call": "io.stdin", "kind": "stdin"},
-        {"call": "std.io.stdin", "kind": "stdin"},
-        {"call": "read_line", "kind": "stdin"}
+        {
+          "call": "env.args",
+          "kind": "argv"
+        },
+        {
+          "call": "std.env.args",
+          "kind": "argv"
+        },
+        {
+          "call": "env.var",
+          "kind": "env"
+        },
+        {
+          "call": "std.env.var",
+          "kind": "env"
+        },
+        {
+          "call": "web.Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "web.Path",
+          "kind": "http_query"
+        },
+        {
+          "call": "web.Form",
+          "kind": "http_body"
+        },
+        {
+          "call": "web.Json",
+          "kind": "http_body"
+        },
+        {
+          "call": "Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "Path",
+          "kind": "http_query"
+        },
+        {
+          "call": "Form",
+          "kind": "http_body"
+        },
+        {
+          "call": "Json",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.body",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.body",
+          "kind": "http_body"
+        },
+        {
+          "call": "body.text",
+          "kind": "http_body"
+        },
+        {
+          "call": "io.stdin",
+          "kind": "stdin"
+        },
+        {
+          "call": "std.io.stdin",
+          "kind": "stdin"
+        },
+        {
+          "call": "read_line",
+          "kind": "stdin"
+        }
       ],
       "sinks": [
-        {"call": "Command.new", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "std::process::Command; dangerous when a tainted program name or a tainted arg (.arg/.args) drives an sh -c style invocation"},
-        {"call": "arg", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into the shell"},
-        {"call": "args", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Command::new(...).args([...]) with a tainted element"},
-        {"call": "sqlx.query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "safe when values are bound via .bind($1); dangerous when a tainted string is format!-interpolated into the query"},
-        {"call": "sqlx.query_as", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "sqlx.query_scalar", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "diesel.sql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "diesel::sql_query(format!(...)) interpolates a tainted string into raw SQL"},
-        {"call": "sql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "File.open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "std::fs::File::open with a tainted path"},
-        {"call": "fs.read", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "fs.read_to_string", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "fs.write", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "OpenOptions.open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "reqwest.get", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "reqwest::get / Client::new().get with a tainted URL is an SSRF vector"},
-        {"call": "Client.get", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "Client.post", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "bincode.deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "deserializing untrusted bytes is an RCE/DoS vector"},
-        {"call": "serde_json.from_str", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "dangerous when the input string is attacker-controlled and deserialized into a type with side effects"},
-        {"call": "serde_json.from_slice", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
-        {"call": "HttpResponse.body", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "a format!-built HTML string returned as a response body without escaping is reflected XSS"},
-        {"call": "Html", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "axum::response::Html(format!(...)) with a tainted value is reflected XSS"}
+        {
+          "call": "Command.new",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "std::process::Command; dangerous when a tainted program name or a tainted arg (.arg/.args) drives an sh -c style invocation"
+        },
+        {
+          "call": "arg",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into the shell"
+        },
+        {
+          "call": "args",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Command::new(...).args([...]) with a tainted element"
+        },
+        {
+          "call": "sqlx.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "safe when values are bound via .bind($1); dangerous when a tainted string is format!-interpolated into the query"
+        },
+        {
+          "call": "sqlx.query_as",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "sqlx.query_scalar",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "diesel.sql_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "diesel::sql_query(format!(...)) interpolates a tainted string into raw SQL"
+        },
+        {
+          "call": "sql_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "File.open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "std::fs::File::open with a tainted path"
+        },
+        {
+          "call": "fs.read",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.read_to_string",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.write",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "OpenOptions.open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "reqwest.get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "reqwest::get / Client::new().get with a tainted URL is an SSRF vector"
+        },
+        {
+          "call": "Client.get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "Client.post",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "bincode.deserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "deserializing untrusted bytes is an RCE/DoS vector"
+        },
+        {
+          "call": "serde_json.from_str",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "dangerous when the input string is attacker-controlled and deserialized into a type with side effects"
+        },
+        {
+          "call": "serde_json.from_slice",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "HttpResponse.body",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "a format!-built HTML string returned as a response body without escaping is reflected XSS"
+        },
+        {
+          "call": "Html",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "axum::response::Html(format!(...)) with a tainted value is reflected XSS"
+        }
       ],
       "sanitizers": [
-        {"call": "bind", "neutralizes": ["sql_injection"], "note": "sqlx bind parameters ($1/?) — the value is passed to the driver as data, never concatenated into SQL"},
-        {"call": "file_name", "neutralizes": ["path_traversal"], "note": "Path::file_name strips directory components, defeating ../ traversal"},
-        {"call": "percent_encode", "neutralizes": ["ssrf", "xss"]},
-        {"call": "utf8_percent_encode", "neutralizes": ["ssrf", "xss"]},
-        {"call": "escape_html", "neutralizes": ["xss"]},
-        {"call": "encode_text", "neutralizes": ["xss"], "note": "html_escape / askama auto-escaping"},
-        {"call": "parse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"], "note": "str::parse::<i64>() etc. — numeric/typed coercion removes injection metacharacters"}
+        {
+          "call": "bind",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "sqlx bind parameters ($1/?) — the value is passed to the driver as data, never concatenated into SQL"
+        },
+        {
+          "call": "file_name",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "Path::file_name strips directory components, defeating ../ traversal"
+        },
+        {
+          "call": "percent_encode",
+          "neutralizes": [
+            "ssrf",
+            "xss"
+          ]
+        },
+        {
+          "call": "utf8_percent_encode",
+          "neutralizes": [
+            "ssrf",
+            "xss"
+          ]
+        },
+        {
+          "call": "escape_html",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "encode_text",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "html_escape / askama auto-escaping"
+        },
+        {
+          "call": "parse",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf"
+          ],
+          "note": "str::parse::<i64>() etc. — numeric/typed coercion removes injection metacharacters"
+        }
       ]
     },
     "csharp": {
       "sources": [
-        {"call": "Request.QueryString", "kind": "http_query"},
-        {"call": "Request.Form", "kind": "http_body"},
-        {"call": "Request.Params", "kind": "http_query"},
-        {"call": "Request.Headers", "kind": "http_header"},
-        {"call": "Request.Cookies", "kind": "http_header"},
-        {"call": "Request.Item", "kind": "http_query"},
-        {"call": "Console.ReadLine", "kind": "stdin"}
+        {
+          "call": "Request.QueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.Form",
+          "kind": "http_body"
+        },
+        {
+          "call": "Request.Params",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.Headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "Request.Cookies",
+          "kind": "http_header"
+        },
+        {
+          "call": "Request.Item",
+          "kind": "http_query"
+        },
+        {
+          "call": "Console.ReadLine",
+          "kind": "stdin"
+        }
       ],
       "sinks": [
-        {"call": "Process.Start", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "dangerous when a tainted value is passed to cmd.exe /c or a shell-style command string"},
-        {"call": "ProcessStartInfo", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "a ProcessStartInfo built from a tainted Arguments/FileName string is a command-injection vector"},
-        {"call": "SqlCommand", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "safe when values are bound via SqlParameter / Parameters.Add rather than concatenated into the CommandText"},
-        {"call": "ExecuteReader", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "ExecuteNonQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "ExecuteScalar", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "File.ReadAllText", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "File.ReadAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "File.Open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "FileStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "StreamReader", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "WebClient.DownloadString", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "DownloadString", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies WebClient.DownloadString(tainted url)"},
-        {"call": "HttpClient.GetAsync", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "GetAsync", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies HttpClient.GetAsync(tainted url)"},
-        {"call": "WebRequest.Create", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "BinaryFormatter.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "BinaryFormatter.Deserialize on attacker-controlled bytes is a well-known RCE vector"},
-        {"call": "Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies BinaryFormatter/JavaScriptSerializer/LosFormatter .Deserialize(tainted); the safe generic JsonSerializer.Deserialize<T>()/DeserializeObject<T>() forms carry a type argument between the chain and '(', so the line recognizer does not read them as a call and they never match this bare key"},
-        {"call": "JavaScriptSerializer.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
-        {"call": "LosFormatter.Deserialize", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
-        {"call": "Response.Write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "writing an un-encoded tainted value to the HTML response reflects it as XSS; safe when HtmlEncode'd first"},
-        {"call": "HttpResponse.Write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"}
+        {
+          "call": "Process.Start",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "dangerous when a tainted value is passed to cmd.exe /c or a shell-style command string"
+        },
+        {
+          "call": "ProcessStartInfo",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "a ProcessStartInfo built from a tainted Arguments/FileName string is a command-injection vector"
+        },
+        {
+          "call": "SqlCommand",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "safe when values are bound via SqlParameter / Parameters.Add rather than concatenated into the CommandText"
+        },
+        {
+          "call": "ExecuteReader",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "ExecuteNonQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "ExecuteScalar",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "File.ReadAllText",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "File.ReadAllBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "File.Open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "StreamReader",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "WebClient.DownloadString",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "DownloadString",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "receiver-varies WebClient.DownloadString(tainted url)"
+        },
+        {
+          "call": "HttpClient.GetAsync",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "GetAsync",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "receiver-varies HttpClient.GetAsync(tainted url)"
+        },
+        {
+          "call": "WebRequest.Create",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "BinaryFormatter.Deserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "BinaryFormatter.Deserialize on attacker-controlled bytes is a well-known RCE vector"
+        },
+        {
+          "call": "Deserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "receiver-varies BinaryFormatter/JavaScriptSerializer/LosFormatter .Deserialize(tainted); the safe generic JsonSerializer.Deserialize<T>()/DeserializeObject<T>() forms carry a type argument between the chain and '(', so the line recognizer does not read them as a call and they never match this bare key"
+        },
+        {
+          "call": "JavaScriptSerializer.Deserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "LosFormatter.Deserialize",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "Response.Write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "writing an un-encoded tainted value to the HTML response reflects it as XSS; safe when HtmlEncode'd first"
+        },
+        {
+          "call": "HttpResponse.Write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        }
       ],
       "sanitizers": [
-        {"call": "SqlParameter", "neutralizes": ["sql_injection"], "note": "binding values as parameters keeps them out of the SQL text"},
-        {"call": "Parameters.Add", "neutralizes": ["sql_injection"]},
-        {"call": "Parameters.AddWithValue", "neutralizes": ["sql_injection"]},
-        {"call": "HttpUtility.HtmlEncode", "neutralizes": ["xss"]},
-        {"call": "WebUtility.HtmlEncode", "neutralizes": ["xss"]},
-        {"call": "AntiXss.HtmlEncode", "neutralizes": ["xss"]},
-        {"call": "int.Parse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "numeric coercion removes injection metacharacters"},
-        {"call": "int.TryParse", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"]},
-        {"call": "Path.GetFileName", "neutralizes": ["path_traversal"], "note": "strips directory components; pair with an allow-base check"}
+        {
+          "call": "SqlParameter",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "binding values as parameters keeps them out of the SQL text"
+        },
+        {
+          "call": "Parameters.Add",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "Parameters.AddWithValue",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "HttpUtility.HtmlEncode",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "WebUtility.HtmlEncode",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "AntiXss.HtmlEncode",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "int.Parse",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "ssrf"
+          ],
+          "note": "numeric coercion removes injection metacharacters"
+        },
+        {
+          "call": "int.TryParse",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "ssrf"
+          ]
+        },
+        {
+          "call": "Path.GetFileName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "strips directory components; pair with an allow-base check"
+        }
       ]
     },
     "cpp": {
       "comment": "C/C++ taint model: INJECTION-CLASS dataflow only (command injection, path traversal, format string, SSRF, SQLi). Memory-safety bugs (buffer overflow strcpy/strcat/sprintf/gets -> CWE-120/787, use-after-free, OOB) are a DIFFERENT analysis than source->sink taint and are OUT OF SCOPE for this engine — see testdata/precision-suite-cpp/README.md. Call keys are the short/bare form; the extractor normalizes C++ `::` to `.` and the engine suffix-matches, so `system` matches `std::system` and `getenv` matches `std::getenv`.",
       "sources": [
-        {"call": "getenv", "kind": "environment"},
-        {"call": "secure_getenv", "kind": "environment"},
-        {"call": "fgets", "kind": "stdin"},
-        {"call": "gets", "kind": "stdin"},
-        {"call": "gets_s", "kind": "stdin"},
-        {"call": "scanf", "kind": "stdin"},
-        {"call": "fscanf", "kind": "file"},
-        {"call": "sscanf", "kind": "user_input"},
-        {"call": "getline", "kind": "stdin"},
-        {"call": "read", "kind": "user_input"},
-        {"call": "recv", "kind": "network"},
-        {"call": "recvfrom", "kind": "network"},
-        {"call": "fread", "kind": "file"},
-        {"call": "cin.getline", "kind": "stdin"},
-        {"call": "getenv_s", "kind": "environment"}
+        {
+          "call": "getenv",
+          "kind": "environment"
+        },
+        {
+          "call": "secure_getenv",
+          "kind": "environment"
+        },
+        {
+          "call": "fgets",
+          "kind": "stdin"
+        },
+        {
+          "call": "gets",
+          "kind": "stdin"
+        },
+        {
+          "call": "gets_s",
+          "kind": "stdin"
+        },
+        {
+          "call": "scanf",
+          "kind": "stdin"
+        },
+        {
+          "call": "fscanf",
+          "kind": "file"
+        },
+        {
+          "call": "sscanf",
+          "kind": "user_input"
+        },
+        {
+          "call": "getline",
+          "kind": "stdin"
+        },
+        {
+          "call": "read",
+          "kind": "user_input"
+        },
+        {
+          "call": "recv",
+          "kind": "network"
+        },
+        {
+          "call": "recvfrom",
+          "kind": "network"
+        },
+        {
+          "call": "fread",
+          "kind": "file"
+        },
+        {
+          "call": "cin.getline",
+          "kind": "stdin"
+        },
+        {
+          "call": "getenv_s",
+          "kind": "environment"
+        }
       ],
       "sinks": [
-        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "system(3) runs its argument through /bin/sh -c; a tainted command string is CWE-78. The classic shape is system(strcat(cmd, argv[1]))"},
-        {"call": "popen", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "popen opens a pipe to a shell command; a tainted command string is command injection"},
-        {"call": "execl", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "execlp", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "execle", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "execv", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "execvp", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "execvpe", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "fopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "opening a file at a tainted path enables ../ directory traversal; sanitize with realpath + a base-prefix check"},
-        {"call": "freopen", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "open", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "open64", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "openat", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "ifstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "std::ifstream(tainted path) is a path-traversal read sink (matches std.ifstream after :: normalization)"},
-        {"call": "ofstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "fstream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "printf", "vuln_class": "code_injection", "cwe": "CWE-134", "rule_id": "TAINT-005", "note": "FORMAT-STRING (CWE-134): mapped to the TAINT-005 code-injection rule id (no dedicated CWE-134 class). The vuln is a TAINTED FORMAT argument — printf(user) — which the engine gates on FirstArgTainted; printf(\"%s\", user) with a fixed format is SAFE and does not fire"},
-        {"call": "vprintf", "vuln_class": "code_injection", "cwe": "CWE-134", "rule_id": "TAINT-005", "note": "format-string via a tainted format arg; gated on FirstArgTainted"},
-        {"call": "mysql_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "mysql_query with a tainted, concatenated SQL string is SQLi; use prepared statements (mysql_stmt_prepare) instead"},
-        {"call": "mysql_real_query", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "PQexec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "libpq PQexec with a tainted query string is SQLi; use PQexecParams with $N placeholders"},
-        {"call": "sqlite3_exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "curl_easy_setopt", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "curl_easy_setopt(h, CURLOPT_URL, tainted) fetches an attacker-controlled URL — SSRF; validate the host against an allow-list first"}
+        {
+          "call": "system",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "system(3) runs its argument through /bin/sh -c; a tainted command string is CWE-78. The classic shape is system(strcat(cmd, argv[1]))"
+        },
+        {
+          "call": "popen",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "popen opens a pipe to a shell command; a tainted command string is command injection"
+        },
+        {
+          "call": "execl",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execlp",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execle",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execv",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execvp",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execvpe",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "fopen",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "opening a file at a tainted path enables ../ directory traversal; sanitize with realpath + a base-prefix check"
+        },
+        {
+          "call": "freopen",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "open64",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "openat",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "ifstream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "std::ifstream(tainted path) is a path-traversal read sink (matches std.ifstream after :: normalization)"
+        },
+        {
+          "call": "ofstream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fstream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "printf",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-134",
+          "rule_id": "TAINT-005",
+          "note": "FORMAT-STRING (CWE-134): mapped to the TAINT-005 code-injection rule id (no dedicated CWE-134 class). The vuln is a TAINTED FORMAT argument — printf(user) — which the engine gates on FirstArgTainted; printf(\"%s\", user) with a fixed format is SAFE and does not fire"
+        },
+        {
+          "call": "vprintf",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-134",
+          "rule_id": "TAINT-005",
+          "note": "format-string via a tainted format arg; gated on FirstArgTainted"
+        },
+        {
+          "call": "mysql_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "mysql_query with a tainted, concatenated SQL string is SQLi; use prepared statements (mysql_stmt_prepare) instead"
+        },
+        {
+          "call": "mysql_real_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "PQexec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "libpq PQexec with a tainted query string is SQLi; use PQexecParams with $N placeholders"
+        },
+        {
+          "call": "sqlite3_exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "curl_easy_setopt",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "curl_easy_setopt(h, CURLOPT_URL, tainted) fetches an attacker-controlled URL — SSRF; validate the host against an allow-list first"
+        }
       ],
       "sanitizers": [
-        {"call": "realpath", "neutralizes": ["path_traversal"], "note": "canonicalizes the path; must be paired with a base-prefix/allow-list check to actually contain traversal"},
-        {"call": "basename", "neutralizes": ["path_traversal"], "note": "strips directory components, leaving the final path element"},
-        {"call": "atoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "numeric coercion removes every injection metacharacter"},
-        {"call": "atol", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "atoll", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "strtol", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "strtoul", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "strtoll", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "stoi", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "std::stoi numeric coercion"},
-        {"call": "mysql_real_escape_string", "neutralizes": ["sql_injection"], "note": "escapes SQL metacharacters for a MySQL string literal"},
-        {"call": "PQescapeLiteral", "neutralizes": ["sql_injection"]},
-        {"call": "curl_easy_escape", "neutralizes": ["ssrf"], "note": "URL-encodes a component; does not by itself validate the host"}
+        {
+          "call": "realpath",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "canonicalizes the path; must be paired with a base-prefix/allow-list check to actually contain traversal"
+        },
+        {
+          "call": "basename",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "strips directory components, leaving the final path element"
+        },
+        {
+          "call": "atoi",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "numeric coercion removes every injection metacharacter"
+        },
+        {
+          "call": "atol",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "atoll",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "strtol",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "strtoul",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "strtoll",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "stoi",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "std::stoi numeric coercion"
+        },
+        {
+          "call": "mysql_real_escape_string",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "escapes SQL metacharacters for a MySQL string literal"
+        },
+        {
+          "call": "PQescapeLiteral",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "curl_easy_escape",
+          "neutralizes": [
+            "ssrf"
+          ],
+          "note": "URL-encodes a component; does not by itself validate the host"
+        }
       ]
     },
     "scala": {
       "comment": "Scala source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/object-qualified calls matched on the full dotted chain (Files.readAllBytes, Source.fromFile), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .execute, .openStream, .exec). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (fluent iterator chains and the postfix `.!` process operator the flat recognizer cannot follow). The Slick `sql\"...\"` and Anorm `SQL(\"...\")` string interpolators are recognized as calls named `sql`/`SQL`. See core/taint/engine/extract_scala.go.",
       "sources": [
-        {"call": "request.getQueryString", "kind": "http_query"},
-        {"call": "request.queryString", "kind": "http_query"},
-        {"call": "request.body", "kind": "http_body"},
-        {"call": "getQueryString", "kind": "http_query", "note": "Play request.getQueryString(\"id\") — matched on the method suffix"},
-        {"call": "queryString", "kind": "http_query", "note": "Play request.queryString attribute — matched on the suffix"},
-        {"call": "params", "kind": "http_query", "note": "Play/Scalatra route params(\"id\") / params attribute"},
-        {"call": "getParameter", "kind": "http_query", "note": "servlet-style request.getParameter reused by some Scala web stacks"}
+        {
+          "call": "request.getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.queryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.body",
+          "kind": "http_body"
+        },
+        {
+          "call": "getQueryString",
+          "kind": "http_query",
+          "note": "Play request.getQueryString(\"id\") — matched on the method suffix"
+        },
+        {
+          "call": "queryString",
+          "kind": "http_query",
+          "note": "Play request.queryString attribute — matched on the suffix"
+        },
+        {
+          "call": "params",
+          "kind": "http_query",
+          "note": "Play/Scalatra route params(\"id\") / params attribute"
+        },
+        {
+          "call": "getParameter",
+          "kind": "http_query",
+          "note": "servlet-style request.getParameter reused by some Scala web stacks"
+        }
       ],
       "sinks": [
-        {"call": "Process", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "scala.sys.process.Process(cmd) / Process(Seq(...)) runs an external process; dangerous when a tainted command string is interpolated"},
-        {"call": "Runtime.exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
-        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix"},
-        {"call": ".!", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "the scala.sys.process postfix `!` operator (\"cmd\".! / Seq(...).!) executes a command; recognized specially by the extractor when a tainted command value is its receiver"},
-        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation/interpolation"},
-        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
-        {"call": "sql", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Slick's sql\"...\" string interpolator: a tainted value spliced with $var is interpolated into the query text (the safe form binds via $bind on a typed value / #${} is the raw-splice danger). Recognized as a call named `sql`."},
-        {"call": "SQL", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Anorm SQL(\"...\") built from a tainted concatenated string; the safe form uses named {placeholders} bound via on(...)"},
-        {"call": "Source.fromFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "scala.io.Source.fromFile(path) opens a file named by input"},
-        {"call": "fromFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Source.fromFile — matched on the method suffix"},
-        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "new File(path) / File(path) opens a file named by input — matched on the File constructor name"},
-        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Files.readAllBytes(Paths.get(path)) — matched on the method suffix"},
-        {"call": "Files.readAllLines", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is not catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
-        {"call": "fromURL", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "scala.io.Source.fromURL(u) fetches an attacker-controlled URL"},
-        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
-        {"call": "ObjectInputStream", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "new ObjectInputStream(bytesFromInput) over attacker-controlled bytes primes a native-serialization RCE; the tainted bytes enter at construction, which is where this is keyed. The trailing .readObject() takes no tainted argument (its receiver is the stream, not the bytes), so keying on the constructor — not the read method — reports the flow exactly once per site and avoids double-counting `new ObjectInputStream(blob).readObject()`."},
-        {"call": "Html", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "play.twirl.api.Html(taintedHtml) marks a tainted string as trusted HTML, bypassing Twirl auto-escaping — reflected XSS. Safe when the value is HTML-escaped first."},
-        {"call": "Html.apply", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003"}
+        {
+          "call": "Process",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "scala.sys.process.Process(cmd) / Process(Seq(...)) runs an external process; dangerous when a tainted command string is interpolated"
+        },
+        {
+          "call": "Runtime.exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Runtime.getRuntime().exec(cmd) — matched on the .exec method suffix"
+        },
+        {
+          "call": ".!",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "the scala.sys.process postfix `!` operator (\"cmd\".! / Seq(...).!) executes a command; recognized specially by the extractor when a tainted command value is its receiver"
+        },
+        {
+          "call": "executeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation/interpolation"
+        },
+        {
+          "call": "executeUpdate",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.execute(sql) — matched on the method suffix"
+        },
+        {
+          "call": "sql",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Slick's sql\"...\" string interpolator: a tainted value spliced with $var is interpolated into the query text (the safe form binds via $bind on a typed value / #${} is the raw-splice danger). Recognized as a call named `sql`."
+        },
+        {
+          "call": "SQL",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Anorm SQL(\"...\") built from a tainted concatenated string; the safe form uses named {placeholders} bound via on(...)"
+        },
+        {
+          "call": "Source.fromFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "scala.io.Source.fromFile(path) opens a file named by input"
+        },
+        {
+          "call": "fromFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "Source.fromFile — matched on the method suffix"
+        },
+        {
+          "call": "File",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "new File(path) / File(path) opens a file named by input — matched on the File constructor name"
+        },
+        {
+          "call": "Files.readAllBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "readAllBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "Files.readAllBytes(Paths.get(path)) — matched on the method suffix"
+        },
+        {
+          "call": "Files.readAllLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "openStream",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "new URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is not catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+        },
+        {
+          "call": "fromURL",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "scala.io.Source.fromURL(u) fetches an attacker-controlled URL"
+        },
+        {
+          "call": "openConnection",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "ObjectInputStream",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "new ObjectInputStream(bytesFromInput) over attacker-controlled bytes primes a native-serialization RCE; the tainted bytes enter at construction, which is where this is keyed. The trailing .readObject() takes no tainted argument (its receiver is the stream, not the bytes), so keying on the constructor — not the read method — reports the flow exactly once per site and avoids double-counting `new ObjectInputStream(blob).readObject()`."
+        },
+        {
+          "call": "Html",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "play.twirl.api.Html(taintedHtml) marks a tainted string as trusted HTML, bypassing Twirl auto-escaping — reflected XSS. Safe when the value is HTML-escaped first."
+        },
+        {
+          "call": "Html.apply",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        }
       ],
       "sanitizers": [
-        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
-        {"call": "toInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "\"str\".toInt numeric coercion removes injection metacharacters (throws on non-numeric)"},
-        {"call": "toLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"]},
-        {"call": "escapeHtml", "neutralizes": ["xss"], "note": "Apache Commons StringEscapeUtils.escapeHtml4 / Play's HtmlFormat.escape output-encodes markup"},
-        {"call": "escapeHtml4", "neutralizes": ["xss"]},
-        {"call": "getName", "neutralizes": ["path_traversal"], "note": "new File(path).getName strips directory components; pair with an allow-base check"},
-        {"call": "getFileName", "neutralizes": ["path_traversal"], "note": "Paths.get(path).getFileName strips directory components"}
+        {
+          "call": "prepareStatement",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"
+        },
+        {
+          "call": "toInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "ssrf"
+          ],
+          "note": "\"str\".toInt numeric coercion removes injection metacharacters (throws on non-numeric)"
+        },
+        {
+          "call": "toLong",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "ssrf"
+          ]
+        },
+        {
+          "call": "escapeHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Apache Commons StringEscapeUtils.escapeHtml4 / Play's HtmlFormat.escape output-encodes markup"
+        },
+        {
+          "call": "escapeHtml4",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "getName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "new File(path).getName strips directory components; pair with an allow-base check"
+        },
+        {
+          "call": "getFileName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "Paths.get(path).getFileName strips directory components"
+        }
       ]
     },
     "kotlin": {
       "comment": "Kotlin source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Kotlin runs on the JVM, so its dangerous APIs are the Java ones (Runtime.exec, JDBC executeQuery, java.io.File, URL.openStream, ObjectInputStream.readObject) plus the Android idioms (intent.getStringExtra source, SQLiteDatabase.rawQuery sink). Sinks come in two shapes matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .exec, .readText, .openStream, .rawQuery). Method-suffix matching is imprecise on purpose (AST-only): a .execute on a non-JDBC object still matches. This is the same precision trade documented for Go/Java method sinks; the corpus README records the resulting honest FNs (scope-function/lambda chains the flat recognizer cannot follow). See core/taint/engine/extract_kotlin.go.",
       "sources": [
-        {"call": "request.getParameter", "kind": "http_query"},
-        {"call": "request.getParameterValues", "kind": "http_query"},
-        {"call": "request.getQueryString", "kind": "http_query"},
-        {"call": "request.getHeader", "kind": "http_header"},
-        {"call": "request.getHeaders", "kind": "http_header"},
-        {"call": "request.getCookies", "kind": "http_header"},
-        {"call": "request.getInputStream", "kind": "http_body"},
-        {"call": "request.getReader", "kind": "http_body"},
-        {"call": "req.getParameter", "kind": "http_query"},
-        {"call": "req.getHeader", "kind": "http_header"},
-        {"call": "getParameter", "kind": "http_query"},
-        {"call": "getQueryString", "kind": "http_query"},
-        {"call": "intent.getStringExtra", "kind": "http_query"},
-        {"call": "intent.getData", "kind": "http_query"},
-        {"call": "getStringExtra", "kind": "http_query"},
-        {"call": "System.getenv", "kind": "env"},
-        {"call": "System.getProperty", "kind": "env"}
+        {
+          "call": "request.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameterValues",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getHeaders",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getCookies",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.getInputStream",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.getReader",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.getHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "getParameter",
+          "kind": "http_query"
+        },
+        {
+          "call": "getQueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "intent.getStringExtra",
+          "kind": "http_query"
+        },
+        {
+          "call": "intent.getData",
+          "kind": "http_query"
+        },
+        {
+          "call": "getStringExtra",
+          "kind": "http_query"
+        },
+        {
+          "call": "System.getenv",
+          "kind": "env"
+        },
+        {
+          "call": "System.getProperty",
+          "kind": "env"
+        }
       ],
       "sinks": [
-        {"call": "exec", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"},
-        {"call": "ProcessBuilder", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"},
-        {"call": "executeQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation or a template string with a $-interpolated value"},
-        {"call": "executeUpdate", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
-        {"call": "execute", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Statement.execute(sql) — matched on the method suffix"},
-        {"call": "rawQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Android SQLiteDatabase.rawQuery(sql, args) with a tainted, non-parameterized SQL string is SQL injection"},
-        {"call": "execSQL", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Android SQLiteDatabase.execSQL(sql) — matched on the method suffix"},
-        {"call": "createQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "JPA/Hibernate/Exposed createQuery(hql) with a tainted string is HQL injection"},
-        {"call": "File", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path) opens a file named by input — matched on the File constructor name"},
-        {"call": "FileInputStream", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "FileInputStream(path)"},
-        {"call": "readText", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path).readText() reads a file named by tainted input — matched on the .readText method suffix"},
-        {"call": "readBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "File(path).readBytes() — matched on the method suffix"},
-        {"call": "readLines", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "Files.readAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
-        {"call": "openStream", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."},
-        {"call": "openConnection", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "URL(u).openConnection() — matched on the method suffix"},
-        {"call": "ObjectInputStream.readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"},
-        {"call": "readObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "ObjectInputStream.readObject() — matched on the method suffix"},
-        {"call": "write", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .write(taintedHtml) reflects unescaped input — reflected XSS"},
-        {"call": "print", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response.getWriter().print(taintedHtml) — reflected XSS"},
-        {"call": "println", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "response writer .println(taintedHtml) — reflected XSS"}
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Runtime.getRuntime().exec(cmd) invokes a shell/command — matched on the .exec method suffix (the flat recognizer sees the trailing .exec, not the fluent Runtime.getRuntime() receiver)"
+        },
+        {
+          "call": "ProcessBuilder",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "ProcessBuilder(cmd).start() runs an external process; dangerous when a tainted command string is passed"
+        },
+        {
+          "call": "executeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.executeQuery(sql) — safe only when the SQL is a constant/parameterized query, not a tainted concatenation or a template string with a $-interpolated value"
+        },
+        {
+          "call": "executeUpdate",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.execute(sql) — matched on the method suffix"
+        },
+        {
+          "call": "rawQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Android SQLiteDatabase.rawQuery(sql, args) with a tainted, non-parameterized SQL string is SQL injection"
+        },
+        {
+          "call": "execSQL",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Android SQLiteDatabase.execSQL(sql) — matched on the method suffix"
+        },
+        {
+          "call": "createQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JPA/Hibernate/Exposed createQuery(hql) with a tainted string is HQL injection"
+        },
+        {
+          "call": "File",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "File(path) opens a file named by input — matched on the File constructor name"
+        },
+        {
+          "call": "FileInputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileInputStream(path)"
+        },
+        {
+          "call": "readText",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "File(path).readText() reads a file named by tainted input — matched on the .readText method suffix"
+        },
+        {
+          "call": "readBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "File(path).readBytes() — matched on the method suffix"
+        },
+        {
+          "call": "readLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.readAllBytes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "openStream",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "URL(u).openStream() fetches an attacker-controlled URL — matched on the .openStream method suffix. The URL constructor itself is NOT catalogued: constructing a URL does not perform the request, so keying on the fetch method avoids double-reporting the same flow."
+        },
+        {
+          "call": "openConnection",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "URL(u).openConnection() — matched on the method suffix"
+        },
+        {
+          "call": "ObjectInputStream.readObject",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "deserializing attacker-controlled bytes via native Java serialization is an RCE vector"
+        },
+        {
+          "call": "readObject",
+          "vuln_class": "unsafe_deserialization",
+          "cwe": "CWE-502",
+          "rule_id": "TAINT-005",
+          "note": "ObjectInputStream.readObject() — matched on the method suffix"
+        },
+        {
+          "call": "write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response writer .write(taintedHtml) reflects unescaped input — reflected XSS"
+        },
+        {
+          "call": "print",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response.getWriter().print(taintedHtml) — reflected XSS"
+        },
+        {
+          "call": "println",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response writer .println(taintedHtml) — reflected XSS"
+        }
       ],
       "sanitizers": [
-        {"call": "prepareStatement", "neutralizes": ["sql_injection"], "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"},
-        {"call": "toInt", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toInt() numeric coercion removes injection metacharacters (throws on non-numeric input)"},
-        {"call": "toIntOrNull", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toIntOrNull() numeric coercion"},
-        {"call": "toLong", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"], "note": "String.toLong() numeric coercion"},
-        {"call": "toLongOrNull", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection"]},
-        {"call": "escapeHtml4", "neutralizes": ["xss"], "note": "Apache Commons StringEscapeUtils.escapeHtml4 — matched on the method suffix"},
-        {"call": "forHtml", "neutralizes": ["xss"], "note": "OWASP Encoder.forHtml — matched on the method suffix"},
-        {"call": "htmlEscape", "neutralizes": ["xss"], "note": "Spring HtmlUtils.htmlEscape"},
-        {"call": "name", "neutralizes": ["path_traversal"], "note": "File(path).name returns the last path component only, stripping directory traversal — matched on the .name accessor when used call-shaped"},
-        {"call": "getName", "neutralizes": ["path_traversal"], "note": "FilenameUtils.getName / File.getName strips path components"},
-        {"call": "normalize", "neutralizes": ["path_traversal"], "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"}
+        {
+          "call": "prepareStatement",
+          "neutralizes": [
+            "sql_injection"
+          ],
+          "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"
+        },
+        {
+          "call": "toInt",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "String.toInt() numeric coercion removes injection metacharacters (throws on non-numeric input)"
+        },
+        {
+          "call": "toIntOrNull",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "String.toIntOrNull() numeric coercion"
+        },
+        {
+          "call": "toLong",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ],
+          "note": "String.toLong() numeric coercion"
+        },
+        {
+          "call": "toLongOrNull",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection"
+          ]
+        },
+        {
+          "call": "escapeHtml4",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Apache Commons StringEscapeUtils.escapeHtml4 — matched on the method suffix"
+        },
+        {
+          "call": "forHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Encoder.forHtml — matched on the method suffix"
+        },
+        {
+          "call": "htmlEscape",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Spring HtmlUtils.htmlEscape"
+        },
+        {
+          "call": "name",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "File(path).name returns the last path component only, stripping directory traversal — matched on the .name accessor when used call-shaped"
+        },
+        {
+          "call": "getName",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "FilenameUtils.getName / File.getName strips path components"
+        },
+        {
+          "call": "normalize",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        }
+      ]
+    },
+    "perl": {
+      "comment": "Perl source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_perl.go). The `$`/`@`/`%` sigils are stripped during normalization, so `$ENV{X}` reads source `ENV`, `@ARGV` reads `ARGV`, and `$q->param` normalizes to the dotted chain `q.param` matched by the `.param` suffix. Backtick and qx command literals are modeled as a synthetic `` ` `` command-injection sink. Perl is recognized pragmatically (no interpreter), so recall is moderate by design; precision is held >= 0.90. Rule IDs mirror the shared TAINT-00x space.",
+      "sources": [
+        {
+          "call": "ENV",
+          "kind": "env"
+        },
+        {
+          "call": "ARGV",
+          "kind": "argv"
+        },
+        {
+          "call": "STDIN",
+          "kind": "stdin"
+        },
+        {
+          "call": "param",
+          "kind": "http_query"
+        },
+        {
+          "call": "q.param",
+          "kind": "http_query"
+        },
+        {
+          "call": "cgi.param",
+          "kind": "http_query"
+        },
+        {
+          "call": "query.param",
+          "kind": "http_query"
+        },
+        {
+          "call": "Vars",
+          "kind": "http_query"
+        }
+      ],
+      "sinks": [
+        {
+          "call": "system",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "exec",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "`",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "backtick / qx command literal with an interpolated tainted value is RCE"
+        },
+        {
+          "call": "qx",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "open",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "open() on a tainted path is path traversal; a 2-arg piped open (\"$cmd|\") is command injection"
+        },
+        {
+          "call": "sysopen",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-95",
+          "rule_id": "TAINT-005",
+          "note": "string eval of a tainted value executes arbitrary Perl"
+        },
+        {
+          "call": "do",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "$dbh->do with an interpolated SQL string is injectable; a placeholder+bind form is safe"
+        },
+        {
+          "call": "dbh.do",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "$dbh->prepare of an interpolated SQL string is injectable"
+        },
+        {
+          "call": "dbh.prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "selectrow_array",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "dbh.selectrow_array",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "LWP::UserAgent->get / LWP::Simple::get of a tainted URL is SSRF"
+        },
+        {
+          "call": "ua.get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "ua.post",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        }
+      ],
+      "sanitizers": [
+        {
+          "call": "quotemeta",
+          "neutralizes": [
+            "command_injection"
+          ],
+          "note": "escapes shell/regex metacharacters"
+        },
+        {
+          "call": "int",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf"
+          ],
+          "note": "integer coercion removes injection metacharacters"
+        },
+        {
+          "call": "basename",
+          "neutralizes": [
+            "path_traversal"
+          ],
+          "note": "File::Basename::basename strips directory components"
+        }
+      ]
+    },
+    "swift": {
+      "sources": [
+        {"call": "CommandLine.arguments", "kind": "argv"},
+        {"call": "ProcessInfo.processInfo.environment", "kind": "env"},
+        {"call": "URLComponents.queryItems", "kind": "http_query"},
+        {"call": "req.query", "kind": "http_query"},
+        {"call": "req.parameters", "kind": "http_query"},
+        {"call": "request.query", "kind": "http_query"},
+        {"call": "request.parameters", "kind": "http_query"},
+        {"call": "textField.text", "kind": "http_body"},
+        {"call": "readLine", "kind": "stdin"}
+      ],
+      "sinks": [
+        {"call": "Process.launch", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "a Process whose arguments/launchPath are built from a tainted string is a command-injection vector; safe with a fixed launchPath and an allow-listed argument array"},
+        {"call": "Process.run", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002"},
+        {"call": "Process", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "constructing a Foundation Process with a tainted command string"},
+        {"call": "system", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "the C system() call hands its argument to /bin/sh -c"},
+        {"call": "sqlite3_exec", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "sqlite3_exec runs a raw SQL string; safe only when values are bound via sqlite3_bind rather than concatenated"},
+        {"call": "sqlite3_prepare_v2", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "preparing a SQL string interpolated with a tainted value is SQL injection; parameterize with sqlite3_bind placeholders instead"},
+        {"call": "prepare", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "receiver-varies db.prepare(tainted SQL) (SQLite.swift / GRDB); safe when the SQL is static and values are bound"},
+        {"call": "FileManager.contents", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "String.contentsOfFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "String(contentsOfFile: tainted) reads a file from a possibly tainted path; the extractor folds the discriminating label so a plain String(x) conversion never matches. Safe when the path's lastPathComponent is validated against an allow-base"},
+        {"call": "contentsOfFile", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "the folded-label suffix also matches FileManager/NSString .init(contentsOfFile:) receiver-varying forms"},
+        {"call": "Data.contentsOf", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Data(contentsOf: tainted URL/path) reads arbitrary file contents when the path is attacker-controlled; folded from Data(contentsOf:)"},
+        {"call": "String.contentsOf", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "URLSession.dataTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "dataTask.with", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "session.dataTask(with: tainted URL/request) — fetching an attacker-controlled URL is SSRF; folded from the with: label so it does not collide with unrelated .with(...) calls"},
+        {"call": "dataTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies session.dataTask(with: tainted URL/request)"},
+        {"call": "URLSession.shared.dataTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "downloadTask", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "receiver-varies session.downloadTask(with: tainted URL); fetching an attacker-controlled URL is SSRF"},
+        {"call": "NSKeyedUnarchiver.unarchiveObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "NSKeyedUnarchiver.unarchiveTopLevelObjectWithData", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005"},
+        {"call": "unarchiveTopLevelObjectWithData", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(tainted) — non-secure unarchiving of attacker bytes is an RCE vector; the secure NSSecureCoding form (unarchivedObject(ofClass:from:) requiring secure coding) is the safe path"},
+        {"call": "unarchiveObject.with", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "NSKeyedUnarchiver.unarchiveObject(with: tainted); folded from the with: label"},
+        {"call": "unarchiveObject", "vuln_class": "unsafe_deserialization", "cwe": "CWE-502", "rule_id": "TAINT-005", "note": "receiver-varies NSKeyedUnarchiver.unarchiveObject(ofType:from:)/legacy unarchiveObject(data:) forms"},
+        {"call": "WKWebView.loadHTMLString", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "loading un-escaped tainted HTML into a WKWebView reflects it as XSS; safe when HTML-escaped first"},
+        {"call": "loadHTMLString", "vuln_class": "xss", "cwe": "CWE-79", "rule_id": "TAINT-003", "note": "receiver-varies webView.loadHTMLString(tainted, baseURL:)"}
+      ],
+      "sanitizers": [
+        {"call": "sqlite3_bind_text", "neutralizes": ["sql_injection"], "note": "binding values as parameters keeps them out of the SQL text"},
+        {"call": "sqlite3_bind_int", "neutralizes": ["sql_injection"]},
+        {"call": "sqlite3_bind", "neutralizes": ["sql_injection"]},
+        {"call": "bind", "neutralizes": ["sql_injection"], "note": "receiver-varies statement.bind(tainted) placeholder binding (SQLite.swift / GRDB)"},
+        {"call": "Int", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "ssrf"], "note": "Int(tainted) numeric coercion removes injection metacharacters (nil on non-numeric input)"},
+        {"call": "lastPathComponent", "neutralizes": ["path_traversal"], "note": "URL(string:).lastPathComponent strips directory components; pair with an allow-base check"},
+        {"call": "addingPercentEncoding", "neutralizes": ["ssrf"], "note": "percent-encoding a component keeps it from altering the URL host/path"},
+        {"call": "escapeHTML", "neutralizes": ["xss"], "note": "HTML entity-escaping neutralizes reflected XSS"},
+        {"call": "htmlEscape", "neutralizes": ["xss"]},
+        {"call": "addingPercentEncodingForHTML", "neutralizes": ["xss"]}
       ]
     },
     "powershell": {

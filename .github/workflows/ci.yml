@@ -172,6 +172,16 @@ jobs:
         # FN cannot be silently hidden and no new C/C++ false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-cpp --baseline testdata/precision-suite-cpp/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — perl
+        # Same honest ratchet, scoped to the Perl taint suite (lexctx scan_perl +
+        # engine extract_perl + the catalog `perl` block). Perl is recognized
+        # pragmatically (no interpreter), so recall is moderate by design (two
+        # documented false negatives — a hash-element launder and a cross-sub
+        # global flow, see testdata/precision-suite-perl/README.md). This gate
+        # defends PRECISION (>= 0.90) and pins the committed baseline so the known
+        # FNs cannot be hidden and no new Perl false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-perl --baseline testdata/precision-suite-perl/baseline.json --min-precision 0.90
+
       - name: SAST precision gate — scala
         # Same honest ratchet, scoped to the Scala taint suite (lexctx scan_scala +
         # engine extract_scala + the catalog `scala` block). Fails on any
@@ -197,6 +207,17 @@ jobs:
         # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
         # be silently hidden and no new PowerShell false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-powershell --baseline testdata/precision-suite-powershell/baseline.json --min-precision 0.90
+
+      - name: SAST precision gate — swift
+        # Same honest ratchet, scoped to the Swift taint suite (lexctx scan_swift
+        # + engine extract_swift + the catalog `swift` block). Swift's dominant
+        # injection carrier is string interpolation "\(userInput)", which lexctx
+        # classifies as CODE; the extractor's label-fold keeps a plain String(x)
+        # conversion from colliding with the file-read sink. Fails on any
+        # regression vs the committed Swift snapshot (including the one documented
+        # property-assignment false negative) and holds the per-rule precision
+        # floor at 0.90 so Swift taint precision cannot silently rot.
+        run: ./nox bench --precision testdata/precision-suite-swift --baseline testdata/precision-suite-swift/baseline.json --min-precision 0.90
 
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,

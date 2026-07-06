@@ -129,10 +129,13 @@ var sourceExtensions = map[string]bool{
 	".c": true, ".h": true,
 	".cpp": true, ".cc": true, ".cxx": true, ".c++": true,
 	".hpp": true, ".hh": true, ".hxx": true, ".ipp": true, ".inl": true,
-	".cs":    true,
+	".cs": true,
+	".sh": true,
+	// Perl translation units, modules, CGI scripts, and test scripts. One taint
+	// module (lexctx scan_perl + engine extract_perl + catalog `perl` block).
+	".pl": true, ".pm": true, ".cgi": true, ".t": true,
 	".scala": true,
 	".sc":    true,
-	".sh":    true,
 	".ps1":   true,
 	".psm1":  true,
 	".psd1":  true,
