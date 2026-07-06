@@ -69,6 +69,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanScala(content)
 	case LangKotlin:
 		return scanKotlin(content)
+	case LangShell:
+		return scanShell(content)
 	case LangPowerShell:
 		return scanPowerShell(content)
 	case LangSwift:

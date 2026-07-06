@@ -19,6 +19,7 @@ const (
 	langPerl
 	langScala
 	langKotlin
+	langShell
 	langPowerShell
 	langSwift
 )

@@ -18,6 +18,7 @@ scan:
     - "testdata/precision-suite-perl/"
     - "testdata/precision-suite-scala/"
     - "testdata/precision-suite-kotlin/"
+    - "testdata/precision-suite-shell/"
     - "testdata/precision-suite-powershell/"
     - "testdata/precision-suite-swift/"
     - ".relicta/"
