@@ -23,6 +23,7 @@ const (
 	langPowerShell
 	langSwift
 	langLua
+	langClojure
 )
 
 // recognizeStatement turns one logical line into a stmtDraft, or reports ok=false

@@ -186,6 +186,16 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// normalization rewrites the `obj:method()` method-call colon to `.` so
 		// the shared recognizer and catalog suffix-matching see `obj.method`.
 		return extractLua(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangClojure:
+		// Clojure is a Lisp: prefix s-expressions `(fn arg …)`, `(def x v)`,
+		// `(let [x v] …)` — very different from the assignment/call line model the
+		// shared recognizer assumes. A dedicated paren-aware FORM recognizer walks
+		// the code-only byte stream (strings/comments already blanked by lexctx) and
+		// emits the shared unitDraft IR: `(def NAME expr)` / `(let [NAME expr …])`
+		// bindings and `(CALLEE args…)` calls. Recall is the LOWEST of any language
+		// by design — threading macros, HOFs, and destructuring are beyond a form
+		// recognizer; see extract_clojure.go for the honest limits.
+		return extractClojure(content, regions)
 	default:
 		return nil
 	}

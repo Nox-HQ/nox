@@ -601,7 +601,14 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// `$dbh->prepare("... ?")` + bind pass the tainted value as a placeholder
 		// bind argument (2nd+ positional), not interpolated into the SQL string
 		// (1st positional). A bare `do`/`prepare` chain reduces to these suffixes.
-		"dbh.do", "dbh.prepare", "dbh.selectrow_array":
+		"dbh.do", "dbh.prepare", "dbh.selectrow_array",
+		// Clojure jdbc: `(jdbc/query db ["… ?" v])` passes the tainted value in a
+		// parameterized bind VECTOR (2nd positional after the db handle) rather than
+		// concatenated into the SQL string; a `(str "… " v)` concat query interpolates
+		// it into arg 0. The suffix key for `jdbc/query` / `next.jdbc/execute!` is the
+		// whole symbol (no dots), so match those verbatim here.
+		"jdbc/query", "jdbc/execute!", "next.jdbc/execute!",
+		"clojure.java.jdbc/query", "clojure.java.jdbc/execute!":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional
