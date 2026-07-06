@@ -51,6 +51,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanJavaScript(content)
 	case LangGo:
 		return scanGo(content)
+	case LangJava:
+		return scanJava(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}
