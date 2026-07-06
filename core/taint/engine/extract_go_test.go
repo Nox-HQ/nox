@@ -199,3 +199,189 @@ func (s *Server) handle(input string) {
 		t.Errorf("params = %v, want [s input] (receiver first)", u.params)
 	}
 }
+
+// stmtAssigningReading returns the first statement in u whose Assigns == name AND
+// which reads `read` — so a test can pinpoint the container-assignment statement
+// (`m["c"] = user`) rather than an earlier `m := ...{}` initializer that also
+// assigns the same base.
+func stmtAssigningReading(t *testing.T, u unitDraft, name, read string) stmtDraft {
+	t.Helper()
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name && containsStr(u.stmts[i].reads, read) {
+			return u.stmts[i]
+		}
+	}
+	t.Fatalf("no statement assigning %q reading %q in unit %q; stmts=%+v", name, read, u.funcName, u.stmts)
+	return stmtDraft{}
+}
+
+// stmtAssigning returns the first statement in u whose Assigns == name.
+func stmtAssigning(t *testing.T, u unitDraft, name string) stmtDraft {
+	t.Helper()
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name {
+			return u.stmts[i]
+		}
+	}
+	t.Fatalf("no statement assigning %q in unit %q; stmts=%+v", name, u.funcName, u.stmts)
+	return stmtDraft{}
+}
+
+// TestExtractGoMapIndexAssignTaintsBase covers container sensitivity for a map
+// index assignment `m["c"] = user`: the extractor must record the BASE identifier
+// (m), not the index expression, as the assignee so a tainted RHS taints the
+// whole container (a sound container-level over-approximation).
+func TestExtractGoMapIndexAssignTaintsBase(t *testing.T) {
+	src := []byte(`package j
+
+import "net/http"
+
+func runMap(r *http.Request) {
+	user := r.FormValue("c")
+	m := map[string]string{}
+	m["c"] = user
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runMap")
+	// The index assignment must be attributed to the base variable m.
+	st := stmtAssigningReading(t, u, "m", "user")
+	if !containsStr(st.reads, "user") {
+		t.Errorf("m[..]=user reads = %v, want to include user", st.reads)
+	}
+}
+
+// TestExtractGoStructFieldAssignTaintsBase covers container sensitivity for a
+// struct-field assignment `obj.Field = user`: the base identifier (obj) is the
+// assignee, so the whole struct is tainted.
+func TestExtractGoStructFieldAssignTaintsBase(t *testing.T) {
+	src := []byte(`package j
+
+import "net/http"
+
+func runField(r *http.Request) {
+	user := r.FormValue("c")
+	var cmd Cmd
+	cmd.Arg = user
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runField")
+	st := stmtAssigning(t, u, "cmd")
+	if !containsStr(st.reads, "user") {
+		t.Errorf("cmd.Arg=user reads = %v, want to include user", st.reads)
+	}
+}
+
+// TestExtractGoIndexAssignBaseNotOverwritingSanitized guards the clean_field_safe
+// path: when the RHS of a field assignment is a sanitized value, the base is still
+// the assignee (so the engine's per-class sanitizer clearing — not the extractor —
+// keeps it clean). The extractor must record the base and the sanitizer call.
+func TestExtractGoIndexAssignBaseRecordsSanitizerCall(t *testing.T) {
+	src := []byte(`package j
+
+import (
+	"net/http"
+	"strconv"
+)
+
+func runSafe(r *http.Request) {
+	var t Ticket
+	t.Count = strconv.Atoi(r.FormValue("count"))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runSafe")
+	st := stmtAssigning(t, u, "t")
+	if !containsStr(st.calls, "strconv.Atoi") {
+		t.Errorf("t.Count=strconv.Atoi(...) calls = %v, want to include strconv.Atoi", st.calls)
+	}
+}
+
+// TestExtractGoFprintfSinkArg covers the reflected-XSS-via-fmt.Fprintf shape:
+// fmt.Fprintf(w, "<div>%s</div>", name) — the callee renders to fmt.Fprintf and
+// the tainted interpolation variable name is captured as a tainted arg var (the
+// writer w is the first positional arg, name a later one).
+func TestExtractGoFprintfSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	fmt.Fprintf(w, "<div>%s</div>", name)
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "fmt.Fprintf")
+	if !containsStr(sink.reads, "name") {
+		t.Errorf("fmt.Fprintf reads = %v, want to include name", sink.reads)
+	}
+	info, ok := sink.sinkArgs["fmt.Fprintf"]
+	if !ok {
+		t.Fatalf("no sinkArg for fmt.Fprintf: %+v", sink.sinkArgs)
+	}
+	if !containsStr(info.taintedArgVars, "name") {
+		t.Errorf("fmt.Fprintf taintedArgVars = %v, want to include name", info.taintedArgVars)
+	}
+}
+
+// TestExtractGoWriteBytesSinkArg covers w.Write([]byte("<b>"+user+"</b>")): the
+// callee renders to w.Write and the tainted concat variable user is captured even
+// though it is nested inside a []byte(...) conversion of a string concatenation.
+func TestExtractGoWriteBytesSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import "net/http"
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	_, _ = w.Write([]byte("<b>" + user + "</b>"))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "w.Write")
+	if !containsStr(sink.reads, "user") {
+		t.Errorf("w.Write reads = %v, want to include user", sink.reads)
+	}
+	info := sink.sinkArgs["w.Write"]
+	if !containsStr(info.taintedArgVars, "user") {
+		t.Errorf("w.Write taintedArgVars = %v, want to include user", info.taintedArgVars)
+	}
+}
+
+// TestExtractGoTemplateHTMLBypassSinkArg covers the auto-escape bypass shape:
+// t.Execute(w, template.HTML(comment)). The nested template.HTML call must be
+// captured as its own sink call with the tainted variable comment as an arg — so
+// the catalog can flag template.HTML(tainted) as an XSS sink independent of the
+// enclosing Execute (which is NOT a sink).
+func TestExtractGoTemplateHTMLBypassSinkArg(t *testing.T) {
+	src := []byte(`package web
+
+import (
+	"html/template"
+	"net/http"
+)
+
+func greet(w http.ResponseWriter, r *http.Request) {
+	comment := r.URL.Query().Get("comment")
+	t := template.Must(template.New("c").Parse("<p>{{.}}</p>"))
+	_ = t.Execute(w, template.HTML(comment))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "greet")
+	sink := stmtWithCall(t, u, "template.HTML")
+	info, ok := sink.sinkArgs["template.HTML"]
+	if !ok {
+		t.Fatalf("no sinkArg for template.HTML: %+v", sink.sinkArgs)
+	}
+	if !containsStr(info.taintedArgVars, "comment") {
+		t.Errorf("template.HTML taintedArgVars = %v, want to include comment", info.taintedArgVars)
+	}
+}

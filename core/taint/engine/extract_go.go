@@ -248,11 +248,18 @@ func (ex *goExtractor) emitReturn(u *unitDraft, st *ast.ReturnStmt) {
 // engine's assigns field is one variable; for a multi-value assign
 // (`out, _ := f()`, `tmp, err := f()`) we pick the first non-blank, non-error
 // identifier so the meaningful value — not the error — is tracked.
+//
+// A container/element or field target (`m["c"] = v`, `obj.Field = v`) resolves
+// to its BASE identifier (m, obj) so a tainted RHS taints the whole container — a
+// sound, container-level over-approximation that makes taint laundered through a
+// map value / slice element / struct field reach a later read of the container.
+// This is the only element/field sensitivity nox claims: container-level, not
+// key-level.
 func (ex *goExtractor) primaryLHS(lhs []ast.Expr) string {
 	names := make([]string, 0, len(lhs))
 	for _, e := range lhs {
-		if id, ok := e.(*ast.Ident); ok {
-			names = append(names, id.Name)
+		if name := lhsAssignedName(e); name != "" {
+			names = append(names, name)
 		} else {
 			names = append(names, "")
 		}
@@ -268,6 +275,33 @@ func (ex *goExtractor) primaryLHS(lhs []ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+// lhsAssignedName returns the variable name an assignment LHS target attributes
+// taint to. A plain identifier (`x = v`) yields the identifier. A container or
+// field target resolves to its base identifier so the whole container is tainted:
+//   - `m["c"] = v` / `s[0] = v` (*ast.IndexExpr) → the base "m" / "s"
+//   - `obj.Field = v` (*ast.SelectorExpr)        → the receiver head "obj"
+//   - `(*p).Field = v` / `p.a.b = v` (nested)     → the leftmost identifier
+//
+// Container-level, not key-level: writing one key taints the container, so a read
+// of any element of it is treated as tainted (a sound over-approximation). Returns
+// "" for a shape with no identifier base (e.g. a literal or call target).
+func lhsAssignedName(e ast.Expr) string {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name
+	case *ast.IndexExpr:
+		return lhsAssignedName(x.X)
+	case *ast.SelectorExpr:
+		return lhsAssignedName(x.X)
+	case *ast.StarExpr:
+		return lhsAssignedName(x.X)
+	case *ast.ParenExpr:
+		return lhsAssignedName(x.X)
+	default:
+		return ""
+	}
 }
 
 // hoistInlineSources scans the given expressions for pure selector chains used as
@@ -363,7 +397,18 @@ func (ex *goExtractor) collectExpr(st *stmtDraft, e ast.Expr) {
 		return
 	case *ast.CallExpr:
 		callee := renderCallChain(x.Fun)
-		if callee != "" {
+		// A raw `.Write` XSS-to-response sink (w.Write([]byte(...))) fires only on the
+		// reflected-HTML shape: a tainted value combined with a string LITERAL in the
+		// write argument (an HTML concatenation "<b>"+user+"</b>"). A bare write of a
+		// precomputed value — w.Write(out) where out is command/file output — is NOT
+		// reflected XSS (that value is already reported at its own upstream sink), so
+		// the callee is not registered as a sink here. This gate keeps the injection
+		// samples (tp_cmdinjection/pathtraversal/… all end in w.Write(out)) from
+		// double-firing an XSS false positive while w.Write([]byte("…"+user)) still
+		// fires. The fmt.Fprint*/io.WriteString string-writers and template.HTML
+		// bypass need no literal gate — a tainted string reaching them IS reflected
+		// content — so they always register and are gated only by taint.
+		if callee != "" && (!isGoRawWriteSink(callee) || xssWriteArgIsHTML(x)) {
 			st.calls = appendUnique(st.calls, callee)
 			st.sinkArgs[callee] = ex.callArgInfo(x)
 		}
@@ -591,6 +636,56 @@ func chainHead(chain string) string {
 func isStringLiteral(e ast.Expr) bool {
 	lit, ok := e.(*ast.BasicLit)
 	return ok && lit.Kind == token.STRING
+}
+
+// isGoRawWriteSink reports whether a rendered callee chain is a raw byte `.Write`
+// on a response writer (w.Write, rw.Write, …). Matched on the `.Write` suffix so an
+// aliased writer name still resolves. This is the only XSS-write sink whose danger
+// is gated on a co-located string literal (a bare w.Write(out) of precomputed bytes
+// is not reflected XSS); the fmt.Fprint*/io.WriteString string-writers are not
+// gated, and template.HTML is an unconditional bypass sink.
+func isGoRawWriteSink(callee string) bool {
+	return strings.HasSuffix(callee, ".Write")
+}
+
+// xssWriteArgIsHTML reports whether a write call carries the reflected-HTML shape:
+// a string LITERAL appears somewhere in its arguments (a format string like
+// "<div>%s</div>" or an HTML concatenation "<b>"+user+"</b>", including inside a
+// []byte(...) conversion). A bare write of a single precomputed value — w.Write(out)
+// — has no literal and is not treated as XSS. Deterministic, AST-only.
+func xssWriteArgIsHTML(call *ast.CallExpr) bool {
+	for _, arg := range call.Args {
+		if exprContainsStringLiteral(arg) {
+			return true
+		}
+	}
+	return false
+}
+
+// exprContainsStringLiteral reports whether an expression tree contains a string
+// basic literal, descending concatenations, conversions ([]byte(...)), and the
+// usual wrappers. It does not descend into nested unrelated calls' arguments
+// beyond the conversion/format spine we care about — a string literal anywhere in
+// the write argument's own spine is enough to mark it HTML-shaped.
+func exprContainsStringLiteral(e ast.Expr) bool {
+	switch x := e.(type) {
+	case *ast.BasicLit:
+		return x.Kind == token.STRING
+	case *ast.BinaryExpr:
+		return exprContainsStringLiteral(x.X) || exprContainsStringLiteral(x.Y)
+	case *ast.ParenExpr:
+		return exprContainsStringLiteral(x.X)
+	case *ast.CallExpr:
+		// Descend a conversion / wrapping call ([]byte("<b>"+user+"</b>"),
+		// string(...)) so a literal inside the converted expression counts.
+		for _, a := range x.Args {
+			if exprContainsStringLiteral(a) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 // isCompositeVector reports whether an expression is a composite literal such as

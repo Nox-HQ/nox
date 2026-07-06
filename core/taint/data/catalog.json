@@ -1113,6 +1113,46 @@
           "vuln_class": "ssti",
           "cwe": "CWE-1336",
           "rule_id": "TAINT-003"
+        },
+        {
+          "call": "fmt.Fprintf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "tainted value written to an http.ResponseWriter (first arg is the writer); html/template Execute is intentionally not a sink"
+        },
+        {
+          "call": "fmt.Fprint",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "fmt.Fprintln",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "w.Write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "response-writer byte write; gated in extract_go on a co-located string literal (the HTML-concat shape)"
+        },
+        {
+          "call": "io.WriteString",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "tainted string written to the response writer"
+        },
+        {
+          "call": "template.HTML",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "the html/template auto-escape bypass; distinct from safe html/template interpolation, which is not a sink"
         }
       ],
       "sanitizers": [

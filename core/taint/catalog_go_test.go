@@ -23,6 +23,14 @@ func TestGoCatalogSinks(t *testing.T) {
 		{"gob.NewDecoder deser", "gob.NewDecoder", VulnUnsafeDeserialization, "CWE-502", "TAINT-005"},
 		{"yaml.Unmarshal deser", "yaml.Unmarshal", VulnUnsafeDeserialization, "CWE-502", "TAINT-005"},
 		{"template.New.Parse ssti", "template.New.Parse", VulnSSTI, "CWE-1336", "TAINT-003"},
+		// XSS-to-response sinks (tier-2): tainted data written as HTML to an
+		// http.ResponseWriter is reflected XSS — TAINT-003, xss, CWE-79.
+		{"fmt.Fprintf xss", "fmt.Fprintf", VulnXSS, "CWE-79", "TAINT-003"},
+		{"fmt.Fprint xss", "fmt.Fprint", VulnXSS, "CWE-79", "TAINT-003"},
+		{"fmt.Fprintln xss", "fmt.Fprintln", VulnXSS, "CWE-79", "TAINT-003"},
+		{"w.Write xss", "w.Write", VulnXSS, "CWE-79", "TAINT-003"},
+		{"io.WriteString xss", "io.WriteString", VulnXSS, "CWE-79", "TAINT-003"},
+		{"template.HTML autoescape bypass", "template.HTML", VulnXSS, "CWE-79", "TAINT-003"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
