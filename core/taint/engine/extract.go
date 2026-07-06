@@ -101,6 +101,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// brace-delimited and `;`-terminated like JS, so it shares the
 		// logicalLines/splitSemicolons segmentation. See extract_java.go.
 		return extractJava(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangCSharp:
+		// C# is brace-delimited like JS: paren/array continuations merge physical
+		// lines, then each logical line splits on top-level semicolons into
+		// statements. Unlike JS it recognizes method headers for per-method units.
+		return extractCSharp(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
