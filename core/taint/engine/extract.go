@@ -175,6 +175,17 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// Like C# it recognizes `func` headers for per-function units (and their
 		// internal parameter binding names). See extract_swift.go.
 		return extractSwift(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangLua:
+		// Lua uses the line/statement RECOGNIZER (no CGo interpreter). `{}` are
+		// table constructors, NOT statement bodies — function/if/for bodies are
+		// delimited by keywords and closed by `end` — so braces must NOT force
+		// line-merging (a function body would collapse into one logical line);
+		// only paren/bracket continuations merge physical lines. Statements are
+		// newline-terminated, but a `;` may separate several on one line, so the
+		// logical lines are also split on top-level semicolons. A per-line
+		// normalization rewrites the `obj:method()` method-call colon to `.` so
+		// the shared recognizer and catalog suffix-matching see `obj.method`.
+		return extractLua(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}

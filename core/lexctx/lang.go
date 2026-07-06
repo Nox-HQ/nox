@@ -44,6 +44,7 @@ const (
 	LangShell      // Shell/Bash — # comments, '…' (literal), "…" ($var/$(…) interp), $'…' (ANSI-C), `…`, $(…), heredocs
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
+	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -80,6 +81,8 @@ func (l Lang) String() string {
 		return "powershell"
 	case LangSwift:
 		return "swift"
+	case LangLua:
+		return "lua"
 	default:
 		return "unknown"
 	}
@@ -138,6 +141,7 @@ var extToLang = map[string]Lang{
 	".psm1":  LangPowerShell,
 	".psd1":  LangPowerShell,
 	".swift": LangSwift,
+	".lua":   LangLua,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
