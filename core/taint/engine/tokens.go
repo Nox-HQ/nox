@@ -76,7 +76,14 @@ func isKeyword(s string) bool {
 		// variable names). `local`, `then`, `end`, `nil`, `until`, `not`, `and`,
 		// `or`, `in`, `do`, `else`, `function` are already covered above; add the
 		// rest.
-		"elseif", "repeat", "goto":
+		"elseif", "repeat", "goto",
+		// Elixir keywords/macros that appear as bare tokens in headers and blocks.
+		// `def`/`fn`/`case`/`do`/`end`/`nil`/`true`/`false`/`for`/`with`/`import`/
+		// `use`/`raise` are already covered above; add the rest so a structural token
+		// is never read as a taint-carrying variable.
+		"defp", "defmodule", "defmacro", "defmacrop", "defstruct", "defprotocol",
+		"defimpl", "cond", "receive", "after", "quote",
+		"unquote", "alias", "require", "defdelegate", "defguard":
 		return true
 	}
 	return false

@@ -186,6 +186,16 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// normalization rewrites the `obj:method()` method-call colon to `.` so
 		// the shared recognizer and catalog suffix-matching see `obj.method`.
 		return extractLua(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangElixir:
+		// Elixir uses the line/statement RECOGNIZER (no CGo parser). Scoping is by
+		// `def`/`defp ... do ... end` (like Ruby's `def...end`), so `{}` are map/
+		// struct/binary delimiters — NOT statement bodies — and must NOT force
+		// line-merging; only paren/bracket continuations merge physical lines.
+		// Statements are newline-terminated, and a `;` can pack several onto one
+		// line, so the logical lines are also split on top-level semicolons. The
+		// pipe operator `|>` and pattern-matching make recall lower (documented in
+		// extract_elixir.go and testdata/precision-suite-elixir/README.md).
+		return extractElixir(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
