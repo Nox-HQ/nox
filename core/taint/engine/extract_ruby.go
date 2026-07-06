@@ -238,7 +238,7 @@ func replaceScopeResolution(s string) string {
 // dotted chain, and the first argument token starts with something that can
 // begin an argument (a quote, an identifier, `:`, a digit, `[`, `%`). Both views
 // are transformed identically to stay aligned.
-func addParenlessCallParens(code, raw string) (string, string) {
+func addParenlessCallParens(code, raw string) (newCode, newRaw string) {
 	// If there is already a top-level '(' before any '=', assume it is a normal
 	// call — leave it alone.
 	if hasTopLevelAssign(code) {
@@ -268,12 +268,12 @@ func addParenlessCallParens(code, raw string) (string, string) {
 	for end > argStart && (code[end-1] == ' ' || code[end-1] == '\t') {
 		end--
 	}
-	newCode := code[:argStart] + "(" + code[argStart:end] + ")" + code[end:]
+	newCode = code[:argStart] + "(" + code[argStart:end] + ")" + code[end:]
 	// Apply the identical transform to raw so both views stay aligned. raw shares
 	// the same offsets as code because shapeRubyLine derived both from the same
 	// aligned pair.
 	if len(raw) == len(code) {
-		newRaw := raw[:argStart] + "(" + raw[argStart:end] + ")" + raw[end:]
+		newRaw = raw[:argStart] + "(" + raw[argStart:end] + ")" + raw[end:]
 		return newCode, newRaw
 	}
 	return newCode, raw
@@ -291,7 +291,7 @@ func hasTopLevelAssign(code string) bool {
 // `x.html_safe`) and the offset just past it, or ("", 0) if the line does not
 // begin with a call head. Keywords are rejected so `return x` is not read as a
 // call to `return`.
-func leadingCallHead(code string) (string, int) {
+func leadingCallHead(code string) (head string, end int) {
 	i := 0
 	n := len(code)
 	for i < n && (code[i] == ' ' || code[i] == '\t') {
@@ -305,7 +305,7 @@ func leadingCallHead(code string) (string, int) {
 	if i < n && (code[i] == '?' || code[i] == '!') {
 		i++
 	}
-	head := code[start:i]
+	head = code[start:i]
 	if head == "" || strings.HasPrefix(head, ".") {
 		return "", 0
 	}

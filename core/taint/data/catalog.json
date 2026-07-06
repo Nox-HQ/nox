@@ -1483,13 +1483,6 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "template body built from tainted data enables injection"
-        },
-        {
-          "call": "render",
-          "vuln_class": "xss",
-          "cwe": "CWE-79",
-          "rule_id": "TAINT-003",
-          "note": "render inline: with tainted template is injectable"
         }
       ],
       "sanitizers": [

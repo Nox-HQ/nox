@@ -138,6 +138,13 @@ jobs:
         # a regression in the Java lexer, extractor, or catalog fails here.
         run: ./nox bench --precision testdata/precision-suite-java --baseline testdata/precision-suite-java/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — ruby
+        # The Ruby honest measurement corpus, gated the same way as the main
+        # suite: any regression vs the committed snapshot (overall or per-rule)
+        # fails the build, and --min-precision 0.90 is a blunt second floor so no
+        # Ruby taint rule that fired may score below it.
+        run: ./nox bench --precision testdata/precision-suite-ruby --baseline testdata/precision-suite-ruby/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
