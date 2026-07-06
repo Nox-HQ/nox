@@ -201,8 +201,8 @@ func perlSubHeader(code string) (name string, params []string, ok bool) {
 	// the inner names are bare identifiers.
 	after := strings.TrimSpace(rest[end:])
 	if strings.HasPrefix(after, "(") {
-		if close := matchParen(after, 0); close > 0 {
-			params = parsePerlParams(after[1:close])
+		if closeIdx := matchParen(after, 0); closeIdx > 0 {
+			params = parsePerlParams(after[1:closeIdx])
 		}
 	}
 	return name, params, true
