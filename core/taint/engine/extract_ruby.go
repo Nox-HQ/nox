@@ -349,13 +349,121 @@ var rubyNoArgSinkMethods = map[string]bool{
 
 // augmentRubyStatement adds Ruby-only sink shapes to an already-recognized
 // statement: a backtick / %x command literal (a command-injection sink whose
-// callee has no identifier form), and a no-argument `.html_safe` / `.raw` XSS
-// sink. Both read the interpolated / receiver variable(s) already present in the
-// statement's reads, so taint propagation is unchanged — only the sink call and
-// its argument shape are added.
+// callee has no identifier form), a no-argument `.html_safe` / `.raw` XSS sink,
+// and a `render inline:` / `render text:` template-injection sink. All read the
+// interpolated / receiver variable(s) already present in the statement's reads,
+// so taint propagation is unchanged — only the sink call and its argument shape
+// are added.
 func augmentRubyStatement(st *stmtDraft, orig, shaped logicalLine) {
 	addRubyCommandLiteral(st, orig, shaped)
 	addRubyNoArgSink(st, shaped)
+	addRubyRenderInlineSink(st, shaped)
+}
+
+// renderInlineSink is the synthetic catalog callee key for a Rails `render` that
+// builds an unescaped template body from a keyword argument (`inline:` or an
+// interpolated `text:`). It is emitted ONLY by the Ruby recognizer, never by the
+// shared call recognizer, so the catalog `render_inline` XSS sink cannot fire on
+// the auto-escaped `render plain:` / `render json:` / `render :template` forms.
+const renderInlineSink = "render_inline"
+
+// renderInlineKeywords are the `render` options whose value becomes an unescaped
+// ERB template body: `inline:` (an inline ERB template) and `text:` (a raw text
+// body). A tainted value interpolated into either is SSTI/XSS. The auto-escaped
+// options (`plain:`, `json:`, `html:` with escaping, a bare `:template` symbol)
+// are deliberately NOT listed, so they never synthesize the sink.
+var renderInlineKeywords = []string{"inline", "text"}
+
+// addRubyRenderInlineSink detects a `render` call carrying an `inline:` (or
+// `text:`) keyword argument and synthesizes a `render_inline` XSS sink whose
+// tainted arguments are the variables interpolated into that keyword's value.
+// This is the co-located-keyword gate that closes the `render inline:` template
+// injection false negative WITHOUT over-firing on the safe auto-escaped renders:
+// `render plain:` / `render json:` / `render :template` carry no `inline:`/`text:`
+// keyword, so no sink is added. Mirrors the Go XSS `w.Write` sink, which fires
+// only when a co-located string literal is present.
+//
+// The shaped CODE view has string-literal text blanked to spaces while `#{...}`
+// interpolation fields survive as code, so the free identifiers of the keyword's
+// value are exactly the interpolated variables (an inline template with no
+// interpolation yields no tainted read and therefore no flow, which is correct —
+// a constant template body is not injectable).
+func addRubyRenderInlineSink(st *stmtDraft, shaped logicalLine) {
+	value, ok := rubyRenderInlineValue(shaped.code)
+	if !ok {
+		return
+	}
+	vars := freeIdentifiers(langRuby, value)
+	if st.sinkArgs == nil {
+		st.sinkArgs = map[string]sinkArgDraft{}
+	}
+	st.calls = append(st.calls, renderInlineSink)
+	st.sinkArgs[renderInlineSink] = sinkArgDraft{
+		taintedArgVars:  append([]string(nil), vars...),
+		argCount:        1,
+		firstArgTainted: len(vars) > 0,
+		positionalVars:  [][]string{append([]string(nil), vars...)},
+	}
+	for _, v := range vars {
+		st.reads = appendUnique(st.reads, v)
+	}
+	sortStrings(st.reads)
+}
+
+// rubyRenderInlineValue reports whether the shaped code view is a `render` call
+// carrying an `inline:` / `text:` keyword argument, returning that keyword's
+// value text (with string literals already blanked, interpolation preserved) for
+// free-identifier extraction. The call head must be `render` so an unrelated
+// method that happens to take an `inline:` option is not matched. Best-effort and
+// deterministic: an unparsable slot yields ok=false (a missed flow, never a
+// spurious sink).
+func rubyRenderInlineValue(code string) (value string, ok bool) {
+	head, end := leadingCallHead(code)
+	if head != "render" {
+		return "", false
+	}
+	// Locate the argument list `(...)` shapeRubyLine synthesized for the call.
+	open := strings.IndexByte(code[end:], '(')
+	if open < 0 {
+		return "", false
+	}
+	open += end
+	args, _ := balancedArgs(code, open)
+	for _, part := range splitTopLevelArgs(args) {
+		key, val, isKW := rubyKeywordArg(part)
+		if !isKW {
+			continue
+		}
+		for _, kw := range renderInlineKeywords {
+			if key == kw {
+				return val, true
+			}
+		}
+	}
+	return "", false
+}
+
+// rubyKeywordArg splits a Ruby keyword argument `name: value` into its bare key
+// and value text, reporting ok=false when the slot is not a `name:` keyword. It
+// recognizes the Ruby 1.9+ symbol-key form (`inline: x`), not the hash-rocket
+// form (`:inline => x`), which shaping does not produce for render options. A
+// top-level `:` after a bare identifier (not `::` scope resolution, already
+// normalized away by shaping) marks the key/value boundary.
+func rubyKeywordArg(part string) (key, value string, ok bool) {
+	part = strings.TrimSpace(part)
+	i := 0
+	for i < len(part) && isIdentPart(part[i]) {
+		i++
+	}
+	if i == 0 || i >= len(part) || part[i] != ':' {
+		return "", "", false
+	}
+	key = part[:i]
+	value = strings.TrimSpace(part[i+1:])
+	if key == "" {
+		return "", "", false
+	}
+	return key, value, true
 }
 
 // addRubyCommandLiteral detects a backtick “ `...` “ or `%x(...)` command
@@ -453,6 +561,7 @@ func rubySpecialStatement(orig, shaped logicalLine) (stmtDraft, bool) {
 	st := stmtDraft{line: orig.line, sinkArgs: map[string]sinkArgDraft{}}
 	addRubyCommandLiteral(&st, orig, shaped)
 	addRubyNoArgSink(&st, shaped)
+	addRubyRenderInlineSink(&st, shaped)
 	if len(st.calls) == 0 {
 		return stmtDraft{}, false
 	}
