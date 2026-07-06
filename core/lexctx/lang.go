@@ -34,6 +34,7 @@ const (
 	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
 	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
 	LangJava       // Java — //, /*…*/, /**…*/, "…", """…""" (text block), '…' (char)
+	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -50,6 +51,8 @@ func (l Lang) String() string {
 		return "php"
 	case LangJava:
 		return "java"
+	case LangRust:
+		return "rust"
 	default:
 		return "unknown"
 	}
@@ -75,6 +78,7 @@ var extToLang = map[string]Lang{
 	".php":   LangPHP,
 	".phtml": LangPHP,
 	".java":  LangJava,
+	".rs":    LangRust,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is
