@@ -21,6 +21,13 @@ func suitePath() string {
 	return filepath.Join("..", "testdata", "precision-suite")
 }
 
+// suitePathPHP resolves the PHP honest measurement corpus relative to the repo
+// root. It is a separate directory so the PHP taint model is measured against
+// PHP-only ground truth, gated by its own baseline.
+func suitePathPHP() string {
+	return filepath.Join("..", "testdata", "precision-suite-php")
+}
+
 // TestPrecisionCorpusBaseline is a guard test: the shipped corpus is curated to
 // score a perfect 1.0/1.0/1.0. If a rule change makes nox miss a labeled
 // finding (recall drops) or fire on a clean sample (precision drops), this test
@@ -101,6 +108,51 @@ func TestPrecisionSuiteBaseline(t *testing.T) {
 	if bench.Improved(base, current) {
 		t.Logf("precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f); "+
 			"refresh testdata/precision-suite/baseline.json to lock in the gain",
+			base.Precision, current.Precision, base.FP, current.FP,
+			base.FindingsPerIssue, current.FindingsPerIssue)
+	}
+}
+
+// TestPrecisionSuiteBaselinePHP is the PHP ratchet: it scans the PHP honest
+// measurement suite, loads its committed baseline snapshot, and fails if any
+// gated metric regressed (precision/recall/F1 dropped, or FP / findings-per-issue
+// rose). It mirrors TestPrecisionSuiteBaseline but pins the PHP taint model's
+// numbers against PHP-only ground truth, so a change that makes PHP scanning
+// noisier or misses a PHP flow fails CI independently of the other languages.
+func TestPrecisionSuiteBaselinePHP(t *testing.T) {
+	dir := suitePathPHP()
+
+	expectations, err := bench.ParseCorpus(dir)
+	if err != nil {
+		t.Fatalf("ParseCorpus(%s): %v", dir, err)
+	}
+	if len(expectations) == 0 {
+		t.Fatal("PHP suite has no expectations; a labeled corpus must declare some")
+	}
+
+	scanFindings, err := scanCorpusFindings(dir)
+	if err != nil {
+		t.Fatalf("scanCorpusFindings(%s): %v", dir, err)
+	}
+
+	report := bench.Score(scanFindings, expectations)
+	current := bench.BaselineFromReport(&report)
+
+	base := loadBaseline(t, filepath.Join(dir, "baseline.json"))
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		for _, r := range regressions {
+			t.Errorf("PHP suite regressed: %s", r.String())
+		}
+		t.Fatalf("PHP precision suite regressed vs baseline.json; investigate the change or, if intended, "+
+			"regenerate the snapshot with `nox bench --precision testdata/precision-suite-php "+
+			"--baseline testdata/precision-suite-php/baseline.json` after deleting it.\n%s",
+			renderPrecisionTable(dir, &report))
+	}
+
+	if bench.Improved(base, current) {
+		t.Logf("PHP precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, FP %d->%d, findings/issue %.2f->%.2f); "+
+			"refresh testdata/precision-suite-php/baseline.json to lock in the gain",
 			base.Precision, current.Precision, base.FP, current.FP,
 			base.FindingsPerIssue, current.FindingsPerIssue)
 	}

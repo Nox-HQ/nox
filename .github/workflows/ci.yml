@@ -123,6 +123,13 @@ jobs:
         # precision number from silently rotting.
         run: ./nox bench --precision testdata/precision-suite --baseline testdata/precision-suite/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — php
+        # The PHP taint model measured against PHP-only ground truth, gated by its
+        # own committed snapshot and the same 0.90 precision floor. Keeps the PHP
+        # source/sink/sanitizer model from silently regressing independently of the
+        # Python/JS/Go corpus.
+        run: ./nox bench --precision testdata/precision-suite-php --baseline testdata/precision-suite-php/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently
