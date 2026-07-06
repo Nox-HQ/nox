@@ -38,6 +38,18 @@ func extractRust(lines []logicalLine) []unitDraft {
 		}
 		if name, params, ok := rustFnHeader(trimmed); ok {
 			u := &unitDraft{funcName: name, params: params}
+			// Seed web-framework extractor parameters as taint sources: when a
+			// parameter's TYPE is a known untrusted-input extractor (actix
+			// `web::Query<_>`/`web::Form<_>`/`web::Json<_>`/`web::Path<_>`, axum
+			// `Query<_>`/`Form<_>`/`Json<_>`/`Path<_>`), the value it binds is
+			// attacker-controlled even though it arrives as a typed parameter, not a
+			// source CALL. The engine has no "tainted parameter" concept, so we emit a
+			// synthetic entry statement `binding = <extractor-source>()` that the
+			// engine already understands: resolveSource matches the source call and
+			// marks the binding tainted-on-entry. Only extractor types seed taint — a
+			// plain `id: i64` never does. See rustExtractorSeeds.
+			seeds := rustExtractorSeeds(ll.line, trimmed)
+			u.stmts = append(u.stmts, seeds...)
 			units = append(units, u)
 			cur = u
 			// Blank the header text (`fn name(params) -> Ret {`) in both views so it
@@ -172,6 +184,171 @@ func parseRustParams(inner string) []string {
 		}
 	}
 	return out
+}
+
+// rustExtractorSourceKey maps a Rust web-framework extractor type constructor to
+// the catalog source key it should seed under (the normalized dotted form the
+// `rust` catalog block keys extractor sources by). It recognizes the actix
+// `web::Xxx<_>` wrappers and the bare axum `Xxx<_>` wrappers. A non-extractor
+// type returns ("", false) — the precision guardrail: only these exact types
+// seed taint, so a normal typed parameter (`id: i64`, `cfg: &Config`) never
+// becomes a source.
+func rustExtractorSourceKey(typeHead string) (string, bool) {
+	switch typeHead {
+	// actix-web: fully-qualified `web::Query<_>` etc.
+	case "web::Query":
+		return "web.Query", true
+	case "web::Form":
+		return "web.Form", true
+	case "web::Json":
+		return "web.Json", true
+	case "web::Path":
+		return "web.Path", true
+	// axum: bare `Query<_>` etc. (also matches actix when `web::` is elided).
+	case "Query":
+		return "Query", true
+	case "Form":
+		return "Form", true
+	case "Json":
+		return "Json", true
+	case "Path":
+		return "Path", true
+	default:
+		return "", false
+	}
+}
+
+// rustExtractorSeeds parses a `fn` header's parameter list and returns a
+// synthetic source-seed statement for every parameter whose TYPE is a web
+// extractor. Each seed is `binding = <sourceKey>()`-shaped (assigns the binding,
+// calls the catalog source), which the engine's resolveSource matches to mark
+// the binding tainted at function entry. Both parameter shapes are handled:
+//
+//   - named:        `query: web::Query<Params>`   -> binding `query`
+//   - destructured: `Query(params): Query<Params>` -> binding `params` (axum's
+//     idiom, where the tuple-struct pattern binds the inner value directly)
+//
+// A destructured pattern with multiple/complex bindings, or a non-extractor
+// type, yields no seed (safe: a missed seed only weakens recall, never invents a
+// flow).
+func rustExtractorSeeds(line int, trimmed string) []stmtDraft {
+	paren := strings.IndexByte(trimmed, '(')
+	if paren < 0 {
+		return nil
+	}
+	closeParen := matchParen(trimmed, paren)
+	if closeParen < 0 {
+		return nil
+	}
+	var seeds []stmtDraft
+	for _, part := range splitTopLevelArgs(trimmed[paren+1 : closeParen]) {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		// A parameter is `pattern: Type`. Split on the FIRST top-level ':' — the
+		// pattern (which may itself contain `::` in a path, handled by depth) is on
+		// the left, the type on the right.
+		colon := topLevelColon(part)
+		if colon < 0 {
+			continue // receiver (`&self`) or malformed: no type to inspect.
+		}
+		pattern := strings.TrimSpace(part[:colon])
+		typ := strings.TrimSpace(part[colon+1:])
+		key, ok := rustExtractorSourceKey(rustTypeHead(typ))
+		if !ok {
+			continue
+		}
+		binding, ok := rustExtractorBinding(pattern)
+		if !ok {
+			continue
+		}
+		seeds = append(seeds, stmtDraft{
+			line:     line,
+			assigns:  binding,
+			calls:    []string{key},
+			sinkArgs: map[string]sinkArgDraft{},
+		})
+	}
+	return seeds
+}
+
+// rustTypeHead returns the type constructor at the head of a parameter type,
+// dropping a leading reference/mutability marker and truncating at the generic
+// `<`. For `web::Query<Params>` it returns `web::Query`; for `&web::Path<u32>`,
+// `web::Path`; for `i64`, `i64`. The `::` path separator is preserved here (the
+// seed's source key is chosen by rustExtractorSourceKey, which knows both the
+// `web::Query` and the collapsed forms).
+func rustTypeHead(typ string) string {
+	typ = strings.TrimSpace(typ)
+	typ = strings.TrimPrefix(typ, "&")
+	typ = strings.TrimSpace(typ)
+	typ = strings.TrimPrefix(typ, "mut ")
+	typ = strings.TrimSpace(typ)
+	if i := strings.IndexByte(typ, '<'); i >= 0 {
+		typ = typ[:i]
+	}
+	return strings.TrimSpace(typ)
+}
+
+// rustExtractorBinding extracts the single binding name a parameter pattern
+// introduces. It handles the two shapes the extractor seeds:
+//
+//   - a bare identifier `query` (named parameter) -> `query`
+//   - a single-field tuple-struct pattern `Query(params)` (axum destructure) ->
+//     `params`
+//
+// Any other pattern (a multi-field tuple, a struct pattern, `mut x` is
+// normalized) returns ok=false so no seed is emitted.
+func rustExtractorBinding(pattern string) (string, bool) {
+	pattern = strings.TrimSpace(pattern)
+	pattern = strings.TrimPrefix(pattern, "mut ")
+	pattern = strings.TrimSpace(pattern)
+	if isSimpleIdent(pattern) {
+		return pattern, true
+	}
+	// Tuple-struct destructure `Wrapper(inner)`: take the single inner binding.
+	if open := strings.IndexByte(pattern, '('); open >= 0 && strings.HasSuffix(pattern, ")") {
+		inner := strings.TrimSpace(pattern[open+1 : len(pattern)-1])
+		inner = strings.TrimPrefix(inner, "mut ")
+		inner = strings.TrimSpace(inner)
+		if isSimpleIdent(inner) {
+			return inner, true
+		}
+	}
+	return "", false
+}
+
+// topLevelColon returns the index of the first ':' in s that is not inside
+// brackets/angle-generics and is not part of a `::` path separator. It locates
+// the `pattern : Type` boundary in a parameter without splitting inside a
+// `web::Query` path or a `<A: Bound>` generic. Returns -1 when none exists.
+func topLevelColon(s string) int {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{', '<':
+			depth++
+		case ')', ']', '}', '>':
+			if depth > 0 {
+				depth--
+			}
+		case ':':
+			if depth != 0 {
+				continue
+			}
+			// Skip a `::` path separator (consume both colons).
+			if i+1 < len(s) && s[i+1] == ':' {
+				i++
+				continue
+			}
+			if i > 0 && s[i-1] == ':' {
+				continue
+			}
+			return i
+		}
+	}
+	return -1
 }
 
 // rustReturnStatement recognizes an explicit `return <expr>;` line and produces
