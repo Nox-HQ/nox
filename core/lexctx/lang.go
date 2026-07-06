@@ -40,6 +40,7 @@ const (
 	LangCPP        // C/C++ — //, /*…*/, "…" (L/u8/u/U prefixes), R"(…)" raw, '…' (char), #… preprocessor, \ line-splice
 	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
 	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
+	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -68,6 +69,8 @@ func (l Lang) String() string {
 		return "scala"
 	case LangKotlin:
 		return "kotlin"
+	case LangPowerShell:
+		return "powershell"
 	default:
 		return "unknown"
 	}
@@ -116,6 +119,9 @@ var extToLang = map[string]Lang{
 	".sc":    LangScala,
 	".kt":    LangKotlin,
 	".kts":   LangKotlin,
+	".ps1":   LangPowerShell,
+	".psm1":  LangPowerShell,
+	".psd1":  LangPowerShell,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
