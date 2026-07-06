@@ -71,6 +71,7 @@ func extractCPP(lines []logicalLine) []unitDraft {
 
 		if !isCPPStructuralLine(trimmed) {
 			if st, ok := recognizeStatement(langCPP, ll); ok {
+				applyCPPBufferBuilder(&st)
 				cur.stmts = append(cur.stmts, st)
 			}
 		}
@@ -437,6 +438,87 @@ func cppReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
 	return st, true
+}
+
+// cppBufferBuilders are C string/memory functions that WRITE their first
+// argument (a destination buffer) from their later arguments. Idiomatic C builds
+// a command/path/query string this way — `strcat(cmd, argv[1])`,
+// `sprintf(buf, "%s", user)` — so taint from a source read in a later argument
+// must propagate INTO the destination buffer for the canonical
+// `system(strcat(cmd, tainted))` shape to be caught. The taint model otherwise
+// tracks only `lhs = rhs` assignments, so these out-parameter writers are
+// modeled explicitly here (a C/C++-local concern that needs no engine change).
+var cppBufferBuilders = map[string]bool{
+	"strcat":   true,
+	"strncat":  true,
+	"strcpy":   true,
+	"strncpy":  true,
+	"memcpy":   true,
+	"memmove":  true,
+	"sprintf":  true,
+	"vsprintf": true,
+	// snprintf/vsnprintf take the buffer as arg0 and the bound as arg1; the
+	// tainted value is a later format argument, so the destination still receives
+	// taint from those later args. The bound does not sanitize injection (only
+	// overflow), so treating snprintf as a builder is sound for injection classes.
+	"snprintf":  true,
+	"vsnprintf": true,
+	"stpcpy":    true,
+}
+
+// cppBufferSources are C input functions that WRITE untrusted bytes into a
+// caller-provided buffer argument rather than returning the value. `fgets(buf,
+// n, stdin)`, `read(fd, buf, n)`, `recv(sock, buf, n, 0)`, `fread(buf, ...)`
+// each taint their buffer argument. The map value is the zero-based positional
+// index of that destination buffer. These are the buffer-writing counterparts of
+// the return-value sources (getenv), modeled here so the buffer becomes tainted.
+var cppBufferSources = map[string]int{
+	"fgets":    0,
+	"gets":     0,
+	"gets_s":   0,
+	"fread":    0,
+	"read":     1,
+	"recv":     1,
+	"recvfrom": 1,
+	"getline":  0,
+}
+
+// applyCPPBufferBuilder rewrites a bare-call statement whose callee is a C buffer
+// BUILDER (strcat/strcpy/sprintf/snprintf/...) or a buffer-writing SOURCE (fgets/
+// read/recv/fread/...) into an assignment to the written buffer, so taint carried
+// by a later argument — or introduced by the source — flows into that buffer. The
+// taint model otherwise tracks only `lhs = rhs`, so these out-parameter writers
+// need explicit modeling (a C/C++-local concern needing no engine change). It
+// only fires when the statement is not already an assignment and the destination
+// argument is a single bare variable; the statement's calls/reads are preserved
+// so source resolution and taint propagation still see the original call.
+func applyCPPBufferBuilder(st *stmtDraft) {
+	if st.assigns != "" {
+		return
+	}
+	for _, call := range st.calls {
+		idx, isSource := cppBufferSources[call]
+		if !isSource {
+			if !cppBufferBuilders[call] {
+				continue
+			}
+			idx = 0
+		}
+		info, ok := st.sinkArgs[call]
+		if !ok || idx >= len(info.positionalVars) {
+			continue
+		}
+		slot := info.positionalVars[idx]
+		if len(slot) != 1 {
+			continue // destination is not a single bare variable — do not guess
+		}
+		dst := slot[0]
+		if !isSimpleIdent(dst) {
+			continue
+		}
+		st.assigns = dst
+		return
+	}
 }
 
 // matchParenBackward returns the index of the '(' matching the ')' at closeIdx,
