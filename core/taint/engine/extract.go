@@ -175,6 +175,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// Like C# it recognizes `func` headers for per-function units (and their
 		// internal parameter binding names). See extract_swift.go.
 		return extractSwift(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangObjC:
+		// Objective-C is C at its core: brace-delimited and `;`-terminated, so —
+		// like C/C++ — paren/array continuations merge physical lines and each
+		// logical line splits on top-level semicolons. The extractor rewrites bracket
+		// message sends `[recv sel:arg]` to dotted calls `recv.sel(arg)` before the
+		// shared recognizer, and recognizes both C function and ObjC method
+		// definitions for per-scope units. See extract_objc.go.
+		return extractObjC(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
