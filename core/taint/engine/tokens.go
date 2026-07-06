@@ -41,6 +41,10 @@ func isKeyword(s string) bool {
 		"lambda", "global", "nonlocal", "assert", "del", "async", "await",
 		"True", "False", "None", "const", "let", "var", "function", "new",
 		"typeof", "instanceof", "true", "false", "null", "undefined", "this",
+		// Ruby keywords (superset; harmless — not valid identifiers, or already
+		// covered above / in the Rust/C# sets below: do, case, self, super).
+		"end", "then", "begin", "ensure", "rescue", "when", "unless", "until",
+		"elsif", "nil", "module", "next", "redo", "retry", "__FILE__", "__LINE__",
 		// Rust keywords (superset is harmless: these are never variable names).
 		// `let`, `as`, `None` are already covered by the Python/JS set above.
 		"mut", "fn", "match", "loop", "move", "ref", "impl", "trait",

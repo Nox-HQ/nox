@@ -34,6 +34,7 @@ const (
 	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
 	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
 	LangJava       // Java — //, /*…*/, /**…*/, "…", """…""" (text block), '…' (char)
+	LangRuby       // Ruby — #, =begin/=end, '…', "…" (#{} interp), `…`, %w/%q, heredocs
 	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 )
@@ -52,6 +53,8 @@ func (l Lang) String() string {
 		return "php"
 	case LangJava:
 		return "java"
+	case LangRuby:
+		return "ruby"
 	case LangRust:
 		return "rust"
 	case LangCSharp:
@@ -66,23 +69,34 @@ func (l Lang) String() string {
 // comment and string lexing is identical for our purposes — we only need to
 // know "is this cursor inside code" and the grammars agree on that.
 var extToLang = map[string]Lang{
-	".py":    LangPython,
-	".pyi":   LangPython,
-	".pyw":   LangPython,
-	".js":    LangJavaScript,
-	".jsx":   LangJavaScript,
-	".mjs":   LangJavaScript,
-	".cjs":   LangJavaScript,
-	".ts":    LangJavaScript,
-	".tsx":   LangJavaScript,
-	".mts":   LangJavaScript,
-	".cts":   LangJavaScript,
-	".go":    LangGo,
-	".php":   LangPHP,
-	".phtml": LangPHP,
-	".java":  LangJava,
-	".rs":    LangRust,
-	".cs":    LangCSharp,
+	".py":      LangPython,
+	".pyi":     LangPython,
+	".pyw":     LangPython,
+	".js":      LangJavaScript,
+	".jsx":     LangJavaScript,
+	".mjs":     LangJavaScript,
+	".cjs":     LangJavaScript,
+	".ts":      LangJavaScript,
+	".tsx":     LangJavaScript,
+	".mts":     LangJavaScript,
+	".cts":     LangJavaScript,
+	".go":      LangGo,
+	".php":     LangPHP,
+	".phtml":   LangPHP,
+	".java":    LangJava,
+	".rb":      LangRuby,
+	".rake":    LangRuby,
+	".gemspec": LangRuby,
+	".rs":      LangRust,
+	".cs":      LangCSharp,
+}
+
+// filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
+// Gemfile / Rakefile carry Ruby code but have no `.rb` extension, so an
+// extension-only lookup misses them; LangFromPath consults this by base name.
+var filenameToLang = map[string]Lang{
+	"Gemfile":  LangRuby,
+	"Rakefile": LangRuby,
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is
@@ -91,5 +105,12 @@ var extToLang = map[string]Lang{
 // correctness) because the scanner degrades to a single code region.
 func LangFromPath(path string) Lang {
 	ext := strings.ToLower(filepath.Ext(path))
-	return extToLang[ext]
+	if l, ok := extToLang[ext]; ok {
+		return l
+	}
+	// Extension-less Ruby manifests (Gemfile, Rakefile) are matched by base name.
+	if l, ok := filenameToLang[filepath.Base(path)]; ok {
+		return l
+	}
+	return LangUnknown
 }

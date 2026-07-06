@@ -221,6 +221,8 @@ func normalizeLang(lang string) string {
 		return "javascript"
 	case "py":
 		return "python"
+	case "rb":
+		return "ruby"
 	default:
 		return lang
 	}

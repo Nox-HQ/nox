@@ -55,6 +55,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanPHP(content)
 	case LangJava:
 		return scanJava(content)
+	case LangRuby:
+		return scanRuby(content)
 	case LangRust:
 		return scanRust(content)
 	case LangCSharp:

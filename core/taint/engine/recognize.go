@@ -12,6 +12,7 @@ const (
 	langJavaScript
 	langPHP
 	langJava
+	langRuby
 	langRust
 	langCSharp
 )
