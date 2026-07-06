@@ -248,11 +248,18 @@ func (ex *goExtractor) emitReturn(u *unitDraft, st *ast.ReturnStmt) {
 // engine's assigns field is one variable; for a multi-value assign
 // (`out, _ := f()`, `tmp, err := f()`) we pick the first non-blank, non-error
 // identifier so the meaningful value — not the error — is tracked.
+//
+// A container/element or field target (`m["c"] = v`, `obj.Field = v`) resolves
+// to its BASE identifier (m, obj) so a tainted RHS taints the whole container — a
+// sound, container-level over-approximation that makes taint laundered through a
+// map value / slice element / struct field reach a later read of the container.
+// This is the only element/field sensitivity nox claims: container-level, not
+// key-level.
 func (ex *goExtractor) primaryLHS(lhs []ast.Expr) string {
 	names := make([]string, 0, len(lhs))
 	for _, e := range lhs {
-		if id, ok := e.(*ast.Ident); ok {
-			names = append(names, id.Name)
+		if name := lhsAssignedName(e); name != "" {
+			names = append(names, name)
 		} else {
 			names = append(names, "")
 		}
@@ -268,6 +275,33 @@ func (ex *goExtractor) primaryLHS(lhs []ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+// lhsAssignedName returns the variable name an assignment LHS target attributes
+// taint to. A plain identifier (`x = v`) yields the identifier. A container or
+// field target resolves to its base identifier so the whole container is tainted:
+//   - `m["c"] = v` / `s[0] = v` (*ast.IndexExpr) → the base "m" / "s"
+//   - `obj.Field = v` (*ast.SelectorExpr)        → the receiver head "obj"
+//   - `(*p).Field = v` / `p.a.b = v` (nested)     → the leftmost identifier
+//
+// Container-level, not key-level: writing one key taints the container, so a read
+// of any element of it is treated as tainted (a sound over-approximation). Returns
+// "" for a shape with no identifier base (e.g. a literal or call target).
+func lhsAssignedName(e ast.Expr) string {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name
+	case *ast.IndexExpr:
+		return lhsAssignedName(x.X)
+	case *ast.SelectorExpr:
+		return lhsAssignedName(x.X)
+	case *ast.StarExpr:
+		return lhsAssignedName(x.X)
+	case *ast.ParenExpr:
+		return lhsAssignedName(x.X)
+	default:
+		return ""
+	}
 }
 
 // hoistInlineSources scans the given expressions for pure selector chains used as

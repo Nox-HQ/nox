@@ -199,3 +199,101 @@ func (s *Server) handle(input string) {
 		t.Errorf("params = %v, want [s input] (receiver first)", u.params)
 	}
 }
+
+// stmtAssigningReading returns the first statement in u whose Assigns == name AND
+// which reads `read` — so a test can pinpoint the container-assignment statement
+// (`m["c"] = user`) rather than an earlier `m := ...{}` initializer that also
+// assigns the same base.
+func stmtAssigningReading(t *testing.T, u unitDraft, name, read string) stmtDraft {
+	t.Helper()
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name && containsStr(u.stmts[i].reads, read) {
+			return u.stmts[i]
+		}
+	}
+	t.Fatalf("no statement assigning %q reading %q in unit %q; stmts=%+v", name, read, u.funcName, u.stmts)
+	return stmtDraft{}
+}
+
+// stmtAssigning returns the first statement in u whose Assigns == name.
+func stmtAssigning(t *testing.T, u unitDraft, name string) stmtDraft {
+	t.Helper()
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name {
+			return u.stmts[i]
+		}
+	}
+	t.Fatalf("no statement assigning %q in unit %q; stmts=%+v", name, u.funcName, u.stmts)
+	return stmtDraft{}
+}
+
+// TestExtractGoMapIndexAssignTaintsBase covers container sensitivity for a map
+// index assignment `m["c"] = user`: the extractor must record the BASE identifier
+// (m), not the index expression, as the assignee so a tainted RHS taints the
+// whole container (a sound container-level over-approximation).
+func TestExtractGoMapIndexAssignTaintsBase(t *testing.T) {
+	src := []byte(`package j
+
+import "net/http"
+
+func runMap(r *http.Request) {
+	user := r.FormValue("c")
+	m := map[string]string{}
+	m["c"] = user
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runMap")
+	// The index assignment must be attributed to the base variable m.
+	st := stmtAssigningReading(t, u, "m", "user")
+	if !containsStr(st.reads, "user") {
+		t.Errorf("m[..]=user reads = %v, want to include user", st.reads)
+	}
+}
+
+// TestExtractGoStructFieldAssignTaintsBase covers container sensitivity for a
+// struct-field assignment `obj.Field = user`: the base identifier (obj) is the
+// assignee, so the whole struct is tainted.
+func TestExtractGoStructFieldAssignTaintsBase(t *testing.T) {
+	src := []byte(`package j
+
+import "net/http"
+
+func runField(r *http.Request) {
+	user := r.FormValue("c")
+	var cmd Cmd
+	cmd.Arg = user
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runField")
+	st := stmtAssigning(t, u, "cmd")
+	if !containsStr(st.reads, "user") {
+		t.Errorf("cmd.Arg=user reads = %v, want to include user", st.reads)
+	}
+}
+
+// TestExtractGoIndexAssignBaseNotOverwritingSanitized guards the clean_field_safe
+// path: when the RHS of a field assignment is a sanitized value, the base is still
+// the assignee (so the engine's per-class sanitizer clearing — not the extractor —
+// keeps it clean). The extractor must record the base and the sanitizer call.
+func TestExtractGoIndexAssignBaseRecordsSanitizerCall(t *testing.T) {
+	src := []byte(`package j
+
+import (
+	"net/http"
+	"strconv"
+)
+
+func runSafe(r *http.Request) {
+	var t Ticket
+	t.Count = strconv.Atoi(r.FormValue("count"))
+}
+`)
+	units := extractUnits(lexctx.LangGo, src)
+	u := findUnit(t, units, "runSafe")
+	st := stmtAssigning(t, u, "t")
+	if !containsStr(st.calls, "strconv.Atoi") {
+		t.Errorf("t.Count=strconv.Atoi(...) calls = %v, want to include strconv.Atoi", st.calls)
+	}
+}

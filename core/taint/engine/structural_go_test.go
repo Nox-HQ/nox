@@ -143,6 +143,53 @@ func run(dir string) {
 	}
 }
 
+// TestStructuralGoContainerTaint covers container-level taint: a request value
+// stashed into a map value (m["c"]=user) then read back at the command sink
+// (m["c"]) must fire TAINT-002. The extractor attributes the index assignment to
+// the base m, so the whole container is tainted and the later read of m is
+// dangerous.
+func TestStructuralGoContainerTaint(t *testing.T) {
+	src := `package j
+func runMap(r *Req) {
+	user := r.FormValue("c")
+	m := map[string]string{}
+	m["c"] = user
+	out, _ := exec.Command("sh", "-c", m["c"]).Output()
+	_ = out
+}`
+	ids := analyzeGoFile(t, src)
+	found := false
+	for _, id := range ids {
+		if id == "TAINT-002" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("container taint: got %v, want TAINT-002 (map value flows to sink)", ids)
+	}
+}
+
+// TestStructuralGoSanitizedFieldStaysClean guards clean_field_safe.go: a request
+// value sanitized into a local (strconv.Atoi) BEFORE being stored in a struct
+// field, then read at the sink, must fire nothing — the sanitized local carries
+// the cleared class into the field-assigned base, so the container-level base
+// attribution does not resurrect the taint.
+func TestStructuralGoSanitizedFieldStaysClean(t *testing.T) {
+	src := `package j
+func build(r *Req) {
+	raw := r.FormValue("count")
+	count := strconv.Atoi(raw)
+	var t Ticket
+	t.Count = count
+	out, _ := exec.Command("gen", "--count", t.Count).Output()
+	_ = out
+}`
+	ids := analyzeGoFile(t, src)
+	if len(ids) != 0 {
+		t.Errorf("sanitized field: want zero findings, got %v", ids)
+	}
+}
+
 // TestStructuralGoInterprocSameFile covers a source in a handler flowing through a
 // locally-defined helper to a sink (the same-file interprocedural summary path).
 func TestStructuralGoInterprocSameFile(t *testing.T) {
