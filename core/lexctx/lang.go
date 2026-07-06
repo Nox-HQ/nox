@@ -45,6 +45,7 @@ const (
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
 	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
+	LangClojure    // Clojure — ; line comments, "…" (Java-style escapes), #"…" regex, \c / \newline char literals, #_ discard
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -83,6 +84,8 @@ func (l Lang) String() string {
 		return "swift"
 	case LangLua:
 		return "lua"
+	case LangClojure:
+		return "clojure"
 	default:
 		return "unknown"
 	}
@@ -142,6 +145,13 @@ var extToLang = map[string]Lang{
 	".psd1":  LangPowerShell,
 	".swift": LangSwift,
 	".lua":   LangLua,
+	// Clojure and its dialects: .clj (JVM), .cljs (ClojureScript), .cljc (portable),
+	// plus .edn (Extensible Data Notation) which shares the same reader lexing
+	// (strings, `;` comments, `\c` chars) so one scanner serves them all.
+	".clj":  LangClojure,
+	".cljs": LangClojure,
+	".cljc": LangClojure,
+	".edn":  LangClojure,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
