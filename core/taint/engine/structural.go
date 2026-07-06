@@ -596,7 +596,12 @@ func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall strin
 		// Ruby ActiveRecord / raw-SQL: a placeholder query passes the tainted
 		// value as a bind parameter (2nd+ positional) rather than interpolating it
 		// into the SQL string (1st positional), e.g. `where("id = ?", id)`.
-		"where", "find_by_sql", "exec_query", "execute":
+		"where", "find_by_sql", "exec_query", "execute",
+		// Perl DBI: `$dbh->do("... ?", undef, $id)` and
+		// `$dbh->prepare("... ?")` + bind pass the tainted value as a placeholder
+		// bind argument (2nd+ positional), not interpolated into the SQL string
+		// (1st positional). A bare `do`/`prepare` chain reduces to these suffixes.
+		"dbh.do", "dbh.prepare", "dbh.selectrow_array":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional

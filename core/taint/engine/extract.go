@@ -128,6 +128,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangPerl:
+		// Perl uses the line/statement RECOGNIZER (no CGo interpreter). Statements
+		// are `;`-terminated and sub bodies are brace-delimited, so — like PHP/JS —
+		// only paren/bracket continuations merge physical lines and each logical
+		// line is split on top-level semicolons. Perl's dynamic dispatch, sigil
+		// magic, and context-sensitive syntax make line recognition coarse; see
+		// extract_perl.go for the honest limits (recall is moderate by design).
+		return extractPerl(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangScala:
 		// Scala is brace-delimited like Java/C#: braces delimit blocks (so a method
 		// body is not collapsed into one logical line) and paren/bracket
@@ -153,6 +161,20 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// language: word-splitting and dynamic constructs a flat recognizer cannot
 		// follow).
 		return extractShell(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangPowerShell:
+		// PowerShell uses the line/statement RECOGNIZER (no CGo parser). Statements
+		// are newline-terminated (like Ruby/Python), and `{}` delimit script blocks
+		// and function bodies — so braces must NOT force line-merging (a function
+		// body would collapse into one logical line); only paren/bracket
+		// continuations merge physical lines. A semicolon can separate statements on
+		// one line, so the logical lines are also split on top-level semicolons.
+		return extractPowerShell(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangSwift:
+		// Swift is brace-delimited like C#/JS: paren/array continuations merge
+		// physical lines, then each logical line splits on top-level semicolons.
+		// Like C# it recognizes `func` headers for per-function units (and their
+		// internal parameter binding names). See extract_swift.go.
+		return extractSwift(splitSemicolons(logicalLines(content, regions, true)))
 	default:
 		return nil
 	}
