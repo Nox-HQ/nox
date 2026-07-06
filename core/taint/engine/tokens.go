@@ -84,9 +84,14 @@ func isKeyword(s string) bool {
 		// `default`, `import`, `enum`, `throw`, `async`, `await`, `dynamic` (=type)
 		// are already covered above. Add the Dart-specific rest; treating a keyword
 		// or a type name as a non-variable only avoids a spurious read of it.
+		// NOTE: Dart's CONTEXTUAL keywords (`on`, `library`, `part`, `show`, `hide`,
+		// `num`) are deliberately NOT listed — they are built-in identifiers that are
+		// valid variable/function names both in Dart and in every other language, so
+		// putting them in this SHARED set silently suppresses real reads (a function
+		// named `show`, a var named `on`) across all languages.
 		"late", "factory", "extends", "implements", "mixin",
-		"on", "library", "part", "show", "hide", "deferred", "covariant", "rethrow",
-		"num", "String", "List", "Map", "Set", "Future", "Stream", "Object",
+		"deferred", "covariant", "rethrow",
+		"String", "List", "Map", "Set", "Future", "Stream", "Object",
 		"Function", "Never", "Uri":
 		return true
 	}
