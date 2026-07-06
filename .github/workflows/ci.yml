@@ -198,6 +198,16 @@ jobs:
         # be silently hidden and no new Kotlin false positive can creep in.
         run: ./nox bench --precision testdata/precision-suite-kotlin --baseline testdata/precision-suite-kotlin/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — powershell
+        # Same honest ratchet, scoped to the dedicated PowerShell corpus (lexctx
+        # scan_powershell + engine extract_powershell + the catalog `powershell`
+        # block). PowerShell recall is intentionally moderate — the flat recognizer
+        # does not model pipeline dataflow (one documented false negative, see
+        # testdata/precision-suite-powershell/README.md) — so this gate defends
+        # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
+        # be silently hidden and no new PowerShell false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-powershell --baseline testdata/precision-suite-powershell/baseline.json --min-precision 0.90
+
       - name: SAST precision gate — swift
         # Same honest ratchet, scoped to the Swift taint suite (lexctx scan_swift
         # + engine extract_swift + the catalog `swift` block). Swift's dominant

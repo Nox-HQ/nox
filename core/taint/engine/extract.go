@@ -151,6 +151,14 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
 		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
+	case lexctx.LangPowerShell:
+		// PowerShell uses the line/statement RECOGNIZER (no CGo parser). Statements
+		// are newline-terminated (like Ruby/Python), and `{}` delimit script blocks
+		// and function bodies — so braces must NOT force line-merging (a function
+		// body would collapse into one logical line); only paren/bracket
+		// continuations merge physical lines. A semicolon can separate statements on
+		// one line, so the logical lines are also split on top-level semicolons.
+		return extractPowerShell(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangSwift:
 		// Swift is brace-delimited like C#/JS: paren/array continuations merge
 		// physical lines, then each logical line splits on top-level semicolons.

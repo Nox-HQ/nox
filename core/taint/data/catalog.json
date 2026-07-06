@@ -3751,6 +3751,49 @@
         {"call": "htmlEscape", "neutralizes": ["xss"]},
         {"call": "addingPercentEncodingForHTML", "neutralizes": ["xss"]}
       ]
+    },
+    "powershell": {
+      "comment": "PowerShell source/sink/sanitizer model for the line/statement recognizer (core/taint/engine/extract_powershell.go). PowerShell shapes are normalized before recognition: the `$` variable sigil is stripped (like PHP), the static-member `::` becomes `.` with the `[Namespace.Type]` accelerator unwrapped (so `[IO.File]::ReadAllText` keys as `IO.File.ReadAllText`, matched by the `.ReadAllText` suffix), a `[int]`/`[long]` cast becomes an `int(...)`/`long(...)` sanitizer call, the `$env:` provider becomes a bare `env` read, and — CRUCIALLY — a cmdlet's `Verb-Noun` hyphen is normalized to an UNDERSCORE (`Invoke-Expression` -> `Invoke_Expression`) because the shared identifier scanner treats `-` as an operator. Every hyphenated cmdlet key below therefore uses the underscore form. Paren-less cmdlet calls (`Get-Content $p`) are wrapped into `Get_Content($p)`, and the call operator `& $cmd` is modeled as the synthetic sink `InvokeOperator`. Rule IDs mirror the shared TAINT-00x space. PowerShell recall is moderate (pipelines, splatting, and paren-less pipeline arguments are only partially modeled) — see testdata/precision-suite-powershell/README.md.",
+      "sources": [
+        {"call": "args", "kind": "argv", "note": "$args automatic variable (script/function argument array)"},
+        {"call": "PSScriptParameter", "kind": "argv", "note": "sentinel: a read of a top-level script param() parameter, bound from the untrusted command line. The extractor promotes this chain onto any statement that reads a script parameter (names are arbitrary, so the catalog keys the sentinel, not each name); function parameters are NOT promoted"},
+        {"call": "MyInvocation", "kind": "argv", "note": "$MyInvocation.* carries bound parameters / the invocation line"},
+        {"call": "env", "kind": "env", "note": "$env:NAME provider access, shaped to a bare `env` read"},
+        {"call": "Read_Host", "kind": "stdin", "note": "Read-Host prompts the user for interactive input"},
+        {"call": "Request.QueryString", "kind": "http_query", "note": "ASP.NET $Request.QueryString in a PowerShell web handler"},
+        {"call": "Request.Form", "kind": "http_body"},
+        {"call": "Request.Params", "kind": "http_query"}
+      ],
+      "sinks": [
+        {"call": "Invoke_Expression", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "Invoke-Expression (iex) evaluates a string as PowerShell code — the canonical PowerShell code-injection sink"},
+        {"call": "iex", "vuln_class": "code_injection", "cwe": "CWE-95", "rule_id": "TAINT-005", "note": "alias for Invoke-Expression"},
+        {"call": "InvokeOperator", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "the call operator `& $cmd args` (or dot-source `. $script`) invokes a command whose name/arguments come from a variable; a tainted command name is command injection"},
+        {"call": "Invoke_Command", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Invoke-Command -ScriptBlock/-ArgumentList with a tainted value runs it as code/command"},
+        {"call": "Start_Process", "vuln_class": "command_injection", "cwe": "CWE-78", "rule_id": "TAINT-002", "note": "Start-Process -FilePath/-ArgumentList with a tainted value launches an attacker-controlled process"},
+        {"call": "Invoke_Sqlcmd", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "Invoke-Sqlcmd -Query with a string-interpolated tainted value is SQLi; safe when parameterized"},
+        {"call": "SqlCommand", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "New-Object System.Data.SqlClient.SqlCommand with a concatenated CommandText; safe when values bind via .Parameters.AddWithValue"},
+        {"call": "ExecuteReader", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001", "note": "receiver-varies $cmd.ExecuteReader() over a tainted CommandText"},
+        {"call": "ExecuteNonQuery", "vuln_class": "sql_injection", "cwe": "CWE-89", "rule_id": "TAINT-001"},
+        {"call": "Get_Content", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Get-Content -Path with a tainted path reads an attacker-chosen file"},
+        {"call": "Import_Csv", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "Import-Csv -Path with a tainted path"},
+        {"call": "ReadAllText", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004", "note": "[IO.File]::ReadAllText($p) shaped to IO.File.ReadAllText — matched on the .ReadAllText suffix"},
+        {"call": "ReadAllBytes", "vuln_class": "path_traversal", "cwe": "CWE-22", "rule_id": "TAINT-004"},
+        {"call": "Invoke_WebRequest", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "Invoke-WebRequest -Uri with a tainted URL is an SSRF vector"},
+        {"call": "iwr", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "alias for Invoke-WebRequest"},
+        {"call": "curl", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "in Windows PowerShell `curl` is an alias for Invoke-WebRequest"},
+        {"call": "Invoke_RestMethod", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006"},
+        {"call": "irm", "vuln_class": "ssrf", "cwe": "CWE-918", "rule_id": "TAINT-006", "note": "alias for Invoke-RestMethod"}
+      ],
+      "sanitizers": [
+        {"call": "int", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"], "note": "[int]$x cast shaped to int($x); numeric coercion removes injection metacharacters"},
+        {"call": "long", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"], "note": "[long]$x cast"},
+        {"call": "int32", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"]},
+        {"call": "int64", "neutralizes": ["command_injection", "sql_injection", "path_traversal", "code_injection", "ssrf"]},
+        {"call": "Parameters.AddWithValue", "neutralizes": ["sql_injection"], "note": "binding a SqlCommand parameter keeps the value out of the SQL text"},
+        {"call": "Parameters.Add", "neutralizes": ["sql_injection"]},
+        {"call": "AddWithValue", "neutralizes": ["sql_injection"], "note": "receiver-varies $cmd.Parameters.AddWithValue(...) — matched on the method suffix"},
+        {"call": "Split_Path", "neutralizes": ["path_traversal"], "note": "Split-Path -Leaf strips directory components; pair with an allow-base check"}
+      ]
     }
   }
 }

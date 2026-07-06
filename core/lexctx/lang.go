@@ -41,6 +41,7 @@ const (
 	LangPerl       // Perl — #, POD =pod…=cut, "…"/'…', `…`, q()/qq()/qw()/qx(), heredocs, m//, s///
 	LangScala      // Scala — //, NESTED /*…*/, "…", """…""" (raw multi-line), s"…"/f"…"/raw"…" interp, '…' (char) vs 'sym (Symbol)
 	LangKotlin     // Kotlin — //, /**…*/, NESTED /*…*/, "…" ($var/${…} templates), """…""" (raw), '…' (char)
+	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
 )
 
@@ -72,6 +73,8 @@ func (l Lang) String() string {
 		return "scala"
 	case LangKotlin:
 		return "kotlin"
+	case LangPowerShell:
+		return "powershell"
 	case LangSwift:
 		return "swift"
 	default:
@@ -126,6 +129,9 @@ var extToLang = map[string]Lang{
 	".sc":    LangScala,
 	".kt":    LangKotlin,
 	".kts":   LangKotlin,
+	".ps1":   LangPowerShell,
+	".psm1":  LangPowerShell,
+	".psd1":  LangPowerShell,
 	".swift": LangSwift,
 }
 
