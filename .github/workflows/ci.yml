@@ -252,6 +252,17 @@ jobs:
         # precision floor at 0.90 so Dart taint precision cannot silently rot.
         run: ./nox bench --precision testdata/precision-suite-dart --baseline testdata/precision-suite-dart/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — groovy
+        # Same honest ratchet, scoped to the Groovy taint suite (lexctx scan_groovy
+        # + engine extract_groovy + the catalog `groovy` block). Groovy's dominant
+        # injection carrier is GString interpolation "...${x}...", which lexctx
+        # emits as CODE so the tainted expression is visible at the sink. Groovy
+        # recall is intentionally below 1.0 (one documented closure false negative —
+        # see testdata/precision-suite-groovy/README.md), so this gate defends
+        # PRECISION (>= 0.90) and pins the committed baseline so the known FN cannot
+        # be silently hidden and no new Groovy false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-groovy --baseline testdata/precision-suite-groovy/baseline.json --min-precision 0.90
+
       - name: Run nox self-scan
         # NOTE: Go's flag.Parse stops at the first positional argument,
         # so the path MUST come last. `nox scan . --vex foo` silently

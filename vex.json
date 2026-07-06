@@ -22,7 +22,7 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "Detector regex patterns and code comments containing 'token'/'secret' literals \u2014 not credentials."
+      "impact_statement": "Detector regex patterns and code comments containing 'token'/'secret' literals — not credentials."
     },
     {
       "vulnerability": "SEC-506",
@@ -49,7 +49,7 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "server/server.go comment line contains 'are otherwise allowed' \u2014 substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
+      "impact_statement": "server/server.go comment line contains 'are otherwise allowed' — substring 'wise' triggers Wise-API-key file-level keyword match. Comment is not a credential."
     },
     {
       "vulnerability": "SEC-162",
@@ -76,7 +76,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json contains intentionally bad MCP configuration for documentation purposes \u2014 not shipped as a runtime asset."
+      "impact_statement": "examples/ai-app/mcp.json contains intentionally bad MCP configuration for documentation purposes — not shipped as a runtime asset."
     },
     {
       "vulnerability": "SEC-003",
@@ -85,7 +85,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo content."
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
     },
     {
       "vulnerability": "MCP-002",
@@ -94,7 +94,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo of MCP server configuration that fails MCP-002. Used to illustrate what nox catches."
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo of MCP server configuration that fails MCP-002. Used to illustrate what nox catches."
     },
     {
       "vulnerability": "MCP-004",
@@ -103,7 +103,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/mcp.json \u2014 intentional demo content."
+      "impact_statement": "examples/ai-app/mcp.json — intentional demo content."
     },
     {
       "vulnerability": "AI-PI-001",
@@ -112,7 +112,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/agent.py \u2014 intentional vulnerable code used to demonstrate AI-PI-001 prompt-injection detection. Not part of the shipped scanner."
+      "impact_statement": "examples/ai-app/agent.py — intentional vulnerable code used to demonstrate AI-PI-001 prompt-injection detection. Not part of the shipped scanner."
     },
     {
       "vulnerability": "AI-PI-002",
@@ -121,7 +121,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/agent.py \u2014 intentional demo content for AI-PI-002."
+      "impact_statement": "examples/ai-app/agent.py — intentional demo content for AI-PI-002."
     },
     {
       "vulnerability": "AI-EMBED-001",
@@ -130,7 +130,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/ingest.py \u2014 intentional demo content for AI-EMBED-001."
+      "impact_statement": "examples/ai-app/ingest.py — intentional demo content for AI-EMBED-001."
     },
     {
       "vulnerability": "AI-AGENT-001",
@@ -139,7 +139,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/tools.py \u2014 intentional demo content for AI-AGENT-001 over-privilege detection."
+      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-001 over-privilege detection."
     },
     {
       "vulnerability": "AI-AGENT-002",
@@ -148,7 +148,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ai-app/tools.py \u2014 intentional demo content for AI-AGENT-002."
+      "impact_statement": "examples/ai-app/tools.py — intentional demo content for AI-AGENT-002."
     },
     {
       "vulnerability": "DATA-001",
@@ -157,7 +157,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/vex.json \u2014 sample VEX document containing fixture data. Not shipped as runtime content."
+      "impact_statement": "examples/ci-baseline/vex.json — sample VEX document containing fixture data. Not shipped as runtime content."
     },
     {
       "vulnerability": "IAC-013",
@@ -166,7 +166,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml \u2014 example workflow shipped as documentation. Action SHA pinning is intentionally relaxed in the example to keep it readable."
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow shipped as documentation. Action SHA pinning is intentionally relaxed in the example to keep it readable."
     },
     {
       "vulnerability": "IAC-157",
@@ -175,7 +175,7 @@
       ],
       "status": "not_affected",
       "justification": "component_not_present",
-      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml \u2014 example workflow."
+      "impact_statement": "examples/ci-baseline/.github/workflows/security.yml — example workflow."
     },
     {
       "vulnerability": "GHSA-p782-xgp4-8hr8",
@@ -251,6 +251,15 @@
       ],
       "status": "under_investigation",
       "impact_statement": "golang.org/x/net v0.54.0 is the latest published release; no fixed version exists for this advisory yet. Tracking upstream; revisit when a fix ships."
+    },
+    {
+      "vulnerability": "SEC-652",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The SEC-652 'Jenkins API Token' rule is a 20-char alphanumeric pattern gated by a file-level 'jenkins' keyword. Nox's Groovy support legitimately references Jenkins (Jenkinsfile detection, the pipeline sh/bat sinks) in code comments and identifiers, so the rule fires on ordinary camelCase symbol names (scanGroovyBlockComment, NewClassifierRegistry, analyzeUnitInterproc) and catalog note text in core/lexctx/scan_groovy.go, core/taint/engine/*.go, core/taint/data/catalog.json, and core/discovery/discovery.go. These are source identifiers and documentation, not credentials."
     }
   ]
 }

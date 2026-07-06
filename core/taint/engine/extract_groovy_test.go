@@ -109,9 +109,9 @@ func TestExtractGroovyBareCall(t *testing.T) {
 // none. A local helper mirroring stmtWithCall.
 func stmtWithAssign(t *testing.T, u unitDraft, name string) stmtDraft {
 	t.Helper()
-	for _, s := range u.stmts {
-		if s.assigns == name {
-			return s
+	for i := range u.stmts {
+		if u.stmts[i].assigns == name {
+			return u.stmts[i]
 		}
 	}
 	t.Fatalf("no statement assigning %q in unit %q", name, u.funcName)

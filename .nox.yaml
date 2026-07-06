@@ -23,6 +23,7 @@ scan:
     - "testdata/precision-suite-swift/"
     - "testdata/precision-suite-lua/"
     - "testdata/precision-suite-dart/"
+    - "testdata/precision-suite-groovy/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
