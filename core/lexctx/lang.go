@@ -45,6 +45,7 @@ const (
 	LangPowerShell // PowerShell — #, <#…#>, '…' (''-escaped), "…" ($var/$()/`-escaped), @"…"@ / @'…'@ here-strings
 	LangSwift      // Swift — //, NESTED /*…*/, "…" (\(…) interp), """…""" (multiline), #"…"# / ##"…"## raw (\#(…) interp)
 	LangLua        // Lua — -- line comments, --[[…]] / --[==[…]==] long-bracket block comments, "…"/'…' strings, [[…]] / [==[…]==] long strings (no escapes)
+	LangDart       // Dart — //, ///, NESTED /*…*/, '…'/"…" ($var/${…} interp), '''…'''/"""…""" (multiline), r'…'/r"…" raw (no interp)
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -83,6 +84,8 @@ func (l Lang) String() string {
 		return "swift"
 	case LangLua:
 		return "lua"
+	case LangDart:
+		return "dart"
 	default:
 		return "unknown"
 	}
@@ -142,6 +145,7 @@ var extToLang = map[string]Lang{
 	".psd1":  LangPowerShell,
 	".swift": LangSwift,
 	".lua":   LangLua,
+	".dart":  LangDart,
 }
 
 // filenameToLang maps well-known extension-less Ruby filenames to LangRuby.
