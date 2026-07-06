@@ -283,7 +283,7 @@ func isDartStructuralLine(trimmed string) bool {
 		return true
 	}
 	if strings.HasPrefix(trimmed, "@") {
-		return true // annotation (`@override`, `@Get(...)`)
+		return true // a Dart annotation line such as an override or route marker
 	}
 	for _, kw := range []string{
 		"import ", "export ", "library ", "part ", "part of ",

@@ -23,12 +23,12 @@ package lexctx
 //     so a `${m['}']}` hole is not mis-terminated. Ordinary Dart strings do not
 //     span lines, so a newline defensively ends the scan.
 //
-//   - Multiline strings `'''...'''` and `"""..."""`: opened by three quote
-//     characters, closed by the next matching triple, span many lines, treat
-//     interior single/double quotes and `//` as literal, and honor `$`/`${...}`
-//     interpolation (emitted as code) and `\` escapes.
+//   - Multiline strings (triple single-quote and triple double-quote): opened by
+//     three quote characters, closed by the next matching triple, span many lines,
+//     treat interior single/double quotes and `//` as literal, and honor
+//     `$`/`${...}` interpolation (emitted as code) and `\` escapes.
 //
-//   - Raw strings `r'...'`, `r"..."`, `r'''...'''`, `r"""..."""`: an `r` prefix
+//   - Raw strings `r'...'`, `r"..."`, and their triple-quoted forms: an `r` prefix
 //     makes the string RAW — NO backslash escapes (a `\` is a literal byte) and
 //     NO interpolation (a `$` is literal). Terminated by the matching quote/triple
 //     only. This is the SVG/base64/regex FP carrier the blob heuristic feeds on.
@@ -61,7 +61,7 @@ func scanDart(content []byte) []Region {
 		case c == 'r' && dartRawStringPrefix(content, i):
 			i = scanDartRawString(content, i, &b)
 		case (c == '\'' || c == '"') && i+2 < n && content[i+1] == c && content[i+2] == c:
-			// Triple-quoted (multiline) string `'''...'''` or `"""..."""`.
+			// Triple-quoted (multiline) string: three single or double quotes.
 			i = scanDartMultiline(content, i, c, false, &b)
 		case c == '\'' || c == '"':
 			i = scanDartInterpreted(content, i, c, false, &b)
@@ -137,8 +137,8 @@ func isDartIdentStart(b byte) bool {
 // scanDartRawString classifies a raw string opening at content[start] (an `r`
 // prefix satisfying dartRawStringPrefix). Raw strings process NO escapes and NO
 // interpolation: the whole body is string. It dispatches to the multiline raw
-// form on a `'''`/`"""` opener, else the single-line raw form. Returns the offset
-// just past the literal (or EOF).
+// form on a triple-quote opener, else the single-line raw form. Returns the
+// offset just past the literal (or EOF).
 func scanDartRawString(content []byte, start int, b *regionBuilder) int {
 	n := len(content)
 	quote := content[start+1] // the `'` or `"` after `r`
@@ -180,21 +180,20 @@ func scanDartInterpreted(content []byte, start int, quote byte, _ bool, b *regio
 	i := bodyStart
 	runStart := start // include the opening quote in the leading string run
 	for i < n {
-		c := content[i]
-		switch {
-		case c == '\\':
+		switch content[i] {
+		case '\\':
 			i += 2 // ordinary escape consumes the next byte
 			continue
-		case c == '$':
+		case '$':
 			b.emit(runStart, i, KindString)
 			holeEnd := scanDartInterpolation(content, i, b)
 			i = holeEnd
 			runStart = i
 			continue
-		case c == quote:
+		case quote:
 			b.emit(runStart, i+1, KindString)
 			return i + 1
-		case c == '\n':
+		case '\n':
 			b.emit(runStart, i, KindString)
 			return i
 		}
@@ -217,7 +216,7 @@ func scanDartMultiline(content []byte, start int, quote byte, raw bool, b *regio
 	// The opener is (optional `r`) + three quote bytes.
 	bodyStart := start + 3
 	if raw {
-		bodyStart = start + 4 // `r` + `'''`
+		bodyStart = start + 4 // `r` + three opening quote bytes
 	}
 	if bodyStart > n {
 		bodyStart = n

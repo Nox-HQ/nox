@@ -190,9 +190,9 @@ func TestDartRawStringDoubleQuote(t *testing.T) {
 	}
 }
 
-// TestDartTripleQuoteString: `'''...'''` spans lines; interior single `'`, `"`
-// and `//` are literal. The trailing code stays code, and simple interpolation
-// still works inside it.
+// TestDartTripleQuoteString: a triple-single-quote string spans lines; interior
+// single `'`, `"` and `//` are literal. The trailing code stays code, and simple
+// interpolation still works inside it.
 func TestDartTripleQuoteString(t *testing.T) {
 	src := "var s = '''\nline1 // not a comment\nline2 'not a close' SECRET\n''';\nvar after = 1;"
 	if k := kindOfSubstring(t, LangDart, src, `// not a comment`); k != KindString {
@@ -217,8 +217,8 @@ func TestDartTripleDoubleQuoteString(t *testing.T) {
 	}
 }
 
-// TestDartRawTripleQuoteString: `r'''...'''` is a raw multiline string — no
-// interpolation, spans lines.
+// TestDartRawTripleQuoteString: an `r`-prefixed triple-single-quote string is a
+// raw multiline string — no interpolation, spans lines.
 func TestDartRawTripleQuoteString(t *testing.T) {
 	src := "var s = r'''\nraw $name \\n body SECRET\n''';\nvar after = 1;"
 	if k := kindOfSubstring(t, LangDart, src, `raw $name`); k != KindString {
