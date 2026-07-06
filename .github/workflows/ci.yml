@@ -138,6 +138,15 @@ jobs:
         # a regression in the Java lexer, extractor, or catalog fails here.
         run: ./nox bench --precision testdata/precision-suite-java --baseline testdata/precision-suite-java/baseline.json --min-precision 0.90
 
+      - name: SAST precision gate — rust
+        # Same honest ratchet, scoped to the dedicated Rust corpus. Rust recall
+        # is intentionally the lowest of the supported languages (one documented
+        # web-extractor false negative — see testdata/precision-suite-rust/
+        # README.md), so this gate defends PRECISION (>= 0.90) and pins the
+        # committed baseline so the known FN cannot be silently hidden and no new
+        # Rust false positive can creep in.
+        run: ./nox bench --precision testdata/precision-suite-rust --baseline testdata/precision-suite-rust/baseline.json --min-precision 0.90
+
       - name: SAST precision gate — csharp
         # Same honest ratchet, scoped to the C# taint suite (lexctx scan_csharp +
         # engine extract_csharp + the catalog `csharp` block). Fails on any

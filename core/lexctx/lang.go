@@ -34,6 +34,7 @@ const (
 	LangGo         // Go — //, /*…*/, "…", `…` (raw), '…' (rune)
 	LangPHP        // PHP — <?php…?> islands; //,#,/*…*/, '…', "…", heredoc/nowdoc
 	LangJava       // Java — //, /*…*/, /**…*/, "…", """…""" (text block), '…' (char)
+	LangRust       // Rust — //,///,//!, NESTED /*…*/, "…", r#"…"#, b"…", '…' vs 'a lifetime
 	LangCSharp     // C# — //, ///, /*…*/, "…", @"…" (verbatim), $"…" (interpolated), """…""" (raw), '…' (char)
 )
 
@@ -51,6 +52,8 @@ func (l Lang) String() string {
 		return "php"
 	case LangJava:
 		return "java"
+	case LangRust:
+		return "rust"
 	case LangCSharp:
 		return "csharp"
 	default:
@@ -78,6 +81,7 @@ var extToLang = map[string]Lang{
 	".php":   LangPHP,
 	".phtml": LangPHP,
 	".java":  LangJava,
+	".rs":    LangRust,
 	".cs":    LangCSharp,
 }
 

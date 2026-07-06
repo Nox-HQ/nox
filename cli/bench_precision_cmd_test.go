@@ -216,6 +216,63 @@ func TestPrecisionSuiteBaselineJava(t *testing.T) {
 	}
 }
 
+// suitePathRust resolves the honest Rust measurement corpus relative to the
+// repo root (the CLI package lives in ./cli, so testdata is one dir up).
+func suitePathRust() string {
+	return filepath.Join("..", "testdata", "precision-suite-rust")
+}
+
+// TestPrecisionSuiteBaselineRust is the ratchet for the Rust corpus, mirroring
+// TestPrecisionSuiteBaseline: it scans the Rust suite, loads the committed
+// baseline snapshot, and fails if any gated metric regressed. The Rust suite
+// deliberately scores below 1.0 on recall (an honest, documented web-extractor
+// false negative — see testdata/precision-suite-rust/README.md); pinning that
+// number here means Rust precision can no longer silently regress and the known
+// FN cannot be quietly hidden.
+func TestPrecisionSuiteBaselineRust(t *testing.T) {
+	dir := suitePathRust()
+
+	expectations, err := bench.ParseCorpus(dir)
+	if err != nil {
+		t.Fatalf("ParseCorpus(%s): %v", dir, err)
+	}
+	if len(expectations) == 0 {
+		t.Fatal("rust suite has no expectations; a labeled corpus must declare some")
+	}
+
+	scanFindings, err := scanCorpusFindings(dir)
+	if err != nil {
+		t.Fatalf("scanCorpusFindings(%s): %v", dir, err)
+	}
+
+	report := bench.Score(scanFindings, expectations)
+	current := bench.BaselineFromReport(&report)
+
+	base := loadBaseline(t, filepath.Join(dir, "baseline.json"))
+
+	if regressions := bench.CompareBaseline(base, current); len(regressions) > 0 {
+		for _, r := range regressions {
+			t.Errorf("rust suite regressed: %s", r.String())
+		}
+		t.Fatalf("rust precision suite regressed vs baseline.json; investigate the change or, if intended, "+
+			"regenerate the snapshot with `nox bench --precision testdata/precision-suite-rust "+
+			"--baseline testdata/precision-suite-rust/baseline.json` after deleting it.\n%s",
+			renderPrecisionTable(dir, &report))
+	}
+
+	// Precision must never fall below the CI gate floor (0.90) for the Rust suite.
+	if report.Overall.Precision() < 0.90 {
+		t.Errorf("rust suite precision %.3f < 0.90 floor:\n%s",
+			report.Overall.Precision(), renderPrecisionTable(dir, &report))
+	}
+
+	if bench.Improved(base, current) {
+		t.Logf("rust precision suite IMPROVED vs baseline.json (precision %.3f->%.3f, recall %.3f->%.3f); "+
+			"refresh testdata/precision-suite-rust/baseline.json to lock in the gain",
+			base.Precision, current.Precision, base.Recall, current.Recall)
+	}
+}
+
 // TestPrecisionSuiteBaselineCSharp is the C# ratchet: it scans the C# honest
 // measurement suite, loads its committed baseline snapshot, and fails if any
 // gated metric regressed. It is the analog of TestPrecisionSuiteBaseline for the
