@@ -240,6 +240,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("get_finding_detail").
 		Description("Get detailed information about a finding including source context and remediation").
 		ReadOnly().
+		OutputSchema(detail.FindingDetail{}).
 		Handler(s.handleGetFindingDetail)
 
 	srv.Tool("summary").
@@ -257,6 +258,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("get_finding_by_fingerprint").
 		Description("Look up a single finding by fingerprint (full or 12-char prefix) and report its current status (new / baselined / suppressed / vex_*). Use this when you already hold a fingerprint (from a prior scan or baseline entry) and just need to know whether it is still active. Returns {found:false, fingerprint} if no match.").
 		ReadOnly().
+		OutputSchema(fingerprintLookupOutput{}).
 		Handler(s.handleFindingByFingerprint)
 
 	srv.Tool("baseline_status").
@@ -276,6 +278,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
 		ReadOnly().
+		OutputSchema(diff.Result{}).
 		Handler(s.handleDiff)
 
 	srv.Tool("badge").
@@ -286,11 +289,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("version").
 		Description("Return nox version, commit, and build date").
 		ReadOnly().
+		OutputSchema(versionOutput{}).
 		Handler(s.handleVersion)
 
 	srv.Tool("rules").
 		Description("List all security rules with ID, description, severity, CWE, and remediation").
 		ReadOnly().
+		OutputSchema(rulesOutput{}).
 		Handler(s.handleRules)
 
 	srv.Tool("protect_status").
@@ -306,11 +311,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("vex_status").
 		Description("Load a VEX document and show a summary of vulnerability statuses").
 		ReadOnly().
+		OutputSchema(vexStatusOutput{}).
 		Handler(s.handleVEXStatus)
 
 	srv.Tool("fix_plan").
 		Description("Plan dependency upgrade actions from VULN-001 findings with fixed_in metadata. Read-only — returns the upgrade plan as a list; never mutates the workspace. Operators apply via the nox fix CLI subcommand.").
 		ReadOnly().
+		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
 
 	srv.Tool("agent_graph").
@@ -586,14 +593,14 @@ func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, e
 	return truncate(string(data)), nil
 }
 
-func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetailInput) (string, error) {
+func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetailInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
-		return "Error: no scan results available — run the scan tool first", nil
+		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
 	if input.FindingID == "" {
-		return "Error: missing required argument: finding_id", nil
+		return toolError("missing required argument: finding_id"), nil
 	}
 
 	contextLines := 5
@@ -604,18 +611,13 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 	store := detail.LoadFromSet(pc.result.Findings, pc.basePath)
 	f, ok := store.ByID(input.FindingID)
 	if !ok {
-		return fmt.Sprintf("Error: finding %q not found", input.FindingID), nil
+		return toolError(fmt.Sprintf("finding %q not found", input.FindingID)), nil
 	}
 
 	cat := catalog.Catalog()
 	enriched := detail.Enrich(&f, pc.basePath, store.All(), cat, contextLines)
 
-	data, err := json.MarshalIndent(enriched, "", "  ")
-	if err != nil {
-		return "Error: marshalling detail: " + err.Error(), nil
-	}
-
-	return truncate(string(data)), nil
+	return structured(enriched)
 }
 
 // handleSummary returns an aggregate overview of the last scan: counts by
@@ -684,13 +686,13 @@ func ruleFamily(ruleID string) string {
 // a prior scan or a baseline entry) and wants to know whether that finding is
 // still active — without pulling and searching the full findings list. Accepts
 // a full fingerprint or a unique prefix (the 12-char form used in finding IDs).
-func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFingerprintInput) (string, error) {
+func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFingerprintInput) (mcp.StructuredResult, error) {
 	if strings.TrimSpace(input.Fingerprint) == "" {
-		return "Error: missing required argument: fingerprint", nil
+		return toolError("missing required argument: fingerprint"), nil
 	}
 	pc := s.getCache("")
 	if pc == nil {
-		return "Error: no scan results available — run the scan tool first", nil
+		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
 	fp := strings.TrimSpace(input.Fingerprint)
@@ -698,29 +700,24 @@ func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFi
 	for i := range all {
 		f := &all[i]
 		if f.Fingerprint == fp || strings.HasPrefix(f.Fingerprint, fp) {
-			resp := map[string]any{
-				"found":       true,
-				"id":          f.ID,
-				"fingerprint": f.Fingerprint,
-				"rule_id":     f.RuleID,
-				"severity":    f.Severity,
-				"confidence":  f.Confidence,
-				"status":      statusOrNew(f.Status),
-				"message":     f.Message,
-				"location":    f.Location,
-			}
-			data, err := json.MarshalIndent(resp, "", "  ")
-			if err != nil {
-				return "Error: marshalling finding: " + err.Error(), nil
-			}
-			return string(data), nil
+			loc := f.Location
+			return structured(fingerprintLookupOutput{
+				Found:       true,
+				ID:          f.ID,
+				Fingerprint: f.Fingerprint,
+				RuleID:      f.RuleID,
+				Severity:    f.Severity,
+				Confidence:  f.Confidence,
+				Status:      statusOrNew(f.Status),
+				Message:     f.Message,
+				Location:    &loc,
+			})
 		}
 	}
-	data, _ := json.MarshalIndent(map[string]any{
-		"found":       false,
-		"fingerprint": fp,
-	}, "", "  ")
-	return string(data), nil
+	return structured(fingerprintLookupOutput{
+		Found:       false,
+		Fingerprint: fp,
+	})
 }
 
 // statusOrNew reports a finding's status, defaulting an empty status to "new".
@@ -974,13 +971,13 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 
 // Diff handler.
 
-func (s *Server) handleDiff(_ context.Context, input diffInput) (string, error) {
+func (s *Server) handleDiff(_ context.Context, input diffInput) (mcp.StructuredResult, error) {
 	if input.Path == "" {
-		return "Error: missing required argument: path", nil
+		return toolError("missing required argument: path"), nil
 	}
 
 	if err := s.isPathAllowed(input.Path); err != nil {
-		return "Error: " + err.Error(), nil
+		return toolError(err.Error()), nil
 	}
 
 	base := input.Base
@@ -997,15 +994,10 @@ func (s *Server) handleDiff(_ context.Context, input diffInput) (string, error) 
 		Head: head,
 	})
 	if err != nil {
-		return "Error: diff failed: " + err.Error(), nil
+		return toolError("diff failed: " + err.Error()), nil
 	}
 
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return "Error: marshalling diff result: " + err.Error(), nil
-	}
-
-	return truncate(string(data)), nil
+	return structured(result)
 }
 
 // Badge handler.
@@ -1034,30 +1026,27 @@ func (s *Server) handleBadge(_ context.Context, input badgeInput) (string, error
 
 // Version handler.
 
-func (s *Server) handleVersion(_ context.Context, _ emptyInput) (string, error) {
-	info := map[string]string{
-		"version": s.version,
-	}
-
-	data, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshalling version: %w", err)
-	}
-
-	return string(data), nil
+func (s *Server) handleVersion(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
+	return structured(versionOutput{Version: s.version})
 }
 
 // Rules handler.
 
-func (s *Server) handleRules(_ context.Context, _ emptyInput) (string, error) {
+func (s *Server) handleRules(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
 	cat := catalog.Catalog()
 
-	data, err := json.MarshalIndent(cat, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshalling rules: %w", err)
+	ids := make([]string, 0, len(cat))
+	for id := range cat {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	rules := make([]catalog.RuleMeta, 0, len(cat))
+	for _, id := range ids {
+		rules = append(rules, cat[id])
 	}
 
-	return truncate(string(data)), nil
+	return structured(rulesOutput{Total: len(rules), Rules: rules})
 }
 
 // Protect status handler.
@@ -1141,25 +1130,18 @@ func (s *Server) handleAnnotate(_ context.Context, _ emptyInput) (string, error)
 
 // VEX status handler.
 
-func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (string, error) {
+func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (mcp.StructuredResult, error) {
 	if input.Path == "" {
-		return "Error: missing required argument: path", nil
+		return toolError("missing required argument: path"), nil
 	}
 
 	if err := s.isPathAllowed(input.Path); err != nil {
-		return "Error: " + err.Error(), nil
+		return toolError(err.Error()), nil
 	}
 
 	doc, err := vex.LoadVEX(input.Path)
 	if err != nil {
-		return "Error: loading VEX document: " + err.Error(), nil
-	}
-
-	type vexStatusResponse struct {
-		Path       string         `json:"path"`
-		Statements int            `json:"statements"`
-		ByStatus   map[string]int `json:"by_status"`
-		Summary    string         `json:"summary"`
+		return toolError("loading VEX document: " + err.Error()), nil
 	}
 
 	byStatus := make(map[string]int)
@@ -1167,19 +1149,12 @@ func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (strin
 		byStatus[string(stmt.Status)]++
 	}
 
-	resp := vexStatusResponse{
+	return structured(vexStatusOutput{
 		Path:       input.Path,
 		Statements: len(doc.Statements),
 		ByStatus:   byStatus,
 		Summary:    vex.Summary(doc),
-	}
-
-	data, err := json.MarshalIndent(resp, "", "  ")
-	if err != nil {
-		return "Error: marshalling response: " + err.Error(), nil
-	}
-
-	return string(data), nil
+	})
 }
 
 // Data sensitivity report handler.
@@ -1740,10 +1715,10 @@ type fixPlanResponse struct {
 	Note         string      `json:"note,omitempty"`
 }
 
-func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, error) {
+func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
-		return "Error: no scan results available — run the scan tool first", nil
+		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
 	resp := fixPlanResponse{
@@ -1797,11 +1772,7 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (string, e
 		resp.Status = fixPlanStatusNoDepMetadata
 	}
 
-	data, err := json.MarshalIndent(resp, "", "  ")
-	if err != nil {
-		return "Error: marshalling plan: " + err.Error(), nil
-	}
-	return truncate(string(data)), nil
+	return structured(resp)
 }
 
 // majorOfVersion returns the leading numeric segment of a semver-ish

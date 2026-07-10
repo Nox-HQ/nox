@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/detail"
+	"github.com/nox-hq/nox/core/diff"
 	mcp "go.klarlabs.de/mcp"
 	"go.klarlabs.de/mcp/schema"
 )
@@ -36,6 +38,13 @@ func TestStructuredOutputSchemasGenerate(t *testing.T) {
 		{"list_findings", listFindingsOutput{}},
 		{"baseline_status", baselineStatusOutput{}},
 		{"data_sensitivity_report", dataSensitivityOutput{}},
+		{"get_finding_detail", detail.FindingDetail{}},
+		{"get_finding_by_fingerprint", fingerprintLookupOutput{}},
+		{"diff", diff.Result{}},
+		{"rules", rulesOutput{}},
+		{"vex_status", vexStatusOutput{}},
+		{"fix_plan", fixPlanResponse{}},
+		{"version", versionOutput{}},
 	}
 	for _, c := range cases {
 		if _, err := schema.Generate(c.v); err != nil {

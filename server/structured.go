@@ -97,3 +97,42 @@ type dataSensitivityOutput struct {
 	Rules         []dataRuleStats `json:"rules"`
 	AffectedFiles []string        `json:"affected_files"`
 }
+
+// fingerprintLookupOutput is the single-finding status lookup returned by
+// "get_finding_by_fingerprint". Found is always emitted (so a caller can
+// distinguish a miss from a hit); the remaining fields are populated only on a
+// match, keeping the not-found response to {found:false, fingerprint}.
+type fingerprintLookupOutput struct {
+	Found       bool                `json:"found"`
+	ID          string              `json:"id,omitempty"`
+	Fingerprint string              `json:"fingerprint,omitempty"`
+	RuleID      string              `json:"rule_id,omitempty"`
+	Severity    findings.Severity   `json:"severity,omitempty"`
+	Confidence  findings.Confidence `json:"confidence,omitempty"`
+	Status      findings.Status     `json:"status,omitempty"`
+	Message     string              `json:"message,omitempty"`
+	Location    *findings.Location  `json:"location,omitempty"`
+}
+
+// rulesOutput is the rule-catalog listing returned by "rules". The catalog is
+// keyed by rule ID internally; the tool exposes it as a stable, ID-sorted slice
+// inside an envelope so structured clients get an array they can iterate plus a
+// total, rather than an unordered object.
+type rulesOutput struct {
+	Total int                `json:"total"`
+	Rules []catalog.RuleMeta `json:"rules"`
+}
+
+// vexStatusOutput is the VEX document summary returned by "vex_status": the
+// statement count, a per-status breakdown, and a human-readable summary line.
+type vexStatusOutput struct {
+	Path       string         `json:"path"`
+	Statements int            `json:"statements"`
+	ByStatus   map[string]int `json:"by_status"`
+	Summary    string         `json:"summary"`
+}
+
+// versionOutput is the server version returned by "version".
+type versionOutput struct {
+	Version string `json:"version"`
+}

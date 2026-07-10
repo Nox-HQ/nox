@@ -661,11 +661,11 @@ func TestHandleGetFindingDetail_BeforeScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error before any scan")
 	}
-	if !strings.Contains(result, "no scan results") {
-		t.Fatalf("expected no-scan-results message, got: %s", result)
+	if !strings.Contains(textOf(result), "no scan results") {
+		t.Fatalf("expected no-scan-results message, got: %s", textOf(result))
 	}
 }
 
@@ -675,11 +675,11 @@ func TestHandleGetFindingDetail_MissingFindingID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for missing finding_id")
 	}
-	if !strings.Contains(result, "missing required argument: finding_id") {
-		t.Fatalf("expected missing argument message, got: %s", result)
+	if !strings.Contains(textOf(result), "missing required argument: finding_id") {
+		t.Fatalf("expected missing argument message, got: %s", textOf(result))
 	}
 }
 
@@ -689,11 +689,11 @@ func TestHandleGetFindingDetail_FindingNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for nonexistent finding")
 	}
-	if !strings.Contains(result, "not found") {
-		t.Fatalf("expected not found message, got: %s", result)
+	if !strings.Contains(textOf(result), "not found") {
+		t.Fatalf("expected not found message, got: %s", textOf(result))
 	}
 }
 
@@ -724,14 +724,14 @@ func TestHandleGetFindingDetail_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
+	if strings.HasPrefix(textOf(result), "Error:") {
+		t.Fatalf("expected success, got: %s", textOf(result))
 	}
-	if !strings.Contains(result, findingID) {
-		t.Fatalf("expected finding ID in response, got: %s", result)
+	if !strings.Contains(textOf(result), findingID) {
+		t.Fatalf("expected finding ID in response, got: %s", textOf(result))
 	}
-	if !strings.Contains(result, `"source"`) {
-		t.Fatalf("expected source in response, got: %s", result)
+	if !strings.Contains(textOf(result), `"source"`) {
+		t.Fatalf("expected source in response, got: %s", textOf(result))
 	}
 }
 
@@ -1227,7 +1227,7 @@ func TestHandleFixPlan_StatusNoVulns(t *testing.T) {
 		t.Fatalf("fix_plan failed: %v", err)
 	}
 	var resp fixPlanResponse
-	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if resp.Status != fixPlanStatusNoVulns {
@@ -1249,11 +1249,11 @@ func TestHandleVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
+	if strings.HasPrefix(textOf(result), "Error:") {
+		t.Fatalf("expected success, got: %s", textOf(result))
 	}
-	if !strings.Contains(result, "1.2.3") {
-		t.Fatalf("expected version in response, got: %s", result)
+	if !strings.Contains(textOf(result), "1.2.3") {
+		t.Fatalf("expected version in response, got: %s", textOf(result))
 	}
 }
 
@@ -1265,12 +1265,13 @@ func TestHandleRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
+	text := textOf(result)
+	if strings.HasPrefix(text, "Error:") {
+		t.Fatalf("expected success, got: %s", text)
 	}
 	// Should contain at least one known rule ID.
-	if !strings.Contains(result, "SEC-") && !strings.Contains(result, "AI-") && !strings.Contains(result, "IAC-") {
-		t.Fatalf("expected rule IDs in response, got: %s", result[:min(len(result), 200)])
+	if !strings.Contains(text, "SEC-") && !strings.Contains(text, "AI-") && !strings.Contains(text, "IAC-") {
+		t.Fatalf("expected rule IDs in response, got: %s", text[:min(len(text), 200)])
 	}
 }
 
@@ -1370,11 +1371,11 @@ func TestHandleDiff_MissingPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-	if !strings.Contains(result, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", result)
+	if !strings.Contains(textOf(result), "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", textOf(result))
 	}
 }
 
@@ -1384,11 +1385,11 @@ func TestHandleDiff_DisallowedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for disallowed path")
 	}
-	if !strings.Contains(result, "outside allowed workspaces") {
-		t.Fatalf("expected workspace error, got: %s", result)
+	if !strings.Contains(textOf(result), "outside allowed workspaces") {
+		t.Fatalf("expected workspace error, got: %s", textOf(result))
 	}
 }
 
@@ -1399,11 +1400,11 @@ func TestHandleDiff_NonGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for non-git directory")
 	}
-	if !strings.Contains(result, "diff failed") {
-		t.Fatalf("expected diff failed message, got: %s", result)
+	if !strings.Contains(textOf(result), "diff failed") {
+		t.Fatalf("expected diff failed message, got: %s", textOf(result))
 	}
 }
 
@@ -1484,11 +1485,11 @@ func TestHandleVEXStatus_MissingPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") {
+	if !strings.HasPrefix(textOf(result), "Error:") {
 		t.Fatal("expected error for missing path")
 	}
-	if !strings.Contains(result, "missing required argument: path") {
-		t.Fatalf("expected missing path message, got: %s", result)
+	if !strings.Contains(textOf(result), "missing required argument: path") {
+		t.Fatalf("expected missing path message, got: %s", textOf(result))
 	}
 }
 
@@ -1510,17 +1511,18 @@ func TestHandleVEXStatus_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
+	text := textOf(result)
+	if strings.HasPrefix(text, "Error:") {
+		t.Fatalf("expected success, got: %s", text)
 	}
-	if !strings.Contains(result, `"statements": 2`) && !strings.Contains(result, `"statements":2`) {
-		t.Fatalf("expected statements count, got: %s", result)
+	if !strings.Contains(text, `"statements": 2`) && !strings.Contains(text, `"statements":2`) {
+		t.Fatalf("expected statements count, got: %s", text)
 	}
-	if !strings.Contains(result, "not_affected") || !strings.Contains(result, "fixed") {
-		t.Fatalf("expected status breakdown, got: %s", result)
+	if !strings.Contains(text, "not_affected") || !strings.Contains(text, "fixed") {
+		t.Fatalf("expected status breakdown, got: %s", text)
 	}
-	if !strings.Contains(result, "VEX: 2 statements") {
-		t.Fatalf("expected summary, got: %s", result)
+	if !strings.Contains(text, "VEX: 2 statements") {
+		t.Fatalf("expected summary, got: %s", text)
 	}
 }
 
@@ -1814,8 +1816,8 @@ func TestHandleFixPlan_NoScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(result, "Error:") || !strings.Contains(result, "no scan results") {
-		t.Fatalf("expected no-scan-results error, got: %s", result)
+	if !strings.HasPrefix(textOf(result), "Error:") || !strings.Contains(textOf(result), "no scan results") {
+		t.Fatalf("expected no-scan-results error, got: %s", textOf(result))
 	}
 }
 
@@ -1825,11 +1827,11 @@ func TestHandleFixPlan_AfterScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.HasPrefix(result, "Error:") {
-		t.Fatalf("expected success, got: %s", result)
+	if strings.HasPrefix(textOf(result), "Error:") {
+		t.Fatalf("expected success, got: %s", textOf(result))
 	}
-	if !strings.Contains(result, `"actions"`) {
-		t.Fatalf("expected actions key in response, got: %s", result)
+	if !strings.Contains(textOf(result), `"actions"`) {
+		t.Fatalf("expected actions key in response, got: %s", textOf(result))
 	}
 }
 
@@ -2060,7 +2062,7 @@ func TestHandleSummary(t *testing.T) {
 func TestHandleFindingByFingerprint(t *testing.T) {
 	s := New("0.1.0", nil)
 	// Missing arg.
-	if r, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{}); !strings.HasPrefix(r, "Error:") {
+	if r, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{}); !strings.HasPrefix(textOf(r), "Error:") {
 		t.Fatal("expected error for empty fingerprint")
 	}
 
@@ -2092,8 +2094,8 @@ func TestHandleFindingByFingerprint(t *testing.T) {
 		Status string `json:"status"`
 		RuleID string `json:"rule_id"`
 	}
-	if err := json.Unmarshal([]byte(out), &found); err != nil {
-		t.Fatalf("not valid JSON: %v\n%s", err, out)
+	if err := json.Unmarshal([]byte(textOf(out)), &found); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, textOf(out))
 	}
 	if !found.Found || found.Status != "new" {
 		t.Errorf("expected found+new, got %+v", found)
@@ -2102,14 +2104,14 @@ func TestHandleFindingByFingerprint(t *testing.T) {
 	// 12-char prefix → also found.
 	if len(fp) >= 12 {
 		out2, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: fp[:12]})
-		if !strings.Contains(out2, `"found": true`) {
-			t.Errorf("prefix lookup should find the finding: %s", out2)
+		if !strings.Contains(textOf(out2), `"found": true`) {
+			t.Errorf("prefix lookup should find the finding: %s", textOf(out2))
 		}
 	}
 
 	// Unknown fingerprint → found:false.
 	out3, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: "deadbeefdeadbeef"})
-	if !strings.Contains(out3, `"found": false`) {
-		t.Errorf("expected found:false for unknown fp: %s", out3)
+	if !strings.Contains(textOf(out3), `"found": false`) {
+		t.Errorf("expected found:false for unknown fp: %s", textOf(out3))
 	}
 }
