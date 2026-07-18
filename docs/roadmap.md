@@ -254,7 +254,7 @@ proper home for governance/risk/compliance framework assessments.
 - Unique rule coverage: Low 302 / Moderate 523 / High 595 rules
 - FedRAMP entries removed from `core/compliance/data.go` (1,517 lines)
 - Core supported frameworks: 11 → 8; GRC plugin frameworks: 10 → 12
-- `plugins/nox-plugin-grc/fedramp.go`, `plugins/nox-plugin-grc/frameworks.go`
+- `fedramp.go`, `frameworks.go` in the `nox-plugin-grc` repository
 - Tests: baseline inclusion (High ⊇ Moderate ⊇ Low), control counts, framework lookup
 
 ## Phase 9 — Closing Security Analysis Gaps ✓

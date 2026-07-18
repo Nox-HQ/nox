@@ -1,7 +1,0 @@
-name: nox-plugin-k8s-runtime
-version: 0.1.0
-track: dynamic-runtime
-description: Inspect running Kubernetes workloads for security misconfigurations
-tools:
-  - name: scan
-    description: Scan Kubernetes cluster for runtime security issues including privileged containers, root execution, missing network policies, and unpinned images

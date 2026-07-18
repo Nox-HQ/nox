@@ -15,9 +15,16 @@ before:
     # — recent GoReleaser asserts dist/ is empty after before-hooks
     # run, so we cannot land artifacts there ahead of the build phase.
     - mkdir -p bundled
-    # Strip the local `replace` directive and tidy so the plugin builds
-    # standalone in the release runner without the parent nox source tree.
-    - sh -c 'cd plugins/nox-plugin-reachability && sed -i.bak "/^replace /d" go.mod && rm -f go.mod.bak && go mod tidy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../../bundled/nox-plugin-reachability .'
+    # Build the bundled plugin from its PUBLISHED module, not from a copy in
+    # this tree.
+    #
+    # It used to build from plugins/nox-plugin-reachability, which had forked
+    # from the repository that actually releases this plugin -- so the
+    # reachability shipped inside the nox archive was different code from the
+    # reachability published under the same name and version. Sourcing the
+    # released module makes the bundled binary and the standalone release the
+    # same artifact by construction.
+    - sh -c 'GOFLAGS=-trimpath CGO_ENABLED=0 GOBIN=$(pwd)/bundled go install -ldflags="-s -w" github.com/nox-hq/nox-plugin-reachability@v0.7.0'
 
 builds:
   - id: nox

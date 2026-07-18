@@ -2,7 +2,7 @@
 
 This document codifies the architectural rule that decides whether a
 detection capability ships in `core/` or as a separate plugin in
-`plugins/nox-plugin-*`.
+their own repositories under the `Nox-HQ` org (`nox-plugin-*`), each released independently.
 
 The boundary exists because nox is positioned as a **deterministic,
 offline-first, read-only** security primitive (per `CLAUDE.md`). Core
