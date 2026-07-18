@@ -986,7 +986,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-351", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)(?:PASSWORD|SECRET_KEY|TOKEN)\s*:\s*['"]?[A-Za-z0-9]`,
+			pattern:      `(?im)^\s*(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)\s*:\s*['"]?[A-Za-z0-9]`,
 			description:  "CI variable with hardcoded secret",
 			cwe:          "CWE-798",
 			keywords:     []string{"PASSWORD", "SECRET", "TOKEN"},

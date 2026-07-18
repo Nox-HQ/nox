@@ -488,6 +488,56 @@ jobs:
 	}
 }
 
+// TestExpandedDetect_IAC351_HardcodedSecret verifies that IAC-351 fires on
+// genuine hardcoded secret variables but does NOT fire on GHA OIDC permission
+// lines (`id-token: write`), which previously triggered a critical false positive
+// because the unanchored TOKEN pattern matched the suffix of `id-token`.
+func TestExpandedDetect_IAC351_HardcodedSecret(t *testing.T) {
+	a := NewAnalyzer()
+
+	// TRUE POSITIVE: a real hardcoded token variable in a GitLab CI file.
+	tpContent := []byte(`variables:
+  DEPLOY_TOKEN: hardcoded123secret
+  OTHER_VAR: safe
+`)
+	tpResults, err := a.ScanFile(".gitlab-ci.yml", tpContent)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, f := range tpResults {
+		if f.RuleID == "IAC-351" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("IAC-351: expected finding on hardcoded TOKEN variable, got none")
+	}
+
+	// FALSE POSITIVE guard: GHA OIDC permission line must NOT trigger IAC-351.
+	fpContent := []byte(`name: Deploy
+on: push
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+`)
+	fpResults, err := a.ScanFile(".github/workflows/deploy.yml", fpContent)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range fpResults {
+		if f.RuleID == "IAC-351" {
+			t.Errorf("IAC-351 false positive: fired on 'id-token: write' GHA permission line at %s:%d",
+				f.Location.FilePath, f.Location.StartLine)
+		}
+	}
+}
+
 func TestExpandedDetect_IAC308_WorkflowDispatch(t *testing.T) {
 	a := NewAnalyzer()
 	// keywords: ["workflow_dispatch"] -- lowercase
