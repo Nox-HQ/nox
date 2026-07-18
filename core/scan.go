@@ -23,6 +23,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
 	"github.com/nox-hq/nox/core/analyzers/variants"
+	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -206,6 +207,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	slopAnalyzer := slop.NewAnalyzer()
+	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	taintflowAnalyzer := taintflow.NewAnalyzer()
 	agentflowAnalyzer := agentflow.NewAnalyzer()
@@ -277,6 +279,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			mu.Lock()
 			inventory = inv
 			mu.Unlock()
+			return nil
+		},
+		func(c context.Context) error {
+			fs, err := cryptoAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
 			return nil
 		},
 		func(c context.Context) error {
@@ -364,6 +374,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range depsAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range cryptoAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 	for _, r := range slopAnalyzer.Rules().Rules() {
