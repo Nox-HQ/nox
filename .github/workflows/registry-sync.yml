@@ -1,0 +1,100 @@
+# Keeps registry-scaffold/index.json in step with what is actually released.
+#
+# WHY. The CLI resolves plugins from that file, so a published GitHub release is
+# NOT installable until the index lists it — and nothing detected the gap.
+# Seven plugins were once released, signed, and completely invisible to
+# `nox plugin install` while every check was green.
+#
+# Two jobs, deliberately separate:
+#
+#   check      runs on every PR touching the index or the tool. Fails when the
+#              NEWEST release of any plugin is missing. This is the part with
+#              standalone value: it turns a silent gap into a red check.
+#
+#   reconcile  runs on a schedule and opens a PR with the missing entries.
+#              A PR rather than a direct commit, because what the registry
+#              offers is the list of binaries people install — a trust
+#              decision that keeps a human in the loop. The latency cost is
+#              hours against a gap that previously lasted days.
+name: Registry
+
+on:
+  pull_request:
+    paths:
+      - 'registry-scaffold/index.json'
+      - 'cmd/registry-sync/**'
+      - '.github/workflows/registry-sync.yml'
+  schedule:
+    # Daily. Releases are infrequent; a tighter loop would only add API calls.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Index is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      # Only the newest release per plugin. The index is a curated subset —
+      # 29 historical versions are absent by choice — so checking every release
+      # would leave this permanently red, and a gate that is always red gets
+      # ignored. `-all` is available locally for a full audit.
+      - name: Check for unpublished releases
+        run: go run ./cmd/registry-sync -check
+        env:
+          # Unauthenticated GitHub API is 60 requests/hour, which this exceeds
+          # across the plugin repositories.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  reconcile:
+    name: Reconcile index
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Add missing releases to the index
+        run: go run ./cmd/registry-sync -write
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Digests come from each release's own checksums.txt; the tool omits any
+      # artifact it cannot verify rather than writing a placeholder. If nothing
+      # changed, create-pull-request is a no-op.
+      - name: Open a PR with the changes
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          branch: chore/registry-sync
+          title: 'chore(registry): publish newly released plugin versions'
+          commit-message: 'chore(registry): publish newly released plugin versions'
+          body: |
+            Opened automatically by the `Registry` workflow.
+
+            A published GitHub release is not installable until
+            `registry-scaffold/index.json` lists it — the CLI resolves plugins
+            from that file. This PR adds releases that were missing.
+
+            Every artifact digest and size comes from that release's own
+            `checksums.txt` and the GitHub API. The tool **omits any artifact
+            whose checksum it cannot resolve** rather than writing a
+            placeholder, so review the run log if an expected platform is
+            absent.
+
+            Merging makes these versions installable via `nox plugin install`.
+          labels: registry
+          delete-branch: true
