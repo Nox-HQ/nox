@@ -104,7 +104,40 @@ type ToolRequest struct {
 
 ## Safety Model
 
-Every plugin declares its safety requirements in the manifest. The host validates these against the active policy before allowing registration.
+Every plugin declares its safety requirements in the manifest, and may additionally declare them **per tool**. The host validates the plugin-level block at registration, and the specific tool's requirements at invocation.
+
+### Plugin-level vs per-tool safety
+
+The plugin-level `Safety(...)` block is the **ceiling** — everything the plugin might ever need, declared up front so an operator can see it before anything runs. Individual tools may declare narrower requirements with `ToolSafety(...)`:
+
+```go
+Capability("red-team", "Attack path analysis").
+    // Reasons over findings the core scan already produced: no network,
+    // no mutation, nothing to confirm.
+    Tool("analyze", "Detect attack chains", true).
+    ToolSafety(sdk.WithRiskClass(sdk.RiskPassive)).
+    // Probes a live target, so it stays opt-in.
+    Tool("validate", "Validate exploitability", false).
+    ToolSafety(
+        sdk.WithRiskClass(sdk.RiskActive),
+        sdk.WithNeedsConfirmation(),
+        sdk.WithNetworkHosts("*"),
+    ).
+    Done().
+    Safety(  // the ceiling across both tools
+        sdk.WithRiskClass(sdk.RiskActive),
+        sdk.WithNeedsConfirmation(),
+        sdk.WithNetworkHosts("*"),
+    )
+```
+
+A tool with no `ToolSafety` inherits the plugin-level block, so plugins written before this existed behave exactly as they did.
+
+**Why it exists.** Safety used to be plugin-scoped only, and validated at registration. A plugin bundling tools with different needs had to declare the union — the strictest requirement of any one tool — and that union then gated *every* tool it shipped. `nox/red-team` could not run its read-only `analyze` under a passive policy purely because it also ships `validate`.
+
+Registration therefore now asks *"is at least one tool usable under this policy?"*, and the binding check happens per invocation.
+
+> **`read_only` does not mean passive.** It means "does not mutate the workspace". A read-only tool may still send data to the network — `nox/llm-triage` declares a read-only tool that ships source code to an external chat endpoint. Declare `ToolSafety` honestly per tool; do not infer passiveness from `readOnly: true`, and do not copy the narrowest block onto a tool that needs more. The host enforces exactly what you declare.
 
 ### Risk Classes
 

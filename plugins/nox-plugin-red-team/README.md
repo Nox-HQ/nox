@@ -8,8 +8,19 @@ Analyzes security findings to detect multi-step attack chains and optionally val
 
 ## Tools
 
-- **analyze** — Detect attack chains from security findings (passive, read-only)
-- **validate** — Validate exploitability against a target URL (active, needs confirmation)
+- **analyze** — Detect attack chains from security findings (passive, read-only).
+  Runs under the **default policy**: it reasons over findings the core scan
+  already produced, so it needs no network access, mutates nothing, and requires
+  no confirmation.
+- **validate** — Validate exploitability against a target URL (active, needs
+  confirmation). Requires an explicit policy opt-in, because it probes a live
+  target.
+
+The two declare their requirements separately (`ToolSafety`), so `validate`
+being active does not gate `analyze`. Before per-tool safety existed, the
+plugin could only declare the union of both, and `analyze` was rejected under a
+passive policy despite needing nothing — this README described it as passive and
+was right about the tool; the manifest simply could not express it.
 
 ## Rules
 
