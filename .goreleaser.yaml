@@ -137,7 +137,12 @@ brews:
     test: |
       system "#{bin}/nox", "--help"
       system "#{bin}/nox-plugin-reachability", "--help" rescue true
-    skip_upload: auto
+    # "auto" already skips prereleases/snapshots. SKIP_BREW additionally skips
+    # when the release workflow found TAP_GITHUB_TOKEN cannot reach the tap, so
+    # an expired packaging credential cannot fail the release and take cosign
+    # signing down with it. Defaults to "auto" for local/manual runs where the
+    # variable is unset.
+    skip_upload: '{{ if eq (envOrDefault "SKIP_BREW" "") "true" }}true{{ else }}auto{{ end }}'
 
 sboms:
   - artifacts: archive
