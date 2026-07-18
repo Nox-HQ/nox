@@ -26,6 +26,34 @@ jobs:
         with:
           syft-version: v1.22.0
 
+      # Probe the Homebrew tap credential BEFORE running goreleaser.
+      #
+      # WHY: publishing the tap formula is a packaging convenience, but it ran
+      # inside the same goreleaser invocation as everything else, so when the
+      # token expired the whole `release` job failed — and `sign`, `docker` and
+      # `update-major-tag` all declare `needs: release`, so they were SKIPPED.
+      #
+      # The result (observed on v1.9.0): binaries and SBOMs published, but the
+      # artifacts left UNSIGNED, no container image, and the floating `v1` tag
+      # not moved. A stale packaging token silently downgraded the
+      # supply-chain guarantees this project exists to provide. That is exactly
+      # backwards, and it failed loudly in the wrong place: the release looked
+      # "failed" while actually being published-but-unsigned.
+      #
+      # Now a bad tap token degrades to a warning and a skipped formula update.
+      # Signing is never collateral damage.
+      - name: Check Homebrew tap credential
+        id: tap
+        run: |
+          if gh api repos/felixgeelhaar/homebrew-tap --silent 2>/dev/null; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Homebrew tap skipped::TAP_GITHUB_TOKEN cannot access felixgeelhaar/homebrew-tap (rotate the secret and re-run to publish the formula). The release itself, signing and the container image are unaffected."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+
       - uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           version: '~> v2'
@@ -33,6 +61,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          SKIP_BREW: ${{ steps.tap.outputs.skip }}
 
   update-major-tag:
     # Move the floating `v1` action tag to this release so `nox-hq/nox@v1`
