@@ -1,5 +1,10 @@
 # Binary
 /nox
+# Binaries from `go build ./cmd/<name>`, which writes to the working directory.
+# /nox was listed but each new command needed its own line, and one was missed:
+# an 8.9 MB darwin/arm64 binary reached main. Cover them by pattern instead.
+/registry-sync
+/marketplace-build
 
 # GoReleaser
 dist/
