@@ -70,15 +70,15 @@ func LoadVEX(path string) (*Document, error) {
 // ApplyVEX matches VEX statements to findings and updates their status
 // accordingly. Match candidates per finding (in order):
 //
-//   1. The finding's RuleID (e.g. SEC-073, IAC-013, AI-PI-001). This
-//      catches the `nox vex init` flow where every nox rule ID is a
-//      valid waiver target.
-//   2. The finding's Fingerprint, when the VEX statement carries a
-//      matching _nox_fingerprint aux field — pins a waiver to a
-//      specific occurrence rather than a whole rule class.
-//   3. (VULN-001 only) The CVE / GHSA identifiers in the finding's
-//      vuln_id and aliases metadata. Operators can keep waiving by
-//      CVE without learning nox-specific rule IDs.
+//  1. The finding's RuleID (e.g. SEC-073, IAC-013, AI-PI-001). This
+//     catches the `nox vex init` flow where every nox rule ID is a
+//     valid waiver target.
+//  2. The finding's Fingerprint, when the VEX statement carries a
+//     matching _nox_fingerprint aux field — pins a waiver to a
+//     specific occurrence rather than a whole rule class.
+//  3. (VULN-001 only) The CVE / GHSA identifiers in the finding's
+//     vuln_id and aliases metadata. Operators can keep waiving by
+//     CVE without learning nox-specific rule IDs.
 //
 // First match wins per finding.
 func ApplyVEX(fs *findings.FindingSet, doc *Document) int {

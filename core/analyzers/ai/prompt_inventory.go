@@ -6,10 +6,10 @@ import (
 
 // PromptTemplate represents a prompt template discovered in the codebase.
 type PromptTemplate struct {
-	Name      string   `json:"name"`
-	Type      string   `json:"type"` // "system", "user", "template", "file"
-	Path      string   `json:"path"`
-	Line      int      `json:"line,omitempty"`
+	Name string `json:"name"`
+	Type string `json:"type"` // "system", "user", "template", "file"
+	Path string `json:"path"`
+	Line int    `json:"line,omitempty"`
 	// Content is a truncated copy of the prompt text (max 512 chars).
 	// AIBOM consumers use this to reason about prompt-injection
 	// susceptibility — without the prompt content, an inventory only

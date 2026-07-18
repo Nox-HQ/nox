@@ -25,6 +25,23 @@ linters:
         - diagnostic
         - style
         - performance
+      # Disabled after reviewing every instance rather than to silence noise.
+      #
+      # hugeParam / rangeValCopy flag passing or ranging over structs of roughly
+      # 80-152 bytes and advise pointers instead. Taking that advice across the
+      # codebase would be a SEMANTIC change, not an optimisation: a value
+      # parameter guarantees the callee cannot mutate the caller's struct, and
+      # switching to pointers removes that guarantee and introduces aliasing.
+      # For a security scanner, "this function provably cannot mutate its input"
+      # is worth more than eliding a sub-200-byte copy on a code path that is
+      # nowhere near hot.
+      #
+      # Re-enable either check if a profile ever shows these copies mattering —
+      # the point is that the trade was evaluated, not that the advice is wrong
+      # in general.
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
     revive:
       rules:
         - name: exported

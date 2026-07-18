@@ -32,9 +32,9 @@ type tfConfiguration struct {
 // tfConfigModule holds the resources, data sources, and child module calls
 // within a configuration module.
 type tfConfigModule struct {
-	Resources     []tfConfigResource        `json:"resources"`
-	DataResources []tfConfigResource        `json:"data_resources"`
-	ModuleCalls   map[string]tfModuleCall   `json:"module_calls"`
+	Resources     []tfConfigResource      `json:"resources"`
+	DataResources []tfConfigResource      `json:"data_resources"`
+	ModuleCalls   map[string]tfModuleCall `json:"module_calls"`
 }
 
 // tfModuleCall describes a child module invocation within a configuration.

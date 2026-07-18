@@ -11,9 +11,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
-	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/registry/oci"
 	"github.com/nox-hq/nox/registry/trust"
 )
