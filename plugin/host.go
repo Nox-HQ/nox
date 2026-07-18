@@ -170,7 +170,44 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 
 	pluginName := p.Info().Name
 
+	// Per-tool safety enforcement.
+	//
+	// Registration only establishes that SOMETHING in this plugin is runnable
+	// (see ValidateManifest); the binding check is here, against the tool
+	// actually being called. A tool declaring its own safety is judged on that;
+	// one that does not inherits the plugin-level block, which is how every
+	// plugin behaved before ToolDef.safety existed.
+	//
+	// This is what lets a plugin ship a passive tool alongside an active one
+	// without the active sibling gating the passive one.
+	if ti := p.getToolInfo(resolvedName); ti != nil && ti.Safety != nil {
+		if violations := validateSafety(ti.Safety, &h.policy); len(violations) > 0 {
+			msgs := make([]string, 0, len(violations))
+			for _, pv := range violations {
+				msgs = append(msgs, pv.Error())
+			}
+			v := RuntimeViolation{
+				Type:       ViolationUnauthorizedAction,
+				PluginName: pluginName,
+				Message: fmt.Sprintf(
+					"tool %q requirements not allowed by policy: %s",
+					resolvedName, strings.Join(msgs, "; "),
+				),
+				Timestamp: time.Now(),
+			}
+			h.mu.Lock()
+			h.handleViolationLocked(v, p)
+			h.mu.Unlock()
+			return nil, v
+		}
+	}
+
 	// Read-only enforcement: reject non-read-only tools under passive policy.
+	//
+	// Deliberately a SEPARATE, independent check. `read_only` means "does not
+	// mutate the workspace" — not "passive": nox/llm-triage declares a read_only
+	// tool that ships source code to an external chat endpoint. Neither property
+	// implies the other, so a tool must satisfy both.
 	if h.policy.MaxRiskClass == RiskClassPassive {
 		ti := p.getToolInfo(resolvedName)
 		if ti != nil && !ti.ReadOnly {

@@ -64,14 +64,87 @@ func (v PolicyViolation) Error() string {
 	return fmt.Sprintf("policy violation on %s: %s", v.Field, v.Message)
 }
 
-// ValidateManifest checks a plugin's manifest against the given policy.
-// It returns all violations found, not just the first.
-// A nil safety requirement in the manifest means no requirements, which always passes.
+// ValidateManifest checks whether a plugin may be REGISTERED under the policy.
+//
+// A plugin is admissible when at least one of its tools is. Safety is declared
+// per-plugin and, since ToolDef.safety was added, optionally per-tool; the
+// plugin-level block is the ceiling across everything the plugin might do.
+//
+// Rejecting on that ceiling alone was the old behaviour and it was too coarse: a
+// plugin bundling one active tool with several passive ones must declare the
+// union, so the active sibling gated every passive tool it ships. nox/red-team
+// could not run its read-only `analyze` under a passive policy purely because it
+// also ships `validate`. Registration therefore now asks "is anything here
+// usable?", and [ValidateToolInvocation] enforces the real constraint per call.
+//
+// Returns all violations found, not just the first. A manifest with no safety
+// requirements always passes.
 func ValidateManifest(manifest *pluginv1.GetManifestResponse, policy *Policy) []PolicyViolation {
 	if manifest == nil {
 		return nil
 	}
-	safety := manifest.GetSafety()
+	pluginSafety := manifest.GetSafety()
+	if pluginSafety == nil {
+		return nil
+	}
+
+	pluginViolations := validateSafety(pluginSafety, policy)
+	if len(pluginViolations) == 0 {
+		return nil
+	}
+
+	// The ceiling exceeds the policy. Admit the plugin anyway if some tool
+	// declares narrower requirements the policy does allow — that tool can still
+	// run, and the others are refused individually at invocation.
+	for _, capability := range manifest.GetCapabilities() {
+		for _, tool := range capability.GetTools() {
+			if tool.GetSafety() == nil {
+				continue // inherits the ceiling, which already violates
+			}
+			if len(validateSafety(tool.GetSafety(), policy)) == 0 {
+				return nil
+			}
+		}
+	}
+	return pluginViolations
+}
+
+// ValidateToolInvocation checks a SPECIFIC tool against the policy.
+//
+// This is the check that actually constrains what runs. A tool's own safety
+// block is used when present; otherwise it inherits the plugin-level block, so
+// plugins predating ToolDef.safety behave exactly as they did before.
+//
+// An unknown tool name is a violation rather than a pass: failing open on a name
+// typo would let an unvalidated call through.
+func ValidateToolInvocation(
+	manifest *pluginv1.GetManifestResponse,
+	toolName string,
+	policy *Policy,
+) []PolicyViolation {
+	if manifest == nil {
+		return nil
+	}
+	for _, capability := range manifest.GetCapabilities() {
+		for _, tool := range capability.GetTools() {
+			if tool.GetName() != toolName {
+				continue
+			}
+			if s := tool.GetSafety(); s != nil {
+				return validateSafety(s, policy)
+			}
+			return validateSafety(manifest.GetSafety(), policy)
+		}
+	}
+	return []PolicyViolation{{
+		Field:   "tool_name",
+		Message: fmt.Sprintf("tool %q is not declared in the manifest", toolName),
+	}}
+}
+
+// validateSafety checks one set of safety requirements against the policy.
+// Shared by the plugin-level and per-tool paths so the two cannot drift apart.
+func validateSafety(safety *pluginv1.SafetyRequirements, policy *Policy) []PolicyViolation {
 	if safety == nil {
 		return nil
 	}

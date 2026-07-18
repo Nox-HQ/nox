@@ -48,6 +48,24 @@ message ToolDef {
   google.protobuf.Struct input_schema = 3;
   bool read_only = 4;
   bool requires_scan_context = 5;  // tool needs ScanContext as input
+
+  // Per-tool safety requirements. When unset, the plugin-level
+  // SafetyRequirements apply — so plugins that predate this field behave
+  // exactly as before.
+  //
+  // Why this exists: safety was declared only per-plugin and validated at
+  // REGISTRATION, so a plugin bundling one active tool with several passive
+  // ones had to declare the union — the strictest requirement of any tool —
+  // which then gated every tool it ships. nox/red-team could not run its
+  // read-only `analyze` under a passive policy purely because it also ships
+  // `validate`; nox/k8s-runtime's `scan` was blocked by its sibling `drift`.
+  //
+  // NOTE: this deliberately is NOT derived from `read_only`. That flag means
+  // "does not mutate the workspace", not "passive" — nox/llm-triage declares a
+  // read_only tool that sends source code to an external chat endpoint.
+  // Inferring passiveness from read_only would have granted unrestricted egress
+  // to precisely the tool that exfiltrates source.
+  optional SafetyRequirements safety = 6;
 }
 
 // ResourceDef describes a resource that a plugin can serve.
