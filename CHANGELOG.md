@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-07-18
+
+### Fixed
+
+- **A stale Homebrew tap token no longer skips cosign signing.** The tap
+  formula update ran inside the same goreleaser invocation as everything else,
+  so an expired `TAP_GITHUB_TOKEN` (401) failed the `release` job — and `sign`,
+  `docker` and `update-major-tag` all declare `needs: release`, so all three
+  were skipped. **v1.9.0 was published with unsigned artifacts, no container
+  image, and the floating `v1` tag left behind.** The workflow now probes the
+  credential first; a bad token degrades to a warning and a skipped formula
+  update while the release, signing, image push and tag move proceed (#237).
+
+> **v1.9.0 should not be used.** Its artifacts are unsigned. Use v1.9.1.
+
 ## [1.9.0] - 2026-07-18
 
 ### Added
