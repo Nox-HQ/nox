@@ -286,13 +286,22 @@ func runPluginInstall(args []string) int {
 	fs.BoolVar(&requireVerified, "require-verified", false, "fail install when signer key is not in the local keyring")
 	fs.BoolVar(&allowUnverified, "allow-unverified", false, "accept unsigned artifacts (overrides .nox.yaml trust_policy)")
 	fs.StringVar(&policyOverride, "trust-policy", "", "override trust policy: permissive, default, enterprise")
+	var localPath string
+	fs.StringVar(&localPath, "local", "", "install an unsigned plugin binary from a local path (development only)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
 	rest := fs.Args()
+	if localPath != "" {
+		if len(rest) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: nox plugin install --local <path> <name>")
+			return 2
+		}
+		return installLocalPlugin(rest[0], localPath)
+	}
 	if len(rest) < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin install [--require-signature|--require-verified|--allow-unverified] <name[@version]>")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin install [--require-signature|--require-verified|--allow-unverified] <name[@version]> | --local <path> <name>")
 		return 2
 	}
 
@@ -640,4 +649,67 @@ func parseNameVersion(s string) (name, constraint string) {
 		return s[:idx], s[idx+1:]
 	}
 	return s, "*"
+}
+
+// installLocalPlugin registers a plugin binary straight from disk.
+//
+// Plugin development previously had no way to run a locally built plugin: the
+// only install path resolves a name against a registry, downloads a published
+// artifact and verifies its signature. That made even a one-line plugin change
+// untestable without cutting a release first, which is a poor loop and pushes
+// people toward editing ~/.nox/state.json by hand.
+//
+// The binary is recorded with TrustLevel "local" and no digest, so it is never
+// mistaken for a verified marketplace artifact: `nox plugin list` shows it as
+// local, and nothing here consults or relaxes the trust policy, because there
+// is no signature to reason about. Nothing about the SAFETY policy changes —
+// a locally installed plugin is validated against the same policy at
+// registration and per-tool at invocation as any other.
+func installLocalPlugin(name, path string) int {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: resolving %s: %v\n", path, err)
+		return 2
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	if info.IsDir() {
+		fmt.Fprintf(os.Stderr, "error: %s is a directory; pass the built plugin binary\n", abs)
+		return 2
+	}
+	// Executable bit checked up front: registration would otherwise fail later
+	// with a confusing exec error.
+	if info.Mode()&0o111 == 0 {
+		fmt.Fprintf(os.Stderr, "error: %s is not executable\n", abs)
+		return 2
+	}
+
+	statePath := DefaultStatePath()
+	st, err := LoadState(statePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: loading state: %v\n", err)
+		return 2
+	}
+
+	now := time.Now()
+	st.AddPlugin(&InstalledPlugin{
+		Name:        name,
+		Version:     "local",
+		BinaryPath:  abs,
+		TrustLevel:  "local",
+		InstalledAt: now,
+		UpdatedAt:   now,
+	})
+	if err := SaveState(statePath, st); err != nil {
+		fmt.Fprintf(os.Stderr, "error: saving state: %v\n", err)
+		return 2
+	}
+
+	fmt.Printf("Installed %s from %s (trust: local, UNSIGNED)\n", name, abs)
+	fmt.Fprintln(os.Stderr, "warning: local plugins are unsigned and unverified — for development only. "+
+		"Reinstall from the marketplace (nox plugin install "+name+") to return to a verified build.")
+	return 0
 }

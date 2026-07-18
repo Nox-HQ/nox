@@ -764,6 +764,12 @@ func infoToProtoCapabilities(info *Info) []*pluginv1.Capability {
 				Description:         t.Description,
 				ReadOnly:            t.ReadOnly,
 				RequiresScanContext: t.RequiresScanContext,
+				// Must be carried back: RegisterPlugin/RegisterBinary rebuild the
+				// manifest from Info before validating it, so dropping per-tool
+				// safety here silently reverts registration to judging the
+				// plugin-level ceiling alone — exactly the behaviour per-tool
+				// safety exists to replace.
+				Safety: t.Safety,
 			})
 		}
 		for _, r := range c.Resources {
