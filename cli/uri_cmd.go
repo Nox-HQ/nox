@@ -13,8 +13,8 @@ import (
 
 // runURI dispatches `nox uri` subcommands. Two surfaces today:
 //
-//   nox uri <uri>             — handle a nox:// URI (install action)
-//   nox uri register          — print or apply OS-level URL handler
+//	nox uri <uri>             — handle a nox:// URI (install action)
+//	nox uri register          — print or apply OS-level URL handler
 //
 // Marketplace pages and docs use `nox://install?plugin=nox/ai-eval`
 // links so an operator can click and have nox install the plugin
@@ -234,7 +234,7 @@ func registerDarwin(exe string, dryRun bool) int {
 	// forwards the URI to the binary.
 	home, _ := os.UserHomeDir()
 	appPath := filepath.Join(home, "Applications", "NoxURIHandler.app")
-	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	plist := `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -253,7 +253,7 @@ func registerDarwin(exe string, dryRun bool) int {
   </array>
 </dict>
 </plist>
-`)
+`
 	wrapper := fmt.Sprintf(`#!/bin/sh
 exec %q uri "$1"
 `, exe)

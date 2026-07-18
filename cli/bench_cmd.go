@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -175,9 +176,8 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 	if err := cmd.Run(); err != nil {
 		// nox returns 1 on findings — treat that as success here. We
 		// only care about scan errors.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			// fall through
-		} else {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 			return ProjectSummary{}, err
 		}
 	}

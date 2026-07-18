@@ -224,7 +224,6 @@ func detectEndpoint(text string) string {
 	return ""
 }
 
-
 // frameworkPattern recognises agent / vector-store framework usage and
 // emits a Component for the inventory. Designed to over-report — a single
 // import line is enough to register the framework as present.

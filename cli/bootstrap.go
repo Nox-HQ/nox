@@ -34,8 +34,9 @@ var defaultRegistrySource = registry.Source{
 // never blocks the CLI from running.
 //
 // Operator opt-outs:
-//   NOX_NO_BUNDLED_PLUGINS=1  — skip bundled-plugin registration
-//   NOX_NO_DEFAULT_REGISTRY=1 — skip default-registry auto-add
+//
+//	NOX_NO_BUNDLED_PLUGINS=1  — skip bundled-plugin registration
+//	NOX_NO_DEFAULT_REGISTRY=1 — skip default-registry auto-add
 //
 // First-run registrations print a one-line notice on stderr so the
 // operator sees what got auto-wired and how to disable it.

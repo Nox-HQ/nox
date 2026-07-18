@@ -112,13 +112,13 @@ func SecurityScore(counts map[findings.Severity]int) int {
 // WeightedSecurityScore. Returned by Explain so users can see why their
 // grade is what it is — see issue #62 (`nox badge --explain`).
 type Contribution struct {
-	RuleID     string              `json:"rule_id"`
-	Severity   findings.Severity   `json:"severity"`
-	Confidence findings.Confidence `json:"confidence"`
-	SeverityW  int                 `json:"severity_weight"`
-	ConfidenceW float64            `json:"confidence_weight"`
-	Points     float64             `json:"points"`
-	Location   string              `json:"location,omitempty"`
+	RuleID      string              `json:"rule_id"`
+	Severity    findings.Severity   `json:"severity"`
+	Confidence  findings.Confidence `json:"confidence"`
+	SeverityW   int                 `json:"severity_weight"`
+	ConfidenceW float64             `json:"confidence_weight"`
+	Points      float64             `json:"points"`
+	Location    string              `json:"location,omitempty"`
 }
 
 // WeightedSecurityScore computes the score as

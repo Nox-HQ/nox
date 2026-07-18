@@ -216,8 +216,8 @@ func TestScanDrift_NoDrift_NoFindings(t *testing.T) {
 func TestPodWorkloadKey_OwnerReplicaSet(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "api-7d4b9c-abc12",
-			Namespace: "prod",
+			Name:            "api-7d4b9c-abc12",
+			Namespace:       "prod",
 			OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "api-7d4b9c"}},
 		},
 	}
@@ -230,8 +230,8 @@ func TestPodWorkloadKey_OwnerReplicaSet(t *testing.T) {
 func TestPodWorkloadKey_OwnerDeployment(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "api-7d4b9c-abc12",
-			Namespace: "prod",
+			Name:            "api-7d4b9c-abc12",
+			Namespace:       "prod",
 			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
 		},
 	}

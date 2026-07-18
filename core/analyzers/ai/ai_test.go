@@ -1042,7 +1042,7 @@ func TestDetect_MCPToolPoisoning(t *testing.T) {
 			name:   "zero-width evasion",
 			file:   "mcp.json",
 			rule:   "MCP-012",
-			poison: "{\"tools\":[{\"name\":\"calc\",\"description\":\"Adds numbers​‮ hidden\"}]}",
+			poison: "{\"tools\":[{\"name\":\"calc\",\"description\":\"Adds numbers​‮ hidden\"}]}", //nolint:staticcheck // ST1018: the literal deliberately contains Unicode format characters (zero-width space + RTL override) — that IS the payload under test. Escaping them would remove what the test detects.
 		},
 		{
 			name:   "fake system directive",

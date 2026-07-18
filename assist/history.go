@@ -171,17 +171,20 @@ func (h *TriageHistory) Save() error {
 		return fmt.Errorf("create temp triage history: %w", err)
 	}
 	tmpPath := tmp.Name()
+	// Cleanup errors below are deliberately discarded: each path is already
+	// returning the error that actually matters, and a failed temp-file removal
+	// must not mask it. Assigning to _ states that intent explicitly.
 	if _, err := tmp.Write(body); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("write temp triage history: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close temp triage history: %w", err)
 	}
 	if err := os.Rename(tmpPath, h.path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename triage history into place: %w", err)
 	}
 	return nil

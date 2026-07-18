@@ -15,10 +15,10 @@ type Connection struct {
 
 // ToolPermissionSet represents the tools available to an agent or MCP server.
 type ToolPermissionSet struct {
-	Agent       string             `json:"agent"`
-	Server      string             `json:"server,omitempty"`
-	Tools       []string           `json:"tools"`
-	Path        string             `json:"path"`
+	Agent  string   `json:"agent"`
+	Server string   `json:"server,omitempty"`
+	Tools  []string `json:"tools"`
+	Path   string   `json:"path"`
 	// Descriptions maps tool name -> description string captured at
 	// registration time. Empty entries omitted; populated by the
 	// agent-lattice extractor for languages where description appears

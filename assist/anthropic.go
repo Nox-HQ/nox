@@ -176,7 +176,8 @@ func (p *AnthropicProvider) Complete(ctx context.Context, messages []Message) (*
 	if err != nil {
 		return nil, fmt.Errorf("anthropic provider: request: %w", err)
 	}
-	defer resp.Body.Close()
+	// Response body close on a read-only HTTP response: nothing to report.
+	defer func() { _ = resp.Body.Close() }()
 
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {

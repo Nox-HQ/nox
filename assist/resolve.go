@@ -91,7 +91,7 @@ func ResolveProvider() (*ProviderConfig, error) {
 	}
 }
 
-func parseTemperature(s string) (float64, bool, error) {
+func parseTemperature(s string) (temperature float64, ok bool, err error) {
 	if strings.TrimSpace(s) == "" {
 		return 0, false, nil
 	}

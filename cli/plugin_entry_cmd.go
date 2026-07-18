@@ -244,12 +244,19 @@ func fetchHTTP(url string) ([]byte, error) {
 }
 
 // stdHTTPGet is a tiny wrapper so tests can override.
+//
+// the closure exists both so tests can substitute it and to carry the
+// gosec/noctx suppression below, which has nowhere to live on a bare reference.
+//
+//nolint:gocritic // unlambda: NOT replaceable with a bare http.Get reference —
 var stdHTTPGet = func(url string) (*http.Response, error) {
 	return http.Get(url) //nolint:gosec,noctx // checksum URL is operator-supplied; install path validates contents
 }
 
 // parseChecksumsFile parses a GoReleaser-style checksums.txt:
-//   <hex-sha256>  <filename>
+//
+//	<hex-sha256>  <filename>
+//
 // One line per artifact. Returns a map of filename -> hex digest.
 func parseChecksumsFile(body []byte) map[string]string {
 	out := map[string]string{}
