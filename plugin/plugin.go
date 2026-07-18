@@ -62,6 +62,11 @@ type ToolInfo struct {
 	Description         string
 	ReadOnly            bool
 	RequiresScanContext bool
+	// Safety, when non-nil, are this tool's own requirements, which override
+	// the plugin-level block for invocations of this tool. Nil means the tool
+	// inherits the plugin-level requirements — the behaviour of every plugin
+	// built before ToolDef.safety existed.
+	Safety *pluginv1.SafetyRequirements
 }
 
 // ResourceInfo describes a resource a plugin can serve.
@@ -291,6 +296,7 @@ func parseManifest(resp *pluginv1.GetManifestResponse) Info {
 				Description:         tool.GetDescription(),
 				ReadOnly:            tool.GetReadOnly(),
 				RequiresScanContext: tool.GetRequiresScanContext(),
+				Safety:              tool.GetSafety(),
 			})
 		}
 		for _, res := range cap.GetResources() {

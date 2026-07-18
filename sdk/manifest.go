@@ -76,6 +76,44 @@ func (cb *CapabilityBuilder) ToolWithContext(name, description string, readOnly 
 	return cb
 }
 
+// ToolSafety declares safety requirements for the most recently added tool,
+// overriding the plugin-level block for invocations of that tool.
+//
+// Use this whenever a plugin ships tools with genuinely different needs.
+// Without it the plugin-level block must be the union — the strictest
+// requirement of any single tool — and that union then gates every tool the
+// plugin ships:
+//
+//	// analyze is read-only and local, yet was unusable under a passive policy
+//	// purely because `validate` (same plugin) needs network + confirmation.
+//	Tool("analyze", "...", true).
+//	    ToolSafety(WithRiskClass(RiskPassive)).
+//	Tool("validate", "...", false).
+//	    ToolSafety(WithRiskClass(RiskActive), WithNeedsConfirmation(), WithNetworkHosts("*")).
+//
+// A tool with no ToolSafety inherits the plugin-level block, so plugins written
+// before this existed are unaffected.
+//
+// Declare requirements honestly per tool rather than copying the narrowest one:
+// this is what the host enforces at invocation. In particular, do not treat
+// `readOnly: true` as implying passive — read-only means "does not mutate the
+// workspace", and a read-only tool may still send data to the network.
+//
+// Panics if called before any Tool/ToolWithContext on this capability: there
+// would be nothing to attach to, which is a programming error worth surfacing
+// at startup rather than silently dropping the requirements.
+func (cb *CapabilityBuilder) ToolSafety(opts ...SafetyOption) *CapabilityBuilder {
+	if len(cb.cap.Tools) == 0 {
+		panic("sdk: ToolSafety called before any Tool was added to the capability")
+	}
+	sr := &pluginv1.SafetyRequirements{}
+	for _, opt := range opts {
+		opt(sr)
+	}
+	cb.cap.Tools[len(cb.cap.Tools)-1].Safety = sr
+	return cb
+}
+
 // Resource adds a resource definition to the capability.
 func (cb *CapabilityBuilder) Resource(uriTemplate, name, description, mimeType string) *CapabilityBuilder {
 	cb.cap.Resources = append(cb.cap.Resources, &pluginv1.ResourceDef{

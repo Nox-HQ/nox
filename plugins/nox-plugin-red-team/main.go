@@ -15,9 +15,29 @@ var version = "dev"
 func buildServer() *sdk.PluginServer {
 	manifest := sdk.NewManifest("nox/red-team", version).
 		Capability("red-team", "Attack path analysis and exploit validation for security findings").
+		// analyze reasons over findings the core scan already produced. No
+		// network, no mutation, nothing to confirm -- so it declares passive and
+		// runs under a default policy.
 		Tool("analyze", "Analyze attack chains from security findings (passive, read-only)", true).
+		ToolSafety(sdk.WithRiskClass(sdk.RiskPassive)).
+		// validate actually probes a live target, so it keeps the full
+		// requirements and stays opt-in.
 		Tool("validate", "Validate exploitability of specific findings (active, needs confirmation)", false).
+		ToolSafety(
+			sdk.WithRiskClass(sdk.RiskActive),
+			sdk.WithNeedsConfirmation(),
+			sdk.WithNetworkHosts("*"),
+		).
 		Done().
+		// Plugin-level safety remains the CEILING across every tool -- what this
+		// plugin might ever need. It is no longer what gates each call: the host
+		// enforces the per-tool blocks above at invocation.
+		//
+		// Before per-tool safety existed, this ceiling was the only declaration,
+		// so `analyze` was rejected under a passive policy purely because
+		// `validate` ships alongside it. The README described analyze as
+		// "passive, read-only" and was accurate about the tool -- the manifest
+		// simply could not express it.
 		Safety(
 			sdk.WithRiskClass(sdk.RiskActive),
 			sdk.WithNeedsConfirmation(),

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-tool safety requirements** (`ToolDef.safety`, `sdk.ToolSafety(...)`).
+  Safety was declared per-plugin and validated at registration, so a plugin
+  bundling tools with different needs had to declare the union — the strictest
+  requirement of any one tool — and that union then gated every tool it ships.
+  `nox/red-team` could not run its read-only `analyze` under a passive policy
+  purely because it also ships `validate`.
+
+  Registration now asks whether *at least one* tool is usable under the policy;
+  the binding check is `ValidateToolInvocation`, applied by the host to the tool
+  actually being called. A tool that declares no safety block inherits the
+  plugin-level one, so existing plugins are unaffected.
+
+  Note that this is deliberately **not** derived from the existing `read_only`
+  flag: that means "does not mutate the workspace", not "passive".
+  `nox/llm-triage` declares a `read_only` tool that sends source code to an
+  external chat endpoint, so inferring passiveness from it would have granted
+  egress to precisely the tool that exfiltrates source. The two checks are
+  independent and a tool must satisfy both.
+
+### Changed
+
+- `nox/red-team` declares per-tool safety: `analyze` passive, `validate` active
+  with network and confirmation. `nox/k8s-runtime` is intentionally unchanged —
+  both `scan` and `drift` genuinely need the cluster API, so neither can honestly
+  declare itself passive.
+
 ## [1.7.1] - 2026-07-06
 
 ### Fixed

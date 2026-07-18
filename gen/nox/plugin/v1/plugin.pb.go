@@ -274,8 +274,25 @@ type ToolDef struct {
 	InputSchema         *structpb.Struct       `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
 	ReadOnly            bool                   `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	RequiresScanContext bool                   `protobuf:"varint,5,opt,name=requires_scan_context,json=requiresScanContext,proto3" json:"requires_scan_context,omitempty"` // tool needs ScanContext as input
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Per-tool safety requirements. When unset, the plugin-level
+	// SafetyRequirements apply — so plugins that predate this field behave
+	// exactly as before.
+	//
+	// Why this exists: safety was declared only per-plugin and validated at
+	// REGISTRATION, so a plugin bundling one active tool with several passive
+	// ones had to declare the union — the strictest requirement of any tool —
+	// which then gated every tool it ships. nox/red-team could not run its
+	// read-only `analyze` under a passive policy purely because it also ships
+	// `validate`; nox/k8s-runtime's `scan` was blocked by its sibling `drift`.
+	//
+	// NOTE: this deliberately is NOT derived from `read_only`. That flag means
+	// "does not mutate the workspace", not "passive" — nox/llm-triage declares a
+	// read_only tool that sends source code to an external chat endpoint.
+	// Inferring passiveness from read_only would have granted unrestricted egress
+	// to precisely the tool that exfiltrates source.
+	Safety        *SafetyRequirements `protobuf:"bytes,6,opt,name=safety,proto3,oneof" json:"safety,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolDef) Reset() {
@@ -341,6 +358,13 @@ func (x *ToolDef) GetRequiresScanContext() bool {
 		return x.RequiresScanContext
 	}
 	return false
+}
+
+func (x *ToolDef) GetSafety() *SafetyRequirements {
+	if x != nil {
+		return x.Safety
+	}
+	return nil
 }
 
 // ResourceDef describes a resource that a plugin can serve.
@@ -838,13 +862,15 @@ const file_nox_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12,\n" +
 	"\x05tools\x18\x03 \x03(\v2\x16.nox.plugin.v1.ToolDefR\x05tools\x128\n" +
-	"\tresources\x18\x04 \x03(\v2\x1a.nox.plugin.v1.ResourceDefR\tresources\"\xcc\x01\n" +
+	"\tresources\x18\x04 \x03(\v2\x1a.nox.plugin.v1.ResourceDefR\tresources\"\x97\x02\n" +
 	"\aToolDef\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
 	"\tread_only\x18\x04 \x01(\bR\breadOnly\x122\n" +
-	"\x15requires_scan_context\x18\x05 \x01(\bR\x13requiresScanContext\"\x83\x01\n" +
+	"\x15requires_scan_context\x18\x05 \x01(\bR\x13requiresScanContext\x12>\n" +
+	"\x06safety\x18\x06 \x01(\v2!.nox.plugin.v1.SafetyRequirementsH\x00R\x06safety\x88\x01\x01B\t\n" +
+	"\a_safety\"\x83\x01\n" +
 	"\vResourceDef\x12!\n" +
 	"\furi_template\x18\x01 \x01(\tR\vuriTemplate\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -936,28 +962,29 @@ var file_nox_plugin_v1_plugin_proto_depIdxs = []int32{
 	4,  // 2: nox.plugin.v1.Capability.tools:type_name -> nox.plugin.v1.ToolDef
 	5,  // 3: nox.plugin.v1.Capability.resources:type_name -> nox.plugin.v1.ResourceDef
 	12, // 4: nox.plugin.v1.ToolDef.input_schema:type_name -> google.protobuf.Struct
-	12, // 5: nox.plugin.v1.InvokeToolRequest.input:type_name -> google.protobuf.Struct
-	13, // 6: nox.plugin.v1.InvokeToolRequest.scan_context:type_name -> nox.plugin.v1.ScanContext
-	14, // 7: nox.plugin.v1.InvokeToolResponse.findings:type_name -> nox.plugin.v1.Finding
-	15, // 8: nox.plugin.v1.InvokeToolResponse.packages:type_name -> nox.plugin.v1.Package
-	16, // 9: nox.plugin.v1.InvokeToolResponse.ai_components:type_name -> nox.plugin.v1.AIComponent
-	9,  // 10: nox.plugin.v1.InvokeToolResponse.diagnostics:type_name -> nox.plugin.v1.Diagnostic
-	17, // 11: nox.plugin.v1.InvokeToolResponse.graphs:type_name -> nox.plugin.v1.Graph
-	18, // 12: nox.plugin.v1.InvokeToolResponse.enrichments:type_name -> nox.plugin.v1.Enrichment
-	0,  // 13: nox.plugin.v1.Diagnostic.severity:type_name -> nox.plugin.v1.DiagnosticSeverity
-	19, // 14: nox.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> nox.plugin.v1.ArtifactType
-	20, // 15: nox.plugin.v1.StreamArtifactsResponse.artifact:type_name -> nox.plugin.v1.Artifact
-	1,  // 16: nox.plugin.v1.PluginService.GetManifest:input_type -> nox.plugin.v1.GetManifestRequest
-	7,  // 17: nox.plugin.v1.PluginService.InvokeTool:input_type -> nox.plugin.v1.InvokeToolRequest
-	10, // 18: nox.plugin.v1.PluginService.StreamArtifacts:input_type -> nox.plugin.v1.StreamArtifactsRequest
-	2,  // 19: nox.plugin.v1.PluginService.GetManifest:output_type -> nox.plugin.v1.GetManifestResponse
-	8,  // 20: nox.plugin.v1.PluginService.InvokeTool:output_type -> nox.plugin.v1.InvokeToolResponse
-	11, // 21: nox.plugin.v1.PluginService.StreamArtifacts:output_type -> nox.plugin.v1.StreamArtifactsResponse
-	19, // [19:22] is the sub-list for method output_type
-	16, // [16:19] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	6,  // 5: nox.plugin.v1.ToolDef.safety:type_name -> nox.plugin.v1.SafetyRequirements
+	12, // 6: nox.plugin.v1.InvokeToolRequest.input:type_name -> google.protobuf.Struct
+	13, // 7: nox.plugin.v1.InvokeToolRequest.scan_context:type_name -> nox.plugin.v1.ScanContext
+	14, // 8: nox.plugin.v1.InvokeToolResponse.findings:type_name -> nox.plugin.v1.Finding
+	15, // 9: nox.plugin.v1.InvokeToolResponse.packages:type_name -> nox.plugin.v1.Package
+	16, // 10: nox.plugin.v1.InvokeToolResponse.ai_components:type_name -> nox.plugin.v1.AIComponent
+	9,  // 11: nox.plugin.v1.InvokeToolResponse.diagnostics:type_name -> nox.plugin.v1.Diagnostic
+	17, // 12: nox.plugin.v1.InvokeToolResponse.graphs:type_name -> nox.plugin.v1.Graph
+	18, // 13: nox.plugin.v1.InvokeToolResponse.enrichments:type_name -> nox.plugin.v1.Enrichment
+	0,  // 14: nox.plugin.v1.Diagnostic.severity:type_name -> nox.plugin.v1.DiagnosticSeverity
+	19, // 15: nox.plugin.v1.StreamArtifactsRequest.artifact_types:type_name -> nox.plugin.v1.ArtifactType
+	20, // 16: nox.plugin.v1.StreamArtifactsResponse.artifact:type_name -> nox.plugin.v1.Artifact
+	1,  // 17: nox.plugin.v1.PluginService.GetManifest:input_type -> nox.plugin.v1.GetManifestRequest
+	7,  // 18: nox.plugin.v1.PluginService.InvokeTool:input_type -> nox.plugin.v1.InvokeToolRequest
+	10, // 19: nox.plugin.v1.PluginService.StreamArtifacts:input_type -> nox.plugin.v1.StreamArtifactsRequest
+	2,  // 20: nox.plugin.v1.PluginService.GetManifest:output_type -> nox.plugin.v1.GetManifestResponse
+	8,  // 21: nox.plugin.v1.PluginService.InvokeTool:output_type -> nox.plugin.v1.InvokeToolResponse
+	11, // 22: nox.plugin.v1.PluginService.StreamArtifacts:output_type -> nox.plugin.v1.StreamArtifactsResponse
+	20, // [20:23] is the sub-list for method output_type
+	17, // [17:20] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_nox_plugin_v1_plugin_proto_init() }
@@ -966,6 +993,7 @@ func file_nox_plugin_v1_plugin_proto_init() {
 		return
 	}
 	file_nox_plugin_v1_types_proto_init()
+	file_nox_plugin_v1_plugin_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
