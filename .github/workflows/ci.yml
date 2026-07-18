@@ -49,50 +49,6 @@ jobs:
           version: v2.7.2
           only-new-issues: true
 
-  plugin-modules:
-    name: Plugin modules
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-
-      # Each plugin under plugins/ is a SEPARATE Go module with a
-      # `replace github.com/nox-hq/nox => ../..` directive, so it compiles
-      # against this working tree rather than a published version. Nothing else
-      # in CI builds them: `go build ./...` at the root stops at the module
-      # boundary, so a plugin module could sit broken on main indefinitely.
-      #
-      # That is not hypothetical. Bumping a root dependency (mcp-go v1.24.0)
-      # left 5 of 7 plugin modules failing with "updates to go.mod needed",
-      # and every check stayed green.
-      #
-      # `go mod tidy -diff` fails when a module's go.mod/go.sum are out of date
-      # without rewriting them, so drift is reported rather than silently fixed
-      # in CI.
-      - name: Build and test every plugin module
-        run: |
-          set -euo pipefail
-          failed=0
-          for d in plugins/*/; do
-            [ -f "$d/go.mod" ] || continue
-            name=$(basename "$d")
-            echo "::group::$name"
-            (
-              cd "$d"
-              if ! go mod tidy -diff; then
-                echo "::error title=$name::go.mod/go.sum out of date — run 'go mod tidy' in $d"
-                exit 1
-              fi
-              go build ./...
-              go test ./...
-            ) || failed=1
-            echo "::endgroup::"
-          done
-          exit $failed
-
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

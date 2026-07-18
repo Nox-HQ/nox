@@ -1,7 +1,0 @@
-name: nox-plugin-reachability
-version: 0.5.0
-track: core-analysis
-description: Multi-language reachability analysis. Annotates VULN findings as REACH-001 (unreachable), REACH-002 (reachable), or REACH-003 (undetermined). Supports Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet. Bundled by default in the nox release archive.
-tools:
-  - name: analyze_reachability
-    description: Cross-reference VULN findings against workspace imports to classify reachability

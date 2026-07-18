@@ -1,9 +1,0 @@
-name: nox-plugin-red-team
-version: 0.1.0
-track: dynamic-runtime
-description: AI-powered attack path analysis and exploit validation for security findings
-tools:
-  - name: analyze
-    description: Analyze attack chains from security findings (passive, read-only)
-  - name: validate
-    description: Validate exploitability of specific findings (active, needs confirmation)
