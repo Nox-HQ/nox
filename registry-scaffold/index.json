@@ -135,6 +135,67 @@
               "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
             }
           ]
+        },
+        {
+          "version": "0.7.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T20:53:10Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "analyze_reachability"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/nox-plugin-reachability_0.7.0_darwin_amd64.tar.gz",
+              "size": 4461220,
+              "digest": "sha256:77576d851a5a4b1345eb3e7439f4ecbe6a0d86e2a0ea5b615da9d6054d1691e0",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/nox-plugin-reachability_0.7.0_darwin_arm64.tar.gz",
+              "size": 4164648,
+              "digest": "sha256:ad704ac6fd6892ea9873f386367b14f78d8bf109bdff88b282970ddc1ebe0366",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/nox-plugin-reachability_0.7.0_linux_amd64.tar.gz",
+              "size": 4358694,
+              "digest": "sha256:cb4729f58f300b033ae2c71e7eaa69a8ea5f68917a5d49e1af367cbc50f78ba2",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/nox-plugin-reachability_0.7.0_linux_arm64.tar.gz",
+              "size": 3976479,
+              "digest": "sha256:649e5bb9dac446a9847672b548444534c8cc1939fc80f5ff0c244371e65cf87f",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/nox-plugin-reachability_0.7.0_windows_amd64.zip",
+              "size": 4496723,
+              "digest": "sha256:b93f708d8cdf3a5a5620c0c9fb01bbe1ed0192d0f375ddc1419d1e47ac1e6180",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-reachability/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-reachability/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
         }
       ],
       "track": "core-analysis",
@@ -279,6 +340,67 @@
           ],
           "minimum_nox_version": "0.6.0",
           "changelog_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/blob/main/CHANGELOG.md"
+        },
+        {
+          "version": "0.7.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:21:15Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "scan"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/nox-plugin-taint-analysis_0.7.0_darwin_amd64.tar.gz",
+              "size": 4494539,
+              "digest": "sha256:50b453b2009e7251206ab6ffd94e9d1775965a325d3916b1c0ef14aa2f23a77e",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/nox-plugin-taint-analysis_0.7.0_darwin_arm64.tar.gz",
+              "size": 4193599,
+              "digest": "sha256:5dee5491c0631a860bd0fa4c6854ce8089cf95effef22a1075882f999e6c6066",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/nox-plugin-taint-analysis_0.7.0_linux_amd64.tar.gz",
+              "size": 4390824,
+              "digest": "sha256:0db7e08e3694fe679cb436801e85d36a6081ff01d756930d01e4d0374e91e168",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/nox-plugin-taint-analysis_0.7.0_linux_arm64.tar.gz",
+              "size": 4007249,
+              "digest": "sha256:86249a420ab0086a0d9ae2e55079b5b79cd049085fdb6b2e85ad6629a7a8acb9",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/nox-plugin-taint-analysis_0.7.0_windows_amd64.zip",
+              "size": 4529022,
+              "digest": "sha256:5dd591175989b182abe7e062dda2d45ef865490b5a832d34ebe39324d7db17a3",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-taint-analysis/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-taint-analysis/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
         }
       ],
       "track": "core-analysis",
@@ -417,6 +539,68 @@
               "size": 14324661,
               "digest": "sha256:64f7323783ead97ece2d5185aa4853e61e5e8fb1a5428fc18306407fcacb4f78",
               "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.6.6/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
+        },
+        {
+          "version": "0.7.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:18:54Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "scan",
+            "drift"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/nox-plugin-k8s-runtime_0.7.0_darwin_amd64.tar.gz",
+              "size": 14204096,
+              "digest": "sha256:5e490a7bec90ae844c1ae53eb545a1826eecb3bdac57319a60168b3b0f38b67e",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/nox-plugin-k8s-runtime_0.7.0_darwin_arm64.tar.gz",
+              "size": 13036500,
+              "digest": "sha256:967366a64316a1c76f9ea6c59feee09554896032925e5d8662debef36c96f546",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/nox-plugin-k8s-runtime_0.7.0_linux_amd64.tar.gz",
+              "size": 13912265,
+              "digest": "sha256:99ee5c996443c402dd83ab137e777ebf77e1e79d586783078f84cc7162ff6285",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/nox-plugin-k8s-runtime_0.7.0_linux_arm64.tar.gz",
+              "size": 12387309,
+              "digest": "sha256:37ee327d5c063690b6d4dfb9aa03f9c9bb12ab1fb57eb49c2650a78f72909909",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/nox-plugin-k8s-runtime_0.7.0_windows_amd64.zip",
+              "size": 14333662,
+              "digest": "sha256:de5ade246f36c7a28d747c8a39b74309406481968ea3202ef9cff703c1158114",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-k8s-runtime/releases/download/v0.7.0/checksums.txt.sigstore.json",
               "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-k8s-runtime/.github/workflows/release.yml@.*",
               "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
             }
@@ -561,6 +745,68 @@
               "size": 4944807,
               "digest": "sha256:07baead397bbcdbc9e408fddc667798550059879aeea1b6fc28c9f864350e391",
               "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.6.6/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
+        },
+        {
+          "version": "0.7.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:12:53Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "analyze",
+            "validate"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/nox-plugin-red-team_0.7.0_darwin_amd64.tar.gz",
+              "size": 4936939,
+              "digest": "sha256:8597573004b38555e23a4b1c31416a862ee824acb41b5ae09065426ac1306d71",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/nox-plugin-red-team_0.7.0_darwin_arm64.tar.gz",
+              "size": 4596213,
+              "digest": "sha256:a2a69c7a832d748632821c9a0934900e9c40d117474414123b1f98b14922afe5",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/nox-plugin-red-team_0.7.0_linux_amd64.tar.gz",
+              "size": 4812493,
+              "digest": "sha256:1e96501ba8395cdab9647836fab54fff5fbef00b2682bef000d5c16fea68554a",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/nox-plugin-red-team_0.7.0_linux_arm64.tar.gz",
+              "size": 4386444,
+              "digest": "sha256:effab109cae785c40e8f9116c0f79e468e7ea900af038090652a0b3a317983ba",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/nox-plugin-red-team_0.7.0_windows_amd64.zip",
+              "size": 4956212,
+              "digest": "sha256:fea1fa739e96b0c52d6d1d2b39fba3d41b85a902334d48f19a74d31279ba689f",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-red-team/releases/download/v0.7.0/checksums.txt.sigstore.json",
               "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-red-team/.github/workflows/release.yml@.*",
               "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
             }
@@ -711,6 +957,69 @@
               "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
             }
           ]
+        },
+        {
+          "version": "0.7.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:21:30Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "assess",
+            "gap_report",
+            "evidence"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/nox-plugin-grc_0.7.0_darwin_amd64.tar.gz",
+              "size": 4842218,
+              "digest": "sha256:b7a3a5ebb995ed46e2f8b4ce7e522cb2bb878f6ce3d17ec1f869196408e12935",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/nox-plugin-grc_0.7.0_darwin_arm64.tar.gz",
+              "size": 4521586,
+              "digest": "sha256:f2eb7f3c6a306a6aa697b238405f6df51ba9e74e3012219efb58bdcc6094c692",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/nox-plugin-grc_0.7.0_linux_amd64.tar.gz",
+              "size": 4728843,
+              "digest": "sha256:21c3df07697990c1da16970f6bd997a8625a5db2e71a54f888cb26585194075d",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/nox-plugin-grc_0.7.0_linux_arm64.tar.gz",
+              "size": 4315039,
+              "digest": "sha256:067b9c951f822f07c06ca0265e3c68cddb8436b362da83e9b0fcff519162b48e",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/nox-plugin-grc_0.7.0_windows_amd64.zip",
+              "size": 4869137,
+              "digest": "sha256:f53e1359ddb9f7c3993a486952ba4d1f370925c25654a1a11317ce9549407b0a",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-grc/releases/download/v0.7.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-grc/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
         }
       ],
       "track": "policy-governance",
@@ -787,6 +1096,67 @@
           ],
           "minimum_nox_version": "0.6.0",
           "changelog_url": "https://github.com/nox-hq/nox-plugin-ai-eval/blob/main/CHANGELOG.md"
+        },
+        {
+          "version": "0.2.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:22:07Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "ai_eval"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/nox-plugin-ai-eval_0.2.0_darwin_amd64.tar.gz",
+              "size": 4786981,
+              "digest": "sha256:9b25db9c867fe4d28b919ba99c45a9a04c9ca67cde42c0a6e83a3cd11e687657",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-ai-eval/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/nox-plugin-ai-eval_0.2.0_darwin_arm64.tar.gz",
+              "size": 4465708,
+              "digest": "sha256:0085a0167e6c4e6c2e23ce723857e4e51dd21a4d00e00b6a68fbeda0e60db43b",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-ai-eval/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/nox-plugin-ai-eval_0.2.0_linux_amd64.tar.gz",
+              "size": 4681124,
+              "digest": "sha256:e30f95f8fbcbfbf95881235c52ea90ff3c503b0d1d0f9ddafb94d59ef695ce15",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-ai-eval/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/nox-plugin-ai-eval_0.2.0_linux_arm64.tar.gz",
+              "size": 4271055,
+              "digest": "sha256:d1a0b091fa97250d8587d3b2dcc91e105dee4990816b41a42180c85c4d0b5410",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-ai-eval/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/nox-plugin-ai-eval_0.2.0_windows_amd64.zip",
+              "size": 4817095,
+              "digest": "sha256:8a4170feb628cca617ef130537d1062b2ac161273e8be880e6066a17ac309c36",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-ai-eval/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-ai-eval/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
         }
       ],
       "track": "dynamic-runtime",
@@ -2614,6 +2984,67 @@
           ],
           "minimum_nox_version": "0.6.0",
           "changelog_url": "https://github.com/nox-hq/nox-plugin-llm-triage/blob/main/CHANGELOG.md"
+        },
+        {
+          "version": "0.2.0",
+          "api_version": "v1",
+          "published_at": "2026-07-18T21:21:58Z",
+          "digest": "sha256:tbd",
+          "capabilities": [
+            "llm_triage"
+          ],
+          "artifacts": [
+            {
+              "os": "darwin",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/nox-plugin-llm-triage_0.2.0_darwin_amd64.tar.gz",
+              "size": 4793953,
+              "digest": "sha256:26a18715bc07ebd7686720b808a616bd079dd5f27910491b2e3402e1578a98a6",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "darwin",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/nox-plugin-llm-triage_0.2.0_darwin_arm64.tar.gz",
+              "size": 4472189,
+              "digest": "sha256:8b8f9aac5098b1e2026611108b4ecdf814d05b3e553d5686ed57064ad09fce22",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/nox-plugin-llm-triage_0.2.0_linux_amd64.tar.gz",
+              "size": 4686122,
+              "digest": "sha256:633ccc79d6db11c9b25ea00fb3f9384f93b9f2dccb88351216a8183e67aaca87",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "linux",
+              "arch": "arm64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/nox-plugin-llm-triage_0.2.0_linux_arm64.tar.gz",
+              "size": 4275007,
+              "digest": "sha256:1889df7ff28736c9e0ba17a5298494ffb2003e7ca499cf29d09772ddb9a43c91",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            },
+            {
+              "os": "windows",
+              "arch": "amd64",
+              "url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/nox-plugin-llm-triage_0.2.0_windows_amd64.zip",
+              "size": 4827538,
+              "digest": "sha256:7e720d3465ef0fa1e30aca54993ed45722edf045fb3788af3bd5ce080c878e57",
+              "cosign_bundle_url": "https://github.com/nox-hq/nox-plugin-llm-triage/releases/download/v0.2.0/checksums.txt.sigstore.json",
+              "cosign_cert_identity_regexp": "(?i)https://github.com/nox-hq/nox-plugin-llm-triage/.github/workflows/release.yml@.*",
+              "cosign_oidc_issuer": "https://token.actions.githubusercontent.com"
+            }
+          ]
         }
       ],
       "track": "dynamic-runtime",
