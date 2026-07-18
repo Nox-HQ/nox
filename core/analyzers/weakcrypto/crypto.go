@@ -1,4 +1,4 @@
-// Package crypto detects use of broken or deprecated cryptographic primitives.
+// Package weakcrypto detects use of broken or deprecated cryptographic primitives.
 //
 // WHY THIS IS ITS OWN ANALYZER. Core's other analyzers do not have a home for
 // this. It is not a taint flow — MD5 is unsafe for a digest regardless of where
@@ -21,7 +21,7 @@
 // pretending every occurrence is a vulnerability. Over-flagging a ubiquitous
 // stdlib call is how a rule gets globally suppressed, which costs more than the
 // rule is worth.
-package crypto
+package weakcrypto
 
 import (
 	"context"

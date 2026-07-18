@@ -15,7 +15,6 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
-	"github.com/nox-hq/nox/core/analyzers/crypto"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/iac"
@@ -24,6 +23,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
 	"github.com/nox-hq/nox/core/analyzers/variants"
+	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -207,7 +207,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	slopAnalyzer := slop.NewAnalyzer()
-	cryptoAnalyzer := crypto.NewAnalyzer()
+	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	taintflowAnalyzer := taintflow.NewAnalyzer()
 	agentflowAnalyzer := agentflow.NewAnalyzer()
