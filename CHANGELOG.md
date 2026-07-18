@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-07-18
+
 ### Added
 
 - **Per-tool safety requirements** (`ToolDef.safety`, `sdk.ToolSafety(...)`).
@@ -34,6 +36,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with network and confirmation. `nox/k8s-runtime` is intentionally unchanged —
   both `scan` and `drift` genuinely need the cluster API, so neither can honestly
   declare itself passive.
+
+### Fixed
+
+- **Plugin modules no longer drift out of the build.** Each plugin under
+  `plugins/` is a separate Go module with a `replace` to the root, and nothing
+  in CI built them — `go build ./...` stops at the module boundary. A root
+  dependency bump left **5 of 7 failing** with every check green. All tidied,
+  plus a `plugin-modules` CI job running `go mod tidy -diff`, build and test per
+  module (#236).
+- **Per-tool safety survived registration.** `RegisterPlugin`/`RegisterBinary`
+  rebuild the manifest from `Info` before validating it, and the conversion
+  dropped `ToolDef.safety` — silently reverting to the plugin-level ceiling
+  (#236).
+- **IAC-351 no longer fires on `id-token: write`.** The unanchored `TOKEN`
+  pattern matched as a suffix of the YAML key, producing spurious **critical**
+  findings on standard GitHub Actions OIDC permissions. Measured on this repo's
+  own workflows: 2 false positives before, 0 after (#233).
+
+### Added (tooling)
+
+- `nox plugin install --local <path> <name>` registers a locally built plugin
+  binary for development. Recorded with trust level `local` and no digest so it
+  is never confused with a verified marketplace artifact; safety policy applies
+  unchanged (#236).
+
+### Changed
+
+- Cleared the 45 pre-existing `golangci-lint` issues. None were bugs; 23 fixed,
+  2 declined with reasoning recorded at the site, and `hugeParam`/`rangeValCopy`
+  disabled in config after review — taking their advice would trade a
+  no-mutation guarantee for eliding sub-200-byte copies (#235).
+- Bumped `go.klarlabs.de/mcp` to v1.24.0 (#232).
+
+## [1.8.0] - 2026-07-10
+
+> Reconstructed after the fact: v1.8.0 was tagged and released without a
+> CHANGELOG entry. Contents below are taken from the commits in
+> `v1.7.1..v1.8.0` rather than from a record written at the time.
+
+### Added
+
+- **Structured content from MCP read/report tools** (#230) — server tools now
+  return structured output alongside text.
+
+### Changed
+
+- Bumped `go.klarlabs.de/mcp` to v1.21.0 (#227) and v1.22.0 (#229).
+- Bumped `golang.org/x/net` to 0.55.0 in `nox-plugin-grc` (#228).
 
 ## [1.7.1] - 2026-07-06
 
