@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-07-18
+
+### Changed
+
+- Bundles `nox-plugin-reachability` **v0.7.0** (multi-language reachability:
+  Rust, Java, Ruby, C#), built from the published module rather than an in-tree
+  copy — so the bundled binary and the standalone release are the same
+  artifact.
+- Removes the duplicated `plugins/` tree. Every plugin now lives solely in its
+  own repository (#238).
+
+### Note on why this version exists
+
+v1.9.1 shipped correctly signed, but its Homebrew formula was not published:
+the tap credential was rotated *while* that release was running, so the job
+read the old value, warned, and skipped the formula — the graceful degradation
+added in #237 working as designed, with unlucky timing.
+
+A release cannot be re-run to publish the formula afterwards (GoReleaser
+rejects re-uploading existing assets with `422 already_exists`), so this
+release carries the formula update. `brew install nox` now resolves 1.9.2
+rather than 1.8.0.
+
 ## [1.9.1] - 2026-07-18
 
 ### Fixed
