@@ -200,6 +200,7 @@ func installOne(name, constraint string, st *State) error {
 		BinaryPath:  artifact.BinaryPath,
 		TrustLevel:  artifact.VerifyResult.Level.String(),
 		RiskClass:   ve.RiskClass,
+		Track:       string(trackForPlugin(ctx, client, name)),
 		InstalledAt: now,
 		UpdatedAt:   now,
 	})

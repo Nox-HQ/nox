@@ -50,6 +50,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	fs := findings.NewFindingSet()
 
 	for _, artifact := range artifacts {
+		// Honour cancellation between artifacts — see the note in the secrets
+		// analyzer: nothing else in this loop consults ctx.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		content, err := os.ReadFile(artifact.AbsPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)

@@ -12,19 +12,23 @@ import (
 // --- Proto → Go conversion ---
 
 // ProtoFindingToGo converts a protobuf Finding to the domain Finding type.
-func ProtoFindingToGo(pf *pluginv1.Finding) findings.Finding {
+//
+// pluginName identifies the plugin that produced the finding; it namespaces the
+// fingerprint so a plugin cannot reach outside its own findings. See
+// pluginFingerprint.
+func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding {
 	if pf == nil {
 		return findings.Finding{}
 	}
 	f := findings.Finding{
-		ID:          pf.GetId(),
-		RuleID:      pf.GetRuleId(),
-		Severity:    ProtoSeverityToGo(pf.GetSeverity()),
-		Confidence:  ProtoConfidenceToGo(pf.GetConfidence()),
-		Location:    ProtoLocationToGo(pf.GetLocation()),
-		Message:     pf.GetMessage(),
-		Fingerprint: pf.GetFingerprint(),
+		ID:         pf.GetId(),
+		RuleID:     pf.GetRuleId(),
+		Severity:   ProtoSeverityToGo(pf.GetSeverity()),
+		Confidence: ProtoConfidenceToGo(pf.GetConfidence()),
+		Location:   ProtoLocationToGo(pf.GetLocation()),
+		Message:    pf.GetMessage(),
 	}
+	f.Fingerprint = pluginFingerprint(pluginName, pf.GetRuleId(), pf.GetFingerprint(), f)
 	if m := pf.GetMetadata(); len(m) > 0 {
 		f.Metadata = make(map[string]string, len(m))
 		for k, v := range m {
@@ -32,6 +36,31 @@ func ProtoFindingToGo(pf *pluginv1.Finding) findings.Finding {
 		}
 	}
 	return f
+}
+
+// pluginFingerprint derives the fingerprint stored for a plugin finding.
+//
+// A plugin's claimed fingerprint cannot be used as-is. Plugin findings merge
+// into the same FindingSet as core findings and are then deduplicated
+// first-wins, and baseline and VEX suppression key on the same value. A plugin
+// could therefore claim a fingerprint matching a core finding and erase it, or
+// claim one matching a baselined finding and hide itself.
+//
+// So the value is recomputed host-side using the core scheme — which keeps
+// determinism, path normalisation and fingerprint-version parity — with the
+// rule ID namespaced by plugin name. The plugin's claim is demoted to hash
+// input, tagged so a claimed fingerprint and a message can never alias. That
+// preserves the one legitimate use of the claim: deciding which of a plugin's
+// own findings are "the same" across runs, so they stay baseline-able.
+func pluginFingerprint(pluginName, ruleID, claimed string, f findings.Finding) string {
+	namespaced := "plugin:" + pluginName + ":" + ruleID
+
+	identity := "msg:" + f.Message
+	if claimed != "" {
+		identity = "fp:" + claimed
+	}
+
+	return findings.ComputeFingerprint(namespaced, f.Location, identity)
 }
 
 // ProtoLocationToGo converts a protobuf Location to the domain Location type.
@@ -432,4 +461,17 @@ func GoScanResultToProtoContext(r *core.ScanResult) *pluginv1.ScanContext {
 		}
 	}
 	return sc
+}
+
+// AttributedResponse pairs a plugin response with the name of the plugin that
+// produced it.
+//
+// The response message itself carries no producer identity, but the host needs
+// it at merge time to namespace fingerprints — see pluginFingerprint. Carrying
+// it alongside is simpler than widening the wire format, and keeps the
+// attribution authoritative: it comes from the host's own registry rather than
+// from anything the plugin says about itself.
+type AttributedResponse struct {
+	PluginName string
+	Response   *pluginv1.InvokeToolResponse
 }

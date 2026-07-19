@@ -2409,7 +2409,9 @@ func TestRefineFindings_ContextDowngrade_Default(t *testing.T) {
 	t.Parallel()
 
 	fs := refineContextDowngradeFixture()
-	refineFindings(fs, &ScanConfig{}, ScanOptions{}, t.TempDir())
+	if err := refineFindings(fs, &ScanConfig{}, ScanOptions{}, t.TempDir(), nil); err != nil {
+		t.Fatalf("refineFindings: %v", err)
+	}
 
 	// IAC-010 in docs/ downgrades high->medium and records provenance.
 	ex := findBy(fs, "IAC-010", "docs/main.tf")
@@ -2455,7 +2457,9 @@ func TestRefineFindings_ContextDowngrade_Disabled(t *testing.T) {
 	off := false
 	cfg := &ScanConfig{}
 	cfg.Scan.ContextDowngrade = &off
-	refineFindings(fs, cfg, ScanOptions{}, t.TempDir())
+	if err := refineFindings(fs, cfg, ScanOptions{}, t.TempDir(), nil); err != nil {
+		t.Fatalf("refineFindings: %v", err)
+	}
 
 	ex := findBy(fs, "IAC-010", "docs/main.tf")
 	if ex == nil || ex.Severity != findings.SeverityHigh {

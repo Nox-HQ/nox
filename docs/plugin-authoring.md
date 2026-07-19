@@ -161,7 +161,7 @@ sdk.WithMaxArtifactBytes(50 * 1024 * 1024)   // Maximum artifact size
 
 ### Track-Specific Profiles
 
-Each track has pre-built safety profiles. Use `plugin.ProfileForTrack(track)` to get defaults:
+`plugin.ProfileForTrack(track)` returns a suggested policy per track:
 
 | Track | Risk | Network | Confirmation |
 |-------|------|---------|-------------|
@@ -170,6 +170,52 @@ Each track has pre-built safety profiles. Use `plugin.ProfileForTrack(track)` to
 | ai-security | passive | none | no |
 | supply-chain | passive | *.osv.dev, *.github.com | no |
 | agent-assistance | passive | LLM APIs | no |
+
+These profiles are **enforced**. The host resolves each plugin's policy as its
+track profile merged with the operator's `.nox.yaml` `plugin_policy` block,
+where operator settings win. A `dynamic-runtime` plugin therefore gets
+localhost access without the operator configuring anything, and a
+`core-analysis` plugin does not — even in the same scan, since policy is
+per-plugin rather than host-wide.
+
+### Where the track comes from
+
+**The track is read from the registry entry your plugin was published under,
+captured at install time — never from your manifest.** The gRPC manifest
+carries no track field by design: a self-declared track would let a plugin
+choose its own sandbox, which is not a sandbox.
+
+The practical consequences:
+
+- A plugin installed with `--local` has no registry entry, so it has **no
+  track** and runs under the strict default policy: `passive` risk class, empty
+  allowlists. Declaring `network_hosts` in a sideloaded plugin means rejection
+  at registration. Test your plugin as installed from a registry, not only
+  sideloaded, or you will not exercise the policy it actually runs under.
+- Plugins installed before tracks were recorded also have no track and get the
+  strict default until reinstalled.
+
+If your plugin needs more than its track grants, the operator must opt in:
+
+```yaml
+# .nox.yaml
+plugin_policy:
+  max_risk_class: active
+  allowed_network_hosts: ["localhost", "127.0.0.1"]
+```
+
+Operators who want the pre-track behaviour — every plugin on the strict default
+regardless of track — set:
+
+```yaml
+plugin_policy:
+  ignore_track_profiles: true
+```
+
+This exists because the override semantics are one-directional: an operator can
+widen an allowlist but cannot empty one, since a zero-length list reads as "not
+configured". Without the flag there would be no way to revoke the localhost
+access the `dynamic-runtime` profile grants.
 
 ## Testing
 

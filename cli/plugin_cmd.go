@@ -184,10 +184,36 @@ func runPluginSearch(args []string) int {
 		if track == "" {
 			track = "-"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, p.Description, latest)
+		desc := p.Description
+		if p.Deprecated {
+			desc = "[DEPRECATED] " + desc
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, desc, latest)
 	}
 	_ = w.Flush()
+
+	// Migration notices go to stderr so the table on stdout stays pipeable.
+	for i := range results {
+		warnIfDeprecated(&results[i])
+	}
 	return 0
+}
+
+// warnIfDeprecated prints a migration notice for a retired plugin.
+//
+// The registry carried "deprecated" and "deprecation_note" for two releases
+// before anything read them, so search and install happily kept recommending
+// retired plugins. The warning is advisory and never blocks: existing installs
+// must keep working.
+func warnIfDeprecated(p *registry.PluginEntry) {
+	if p == nil || !p.Deprecated {
+		return
+	}
+	if p.DeprecationNote != "" {
+		fmt.Fprintf(os.Stderr, "warning: %s is deprecated — %s\n", p.Name, p.DeprecationNote)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "warning: %s is deprecated and no longer maintained\n", p.Name)
 }
 
 // runPluginInfo shows detailed information about a plugin.
@@ -234,6 +260,13 @@ func runPluginInfo(args []string) int {
 
 	fmt.Printf("Name:        %s\n", found.Name)
 	fmt.Printf("Description: %s\n", found.Description)
+	if found.Deprecated {
+		note := found.DeprecationNote
+		if note == "" {
+			note = "no longer maintained"
+		}
+		fmt.Printf("Status:      DEPRECATED — %s\n", note)
+	}
 	if found.Track != "" {
 		fmt.Printf("Track:       %s\n", found.Track)
 	}
@@ -337,6 +370,17 @@ func runPluginInstall(args []string) int {
 		return 2
 	}
 
+	// Warn before downloading, but do not block: retired plugins must stay
+	// installable so existing pipelines keep working.
+	if entries, searchErr := client.Search(ctx, name); searchErr == nil {
+		for i := range entries {
+			if entries[i].Name == name {
+				warnIfDeprecated(&entries[i])
+				break
+			}
+		}
+	}
+
 	// If already installed at the resolved version, skip.
 	if ip := st.FindPlugin(name); ip != nil && ip.Version == ve.Version {
 		fmt.Printf("%s@%s is already installed.\n", name, ve.Version)
@@ -379,6 +423,7 @@ func runPluginInstall(args []string) int {
 		BinaryPath:  artifact.BinaryPath,
 		TrustLevel:  trustLevel,
 		RiskClass:   ve.RiskClass,
+		Track:       string(trackForPlugin(ctx, client, name)),
 		InstalledAt: now,
 		UpdatedAt:   now,
 	})
@@ -458,6 +503,7 @@ func runPluginUpdate(args []string) int {
 			BinaryPath:  artifact.BinaryPath,
 			TrustLevel:  artifact.VerifyResult.Level.String(),
 			RiskClass:   ve.RiskClass,
+			Track:       string(trackForPlugin(ctx, client, name)),
 			InstalledAt: ip.InstalledAt,
 			UpdatedAt:   now,
 		})

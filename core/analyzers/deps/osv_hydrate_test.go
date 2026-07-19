@@ -39,7 +39,7 @@ func TestHydrateVulnDetails_FillsSeverityAndSummary(t *testing.T) {
 	if got.Summary != "Remote code execution in example" {
 		t.Errorf("summary not hydrated: %q", got.Summary)
 	}
-	if sev := mapOSVSeverity(got.Severity); sev != findings.SeverityCritical {
+	if sev := mapOSVSeverity(got.Severity, osvDatabaseSpecific{}); sev != findings.SeverityCritical {
 		t.Errorf("severity = %v, want critical (CVSS 9.8)", sev)
 	}
 	if len(got.Affected) != 1 {

@@ -22,7 +22,7 @@ func TestRunScanPlugins_NoRequired_NoOp(t *testing.T) {
 }
 
 func TestRunPluginBinaries_NoBinaries_NoOp(t *testing.T) {
-	out, err := runPluginBinaries(context.Background(), t.TempDir(), nil, nil)
+	out, err := runPluginBinaries(context.Background(), t.TempDir(), nil, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

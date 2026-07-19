@@ -25,6 +25,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
@@ -68,7 +69,17 @@ type ScanResult struct {
 	// "what depth did this scan give each language?" and is copied into the
 	// report meta so the decision is visible in the artifact, not just in config.
 	SASTProfile map[string]string
+
+	// Degradations lists the parts of the scan that could not run. An empty
+	// slice means every configured check completed; a non-empty one means the
+	// findings are incomplete and "no findings" must not be read as "clean".
+	Degradations []Degradation
 }
+
+// Degradation re-exports degrade.Degradation so callers holding a ScanResult
+// need not import the leaf package. It lives in its own package because
+// analyzers report degradations too, and they cannot import core.
+type Degradation = degrade.Degradation
 
 // ScanOptions holds optional parameters for RunScanWithOptions. The zero
 // value means no additional options are applied.
@@ -102,9 +113,6 @@ type ScanOptions struct {
 	// Sequential forces analyzers to run sequentially instead of in parallel.
 	// Useful for debugging analyzer interactions.
 	Sequential bool
-
-	// NoCache disables the incremental scan cache, forcing a full re-scan.
-	NoCache bool
 
 	// ChangedSince limits the scan to files changed since the given git ref.
 	// Only files in the diff between the ref and HEAD are analyzed.
@@ -150,6 +158,11 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 // honoring ctx for cancellation and deadlines. The context is propagated to
 // every analyzer (including OSV network lookups) and bounds parallel analyzer
 // execution.
+//
+// Analyzers check ctx between artifacts, so cancellation takes effect within
+// one file rather than at the end of the walk. Discovery itself is not
+// interruptible: a cancelled scan still completes the directory traversal it
+// had already begun.
 //
 //nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
 func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*ScanResult, error) {
@@ -201,9 +214,23 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	dataAnalyzer := data.NewAnalyzer()
 	iacAnalyzer := iac.NewAnalyzer()
 	aiAnalyzer := ai.NewAnalyzer()
-	var depsOpts []deps.AnalyzerOption
+	// degradations collects checks that could not complete. Analyzers write to
+	// it concurrently; it is surfaced on ScanResult so "no findings" can be
+	// distinguished from "did not look".
+	degradations := &degrade.Degradations{}
+
+	depsOpts := []deps.AnalyzerOption{deps.WithDegradations(degradations)}
 	if opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
+	}
+	// Wire the project's license policy through. Without this, license.deny /
+	// license.allow in .nox.yaml parsed cleanly and then produced no LIC-*
+	// findings at all — configured policy that silently did nothing.
+	if len(cfg.License.Deny) > 0 || len(cfg.License.Allow) > 0 {
+		depsOpts = append(depsOpts, deps.WithLicensePolicy(deps.LicensePolicy{
+			Deny:  cfg.License.Deny,
+			Allow: cfg.License.Allow,
+		}))
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	slopAnalyzer := slop.NewAnalyzer()
@@ -471,7 +498,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,
 	// baseline matching, and VEX.
-	refineFindings(allFindings, cfg, opts, target)
+	if err := refineFindings(allFindings, cfg, opts, target, degradations); err != nil {
+		return nil, err
+	}
 
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings)
@@ -484,6 +513,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		AIInventory:  aiInventory,
 		PolicyResult: policyResult,
 		Rules:        allRules,
+		Degradations: degradations.Items(),
 		SASTProfile:  cfg.Scan.SAST.ResolvedProfile(),
 	}, nil
 }
@@ -594,7 +624,7 @@ func singleFileArtifacts(path string, cfg *ScanConfig) ([]discovery.Artifact, er
 // conditional severity, dedup + deterministic sort, inline suppressions,
 // optional terraform-plan findings, baseline matching, and VEX. It is stage 3
 // of the scan pipeline.
-func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string) {
+func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string, deg *degrade.Degradations) error {
 	// Config rule disabling and severity overrides.
 	if len(cfg.Scan.Rules.Disable) > 0 {
 		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
@@ -672,16 +702,22 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 
-	applySuppressions(allFindings, target)
+	applySuppressions(allFindings, target, deg)
 
-	// Scan a terraform plan if provided.
+	// Scan a terraform plan if provided. A plan path is only ever set because
+	// the operator asked for it, so a plan that cannot be read or parsed is an
+	// error: silently scanning nothing while reporting success would let a
+	// typo'd path masquerade as a clean infrastructure review.
 	if opts.TerraformPlanPath != "" {
 		tfPlanPath := opts.TerraformPlanPath
 		if !filepath.IsAbs(tfPlanPath) {
 			tfPlanPath = filepath.Join(target, tfPlanPath)
 		}
 		tfFindings, tfErr := iac.ScanTerraformPlan(tfPlanPath)
-		if tfErr == nil && tfFindings != nil {
+		if tfErr != nil {
+			return fmt.Errorf("scanning terraform plan %s: %w", opts.TerraformPlanPath, tfErr)
+		}
+		if tfFindings != nil {
 			tfItems := tfFindings.Findings()
 			for i := range tfItems {
 				allFindings.Add(tfItems[i])
@@ -701,21 +737,28 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	} else if !filepath.IsAbs(baselinePath) {
 		baselinePath = filepath.Join(target, baselinePath)
 	}
-	applyBaseline(allFindings, baselinePath)
+	applyBaseline(allFindings, baselinePath, deg)
 
 	// VEX document.
 	vexPath := opts.VEXPath
 	if vexPath == "" {
 		vexPath = cfg.Policy.VEXPath
 	}
+	// As with the terraform plan, the path is explicit — from a flag or from
+	// .nox.yaml — so failing to load it is an error rather than a silent no-op
+	// that would leave every waiver unapplied.
 	if vexPath != "" {
 		if !filepath.IsAbs(vexPath) {
 			vexPath = filepath.Join(target, vexPath)
 		}
-		if vexDoc, vexErr := vex.LoadVEX(vexPath); vexErr == nil {
-			vex.ApplyVEX(allFindings, vexDoc)
+		vexDoc, vexErr := vex.LoadVEX(vexPath)
+		if vexErr != nil {
+			return fmt.Errorf("loading VEX document %s: %w", vexPath, vexErr)
 		}
+		vex.ApplyVEX(allFindings, vexDoc)
 	}
+
+	return nil
 }
 
 // evaluatePolicy runs the configured fail-on / baseline policy gate over the
@@ -857,7 +900,17 @@ func RunStagedScanWithOptions(repoRoot string, opts ScanOptions) (*ScanResult, e
 	// Run the standard scan against the temp directory. Paths in findings
 	// will be relative to tmpDir, which mirrors the repository-relative
 	// structure, so no remapping is needed.
-	result, err := RunScan(tmpDir)
+	// opts is threaded through deliberately: this previously called
+	// RunScan(tmpDir) and dropped every option, so --rules, --offline, --vex and
+	// friends were silently ignored whenever --staged was used.
+	//
+	// ChangedSince is cleared because the temp directory is not a git
+	// repository — a staged scan already IS a changed-files scan, and leaving
+	// the ref set would make discovery fail.
+	stagedOpts := opts
+	stagedOpts.ChangedSince = ""
+
+	result, err := RunScanWithOptions(tmpDir, stagedOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -890,11 +943,32 @@ func RunHistoryScan(repoRoot string, opts *HistoryScanOptions) (*ScanResult, err
 	allRules := rules.NewRuleSet()
 
 	secretsAnalyzer := secrets.NewAnalyzer()
-	for _, r := range secretsAnalyzer.Rules().Rules() {
+	scanRules := secretsAnalyzer.Rules()
+	for _, r := range scanRules.Rules() {
 		allRules.Add(r)
 	}
 
-	engine := rules.NewEngine(secretsAnalyzer.Rules())
+	// Honour --rules here too. HistoryScanOptions carried a ScanOptions field
+	// that nothing ever read, so custom rules were silently dropped for
+	// --history scans — the flag appeared to work and quietly did nothing.
+	if path := opts.ScanOptions.CustomRulesPath; path != "" {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(repoRoot, path)
+		}
+		customRules, err := loadCustomRules(path)
+		if err != nil {
+			return nil, fmt.Errorf("loading custom rules: %w", err)
+		}
+		for _, r := range customRules.Rules() {
+			if scanRules.HasID(r.ID) {
+				return nil, fmt.Errorf("custom rule %s conflicts with a built-in rule ID", r.ID)
+			}
+			scanRules.Add(r)
+			allRules.Add(r)
+		}
+	}
+
+	engine := rules.NewEngine(scanRules)
 
 	walkOpts := git.WalkHistoryOptions{
 		MaxDepth: opts.MaxDepth,
@@ -977,7 +1051,7 @@ func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
 }
 
 // applySuppressions reads files that have findings and marks suppressed findings.
-func applySuppressions(fs *findings.FindingSet, target string) {
+func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations) {
 	// Group findings by file.
 	byFile := make(map[string][]int)
 	items := fs.Findings()
@@ -993,6 +1067,12 @@ func applySuppressions(fs *findings.FindingSet, target string) {
 
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
+			// Fails safe — findings stay reported rather than being wrongly
+			// suppressed — but the operator's nox:ignore comments in this file
+			// are not being honoured, which is surprising enough to surface.
+			deg.Add(degrade.Suppression,
+				fmt.Sprintf("%s could not be re-read to apply inline suppressions: %v", filePath, err),
+				"nox:ignore comments in this file were not applied; its findings may be reported despite being waived")
 			continue
 		}
 
@@ -1015,9 +1095,21 @@ func applySuppressions(fs *findings.FindingSet, target string) {
 }
 
 // applyBaseline loads a baseline file and marks matched findings.
-func applyBaseline(fs *findings.FindingSet, baselinePath string) {
+func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.Degradations) {
 	bl, err := baseline.Load(baselinePath)
-	if err != nil || bl.Len() == 0 {
+	if err != nil {
+		// No baseline is the normal state before the first `nox baseline write`,
+		// so absence is silent. A baseline that exists but will not load is
+		// different: under baseline_mode it changes what the gate enforces, so
+		// it must not pass unnoticed.
+		if !os.IsNotExist(err) {
+			deg.Add(degrade.Baseline,
+				fmt.Sprintf("%s could not be loaded: %v", baselinePath, err),
+				"findings are not being classified against the baseline; known-vs-new status is unreliable")
+		}
+		return
+	}
+	if bl.Len() == 0 {
 		return
 	}
 
