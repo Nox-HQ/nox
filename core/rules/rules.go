@@ -16,6 +16,7 @@ var ValidMatcherTypes = map[string]bool{
 	"yamlpath":  true,
 	"heuristic": true,
 	"entropy":   true,
+	"absence":   true,
 }
 
 // Rule is a single declarative security rule loaded from YAML. It describes
@@ -62,6 +63,34 @@ type Rule struct {
 	// while a genuine AWS access key scored 3.684, so any cutoff rejecting the
 	// identifier also rejects the key.
 	RequireContextKeywords []string `yaml:"require_context_keywords"`
+
+	// Absence* fields drive the block-scoped absence matcher (MatcherType
+	// "absence"). They restore IaC "resource present but hardening property
+	// missing" detections that Go's RE2 regexp cannot express: those were
+	// written as negative-lookahead patterns (?!...), which RE2 rejects, and the
+	// matcher silently swallowed the compile error — so the rules never fired.
+	//
+	// The matcher finds each AbsenceAnchor occurrence, computes that anchor's
+	// real structural span per AbsenceSpan, and emits a finding when
+	// AbsenceProperty does NOT appear anywhere in that span. Because the span is
+	// the resource's actual extent (a brace-delimited block, a YAML indentation
+	// block, a YAML document, or the whole file) — not a fixed line window — a
+	// hardened resource whose property sits anywhere inside its block is never
+	// falsely flagged, which a line-windowed exclusion cannot guarantee.
+	//
+	// AbsenceRequire, when non-empty, additionally requires its pattern to be
+	// present in the span before the rule fires (e.g. an IAM statement that
+	// grants "Resource": "*"). All four are RE2 regexes and must compile.
+	AbsenceAnchor   string `yaml:"absence_anchor"`
+	AbsenceProperty string `yaml:"absence_property"`
+	AbsenceRequire  string `yaml:"absence_require"`
+	// AbsenceSpan selects how the anchor's span is computed: "file" (whole
+	// file), "line" (the anchor's line), "brace-block" (the {...} block that
+	// follows the anchor, e.g. HCL headers), "brace-enclosing" (the {...} object
+	// that surrounds the anchor, e.g. a CloudFormation Type value), "yaml-block"
+	// (the anchor line plus its more-indented children), or "yaml-doc" (the
+	// enclosing `---`-delimited YAML document).
+	AbsenceSpan string `yaml:"absence_span"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
