@@ -2,7 +2,6 @@ scan:
   exclude:
     - "plugins/"
     - "dist/"
-    - "registry-scaffold/"
     - "*_test.go"
     # Intentionally-vulnerable ground-truth samples for `nox bench --precision`
     # (hardcoded secret, eval injection, prompt concat). The precision harness

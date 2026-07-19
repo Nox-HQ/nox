@@ -124,7 +124,7 @@ func (s *Store) fetchArtifact(ctx context.Context, name string, ve *registry.Ver
 	// against an unfinished entry.
 	if !isRealDigest(artifact.Digest) {
 		return nil, fmt.Errorf(
-			"refusing to install %s@%s: artifact digest %q is a placeholder or missing. The plugin's release pipeline must stamp the real SHA-256 in registry-scaffold/index.json before installs can proceed",
+			"refusing to install %s@%s: artifact digest %q is a placeholder or missing. The plugin's release pipeline must stamp the real SHA-256 in the registry index (github.com/nox-hq/registry) before installs can proceed",
 			name, ve.Version, artifact.Digest)
 	}
 

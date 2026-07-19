@@ -24,7 +24,38 @@ var bundledPlugins = []string{
 // `nox registry remove official`.
 var defaultRegistrySource = registry.Source{
 	Name: "official",
-	URL:  "https://raw.githubusercontent.com/nox-hq/nox/main/registry-scaffold/index.json",
+	URL:  "https://raw.githubusercontent.com/nox-hq/registry/main/index.json",
+}
+
+// legacyRegistryURL is where the index lived before it was extracted into its
+// own repository. It is retained ONLY so an existing install — which has the
+// old URL written into ~/.nox/state.json and will not be re-bootstrapped — can
+// be recognised and migrated, instead of failing with a bare 404 that gives the
+// operator nothing to act on.
+const legacyRegistryURL = "https://raw.githubusercontent.com/nox-hq/nox/main/registry-scaffold/index.json"
+
+// migrateLegacyRegistrySource rewrites the official source when it still points
+// at the pre-extraction location.
+//
+// The index moved out of the nox repository, so that URL now 404s. Bootstrap
+// only ADDS a default source when none exists, which means an existing install
+// would otherwise keep the dead URL indefinitely and see every `plugin search`
+// and `plugin install` fail for no visible reason.
+//
+// Only the entry that still carries the exact old URL is touched: a source an
+// operator has deliberately re-pointed is left alone.
+func migrateLegacyRegistrySource(st *State) bool {
+	for i := range st.Sources {
+		if st.Sources[i].Name == defaultRegistrySource.Name &&
+			st.Sources[i].URL == legacyRegistryURL {
+			st.Sources[i].URL = defaultRegistrySource.URL
+			fmt.Fprintf(os.Stderr,
+				"nox: the plugin registry moved to its own repository; updated the %q source to %s\n",
+				defaultRegistrySource.Name, defaultRegistrySource.URL)
+			return true
+		}
+	}
+	return false
 }
 
 // bootstrapBundledPlugins registers any plugin binaries that ship in the
@@ -74,6 +105,11 @@ func bootstrapBundledPlugins() {
 			notices = append(notices, fmt.Sprintf(
 				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)", // nox:ignore SEC-161,SEC-162 -- env var name in user-facing notice, not a credential
 				defaultRegistrySource.URL))
+		} else if migrateLegacyRegistrySource(st) {
+			// An existing install already HAS an "official" source, so the
+			// branch above never runs for it and the pre-extraction URL would
+			// persist forever — 404ing on every search and install.
+			changed = true
 		}
 	}
 
