@@ -23,8 +23,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// outside the regex engine.
 	// 1547 = 1553 minus the six duplicate secret rules merged away
 	// (SEC-152, SEC-451, SEC-452, SEC-470, SEC-558, SEC-673).
-	if got := len(cat); got != 1547 {
-		t.Errorf("Catalog() returned %d rules, want 1547", got)
+	// 1528 = 1547 minus the 19 redundant bare-connection-scheme secret rules
+	// deleted (SEC-356..SEC-370 and SEC-430..SEC-433): they fired on
+	// password-less URLs, and the credential-aware DSN rules SEC-073/074/076
+	// already cover connection strings carrying userinfo credentials.
+	if got := len(cat); got != 1528 {
+		t.Errorf("Catalog() returned %d rules, want 1528", got)
 	}
 }
 
