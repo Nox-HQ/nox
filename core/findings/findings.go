@@ -209,10 +209,21 @@ func (fs *FindingSet) Deduplicate() {
 	unique := make([]Finding, 0, len(fs.items))
 	for i := range fs.items {
 		finding := fs.items[i]
-		if _, exists := seen[finding.Fingerprint]; exists {
+		// Key on fingerprint AND location, not fingerprint alone.
+		//
+		// The V2 fingerprint is deliberately line-independent so a baseline
+		// survives code moving up or down a file. But an analyzer that builds
+		// findings directly (weakcrypto, variants, slop) and leaves Add to
+		// derive the fingerprint from a static Message produces the SAME
+		// fingerprint for two genuinely distinct findings in one file — two
+		// MD5 calls at lines 10 and 50. Keying dedup on fingerprint alone then
+		// silently dropped the second, real finding. Two findings at different
+		// positions are never duplicates; a true duplicate shares position too.
+		key := fmt.Sprintf("%s|%d|%d", finding.Fingerprint, finding.Location.StartLine, finding.Location.StartColumn)
+		if _, exists := seen[key]; exists {
 			continue
 		}
-		seen[finding.Fingerprint] = struct{}{}
+		seen[key] = struct{}{}
 		unique = append(unique, finding)
 	}
 	fs.items = unique

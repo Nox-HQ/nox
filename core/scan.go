@@ -184,6 +184,18 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Fail loudly on an invalid policy gate keyword. An unrecognized fail_on
+	// silently disables the gate — a capitalized "High" or a typo turns CI
+	// green on critical findings — so reject it at load rather than at exit.
+	if err := (policy.Config{
+		FailOn:       findings.Severity(cfg.Policy.FailOn),
+		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
+		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
+		Budget:       policyBudget(cfg.Policy.Budget),
+	}).Validate(); err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
 	// Stage 1: Discover artifacts.
 	artifacts, err := discoverArtifacts(target, cfg, opts)
 	if err != nil {
@@ -791,20 +803,26 @@ func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet) *policy.R
 	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" && len(cfg.Policy.Budget) == 0 {
 		return nil
 	}
-	var budget map[findings.Severity]int
-	if len(cfg.Policy.Budget) > 0 {
-		budget = make(map[findings.Severity]int, len(cfg.Policy.Budget))
-		for sev, n := range cfg.Policy.Budget {
-			budget[findings.Severity(sev)] = n
-		}
-	}
 	policyCfg := policy.Config{
 		FailOn:       findings.Severity(cfg.Policy.FailOn),
 		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
 		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
-		Budget:       budget,
+		Budget:       policyBudget(cfg.Policy.Budget),
 	}
 	return policy.Evaluate(policyCfg, allFindings.Findings())
+}
+
+// policyBudget converts the string-keyed budget from config into the
+// severity-keyed map the policy package expects.
+func policyBudget(in map[string]int) map[findings.Severity]int {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[findings.Severity]int, len(in))
+	for sev, n := range in {
+		out[findings.Severity(sev)] = n
+	}
+	return out
 }
 
 // analyzerTask runs one analyzer against the discovered artifacts. Wrapping

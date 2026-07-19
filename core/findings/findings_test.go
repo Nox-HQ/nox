@@ -1151,3 +1151,44 @@ func TestDowngradeByRulePatternsAndPath_Idempotent(t *testing.T) {
 func ContextRuleScopeFixture() []string {
 	return []string{"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*"}
 }
+
+// TestDeduplicate_KeepsDistinctFindingsAtDifferentLines is the regression test
+// for a silent finding loss.
+//
+// The V2 fingerprint is line-independent by design (baseline stability), so an
+// analyzer that builds findings directly and lets Add derive the fingerprint
+// from a static message gives two genuinely distinct findings in one file the
+// same fingerprint. Deduplicate keyed on fingerprint alone then dropped the
+// second — a real second MD5 call, a real second hardcoded secret, never
+// reported.
+func TestDeduplicate_KeepsDistinctFindingsAtDifferentLines(t *testing.T) {
+	fs := NewFindingSet()
+	// Same rule, same file, same message — differing only in line, exactly the
+	// shape a direct-construction analyzer produces for two occurrences.
+	fs.Add(Finding{RuleID: "CRYPTO-001", Message: "Use of MD5",
+		Location: Location{FilePath: "hash.go", StartLine: 10}})
+	fs.Add(Finding{RuleID: "CRYPTO-001", Message: "Use of MD5",
+		Location: Location{FilePath: "hash.go", StartLine: 50}})
+
+	fs.Deduplicate()
+
+	if got := len(fs.Findings()); got != 2 {
+		t.Errorf("expected both distinct findings to survive dedup, got %d", got)
+	}
+}
+
+// TestDeduplicate_RemovesTrueDuplicates confirms the fix did not disable dedup:
+// two findings identical in rule, location AND fingerprint are still collapsed.
+func TestDeduplicate_RemovesTrueDuplicates(t *testing.T) {
+	fs := NewFindingSet()
+	f := Finding{RuleID: "CRYPTO-001", Message: "Use of MD5",
+		Location: Location{FilePath: "hash.go", StartLine: 10}}
+	fs.Add(f)
+	fs.Add(f)
+
+	fs.Deduplicate()
+
+	if got := len(fs.Findings()); got != 1 {
+		t.Errorf("expected a true duplicate to be removed, got %d findings", got)
+	}
+}
