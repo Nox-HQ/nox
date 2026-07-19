@@ -4,8 +4,10 @@
 package badge
 
 import (
+	"encoding/xml"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -228,11 +230,25 @@ func SeverityBadges(ff []findings.Finding, label string) map[findings.Severity]*
 	return results
 }
 
+// escapeXML escapes text for safe inclusion in an SVG/XML attribute or element.
+func escapeXML(s string) string {
+	var b strings.Builder
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
 // GenerateSVG produces an SVG badge string for the given label, value, and color.
 func GenerateSVG(label, value, color string) string {
+	// Widths are measured on the raw text (visual glyph count), but the text is
+	// XML-escaped before it goes into the SVG. A label containing '&', '<', '>'
+	// or '"' — a user-supplied --label — would otherwise produce malformed XML
+	// or allow markup injection into the badge.
 	labelW := textWidth(label) + 10
 	valueW := textWidth(value) + 10
 	totalW := labelW + valueW
+
+	label = escapeXML(label)
+	value = escapeXML(value)
 
 	// Text positions are in tenths of a pixel (SVG uses scale(.1)).
 	labelX := labelW * 10 / 2
