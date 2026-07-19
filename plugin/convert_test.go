@@ -139,7 +139,7 @@ func TestFindingRoundTrip(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto)
+	roundTrip := ProtoFindingToGo(proto, "test-plugin")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)
@@ -159,8 +159,15 @@ func TestFindingRoundTrip(t *testing.T) {
 	if roundTrip.Message != original.Message {
 		t.Errorf("Message mismatch: %q vs %q", roundTrip.Message, original.Message)
 	}
-	if roundTrip.Fingerprint != original.Fingerprint {
-		t.Errorf("Fingerprint mismatch: %q vs %q", roundTrip.Fingerprint, original.Fingerprint)
+	// Fingerprint is deliberately NOT round-tripped. Non-preservation is the
+	// security property: a fingerprint arriving from a plugin is recomputed
+	// host-side and namespaced, so a plugin cannot collide with a core finding
+	// and suppress it via dedup, or match a baselined finding to hide itself.
+	if roundTrip.Fingerprint == original.Fingerprint {
+		t.Error("Fingerprint was preserved verbatim; it must be recomputed host-side")
+	}
+	if roundTrip.Fingerprint == "" {
+		t.Error("Fingerprint should be recomputed, not blanked")
 	}
 	if !reflect.DeepEqual(roundTrip.Metadata, original.Metadata) {
 		t.Errorf("Metadata mismatch: %v vs %v", roundTrip.Metadata, original.Metadata)
@@ -168,7 +175,7 @@ func TestFindingRoundTrip(t *testing.T) {
 }
 
 func TestProtoFindingToGo_Nil(t *testing.T) {
-	got := ProtoFindingToGo(nil)
+	got := ProtoFindingToGo(nil, "test-plugin")
 	if got.ID != "" || got.RuleID != "" {
 		t.Errorf("ProtoFindingToGo(nil) should return zero value, got %+v", got)
 	}
@@ -182,7 +189,7 @@ func TestFindingRoundTrip_EmptyMetadata(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto)
+	roundTrip := ProtoFindingToGo(proto, "test-plugin")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)
@@ -521,5 +528,100 @@ func TestGoEnrichmentToProto_Nil(t *testing.T) {
 	got := GoEnrichmentToProto(nil)
 	if got != nil {
 		t.Errorf("GoEnrichmentToProto(nil) should return nil, got %+v", got)
+	}
+}
+
+// --- fingerprint trust boundary ---
+
+// TestProtoFindingToGo_DoesNotTrustClaimedFingerprint pins the core property:
+// whatever a plugin claims, the stored value is derived host-side.
+func TestProtoFindingToGo_DoesNotTrustClaimedFingerprint(t *testing.T) {
+	t.Parallel()
+
+	claimed := "0000000000000000000000000000000000000000000000000000000000000000"
+	f := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId:      "PLG-001",
+		Message:     "something",
+		Fingerprint: claimed,
+	}, "some-plugin")
+
+	if f.Fingerprint == claimed {
+		t.Fatal("the plugin's claimed fingerprint was stored verbatim")
+	}
+	if f.Fingerprint == "" {
+		t.Fatal("expected a recomputed fingerprint, got empty")
+	}
+}
+
+// TestProtoFindingToGo_FingerprintIsolatedPerPlugin shows two plugins cannot
+// collide even when they claim the identical fingerprint for identical content
+// — which is what made cross-plugin and plugin-vs-core suppression possible.
+func TestProtoFindingToGo_FingerprintIsolatedPerPlugin(t *testing.T) {
+	t.Parallel()
+
+	proto := &pluginv1.Finding{RuleId: "PLG-001", Message: "same", Fingerprint: "identical"}
+
+	a := ProtoFindingToGo(proto, "plugin-a")
+	b := ProtoFindingToGo(proto, "plugin-b")
+
+	if a.Fingerprint == b.Fingerprint {
+		t.Error("two plugins claiming the same fingerprint collided; namespacing is not applied")
+	}
+}
+
+// TestProtoFindingToGo_FingerprintDeterministic guards nox's reproducibility
+// guarantee: identical input must yield an identical fingerprint across runs.
+func TestProtoFindingToGo_FingerprintDeterministic(t *testing.T) {
+	t.Parallel()
+
+	proto := &pluginv1.Finding{
+		RuleId:      "PLG-001",
+		Message:     "stable",
+		Fingerprint: "claimed",
+		Location:    &pluginv1.Location{FilePath: "a/b.go", StartLine: 4},
+	}
+
+	first := ProtoFindingToGo(proto, "plugin-a")
+	second := ProtoFindingToGo(proto, "plugin-a")
+
+	if first.Fingerprint != second.Fingerprint {
+		t.Errorf("fingerprint is not deterministic: %q vs %q", first.Fingerprint, second.Fingerprint)
+	}
+}
+
+// TestProtoFindingToGo_DistinctFindingsStayDistinct confirms namespacing does
+// not over-collapse: a plugin's own findings must remain individually
+// addressable, or they could not be baselined or waived separately.
+func TestProtoFindingToGo_DistinctFindingsStayDistinct(t *testing.T) {
+	t.Parallel()
+
+	one := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId: "PLG-001", Message: "first", Fingerprint: "fp-1",
+	}, "plugin-a")
+	two := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId: "PLG-001", Message: "second", Fingerprint: "fp-2",
+	}, "plugin-a")
+
+	if one.Fingerprint == two.Fingerprint {
+		t.Error("two distinct findings from one plugin share a fingerprint")
+	}
+}
+
+// TestProtoFindingToGo_ComputesFingerprintWhenAbsent covers the plugin that
+// supplies no fingerprint at all — it must still get a stable one, and it must
+// not alias with a plugin that claimed its message as a fingerprint.
+func TestProtoFindingToGo_ComputesFingerprintWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	absent := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-001", Message: "text"}, "plugin-a")
+	if absent.Fingerprint == "" {
+		t.Fatal("expected a computed fingerprint when the plugin supplied none")
+	}
+
+	claimedAsMessage := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId: "PLG-001", Message: "text", Fingerprint: "text",
+	}, "plugin-a")
+	if absent.Fingerprint == claimedAsMessage.Fingerprint {
+		t.Error("a claimed fingerprint aliased with an absent one; the hash inputs are not tagged")
 	}
 }

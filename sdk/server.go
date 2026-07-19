@@ -76,7 +76,11 @@ func (s *PluginServer) Serve(ctx context.Context, opts ...ServeOption) error {
 		opt(cfg)
 	}
 
-	lis, err := net.Listen("tcp", ":0")
+	// Bind loopback-only. A plugin is a subprocess of the host scanner and is
+	// only ever dialled over the address handshake below, so exposing it on
+	// every interface would let any other local process — or, behind a
+	// permissive firewall, any LAN peer — invoke plugin tools during a scan.
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("sdk: listen: %w", err)
 	}
