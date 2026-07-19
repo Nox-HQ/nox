@@ -337,6 +337,9 @@ func applyVulnDetails(vulns []osvVuln, details map[string]osvVuln) {
 		if len(detail.Affected) > 0 {
 			vulns[i].Affected = detail.Affected
 		}
+		if detail.DatabaseSpecific.Severity != "" {
+			vulns[i].DatabaseSpecific = detail.DatabaseSpecific
+		}
 	}
 }
 
@@ -397,14 +400,27 @@ func decodeBatchResponse(resp *http.Response) ([]osvBatchResult, error) {
 // increasingly common case — silently collapsed to medium regardless of how
 // severe it actually was. SeverityMedium now means a genuine "unknown".
 func mapOSVSeverity(sev []osvSeverity, dbSpecific osvDatabaseSpecific) findings.Severity {
+	// A computable CVSS base score is the most precise signal, so it wins when
+	// one is available. Note the score must be PARSED, not merely present: a
+	// CVSS v2 vector matches the type check but cannot be scored, and returning
+	// on it discarded an accurate database label in favour of cvssToSeverity's
+	// medium default.
 	for _, s := range sev {
-		if s.Type == "CVSS_V3" || s.Type == "CVSS_V2" {
-			return cvssToSeverity(s.Score)
+		if s.Type != "CVSS_V3" && s.Type != "CVSS_V2" {
+			continue
+		}
+		if score, ok := cvssBaseScore(s.Score); ok {
+			return scoreToSeverity(score)
 		}
 	}
+
+	// No score we could compute — fall back to the source database's coarse
+	// label. This is the only severity signal for CVSS v4-only advisories.
 	if s, ok := severityFromLabel(dbSpecific.Severity); ok {
 		return s
 	}
+
+	// Genuinely unknown.
 	return findings.SeverityMedium
 }
 
@@ -425,25 +441,28 @@ func severityFromLabel(label string) (findings.Severity, bool) {
 	}
 }
 
-// cvssToSeverity converts a CVSS vector string or numeric score to a Severity.
-// It extracts the base score from either a bare number ("9.8") or a CVSS
-// vector string by looking for a trailing numeric value.
-func cvssToSeverity(score string) findings.Severity {
-	// Try parsing as a plain float first (e.g. "9.8").
-	f, err := strconv.ParseFloat(score, 64)
-	if err != nil {
-		// OSV publishes CVSS as a vector string, e.g.
-		// "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H". The base score is not
-		// embedded in it, but it is fully determined by it, so compute it.
-		if base, ok := cvssV3BaseScore(score); ok {
-			f = base
-		} else {
-			// Unrecognised format (e.g. a CVSS v2 or v4 vector): stay
-			// conservative rather than guessing.
-			return findings.SeverityMedium
-		}
+// cvssBaseScore returns the CVSS base score for an OSV severity value, which
+// is published either as a bare number ("9.8") or as a vector string.
+//
+// The bool reports whether a score could be DERIVED, which callers must
+// distinguish from a low score. CVSS v2 and v4 vectors match OSV's type field
+// but use scoring algorithms this does not implement; conflating "cannot
+// compute" with "scored medium" discarded accurate severity labels.
+func cvssBaseScore(score string) (float64, bool) {
+	// A bare number, as some databases publish.
+	if f, err := strconv.ParseFloat(score, 64); err == nil {
+		return f, true
 	}
 
+	// OSV publishes CVSS as a vector string, e.g.
+	// "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H". The base score is not
+	// embedded in it, but it is fully determined by it, so compute it.
+	return cvssV3BaseScore(score)
+}
+
+// scoreToSeverity buckets a CVSS base score using the standard qualitative
+// severity rating scale.
+func scoreToSeverity(f float64) findings.Severity {
 	switch {
 	case f >= 9.0:
 		return findings.SeverityCritical
@@ -456,6 +475,16 @@ func cvssToSeverity(score string) findings.Severity {
 	default:
 		return findings.SeverityInfo
 	}
+}
+
+// cvssToSeverity converts a CVSS vector string or numeric score to a Severity,
+// falling back to medium when no score can be derived.
+func cvssToSeverity(score string) findings.Severity {
+	f, ok := cvssBaseScore(score)
+	if !ok {
+		return findings.SeverityMedium
+	}
+	return scoreToSeverity(f)
 }
 
 // upgradeCommand returns the canonical one-liner an operator can run to

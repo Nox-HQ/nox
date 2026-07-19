@@ -9,12 +9,30 @@ package deps
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 )
 
 //go:embed data/popular_npm.txt data/popular_pypi.txt data/known_malicious.json
 var dataFS embed.FS
+
+// dataLoadErrs records embedded-dataset load failures.
+//
+// These datasets drive typosquatting and known-malicious-package detection. If
+// one fails to load, the corresponding check returns no findings and the scan
+// reports success — for a supply-chain scanner, the worst possible silent
+// failure: the check that exists to catch active attacks says "clean" when it
+// never loaded its data. Writes happen inside sync.Once, reads after it.
+var dataLoadErrs []string
+
+// dataLoadFailures returns the embedded-dataset load failures seen so far.
+// Callers must have triggered the relevant sync.Once first.
+func dataLoadFailures() []string {
+	out := make([]string, len(dataLoadErrs))
+	copy(out, dataLoadErrs)
+	return out
+}
 
 // popularPackages holds lazy-loaded popular package names per ecosystem.
 var (
@@ -46,6 +64,8 @@ func loadPopular() {
 	for eco, path := range files {
 		data, err := dataFS.ReadFile(path)
 		if err != nil {
+			dataLoadErrs = append(dataLoadErrs,
+				fmt.Sprintf("popular-package list for %s (%s) could not be read: %v", eco, path, err))
 			continue
 		}
 		var names []string
@@ -70,11 +90,15 @@ func loadMalicious() {
 
 	data, err := dataFS.ReadFile("data/known_malicious.json")
 	if err != nil {
+		dataLoadErrs = append(dataLoadErrs,
+			fmt.Sprintf("known-malicious package list could not be read: %v", err))
 		return
 	}
 
 	var raw map[string][]string
 	if err := json.Unmarshal(data, &raw); err != nil {
+		dataLoadErrs = append(dataLoadErrs,
+			fmt.Sprintf("known-malicious package list could not be parsed: %v", err))
 		return
 	}
 

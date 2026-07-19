@@ -28,6 +28,17 @@ type Suppression struct {
 	Line     int // the line the suppression applies to
 	Reason   string
 	Expires  *time.Time
+
+	// InvalidExpiry holds the date text of an expires: directive that could
+	// not be parsed. It is set instead of Expires, never alongside it.
+	//
+	// A malformed expiry must never be treated as "no expiry". The parse
+	// failure used to be discarded while the expires: text was still stripped
+	// from the reason, so a typo like expires:2026-13-01 silently produced a
+	// PERMANENT waiver that looked accepted. Suppressions carrying this field
+	// do not match, so the finding is reported — failing toward showing
+	// findings rather than hiding them — and the caller reports it.
+	InvalidExpiry string
 }
 
 // suppressionRE matches nox:ignore / nox:disable directives in any
@@ -90,9 +101,12 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 
 		// Parse expiration from reason.
 		var expires *time.Time
+		var invalidExpiry string
 		if em := expiresRE.FindStringSubmatch(reason); em != nil {
 			if t, err := time.Parse("2006-01-02", em[1]); err == nil {
 				expires = &t
+			} else {
+				invalidExpiry = em[1]
 			}
 			reason = strings.TrimSpace(expiresRE.ReplaceAllString(reason, ""))
 		}
@@ -107,11 +121,12 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 		}
 
 		result = append(result, Suppression{
-			RuleIDs:  ruleIDs,
-			FilePath: filePath,
-			Line:     targetLine,
-			Reason:   reason,
-			Expires:  expires,
+			RuleIDs:       ruleIDs,
+			FilePath:      filePath,
+			Line:          targetLine,
+			Reason:        reason,
+			Expires:       expires,
+			InvalidExpiry: invalidExpiry,
 		})
 	}
 
@@ -122,6 +137,12 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 // and line, considering expiration.
 func (s Suppression) MatchesFinding(ruleID string, line int, now time.Time) bool {
 	if s.Line != line {
+		return false
+	}
+	// An expiry the operator wrote but nox could not parse is not an absent
+	// expiry. Refuse to suppress rather than silently making the waiver
+	// permanent.
+	if s.InvalidExpiry != "" {
 		return false
 	}
 	if s.Expires != nil && now.After(*s.Expires) {

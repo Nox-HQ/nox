@@ -81,6 +81,23 @@ func (r *ClassifierRegistry) Classify(path string, info os.FileInfo) ArtifactTyp
 // DefaultClassifier classifies files by extension and well-known names.
 type DefaultClassifier struct{}
 
+// LockfileNames returns the set of filenames that discovery classifies as
+// dependency lockfiles.
+//
+// Exported so the dependency analyzer can assert that every classified
+// lockfile is either parsed or explicitly known to be redundant. Adding a name
+// here without a parser creates a silent blind spot — a project of that
+// ecosystem scans clean while nothing was read — which is exactly what
+// happened to yarn, pnpm and poetry.
+func LockfileNames() []string {
+	out := make([]string, 0, len(lockfileNames))
+	for name := range lockfileNames {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // lockfileNames contains exact file names that identify lockfiles.
 var lockfileNames = map[string]bool{
 	"package-lock.json": true,

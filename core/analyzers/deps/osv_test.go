@@ -322,7 +322,12 @@ func TestMapOSVSeverity(t *testing.T) {
 		{
 			// v2 vectors use a different formula and are not computed; keep the
 			// conservative default rather than guessing.
-			name:     "CVSS v2 vector string falls back to medium",
+			// A v2 vector cannot be scored and there is no label to fall back
+			// to, so medium here means "unknown" — not "this is a medium
+			// vulnerability". The companion case in
+			// TestMapOSVSeverity_FallsBackToLabel covers what happens when a
+			// label IS available, which is where this previously went wrong.
+			name:     "unscorable CVSS v2 vector with no label is unknown",
 			input:    []osvSeverity{{Type: "CVSS_V2", Score: "AV:N/AC:L/Au:N/C:P/I:P/A:P"}},
 			expected: findings.SeverityMedium,
 		},
@@ -333,6 +338,66 @@ func TestMapOSVSeverity(t *testing.T) {
 			result := mapOSVSeverity(tt.input, osvDatabaseSpecific{})
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestMapOSVSeverity_FallsBackToLabel covers the precedence between a CVSS
+// entry and the source database's coarse label.
+//
+// The rule is "most precise signal wins", and the trap is that presence of a
+// CVSS entry is not the same as being able to score it. Returning on any
+// CVSS_V2/V3 entry meant an unscorable vector beat an accurate label, so
+// advisories that plainly said CRITICAL were reported as medium.
+func TestMapOSVSeverity_FallsBackToLabel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		sev      []osvSeverity
+		label    string
+		expected findings.Severity
+	}{
+		{
+			name:     "unscorable v2 vector yields to the label",
+			sev:      []osvSeverity{{Type: "CVSS_V2", Score: "AV:N/AC:L/Au:N/C:P/I:P/A:P"}},
+			label:    "CRITICAL",
+			expected: findings.SeverityCritical,
+		},
+		{
+			name:     "v4-only advisory uses the label",
+			sev:      []osvSeverity{{Type: "CVSS_V4", Score: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"}},
+			label:    "HIGH",
+			expected: findings.SeverityHigh,
+		},
+		{
+			name:     "a scorable v3 vector beats the label",
+			sev:      []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+			label:    "LOW",
+			expected: findings.SeverityCritical,
+		},
+		{
+			name:     "github MODERATE means medium",
+			label:    "MODERATE",
+			expected: findings.SeverityMedium,
+		},
+		{
+			name:     "unrecognised label is unknown",
+			label:    "SPICY",
+			expected: findings.SeverityMedium,
+		},
+		{
+			name:     "no signal at all is unknown",
+			expected: findings.SeverityMedium,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapOSVSeverity(tt.sev, osvDatabaseSpecific{Severity: tt.label})
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
 			}
 		})
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
 )
@@ -36,18 +37,35 @@ type installedPlugin struct {
 // An empty track — a sideloaded plugin, or one installed before tracks were
 // recorded — is passed through as-is, which the host resolves to the strict
 // default policy.
-func installedPluginBinaries(required []string) ([]installedPlugin, error) {
+func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degradation, error) {
 	st, err := LoadState(DefaultStatePath())
 	if err != nil {
-		return nil, fmt.Errorf("loading plugin state: %w", err)
+		return nil, nil, fmt.Errorf("loading plugin state: %w", err)
 	}
+
 	var binaries []installedPlugin
+	var missing []core.Degradation
+
 	for _, name := range required {
+		// A plugin the project REQUIRED and did not get is reported, not
+		// skipped. Silently continuing here meant a CI job listing a security
+		// plugin, failing to install it, and exiting 0 with a clean report —
+		// even under --fail-on-degraded, whose help text promises otherwise.
 		ip := st.FindPlugin(name)
 		if ip == nil {
+			missing = append(missing, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q is not installed", name),
+				Impact: "findings this plugin would have produced are missing from this scan",
+			})
 			continue
 		}
 		if _, statErr := os.Stat(ip.BinaryPath); statErr != nil {
+			missing = append(missing, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q has no usable binary at %s: %v", name, ip.BinaryPath, statErr),
+				Impact: "findings this plugin would have produced are missing from this scan",
+			})
 			continue
 		}
 		binaries = append(binaries, installedPlugin{
@@ -55,7 +73,7 @@ func installedPluginBinaries(required []string) ([]installedPlugin, error) {
 			track: registry.Track(ip.Track),
 		})
 	}
-	return binaries, nil
+	return binaries, missing, nil
 }
 
 // runPostScanPlugins invokes the post-scan (scan-context) tools of every
@@ -69,7 +87,7 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 		return nil
 	}
 
-	binaries, err := installedPluginBinaries(required)
+	binaries, _, err := installedPluginBinaries(required)
 	if err != nil {
 		return err
 	}
@@ -122,7 +140,7 @@ func runScanPlugins(ctx context.Context, target string, required []string) (*cor
 		return nil, nil
 	}
 
-	binaries, err := installedPluginBinaries(required)
+	binaries, missing, err := installedPluginBinaries(required)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +153,17 @@ func runScanPlugins(ctx context.Context, target string, required []string) (*cor
 		overrides = cfg.PluginPolicy.Overrides()
 		ignoreTrackProfiles = cfg.PluginPolicy.IgnoreTrackProfiles
 	}
-	return runPluginBinaries(ctx, target, binaries, &policy, &overrides, ignoreTrackProfiles)
+	out, err := runPluginBinaries(ctx, target, binaries, &policy, &overrides, ignoreTrackProfiles)
+	if err != nil {
+		return nil, err
+	}
+	if out == nil && len(missing) > 0 {
+		out = &core.PluginScanOutput{}
+	}
+	if out != nil {
+		out.Degradations = append(out.Degradations, missing...)
+	}
+	return out, nil
 }
 
 // runPluginBinaries registers the given plugin binaries with a host, runs

@@ -10,6 +10,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -47,14 +48,33 @@ type signature struct {
 // Analyzer matches embedded CVE-variant signatures against source/config files.
 type Analyzer struct {
 	sigs []signature
+
+	// loadErr is set when the embedded signature database could not be parsed
+	// at all, leaving the analyzer with no signatures. Exposed via LoadErr so
+	// the pipeline can report that CVE-variant detection did not run, rather
+	// than emitting zero findings and calling it clean.
+	loadErr error
 }
+
+// LoadErr reports a whole-database load failure, or nil when the signature
+// database parsed. A non-nil value means no VARIANT-* rule can match.
+func (a *Analyzer) LoadErr() error { return a.loadErr }
 
 // NewAnalyzer returns a variants analyzer with the embedded signatures compiled.
 // Signatures that fail to compile are skipped so one bad entry can't disable
 // the analyzer.
+//
+// LoadErr reports whole-database failure, which is a different matter from a
+// bad entry: an unparseable signatures file leaves the analyzer with nothing
+// to match, so every VARIANT-* detection is off while the scan reports success.
+// Because the data is compiled in, that failure would ship to every user at
+// once and look like a quiet week for CVE variants.
 func NewAnalyzer() *Analyzer {
 	var sigs []signature
-	_ = json.Unmarshal(signaturesJSON, &sigs)
+	var loadErr error
+	if err := json.Unmarshal(signaturesJSON, &sigs); err != nil {
+		loadErr = fmt.Errorf("variant signature database could not be parsed: %w", err)
+	}
 	compiled := sigs[:0]
 	for i := range sigs {
 		re, err := regexp.Compile(sigs[i].Pattern)
@@ -69,7 +89,7 @@ func NewAnalyzer() *Analyzer {
 		}
 		compiled = append(compiled, sigs[i])
 	}
-	return &Analyzer{sigs: compiled}
+	return &Analyzer{sigs: compiled, loadErr: loadErr}
 }
 
 // Signatures returns the compiled CVE-variant signatures (for the `variants`

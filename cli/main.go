@@ -109,6 +109,26 @@ func isTopLevelStringFlag(name string) bool {
 	return false
 }
 
+// degradationsForReport converts scan degradations into their report form so
+// they can be recorded in findings.json. Consumers that only read the artifact
+// — CI jobs, dashboards, MCP clients — never see the stderr warnings, and for
+// them an empty findings list would otherwise be indistinguishable from a scan
+// that could not run.
+func degradationsForReport(ds []nox.Degradation) []report.Degradation {
+	if len(ds) == 0 {
+		return nil
+	}
+	out := make([]report.Degradation, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, report.Degradation{
+			Kind:   string(d.Kind),
+			Detail: d.Detail,
+			Impact: d.Impact,
+		})
+	}
+	return out
+}
+
 // run executes the CLI and returns the exit code.
 // 0 = clean (no findings), 1 = findings detected, 2 = error.
 func run(args []string) int {
@@ -503,12 +523,14 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// Report incomplete checks even under --quiet, and on stderr. A scan that
 	// could not run part of itself must never look like a clean scan: quiet
 	// mode suppresses noise, not a warning that the results are partial.
+	//
+	// The --fail-on-degraded exit is deliberately NOT taken here: returning
+	// before report generation threw away findings.json, the SARIF and the
+	// SBOM, so a pipeline that tripped the flag lost the findings it did
+	// collect and had nothing to upload. The exit is applied after reports are
+	// written; see below.
 	for _, d := range result.Degradations {
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
-	}
-	if len(result.Degradations) > 0 && failOnDegraded {
-		fmt.Fprintf(os.Stderr, "error: %d check(s) did not complete and --fail-on-degraded is set\n", len(result.Degradations))
-		return 2
 	}
 
 	// Generate reports.
@@ -525,6 +547,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r.Offline = offlineFlag
 			r.Prioritize = sortFlag == "priority"
 			r.SASTLanguages = result.SASTProfile
+			r.Degradations = degradationsForReport(result.Degradations)
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -604,6 +627,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if !quiet {
 		printNextStepTips(activeFindings, outputDir)
 		fmt.Println("[done]")
+	}
+
+	// An incomplete scan outranks the findings verdict: a policy gate that
+	// passed on partial results has not actually been satisfied. Applied here,
+	// after reports are written, so CI still gets its artifacts.
+	if len(result.Degradations) > 0 && failOnDegraded {
+		fmt.Fprintf(os.Stderr, "error: %d check(s) did not complete and --fail-on-degraded is set\n",
+			len(result.Degradations))
+		return 2
 	}
 
 	// If policy is configured, use its exit code.

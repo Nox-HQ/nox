@@ -777,3 +777,62 @@ func TestNewAnalyzer(t *testing.T) {
 		t.Errorf("expected OSVBaseURL %q, got %q", "https://api.osv.dev", a.OSVBaseURL)
 	}
 }
+
+// TestEveryClassifiedLockfileIsHandled enforces the invariant that produced
+// the yarn/pnpm/poetry blind spot: discovery classified those files as
+// lockfiles, the analyzer had no parser for them, and the gap was invisible.
+//
+// Every name discovery treats as a lockfile must either have a parser, or be
+// explicitly listed as redundant with one that does. A new entry on one side
+// and not the other fails here rather than shipping a silently empty scan for
+// that ecosystem.
+func TestEveryClassifiedLockfileIsHandled(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range discovery.LockfileNames() {
+		if _, parsed := supportedLockfiles[name]; parsed {
+			continue
+		}
+		if redundantLockfiles[name] {
+			continue
+		}
+		if _, known := knownUnparsed[name]; known {
+			continue
+		}
+		t.Errorf("%s is classified as a lockfile but is neither parsed, nor redundant, nor a "+
+			"recorded gap: projects using it would scan clean while nothing was read. Add a "+
+			"parser, or record it in knownUnparsed so the blind spot is deliberate and reported.", name)
+	}
+}
+
+// TestKnownUnparsedLockfilesAreReported ensures a recorded gap is a REPORTED
+// gap. An entry in knownUnparsed documents that nox cannot read the file; it
+// must never become a second silent-exemption list, so each one is checked to
+// be absent from the silently-ignored set.
+func TestKnownUnparsedLockfilesAreReported(t *testing.T) {
+	t.Parallel()
+
+	for name := range knownUnparsed {
+		if redundantLockfiles[name] {
+			t.Errorf("%s is recorded as an unparsed blind spot but is also exempt from "+
+				"degradation reporting; operators would never learn it went unscanned", name)
+		}
+	}
+}
+
+// TestRedundantLockfilesAreActuallyClassified keeps the exemption list honest —
+// an entry naming a file discovery never classifies is dead weight that hides
+// nothing and misleads the next reader.
+func TestRedundantLockfilesAreActuallyClassified(t *testing.T) {
+	t.Parallel()
+
+	classified := make(map[string]bool)
+	for _, name := range discovery.LockfileNames() {
+		classified[name] = true
+	}
+	for name := range redundantLockfiles {
+		if !classified[name] {
+			t.Errorf("%s is listed as a redundant lockfile but discovery does not classify it", name)
+		}
+	}
+}

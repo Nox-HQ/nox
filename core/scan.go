@@ -236,6 +236,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	slopAnalyzer := slop.NewAnalyzer()
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
+	// A signature database that fails to parse leaves every VARIANT-* rule
+	// unable to match. The scan would otherwise report zero variant findings
+	// and look clean.
+	if err := variantsAnalyzer.LoadErr(); err != nil {
+		degradations.Add(degrade.VulnData,
+			fmt.Sprintf("CVE-variant signatures could not be loaded: %v", err),
+			"no VARIANT-* detection ran; known CVE variants in this codebase would not be reported")
+	}
 	taintflowAnalyzer := taintflow.NewAnalyzer()
 	agentflowAnalyzer := agentflow.NewAnalyzer()
 	provenanceAnalyzer := provenance.NewAnalyzer()
@@ -473,6 +481,12 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		out, hookErr := ScanPluginHook(ctx, target, cfg.Plugins.Required)
 		if hookErr != nil {
 			slog.WarnContext(ctx, "analysis plugins failed; continuing with built-in findings only", "error", hookErr)
+			// A required detector that fails silently is the worst outcome for
+			// a security scanner: the build stays green precisely because the
+			// check that would have failed it never ran.
+			degradations.Add(degrade.Plugin,
+				fmt.Sprintf("required analysis plugins %v did not run: %v", cfg.Plugins.Required, hookErr),
+				"findings these plugins would have produced are missing from this scan")
 		}
 		if out != nil {
 			for i := range out.Findings {
@@ -480,6 +494,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			}
 			pluginEnrichments = out.Enrichments
 			pluginGraphs = out.Graphs
+			for _, d := range out.Degradations {
+				degradations.Add(d.Kind, d.Detail, d.Impact)
+			}
 		}
 	}
 
@@ -491,6 +508,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		postResult := &ScanResult{Findings: allFindings, Inventory: inventory, AIInventory: aiInventory}
 		if hookErr := PostScanPluginHook(ctx, postResult, target, cfg.Plugins.Required); hookErr != nil {
 			slog.WarnContext(ctx, "post-scan plugins failed; continuing with findings so far", "error", hookErr)
+			// Post-scan plugins annotate rather than detect — reachability
+			// classification, most importantly. Their failure leaves findings
+			// present but stripped of the signal operators triage on, which
+			// looks like a normal scan.
+			degradations.Add(degrade.Plugin,
+				fmt.Sprintf("post-scan plugins %v did not run: %v", cfg.Plugins.Required, hookErr),
+				"findings are missing enrichment such as reachability classification; triage priority is unreliable")
 		}
 		pluginEnrichments = append(pluginEnrichments, postResult.Enrichments...)
 	}
@@ -1077,6 +1101,19 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 		}
 
 		suppressions := suppress.ScanForSuppressions(content, filePath)
+
+		// A waiver whose expiry date will not parse is not applied — see
+		// Suppression.InvalidExpiry. Say so, or the operator sees an
+		// unexplained finding they believe they waived.
+		for i := range suppressions {
+			if suppressions[i].InvalidExpiry == "" {
+				continue
+			}
+			deg.Add(degrade.Suppression,
+				fmt.Sprintf("%s:%d has an unparseable expiry date %q (expected YYYY-MM-DD)",
+					filePath, suppressions[i].Line, suppressions[i].InvalidExpiry),
+				"this waiver was NOT applied and its findings are reported; fix the date to restore it")
+		}
 		if len(suppressions) == 0 {
 			continue
 		}
