@@ -350,8 +350,62 @@ func (ex *goExtractor) hoistWithinCalls(u *unitDraft, e ast.Expr, line int) {
 			call.Args[i] = &ast.Ident{NamePos: arg.Pos(), Name: tmp}
 			continue
 		}
+		// F1: a source-ACCESSOR call used directly as an argument
+		// (exec.Command(r.FormValue("c"))). A pure selector chain that reads an
+		// attribute (r.Body) is hoisted above; a source that is a METHOD CALL with a
+		// fixed key (r.FormValue("c"), r.Header.Get("X")) needs the call itself
+		// hoisted so the engine's source resolution — which taints a VARIABLE on
+		// assignment from a source — sees it. Restricted to a pure-selector callee
+		// with literal-only arguments so it targets the request-accessor source
+		// shape, never an arbitrary transform (a non-source accessor hoisted to a
+		// temp is simply never tainted and changes nothing).
+		if acc, ok := accessorSourceCall(arg); ok {
+			tmp := ex.newTemp()
+			ex.emitSyntheticSourceCall(u, tmp, acc, line)
+			call.Args[i] = &ast.Ident{NamePos: arg.Pos(), Name: tmp}
+			continue
+		}
 		ex.hoistWithinCalls(u, arg, line)
 	}
+}
+
+// accessorSourceCall reports whether e is a source-accessor call safe to hoist
+// into a synthetic source assignment: a CallExpr whose callee is a pure selector
+// chain of at least two segments (r.FormValue, r.Header.Get) and whose arguments
+// are all literals (a fixed key/index, never a variable). This is the exact shape
+// of a request accessor source; a call taking a variable is a transform and is
+// left for ordinary read-propagation.
+func accessorSourceCall(e ast.Expr) (*ast.CallExpr, bool) {
+	call, ok := e.(*ast.CallExpr)
+	if !ok {
+		return nil, false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || !isPureSelector(sel) {
+		return nil, false
+	}
+	if !strings.Contains(selectorChain(sel), ".") {
+		return nil, false
+	}
+	for _, a := range call.Args {
+		if _, isLit := a.(*ast.BasicLit); !isLit {
+			return nil, false
+		}
+	}
+	return call, true
+}
+
+// emitSyntheticSourceCall appends a synthetic assignment `tmp = <accessor call>`
+// carrying the call so the engine's source resolution (which consults st.calls)
+// taints tmp when the accessor is a catalog source.
+func (ex *goExtractor) emitSyntheticSourceCall(u *unitDraft, tmp string, call *ast.CallExpr, line int) {
+	st := stmtDraft{line: line, assigns: tmp, sinkArgs: map[string]sinkArgDraft{}}
+	ex.collectExprs(&st, []ast.Expr{call})
+	finalizeStmt(&st)
+	if stmtIsEmpty(&st) {
+		return
+	}
+	u.stmts = append(u.stmts, st)
 }
 
 // emitSyntheticSource appends a synthetic assignment `tmp = <chain>` carrying the

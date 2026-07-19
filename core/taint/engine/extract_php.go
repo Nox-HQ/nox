@@ -33,20 +33,23 @@ func extractPHP(lines []logicalLine) []unitDraft {
 			u := &unitDraft{funcName: name, params: params}
 			units = append(units, u)
 			cur = u
-			// A header line may also carry a body statement after `{` on the same
-			// logical line; the recognizer below still runs on the remainder is not
-			// attempted here (headers are their own line in practice). Continue.
+			// F4: a header line may carry the body on the SAME line with the brace on
+			// the header — `function run($c){ system($c); }`. The multi-line form
+			// (brace-on-header, body on following lines) is handled by the ordinary
+			// loop, but a same-line body was previously discarded (stmts=0). Recognize
+			// those inline statements into the new unit; if the body is complete on the
+			// line (a matching close brace), the function ends here, so reset the
+			// current scope to the module for the statements that follow.
+			body, complete := phpInlineBody(ll)
+			for i := range body {
+				phpRecognizeInto(u, body[i])
+			}
+			if complete {
+				cur = module
+			}
 			continue
 		}
-		if st, ok := phpReturnStatement(ll); ok {
-			promotePHPSuperglobals(&st)
-			cur.stmts = append(cur.stmts, st)
-			continue
-		}
-		if st, ok := recognizeStatement(langPHP, ll); ok {
-			promotePHPSuperglobals(&st)
-			cur.stmts = append(cur.stmts, st)
-		}
+		phpRecognizeInto(cur, ll)
 	}
 
 	out := make([]unitDraft, 0, len(units))
@@ -54,6 +57,56 @@ func extractPHP(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// phpRecognizeInto recognizes one normalized PHP logical line into unit u,
+// applying the return-statement special case and superglobal promotion. Empty and
+// structural lines are skipped. Shared by the top-level loop and inline-body
+// extraction so both paths recognize statements identically.
+func phpRecognizeInto(u *unitDraft, ll logicalLine) {
+	code := strings.TrimSpace(ll.code)
+	if code == "" || isPHPStructuralLine(code) {
+		return
+	}
+	if st, ok := phpReturnStatement(ll); ok {
+		promotePHPSuperglobals(&st)
+		u.stmts = append(u.stmts, st)
+		return
+	}
+	if st, ok := recognizeStatement(langPHP, ll); ok {
+		promotePHPSuperglobals(&st)
+		u.stmts = append(u.stmts, st)
+	}
+}
+
+// phpInlineBody extracts the statements written on the SAME line as a function
+// header (`function run($c){ system($c); }`) and reports whether the body is
+// complete on that line (a matching close brace present). It slices the body out
+// between the header's opening brace and the trailing close brace, keeping the
+// code and raw views aligned, and splits it on top-level semicolons into logical
+// lines. A header with no brace on the line, or a brace-at-end with no body,
+// yields no statements — the ordinary multi-line loop handles those.
+func phpInlineBody(ll logicalLine) (body []logicalLine, complete bool) {
+	openIdx := strings.IndexByte(ll.code, '{')
+	if openIdx < 0 {
+		return nil, false
+	}
+	closeIdx := strings.LastIndexByte(ll.code, '}')
+	complete = closeIdx > openIdx
+	end := len(ll.code)
+	if complete {
+		end = closeIdx
+	}
+	start := openIdx + 1
+	if start >= end {
+		return nil, complete
+	}
+	bodyCode := ll.code[start:end]
+	bodyRaw := bodyCode
+	if len(ll.raw) == len(ll.code) {
+		bodyRaw = ll.raw[start:end]
+	}
+	return splitSemicolons([]logicalLine{{line: ll.line, code: bodyCode, raw: bodyRaw}}), complete
 }
 
 // phpSuperglobals is the set of PHP superglobals that are untrusted-input
@@ -103,14 +156,48 @@ func normalizePHPLine(ll logicalLine) logicalLine {
 	}
 }
 
-// normalizePHPExpr applies the three PHP→shared-recognizer rewrites to one text
-// view. The transforms are byte-for-byte identical on the code and raw views so
+// normalizePHPExpr applies the PHP→shared-recognizer rewrites to one text view.
+// The transforms are byte-for-byte length-preserving on the code and raw views so
 // applying it to both keeps them aligned.
+//
+// ORDER MATTERS: the concat rewrite runs BEFORE `->`→`.`. In PHP source a bare
+// `.` is ALWAYS string concatenation (object member access is `->`, static is
+// `::`), so at this point every non-decimal `.` is a concat operator. Rewriting
+// it to `+` FIRST — while member accesses are still `->` — keeps the two meanings
+// distinct: after `->`→`.`, a `.` unambiguously marks a member chain (pdo.query)
+// the recognizer treats as an attribute tail, and a concatenated tainted operand
+// (`'ls '.$id`) is a `+`-separated read the recognizer captures as a variable.
 func normalizePHPExpr(s string) string {
 	s = rewriteEchoPrint(s)
+	s = rewritePHPConcat(s)
 	s = strings.ReplaceAll(s, "->", ".")
 	s = strings.ReplaceAll(s, "$", "")
 	return s
+}
+
+// rewritePHPConcat replaces the PHP string-concatenation operator `.` with `+`
+// (a neutral binary operator the shared recognizer already understands), so a
+// tainted operand concatenated WITHOUT surrounding spaces — `system('ls '.$id)`
+// — is captured as a variable read instead of being mistaken for a member-access
+// attribute tail (`.id`) and skipped (F3). It is length-preserving (a single-byte
+// substitution) so the code and raw views stay byte-aligned, and it runs before
+// `->`→`.` so a genuine member access is never affected. A decimal point in a
+// numeric literal (`1.5`) is left untouched (digit on both sides); a real
+// concat's operands are strings/identifiers, never two digits.
+func rewritePHPConcat(s string) string {
+	b := []byte(s)
+	for i := 0; i < len(b); i++ {
+		if b[i] != '.' {
+			continue
+		}
+		prevDigit := i > 0 && b[i-1] >= '0' && b[i-1] <= '9'
+		nextDigit := i+1 < len(b) && b[i+1] >= '0' && b[i+1] <= '9'
+		if prevDigit && nextDigit {
+			continue // decimal point inside a number, not a concat operator
+		}
+		b[i] = '+'
+	}
+	return string(b)
 }
 
 // rewriteEchoPrint turns a leading `echo <expr>` / `print <expr>` construct
