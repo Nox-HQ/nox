@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The plugin registry moved to its own repository**,
+  [Nox-HQ/registry](https://github.com/nox-hq/registry). The index, the sync
+  tool and the marketplace builder left core, which was cataloguing seven other
+  repositories: it needed a GitHub token, knew every plugin's release cadence,
+  and failed CI when an unrelated repository published. Plugin availability was
+  also coupled to core's default branch, since the index was served from
+  `raw.githubusercontent.com/nox-hq/nox/main/...`.
+
+  nox now only *consumes* the published index over HTTP.
+
+  **Existing installs migrate automatically.** The old URL is written into
+  `~/.nox/state.json`, and bootstrap only adds a default source when none
+  exists — so the dead URL would otherwise have persisted and 404ed on every
+  search and install. nox now detects it, rewrites it, and says so on stderr.
+  A source you have deliberately re-pointed is left alone.
+
 ### Added
 
 - **`CRYPTO-001`** — broken cryptographic primitives (MD5, SHA-1, DES, RC4)
