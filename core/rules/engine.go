@@ -68,7 +68,8 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 		for _, mr := range results {
 			// Precision filters: drop matches in comments or defensive
 			// contexts when the rule opts in. Lines are computed lazily.
-			if rule.IgnoreInComments || len(rule.ExcludeContextKeywords) > 0 {
+			if rule.IgnoreInComments || len(rule.ExcludeContextKeywords) > 0 ||
+				len(rule.RequireContextKeywords) > 0 {
 				if lines == nil {
 					lines = splitLines(content)
 				}
@@ -77,6 +78,12 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				}
 				if len(rule.ExcludeContextKeywords) > 0 &&
 					contextHasKeyword(lines, mr.Line, contextWindow, rule.ExcludeContextKeywords) {
+					continue
+				}
+				// Positive context requirement: the vendor name must be near
+				// the match, not merely somewhere in the file.
+				if len(rule.RequireContextKeywords) > 0 &&
+					!contextHasKeyword(lines, mr.Line, contextWindow, rule.RequireContextKeywords) {
 					continue
 				}
 			}
