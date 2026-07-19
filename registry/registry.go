@@ -103,6 +103,15 @@ type PluginEntry struct {
 	Maintainers []string `json:"maintainers,omitempty"`
 	License     string   `json:"license,omitempty"`
 	Repository  string   `json:"repository,omitempty"`
+
+	// Deprecated marks a plugin as superseded. It is advisory only:
+	// deprecated plugins stay resolvable and installable so existing
+	// users keep working, and nox limits itself to warning.
+	Deprecated bool `json:"deprecated,omitempty"`
+	// DeprecationNote explains what to migrate to. Registry authors
+	// should name the replacement plugin here — it is the only place
+	// the CLI has to point operators at.
+	DeprecationNote string `json:"deprecation_note,omitempty"`
 }
 
 // VersionEntry describes a specific version of a plugin.

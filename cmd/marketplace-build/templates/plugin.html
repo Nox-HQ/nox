@@ -24,6 +24,9 @@
 
     <p style="color:#8a92a3;margin-top:32px"><a href="{{$.BaseURL}}/">← All plugins</a></p>
     <h1>{{.Name}}</h1>
+    {{if .Deprecated}}
+    <p class="deprecation-notice"><strong>Deprecated.</strong> {{if .DeprecationNote}}{{.DeprecationNote}}{{else}}This plugin is no longer maintained.{{end}} Existing installs keep working.</p>
+    {{end}}
     <p class="lede">{{.Description}}</p>
 
     <div class="meta">

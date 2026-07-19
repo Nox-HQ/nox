@@ -1674,7 +1674,7 @@
           "changelog_url": "https://github.com/nox-hq/nox-plugin-remediate/blob/main/CHANGELOG.md"
         }
       ],
-      "track": "remediation",
+      "track": "agent-assistance",
       "maintainers": [
         "nox-hq"
       ],

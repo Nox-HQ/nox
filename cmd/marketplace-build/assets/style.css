@@ -123,6 +123,29 @@ nav a { color: var(--muted); }
 .tag { background: rgba(125,109,255,0.08); color: var(--accent); }
 .risk { color: #1a1a1a; font-weight: 500; }
 
+/* Deprecated plugins stay listed and installable, so they are dimmed
+   rather than hidden — operators still need to find their docs. */
+.card.deprecated { opacity: 0.62; }
+.card.deprecated:hover { opacity: 1; }
+.deprecated-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(255,138,0,0.16);
+  color: #ff8a00;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.deprecation-notice {
+  border-left: 3px solid #ff8a00;
+  background: rgba(255,138,0,0.08);
+  padding: 12px 16px;
+  border-radius: 0 6px 6px 0;
+  margin: 12px 0 24px;
+  font-size: 15px;
+}
+
 /* ---------- detail page ---------- */
 .detail h1 { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 28px; margin-bottom: 4px; }
 .detail .lede { color: var(--muted); font-size: 18px; margin-bottom: 32px; }

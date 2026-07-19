@@ -40,9 +40,10 @@ nox plugin install nox/ai-eval</code></pre>
   <section class="grid">
   {{range .Plugins}}
     {{$v := firstVersion .}}
-    <a class="card" data-track="{{.Track}}" href="{{$.BaseURL}}/plugins/{{slug .Name}}.html">
+    <a class="card{{if .Deprecated}} deprecated{{end}}" data-track="{{.Track}}" href="{{$.BaseURL}}/plugins/{{slug .Name}}.html">
       <header>
         <h2>{{.Name}}</h2>
+        {{if .Deprecated}}<span class="deprecated-badge">deprecated</span>{{end}}
         {{if .Track}}<span class="track">{{trackName .Track}}</span>{{end}}
       </header>
       <p>{{.Description}}</p>

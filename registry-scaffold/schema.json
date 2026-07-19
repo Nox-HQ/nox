@@ -31,6 +31,8 @@
               "developer-experience", "agent-assistance"
             ]
           },
+          "deprecated": { "type": "boolean" },
+          "deprecation_note": { "type": "string" },
           "tags": { "type": "array", "items": { "type": "string" } },
           "maintainers": { "type": "array", "items": { "type": "string" } },
           "license": { "type": "string" },

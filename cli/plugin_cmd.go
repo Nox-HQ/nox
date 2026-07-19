@@ -11,9 +11,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
-	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/registry/oci"
 	"github.com/nox-hq/nox/registry/trust"
 )
@@ -184,10 +184,49 @@ func runPluginSearch(args []string) int {
 		if track == "" {
 			track = "-"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, p.Description, latest)
+		desc := p.Description
+		if p.Deprecated {
+			desc = "[DEPRECATED] " + desc
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, track, desc, latest)
 	}
 	_ = w.Flush()
+
+	// Migration guidance goes to stderr so the table above stays
+	// pipeable, while operators still see where to go next.
+	for i := range results {
+		warnIfDeprecated(&results[i])
+	}
 	return 0
+}
+
+// warnIfDeprecated prints a migration notice for a deprecated plugin.
+// It is purely advisory — no caller treats it as a failure.
+func warnIfDeprecated(p *registry.PluginEntry) {
+	if p == nil || !p.Deprecated {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "warning: %s is deprecated\n", p.Name)
+	if p.DeprecationNote != "" {
+		fmt.Fprintf(os.Stderr, "  %s\n", p.DeprecationNote)
+	}
+}
+
+// lookupPluginEntry returns the registry entry exactly matching name,
+// or nil when no registry carries it. Search is index-backed and
+// cached, so callers that already resolved a version pay little for
+// the extra lookup.
+func lookupPluginEntry(ctx context.Context, client *registry.Client, name string) *registry.PluginEntry {
+	results, err := client.Search(ctx, name)
+	if err != nil {
+		return nil
+	}
+	for i := range results {
+		if results[i].Name == name {
+			return &results[i]
+		}
+	}
+	return nil
 }
 
 // runPluginInfo shows detailed information about a plugin.
@@ -212,21 +251,7 @@ func runPluginInfo(args []string) int {
 	client := newRegistryClient(st)
 	ctx := context.Background()
 
-	results, err := client.Search(ctx, name)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: searching registries: %v\n", err)
-		return 2
-	}
-
-	// Find exact match.
-	var found *registry.PluginEntry
-	for i := range results {
-		if results[i].Name == name {
-			found = &results[i]
-			break
-		}
-	}
-
+	found := lookupPluginEntry(ctx, client, name)
 	if found == nil {
 		fmt.Fprintf(os.Stderr, "Plugin %q not found in registries.\n", name)
 		return 2
@@ -234,6 +259,13 @@ func runPluginInfo(args []string) int {
 
 	fmt.Printf("Name:        %s\n", found.Name)
 	fmt.Printf("Description: %s\n", found.Description)
+	if found.Deprecated {
+		note := found.DeprecationNote
+		if note == "" {
+			note = "No replacement recorded."
+		}
+		fmt.Printf("Status:      DEPRECATED — %s\n", note)
+	}
 	if found.Track != "" {
 		fmt.Printf("Track:       %s\n", found.Track)
 	}
@@ -327,6 +359,11 @@ func runPluginInstall(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: resolving %s@%s: %v\n", name, constraint, err)
 		return 2
 	}
+
+	// Warn before downloading anything, but never block: operators
+	// with a deprecated plugin already in their pipeline must be able
+	// to reinstall it until they have migrated.
+	warnIfDeprecated(lookupPluginEntry(ctx, client, name))
 
 	// If already installed at the resolved version, skip.
 	if ip := st.FindPlugin(name); ip != nil && ip.Version == ve.Version {
