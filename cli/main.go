@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,19 @@ var (
 )
 
 func main() {
+	// Route slog to stderr at warn level. Nothing configured a handler before,
+	// so every slog.Warn the pipeline emits about degraded checks — including
+	// the OSV degradation warning added specifically to prevent silent failure
+	// — was reaching nobody. NOX_LOG_LEVEL surfaces the rest.
+	level := slog.LevelWarn
+	if lvl := os.Getenv("NOX_LOG_LEVEL"); lvl != "" {
+		var parsed slog.Level
+		if err := parsed.UnmarshalText([]byte(lvl)); err == nil {
+			level = parsed
+		}
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
 	os.Exit(run(os.Args[1:]))
 }
 
@@ -289,11 +303,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		noAutoInstallFlg      bool
 		failOnUnwaivedFlg     bool
 		offlineFlag           bool
+		failOnDegraded        bool
 		sortFlag              string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
-	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "disable incremental scan cache")
+	// Accepted for compatibility with existing scripts, but the scan pipeline
+	// consults no incremental cache — every run is already a full re-scan. The
+	// flag previously set ScanOptions.NoCache, which nothing read.
+	scanFS.BoolVar(&noCacheFlag, "no-cache", false, "no-op: scans are never cached (accepted for compatibility)")
 	scanFS.StringVar(&changedSinceFlag, "changed-since", "", "scan only files changed since the given git ref")
 	var baselineFlag string
 	scanFS.StringVar(&baselineFlag, "baseline", "", "path to the baseline file whose fingerprints mark known findings as suppressed (default: auto-discover .nox/baseline.json, or .nox.yaml policy.baseline_path)")
@@ -301,6 +319,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&trackedOnlyFlag, "tracked-only", false, "scan only git-tracked files (git ls-files); exclude untracked working-tree files and submodule contents")
 	scanFS.BoolVar(&noAutoInstallFlg, "no-auto-install", false, "skip auto-installing plugins listed in .nox.yaml plugins.required")
 	scanFS.BoolVar(&failOnUnwaivedFlg, "fail-on-unwaived", false, "with --vex: only exit non-zero on findings NOT covered by an OpenVEX waiver")
+	// For CI that must treat "could not check" as failure rather than success —
+	// e.g. a runner where OSV is firewalled, or a required plugin is missing.
+	// Without this, an incomplete scan exits 0 exactly like a clean one.
+	scanFS.BoolVar(&failOnDegraded, "fail-on-degraded", false, "exit non-zero if any check could not complete (OSV lookup, plugin, lockfile parse)")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	scanFS.StringVar(&sortFlag, "sort", "deterministic", "findings.json order: 'deterministic' (rule/path/line) or 'priority' (severity, then reachability, then confidence — most actionable first)")
 	var fingerprintVersionFlag string
@@ -402,7 +424,6 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			Offline:            offlineFlag,
 			VEXPath:            vexFlag,
 			TerraformPlanPath:  tfPlanFlag,
-			NoCache:            noCacheFlag,
 			ChangedSince:       changedSinceFlag,
 			NoRespectGitignore: noRespectGitignoreFlg,
 			TrackedOnly:        trackedOnlyFlag,
@@ -477,6 +498,17 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if offlineFlag {
 			fmt.Println("[offline] zero-network guarantee: no OSV, no API, no token, no telemetry (recorded in findings.json meta)")
 		}
+	}
+
+	// Report incomplete checks even under --quiet, and on stderr. A scan that
+	// could not run part of itself must never look like a clean scan: quiet
+	// mode suppresses noise, not a warning that the results are partial.
+	for _, d := range result.Degradations {
+		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
+	}
+	if len(result.Degradations) > 0 && failOnDegraded {
+		fmt.Fprintf(os.Stderr, "error: %d check(s) did not complete and --fail-on-degraded is set\n", len(result.Degradations))
+		return 2
 	}
 
 	// Generate reports.

@@ -9,6 +9,7 @@ package deps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,10 +18,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
+
+// ErrUnsupportedLockfile marks a file whose name matches no known lockfile
+// parser. It is deliberately distinguishable from a parse failure: the former
+// means nox never intended to read the file, the latter means it tried and
+// failed, which leaves a real blind spot worth reporting.
+var ErrUnsupportedLockfile = errors.New("unsupported lockfile type")
 
 // Package represents a single dependency extracted from a lockfile.
 type Package struct {
@@ -160,6 +168,18 @@ type Analyzer struct {
 	httpClient    *http.Client
 	osvEnabled    bool
 	licensePolicy *LicensePolicy
+
+	// degradations collects the checks this analyzer could not complete. It is
+	// optional: a nil collector discards records, so library callers that do
+	// not supply one behave exactly as before.
+	degradations *degrade.Degradations
+}
+
+// WithDegradations gives the analyzer a collector to report incomplete checks
+// to. Without one, a failed OSV lookup or an unparseable lockfile is
+// indistinguishable from a clean result.
+func WithDegradations(d *degrade.Degradations) AnalyzerOption {
+	return func(a *Analyzer) { a.degradations = d }
 }
 
 // NewAnalyzer returns an Analyzer with the default OSV API endpoint.
@@ -274,7 +294,7 @@ func (a *Analyzer) ParseLockfile(path string, content []byte) ([]Package, error)
 	base := filepath.Base(path)
 	parser, ok := supportedLockfiles[base]
 	if !ok {
-		return nil, fmt.Errorf("unsupported lockfile type: %s", base)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedLockfile, base)
 	}
 	return parser(content)
 }
@@ -318,8 +338,16 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			pkgs, err = a.ParseLockfile(art.AbsPath, content)
 		}
 		if err != nil {
-			// Skip lockfiles we cannot parse (e.g. yarn.lock)
-			// rather than failing the entire scan.
+			// A file type we deliberately do not parse (go.sum, yarn.lock) is
+			// not a degradation — nothing was expected of it, and reporting it
+			// would train operators to ignore the degradation output entirely.
+			// A file we DO claim to parse but could not is the real signal:
+			// every package it declares is now absent from CVE matching.
+			if !errors.Is(err, ErrUnsupportedLockfile) {
+				a.degradations.Add(degrade.Lockfile,
+					fmt.Sprintf("%s could not be parsed: %v", art.Path, err),
+					"dependencies declared in this file were not scanned for vulnerabilities")
+			}
 			continue
 		}
 
@@ -483,7 +511,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
-			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs)
+			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs, a.degradations)
 			if err != nil {
 				return nil, nil, fmt.Errorf("querying OSV: %w", err)
 			}
@@ -505,7 +533,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				var domainVulns []Vulnerability
 
 				for _, ov := range osvVulns {
-					sev := mapOSVSeverity(ov.Severity)
+					sev := mapOSVSeverity(ov.Severity, ov.DatabaseSpecific)
 					domainVulns = append(domainVulns, Vulnerability{
 						ID:       ov.ID,
 						Summary:  ov.Summary,

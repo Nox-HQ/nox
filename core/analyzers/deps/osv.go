@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -52,6 +53,16 @@ type osvVuln struct {
 	Aliases  []string      `json:"aliases"`
 	Details  string        `json:"details"`
 	Affected []osvAffected `json:"affected"`
+
+	// DatabaseSpecific carries source-database annotations. GitHub advisories
+	// publish a coarse severity label here, which is the only severity signal
+	// available for records that carry a CVSS v4 vector and nothing else.
+	DatabaseSpecific osvDatabaseSpecific `json:"database_specific"`
+}
+
+// osvDatabaseSpecific holds the subset of source-specific annotations we read.
+type osvDatabaseSpecific struct {
+	Severity string `json:"severity"`
 }
 
 // osvSeverity holds a CVSS or other severity score.
@@ -126,7 +137,7 @@ func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
 //
 // On network errors the function returns an empty map (graceful degradation)
 // rather than failing the scan, honouring Nox's offline-first design.
-func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []Package) (map[int][]osvVuln, error) {
+func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []Package, deg *degrade.Degradations) (map[int][]osvVuln, error) {
 	result := make(map[int][]osvVuln)
 
 	// Only query packages whose ecosystem OSV.dev actually understands. Other
@@ -185,6 +196,9 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 			// result is indistinguishable from "no vulnerabilities found".
 			slog.WarnContext(ctx, "OSV query failed; dependency vulnerabilities may be under-reported",
 				"error", err, "queries", len(queries))
+			deg.Add(degrade.OSV,
+				fmt.Sprintf("vulnerability lookup failed for %d packages: %v", len(queries), err),
+				"dependency vulnerabilities are under-reported; this scan cannot confirm the absence of known CVEs")
 			return result, nil
 		}
 
@@ -195,6 +209,9 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 			// clean scan when the lookup actually failed.
 			slog.WarnContext(ctx, "OSV query returned an error; dependency vulnerabilities may be under-reported",
 				"error", decodeErr, "queries", len(queries))
+			deg.Add(degrade.OSV,
+				fmt.Sprintf("vulnerability lookup failed for %d packages: %v", len(queries), decodeErr),
+				"dependency vulnerabilities are under-reported; this scan cannot confirm the absence of known CVEs")
 			return result, nil
 		}
 
@@ -345,6 +362,15 @@ func fetchVulnDetail(ctx context.Context, client *http.Client, baseURL, id strin
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return osvVuln{}, err
 	}
+
+	// Confirm we got back the record we asked for. Any JSON object decodes into
+	// osvVuln without error, so an intercepting proxy or captive portal
+	// answering 200 with unrelated JSON would otherwise yield a well-formed but
+	// entirely empty advisory — silently blanking a real finding's severity and
+	// fix version, which is exactly the failure hydration exists to prevent.
+	if v.ID != id {
+		return osvVuln{}, fmt.Errorf("OSV vuln lookup for %s returned mismatched record %q", id, v.ID)
+	}
 	return v, nil
 }
 
@@ -362,15 +388,41 @@ func decodeBatchResponse(resp *http.Response) ([]osvBatchResult, error) {
 }
 
 // mapOSVSeverity converts OSV severity entries to a nox Severity.
-// It looks for a CVSS_V3 score first, then falls back to CVSS_V2.
-// If no score is found, it returns SeverityMedium as a conservative default.
-func mapOSVSeverity(sev []osvSeverity) findings.Severity {
+// It looks for a CVSS_V3 score first, then falls back to CVSS_V2, then to the
+// source database's coarse severity label.
+//
+// The label matters because CVSS v4 vectors score by a different and
+// substantially more complex algorithm that cvssToSeverity does not attempt.
+// Without the fallback, an advisory publishing only a v4 vector — an
+// increasingly common case — silently collapsed to medium regardless of how
+// severe it actually was. SeverityMedium now means a genuine "unknown".
+func mapOSVSeverity(sev []osvSeverity, dbSpecific osvDatabaseSpecific) findings.Severity {
 	for _, s := range sev {
 		if s.Type == "CVSS_V3" || s.Type == "CVSS_V2" {
 			return cvssToSeverity(s.Score)
 		}
 	}
+	if s, ok := severityFromLabel(dbSpecific.Severity); ok {
+		return s
+	}
 	return findings.SeverityMedium
+}
+
+// severityFromLabel maps a coarse textual severity label to a nox Severity.
+// GitHub advisories say "MODERATE" where most other sources say "MEDIUM".
+func severityFromLabel(label string) (findings.Severity, bool) {
+	switch strings.ToUpper(strings.TrimSpace(label)) {
+	case "CRITICAL":
+		return findings.SeverityCritical, true
+	case "HIGH":
+		return findings.SeverityHigh, true
+	case "MODERATE", "MEDIUM":
+		return findings.SeverityMedium, true
+	case "LOW":
+		return findings.SeverityLow, true
+	default:
+		return "", false
+	}
 }
 
 // cvssToSeverity converts a CVSS vector string or numeric score to a Severity.
