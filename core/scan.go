@@ -586,14 +586,23 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 
 	// --tracked-only: restrict the walk to git-tracked files by seeding the
 	// allow-list with `git ls-files`. Untracked working-tree files and
-	// submodule contents (gitlinks, not listed) are excluded. Best-effort:
-	// outside a git repo this errors and the full walk proceeds.
+	// submodule contents (gitlinks, not listed) are excluded.
+	//
+	// A git failure here is a hard error, not a fallback. The previous
+	// best-effort skip left the allow-list empty, which the walker treats as
+	// "no restriction" — so --tracked-only silently INVERTED to scanning the
+	// entire working tree, including the untracked and generated files the flag
+	// exists to keep out. An operator using it to bound a CI or pre-commit scan
+	// got the opposite of what they asked for, with no signal. As with --vex and
+	// --terraform-plan, an explicit request that cannot be honoured must fail.
 	if opts.TrackedOnly {
-		if tracked, err := git.TrackedFiles(target); err == nil {
-			walker.IncludePaths = make(map[string]bool, len(tracked))
-			for _, f := range tracked {
-				walker.IncludePaths[f] = true
-			}
+		tracked, err := git.TrackedFiles(target)
+		if err != nil {
+			return nil, fmt.Errorf("--tracked-only requires a git repository: %w", err)
+		}
+		walker.IncludePaths = make(map[string]bool, len(tracked))
+		for _, f := range tracked {
+			walker.IncludePaths[f] = true
 		}
 	}
 

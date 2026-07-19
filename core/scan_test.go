@@ -2469,3 +2469,29 @@ func TestRefineFindings_ContextDowngrade_Disabled(t *testing.T) {
 		t.Error("disabled downgrade must not stamp original_severity")
 	}
 }
+
+// TestScan_TrackedOnlyOutsideRepoIsError guards a silent scope inversion.
+//
+// --tracked-only seeds the walker's allow-list from `git ls-files`. On a git
+// failure the previous code skipped that block, leaving the allow-list empty —
+// which the walker reads as "no restriction", so --tracked-only silently
+// scanned the ENTIRE working tree including the untracked and generated files
+// the flag exists to exclude. An operator got the opposite of what they asked
+// for. It is now a hard error, matching --vex / --terraform-plan.
+func TestScan_TrackedOnlyOutsideRepoIsError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir() // a temp dir is not a git repository
+	if err := os.WriteFile(filepath.Join(dir, "untracked.py"),
+		[]byte("x = 1\n"), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	_, err := RunScanWithOptions(dir, ScanOptions{TrackedOnly: true, Offline: true})
+	if err == nil {
+		t.Fatal("expected an error for --tracked-only outside a git repository, got nil")
+	}
+	if !strings.Contains(err.Error(), "tracked-only") {
+		t.Errorf("expected the error to name --tracked-only, got: %v", err)
+	}
+}

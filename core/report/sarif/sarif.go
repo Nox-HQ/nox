@@ -9,8 +9,10 @@ package sarif
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
@@ -103,6 +105,11 @@ type Result struct {
 	Message      Message           `json:"message"`
 	Locations    []Location        `json:"locations"`
 	Fingerprints map[string]string `json:"fingerprints"`
+	// Properties carries the finding's Metadata — the reachability class, the
+	// vuln class, and the original-severity downgrade audit trail. Without it a
+	// finding downgraded from critical to low showed only "low" in SARIF with
+	// no record of the override. Omitted when the finding has no metadata.
+	Properties map[string]any `json:"properties,omitempty"`
 }
 
 // Location wraps a physical location within a source artifact.
@@ -113,7 +120,10 @@ type Location struct {
 // PhysicalLocation identifies a file and region within that file.
 type PhysicalLocation struct {
 	ArtifactLocation ArtifactLocation `json:"artifactLocation"`
-	Region           Region           `json:"region"`
+	// Region is a pointer so a file-level finding (no line) omits it. An empty
+	// "region": {} object is rejected by strict SARIF validators, which require
+	// a region to carry at least one property.
+	Region *Region `json:"region,omitempty"`
 }
 
 // ArtifactLocation is a URI reference to a source file.
@@ -175,27 +185,26 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			idx = 0
 		}
 
+		phys := PhysicalLocation{
+			ArtifactLocation: ArtifactLocation{URI: encodeURI(f.Location.FilePath)},
+		}
+		if f.Location.StartLine > 0 {
+			phys.Region = &Region{
+				StartLine:   f.Location.StartLine,
+				StartColumn: f.Location.StartColumn,
+				EndLine:     f.Location.EndLine,
+				EndColumn:   f.Location.EndColumn,
+			}
+		}
+
 		result := Result{
-			RuleID:    f.RuleID,
-			RuleIndex: idx,
-			Level:     severityToLevel(f.Severity),
-			Message:   Message{Text: f.Message},
-			Locations: []Location{
-				{
-					PhysicalLocation: PhysicalLocation{
-						ArtifactLocation: ArtifactLocation{URI: f.Location.FilePath},
-						Region: Region{
-							StartLine:   f.Location.StartLine,
-							StartColumn: f.Location.StartColumn,
-							EndLine:     f.Location.EndLine,
-							EndColumn:   f.Location.EndColumn,
-						},
-					},
-				},
-			},
-			Fingerprints: map[string]string{
-				"nox/v1": f.Fingerprint,
-			},
+			RuleID:       f.RuleID,
+			RuleIndex:    idx,
+			Level:        severityToLevel(f.Severity),
+			Message:      Message{Text: f.Message},
+			Locations:    []Location{{PhysicalLocation: phys}},
+			Fingerprints: map[string]string{"nox/v1": f.Fingerprint},
+			Properties:   sarifProperties(f),
 		}
 		results = append(results, result)
 	}
@@ -255,11 +264,59 @@ func severityToLevel(s findings.Severity) string {
 // its index within that array. When the reporter has a RuleSet, the catalog is
 // populated from it. Otherwise the catalog is derived from the unique rule IDs
 // found in the given findings slice.
+// encodeURI turns a scanned file path into a valid SARIF artifact URI. Paths
+// may contain spaces, '#', '?' and other characters that are invalid in a raw
+// URI reference; a bare '#' in particular truncates the path at the fragment.
+// Backslashes from Windows runners are normalised to forward slashes first so
+// the result is a portable relative URI.
+func encodeURI(path string) string {
+	path = strings.ReplaceAll(path, "\\", "/")
+	u := url.URL{Path: path}
+	return u.String()
+}
+
+// sarifProperties projects a finding's metadata into a SARIF property bag,
+// returning nil when there is nothing to carry so the field is omitted.
+func sarifProperties(f findings.Finding) map[string]any {
+	if len(f.Metadata) == 0 {
+		return nil
+	}
+	props := make(map[string]any, len(f.Metadata))
+	for k, v := range f.Metadata {
+		props[k] = v
+	}
+	return props
+}
+
 func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
 	if r.Rules != nil {
-		return r.buildCatalogFromRuleSet()
+		catalog, index = r.buildCatalogFromRuleSet()
+	} else {
+		return r.buildCatalogFromFindings(items)
 	}
-	return r.buildCatalogFromFindings(items)
+
+	// Reconcile against the findings actually present. A finding whose rule is
+	// not in the RuleSet — every plugin finding (taint, reachability) and any
+	// analyzer rule missing from the catalog — would otherwise get RuleIndex 0,
+	// a dangling ruleId pointing at whatever rule sorts first. GitHub Code
+	// Scanning validates this and rejects the whole upload silently. Synthesise
+	// a minimal descriptor for each missing rule ID so the reference resolves.
+	for i := range items {
+		id := items[i].RuleID
+		if _, ok := index[id]; ok || id == "" {
+			continue
+		}
+		index[id] = len(catalog)
+		catalog = append(catalog, ReportingDescriptor{
+			ID:               id,
+			Name:             id,
+			ShortDescription: Message{Text: items[i].Message},
+			DefaultConfiguration: Configuration{
+				Level: severityToLevel(items[i].Severity),
+			},
+		})
+	}
+	return catalog, index
 }
 
 // buildCatalogFromRuleSet creates catalog entries for every rule in the
