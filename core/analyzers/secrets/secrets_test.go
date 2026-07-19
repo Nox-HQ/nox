@@ -652,12 +652,14 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 	}
 }
 
-// TestAllRules_Count verifies we have the expected number of built-in secret rules
-// (160 original regex + 3 entropy + 319 imported = 482).
+// TestAllRules_Count verifies the built-in secret rule count. It dropped from
+// 938 to 932 when six functionally-identical duplicate rules were merged away
+// (see TestNoFunctionallyIdenticalRules): SEC-152, SEC-451, SEC-452, SEC-470,
+// SEC-558 and SEC-673 each restated another rule verbatim.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 938 {
-		t.Fatalf("expected 938 built-in secret rules, got %d", len(rules))
+	if len(rules) != 932 {
+		t.Fatalf("expected 932 built-in secret rules, got %d", len(rules))
 	}
 }
 
