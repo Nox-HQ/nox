@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -60,6 +61,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 				ShellTrue:       a.shellTrue,
 				FirstArgTainted: a.firstArgTainted,
 				PositionalVars:  copyPositional(a.positionalVars),
+				PositionalArgs:  append([]string(nil), a.positionalArgs...),
 			}
 		}
 	}
@@ -212,17 +214,45 @@ func (e *StructuralEngine) forwardPass(
 			if !ok {
 				continue
 			}
-			if !e.sinkArgIsDangerous(st, rawCall, &sink) {
+			info, hasInfo := lookupSinkArg(st, rawCall)
+
+			// F1: a catalog source used DIRECTLY as an argument of this sink in the
+			// same statement — sink(source()) — binds no variable, so ordinary
+			// variable propagation never sees it and no prior assignment ever tainted
+			// anything. Detect such inline sources per positional slot and fold each
+			// into the sink's argument shape as a synthetic tainted operand, so the
+			// gating and class-precise sanitizer clearing below apply uniformly (a
+			// wrapped source like os.system(shlex.quote(source())) stays suppressed).
+			inline := e.inlineSourceOperands(lang, info, st.Line)
+			if len(inline) > 0 {
+				info = withInlineOperands(info, inline)
+				hasInfo = true
+			}
+
+			// Unknown shape (no SinkArgInfo at all) is dangerous — we never suppress
+			// on missing evidence.
+			if hasInfo && !e.sinkArgShapeDangerous(&sink, info) {
 				continue // argument shape makes this call safe (parameterized, no shell)
 			}
-			argVars := e.sinkArgVars(st, rawCall)
+
+			argVars := info.TaintedArgVars
+			if len(argVars) == 0 {
+				argVars = st.Reads
+			}
 			for _, v := range argVars {
 				ti, isTainted := tainted[v]
+				sourceVar := v
+				if !isTainted {
+					if op, isInline := inline[v]; isInline {
+						ti, isTainted = op.info, true
+						sourceVar = "" // an inline source expression has no variable name
+					}
+				}
 				if !isTainted {
 					continue
 				}
 				if ti.cleared[sink.VulnClass] {
-					continue // sanitized for this exact class (prior assignment)
+					continue // sanitized for this exact class (prior assignment / inline wrap)
 				}
 				if inlineCleared[v][sink.VulnClass] {
 					continue // sanitized inline at the sink call
@@ -230,7 +260,7 @@ func (e *StructuralEngine) forwardPass(
 				flows = append(flows, taint.Flow{
 					Source:     ti.src,
 					SourceLine: ti.srcLine,
-					SourceVar:  v,
+					SourceVar:  sourceVar,
 					Sink:       sink,
 					SinkLine:   st.Line,
 					SinkCall:   sink.Call,
@@ -340,29 +370,25 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 		if !ok {
 			continue
 		}
-		for argIdx, slotVars := range info.PositionalVars {
+		for argIdx := range info.PositionalVars {
 			sinks, has := sum.sinksArg[argIdx]
 			if !has {
 				continue
 			}
-			for _, v := range slotVars {
-				ti, isTainted := tainted[v]
-				if !isTainted {
-					continue
-				}
+			for _, op := range e.argOperands(lang, info, argIdx, tainted, st.Line) {
 				for _, as := range sinks {
-					if ti.cleared[as.sink.VulnClass] {
+					if op.ti.cleared[as.sink.VulnClass] {
 						continue // caller already sanitized for this class
 					}
 					if cls := sum.sanitizesClass[argIdx]; cls[as.sink.VulnClass] {
 						continue // helper sanitizes this parameter for this class
 					}
-					via := append(append([]string(nil), ti.via...), sum.name)
+					via := append(append([]string(nil), op.ti.via...), sum.name)
 					via = append(via, as.via...)
 					out = append(out, taint.Flow{
-						Source:     ti.src,
-						SourceLine: ti.srcLine,
-						SourceVar:  v,
+						Source:     op.ti.src,
+						SourceLine: op.ti.srcLine,
+						SourceVar:  op.sourceVar,
 						Sink:       as.sink,
 						SinkLine:   st.Line,
 						SinkCall:   as.sink.Call,
@@ -395,25 +421,21 @@ func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement
 		if !ok {
 			continue
 		}
-		for argIdx, slotVars := range info.PositionalVars {
+		for argIdx := range info.PositionalVars {
 			if !sum.returnsTaintedIf[argIdx] {
 				continue
 			}
-			for _, v := range slotVars {
-				ti, isTainted := tainted[v]
-				if !isTainted {
-					continue
-				}
+			for _, op := range e.argOperands(lang, info, argIdx, tainted, st.Line) {
 				cleared := map[taint.VulnClass]bool{}
-				for c, val := range ti.cleared {
+				for c, val := range op.ti.cleared {
 					cleared[c] = val
 				}
 				for c, val := range sum.sanitizesClass[argIdx] {
 					cleared[c] = val
 				}
-				via := append(append([]string(nil), ti.via...), sum.name)
+				via := append(append([]string(nil), op.ti.via...), sum.name)
 				via = append(via, sum.returnVia[argIdx]...)
-				return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: via}, true
+				return taintInfo{src: op.ti.src, srcLine: op.ti.srcLine, cleared: cleared, via: via}, true
 			}
 		}
 	}
@@ -538,20 +560,230 @@ func (e *StructuralEngine) resolveSink(lang, rawCall string) (taint.Sink, bool) 
 // specific match wins.
 func (e *StructuralEngine) resolveSource(lang string, st *taint.Statement) (taint.Source, bool) {
 	for _, rawCall := range st.Calls {
-		for _, key := range suffixKeys(rawCall) {
-			if s, ok := e.cat.Source(lang, key); ok {
-				return s, true
-			}
+		if s, ok := e.sourceForChain(lang, rawCall); ok {
+			return s, true
 		}
 	}
 	for _, chain := range st.Chains {
-		for _, key := range suffixKeys(chain) {
+		if s, ok := e.sourceForChain(lang, chain); ok {
+			return s, true
+		}
+	}
+	return taint.Source{}, false
+}
+
+// sourceForChain resolves one call/attribute chain to a catalog source, matching
+// both by dotted SUFFIX (to strip a framework/import prefix — flask.request.args
+// → request.args) AND by dotted PREFIX (to strip a trailing member accessor read
+// off an attribute-source — req.query.id → req.query, request.values.get →
+// request.values). This closes F2: the dominant Express `req.query.<param>` /
+// `req.body.<field>` pattern and the Python `request.values.get` /
+// `request.cookies.get` accessors all read a member off a catalog attribute-
+// source, appending a segment the catalog does not (and should not) enumerate.
+//
+// WHY a prefix match is safe: a value derived from any member of an untrusted
+// object is itself untrusted, so once a chain's prefix is a known source the
+// whole chain is tainted. Precision is preserved by requiring a STRIPPED prefix
+// to remain multi-segment (contain a dot): the exact key is honored at any length
+// (bare sources like `input`, `_GET`, `fetch` keep working), but trailing
+// accessors are only peeled back to a still-qualified source (req.query), never
+// down to a single bare token that would swallow every `x.y` member read.
+func (e *StructuralEngine) sourceForChain(lang, chain string) (taint.Source, bool) {
+	for _, key := range suffixKeys(chain) {
+		// Exact suffix (any length) — preserves prior bare-source behavior.
+		if s, ok := e.cat.Source(lang, key); ok {
+			return s, true
+		}
+		// Peel trailing accessor segments off the suffix, stopping before the key
+		// would collapse to a single bare token.
+		for {
+			dot := strings.LastIndexByte(key, '.')
+			if dot < 0 {
+				break
+			}
+			key = key[:dot]
+			if !strings.Contains(key, ".") {
+				break // single bare token: too broad to match a member read against
+			}
 			if s, ok := e.cat.Source(lang, key); ok {
 				return s, true
 			}
 		}
 	}
 	return taint.Source{}, false
+}
+
+// inlineOperand is a catalog source appearing DIRECTLY as a sink argument in one
+// statement — sink(source()) (F1). It carries a synthetic variable name (so the
+// ordinary tainted-variable sink logic can consume it), the positional slot it
+// occupies, whether that slot is an argument VECTOR (a leading `[` first arg is
+// not a tainted command string), and the source's taint state — including any
+// vuln classes a sanitizer wrapping the source at the call site already cleared.
+type inlineOperand struct {
+	name   string
+	slot   int
+	vector bool
+	info   taintInfo
+}
+
+// argOperand is one tainted value reaching a positional argument slot: its taint
+// state and the SourceVar to report in a Flow ("" for an inline source expression
+// that binds no variable).
+type argOperand struct {
+	ti        taintInfo
+	sourceVar string
+}
+
+// argOperands returns every tainted value reaching positional slot argIdx of a
+// call: the tainted VARIABLES in that slot, followed by an inline catalog SOURCE
+// used directly in the slot (F1 composed with the interprocedural pass — a thin
+// handler that calls a helper with req.query.id / $_GET['c'] inline). The inline
+// source carries the sanitizer classes cleared by any sanitizer wrapping it at the
+// call site. Order is deterministic: extractor slot order, then the inline source.
+func (e *StructuralEngine) argOperands(lang string, info taint.SinkArgInfo, argIdx int, tainted map[string]taintInfo, srcLine int) []argOperand {
+	var out []argOperand
+	if argIdx < len(info.PositionalVars) {
+		for _, v := range info.PositionalVars[argIdx] {
+			if ti, ok := tainted[v]; ok {
+				out = append(out, argOperand{ti: ti, sourceVar: v})
+			}
+		}
+	}
+	if argIdx < len(info.PositionalArgs) {
+		if src, cleared, ok := e.scanInlineSource(lang, info.PositionalArgs[argIdx]); ok {
+			out = append(out, argOperand{ti: taintInfo{src: src, srcLine: srcLine, cleared: cleared}, sourceVar: ""})
+		}
+	}
+	return out
+}
+
+// inlineOperandName returns a synthetic, collision-free variable name for the
+// inline source in positional slot i. The NUL prefix cannot appear in any real
+// extracted identifier, so it never shadows a program variable.
+func inlineOperandName(i int) string { return "\x00inline" + strconv.Itoa(i) }
+
+// inlineSourceOperands finds, per positional argument slot of a sink call, a
+// catalog source used directly in that slot (F1: sink(source())). It returns the
+// operands keyed by their synthetic variable name, each carrying the sanitizer
+// classes cleared by any sanitizer wrapping the source at the call site (so a
+// wrapped source — os.system(shlex.quote(source())) — is correctly suppressed).
+// srcLine is the statement's line (source and sink coincide for an inline flow).
+func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgInfo, srcLine int) map[string]inlineOperand {
+	if len(info.PositionalArgs) == 0 {
+		return nil
+	}
+	var out map[string]inlineOperand
+	for slot, argText := range info.PositionalArgs {
+		src, cleared, ok := e.scanInlineSource(lang, argText)
+		if !ok {
+			continue
+		}
+		if out == nil {
+			out = map[string]inlineOperand{}
+		}
+		name := inlineOperandName(slot)
+		out[name] = inlineOperand{
+			name:   name,
+			slot:   slot,
+			vector: strings.HasPrefix(strings.TrimSpace(argText), "["),
+			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared},
+		}
+	}
+	return out
+}
+
+// withInlineOperands returns a copy of info augmented with the inline source
+// operands: their synthetic names are added to TaintedArgVars, and a non-vector
+// source in the first positional slot sets FirstArgTainted (so a gated sink —
+// subprocess/exec/printf/sh — treats the tainted first argument as dangerous just
+// as it would for a tainted variable). TaintedArgVars is re-sorted so the sink
+// loop's first-match choice stays deterministic regardless of map iteration.
+func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
+	out := info
+	out.TaintedArgVars = append([]string(nil), info.TaintedArgVars...)
+	for name, op := range inline {
+		out.TaintedArgVars = append(out.TaintedArgVars, name)
+		if op.slot == 0 && !op.vector {
+			out.FirstArgTainted = true
+		}
+	}
+	sortStrings(out.TaintedArgVars)
+	return out
+}
+
+// scanInlineSource walks an argument expression (code view, literals blanked)
+// outermost-first and returns the first catalog source reachable in it, together
+// with the sanitizer classes cleared on the path from the expression root down to
+// that source. A sanitizer call wrapping the source contributes its classes to
+// the cleared set, so os.system(shlex.quote(source())) is suppressed for command
+// injection while a bare os.system(source()) fires. Precedence mirrors
+// resolveSource: top-level calls (recursed), then attribute chains, then bare
+// identifiers (PHP superglobals). Nesting is respected by recursing only into a
+// call's own arguments, so a source is never matched outside the sanitizer that
+// wraps it.
+func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	for _, c := range topLevelCalls(code) {
+		// The call itself may be a source (request.args.get(...), r.FormValue(...)).
+		if s, ok := e.sourceForChain(lang, c.callee); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+		// Otherwise recurse into the call's arguments; a wrapping sanitizer clears
+		// the inner source's classes.
+		if s, cleared, ok := e.scanInlineSource(lang, c.codeArgs); ok {
+			for _, class := range e.sanitizerClasses(lang, c.callee) {
+				cleared[class] = true
+			}
+			return s, cleared, true
+		}
+	}
+	// Attribute-source used directly (req.query, request.args).
+	for _, ch := range dottedChains(code) {
+		if s, ok := e.sourceForChain(lang, ch); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	// Bare-identifier source (PHP superglobal read: _GET['c']).
+	for _, id := range freeIdentifiers(langPython, code) {
+		if s, ok := e.sourceForChain(lang, id); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	return taint.Source{}, nil, false
+}
+
+// topLevelCalls returns the calls at the OUTERMOST nesting level of code (each
+// with its argument text), skipping over a call's own arguments rather than
+// recursing into them. Unlike extractCalls (which flattens every nested call for
+// sink/sanitizer discovery), this preserves nesting so scanInlineSource can tell
+// a source WRAPPED by a sanitizer from one that is not. Literals are already
+// blanked, so no in-string paren confuses the scan.
+func topLevelCalls(code string) []callChain {
+	var calls []callChain
+	i, n := 0, len(code)
+	for i < n {
+		if !isIdentStart(code[i]) {
+			i++
+			continue
+		}
+		start := i
+		for i < n && (isIdentPart(code[i]) || code[i] == '.') {
+			i++
+		}
+		chain := code[start:i]
+		j := i
+		for j < n && (code[j] == ' ' || code[j] == '\t') {
+			j++
+		}
+		if j >= n || code[j] != '(' {
+			continue // an identifier/attribute read, not a call
+		}
+		codeArgs, end := balancedArgs(code, j)
+		if callee := normalizeCallee(chain); callee != "" {
+			calls = append(calls, callChain{callee: callee, codeArgs: codeArgs, rawArgs: codeArgs})
+		}
+		i = end // jump past the whole call: its args are NOT top-level
+	}
+	return calls
 }
 
 // sanitizerClasses returns every vuln class a call neutralizes (by suffix match).
@@ -570,25 +802,14 @@ func (e *StructuralEngine) sanitizerClasses(lang, rawCall string) []taint.VulnCl
 	return out
 }
 
-// sinkArgVars returns the variables that reach this sink call as arguments. It
-// prefers the precise per-call TaintedArgVars the extractor recorded, falling
-// back to the statement's whole Reads set when none were captured.
-func (e *StructuralEngine) sinkArgVars(st *taint.Statement, rawCall string) []string {
-	if info, ok := lookupSinkArg(st, rawCall); ok && len(info.TaintedArgVars) > 0 {
-		return info.TaintedArgVars
-	}
-	return st.Reads
-}
-
-// sinkArgIsDangerous applies the catalog's per-sink argument notes to decide
-// whether a call site is a live sink given its argument shape. Unknown shape
-// (no SinkArgInfo) is treated as dangerous — we never suppress on missing
-// evidence.
-func (e *StructuralEngine) sinkArgIsDangerous(st *taint.Statement, rawCall string, sink *taint.Sink) bool {
-	info, ok := lookupSinkArg(st, rawCall)
-	if !ok {
-		return true
-	}
+// sinkArgShapeDangerous applies the catalog's per-sink argument notes to decide
+// whether a call site is a live sink given its (possibly inline-source-augmented)
+// argument shape. The caller supplies the SinkArgInfo directly so an inline
+// source used as an argument — sink(source()) — can set FirstArgTainted before
+// this gate runs. A caller with no SinkArgInfo at all treats the sink as
+// dangerous (never suppress on missing evidence); this function is only reached
+// once such info exists.
+func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.SinkArgInfo) bool {
 	switch canonicalSuffix(sink.Call) {
 	case "cursor.execute", "cursor.executemany", "connection.execute",
 		"db.execute", "session.execute", "connection.query", "db.query",

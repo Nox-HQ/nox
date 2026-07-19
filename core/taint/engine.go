@@ -66,6 +66,13 @@ type SinkArgInfo struct {
 	// callee's parameter of the same index. Keyword arguments are excluded (they
 	// have no fixed position). Best-effort; empty when unobserved.
 	PositionalVars [][]string
+	// PositionalArgs lists, per positional argument slot (index-aligned with
+	// PositionalVars), the code-view text of that argument (string/comment
+	// literals blanked). It lets an engine detect a SOURCE used directly as a sink
+	// argument in one statement — sink(source()) — which introduces no tracked
+	// variable and so is invisible to variable-based propagation. Keyword arguments
+	// are excluded. Best-effort; empty when unobserved.
+	PositionalArgs []string
 }
 
 // Unit is a single intraprocedural scope (typically one function body) presented

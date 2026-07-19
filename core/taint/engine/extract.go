@@ -67,6 +67,11 @@ type sinkArgDraft struct {
 	// that slot (index 0 = first positional). Used by the interprocedural pass to
 	// bind a caller argument position to a callee parameter index.
 	positionalVars [][]string
+	// positionalArgs lists, per positional argument slot (index-aligned with
+	// positionalVars), the code-view text of that slot. It lets the engine spot a
+	// SOURCE used directly as a sink argument (sink(source())), which binds no
+	// variable and is otherwise invisible to variable propagation.
+	positionalArgs []string
 }
 
 // extractUnits parses content into unit drafts for the given language. It walks

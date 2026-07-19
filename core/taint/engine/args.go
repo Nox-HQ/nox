@@ -41,6 +41,9 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 		// argument's variables.
 		if !isKeywordArg(p) {
 			info.positionalVars = append(info.positionalVars, append([]string(nil), slotVars...))
+			// Record the slot's code text (literals already blanked) so the engine
+			// can detect a source used directly as this argument — sink(source()).
+			info.positionalArgs = append(info.positionalArgs, p)
 		}
 		for _, id := range slotVars {
 			if _, dup := seen[id]; !dup {
