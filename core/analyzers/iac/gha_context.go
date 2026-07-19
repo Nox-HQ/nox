@@ -27,8 +27,10 @@ var servicesBlockRe = regexp.MustCompile(`(?m)^\s{2,}services:\s*$`)
 var ephemeralTestDBRules = map[string]bool{
 	"IAC-254": true,
 	"IAC-351": true,
+	// SEC-073 is the credential-aware DB connection-string rule. The bare
+	// scheme rule SEC-430 (postgres://) it superseded was retired in the
+	// secrets rebuild, so only SEC-073 remains here.
 	"SEC-073": true,
-	"SEC-430": true,
 }
 
 // permissionConsumers maps a workflow permission rule ID to a set of action
