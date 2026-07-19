@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"regexp"
 	"strconv"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -3750,23 +3751,56 @@ func builtinSecretRules() []*rules.Rule {
 				md["min_entropy"] = strconv.FormatFloat(d.minEntropy, 'f', -1, 64)
 			}
 		}
+
+		// A pattern that is nothing but a character class and a length carries
+		// no anchor of its own, so it matches any run of characters of that
+		// length. Keywords gate at file level only — a cheap pre-filter — which
+		// means one mention of the vendor anywhere in a file turns every
+		// identifier, comment word and JSON value of the right length into a
+		// high-severity credential finding. Measured on nox's own source, that
+		// produced 34 such findings from a single rule and blocked this
+		// repository's PR gate twice.
+		//
+		// Requiring the vendor name NEAR the match reflects how credentials
+		// are actually written (`jenkins_api_token = "..."`) and costs no
+		// recall, unlike an entropy cutoff: real tokens and code identifiers
+		// occupy the same entropy range, so no threshold separates them.
+		var requireContext []string
+		if isAnchorlessPattern(d.pattern) && len(d.keywords) > 0 {
+			requireContext = d.keywords
+		}
+
 		out = append(out, &rules.Rule{
-			ID:          d.id,
-			Version:     "1.0",
-			Description: d.description,
-			Severity:    d.severity,
-			Confidence:  d.confidence,
-			MatcherType: "regex",
-			Pattern:     d.pattern,
-			Keywords:    d.keywords,
-			Tags:        []string{"secrets"},
-			Metadata:    md,
-			Remediation: d.remediation,
-			References:  d.references,
+			ID:                     d.id,
+			Version:                "1.0",
+			Description:            d.description,
+			Severity:               d.severity,
+			Confidence:             d.confidence,
+			MatcherType:            "regex",
+			Pattern:                d.pattern,
+			Keywords:               d.keywords,
+			RequireContextKeywords: requireContext,
+			Tags:                   []string{"secrets"},
+			Metadata:               md,
+			Remediation:            d.remediation,
+			References:             d.references,
 		})
 	}
 	out = append(out, builtinEntropyRules()...)
 	return out
+}
+
+// anchorlessPattern matches a regex that is only a character class plus a
+// length quantifier, optionally word-bounded — `[a-zA-Z0-9]{32}`,
+// `\b[a-f0-9]{40}\b`. Such a pattern contains no literal text tying it to the
+// credential format it claims to detect, so it needs the vendor name nearby to
+// mean anything.
+var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d+)?\}(\\b)?$`)
+
+// isAnchorlessPattern reports whether a rule pattern relies entirely on shape
+// and length, with no literal anchor of its own.
+func isAnchorlessPattern(pattern string) bool {
+	return anchorlessPattern.MatchString(pattern)
 }
 
 // entropySourceFilePatterns restricts entropy rules to source-like files,

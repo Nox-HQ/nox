@@ -46,6 +46,22 @@ type Rule struct {
 	// defensive contexts — e.g. an SSRF metadata IP that sits in a block/deny
 	// list rather than in a live request.
 	ExcludeContextKeywords []string `yaml:"exclude_context_keywords"`
+	// RequireContextKeywords drops a match UNLESS one of these keywords appears
+	// on or near the matched line (windowed).
+	//
+	// This is the precision control for vendor rules whose pattern carries no
+	// literal anchor of its own — `[a-zA-Z0-9]{32}` and similar. Keywords alone
+	// gate at FILE level, which is only a cheap pre-filter: once any line in a
+	// file mentions the vendor, such a pattern matches every run of characters
+	// of that length anywhere in it, including comments and identifiers.
+	//
+	// Requiring the vendor name near the match reflects how credentials are
+	// actually written — the vendor name and the value sit on the same line —
+	// without resorting to an entropy threshold. Entropy cannot separate the
+	// two cases: measured on real data, a long Go test identifier scored 4.118
+	// while a genuine AWS access key scored 3.684, so any cutoff rejecting the
+	// identifier also rejects the key.
+	RequireContextKeywords []string `yaml:"require_context_keywords"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
