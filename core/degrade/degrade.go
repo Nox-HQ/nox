@@ -35,6 +35,14 @@ const (
 	// Suppression means a file could not be re-read to apply inline
 	// suppression comments, so its findings are reported unsuppressed.
 	Suppression Kind = "suppression"
+
+	// MCP means a file that structurally looks like an MCP client config
+	// (named mcp.json or containing an mcpServers object) could not be parsed,
+	// or an MCP pin store existed but could not be read. Either way an MCP
+	// relational check (shadowing MCP-023/024, rug-pull MCP-015, or the tool
+	// permission matrix) was skipped for that input, so its absence of findings
+	// must not be read as "safe".
+	MCP Kind = "mcp"
 )
 
 // Degradation records that some part of the scan did not run to completion.

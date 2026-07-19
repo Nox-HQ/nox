@@ -225,11 +225,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	dataAnalyzer := data.NewAnalyzer()
 	iacAnalyzer := iac.NewAnalyzer()
-	aiAnalyzer := ai.NewAnalyzer()
 	// degradations collects checks that could not complete. Analyzers write to
 	// it concurrently; it is surfaced on ScanResult so "no findings" can be
 	// distinguished from "did not look".
 	degradations := &degrade.Degradations{}
+	// The AI analyzer surfaces MCP/agent config parse failures hit while building
+	// the tool permission matrix, so a broken config is a visible degradation
+	// rather than a silently-empty (or all-tools-defaulted) matrix.
+	aiAnalyzer := ai.NewAnalyzer(ai.WithDegradations(degradations))
 
 	depsOpts := []deps.AnalyzerOption{deps.WithDegradations(degradations)}
 	if opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled {
@@ -530,6 +533,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 		pluginEnrichments = append(pluginEnrichments, postResult.Enrichments...)
 	}
+
+	// Relational MCP pass: server/tool shadowing (MCP-023/024) and rug-pull
+	// drift (MCP-015) require the full multi-config set, so they run outside the
+	// per-file regex engine — like the agentflow and plugin passes — and merge
+	// in before refinement, so their findings are deduped, suppressed, and
+	// policy-gated like any other. Non-fatal per file.
+	runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,

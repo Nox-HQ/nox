@@ -87,8 +87,16 @@ func New(opts ...Option) *Pinner {
 	return p
 }
 
-// Load reads the pin store from disk, initializing an empty store if absent or
-// corrupted.
+// Load reads the pin store from disk. An absent store is the normal state
+// before the first pin and yields a fresh empty store. A store that EXISTS but
+// cannot be read or parsed is a hard error and leaves the Pinner unloaded.
+//
+// The previous behaviour — silently resetting a corrupt store to empty and
+// returning nil — was the rug-pull attacker's dream: every pinned server would
+// be re-baselined as "first seen", so a tampered MCP server (the exact thing
+// this package exists to catch) would be re-approved with no alert. Corrupting
+// the pin store is trivial (truncate a file) and it turned the tamper alarm
+// off. An existing-but-unreadable store must therefore surface, never reset.
 func (p *Pinner) Load() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -104,9 +112,12 @@ func (p *Pinner) Load() error {
 
 	var s Store
 	if err := json.Unmarshal(data, &s); err != nil {
-		// Corrupted store — start fresh rather than fail the scan.
-		p.store = newStore()
-		return nil
+		// Do NOT reset to empty: that silently disarms rug-pull detection. Fail
+		// so the orchestration layer can turn this into a visible degradation
+		// and the operator can re-approve deliberately (Clear) rather than by
+		// accident. p.store stays nil so a caller that ignores the error cannot
+		// proceed to silently re-baseline.
+		return fmt.Errorf("mcp pin store %s is corrupt and was not reset (re-approve deliberately with Clear): %w", p.storePath(), err)
 	}
 	if s.Pins == nil {
 		s.Pins = make(map[string]Pin)
@@ -120,7 +131,13 @@ func (p *Pinner) Load() error {
 // last pinned. First observations are recorded silently (approval baseline);
 // unchanged definitions produce nothing. On drift, the pin is updated to the
 // new definition so a single change alerts exactly once.
-func (p *Pinner) CheckArtifact(path string, content []byte) []findings.Finding {
+//
+// The error return is non-nil when content that was handed in as an MCP config
+// does not parse. A malformed definition must not be treated as "no servers to
+// pin": that is how a rogue server evades rug-pull detection (break the JSON and
+// nothing is ever pinned, so nothing can ever drift). The caller surfaces the
+// error as a visible degradation.
+func (p *Pinner) CheckArtifact(path string, content []byte) ([]findings.Finding, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -128,9 +145,12 @@ func (p *Pinner) CheckArtifact(path string, content []byte) []findings.Finding {
 		p.store = newStore()
 	}
 
-	servers := extractServerDefs(content)
+	servers, err := extractServerDefs(content)
+	if err != nil {
+		return nil, fmt.Errorf("extracting MCP server definitions from %s: %w", path, err)
+	}
 	if len(servers) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	now := p.nowFunc()
@@ -165,7 +185,7 @@ func (p *Pinner) CheckArtifact(path string, content []byte) []findings.Finding {
 		}
 	}
 
-	return out
+	return out, nil
 }
 
 // Save writes the pin store to disk if dirty, using an atomic temp+rename.
@@ -222,21 +242,26 @@ func newStore() *Store {
 }
 
 // extractServerDefs parses an mcp.json-style file and returns a map of server
-// name to the SHA-256 hash of its canonicalized definition. Returns an empty
-// map for files without a parseable mcpServers object.
-func extractServerDefs(content []byte) map[string]string {
+// name to the SHA-256 hash of its canonicalized definition.
+//
+// A JSON parse failure is returned as an error, not swallowed to an empty map:
+// an empty map means "this file pins nothing", which for rug-pull detection is
+// indistinguishable from "everything is fine". A file handed in for pinning that
+// will not parse is a signal, not a no-op. Valid JSON with no mcpServers object
+// yields an empty map and a nil error (genuinely nothing to pin).
+func extractServerDefs(content []byte) (map[string]string, error) {
 	var config struct {
 		MCPServers map[string]json.RawMessage `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(content, &config); err != nil {
-		return nil
+		return nil, fmt.Errorf("parsing mcp config: %w", err)
 	}
 
 	out := make(map[string]string, len(config.MCPServers))
 	for name, raw := range config.MCPServers {
 		out[name] = canonicalHash(raw)
 	}
-	return out
+	return out, nil
 }
 
 // canonicalHash produces a key-order-independent SHA-256 of a JSON value. It

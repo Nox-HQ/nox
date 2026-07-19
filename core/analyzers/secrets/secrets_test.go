@@ -655,11 +655,15 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // TestAllRules_Count verifies the built-in secret rule count. It dropped from
 // 938 to 932 when six functionally-identical duplicate rules were merged away
 // (see TestNoFunctionallyIdenticalRules): SEC-152, SEC-451, SEC-452, SEC-470,
-// SEC-558 and SEC-673 each restated another rule verbatim.
+// SEC-558 and SEC-673 each restated another rule verbatim. It then dropped from
+// 932 to 913 when the 19 redundant bare-connection-scheme rules were deleted
+// (SEC-356..SEC-370 and SEC-430..SEC-433): they fired on password-less URLs like
+// `redis://localhost`, and the credential-aware DSN rules SEC-073/SEC-074/SEC-076
+// already cover connection strings that carry userinfo credentials.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 932 {
-		t.Fatalf("expected 932 built-in secret rules, got %d", len(rules))
+	if len(rules) != 913 {
+		t.Fatalf("expected 913 built-in secret rules, got %d", len(rules))
 	}
 }
 
