@@ -292,6 +292,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 	var sources []pkgSource
 
+	// Module root of the Go module under scan, used to enumerate the packages
+	// the build actually links so advisories can be scoped by import path.
+	var goModDir string
+
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile {
 			continue
@@ -304,6 +308,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 		var pkgs []Package
 		if filepath.Base(art.AbsPath) == "go.mod" {
+			goModDir = filepath.Dir(art.AbsPath)
 			// Go needs both files: go.mod for the selected versions, go.sum to
 			// recover transitives that module graph pruning left unnamed. A
 			// missing or unreadable go.sum is fine — go.mod alone still resolves.
@@ -483,6 +488,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				return nil, nil, fmt.Errorf("querying OSV: %w", err)
 			}
 
+			// Enumerate the packages this build links, once, so Go advisories
+			// can be scoped to the import paths they actually affect. Best
+			// effort: when it cannot be determined, every finding is reported
+			// exactly as before.
+			var (
+				linkedGoPkgs  map[string]struct{}
+				linkedGoKnown bool
+			)
+			if goModDir != "" {
+				linkedGoPkgs, linkedGoKnown = goImportedPackages(ctx, goModDir)
+			}
+
 			for pkgIdx, osvVulns := range vulnMap {
 				pkg := pkgs[pkgIdx]
 				var domainVulns []Vulnerability
@@ -515,6 +532,26 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						meta["remediation_action"] = "upgrade"
 						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)
 					}
+					// OSV scopes Go advisories to import paths. When the affected
+					// packages are provably not linked, the finding is recorded
+					// but demoted out of gating severity rather than dropped: a
+					// silent disappearance is indistinguishable from a scanner
+					// that simply missed it.
+					message := fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary)
+					if pkg.Ecosystem == "go" {
+						affected := goAffectedImports(&ov, pkg.Name)
+						if reachable, determined := goVulnReachable(affected, linkedGoPkgs, linkedGoKnown); determined {
+							meta["affected_imports"] = strings.Join(affected, ",")
+							if reachable {
+								meta["reachable"] = "true"
+							} else {
+								meta["reachable"] = "false"
+								sev = findings.SeverityInfo
+								message += " (not reachable: the affected package is not linked by this build)"
+							}
+						}
+					}
+
 					fs.Add(findings.Finding{
 						RuleID:     "VULN-001",
 						Severity:   sev,
@@ -523,7 +560,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							FilePath:  lockfilePath,
 							StartLine: 1,
 						},
-						Message:  fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary),
+						Message:  message,
 						Metadata: meta,
 					})
 				}
