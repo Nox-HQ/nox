@@ -202,6 +202,370 @@ func findLine(lineStarts []int, offset int) int {
 	return 0
 }
 
+// AbsenceMatcher implements block-scoped "hardening property absent" detection
+// for IaC rules. See the Rule.Absence* fields for the model. It is the RE2-safe
+// replacement for the negative-lookahead patterns (?!...) that Go's regexp
+// rejected: rather than expressing "resource present but property absent" as a
+// single impossible pattern, it locates each anchor, bounds the anchor's real
+// structural span, and reports the span when the hardening property is missing.
+//
+// It is deterministic: for identical content it always yields the same match
+// set, computed purely from byte offsets and the rule's patterns.
+type AbsenceMatcher struct {
+	mu    sync.Mutex
+	cache map[string]*regexp.Regexp
+}
+
+// NewAbsenceMatcher returns an AbsenceMatcher with an initialised pattern cache.
+func NewAbsenceMatcher() *AbsenceMatcher {
+	return &AbsenceMatcher{cache: make(map[string]*regexp.Regexp)}
+}
+
+// compile returns a compiled regexp for pattern, cached. An empty pattern
+// returns (nil, nil) so callers can treat "unset" distinctly from "invalid".
+func (m *AbsenceMatcher) compile(pattern string) (*regexp.Regexp, error) {
+	if pattern == "" {
+		return nil, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if re, ok := m.cache[pattern]; ok {
+		return re, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("compiling absence pattern %q: %w", pattern, err)
+	}
+	m.cache[pattern] = re
+	return re, nil
+}
+
+// Match reports each AbsenceAnchor occurrence whose span lacks AbsenceProperty
+// (and, when set, contains AbsenceRequire). The returned MatchResult points at
+// the anchor so the finding lands on the resource declaration.
+func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
+	anchorRe, err := m.compile(rule.AbsenceAnchor)
+	if err != nil || anchorRe == nil {
+		return nil
+	}
+	propRe, err := m.compile(rule.AbsenceProperty)
+	if err != nil || propRe == nil {
+		return nil
+	}
+	requireRe, err := m.compile(rule.AbsenceRequire)
+	if err != nil {
+		return nil
+	}
+
+	anchors := anchorRe.FindAllIndex(content, -1)
+	if len(anchors) == 0 {
+		return nil
+	}
+	lineStarts := computeLineStarts(content)
+
+	// File span is global: the property (and any requirement) is evaluated once
+	// over the whole file, and a single deterministic finding is reported at the
+	// first anchor. Used for cross-object rules — e.g. a Deployment whose
+	// companion PodDisruptionBudget is a separate manifest, or a Dockerfile
+	// missing a HEALTHCHECK entirely.
+	if rule.AbsenceSpan == "file" || rule.AbsenceSpan == "" {
+		if propRe.Match(content) {
+			return nil
+		}
+		if requireRe != nil && !requireRe.Match(content) {
+			return nil
+		}
+		return []MatchResult{makeMatchResult(content, lineStarts, anchors[0])}
+	}
+
+	var results []MatchResult
+	seenLine := make(map[int]bool)
+	for _, loc := range anchors {
+		span := absenceSpan(content, loc, rule.AbsenceSpan)
+		if span == nil {
+			continue
+		}
+		if requireRe != nil && !requireRe.Match(span) {
+			continue
+		}
+		if propRe.Match(span) {
+			continue
+		}
+		r := makeMatchResult(content, lineStarts, loc)
+		// Multiple anchors that resolve to the same line (rare) collapse to one
+		// finding, keeping output stable and free of duplicates.
+		if seenLine[r.Line] {
+			continue
+		}
+		seenLine[r.Line] = true
+		results = append(results, r)
+	}
+	return results
+}
+
+// absenceSpan returns the byte slice of content that constitutes the anchor's
+// structural span for the given mode, or nil when no complete span exists.
+func absenceSpan(content []byte, loc []int, mode string) []byte {
+	switch mode {
+	case "line":
+		return lineSpan(content, loc[0])
+	case "line-continued":
+		return lineContinuedSpan(content, loc[0])
+	case "brace-block":
+		return braceBlockFollowing(content, loc[1])
+	case "brace-enclosing":
+		return braceBlockEnclosing(content, loc[0])
+	case "yaml-block":
+		return yamlBlockSpan(content, loc[0])
+	case "yaml-doc":
+		return yamlDocSpan(content, loc[0])
+	default:
+		return nil
+	}
+}
+
+// computeLineStarts returns the byte offset at which each line begins.
+func computeLineStarts(content []byte) []int {
+	lines := bytes.SplitAfter(content, []byte("\n"))
+	lineStarts := make([]int, len(lines))
+	offset := 0
+	for i, line := range lines {
+		lineStarts[i] = offset
+		offset += len(line)
+	}
+	return lineStarts
+}
+
+// makeMatchResult builds a MatchResult for the match at loc, resolving its
+// 1-based line and column from precomputed line starts.
+func makeMatchResult(content []byte, lineStarts, loc []int) MatchResult {
+	line := findLine(lineStarts, loc[0])
+	return MatchResult{
+		Line:      line + 1,
+		Column:    loc[0] - lineStarts[line] + 1,
+		MatchText: string(content[loc[0]:loc[1]]),
+	}
+}
+
+// lineSpan returns the single line (excluding the trailing newline) that
+// contains offset.
+func lineSpan(content []byte, offset int) []byte {
+	start := offset
+	for start > 0 && content[start-1] != '\n' {
+		start--
+	}
+	end := offset
+	for end < len(content) && content[end] != '\n' {
+		end++
+	}
+	return content[start:end]
+}
+
+// lineContinuedSpan returns the logical line at offset, extended across shell
+// line-continuations (a trailing backslash). A Dockerfile RUN whose flags wrap
+// onto following lines is thereby treated as one command, so a hardening flag on
+// a continuation line is not missed — the precise "property outside the window"
+// false positive a single-line span would produce.
+func lineContinuedSpan(content []byte, offset int) []byte {
+	start := offset
+	for start > 0 && content[start-1] != '\n' {
+		start--
+	}
+	end := start
+	for end < len(content) {
+		lineEnd := end
+		for lineEnd < len(content) && content[lineEnd] != '\n' {
+			lineEnd++
+		}
+		trimmed := bytes.TrimRight(content[end:lineEnd], " \t\r")
+		cont := len(trimmed) > 0 && trimmed[len(trimmed)-1] == '\\'
+		if lineEnd < len(content) {
+			end = lineEnd + 1
+		} else {
+			end = lineEnd
+			cont = false
+		}
+		if !cont {
+			break
+		}
+	}
+	return content[start:end]
+}
+
+// matchBrace returns the index of the '}' that closes the '{' at openIdx, or -1
+// if the block is unterminated. Braces are balanced across nesting; braces
+// inside strings are not special-cased, which is adequate for the well-formed
+// IaC configs these rules target.
+func matchBrace(content []byte, openIdx int) int {
+	depth := 0
+	for i := openIdx; i < len(content); i++ {
+		switch content[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// braceBlockFollowing returns the first balanced {...} block beginning at or
+// after `from`, inclusive of both braces. Used for HCL/Terraform where a
+// resource header (`resource "aws_s3_bucket" "b"`) precedes its block.
+func braceBlockFollowing(content []byte, from int) []byte {
+	open := -1
+	for i := from; i < len(content); i++ {
+		if content[i] == '{' {
+			open = i
+			break
+		}
+	}
+	if open < 0 {
+		return nil
+	}
+	closeIdx := matchBrace(content, open)
+	if closeIdx < 0 {
+		return nil
+	}
+	return content[open : closeIdx+1]
+}
+
+// braceBlockEnclosing returns the innermost balanced {...} block whose braces
+// surround pos, inclusive. Used for CloudFormation / ARM JSON where the
+// resource's Type value sits inside the resource object.
+func braceBlockEnclosing(content []byte, pos int) []byte {
+	depth := 0
+	open := -1
+	for i := pos - 1; i >= 0; i-- {
+		switch content[i] {
+		case '}':
+			depth++
+		case '{':
+			if depth == 0 {
+				open = i
+			} else {
+				depth--
+			}
+		}
+		if open >= 0 {
+			break
+		}
+	}
+	if open < 0 {
+		return nil
+	}
+	closeIdx := matchBrace(content, open)
+	if closeIdx < 0 {
+		return nil
+	}
+	return content[open : closeIdx+1]
+}
+
+// lineIndent returns the number of leading space/tab columns on the line that
+// begins at lineStart.
+func lineIndent(content []byte, lineStart int) int {
+	n := 0
+	for i := lineStart; i < len(content) && (content[i] == ' ' || content[i] == '\t'); i++ {
+		n++
+	}
+	return n
+}
+
+// yamlBlockSpan returns the anchor's YAML block: the line containing pos plus
+// every following line indented deeper than it (blank lines are absorbed rather
+// than ending the block). This is the structural extent of the key the anchor
+// sits on — e.g. a `securityContext:` mapping and all of its children.
+func yamlBlockSpan(content []byte, pos int) []byte {
+	start := pos
+	for start > 0 && content[start-1] != '\n' {
+		start--
+	}
+	baseIndent := lineIndent(content, start)
+
+	end := start
+	first := true
+	for end < len(content) {
+		lineEnd := end
+		for lineEnd < len(content) && content[lineEnd] != '\n' {
+			lineEnd++
+		}
+		if !first {
+			trimmed := bytes.TrimSpace(content[end:lineEnd])
+			if len(trimmed) > 0 {
+				ind := lineIndent(content, end)
+				// A block sequence may be indented the SAME as its parent key
+				// (YAML allows `containers:` and its `- name:` items at equal
+				// indentation), so a same-indent line that is a sequence entry
+				// ("-") still belongs to the block. The block ends at the first
+				// line that is shallower, or at the same indent but a sibling
+				// mapping key rather than a sequence entry.
+				isSeqItem := trimmed[0] == '-'
+				if ind < baseIndent || (ind == baseIndent && !isSeqItem) {
+					break
+				}
+			}
+		}
+		first = false
+		if lineEnd < len(content) {
+			end = lineEnd + 1
+		} else {
+			end = lineEnd
+			break
+		}
+	}
+	return content[start:end]
+}
+
+// yamlDocSpan returns the `---`/`...`-delimited YAML document (or the whole file
+// when there are no separators) that contains pos. Used for K8s resources whose
+// companion property may sit anywhere within the same document — e.g. a
+// Deployment and a `securityContext:` nested several levels below its `kind:`.
+func yamlDocSpan(content []byte, pos int) []byte {
+	lines := bytes.SplitAfter(content, []byte("\n"))
+	starts := make([]int, len(lines))
+	offset := 0
+	for i, l := range lines {
+		starts[i] = offset
+		offset += len(l)
+	}
+	isSep := func(i int) bool {
+		t := strings.TrimSpace(string(lines[i]))
+		return t == "---" || t == "..."
+	}
+	posLine := len(lines) - 1
+	for i := range lines {
+		lineEnd := len(content)
+		if i+1 < len(starts) {
+			lineEnd = starts[i+1]
+		}
+		if starts[i] <= pos && pos < lineEnd {
+			posLine = i
+			break
+		}
+	}
+	docStart := 0
+	for i := posLine; i >= 0; i-- {
+		if isSep(i) {
+			docStart = starts[i] + len(lines[i])
+			break
+		}
+	}
+	docEnd := len(content)
+	for i := posLine + 1; i < len(lines); i++ {
+		if isSep(i) {
+			docEnd = starts[i]
+			break
+		}
+	}
+	if docStart > docEnd {
+		return nil
+	}
+	return content[docStart:docEnd]
+}
+
 // stubMatcher is a placeholder for matcher types that are not yet implemented
 // (jsonpath, yamlpath, heuristic). It always returns nil.
 type stubMatcher struct{}
@@ -241,6 +605,7 @@ func (r *MatcherRegistry) Get(matcherType string) Matcher {
 func NewDefaultMatcherRegistry() *MatcherRegistry {
 	r := NewMatcherRegistry()
 	r.Register("regex", NewRegexMatcher())
+	r.Register("absence", NewAbsenceMatcher())
 	r.Register("entropy", &EntropyMatcher{})
 	r.Register("jsonpath", &stubMatcher{})
 	r.Register("yamlpath", &stubMatcher{})
