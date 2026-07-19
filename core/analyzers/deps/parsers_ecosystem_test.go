@@ -433,9 +433,9 @@ func TestParsers_AgainstRealLockfiles(t *testing.T) {
 		ecosystem string
 		minPkgs   int
 	}{
-		{"yarn-v1.lock", parseYarnLock, "npm", 20},
-		{"pnpm-v6.yaml", parsePnpmLock, "npm", 10},
-		{"poetry.lock", parsePoetryLock, "pypi", 5},
+		{"yarn-v1/yarn.lock", parseYarnLock, "npm", 20},
+		{"pnpm-v6/pnpm-lock.yaml", parsePnpmLock, "npm", 10},
+		{"poetry/poetry.lock", parsePoetryLock, "pypi", 5},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			t.Parallel()
