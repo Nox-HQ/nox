@@ -54,6 +54,24 @@ type Meta struct {
 	// re-deriving defaults from config. Omitted from JSON when empty (a scan
 	// run without a profile, e.g. history scans).
 	SASTLanguages map[string]string `json:"sast_languages,omitempty"`
+	// Degradations records checks that did not complete — a failed OSV lookup,
+	// a required plugin that never ran, an unparsed lockfile.
+	//
+	// It belongs in the artifact and not only on stderr, because the consumers
+	// that most need it never see stderr: a CI job reading findings.json, a
+	// dashboard, an MCP client. Without it, an empty findings list is
+	// indistinguishable from a scan that never looked. Omitted when the scan
+	// was complete.
+	Degradations []Degradation `json:"degradations,omitempty"`
+}
+
+// Degradation is a single incomplete check, as recorded in the artifact.
+type Degradation struct {
+	Kind   string `json:"kind"`
+	Detail string `json:"detail"`
+	// Impact states what may be missing from the results, in the operator's
+	// terms. It is the field that answers "should I trust this report?".
+	Impact string `json:"impact"`
 }
 
 // JSONReport is the top-level structure serialized to JSON. It pairs report
@@ -77,6 +95,10 @@ type JSONReporter struct {
 	// recorded verbatim in the report Meta. Set it from ScanResult.SASTProfile
 	// before Generate to make the depth strategy auditable in the artifact.
 	SASTLanguages map[string]string
+	// Degradations are the scan's incomplete checks. Set from
+	// ScanResult.Degradations before Generate so a consumer reading only the
+	// artifact can tell a clean scan from one that could not run.
+	Degradations []Degradation
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -111,6 +133,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			ToolVersion:   r.ToolVersion,
 			Offline:       r.Offline,
 			SASTLanguages: r.SASTLanguages,
+			Degradations:  r.Degradations,
 		},
 		Findings: f,
 	}

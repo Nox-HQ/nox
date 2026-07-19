@@ -24,6 +24,39 @@ import (
 	"github.com/nox-hq/nox/core/rules"
 )
 
+// redundantLockfiles names files that carry no dependency information nox
+// cannot already get from a file it does parse. Only these are exempt from
+// degradation reporting when they go unparsed.
+//
+// go.sum is the sole member: it hashes the whole module graph, while go.mod
+// carries the versions Minimal Version Selection actually chose, so parsing
+// go.mod loses nothing. Do not add a lockfile here merely because nox lacks a
+// parser for it — that is exactly the blind spot this list exists to avoid
+// hiding.
+var redundantLockfiles = map[string]bool{
+	"go.sum": true,
+}
+
+// knownUnparsed names lockfiles nox classifies but cannot yet parse.
+//
+// Unlike redundantLockfiles, these ARE blind spots: a project using one gets no
+// dependency inventory and no vulnerability matching for it. They are listed
+// only so the gap is a recorded, testable decision rather than an accident —
+// each still produces a degradation at scan time, so operators are told. Adding
+// a parser and removing the entry is the fix; the entry is not the fix.
+var knownUnparsed = map[string]string{
+	"yarn.lock":      "no parser yet — yarn v1 and berry use different formats",
+	"poetry.lock":    "no parser yet — TOML with a distinct schema from pyproject",
+	"pnpm-lock.yaml": "no parser yet — YAML with a version-dependent schema",
+}
+
+// isRedundantLockfile reports whether an unparsed lockfile is safe to ignore
+// silently. Only genuine redundancy qualifies — a missing parser does not,
+// because the operator needs to know their dependencies went unscanned.
+func isRedundantLockfile(path string) bool {
+	return redundantLockfiles[filepath.Base(path)]
+}
+
 // ErrUnsupportedLockfile marks a file whose name matches no known lockfile
 // parser. It is deliberately distinguishable from a parse failure: the former
 // means nox never intended to read the file, the latter means it tried and
@@ -338,15 +371,22 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			pkgs, err = a.ParseLockfile(art.AbsPath, content)
 		}
 		if err != nil {
-			// A file type we deliberately do not parse (go.sum, yarn.lock) is
-			// not a degradation — nothing was expected of it, and reporting it
-			// would train operators to ignore the degradation output entirely.
-			// A file we DO claim to parse but could not is the real signal:
-			// every package it declares is now absent from CVE matching.
-			if !errors.Is(err, ErrUnsupportedLockfile) {
+			// Two different situations reach here, and conflating them is how
+			// yarn, pnpm, poetry and gradle projects came to get a silently
+			// empty dependency scan.
+			//
+			// A file whose contents are redundant with one we DO parse (go.sum
+			// against go.mod) is genuinely nothing to report; saying so on every
+			// Go repository would train operators to ignore this channel.
+			//
+			// Anything else — a lockfile nox recognises well enough to classify
+			// but has no parser for, or one that failed to parse — is a real
+			// blind spot. Every dependency it declares is absent from
+			// vulnerability matching, and the operator has no way to know.
+			if !isRedundantLockfile(art.Path) {
 				a.degradations.Add(degrade.Lockfile,
-					fmt.Sprintf("%s could not be parsed: %v", art.Path, err),
-					"dependencies declared in this file were not scanned for vulnerabilities")
+					fmt.Sprintf("%s was not parsed: %v", art.Path, err),
+					"dependencies declared in this file were NOT scanned for vulnerabilities")
 			}
 			continue
 		}
@@ -366,13 +406,22 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
+		// Same class of blind spot as an unparsed lockfile: without the base
+		// image nox has no container inventory and no base-image findings for
+		// this file, and reported success either way.
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
-			continue // best-effort: skip unreadable files
+			a.degradations.Add(degrade.Lockfile,
+				fmt.Sprintf("%s could not be read: %v", art.Path, err),
+				"base images declared in this Dockerfile were NOT inventoried or scanned")
+			continue
 		}
 
 		images, err := ParseDockerfile(content)
 		if err != nil {
+			a.degradations.Add(degrade.Lockfile,
+				fmt.Sprintf("%s could not be parsed: %v", art.Path, err),
+				"base images declared in this Dockerfile were NOT inventoried or scanned")
 			continue
 		}
 
@@ -451,6 +500,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// offline using embedded data.
 	{
 		pkgs := inventory.Packages()
+		// Report any embedded dataset that failed to load. Both checks below
+		// silently return "not malicious" / "not a typosquat" when their data
+		// is missing, so without this a supply-chain scan that never loaded its
+		// attack data is indistinguishable from one that found nothing.
+		for _, failure := range dataLoadFailures() {
+			a.degradations.Add(degrade.VulnData, failure,
+				"malicious-package and typosquatting detection did not run against this dataset")
+		}
+
 		for i, pkg := range pkgs {
 			lockfilePath := ""
 			if i < len(sources) {

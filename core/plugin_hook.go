@@ -14,6 +14,15 @@ type PluginScanOutput struct {
 	Findings    []findings.Finding
 	Enrichments []findings.Enrichment
 	Graphs      []graph.Graph
+
+	// Degradations reports plugins that were required but did not contribute —
+	// not installed, binary missing, failed to register.
+	//
+	// These are not hook errors: the hook succeeds, having run whatever
+	// plugins it could. Without a channel for them, a required security plugin
+	// that was never installed produced a clean scan and a passing gate, which
+	// is the exact failure the degradation mechanism exists to prevent.
+	Degradations []Degradation
 }
 
 // ScanPluginHook runs the analysis plugins listed in a project's .nox.yaml

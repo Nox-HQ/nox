@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-07-19
+
+A post-release review found that three of 1.11.0's own promises did not hold.
+Each had full unit-test coverage of the function involved while the defect sat
+at the call site — the same shape as the bug 1.11.0 was written to fix.
+
+### Fixed
+
+- **Critical dependency advisories reported as `medium`, again.** The CVSS-v4
+  severity fallback added in 1.11.0 never received data: advisory hydration
+  copied summary, aliases and CVSS entries but not the source database's
+  severity label, and `/v1/querybatch` supplies none of those fields. A
+  `CRITICAL` advisory scored `medium`, so critical/high gates did not fire on
+  it. Severity mapping also returned on the first CVSS entry it *saw* rather
+  than the first it could *score*, letting an unscorable CVSS v2 vector
+  override an accurate label.
+
+- **`--fail-on-degraded` could not fire for plugin failures**, despite naming
+  them in its help text. A required plugin that was not installed was silently
+  skipped, so a CI job listing a security plugin, failing to install it, and
+  running with the flag exited 0 with a clean report.
+
+- **yarn, pnpm and poetry projects scanned clean while nothing was read.**
+  1.11.0 exempted unparsed lockfiles from degradation reporting to stop
+  `go.sum` warning on every Go repository; that exemption silently covered
+  three lockfiles nox cannot parse and has no substitute for. Only genuine
+  redundancy is exempt now. A new invariant test fails the build if a lockfile
+  is added to discovery without either a parser or a recorded, reported gap.
+
+- **A suppression with an unparseable expiry became a permanent waiver.**
+  `# nox:ignore SEC-001 -- expires:2026-13-01` (month 13) was accepted, the
+  expiry text stripped from the displayed reason, and the finding hidden
+  forever. The waiver is now not applied, the finding is reported, and the bad
+  date is named. This one is long-standing and failed toward hiding findings.
+
+- **`--fail-on-degraded` discarded every report.** It exited before report
+  generation, so a pipeline that tripped the flag lost `findings.json`, the
+  SARIF and the SBOM — including the findings it had collected. Reports are
+  now written first, and the degraded exit outranks the policy exit code.
+
+- **Silent supply-chain and CVE-variant data failures.** Typosquatting and
+  known-malicious-package detection returned nothing when their embedded
+  datasets failed to load; a whole-database parse failure disabled every
+  `VARIANT-*` rule. All are reported now.
+
+- **Dockerfile read and parse failures** are reported, in the same analyzer
+  that already reported lockfile failures.
+
+### Added
+
+- `findings.json` records incomplete checks under `meta.degradations`. The
+  consumers that most need them — CI jobs, dashboards, MCP clients — never see
+  stderr, and for them an empty findings list was indistinguishable from a scan
+  that never looked.
+
+### Known gaps
+
+`yarn.lock`, `poetry.lock` and `pnpm-lock.yaml` are still not parsed. They are
+now reported as blind spots on every scan that encounters them rather than
+passing silently; parsers are the fix and are not in this release.
+
+
 ## [1.11.0] - 2026-07-19
 
 ### BREAKING CHANGES
@@ -934,7 +996,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/nox-hq/nox/compare/v1.9.2...v1.10.0
 [0.6.0]: https://github.com/nox-hq/nox/compare/v0.5.0...v0.6.0
