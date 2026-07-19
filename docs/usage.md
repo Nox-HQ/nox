@@ -997,7 +997,7 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 
 | Lockfile | Ecosystem |
 |----------|-----------|
-| `go.sum` | Go |
+| `go.mod` (with `go.sum`) | Go |
 | `package-lock.json` | npm |
 | `requirements.txt` | PyPI |
 | `Gemfile.lock` | RubyGems |
@@ -1005,6 +1005,14 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 | `pom.xml` | Maven |
 | `build.gradle`, `build.gradle.kts` | Gradle |
 | `packages.lock.json` | NuGet |
+
+> **Go:** versions come from `go.mod`, which records what Minimal Version
+> Selection actually chose. `go.sum` is not used as the version source — it
+> hashes the entire module graph, including versions the build never selects,
+> so scanning it directly reports vulnerabilities against code that is never
+> compiled. It is consulted only to recover modules that Go 1.17+ module graph
+> pruning omits from `go.mod`, and only for entries with a source hash (a
+> `/go.mod`-only entry means the module's code was never downloaded).
 
 ### AI Inventory
 

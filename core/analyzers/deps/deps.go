@@ -250,7 +250,10 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // supportedLockfiles maps well-known lockfile basenames to their parser
 // functions.
 var supportedLockfiles = map[string]func([]byte) ([]Package, error){
-	"go.sum":             parseGoSum,
+	// Go resolves from go.mod, deliberately NOT go.sum: go.sum hashes the
+	// entire module graph, so it yields versions the build never selects
+	// (~99% false positives in practice). See parseGoMod.
+	"go.mod":             parseGoMod,
 	"package-lock.json":  parsePackageLockJSON,
 	"requirements.txt":   parseRequirementsTxt,
 	"Gemfile.lock":       parseGemfileLock,
@@ -299,7 +302,16 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
 		}
 
-		pkgs, err := a.ParseLockfile(art.AbsPath, content)
+		var pkgs []Package
+		if filepath.Base(art.AbsPath) == "go.mod" {
+			// Go needs both files: go.mod for the selected versions, go.sum to
+			// recover transitives that module graph pruning left unnamed. A
+			// missing or unreadable go.sum is fine — go.mod alone still resolves.
+			goSum, _ := os.ReadFile(filepath.Join(filepath.Dir(art.AbsPath), "go.sum"))
+			pkgs, err = resolveGoPackages(content, goSum)
+		} else {
+			pkgs, err = a.ParseLockfile(art.AbsPath, content)
+		}
 		if err != nil {
 			// Skip lockfiles we cannot parse (e.g. yarn.lock)
 			// rather than failing the entire scan.
