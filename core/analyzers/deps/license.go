@@ -149,24 +149,24 @@ func matchesLicenseList(license string, list []string) bool {
 // name to license string.
 func detectNPMLicenses(basePath string) map[string]string {
 	result := make(map[string]string)
+
+	// Read the root manifest's own license if present. A missing or malformed
+	// root package.json must not stop us: the dependency licences we actually
+	// evaluate live in node_modules, and returning early here meant a project
+	// whose root manifest was absent got no license findings at all.
 	path := filepath.Join(basePath, "package.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return result
-	}
-
-	var pkg struct {
-		Name    string          `json:"name"`
-		License json.RawMessage `json:"license"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return result
-	}
-
-	// The license field can be a string or an object {type: "MIT"}.
-	license := extractJSONLicense(pkg.License)
-	if license != "" && pkg.Name != "" {
-		result[pkg.Name] = license
+	if data, err := os.ReadFile(path); err == nil {
+		var pkg struct {
+			Name    string          `json:"name"`
+			License json.RawMessage `json:"license"`
+		}
+		if err := json.Unmarshal(data, &pkg); err == nil {
+			// The license field can be a string or an object {type: "MIT"}.
+			license := extractJSONLicense(pkg.License)
+			if license != "" && pkg.Name != "" {
+				result[pkg.Name] = license
+			}
+		}
 	}
 
 	// Read license info from node_modules package.json files.

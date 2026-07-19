@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -160,6 +161,18 @@ type Analyzer struct {
 	httpClient    *http.Client
 	osvEnabled    bool
 	licensePolicy *LicensePolicy
+
+	// degradations collects the checks this analyzer could not complete. It is
+	// optional: a nil collector discards records, so library callers that do
+	// not supply one behave exactly as before.
+	degradations *degrade.Degradations
+}
+
+// WithDegradations gives the analyzer a collector to report incomplete checks
+// to. Without one, a failed OSV lookup or an unparseable lockfile is
+// indistinguishable from a clean result.
+func WithDegradations(d *degrade.Degradations) AnalyzerOption {
+	return func(a *Analyzer) { a.degradations = d }
 }
 
 // NewAnalyzer returns an Analyzer with the default OSV API endpoint.
@@ -301,8 +314,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 		pkgs, err := a.ParseLockfile(art.AbsPath, content)
 		if err != nil {
-			// Skip lockfiles we cannot parse (e.g. yarn.lock)
-			// rather than failing the entire scan.
+			// Skip lockfiles we cannot parse (e.g. yarn.lock) rather than
+			// failing the entire scan — but record it, because every package
+			// in this file is now absent from vulnerability matching.
+			a.degradations.Add(degrade.Lockfile,
+				fmt.Sprintf("%s could not be parsed: %v", art.Path, err),
+				"dependencies declared in this file were not scanned for vulnerabilities")
 			continue
 		}
 
@@ -466,7 +483,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
-			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs)
+			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs, a.degradations)
 			if err != nil {
 				return nil, nil, fmt.Errorf("querying OSV: %w", err)
 			}

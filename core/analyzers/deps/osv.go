@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -133,7 +134,7 @@ func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
 //
 // On network errors the function returns an empty map (graceful degradation)
 // rather than failing the scan, honouring Nox's offline-first design.
-func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []Package) (map[int][]osvVuln, error) {
+func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []Package, deg *degrade.Degradations) (map[int][]osvVuln, error) {
 	result := make(map[int][]osvVuln)
 
 	// Only query packages whose ecosystem OSV.dev actually understands. Other
@@ -192,6 +193,9 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 			// result is indistinguishable from "no vulnerabilities found".
 			slog.WarnContext(ctx, "OSV query failed; dependency vulnerabilities may be under-reported",
 				"error", err, "queries", len(queries))
+			deg.Add(degrade.OSV,
+				fmt.Sprintf("vulnerability lookup failed for %d packages: %v", len(queries), err),
+				"dependency vulnerabilities are under-reported; this scan cannot confirm the absence of known CVEs")
 			return result, nil
 		}
 
@@ -202,6 +206,9 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 			// clean scan when the lookup actually failed.
 			slog.WarnContext(ctx, "OSV query returned an error; dependency vulnerabilities may be under-reported",
 				"error", decodeErr, "queries", len(queries))
+			deg.Add(degrade.OSV,
+				fmt.Sprintf("vulnerability lookup failed for %d packages: %v", len(queries), decodeErr),
+				"dependency vulnerabilities are under-reported; this scan cannot confirm the absence of known CVEs")
 			return result, nil
 		}
 
@@ -218,7 +225,7 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 	// via GET /v1/vulns/{id}. Cost scales with vulnerabilities found, not
 	// packages scanned: a 62-package Go module with one affected dependency
 	// costs 7 extra requests.
-	hydrateVulns(ctx, client, baseURL, result)
+	hydrateVulns(ctx, client, baseURL, result, deg)
 
 	return result, nil
 }
@@ -238,7 +245,7 @@ const osvHydrateConcurrency = 8
 //
 // Results are written back deterministically: concurrency affects only fetch
 // order, never the contents or ordering of result.
-func hydrateVulns(ctx context.Context, client *http.Client, baseURL string, result map[int][]osvVuln) {
+func hydrateVulns(ctx context.Context, client *http.Client, baseURL string, result map[int][]osvVuln, deg *degrade.Degradations) {
 	ids := make([]string, 0)
 	seen := make(map[string]bool)
 	for _, vulns := range result {
@@ -282,6 +289,9 @@ func hydrateVulns(ctx context.Context, client *http.Client, baseURL string, resu
 	if failed > 0 {
 		slog.WarnContext(ctx, "some OSV vulnerability details could not be fetched; those findings keep a conservative severity and carry no fix version",
 			"failed", failed, "total", len(ids))
+		deg.Add(degrade.OSV,
+			fmt.Sprintf("%d of %d vulnerability records could not be fetched", failed, len(ids)),
+			"affected findings carry a conservative severity and no fix version; their real severity may be higher")
 	}
 
 	for pkgIdx, vulns := range result {

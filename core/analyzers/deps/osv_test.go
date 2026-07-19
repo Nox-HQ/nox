@@ -111,7 +111,7 @@ func TestQueryOSV_BatchQuery(t *testing.T) {
 		{Name: "lodash", Version: "4.17.20", Ecosystem: "npm"},
 	}
 
-	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestQueryOSV_HydrationFailureKeepsFinding(t *testing.T) {
 
 	pkgs := []Package{{Name: "lodash", Version: "4.17.20", Ecosystem: "npm"}}
 
-	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestQueryOSV_LargeBatch(t *testing.T) {
 		pkgs[i] = Package{Name: "pkg", Version: "1.0.0", Ecosystem: "npm"}
 	}
 
-	_, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	_, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestQueryOSV_NetworkError(t *testing.T) {
 		{Name: "express", Version: "4.17.1", Ecosystem: "npm"},
 	}
 
-	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestQueryOSV_EmptyResponse(t *testing.T) {
 		{Name: "lodash", Version: "4.17.21", Ecosystem: "npm"},
 	}
 
-	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestQueryOSV_Non200Status(t *testing.T) {
 		{Name: "express", Version: "4.17.1", Ecosystem: "npm"},
 	}
 
-	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("expected graceful degradation, got error: %v", err)
 	}
@@ -964,7 +964,7 @@ func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
 		{Name: "esbuild", Version: "0.27.7", Ecosystem: "npm"},
 	}
 
-	got, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	got, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
@@ -999,7 +999,7 @@ func TestQueryOSV_WarnsOnNon200(t *testing.T) {
 	defer slog.SetDefault(prev)
 
 	got, err := queryOSV(context.Background(), srv.Client(), srv.URL,
-		[]Package{{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"}})
+		[]Package{{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"}}, nil)
 	if err != nil {
 		t.Fatalf("queryOSV returned error: %v", err)
 	}
