@@ -85,3 +85,45 @@ func TestGoCatalogSanitizers(t *testing.T) {
 		}
 	}
 }
+
+// Open redirect (TAINT-007, CWE-601) was folded in from nox-plugin-sast's
+// SAST-008 when that plugin was retired. In the catalogue it is taint-gated:
+// the plugin matched `res.redirect(...req.query)` textually, whereas a sink
+// only fires when untrusted input actually reaches it — so a redirect to a
+// constant path is correctly silent.
+func TestCatalog_OpenRedirectSink(t *testing.T) {
+	c := MustDefault()
+	s, ok := c.IsSink("go", "http.Redirect")
+	if !ok {
+		t.Fatal("http.Redirect should be an open-redirect sink")
+	}
+	if s.VulnClass != VulnOpenRedirect {
+		t.Errorf("vuln class = %q, want %q", s.VulnClass, VulnOpenRedirect)
+	}
+	if s.CWE != "CWE-601" {
+		t.Errorf("cwe = %q, want CWE-601", s.CWE)
+	}
+	if s.RuleID != "TAINT-007" {
+		t.Errorf("rule id = %q, want TAINT-007", s.RuleID)
+	}
+}
+
+func TestCatalog_OpenRedirectAcrossLanguages(t *testing.T) {
+	c := MustDefault()
+	for _, tc := range []struct{ lang, call string }{
+		{"python", "redirect"},
+		{"python", "HttpResponseRedirect"},
+		{"javascript", "res.redirect"},
+		{"java", "sendRedirect"},
+		{"ruby", "redirect_to"},
+	} {
+		s, ok := c.IsSink(tc.lang, tc.call)
+		if !ok {
+			t.Errorf("%s/%s should be a sink", tc.lang, tc.call)
+			continue
+		}
+		if s.VulnClass != VulnOpenRedirect {
+			t.Errorf("%s/%s class = %q, want %q", tc.lang, tc.call, s.VulnClass, VulnOpenRedirect)
+		}
+	}
+}
