@@ -103,6 +103,15 @@ type PluginEntry struct {
 	Maintainers []string `json:"maintainers,omitempty"`
 	License     string   `json:"license,omitempty"`
 	Repository  string   `json:"repository,omitempty"`
+
+	// Deprecated marks a plugin that is no longer maintained. Existing installs
+	// keep working — resolution and install are unaffected — but users are told,
+	// so a retired plugin cannot go on being adopted silently.
+	Deprecated bool `json:"deprecated,omitempty"`
+
+	// DeprecationNote explains what supersedes the plugin. It is shown verbatim
+	// on search, info and install, so it should name the replacement.
+	DeprecationNote string `json:"deprecation_note,omitempty"`
 }
 
 // VersionEntry describes a specific version of a plugin.
