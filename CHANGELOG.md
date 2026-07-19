@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.2] - 2026-07-19
+
+### Fixed
+
+- **Some secrets were reported multiple times.** Five vendors had two or three
+  built-in rules that were byte-for-byte the same detection — identical
+  description, identical pattern — so a single credential surfaced as several
+  findings under different rule IDs (a Bugsnag key as three, a Heroku key as
+  two), all with the same description and no way to tell them apart. The
+  redundant rules are merged; where they carried different keywords those are
+  combined into the surviving rule, so no file loses coverage. A before/after
+  scan of a real repository produces an identical finding set. Two tests now
+  prevent duplicate rules from recurring.
+
+
 ## [1.12.1] - 2026-07-19
 
 ### Fixed
@@ -1078,7 +1093,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.2...HEAD
+[1.12.2]: https://github.com/nox-hq/nox/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/nox-hq/nox/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
