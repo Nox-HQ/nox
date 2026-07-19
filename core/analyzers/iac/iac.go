@@ -48,10 +48,6 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
-	// Cache GHA workflow file contents so the post-pass can see the full
-	// file, not just the matched line.
-	ghaContent := map[string][]byte{}
-
 	var collected []findings.Finding
 	for _, artifact := range artifacts {
 		// Honour cancellation between artifacts — see the note in the secrets
@@ -65,10 +61,6 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}
 
-		if isGHAWorkflowPath(artifact.Path) {
-			ghaContent[artifact.Path] = content
-		}
-
 		results, err := a.ScanFile(artifact.Path, content)
 		if err != nil {
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
@@ -77,16 +69,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		collected = append(collected, results...)
 	}
 
-	collected = applyGHAContext(collected, ghaContent)
-
+	// GitHub Actions context downgrades are applied by the scan pipeline across
+	// EVERY analyzer's output (core/scan.go), not just IaC's. Applying them a
+	// second time here was redundant, and — before finding metadata was copied
+	// per-finding — the second pass re-wrote a shared map and contaminated
+	// unrelated findings. The pipeline is the single place they are applied.
 	for i := range collected {
 		fs.Add(collected[i])
 	}
 
 	fs.Deduplicate()
 	return fs, nil
-}
-
-func isGHAWorkflowPath(path string) bool {
-	return len(path) > len(ghaWorkflowsPrefix) && path[:len(ghaWorkflowsPrefix)] == ghaWorkflowsPrefix
 }

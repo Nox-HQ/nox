@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -304,8 +305,17 @@ func extractMCPComponents(path string, content []byte) []Component {
 		}}
 	}
 
-	var components []Component
+	// Sort so the inventory is byte-identical run to run. Map iteration order is
+	// randomized, and ai.inventory.json is a reproducible artifact — leaving the
+	// order to the map violated the project's determinism guarantee.
+	names := make([]string, 0, len(config.MCPServers))
 	for serverName := range config.MCPServers {
+		names = append(names, serverName)
+	}
+	sort.Strings(names)
+
+	var components []Component
+	for _, serverName := range names {
 		components = append(components, Component{
 			Name:    serverName,
 			Type:    "mcp_server",
