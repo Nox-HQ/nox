@@ -83,7 +83,11 @@ type DefaultClassifier struct{}
 
 // lockfileNames contains exact file names that identify lockfiles.
 var lockfileNames = map[string]bool{
-	"package-lock.json":  true,
+	"package-lock.json": true,
+	// go.mod is the Go dependency source (selected versions). go.sum stays
+	// classified so it is kept out of the content rule families, but the deps
+	// analyzer no longer parses it — see deps.parseGoMod.
+	"go.mod":             true,
 	"go.sum":             true,
 	"yarn.lock":          true,
 	"poetry.lock":        true,

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -60,11 +61,23 @@ type osvSeverity struct {
 }
 
 // osvAffected describes packages and version ranges affected by a vuln.
-// We only consume Package and Ranges — the broader OSV schema includes
-// many additional fields not yet used here.
 type osvAffected struct {
-	Package osvPackage `json:"package"`
-	Ranges  []osvRange `json:"ranges"`
+	Package           osvPackage           `json:"package"`
+	Ranges            []osvRange           `json:"ranges"`
+	EcosystemSpecific osvEcosystemSpecific `json:"ecosystem_specific"`
+}
+
+// osvEcosystemSpecific carries per-ecosystem detail. For Go, OSV scopes an
+// advisory to the import paths it actually affects — a module-level match alone
+// overstates exposure (e.g. GO-2026-5932 affects only x/crypto/openpgp, not
+// every consumer of x/crypto).
+type osvEcosystemSpecific struct {
+	Imports []osvImport `json:"imports"`
+}
+
+// osvImport is a single affected import path within a module.
+type osvImport struct {
+	Path string `json:"path"`
 }
 
 // osvRange is a version range with events marking introduction / fix.
@@ -192,7 +205,147 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 		}
 	}
 
+	// /v1/querybatch returns only {id, modified}; fetch the detail that
+	// severity mapping and import-path scoping depend on. Each result slice is
+	// hydrated in place — never reassigned — because map iteration order is
+	// randomised and rebuilding the map from a flattened slice would attribute
+	// vulnerabilities to the wrong packages.
+	var ids []string
+	for _, vs := range result {
+		for _, v := range vs {
+			ids = append(ids, v.ID)
+		}
+	}
+	details := fetchVulnDetails(ctx, client, baseURL, ids)
+	for _, vs := range result {
+		applyVulnDetails(vs, details)
+	}
+
 	return result, nil
+}
+
+// osvHydrateConcurrency bounds in-flight detail lookups so a large dependency
+// tree does not open hundreds of simultaneous connections to OSV.
+const osvHydrateConcurrency = 8
+
+// hydrateVulnDetails fills in the fields /v1/querybatch does not return.
+//
+// The batch endpoint answers only "which advisory IDs match this package", as
+// {id, modified} pairs — no severity, summary or affected ranges. Everything
+// downstream therefore fell back to defaults: every dependency finding was
+// reported at SeverityMedium with an empty summary, regardless of its real
+// CVSS. Since enforcing gates key on high/critical, a critical dependency CVE
+// could never block a build.
+//
+// Each distinct ID is fetched once from /v1/vulns/{id} and the result is copied
+// into every osvVuln sharing it. Hydration is best-effort: on any failure the
+// original entry is left untouched, so a lookup problem degrades severity
+// accuracy but never loses a finding.
+func hydrateVulnDetails(ctx context.Context, client *http.Client, baseURL string, vulns []osvVuln) {
+	ids := make([]string, 0, len(vulns))
+	for _, v := range vulns {
+		ids = append(ids, v.ID)
+	}
+	applyVulnDetails(vulns, fetchVulnDetails(ctx, client, baseURL, ids))
+}
+
+// fetchVulnDetails retrieves advisory detail for each distinct ID, concurrently
+// and at most once per ID. IDs that cannot be fetched are simply absent from
+// the returned map, which callers treat as "leave the finding as it is".
+func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, ids []string) map[string]osvVuln {
+	unique := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if id != "" {
+			unique[id] = struct{}{}
+		}
+	}
+	if len(unique) == 0 {
+		return nil
+	}
+
+	var (
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		failures int
+	)
+	out := make(map[string]osvVuln, len(unique))
+	sem := make(chan struct{}, osvHydrateConcurrency)
+
+	for id := range unique {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			detail, err := fetchVulnDetail(ctx, client, baseURL, id)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failures++
+				return
+			}
+			out[id] = detail
+		}(id)
+	}
+	wg.Wait()
+
+	if failures > 0 {
+		slog.WarnContext(ctx, "OSV detail lookup failed for some advisories; severity may be under-reported",
+			"failed", failures, "total", len(unique))
+	}
+	return out
+}
+
+// applyVulnDetails copies fetched detail onto the matching entries in vulns,
+// in place. Only fields the batch response could not supply are overwritten.
+func applyVulnDetails(vulns []osvVuln, details map[string]osvVuln) {
+	for i := range vulns {
+		detail, ok := details[vulns[i].ID]
+		if !ok {
+			continue
+		}
+		if detail.Summary != "" {
+			vulns[i].Summary = detail.Summary
+		}
+		if detail.Details != "" {
+			vulns[i].Details = detail.Details
+		}
+		if len(detail.Severity) > 0 {
+			vulns[i].Severity = detail.Severity
+		}
+		if len(detail.Aliases) > 0 {
+			vulns[i].Aliases = detail.Aliases
+		}
+		if len(detail.Affected) > 0 {
+			vulns[i].Affected = detail.Affected
+		}
+	}
+}
+
+// fetchVulnDetail retrieves a single advisory from OSV's /v1/vulns/{id}.
+func fetchVulnDetail(ctx context.Context, client *http.Client, baseURL, id string) (osvVuln, error) {
+	url := strings.TrimRight(baseURL, "/") + "/v1/vulns/" + id
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return osvVuln{}, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return osvVuln{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return osvVuln{}, fmt.Errorf("OSV vuln lookup for %s returned status %d", id, resp.StatusCode)
+	}
+
+	var v osvVuln
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return osvVuln{}, err
+	}
+	return v, nil
 }
 
 // decodeBatchResponse reads and decodes an OSV batch response. It returns
@@ -227,11 +380,16 @@ func cvssToSeverity(score string) findings.Severity {
 	// Try parsing as a plain float first (e.g. "9.8").
 	f, err := strconv.ParseFloat(score, 64)
 	if err != nil {
-		// Try extracting the base score from a CVSS vector string.
-		// CVSS vectors look like "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-		// — the score is not embedded in the vector, so we can't parse it.
-		// Fall back to medium.
-		return findings.SeverityMedium
+		// OSV publishes CVSS as a vector string, e.g.
+		// "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H". The base score is not
+		// embedded in it, but it is fully determined by it, so compute it.
+		if base, ok := cvssV3BaseScore(score); ok {
+			f = base
+		} else {
+			// Unrecognised format (e.g. a CVSS v2 or v4 vector): stay
+			// conservative rather than guessing.
+			return findings.SeverityMedium
+		}
 	}
 
 	switch {

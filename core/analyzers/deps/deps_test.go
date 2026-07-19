@@ -250,8 +250,8 @@ func TestParseLockfile_Dispatch(t *testing.T) {
 		ecosystem string
 	}{
 		{
-			filename:  "/project/go.sum",
-			content:   []byte("golang.org/x/text v0.3.7 h1:abc=\n"),
+			filename:  "/project/go.mod",
+			content:   []byte("module example.com/p\n\ngo 1.24\n\nrequire golang.org/x/text v0.3.7\n"),
 			ecosystem: "go",
 		},
 		{
@@ -364,11 +364,11 @@ func TestScanArtifacts(t *testing.T) {
 	// Create a temporary directory with lockfiles.
 	tmpDir := t.TempDir()
 
-	// Write a go.sum file.
-	goSumContent := []byte("golang.org/x/text v0.3.7 h1:abc=\ngolang.org/x/text v0.3.7/go.mod h1:def=\n")
-	goSumPath := filepath.Join(tmpDir, "go.sum")
-	if err := os.WriteFile(goSumPath, goSumContent, 0o644); err != nil {
-		t.Fatalf("writing go.sum: %v", err)
+	// Write a go.mod file (Go deps resolve from go.mod, not go.sum).
+	goModContent := []byte("module example.com/p\n\ngo 1.24\n\nrequire golang.org/x/text v0.3.7\n")
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goModPath, goModContent, 0o644); err != nil {
+		t.Fatalf("writing go.mod: %v", err)
 	}
 
 	// Write a requirements.txt file.
@@ -380,10 +380,10 @@ func TestScanArtifacts(t *testing.T) {
 
 	artifacts := []discovery.Artifact{
 		{
-			Path:    "go.sum",
-			AbsPath: goSumPath,
+			Path:    "go.mod",
+			AbsPath: goModPath,
 			Type:    discovery.Lockfile,
-			Size:    int64(len(goSumContent)),
+			Size:    int64(len(goModContent)),
 		},
 		{
 			Path:    "requirements.txt",
@@ -405,7 +405,7 @@ func TestScanArtifacts(t *testing.T) {
 		t.Fatalf("ScanArtifacts returned error: %v", err)
 	}
 
-	// Should have 3 packages: 1 from go.sum (deduplicated) + 2 from requirements.txt.
+	// Should have 3 packages: 1 from go.mod + 2 from requirements.txt.
 	pkgs := inventory.Packages()
 	if len(pkgs) != 3 {
 		t.Fatalf("expected 3 packages, got %d: %+v", len(pkgs), pkgs)
