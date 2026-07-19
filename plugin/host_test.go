@@ -1489,3 +1489,102 @@ func TestHost_InvokePostScan_RefusalDoesNotKillSiblings(t *testing.T) {
 		t.Error("the plugin was terminated for a tool the host chose to invoke")
 	}
 }
+
+// TestEveryInvocationPathIsGated catches an invocation path that reaches a
+// plugin without passing the policy gate.
+//
+// This is the guard for a real bypass: enforcement was extracted into
+// authorizeTool with a comment saying "any new invocation path must go through
+// here", and InvokeAll — the path `nox scan` actually uses — did not. It
+// re-inlined only some of the checks, so a tool declaring requirements its
+// policy forbids was blocked on one path and admitted on the shipping one.
+//
+// The property is structural, not behavioural, so it is checked structurally:
+// the raw gRPC client may only be reached from a function that is itself gated.
+// A behavioural test would have to guess which path a future author adds.
+func TestEveryInvocationPathIsGated(t *testing.T) {
+	t.Parallel()
+
+	// Functions permitted to call the raw client. Each is small, and each is
+	// reached only after authorizeTool. Adding a name here is a deliberate
+	// assertion that the caller gates first.
+	gatedCallers := map[string]bool{
+		"invokeRequest": true, // plugin.go — callers gate; see InvokePostScan
+		"InvokeTool":    true, // plugin.go — callers gate; see Host.InvokeTool
+	}
+
+	for _, file := range []string{"host.go", "plugin.go"} {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("reading %s: %v", file, err)
+		}
+
+		var current string
+		for i, line := range strings.Split(string(src), "\n") {
+			if strings.HasPrefix(line, "func ") {
+				current = funcName(line)
+			}
+			if !strings.Contains(line, ".client.InvokeTool(") {
+				continue
+			}
+			if !gatedCallers[current] {
+				t.Errorf("%s:%d: %s calls the raw plugin client directly. "+
+					"Every invocation must pass through Host.authorizeTool first — "+
+					"a path that skips it runs plugin tools with no policy, no rate limit "+
+					"and no secret redaction. Route it through the gate, or add it to "+
+					"gatedCallers if its callers gate.", file, i+1, current)
+			}
+		}
+	}
+}
+
+// TestHostInvocationEntryPointsCallAuthorize checks the other direction: every
+// exported Host method that reaches a plugin names the gate.
+func TestHostInvocationEntryPointsCallAuthorize(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile("host.go")
+	if err != nil {
+		t.Fatalf("reading host.go: %v", err)
+	}
+
+	// Exported Host methods that invoke plugin tools.
+	entryPoints := []string{"InvokeTool", "InvokeAll", "InvokePostScan"}
+	text := string(src)
+
+	for _, name := range entryPoints {
+		marker := "func (h *Host) " + name + "("
+		start := strings.Index(text, marker)
+		if start < 0 {
+			t.Errorf("%s no longer exists; update this test's list of entry points", name)
+			continue
+		}
+		end := strings.Index(text[start:], "\n}\n")
+		if end < 0 {
+			end = len(text) - start
+		}
+		body := text[start : start+end]
+
+		if !strings.Contains(body, "authorizeTool") && !strings.Contains(body, "authorizeToolWithoutTermination") {
+			t.Errorf("Host.%s invokes plugin tools without calling the authorization gate", name)
+		}
+		if !strings.Contains(body, "processResponse") {
+			t.Errorf("Host.%s delivers plugin output without calling processResponse, "+
+				"so responses are neither bandwidth-checked nor secret-redacted", name)
+		}
+	}
+}
+
+// funcName extracts the identifier from a Go function declaration line.
+func funcName(line string) string {
+	rest := strings.TrimPrefix(line, "func ")
+	if strings.HasPrefix(rest, "(") {
+		if idx := strings.Index(rest, ") "); idx >= 0 {
+			rest = rest[idx+2:]
+		}
+	}
+	if idx := strings.Index(rest, "("); idx >= 0 {
+		return rest[:idx]
+	}
+	return rest
+}

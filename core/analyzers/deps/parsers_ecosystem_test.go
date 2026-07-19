@@ -1,6 +1,9 @@
 package deps
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -411,5 +414,65 @@ func TestParseYarnLock_CommaInsideRange(t *testing.T) {
 	}
 	if pkgs[0].Name != "foo" {
 		t.Errorf("name = %q, want foo", pkgs[0].Name)
+	}
+}
+
+// TestParsers_AgainstRealLockfiles runs each parser over a lockfile trimmed
+// from a real project rather than written for the test.
+//
+// Every parser bug this suite has caught came from a shape nobody thought to
+// invent: yarn's npm-alias protocol, pnpm's peer suffixes, poetry's nested
+// tables. A fixture the parser's author writes tends to match the parser they
+// wrote. See testdata/lockfiles/SOURCES.md for provenance.
+func TestParsers_AgainstRealLockfiles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		file      string
+		parse     func([]byte) ([]Package, error)
+		ecosystem string
+		minPkgs   int
+	}{
+		{"yarn-v1.lock", parseYarnLock, "npm", 20},
+		{"pnpm-v6.yaml", parsePnpmLock, "npm", 10},
+		{"poetry.lock", parsePoetryLock, "pypi", 5},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(filepath.Join("testdata", "lockfiles", tc.file))
+			if err != nil {
+				t.Fatalf("reading fixture: %v", err)
+			}
+
+			pkgs, err := tc.parse(data)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if len(pkgs) < tc.minPkgs {
+				t.Fatalf("parsed %d packages, expected at least %d — the parser is "+
+					"silently reading almost nothing from a real file", len(pkgs), tc.minPkgs)
+			}
+
+			for _, p := range pkgs {
+				if p.Name == "" {
+					t.Errorf("package with empty name: %+v", p)
+				}
+				if p.Ecosystem != tc.ecosystem {
+					t.Errorf("%s: ecosystem %q, want %q", p.Name, p.Ecosystem, tc.ecosystem)
+				}
+				// A version must be concrete. A range or protocol here means
+				// the descriptor was read instead of the resolution, which
+				// matches no advisory and fails every lookup silently.
+				if p.Version == "" || strings.ContainsAny(p.Version, "^~><*| ") || strings.Contains(p.Version, ":") {
+					t.Errorf("%s has %q, which is not a concrete version", p.Name, p.Version)
+				}
+				// Name corruption from a mishandled separator.
+				if strings.ContainsAny(p.Name, "()") || strings.Contains(p.Name, "npm:") {
+					t.Errorf("%s: name carries range or protocol syntax", p.Name)
+				}
+			}
+			t.Logf("%s -> %d packages", tc.file, len(pkgs))
+		})
 	}
 }
