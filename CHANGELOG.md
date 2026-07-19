@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`CRYPTO-001`** — broken cryptographic primitives (MD5, SHA-1, DES, RC4)
+  across Go, Python, JS/TS and Java (#242).
+- **`TAINT-007`** — open redirect (CWE-601) as a taint-gated sink for Go,
+  Python, JavaScript, Java, PHP and Ruby (#243).
+
+### Removed
+
+- **`nox/sast` is retired** and removed from the plugin registry. Seven of its
+  nine rules duplicated classes core's taint engine already detects (SQLi, XSS,
+  path traversal, command injection, deserialization, SSRF, SSTI) under a
+  second rule-ID namespace, so enabling it reported the same vulnerability
+  twice. Its two additive rules are now in core: weak crypto as `CRYPTO-001`,
+  and open redirect as `TAINT-007` — the latter taint-gated, where the plugin
+  matched a regex against the shape of the code.
+
+  Existing installs keep working; the plugin is simply no longer offered.
+
 ## [1.9.2] - 2026-07-18
 
 ### Changed
