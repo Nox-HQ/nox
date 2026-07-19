@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -92,8 +93,16 @@ func extractMCPToolPermissions(path string, content []byte) []ToolPermissionSet 
 		return nil
 	}
 
+	// Deterministic order — see the note in extractMCPComponents.
+	names := make([]string, 0, len(config.MCPServers))
+	for serverName := range config.MCPServers {
+		names = append(names, serverName)
+	}
+	sort.Strings(names)
+
 	var sets []ToolPermissionSet
-	for serverName, raw := range config.MCPServers {
+	for _, serverName := range names {
+		raw := config.MCPServers[serverName]
 		var serverConfig struct {
 			Command string   `json:"command"`
 			Args    []string `json:"args"`

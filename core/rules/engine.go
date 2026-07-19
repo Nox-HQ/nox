@@ -102,7 +102,13 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				Confidence: rule.Confidence,
 				Location:   loc,
 				Message:    rule.Description,
-				Metadata:   rule.Metadata,
+				// Per-finding copy, never the rule's shared map. Downstream
+				// passes write per-finding keys (GHA context, the
+				// original-severity downgrade trail), and assigning
+				// rule.Metadata directly meant one finding's write mutated the
+				// single shared instance and contaminated every other finding
+				// of the same rule — including findings in unrelated files.
+				Metadata: copyMetadata(rule.Metadata),
 			}
 			// Fingerprint is computed by FindingSet.Add, but we also set it
 			// here so callers who do not use FindingSet still get a stable
@@ -146,6 +152,20 @@ func lineIsComment(lines []string, line1 int) bool {
 		}
 	}
 	return false
+}
+
+// copyMetadata returns a shallow copy of a rule's metadata so each finding owns
+// its own map. Returns nil for an empty source, matching the previous behaviour
+// for rules that carry no metadata.
+func copyMetadata(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
 }
 
 // contextHasKeyword reports whether any keyword appears within ±window lines of
