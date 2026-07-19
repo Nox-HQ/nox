@@ -33,6 +33,40 @@ type Config struct {
 	Budget map[findings.Severity]int `yaml:"budget"`
 }
 
+// Validate rejects a policy configuration whose gate keywords are not
+// recognized values.
+//
+// This exists because an unrecognized fail_on silently DISABLES the gate rather
+// than failing loudly: meetsThreshold returns false for a severity it does not
+// know, so every finding is treated as un-gated and a scan with critical
+// findings exits 0. A capitalized "High", a trailing space, or a typo therefore
+// turns the primary CI gate off with no signal — strictly worse than having no
+// policy at all, because it looks configured. The severity comparison is
+// case-sensitive and lowercase-only, so the value must match exactly.
+func (c Config) Validate() error {
+	if c.FailOn != "" {
+		if _, ok := severityRank[c.FailOn]; !ok {
+			return fmt.Errorf("policy.fail_on: %q is not a valid severity (want one of critical, high, medium, low, info)", c.FailOn)
+		}
+	}
+	if c.WarnOn != "" {
+		if _, ok := severityRank[c.WarnOn]; !ok {
+			return fmt.Errorf("policy.warn_on: %q is not a valid severity (want one of critical, high, medium, low, info)", c.WarnOn)
+		}
+	}
+	switch c.BaselineMode {
+	case "", BaselineModeStrict, BaselineModeWarn, BaselineModeOff:
+	default:
+		return fmt.Errorf("policy.baseline_mode: %q is not valid (want one of strict, warn, off)", c.BaselineMode)
+	}
+	for sev := range c.Budget {
+		if _, ok := severityRank[sev]; !ok {
+			return fmt.Errorf("policy.budget: %q is not a valid severity key (want one of critical, high, medium, low, info)", sev)
+		}
+	}
+	return nil
+}
+
 // Result holds the outcome of a policy evaluation.
 type Result struct {
 	Pass      bool
