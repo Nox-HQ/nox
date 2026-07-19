@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-07-19
+
+### BREAKING CHANGES
+
+- **Post-scan plugin tools are now subject to policy.** `InvokePostScan` called
+  the gRPC client directly and applied no policy at all — no per-tool safety
+  check, no read-only gate, no rate limit, no timeout, no secret redaction.
+  A non-read-only post-scan tool now runs only if the operator opts in with
+  `plugin_policy.max_risk_class: active`.
+
+  This affects `nox/remediate`, whose `apply_code` and `verify_code` tools are
+  declared non-read-only and will be blocked under the default passive policy
+  until opted in. That is the documented behaviour, and blocking a tool that
+  rewrites source until an operator asks for it is the correct default.
+
+- **Plugin fingerprints change value.** The namespace separator moved from `:`
+  to NUL. Anything baselined against a 1.11.x plugin fingerprint needs
+  re-baselining.
+
+### Fixed
+
+- **nox's "never auto-applies fixes" guarantee was bypassable.** A plugin
+  declaring a tool with `requires_scan_context` and `read_only: false` ran it
+  regardless of policy, because the post-scan path applied none. Counting
+  enforcement sites, that path had zero against the normal path's eight. Both
+  now share one authorisation routine, so a future third invocation path
+  cannot quietly skip the checks.
+
+- **Every plugin enrichment and graph was silently discarded.** Secret
+  redaction rebuilds the response and copied findings, packages, AI components
+  and diagnostics — but not enrichments or graphs. Reachability annotations and
+  call graphs never arrived, with no error. The post-scan bypass had been
+  masking this, which is why post-scan enrichments appeared to work and
+  scan-tool ones did not. Graph node properties, file paths and edge labels
+  were being dropped by the same code and are now carried through, with their
+  free text redacted.
+
+- **Plugin fingerprint namespacing was defeated by delimiter injection.**
+  `plugin:<name>:<ruleID>` meant plugin `acme` with rule `sql:injection` and
+  plugin `acme:sql` with rule `injection` collided, letting one plugin suppress
+  another's finding through first-wins deduplication.
+
+### Added
+
+- **yarn, pnpm and poetry lockfiles are parsed.** These ecosystems previously
+  produced an empty dependency inventory; 1.11.1 made that visible, and this
+  closes it. Verified against the live OSV API: a yarn project pinning lodash
+  4.17.15 reports 6 vulnerabilities with severities, fix versions and CVE
+  aliases where it previously reported none.
+
+  Covers yarn v1 and berry, pnpm lockfile v5 and v6+, and poetry's
+  `[[package]]` tables — including the range-versus-resolved-version trap in
+  yarn descriptors and the `[metadata]` table that poetry interleaves between
+  package blocks.
+
+
 ## [1.11.1] - 2026-07-19
 
 A post-release review found that three of 1.11.0's own promises did not hold.
@@ -996,7 +1052,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/nox-hq/nox/compare/v1.9.2...v1.10.0

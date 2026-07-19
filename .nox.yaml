@@ -6,6 +6,12 @@ scan:
     # Intentionally-vulnerable ground-truth samples for `nox bench --precision`
     # (hardcoded secret, eval injection, prompt concat). The precision harness
     # scans this dir explicitly; the default self-scan must not flag them.
+    # Lockfiles vendored from real projects to test the dependency parsers.
+    # They pin real, sometimes vulnerable versions — which nox now parses and
+    # correctly reports. Those are the fixtures' dependencies, not nox's, so
+    # scanning them reports vulnerabilities nox does not have. Same rationale as
+    # the precision corpora below.
+    - "core/analyzers/deps/testdata/lockfiles/"
     - "testdata/precision-corpus/"
     - "testdata/precision-suite/"
     - "testdata/precision-suite-php/"

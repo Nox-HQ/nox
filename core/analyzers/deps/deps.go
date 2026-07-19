@@ -39,16 +39,15 @@ var redundantLockfiles = map[string]bool{
 
 // knownUnparsed names lockfiles nox classifies but cannot yet parse.
 //
-// Unlike redundantLockfiles, these ARE blind spots: a project using one gets no
-// dependency inventory and no vulnerability matching for it. They are listed
-// only so the gap is a recorded, testable decision rather than an accident —
-// each still produces a degradation at scan time, so operators are told. Adding
-// a parser and removing the entry is the fix; the entry is not the fix.
-var knownUnparsed = map[string]string{
-	"yarn.lock":      "no parser yet — yarn v1 and berry use different formats",
-	"poetry.lock":    "no parser yet — TOML with a distinct schema from pyproject",
-	"pnpm-lock.yaml": "no parser yet — YAML with a version-dependent schema",
-}
+// Empty, and meant to stay that way: every lockfile discovery classifies now
+// has a parser. Unlike redundantLockfiles, an entry here is a real blind spot —
+// a project using that ecosystem gets no dependency inventory and no
+// vulnerability matching. Entries are permitted only so the gap is a recorded,
+// testable decision rather than an accident, and each still produces a
+// degradation at scan time so operators are told. Writing a parser and removing
+// the entry is the fix; the entry is not the fix. The coverage invariant is
+// enforced by the deps package tests.
+var knownUnparsed = map[string]string{}
 
 // isRedundantLockfile reports whether an unparsed lockfile is safe to ignore
 // silently. Only genuine redundancy qualifies — a missing parser does not,
@@ -314,6 +313,9 @@ var supportedLockfiles = map[string]func([]byte) ([]Package, error){
 	"pom.xml":            parsePomXML,
 	"build.gradle":       parseBuildGradle,
 	"build.gradle.kts":   parseBuildGradle,
+	"yarn.lock":          parseYarnLock,
+	"pnpm-lock.yaml":     parsePnpmLock,
+	"poetry.lock":        parsePoetryLock,
 	"packages.lock.json": parseNuGetPackagesLock,
 	"composer.lock":      parseComposerLock,
 	"bom.json":           parseCycloneDXContent,

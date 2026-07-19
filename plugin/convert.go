@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"fmt"
+
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -53,7 +55,18 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 // preserves the one legitimate use of the claim: deciding which of a plugin's
 // own findings are "the same" across runs, so they stay baseline-able.
 func pluginFingerprint(pluginName, ruleID, claimed string, f findings.Finding) string {
-	namespaced := "plugin:" + pluginName + ":" + ruleID
+	// Length-prefixed rather than delimited.
+	//
+	// A delimiter is only unambiguous if it cannot appear in the components,
+	// and nothing enforces that here: the plugin name comes from the plugin's
+	// own GetManifest response and the rule ID from the finding it emitted, so
+	// both are attacker-controlled. A colon separator collided outright
+	// ("acme" + "sql:injection" versus "acme:sql" + "injection"), and moving to
+	// NUL only made the same collision require a NUL-bearing name — proto3
+	// strings are UTF-8, which permits NUL. Length prefixes remove the class:
+	// no choice of name or rule ID can produce another pair's encoding.
+	namespaced := fmt.Sprintf("plugin\x00%d:%s\x00%d:%s",
+		len(pluginName), pluginName, len(ruleID), ruleID)
 
 	identity := "msg:" + f.Message
 	if claimed != "" {

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -238,5 +239,56 @@ func TestOSVWire_HydratesEveryOperatorFacingField(t *testing.T) {
 	}
 	if f.Severity != findings.SeverityCritical {
 		t.Errorf("severity did not survive hydration: %s", f.Severity)
+	}
+}
+
+// TestApplyVulnDetails_CopiesEveryField is the structural guard for the bug
+// that shipped twice in this file.
+//
+// /v1/querybatch returns only {id, modified}, so every other field of an
+// advisory reaches nox exclusively through hydration. applyVulnDetails copies
+// field by field, which means a field it forgets is silently empty in
+// production while every unit test — which builds osvVuln structs by hand —
+// keeps passing. That is precisely how database_specific came to be dropped
+// after summary and severity were already being copied.
+//
+// Reflection rather than a hand-written checklist: a checklist in a test fails
+// the same way the implementation does, because the same author forgets in both
+// places.
+func TestApplyVulnDetails_CopiesEveryField(t *testing.T) {
+	t.Parallel()
+
+	detail := osvVuln{
+		ID:               "GHSA-x",
+		Summary:          "a summary",
+		Severity:         []osvSeverity{{Type: "CVSS_V3", Score: "9.8"}},
+		Aliases:          []string{"CVE-2024-0001"},
+		Details:          "long form",
+		Affected:         []osvAffected{{Package: osvPackage{Name: "p", Ecosystem: "npm"}}},
+		DatabaseSpecific: osvDatabaseSpecific{Severity: "CRITICAL"},
+	}
+
+	// Guard the guard: every field of osvVuln must be set in the fixture, or
+	// the completeness check below passes vacuously.
+	dv := reflect.ValueOf(detail)
+	for i := range dv.NumField() {
+		if dv.Field(i).IsZero() {
+			t.Fatalf("this test's fixture leaves osvVuln.%s unset; populate it, then "+
+				"make sure applyVulnDetails copies it",
+				dv.Type().Field(i).Name)
+		}
+	}
+
+	// A stub as querybatch actually returns it: ID and nothing else.
+	vulns := []osvVuln{{ID: "GHSA-x"}}
+	applyVulnDetails(vulns, map[string]osvVuln{"GHSA-x": detail})
+
+	got := reflect.ValueOf(vulns[0])
+	for i := range got.NumField() {
+		if got.Field(i).IsZero() {
+			t.Errorf("osvVuln.%s was present in the hydrated advisory and is empty after "+
+				"applyVulnDetails; it will be empty for every scan in production",
+				got.Type().Field(i).Name)
+		}
 	}
 }

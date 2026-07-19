@@ -211,6 +211,20 @@ func (p *Plugin) InvokeTool(ctx context.Context, toolName string, input map[stri
 	return p.client.InvokeTool(ctx, req)
 }
 
+// invokeRequest sends a pre-built request, applying the same readiness check
+// as InvokeTool. Used by the post-scan path, whose request carries a
+// ScanContext that buildInvokeRequest does not model.
+func (p *Plugin) invokeRequest(ctx context.Context, req *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+	p.mu.Lock()
+	if p.state != StateReady {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("plugin %q not ready (state=%d)", p.info.Name, p.state)
+	}
+	p.mu.Unlock()
+
+	return p.client.InvokeTool(ctx, req)
+}
+
 // fail transitions the plugin to StateFailed. Called by the violation handler
 // before Close to mark the plugin as failed rather than cleanly stopped.
 func (p *Plugin) fail() {
