@@ -2,9 +2,12 @@ package ai
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/degrade"
 )
 
 // Connection represents a connection between AI components.
@@ -31,13 +34,16 @@ type ToolPermissionSet struct {
 	Capabilities map[string][]string `json:"capabilities,omitempty"`
 }
 
-// extractToolPermissions parses MCP and agent configs for tool permission matrices.
-func extractToolPermissions(path string, content []byte) []ToolPermissionSet {
+// extractToolPermissions parses MCP and agent configs for tool permission
+// matrices. deg (may be nil) receives a visible degradation when a file that is
+// structurally an MCP config fails to parse, so a broken config does not quietly
+// contribute an empty matrix.
+func extractToolPermissions(path string, content []byte, deg *degrade.Degradations) []ToolPermissionSet {
 	var sets []ToolPermissionSet
 	fileName := baseName(path)
 
 	if fileName == "mcp.json" {
-		sets = append(sets, extractMCPToolPermissions(path, content)...)
+		sets = append(sets, extractMCPToolPermissions(path, content, deg)...)
 	}
 
 	// Agent config files with tools arrays
@@ -85,11 +91,18 @@ func extractAgentLatticeToolSet(path string, content []byte) *ToolPermissionSet 
 	return set
 }
 
-func extractMCPToolPermissions(path string, content []byte) []ToolPermissionSet {
+func extractMCPToolPermissions(path string, content []byte, deg *degrade.Degradations) []ToolPermissionSet {
 	var config struct {
 		MCPServers map[string]json.RawMessage `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(content, &config); err != nil {
+		// A file named mcp.json that will not parse is not "no tools here" — it
+		// is a config whose tool exposure we could not read. Returning nil made
+		// it indistinguishable from a genuinely toolless config, so a rogue
+		// server with a deliberately-broken definition dropped off the matrix.
+		deg.Add(degrade.MCP,
+			fmt.Sprintf("%s could not be parsed: %v", path, err),
+			"the MCP tool permission matrix was not built for this file; its servers and their tool exposure are absent from the AI inventory")
 		return nil
 	}
 
@@ -107,7 +120,16 @@ func extractMCPToolPermissions(path string, content []byte) []ToolPermissionSet 
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
 		}
-		_ = json.Unmarshal(raw, &serverConfig)
+		// A server entry that does not decode falls through to Tools=["*"]
+		// below (unknown/all tools). That default is the safe direction, but
+		// silently applying it hid the fact that we never actually read the
+		// server's command/args — surface it so "this server exposes everything"
+		// is a reported assumption, not an invisible one.
+		if err := json.Unmarshal(raw, &serverConfig); err != nil {
+			deg.Add(degrade.MCP,
+				fmt.Sprintf("%s: MCP server %q definition could not be parsed: %v", path, serverName, err),
+				"this server was recorded as exposing all tools (*) because its definition could not be read; its real command and tool exposure are unknown")
+		}
 
 		set := ToolPermissionSet{
 			Agent:  "mcp_client",

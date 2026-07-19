@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
@@ -79,18 +80,37 @@ func (inv *Inventory) WriteFile(path string) error {
 // extracts an inventory of AI components.
 type Analyzer struct {
 	engine *rules.Engine
+	// deg collects visible degradations for MCP/agent config parse failures
+	// hit while building the tool permission matrix. A nil collector silently
+	// discards them (see degrade.Degradations), so tests and library callers
+	// that pass no option are unaffected.
+	deg *degrade.Degradations
+}
+
+// Option configures an Analyzer.
+type Option func(*Analyzer)
+
+// WithDegradations wires a degradation collector so config parse failures during
+// tool-matrix extraction are surfaced instead of silently defaulting a server to
+// "all tools". Without it those failures are invisible.
+func WithDegradations(d *degrade.Degradations) Option {
+	return func(a *Analyzer) { a.deg = d }
 }
 
 // NewAnalyzer creates an Analyzer with built-in AI security rules.
-func NewAnalyzer() *Analyzer {
+func NewAnalyzer(opts ...Option) *Analyzer {
 	rs := rules.NewRuleSet()
 	aiRules := builtinAIRules()
 	for _, r := range aiRules {
 		rs.Add(r)
 	}
-	return &Analyzer{
+	a := &Analyzer{
 		engine: rules.NewEngine(rs),
 	}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
 }
 
 // Rules returns the analyzer's RuleSet for catalog aggregation.
@@ -194,7 +214,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 			inv.ModelProvenance = append(inv.ModelProvenance, extractModelReferences(artifact.Path, content)...)
 			inv.PromptTemplates = append(inv.PromptTemplates, extractPromptTemplates(artifact.Path, content)...)
-			inv.ToolMatrix = append(inv.ToolMatrix, extractToolPermissions(artifact.Path, content)...)
+			inv.ToolMatrix = append(inv.ToolMatrix, extractToolPermissions(artifact.Path, content, a.deg)...)
 
 			// Polyglot SDK invocation discovery — captures `client.chat.
 			// completions.create(model="gpt-4o")` style call sites that

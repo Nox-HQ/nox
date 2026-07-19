@@ -35,14 +35,27 @@ type Server struct {
 	Tools   []string
 }
 
-// ParseConfig extracts server definitions from an mcp.json-style config. It
-// returns nil for content without a parseable mcpServers object.
-func ParseConfig(path string, content []byte) []Server {
+// ParseConfig extracts server definitions from an mcp.json-style config.
+//
+// It distinguishes three cases the caller must be able to tell apart, because a
+// security scanner that treats "could not parse" the same as "nothing here" is
+// blind exactly where an attacker wants it to be:
+//
+//   - valid JSON with an mcpServers object => the servers, nil error.
+//   - valid JSON WITHOUT an mcpServers object (some other file) => nil, nil.
+//   - malformed JSON (a trailing comma, truncation) => nil, error. Previously
+//     this silently returned nil, so a rogue config that fails to parse looked
+//     identical to a benign non-MCP file and its shadowing risk was invisible.
+//     The caller surfaces this as a visible degradation.
+func ParseConfig(path string, content []byte) ([]Server, error) {
 	var cfg struct {
 		MCPServers map[string]json.RawMessage `json:"mcpServers"`
 	}
-	if err := json.Unmarshal(content, &cfg); err != nil || len(cfg.MCPServers) == 0 {
-		return nil
+	if err := json.Unmarshal(content, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing MCP config %s: %w", path, err)
+	}
+	if len(cfg.MCPServers) == 0 {
+		return nil, nil
 	}
 
 	names := make([]string, 0, len(cfg.MCPServers))
@@ -61,7 +74,7 @@ func ParseConfig(path string, content []byte) []Server {
 			Tools:   extractToolNames(raw),
 		})
 	}
-	return out
+	return out, nil
 }
 
 // Detect returns MCP-023 and MCP-024 findings for the given set of servers
