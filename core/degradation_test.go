@@ -245,20 +245,23 @@ func TestScan_RedundantLockfileIsNotADegradation(t *testing.T) {
 	}
 }
 
-// TestScan_UnparsedEcosystemIsReported is the regression test for a blind spot
-// this project shipped: yarn, pnpm, poetry and gradle lockfiles are recognised
-// well enough to be classified, but nox has no parser for any of them. They
-// were lumped in with go.sum as "deliberately not parsed", so those projects
-// got zero dependencies, zero vulnerability findings, and no warning at all.
+// TestScan_EveryEcosystemLockfileYieldsDependencies is the end-to-end guarantee
+// for the ecosystems that previously scanned clean while nothing was read.
 //
-// Being unable to parse a lockfile is defensible. Not saying so is not.
-func TestScan_UnparsedEcosystemIsReported(t *testing.T) {
+// It asserts the operator-visible outcome — packages in the inventory — rather
+// than the parser's return value, because the failure was never in a parser: it
+// was that no parser was reached at all.
+func TestScan_EveryEcosystemLockfileYieldsDependencies(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct{ file, content string }{
-		{"yarn.lock", "# yarn lockfile v1\nlodash@4.17.20:\n  version \"4.17.20\"\n"},
-		{"pnpm-lock.yaml", "lockfileVersion: '6.0'\n"},
-		{"poetry.lock", "[[package]]\nname = \"django\"\nversion = \"4.2.1\"\n"},
+	for _, tc := range []struct {
+		file    string
+		content string
+		pkg     string
+	}{
+		{"yarn.lock", "# yarn lockfile v1\n\nlodash@^4.17.0:\n  version \"4.17.20\"\n", "lodash"},
+		{"pnpm-lock.yaml", "lockfileVersion: '6.0'\n\npackages:\n\n  /lodash@4.17.21:\n    dev: false\n", "lodash"},
+		{"poetry.lock", "[[package]]\nname = \"django\"\nversion = \"4.2.1\"\n", "django"},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			t.Parallel()
@@ -272,8 +275,20 @@ func TestScan_UnparsedEcosystemIsReported(t *testing.T) {
 			if err != nil {
 				t.Fatalf("scan failed: %v", err)
 			}
-			if !hasDegradationKind(result, "lockfile_parse") {
-				t.Errorf("%s produced no dependencies and no degradation — a silent blind spot", tc.file)
+
+			var found bool
+			for _, p := range result.Inventory.Packages() {
+				if p.Name == tc.pkg {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s produced no dependencies: %+v", tc.file, result.Inventory.Packages())
+			}
+			// A parsed lockfile is not a blind spot and must not be reported.
+			if hasDegradationKind(result, "lockfile_parse") {
+				t.Errorf("%s parsed successfully but was still reported as degraded: %+v",
+					tc.file, result.Degradations)
 			}
 		})
 	}
