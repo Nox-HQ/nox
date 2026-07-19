@@ -46,6 +46,7 @@ const (
 	VulnSSRF                  VulnClass = "ssrf"                   // CWE-918
 	VulnUnsafeDeserialization VulnClass = "unsafe_deserialization" // CWE-502
 	VulnPromptInjection       VulnClass = "prompt_injection"       // CWE-77 / CWE-200
+	VulnOpenRedirect          VulnClass = "open_redirect"          // CWE-601
 )
 
 // SourceKind describes the provenance of untrusted input. It is informational
