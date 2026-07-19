@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-07-19
+
+### Fixed
+
+- **129 vendor secret rules fired on ordinary code.** Rules whose pattern is
+  only a character class and a length — `[a-zA-Z0-9]{32}` and similar — were
+  gated by keyword at file level, so a single mention of a vendor anywhere in a
+  file turned every run of characters of that length into a high-severity
+  credential finding: comments, identifiers, JSON values. On nox's own source
+  one rule produced 34 such findings, two of which had blocked this project's
+  own PR gate.
+
+  These rules now require the vendor keyword *near* the match, and the matched
+  value to have the entropy and shape of a credential. Neither test alone is
+  enough — a hostname sits right beside its keyword, and a real key can score
+  lower entropy than a long code identifier — so both are applied.
+
+  Measured on nox's own source at `--severity-threshold high`, `SEC-*` findings
+  dropped from 45 to 12 with no loss of recall: the precision suite still scores
+  1.000/1.000, and every one of the 129 rules still detects a credential-grade
+  token of its own shape. A small residual remains on values whose character
+  profile is genuinely ambiguous with a lowercase key (run-together hostnames);
+  it is bounded by a test rather than removed, because the only discriminator
+  that removes it also rejects real keys.
+
+
 ## [1.12.0] - 2026-07-19
 
 ### BREAKING CHANGES
@@ -1052,7 +1078,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.1...HEAD
+[1.12.1]: https://github.com/nox-hq/nox/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
