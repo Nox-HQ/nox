@@ -39,6 +39,14 @@ func decodeJSON(t *testing.T, r *http.Request, v any) {
 
 func TestQueryOSV_BatchQuery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// queryOSV follows each batch result with a /v1/vulns/{id} detail
+		// lookup, since querybatch returns only {id, modified}. These tests
+		// assert batch behaviour, so answer detail lookups with 404 — hydration
+		// fails open and leaves the batch result untouched.
+		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		if r.URL.Path != "/v1/querybatch" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			http.Error(w, "not found", http.StatusNotFound)
@@ -184,6 +192,12 @@ func TestQueryOSV_NetworkError(t *testing.T) {
 
 func TestQueryOSV_EmptyResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
+		// hydration fails open, leaving the batch result as the test expects.
+		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
@@ -298,8 +312,18 @@ func TestMapOSVSeverity(t *testing.T) {
 			expected: findings.SeverityMedium,
 		},
 		{
-			name:     "CVSS vector string (not a number)",
+			// OSV publishes CVSS as a vector string. The base score is fully
+			// determined by the vector, so it is computed rather than defaulted
+			// to medium; this is the canonical 9.8 critical vector.
+			name:     "CVSS v3 vector string",
 			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+			expected: findings.SeverityCritical,
+		},
+		{
+			// v2 vectors use a different formula and are not computed; keep the
+			// conservative default rather than guessing.
+			name:     "CVSS v2 vector string falls back to medium",
+			input:    []osvSeverity{{Type: "CVSS_V2", Score: "AV:N/AC:L/Au:N/C:P/I:P/A:P"}},
 			expected: findings.SeverityMedium,
 		},
 	}
@@ -418,6 +442,12 @@ func TestEcosystemToOSV(t *testing.T) {
 func TestScanArtifacts_WithOSV(t *testing.T) {
 	// Mock OSV server returning a vulnerability for lodash.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
+		// hydration fails open, leaving the batch result as the test expects.
+		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
@@ -574,6 +604,12 @@ func TestScanArtifacts_OSVDisabled(t *testing.T) {
 
 func TestScanArtifacts_VulnerabilityMetadata(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
+		// hydration fails open, leaving the batch result as the test expects.
+		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
@@ -769,6 +805,12 @@ func TestNewAnalyzer_Defaults(t *testing.T) {
 // with a Dockerfile silently lost every real Go/npm/PyPI vulnerability finding.
 func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
+		// hydration fails open, leaving the batch result as the test expects.
+		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
