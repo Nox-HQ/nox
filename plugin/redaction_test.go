@@ -197,3 +197,116 @@ func TestRedactor_EmptyResponse(t *testing.T) {
 		t.Error("empty response should return non-nil")
 	}
 }
+
+// TestRedactResponse_PreservesEnrichmentsAndGraphs is the regression test for
+// silent data loss.
+//
+// RedactResponse rebuilds the response rather than mutating it, and it copied
+// findings, packages, AI components and diagnostics — but not enrichments or
+// graphs. Every enrichment and graph a plugin produced was therefore discarded
+// on the main scan path, with no error: reachability annotations and call
+// graphs simply never arrived. The post-scan path masked it by bypassing
+// redaction entirely, which is why the loss was invisible.
+//
+// Any field added to InvokeToolResponse needs a case here, or it will be
+// dropped the same way.
+func TestRedactResponse_PreservesEnrichmentsAndGraphs(t *testing.T) {
+	t.Parallel()
+
+	resp := &pluginv1.InvokeToolResponse{
+		Enrichments: []*pluginv1.Enrichment{{
+			FindingFingerprint: "fp-1",
+			Kind:               "reachability",
+			Title:              "Reachable from main",
+			Body:               "call path: main -> handler -> sink",
+			Confidence:         pluginv1.Confidence_CONFIDENCE_HIGH,
+			Source:             "nox/reachability",
+			Metadata:           map[string]string{"depth": "3"},
+		}},
+		Graphs: []*pluginv1.Graph{{
+			Name:        "call-graph",
+			Description: "static call graph",
+			Nodes: []*pluginv1.GraphNode{{
+				Id: "fn-a", Kind: pluginv1.NodeKind_NODE_KIND_FUNCTION,
+				Label: "funcA", FilePath: "app/a.go",
+				Properties: map[string]string{"pkg": "app"},
+			}},
+			Edges: []*pluginv1.GraphEdge{{
+				Source: "fn-a", Target: "fn-b",
+				Kind: pluginv1.EdgeKind_EDGE_KIND_CALLS, Label: "calls",
+				Properties: map[string]string{"line": "42"},
+			}},
+		}},
+	}
+
+	out, _ := NewRedactor().RedactResponse(resp)
+
+	if len(out.GetEnrichments()) != 1 {
+		t.Fatalf("enrichments were dropped by redaction: got %d, want 1", len(out.GetEnrichments()))
+	}
+	e := out.GetEnrichments()[0]
+	if e.GetFindingFingerprint() != "fp-1" || e.GetKind() != "reachability" {
+		t.Errorf("enrichment identity lost: %+v", e)
+	}
+	if e.GetTitle() != "Reachable from main" || e.GetBody() == "" {
+		t.Errorf("enrichment text lost: title=%q body=%q", e.GetTitle(), e.GetBody())
+	}
+	if e.GetSource() != "nox/reachability" || e.GetMetadata()["depth"] != "3" {
+		t.Errorf("enrichment attribution or metadata lost: %+v", e)
+	}
+
+	if len(out.GetGraphs()) != 1 {
+		t.Fatalf("graphs were dropped by redaction: got %d, want 1", len(out.GetGraphs()))
+	}
+	g := out.GetGraphs()[0]
+	if g.GetName() != "call-graph" || g.GetDescription() != "static call graph" {
+		t.Errorf("graph identity lost: %+v", g)
+	}
+	if len(g.GetNodes()) != 1 || len(g.GetEdges()) != 1 {
+		t.Fatalf("graph topology lost: %d nodes, %d edges", len(g.GetNodes()), len(g.GetEdges()))
+	}
+	n := g.GetNodes()[0]
+	if n.GetFilePath() != "app/a.go" || n.GetProperties()["pkg"] != "app" {
+		t.Errorf("graph node fields lost: %+v", n)
+	}
+	ed := g.GetEdges()[0]
+	if ed.GetLabel() != "calls" || ed.GetProperties()["line"] != "42" {
+		t.Errorf("graph edge fields lost: %+v", ed)
+	}
+}
+
+// TestRedactResponse_RedactsEnrichmentText confirms the newly-preserved fields
+// are actually redacted, not merely copied through — carrying a secret in an
+// enrichment body would be a worse outcome than dropping it.
+func TestRedactResponse_RedactsEnrichmentText(t *testing.T) {
+	t.Parallel()
+
+	const secret = "AKIAIOSFODNN7EXAMPLE" // nox:ignore SEC-102 -- redaction test fixture
+	resp := &pluginv1.InvokeToolResponse{
+		Enrichments: []*pluginv1.Enrichment{{
+			Title:    "found " + secret,
+			Body:     "in config: " + secret,
+			Metadata: map[string]string{"key": secret},
+		}},
+		Graphs: []*pluginv1.Graph{{
+			Description: "graph for " + secret,
+			Nodes:       []*pluginv1.GraphNode{{Id: "n1", Label: secret}},
+		}},
+	}
+
+	out, redacted := NewRedactor().RedactResponse(resp)
+	if !redacted {
+		t.Error("expected the redaction flag to be set")
+	}
+
+	e := out.GetEnrichments()[0]
+	for name, got := range map[string]string{
+		"title": e.GetTitle(), "body": e.GetBody(), "metadata": e.GetMetadata()["key"],
+		"graph description": out.GetGraphs()[0].GetDescription(),
+		"node label":        out.GetGraphs()[0].GetNodes()[0].GetLabel(),
+	} {
+		if strings.Contains(got, secret) {
+			t.Errorf("%s was not redacted: %q", name, got)
+		}
+	}
+}

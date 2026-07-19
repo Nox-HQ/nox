@@ -53,7 +53,13 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 // preserves the one legitimate use of the claim: deciding which of a plugin's
 // own findings are "the same" across runs, so they stay baseline-able.
 func pluginFingerprint(pluginName, ruleID, claimed string, f findings.Finding) string {
-	namespaced := "plugin:" + pluginName + ":" + ruleID
+	// NUL-separated, not colon-separated. A printable delimiter is injectable:
+	// plugin "acme" with rule "sql:injection" and plugin "acme:sql" with rule
+	// "injection" both flatten to "plugin:acme:sql:injection" and collide,
+	// which defeats the namespacing this function exists to provide. NUL cannot
+	// appear in a plugin name or rule ID, so the encoding is unambiguous —
+	// the same reason ComputeFingerprint separates its own arguments with it.
+	namespaced := "plugin\x00" + pluginName + "\x00" + ruleID
 
 	identity := "msg:" + f.Message
 	if claimed != "" {

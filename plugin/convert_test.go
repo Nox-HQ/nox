@@ -625,3 +625,60 @@ func TestProtoFindingToGo_ComputesFingerprintWhenAbsent(t *testing.T) {
 		t.Error("a claimed fingerprint aliased with an absent one; the hash inputs are not tagged")
 	}
 }
+
+// TestProtoFindingToGo_NamespaceDelimiterIsNotInjectable is the regression test
+// for a collision that defeated fingerprint namespacing.
+//
+// The namespace was built as "plugin:<name>:<ruleID>", so a plugin could pick a
+// name ending in a colon-prefixed fragment and collide with another plugin's
+// rule ID: "acme" + "sql:injection" and "acme:sql" + "injection" both flatten
+// to the same string. Colliding lets one plugin suppress another's finding via
+// first-wins dedup, or hide behind a baselined entry.
+func TestProtoFindingToGo_NamespaceDelimiterIsNotInjectable(t *testing.T) {
+	t.Parallel()
+
+	loc := &pluginv1.Location{FilePath: "app/db.go", StartLine: 10}
+
+	victim := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId: "sql:injection", Message: "m", Fingerprint: "fp", Location: loc,
+	}, "acme")
+	attacker := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId: "injection", Message: "m", Fingerprint: "fp", Location: loc,
+	}, "acme:sql")
+
+	if victim.Fingerprint == attacker.Fingerprint {
+		t.Error("delimiter injection produced a fingerprint collision across plugins")
+	}
+}
+
+// TestProtoFindingToGo_NamespaceSurvivesSeparatorsInNames covers the general
+// property rather than the one known payload: no combination of separator
+// characters in the plugin name or rule ID may cause two distinct plugins to
+// share a fingerprint.
+func TestProtoFindingToGo_NamespaceSurvivesSeparatorsInNames(t *testing.T) {
+	t.Parallel()
+
+	loc := &pluginv1.Location{FilePath: "a.go", StartLine: 1}
+	seen := make(map[string]string)
+
+	for _, tc := range []struct{ plugin, rule string }{
+		{"a", "b:c"},
+		{"a:b", "c"},
+		{"a", "b/c"},
+		{"a/b", "c"},
+		{"a", "b c"},
+		{"a b", "c"},
+		{"a", "b\x00c"},
+		{"plugin:a", "b"},
+	} {
+		f := ProtoFindingToGo(&pluginv1.Finding{
+			RuleId: tc.rule, Message: "m", Fingerprint: "fp", Location: loc,
+		}, tc.plugin)
+
+		key := tc.plugin + " / " + tc.rule
+		if prev, dup := seen[f.Fingerprint]; dup {
+			t.Errorf("collision between %q and %q", prev, key)
+		}
+		seen[f.Fingerprint] = key
+	}
+}

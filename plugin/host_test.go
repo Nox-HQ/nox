@@ -1301,3 +1301,116 @@ func TestHost_MergeResults_PluginCannotSuppressCoreFinding(t *testing.T) {
 		t.Error("the core critical finding was suppressed by the plugin's claimed fingerprint")
 	}
 }
+
+// TestHost_InvokePostScan_EnforcesReadOnlyGate is the regression test for a
+// bypass of nox's core safety promise.
+//
+// InvokePostScan called the gRPC client directly, applying no policy at all, so
+// a plugin declaring a non-read-only tool with requires_scan_context ran it
+// regardless of the passive default. nox/remediate ships exactly that shape —
+// apply_code, which modifies source — meaning "nox never auto-applies fixes"
+// was bypassable by a registry plugin.
+//
+// This asserts the outcome that matters: the tool does not execute.
+func TestHost_InvokePostScan_EnforcesReadOnlyGate(t *testing.T) {
+	var invoked bool
+
+	mock := &mockPluginServer{
+		manifest: &pluginv1.GetManifestResponse{
+			Name:       "mutating-plugin",
+			Version:    "1.0.0",
+			ApiVersion: HostAPIVersion,
+			Capabilities: []*pluginv1.Capability{{
+				Name: "remediation",
+				Tools: []*pluginv1.ToolDef{{
+					Name:                "apply_code",
+					Description:         "Rewrites source files",
+					ReadOnly:            false,
+					RequiresScanContext: true,
+				}},
+			}},
+		},
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			invoked = true
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	// DefaultPolicy is passive, which is what an operator gets without opting in.
+	h := newTestHost()
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+	if err := h.InvokePostScan(context.Background(), result, t.TempDir()); err != nil {
+		t.Fatalf("InvokePostScan should not abort the scan: %v", err)
+	}
+
+	if invoked {
+		t.Error("a non-read-only post-scan tool executed under a passive policy — the read-only gate is bypassed")
+	}
+
+	var reported bool
+	for _, d := range h.Diagnostics() {
+		if strings.Contains(d.Message, "apply_code") {
+			reported = true
+		}
+	}
+	if !reported {
+		t.Error("the blocked post-scan tool was not reported as a diagnostic")
+	}
+}
+
+// TestHost_InvokePostScan_AllowsWhenOperatorOptsIn confirms the gate is a
+// policy decision and not a hard ban: an operator who raises max_risk_class
+// gets the tool they asked for.
+func TestHost_InvokePostScan_AllowsWhenOperatorOptsIn(t *testing.T) {
+	var invoked bool
+
+	mock := &mockPluginServer{
+		manifest: &pluginv1.GetManifestResponse{
+			Name:       "mutating-plugin",
+			Version:    "1.0.0",
+			ApiVersion: HostAPIVersion,
+			Capabilities: []*pluginv1.Capability{{
+				Name: "remediation",
+				Tools: []*pluginv1.ToolDef{{
+					Name:                "apply_code",
+					ReadOnly:            false,
+					RequiresScanContext: true,
+				}},
+			}},
+		},
+		invokeFunc: func(_ context.Context, _ *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			invoked = true
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	active := DefaultPolicy()
+	active.MaxRiskClass = RiskClassActive
+	h := newTestHost(WithPolicy(&active))
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+	if err := h.InvokePostScan(context.Background(), result, t.TempDir()); err != nil {
+		t.Fatalf("InvokePostScan: %v", err)
+	}
+
+	if !invoked {
+		t.Error("an operator who opted in to active risk class did not get the tool they configured")
+	}
+}
