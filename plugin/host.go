@@ -10,6 +10,7 @@ import (
 
 	"github.com/nox-hq/nox/core"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/registry"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -27,6 +28,39 @@ type Host struct {
 	telemetry   *telemetryCollector
 	mu          sync.RWMutex
 	logger      *slog.Logger
+
+	// overrides holds the operator's explicit .nox.yaml settings, kept
+	// separately from policy so they can be merged onto a track profile.
+	// policy remains the effective policy for plugins with no known track,
+	// and governs host-global concerns (concurrency, the InvokeAll deadline).
+	overrides           Policy
+	ignoreTrackProfiles bool
+}
+
+// WithPolicyOverrides supplies the operator's explicit .nox.yaml settings so
+// they can be merged onto each plugin's track profile.
+//
+// Without this the host has only a fully-resolved policy, in which every
+// DefaultPolicy-derived value is indistinguishable from a deliberate operator
+// choice — merging a track profile through it would be a no-op.
+func WithPolicyOverrides(o *Policy) HostOption {
+	return func(h *Host) { h.overrides = *o }
+}
+
+// WithIgnoreTrackProfiles forces every plugin onto DefaultPolicy() regardless
+// of track. See PolicyConfig.IgnoreTrackProfiles.
+func WithIgnoreTrackProfiles(ignore bool) HostOption {
+	return func(h *Host) { h.ignoreTrackProfiles = ignore }
+}
+
+// policyForTrack resolves the effective policy for a plugin of the given
+// track. An empty or unrecognised track yields the host's default policy,
+// which is the strict one — see EffectivePolicy for why that matters.
+func (h *Host) policyForTrack(track registry.Track) Policy {
+	if track == "" || h.ignoreTrackProfiles {
+		return h.policy
+	}
+	return EffectivePolicy(track, &h.overrides, h.ignoreTrackProfiles)
 }
 
 // HostOption is a functional option for configuring a Host.
@@ -88,6 +122,7 @@ func (h *Host) RegisterPlugin(ctx context.Context, conn *grpc.ClientConn) error 
 		return fmt.Errorf("plugin %q rejected: %s", info.Name, strings.Join(msgs, "; "))
 	}
 
+	p.setPolicy(h.policy)
 	p.rateLimiter = NewRateLimiter(h.policy.RequestsPerMinute, h.policy.BandwidthBytesPerMin)
 
 	h.mu.Lock()
@@ -100,9 +135,25 @@ func (h *Host) RegisterPlugin(ctx context.Context, conn *grpc.ClientConn) error 
 	return nil
 }
 
-// RegisterBinary spawns a plugin binary subprocess and registers it.
+// RegisterBinary spawns a plugin binary subprocess and registers it under the
+// host's default policy. Use RegisterBinaryWithTrack when the plugin's registry
+// track is known, so its track profile applies.
 func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) error {
-	timeout := h.policy.ToolInvocationTimeout
+	return h.RegisterBinaryWithTrack(ctx, path, args, "")
+}
+
+// RegisterBinaryWithTrack spawns a plugin binary and registers it under the
+// policy for the given registry track, merged with the operator's overrides.
+//
+// SECURITY: track must come from the registry entry the plugin was installed
+// from. It is not, and must not be, anything the plugin asserts about itself —
+// see EffectivePolicy. Pass an empty track whenever provenance is uncertain
+// (sideloaded binaries, installs predating track recording); that selects the
+// strict default policy.
+func (h *Host) RegisterBinaryWithTrack(ctx context.Context, path string, args []string, track registry.Track) error {
+	policy := h.policyForTrack(track)
+
+	timeout := policy.ToolInvocationTimeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
@@ -124,7 +175,7 @@ func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) e
 		ApiVersion:   info.APIVersion,
 		Capabilities: infoToProtoCapabilities(&info),
 		Safety:       info.Safety,
-	}, &h.policy)
+	}, &policy)
 
 	if len(violations) > 0 {
 		_ = p.Close()
@@ -135,14 +186,16 @@ func (h *Host) RegisterBinary(ctx context.Context, path string, args []string) e
 		return fmt.Errorf("plugin %q rejected: %s", info.Name, strings.Join(msgs, "; "))
 	}
 
-	p.rateLimiter = NewRateLimiter(h.policy.RequestsPerMinute, h.policy.BandwidthBytesPerMin)
+	p.setPolicy(policy)
+	p.rateLimiter = NewRateLimiter(policy.RequestsPerMinute, policy.BandwidthBytesPerMin)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.plugins[info.Name] = p
 	h.buildToolIndex()
-	h.logger.Info("registered plugin binary", "name", info.Name, "path", path)
+	h.logger.Info("registered plugin binary",
+		"name", info.Name, "path", path, "track", string(track), "max_risk_class", string(policy.MaxRiskClass))
 
 	return nil
 }
@@ -170,6 +223,12 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 
 	pluginName := p.Info().Name
 
+	// Enforcement below reads the plugin's OWN effective policy, not the
+	// host's: plugins of different tracks run under different policies in the
+	// same host, so a dynamic-runtime plugin's localhost grant must not leak to
+	// a core-analysis one sharing the process.
+	policy := p.Policy()
+
 	// Per-tool safety enforcement.
 	//
 	// Registration only establishes that SOMETHING in this plugin is runnable
@@ -181,7 +240,7 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 	// This is what lets a plugin ship a passive tool alongside an active one
 	// without the active sibling gating the passive one.
 	if ti := p.getToolInfo(resolvedName); ti != nil && ti.Safety != nil {
-		if violations := validateSafety(ti.Safety, &h.policy); len(violations) > 0 {
+		if violations := validateSafety(ti.Safety, &policy); len(violations) > 0 {
 			msgs := make([]string, 0, len(violations))
 			for _, pv := range violations {
 				msgs = append(msgs, pv.Error())
@@ -208,7 +267,7 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 	// mutate the workspace" — not "passive": nox/llm-triage declares a read_only
 	// tool that ships source code to an external chat endpoint. Neither property
 	// implies the other, so a tool must satisfy both.
-	if h.policy.MaxRiskClass == RiskClassPassive {
+	if policy.MaxRiskClass == RiskClassPassive {
 		ti := p.getToolInfo(resolvedName)
 		if ti != nil && !ti.ReadOnly {
 			v := RuntimeViolation{
@@ -240,7 +299,7 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 		}
 	}
 
-	timeout := h.policy.ToolInvocationTimeout
+	timeout := policy.ToolInvocationTimeout
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -325,13 +384,25 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 		return nil, nil
 	}
 
+	// Bound the whole group by the LONGEST timeout any participating plugin is
+	// allowed, then bound each plugin individually by its own below. Using a
+	// single host-wide deadline would cut short a dynamic-runtime plugin whose
+	// track grants it five minutes just because a core-analysis plugin's track
+	// grants two.
 	timeout := h.policy.ToolInvocationTimeout
+	for _, p := range targets {
+		if t := p.Policy().ToolInvocationTimeout; t > timeout {
+			timeout = t
+		}
+	}
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
+	// Concurrency is genuinely host-global: it bounds this process's fan-out,
+	// not any single plugin's entitlement.
 	concurrency := h.policy.MaxConcurrency
 	if concurrency <= 0 {
 		concurrency = 1
@@ -352,9 +423,10 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 	for i, p := range targets {
 		g.Go(func() error {
 			pluginName := p.Info().Name
+			policy := p.Policy()
 
-			// Read-only enforcement.
-			if h.policy.MaxRiskClass == RiskClassPassive {
+			// Read-only enforcement, against this plugin's own policy.
+			if policy.MaxRiskClass == RiskClassPassive {
 				ti := p.getToolInfo(toolName)
 				if ti != nil && !ti.ReadOnly {
 					v := RuntimeViolation{
@@ -386,7 +458,17 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 				}
 			}
 
-			resp, err := p.InvokeTool(gCtx, toolName, input, workspaceRoot)
+			// Bound this plugin by its own track's timeout, inside the group's
+			// longest-of-all deadline, so one plugin's larger allowance never
+			// extends another's.
+			invokeCtx := gCtx
+			if t := policy.ToolInvocationTimeout; t > 0 {
+				var cancel context.CancelFunc
+				invokeCtx, cancel = context.WithTimeout(gCtx, t)
+				defer cancel()
+			}
+
+			resp, err := p.InvokeTool(invokeCtx, toolName, input, workspaceRoot)
 			if err != nil {
 				h.mu.Lock()
 				h.diagnostics = append(h.diagnostics, Diagnostic{

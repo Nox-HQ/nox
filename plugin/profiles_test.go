@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/registry"
 )
 
@@ -143,45 +144,151 @@ func TestMergeWithUserPolicyNetworkOverride(t *testing.T) {
 	}
 }
 
-// TestHost_DoesNotAutoApplyTrackProfiles pins the gap between ProfileForTrack
-// and what the host actually enforces.
-//
-// docs/plugin-authoring.md previously presented the per-track profiles as
-// though they were the effective policy, so a plugin author would reasonably
-// expect a dynamic-runtime plugin to get localhost network access. It does not:
-// the host enforces DefaultPolicy() — passive, with empty allowlists — unless
-// the operator's .nox.yaml opts in. Documenting an enforced control that does
-// not exist is the more dangerous half of this, so if the host ever starts
-// consulting track profiles, this test should fail and the documentation must
-// be corrected in the same change.
-func TestHost_DoesNotAutoApplyTrackProfiles(t *testing.T) {
+// --- track profile enforcement ---
+
+// TestHost_AppliesTrackProfile confirms the profile actually reaches the
+// enforced policy. Track profiles existed for several releases while the host
+// enforced DefaultPolicy() regardless, so docs promised a sandbox shape that
+// was never applied.
+func TestHost_AppliesTrackProfile(t *testing.T) {
+	t.Parallel()
+
+	h := NewHost()
+	got := h.policyForTrack(registry.TrackDynamicRuntime)
+
+	if got.MaxRiskClass != RiskClassActive {
+		t.Errorf("MaxRiskClass = %q, want %q", got.MaxRiskClass, RiskClassActive)
+	}
+	if len(got.AllowedNetworkHosts) == 0 {
+		t.Error("expected the dynamic-runtime profile to permit localhost")
+	}
+}
+
+// TestHost_UnknownTrackFallsBackToStrict is the security-critical case: a
+// plugin whose provenance cannot be established must not get a profile.
+// Sideloaded (--local) binaries and installs predating track recording both
+// arrive with an empty track.
+func TestHost_UnknownTrackFallsBackToStrict(t *testing.T) {
 	t.Parallel()
 
 	h := NewHost()
 
-	got := h.policy
-	want := DefaultPolicy()
+	for _, track := range []registry.Track{"", "not-a-real-track", "dynamic-runtime-ish"} {
+		t.Run(string(track), func(t *testing.T) {
+			got := h.policyForTrack(track)
 
-	if got.MaxRiskClass != want.MaxRiskClass {
-		t.Errorf("MaxRiskClass = %v, want %v", got.MaxRiskClass, want.MaxRiskClass)
+			if got.MaxRiskClass != RiskClassPassive {
+				t.Errorf("MaxRiskClass = %q, want passive for an unverifiable track", got.MaxRiskClass)
+			}
+			if len(got.AllowedNetworkHosts) != 0 {
+				t.Errorf("an unverifiable track was granted network access: %v", got.AllowedNetworkHosts)
+			}
+		})
+	}
+}
+
+// TestHost_IgnoreTrackProfilesRestoresStrictBase covers the opt-out. It has to
+// exist because the override semantics are one-directional: an operator can
+// widen an allowlist but cannot empty one, so without this flag there is no way
+// to revoke the localhost access the dynamic-runtime profile grants.
+func TestHost_IgnoreTrackProfilesRestoresStrictBase(t *testing.T) {
+	t.Parallel()
+
+	h := NewHost(WithIgnoreTrackProfiles(true))
+	got := h.policyForTrack(registry.TrackDynamicRuntime)
+
+	if got.MaxRiskClass != RiskClassPassive {
+		t.Errorf("MaxRiskClass = %q, want passive when track profiles are ignored", got.MaxRiskClass)
 	}
 	if len(got.AllowedNetworkHosts) != 0 {
-		t.Errorf("expected an empty network allowlist, got %v", got.AllowedNetworkHosts)
+		t.Errorf("expected no network access when track profiles are ignored, got %v", got.AllowedNetworkHosts)
 	}
-	if len(got.AllowedFilePaths) != 0 {
-		t.Errorf("expected an empty file-path allowlist, got %v", got.AllowedFilePaths)
+}
+
+// TestEffectivePolicy_OperatorOverridesWin confirms a project can still tighten
+// or widen what its own plugins get; the track sets the base, not the ceiling.
+func TestEffectivePolicy_OperatorOverridesWin(t *testing.T) {
+	t.Parallel()
+
+	overrides := Policy{
+		MaxRiskClass:        RiskClassPassive,
+		AllowedNetworkHosts: []string{"proxy.internal"},
 	}
-	if len(got.AllowedEnvVars) != 0 {
-		t.Errorf("expected an empty env-var allowlist, got %v", got.AllowedEnvVars)
+	got := EffectivePolicy(registry.TrackDynamicRuntime, &overrides, false)
+
+	if got.MaxRiskClass != RiskClassPassive {
+		t.Errorf("operator's max_risk_class was not honoured: got %q", got.MaxRiskClass)
+	}
+	if len(got.AllowedNetworkHosts) != 1 || got.AllowedNetworkHosts[0] != "proxy.internal" {
+		t.Errorf("operator's network allowlist was not honoured: got %v", got.AllowedNetworkHosts)
+	}
+}
+
+// TestEffectivePolicy_ProfileAppliesWithoutOverrides pins the loosening this
+// change deliberately introduces, so it cannot happen by accident later.
+func TestEffectivePolicy_ProfileAppliesWithoutOverrides(t *testing.T) {
+	t.Parallel()
+
+	got := EffectivePolicy(registry.TrackDynamicRuntime, &Policy{}, false)
+
+	if got.MaxRiskClass != RiskClassActive {
+		t.Errorf("MaxRiskClass = %q, want active from the track profile", got.MaxRiskClass)
+	}
+	if len(got.AllowedNetworkHosts) == 0 {
+		t.Error("expected localhost access from the track profile")
+	}
+}
+
+// TestTrackProfile_GovernsManifestAcceptance exercises the decision that
+// actually matters: whether a plugin declaring network access is admitted.
+//
+// It runs the real ValidateManifest against the real resolved policies, so it
+// would catch a regression where policyForTrack returns the right values but
+// registration consults something else.
+func TestTrackProfile_GovernsManifestAcceptance(t *testing.T) {
+	t.Parallel()
+
+	// A plugin that needs localhost — the shape a dynamic-runtime scanner has.
+	manifest := &pluginv1.GetManifestResponse{
+		Name:       "runtime-scanner",
+		Version:    "1.0.0",
+		ApiVersion: HostAPIVersion,
+		Safety: &pluginv1.SafetyRequirements{
+			RiskClass:    "active",
+			NetworkHosts: []string{"localhost"},
+		},
 	}
 
-	// The dynamic-runtime profile is materially more permissive. Confirm that
-	// difference is real, so the test above is meaningful rather than vacuous.
-	profile := ProfileForTrack(registry.TrackDynamicRuntime)
-	if len(profile.AllowedNetworkHosts) == 0 {
-		t.Fatal("expected the dynamic-runtime profile to allow localhost; test premise is stale")
-	}
-	if profile.MaxRiskClass == want.MaxRiskClass {
-		t.Fatal("expected the dynamic-runtime profile to differ in risk class; test premise is stale")
-	}
+	h := NewHost()
+
+	t.Run("dynamic-runtime track admits it", func(t *testing.T) {
+		policy := h.policyForTrack(registry.TrackDynamicRuntime)
+		if v := ValidateManifest(manifest, &policy); len(v) > 0 {
+			t.Errorf("expected admission under the dynamic-runtime profile, rejected with: %v", v)
+		}
+	})
+
+	t.Run("core-analysis track rejects it", func(t *testing.T) {
+		// Same host, same process, different plugin: policy is per-plugin, so a
+		// dynamic-runtime plugin's grant must not leak to a passive track.
+		policy := h.policyForTrack(registry.TrackCoreAnalysis)
+		if v := ValidateManifest(manifest, &policy); len(v) == 0 {
+			t.Error("expected rejection under the core-analysis profile, but it was admitted")
+		}
+	})
+
+	t.Run("unknown track rejects it", func(t *testing.T) {
+		policy := h.policyForTrack("")
+		if v := ValidateManifest(manifest, &policy); len(v) == 0 {
+			t.Error("a plugin of unverifiable provenance was admitted with network access")
+		}
+	})
+
+	t.Run("ignore_track_profiles rejects it", func(t *testing.T) {
+		strict := NewHost(WithIgnoreTrackProfiles(true))
+		policy := strict.policyForTrack(registry.TrackDynamicRuntime)
+		if v := ValidateManifest(manifest, &policy); len(v) == 0 {
+			t.Error("the opt-out did not restore strict enforcement")
+		}
+	})
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/plugin"
+	"github.com/nox-hq/nox/registry"
 )
 
 // init registers the analysis-plugin runner with the core scan pipeline.
@@ -19,15 +20,28 @@ func init() {
 	core.PostScanPluginHook = runPostScanPlugins
 }
 
+// installedPlugin pairs a plugin binary with the registry track it was
+// installed under. The track selects the safety profile the host enforces, so
+// it travels with the path rather than being looked up again later.
+type installedPlugin struct {
+	path  string
+	track registry.Track
+}
+
 // installedPluginBinaries resolves each required plugin name to its installed
-// binary path. Missing or not-yet-installed plugins are skipped (scan-time
-// auto-install may have been disabled or failed) rather than aborting the scan.
-func installedPluginBinaries(required []string) ([]string, error) {
+// binary path and recorded track. Missing or not-yet-installed plugins are
+// skipped (scan-time auto-install may have been disabled or failed) rather than
+// aborting the scan.
+//
+// An empty track — a sideloaded plugin, or one installed before tracks were
+// recorded — is passed through as-is, which the host resolves to the strict
+// default policy.
+func installedPluginBinaries(required []string) ([]installedPlugin, error) {
 	st, err := LoadState(DefaultStatePath())
 	if err != nil {
 		return nil, fmt.Errorf("loading plugin state: %w", err)
 	}
-	var binaries []string
+	var binaries []installedPlugin
 	for _, name := range required {
 		ip := st.FindPlugin(name)
 		if ip == nil {
@@ -36,7 +50,10 @@ func installedPluginBinaries(required []string) ([]string, error) {
 		if _, statErr := os.Stat(ip.BinaryPath); statErr != nil {
 			continue
 		}
-		binaries = append(binaries, ip.BinaryPath)
+		binaries = append(binaries, installedPlugin{
+			path:  ip.BinaryPath,
+			track: registry.Track(ip.Track),
+		})
 	}
 	return binaries, nil
 }
@@ -66,15 +83,23 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	}
 
 	policy := plugin.DefaultPolicy()
+	var overrides plugin.Policy
+	ignoreTrackProfiles := false
 	if cfg, cfgErr := plugin.LoadConfig(filepath.Join(target, ".nox.yaml")); cfgErr == nil {
 		policy = cfg.PluginPolicy.ToPolicy()
+		overrides = cfg.PluginPolicy.Overrides()
+		ignoreTrackProfiles = cfg.PluginPolicy.IgnoreTrackProfiles
 	}
 
-	host := plugin.NewHost(plugin.WithPolicy(&policy))
+	host := plugin.NewHost(
+		plugin.WithPolicy(&policy),
+		plugin.WithPolicyOverrides(&overrides),
+		plugin.WithIgnoreTrackProfiles(ignoreTrackProfiles),
+	)
 	defer func() { _ = host.Close() }()
 	for _, bin := range binaries {
-		if regErr := host.RegisterBinary(ctx, bin, nil); regErr != nil {
-			return fmt.Errorf("registering plugin %q: %w", bin, regErr)
+		if regErr := host.RegisterBinaryWithTrack(ctx, bin.path, nil, bin.track); regErr != nil {
+			return fmt.Errorf("registering plugin %q: %w", bin.path, regErr)
 		}
 	}
 
@@ -103,10 +128,14 @@ func runScanPlugins(ctx context.Context, target string, required []string) (*cor
 	}
 
 	policy := plugin.DefaultPolicy()
+	var overrides plugin.Policy
+	ignoreTrackProfiles := false
 	if cfg, cfgErr := plugin.LoadConfig(filepath.Join(target, ".nox.yaml")); cfgErr == nil {
 		policy = cfg.PluginPolicy.ToPolicy()
+		overrides = cfg.PluginPolicy.Overrides()
+		ignoreTrackProfiles = cfg.PluginPolicy.IgnoreTrackProfiles
 	}
-	return runPluginBinaries(ctx, target, binaries, &policy)
+	return runPluginBinaries(ctx, target, binaries, &policy, &overrides, ignoreTrackProfiles)
 }
 
 // runPluginBinaries registers the given plugin binaries with a host, runs
@@ -114,7 +143,7 @@ func runScanPlugins(ctx context.Context, target string, required []string) (*cor
 // findings/enrichments/graphs. It is separated from runScanPlugins so it can
 // be exercised against a freshly-built plugin binary without touching the
 // installed-plugin state.
-func runPluginBinaries(ctx context.Context, target string, binaries []string, policy *plugin.Policy) (*core.PluginScanOutput, error) {
+func runPluginBinaries(ctx context.Context, target string, binaries []installedPlugin, policy, overrides *plugin.Policy, ignoreTrackProfiles bool) (*core.PluginScanOutput, error) {
 	if len(binaries) == 0 {
 		return nil, nil
 	}
@@ -132,12 +161,20 @@ func runPluginBinaries(ctx context.Context, target string, binaries []string, po
 		absTarget = target
 	}
 
-	host := plugin.NewHost(plugin.WithPolicy(policy))
+	if overrides == nil {
+		overrides = &plugin.Policy{}
+	}
+
+	host := plugin.NewHost(
+		plugin.WithPolicy(policy),
+		plugin.WithPolicyOverrides(overrides),
+		plugin.WithIgnoreTrackProfiles(ignoreTrackProfiles),
+	)
 	defer func() { _ = host.Close() }()
 
 	for _, bin := range binaries {
-		if regErr := host.RegisterBinary(ctx, bin, nil); regErr != nil {
-			return nil, fmt.Errorf("registering plugin %q: %w", bin, regErr)
+		if regErr := host.RegisterBinaryWithTrack(ctx, bin.path, nil, bin.track); regErr != nil {
+			return nil, fmt.Errorf("registering plugin %q: %w", bin.path, regErr)
 		}
 	}
 

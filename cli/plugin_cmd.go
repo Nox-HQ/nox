@@ -423,6 +423,7 @@ func runPluginInstall(args []string) int {
 		BinaryPath:  artifact.BinaryPath,
 		TrustLevel:  trustLevel,
 		RiskClass:   ve.RiskClass,
+		Track:       string(trackForPlugin(ctx, client, name)),
 		InstalledAt: now,
 		UpdatedAt:   now,
 	})
@@ -502,6 +503,7 @@ func runPluginUpdate(args []string) int {
 			BinaryPath:  artifact.BinaryPath,
 			TrustLevel:  artifact.VerifyResult.Level.String(),
 			RiskClass:   ve.RiskClass,
+			Track:       string(trackForPlugin(ctx, client, name)),
 			InstalledAt: ip.InstalledAt,
 			UpdatedAt:   now,
 		})

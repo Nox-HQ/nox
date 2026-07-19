@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,12 +12,21 @@ import (
 
 // InstalledPlugin records metadata for a locally installed plugin.
 type InstalledPlugin struct {
-	Name        string    `json:"name"`
-	Version     string    `json:"version"`
-	Digest      string    `json:"digest"`
-	BinaryPath  string    `json:"binary_path"`
-	TrustLevel  string    `json:"trust_level"`
-	RiskClass   string    `json:"risk_class"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Digest     string `json:"digest"`
+	BinaryPath string `json:"binary_path"`
+	TrustLevel string `json:"trust_level"`
+	RiskClass  string `json:"risk_class"`
+
+	// Track is the registry track this plugin was published under, captured at
+	// install time. It selects the safety profile enforced at scan time, so it
+	// is deliberately recorded from the registry entry and never read from the
+	// plugin itself — a self-declared track would let a plugin choose its own
+	// sandbox. Empty for sideloaded (--local) plugins and for installs
+	// predating this field, both of which fall back to the strict default
+	// policy.
+	Track       string    `json:"track,omitempty"`
 	InstalledAt time.Time `json:"installed_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -121,4 +131,24 @@ func noxHome() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".nox")
+}
+
+// trackForPlugin looks up the registry track a plugin is published under.
+//
+// The track selects which safety profile the host enforces, so it must come
+// from the registry — the operator-configured source of truth — and never from
+// the plugin's own manifest, which carries no track field for exactly this
+// reason. A lookup failure returns an empty track, which the host treats as
+// "provenance unknown" and falls back to the strict default policy.
+func trackForPlugin(ctx context.Context, client *registry.Client, name string) registry.Track {
+	entries, err := client.Search(ctx, name)
+	if err != nil {
+		return ""
+	}
+	for i := range entries {
+		if entries[i].Name == name {
+			return entries[i].Track
+		}
+	}
+	return ""
 }

@@ -165,3 +165,32 @@ func MergeWithUserPolicy(profile, user *Policy) Policy {
 
 	return merged
 }
+
+// EffectivePolicy resolves the policy enforced against a single plugin.
+//
+// The track is the base: it decides what class of plugin this is and therefore
+// what it may reasonably need — a dynamic-runtime scanner has to reach
+// localhost, a core-analysis plugin never does. The operator's .nox.yaml then
+// overrides on top, so a project can always widen or tighten what its own
+// plugins get.
+//
+// SECURITY: track MUST come from the registry entry the plugin was installed
+// from, never from the plugin itself. The gRPC manifest deliberately carries no
+// track field — a self-declared track would let a plugin choose its own
+// sandbox, which is not a sandbox. Callers that cannot establish a trustworthy
+// track (a --local sideloaded binary, an install predating track recording)
+// must pass an empty track, which falls back to the strict DefaultPolicy.
+//
+// ignoreTrackProfiles forces that strict base regardless of track; see
+// PolicyConfig.IgnoreTrackProfiles for why an explicit opt-out is required
+// rather than expressible through overrides.
+func EffectivePolicy(track registry.Track, overrides *Policy, ignoreTrackProfiles bool) Policy {
+	base := DefaultPolicy()
+	if !ignoreTrackProfiles && registry.ValidTrack(track) {
+		base = ProfileForTrack(track)
+	}
+	if overrides == nil {
+		return base
+	}
+	return MergeWithUserPolicy(&base, overrides)
+}

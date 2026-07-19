@@ -87,6 +87,27 @@ type Plugin struct {
 	cmd         *exec.Cmd // nil if connected to an external process
 	rateLimiter *RateLimiter
 	mu          sync.Mutex
+
+	// policy is the effective policy for THIS plugin, resolved from its
+	// registry track merged with the operator's overrides. Plugins of
+	// different tracks run under different policies in the same host, so
+	// enforcement reads this rather than a single host-wide value.
+	policy Policy
+}
+
+// Policy returns the effective policy enforced against this plugin.
+func (p *Plugin) Policy() Policy {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.policy
+}
+
+// setPolicy assigns the effective policy. Called by the host during
+// registration, before the plugin can be invoked.
+func (p *Plugin) setPolicy(pol Policy) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.policy = pol
 }
 
 // NewPlugin creates a Plugin from an existing gRPC client connection.
