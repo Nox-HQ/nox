@@ -21,8 +21,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// cards, DXT command injection). MCP-015 (rug pull, core/mcppin) and
 	// MCP-023/024 (shadowing, core/mcpshadow) are emitted relationally
 	// outside the regex engine.
-	if got := len(cat); got != 1553 {
-		t.Errorf("Catalog() returned %d rules, want 1553", got)
+	// 1547 = 1553 minus the six duplicate secret rules merged away
+	// (SEC-152, SEC-451, SEC-452, SEC-470, SEC-558, SEC-673).
+	if got := len(cat); got != 1547 {
+		t.Errorf("Catalog() returned %d rules, want 1547", got)
 	}
 }
 
