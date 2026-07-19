@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-07-19
+
+### Fixed
+
+- **Go dependency scanning reported mostly wrong versions, at uniformly wrong
+  severity, with no way to act on the result** (#248). Three bugs, each of
+  which hid the others.
+
+  **Versions came from `go.sum`.** It is not a lockfile — it hashes the entire
+  module graph, every version the resolver ever considered. Across 28
+  repositories 5,263 findings came from it; on one repository 148 of 148 named
+  a version the build does not use (`x/net` flagged at a 2019 pseudo-version
+  while the build selects v0.56.0). Projects had responded by excluding
+  `go.sum` outright, trading the noise for a total blind spot on Go
+  dependencies. Versions now come from `go.mod` — what Minimal Version
+  Selection actually chose — consulting `go.sum` only for transitives that
+  module graph pruning omits, and only for entries carrying a source hash (a
+  `/go.mod`-only entry means the code was never downloaded).
+
+  **Severity and remediation were never populated.** Every finding was
+  `medium` with an empty summary — not one high or critical — so a critical
+  dependency CVE could never trip a high/critical gate. OSV's `/v1/querybatch`
+  returns only `{id, modified}`, and OSV publishes CVSS as vector strings that
+  the severity mapper could not parse; both had to be fixed for either to
+  matter. Advisory detail is now fetched per distinct ID, and CVSS v3.x base
+  scores are computed from the vector per the specification. This also
+  restores the fix-version remediation field, which had never emitted anything
+  because it reads data `querybatch` does not return.
+
+  **Advisories were matched per module, not per package.** OSV scopes Go
+  advisories to import paths: `GO-2026-5932` affects only
+  `golang.org/x/crypto/openpgp`, yet was reported against builds linking only
+  `chacha20`/`cryptobyte`. Affected paths are now intersected with the packages
+  the build links. Findings that are provably unreachable are demoted to `info`
+  with `reachable=false` and the affected paths recorded — never dropped, since
+  a silent disappearance is indistinguishable from a scanner that missed
+  something. Where an advisory carries no import metadata, or the build cannot
+  be enumerated, the finding is left exactly as before.
+
+  Measured: vorhut 376 → 19 findings with every in-build module retained,
+  mnemos 148 → 0, and severities spread across 1 critical / 24 high / 57
+  medium / 3 low where everything had been medium.
+
+  **Behaviour change:** repositories with high or critical dependency
+  vulnerabilities will start failing an enforcing gate. Those vulnerabilities
+  were always present and were being reported as medium.
+
+- **`nox cache clear` now clears the registry cache too** (#246).
+
+- Removed an 8.9 MB binary committed to the repository (#241).
+
 ### Changed
 
 - **The plugin registry moved to its own repository**,
