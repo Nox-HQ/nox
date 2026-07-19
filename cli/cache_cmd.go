@@ -59,11 +59,11 @@ func runCache(args []string) int {
 // re-download, it breaks every installed plugin until each is reinstalled.
 // It is available behind --artifacts, which says so.
 func runCacheClear(args []string) int {
-	fs := flag.NewFlagSet("cache clear", flag.ContinueOnError)
+	clearFS := flag.NewFlagSet("cache clear", flag.ContinueOnError)
 	var artifacts bool
-	fs.BoolVar(&artifacts, "artifacts", false,
+	clearFS.BoolVar(&artifacts, "artifacts", false,
 		"also delete downloaded plugin binaries (breaks installed plugins until reinstalled)")
-	if err := fs.Parse(args); err != nil {
+	if err := clearFS.Parse(args); err != nil {
 		return 2
 	}
 
