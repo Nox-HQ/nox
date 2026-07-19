@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func TestRedactor_AWSAccessKey(t *testing.T) {
@@ -309,4 +310,52 @@ func TestRedactResponse_RedactsEnrichmentText(t *testing.T) {
 			t.Errorf("%s was not redacted: %q", name, got)
 		}
 	}
+}
+
+// TestRedactResponse_DropsNoField is the structural guard against this bug
+// class recurring.
+//
+// RedactResponse rebuilds the response rather than mutating it, so any field it
+// forgets is silently discarded — which is exactly how every enrichment and
+// graph came to be dropped. Enumerating fields by hand in a test has the same
+// weakness as the function itself: the test author forgets alongside the
+// implementer.
+//
+// This walks the message with protobuf reflection instead, so a field added to
+// InvokeToolResponse tomorrow fails here until the redactor handles it.
+func TestRedactResponse_DropsNoField(t *testing.T) {
+	t.Parallel()
+
+	in := &pluginv1.InvokeToolResponse{
+		Findings:     []*pluginv1.Finding{{Id: "f1", RuleId: "R-1", Message: "m"}},
+		Packages:     []*pluginv1.Package{{Name: "pkg", Version: "1.0.0", Ecosystem: "npm"}},
+		AiComponents: []*pluginv1.AIComponent{{Name: "agent", Type: "agent", Path: "a.yaml"}},
+		Diagnostics:  []*pluginv1.Diagnostic{{Severity: pluginv1.DiagnosticSeverity_DIAGNOSTIC_SEVERITY_INFO, Message: "d", Source: "s"}},
+		Graphs:       []*pluginv1.Graph{{Name: "g", Nodes: []*pluginv1.GraphNode{{Id: "n"}}}},
+		Enrichments:  []*pluginv1.Enrichment{{FindingFingerprint: "fp", Kind: "k", Title: "t"}},
+	}
+
+	// Guard the guard: if a field is added to the proto and not to this
+	// fixture, the walk below would pass vacuously.
+	wantPopulated := in.ProtoReflect().Descriptor().Fields().Len()
+	gotPopulated := 0
+	in.ProtoReflect().Range(func(protoreflect.FieldDescriptor, protoreflect.Value) bool {
+		gotPopulated++
+		return true
+	})
+	if gotPopulated != wantPopulated {
+		t.Fatalf("this test's fixture populates %d of %d InvokeToolResponse fields; "+
+			"add the missing field to the fixture, then make sure RedactResponse copies it",
+			gotPopulated, wantPopulated)
+	}
+
+	out, _ := NewRedactor().RedactResponse(in)
+
+	in.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		if !out.ProtoReflect().Has(fd) {
+			t.Errorf("field %q was populated in the input and is missing from the redacted output; "+
+				"RedactResponse silently drops it", fd.Name())
+		}
+		return true
+	})
 }

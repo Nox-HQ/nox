@@ -1084,6 +1084,15 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 	}
 
 	for filePath, indices := range byFile {
+		// A finding with no file path has no file to read suppressions from —
+		// dependency and plugin findings are often repository-scoped rather
+		// than located. Joining "" to the target yields the target directory,
+		// whose read fails, which then reported a degradation on a perfectly
+		// healthy scan. Nothing was missed here, so nothing is reported.
+		if filePath == "" {
+			continue
+		}
+
 		fullPath := filePath
 		if !filepath.IsAbs(fullPath) {
 			fullPath = filepath.Join(target, fullPath)

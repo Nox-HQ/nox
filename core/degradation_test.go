@@ -441,3 +441,60 @@ func TestScan_FailedPluginIsReported(t *testing.T) {
 		}
 	})
 }
+
+// TestScan_PathlessFindingIsNotASuppressionDegradation guards against noise on
+// healthy scans.
+//
+// Dependency and plugin findings are often repository-scoped and carry no file
+// path. Grouping them for inline-suppression scanning joined "" to the target,
+// producing the target DIRECTORY, whose read fails — which was then reported as
+// "could not be re-read to apply inline suppressions: is a directory" on scans
+// where nothing was actually missed.
+//
+// A degradation channel that fires on healthy scans is one operators learn to
+// ignore, which defeats its entire purpose.
+func TestScan_PathlessFindingIsNotASuppressionDegradation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// A lockfile yields VULN/LIC-style findings that may carry no file path,
+	// and the license finding below is emitted with an empty FilePath.
+	lock := `{"packages":{"node_modules/leftpad":{"version":"1.0.0"}}}`
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lock), 0o644); err != nil {
+		t.Fatalf("writing lockfile: %v", err)
+	}
+	modDir := filepath.Join(dir, "node_modules", "leftpad")
+	if err := os.MkdirAll(modDir, 0o755); err != nil {
+		t.Fatalf("creating node_modules: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modDir, "package.json"),
+		[]byte(`{"name":"leftpad","version":"1.0.0","license":"GPL-3.0"}`), 0o644); err != nil {
+		t.Fatalf("writing manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"),
+		[]byte("license:\n  deny:\n    - GPL-3.0\n"), 0o644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	// Confirm the premise: a finding with no file path was actually produced,
+	// or this test would pass vacuously.
+	var pathless bool
+	for _, f := range result.Findings.Findings() {
+		if f.Location.FilePath == "" {
+			pathless = true
+		}
+	}
+	if !pathless {
+		t.Skip("no path-less finding produced; test premise no longer holds")
+	}
+
+	if hasDegradationKind(result, "suppression") {
+		t.Errorf("a path-less finding produced a spurious suppression degradation: %+v",
+			result.Degradations)
+	}
+}
