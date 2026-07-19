@@ -1414,3 +1414,78 @@ func TestHost_InvokePostScan_AllowsWhenOperatorOptsIn(t *testing.T) {
 		t.Error("an operator who opted in to active risk class did not get the tool they configured")
 	}
 }
+
+// TestHost_InvokePostScan_RefusalDoesNotKillSiblings covers a false block that
+// enforcing post-scan policy introduced.
+//
+// The host — not a caller — enumerates every requires_scan_context tool and
+// invokes them all. Treating a refusal as a terminating RuntimeViolation
+// therefore punished a well-behaved plugin for a tool it never asked to run,
+// and took its READ-ONLY siblings down with it: they then failed with
+// "plugin not ready".
+//
+// A plugin shipping a passive plan_code alongside an active apply_code is the
+// exact shape the SDK docs recommend, so the cascade would have hit the
+// recommended layout. The blocked tool must be skipped, not fatal.
+func TestHost_InvokePostScan_RefusalDoesNotKillSiblings(t *testing.T) {
+	var ran []string
+
+	mock := &mockPluginServer{
+		manifest: &pluginv1.GetManifestResponse{
+			Name:       "mixed-plugin",
+			Version:    "1.0.0",
+			ApiVersion: HostAPIVersion,
+			Capabilities: []*pluginv1.Capability{{
+				Name: "remediation",
+				Tools: []*pluginv1.ToolDef{
+					// Write tool declared FIRST, so a cascade would take out
+					// everything after it.
+					{Name: "apply_code", ReadOnly: false, RequiresScanContext: true},
+					{Name: "plan_code", ReadOnly: true, RequiresScanContext: true},
+					{Name: "verify_code", ReadOnly: true, RequiresScanContext: true},
+				},
+			}},
+		},
+		invokeFunc: func(_ context.Context, req *pluginv1.InvokeToolRequest) (*pluginv1.InvokeToolResponse, error) {
+			ran = append(ran, req.GetToolName())
+			return &pluginv1.InvokeToolResponse{}, nil
+		},
+	}
+
+	conn := startMockPlugin(t, mock)
+	h := newTestHost() // passive default
+	if err := h.RegisterPlugin(context.Background(), conn); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+	if err := h.InvokePostScan(context.Background(), result, t.TempDir()); err != nil {
+		t.Fatalf("InvokePostScan: %v", err)
+	}
+
+	for _, tool := range ran {
+		if tool == "apply_code" {
+			t.Error("the non-read-only tool ran under a passive policy")
+		}
+	}
+
+	for _, want := range []string{"plan_code", "verify_code"} {
+		var found bool
+		for _, tool := range ran {
+			if tool == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("read-only tool %q did not run; blocking a sibling terminated the plugin", want)
+		}
+	}
+
+	if len(h.Plugins()) != 1 {
+		t.Error("the plugin was terminated for a tool the host chose to invoke")
+	}
+}

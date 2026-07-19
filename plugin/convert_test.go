@@ -682,3 +682,39 @@ func TestProtoFindingToGo_NamespaceSurvivesSeparatorsInNames(t *testing.T) {
 		seen[f.Fingerprint] = key
 	}
 }
+
+// TestProtoFindingToGo_NamespaceIsUnambiguousForAnyInput is the general form of
+// the namespace-collision guard.
+//
+// Two earlier attempts used a delimiter — ':' then NUL — each justified by the
+// claim that the character could not appear in a plugin name or rule ID.
+// Nothing enforced that claim: both values are attacker-controlled, and proto3
+// strings permit NUL. Length-prefixing removes the class rather than raising
+// the bar, so this sweeps separator characters instead of testing one payload.
+func TestProtoFindingToGo_NamespaceIsUnambiguousForAnyInput(t *testing.T) {
+	t.Parallel()
+
+	loc := &pluginv1.Location{FilePath: "a.go", StartLine: 1}
+	seen := make(map[string]string)
+
+	pairs := []struct{ plugin, rule string }{
+		{"a", "b:c"}, {"a:b", "c"},
+		{"a", "b\x00c"}, {"a\x00b", "c"},
+		{"a", "1:b"}, {"a1", ":b"},
+		{"ab", "c"}, {"a", "bc"},
+		{"", "abc"}, {"abc", ""},
+		{"plugin", "a"}, {"", "plugin\x00a"},
+	}
+
+	for _, tc := range pairs {
+		f := ProtoFindingToGo(&pluginv1.Finding{
+			RuleId: tc.rule, Message: "m", Fingerprint: "fp", Location: loc,
+		}, tc.plugin)
+
+		key := tc.plugin + " / " + tc.rule
+		if prev, dup := seen[f.Fingerprint]; dup {
+			t.Errorf("collision between %q and %q", prev, key)
+		}
+		seen[f.Fingerprint] = key
+	}
+}

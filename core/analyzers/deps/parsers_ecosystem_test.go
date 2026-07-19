@@ -282,3 +282,134 @@ func assertPackages(t *testing.T, got []Package, want map[string]string, ecosyst
 		}
 	}
 }
+
+// --- formats and shapes found by adversarial review ---
+
+// pnpm 9 dropped the leading slash from package keys and moved resolution data
+// into a `snapshots:` section. It has been the default since 2024, so a parser
+// handling only v5 and v6 leaves most current pnpm projects unscanned — the
+// silent blind spot these parsers exist to remove.
+const pnpmLockV9 = `lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+
+importers:
+
+  .:
+    dependencies:
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
+
+packages:
+
+  lodash@4.17.21:
+    resolution: {integrity: sha512-abc==}
+
+  '@babel/core@7.22.5':
+    resolution: {integrity: sha512-def==}
+
+  react-dom@18.2.0:
+    resolution: {integrity: sha512-ghi==}
+    peerDependencies:
+      react: ^18.2.0
+
+snapshots:
+
+  lodash@4.17.21: {}
+`
+
+func TestParsePnpmLock_V9(t *testing.T) {
+	t.Parallel()
+
+	pkgs, err := parsePnpmLock([]byte(pnpmLockV9))
+	if err != nil {
+		t.Fatalf("parsePnpmLock: %v", err)
+	}
+	assertPackages(t, pkgs, map[string]string{
+		"lodash":      "4.17.21",
+		"@babel/core": "7.22.5",
+		"react-dom":   "18.2.0",
+	}, "npm")
+}
+
+// TestParsePnpmLock_PeerSuffixes covers both spellings of the peer-dependency
+// suffix. v5 appends "_peer@version" and v6+ uses "(peer@version)"; leaving
+// either attached corrupts both the name and the version, so no advisory can
+// ever match.
+func TestParsePnpmLock_PeerSuffixes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ name, input, wantName, wantVersion string }{
+		{"v5 underscore", "lockfileVersion: 5.4\n\npackages:\n\n  /react-dom/16.8.0_react@16.8.0:\n    dev: false\n", "react-dom", "16.8.0"},
+		{"v5 scoped underscore", "lockfileVersion: 5.4\n\npackages:\n\n  /@scope/pkg/1.0.0_bar@2.0.0:\n    dev: false\n", "@scope/pkg", "1.0.0"},
+		{"v6 parenthesis", "lockfileVersion: '6.0'\n\npackages:\n\n  /react-dom@18.2.0(react@18.2.0):\n    dev: false\n", "react-dom", "18.2.0"},
+		{"v9 parenthesis", "lockfileVersion: '9.0'\n\npackages:\n\n  react-dom@18.2.0(react@18.2.0):\n    resolution: {}\n", "react-dom", "18.2.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			pkgs, err := parsePnpmLock([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("parsePnpmLock: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("expected 1 package, got %d: %+v", len(pkgs), pkgs)
+			}
+			if pkgs[0].Name != tc.wantName || pkgs[0].Version != tc.wantVersion {
+				t.Errorf("got %q@%q, want %q@%q",
+					pkgs[0].Name, pkgs[0].Version, tc.wantName, tc.wantVersion)
+			}
+		})
+	}
+}
+
+// TestParseYarnLock_BerryProtocols covers berry descriptors whose RANGE itself
+// contains an '@'. Splitting on the last '@' then eats part of the range into
+// the name. The alias form is not exotic — cliui and wrap-ansi put it in
+// essentially every modern berry lockfile.
+func TestParseYarnLock_BerryProtocols(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ name, input, want string }{
+		{"npm alias", "\"string-width-cjs@npm:string-width@^4.2.0\":\n  version: 4.2.3\n", "string-width-cjs"},
+		{"patch protocol", "\"lodash@patch:lodash@npm%3A4.17.21#~/.yarn/patch.diff\":\n  version: 4.17.21\n", "lodash"},
+		{"plain npm protocol", "\"lodash@npm:^4.17.15\":\n  version: 4.17.21\n", "lodash"},
+		{"scoped alias", "\"@foo/bar@npm:@baz/qux@^1.0.0\":\n  version: 1.2.3\n", "@foo/bar"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			pkgs, err := parseYarnLock([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("parseYarnLock: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("expected 1 package, got %d: %+v", len(pkgs), pkgs)
+			}
+			if pkgs[0].Name != tc.want {
+				t.Errorf("name = %q, want %q", pkgs[0].Name, tc.want)
+			}
+		})
+	}
+}
+
+// TestParseYarnLock_CommaInsideRange guards against phantom packages. A
+// descriptor may carry a comma INSIDE one range ("foo@>=1.0.0, <2.0.0"), and
+// splitting on every comma turns the fragment "<2.0.0" into a package of that
+// name — polluting the inventory and the SBOM with entries that do not exist.
+func TestParseYarnLock_CommaInsideRange(t *testing.T) {
+	t.Parallel()
+
+	pkgs, err := parseYarnLock([]byte("\"foo@>=1.0.0, <2.0.0\":\n  version \"1.5.0\"\n"))
+	if err != nil {
+		t.Fatalf("parseYarnLock: %v", err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d: %+v", len(pkgs), pkgs)
+	}
+	if pkgs[0].Name != "foo" {
+		t.Errorf("name = %q, want foo", pkgs[0].Name)
+	}
+}

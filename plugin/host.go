@@ -225,7 +225,38 @@ func (h *Host) Plugins() []Info {
 // A returned error is a RuntimeViolation and the plugin has already been shut
 // down by handleViolationLocked.
 func (h *Host) authorizeTool(ctx context.Context, p *Plugin, toolName string) error {
+	return h.authorize(ctx, p, toolName, true)
+}
+
+// authorizeToolWithoutTermination applies the same controls but leaves the
+// plugin running when it refuses.
+//
+// Termination is the right response to a tool the CALLER asked for: the plugin
+// tried to do something its policy forbids. It is the wrong response when the
+// HOST chose the tool — InvokePostScan enumerates every requires_scan_context
+// tool itself, so terminating on refusal punishes a well-behaved plugin and
+// takes its read-only siblings down with it (they then fail "not ready").
+// A plugin shipping a passive plan_code alongside an active apply_code would
+// lose plan_code entirely, which is the shape the SDK docs recommend.
+func (h *Host) authorizeToolWithoutTermination(ctx context.Context, p *Plugin, toolName string) error {
+	return h.authorize(ctx, p, toolName, false)
+}
+
+func (h *Host) authorize(ctx context.Context, p *Plugin, toolName string, terminate bool) error {
 	pluginName := p.Info().Name
+
+	// refuse records the violation and, for caller-initiated invocations,
+	// shuts the plugin down.
+	refuse := func(v RuntimeViolation) error {
+		h.mu.Lock()
+		if terminate {
+			h.handleViolationLocked(v, p)
+		} else {
+			h.violations = append(h.violations, v)
+		}
+		h.mu.Unlock()
+		return v
+	}
 
 	// Enforcement reads the plugin's OWN effective policy, not the host's:
 	// plugins of different tracks run under different policies in the same
@@ -255,10 +286,7 @@ func (h *Host) authorizeTool(ctx context.Context, p *Plugin, toolName string) er
 				),
 				Timestamp: time.Now(),
 			}
-			h.mu.Lock()
-			h.handleViolationLocked(v, p)
-			h.mu.Unlock()
-			return v
+			return refuse(v)
 		}
 	}
 
@@ -276,10 +304,7 @@ func (h *Host) authorizeTool(ctx context.Context, p *Plugin, toolName string) er
 				Message:    fmt.Sprintf("tool %q is not read-only but policy is passive", toolName),
 				Timestamp:  time.Now(),
 			}
-			h.mu.Lock()
-			h.handleViolationLocked(v, p)
-			h.mu.Unlock()
-			return v
+			return refuse(v)
 		}
 	}
 
@@ -292,10 +317,7 @@ func (h *Host) authorizeTool(ctx context.Context, p *Plugin, toolName string) er
 				Message:    fmt.Sprintf("request rate limit exceeded: %v", err),
 				Timestamp:  time.Now(),
 			}
-			h.mu.Lock()
-			h.handleViolationLocked(v, p)
-			h.mu.Unlock()
-			return v
+			return refuse(v)
 		}
 	}
 
@@ -468,42 +490,15 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 			pluginName := p.Info().Name
 			policy := p.Policy()
 
-			// Read-only enforcement, against this plugin's own policy.
-			if policy.MaxRiskClass == RiskClassPassive {
-				ti := p.getToolInfo(toolName)
-				if ti != nil && !ti.ReadOnly {
-					v := RuntimeViolation{
-						Type:       ViolationUnauthorizedAction,
-						PluginName: pluginName,
-						Message:    fmt.Sprintf("tool %q is not read-only but policy is passive", toolName),
-						Timestamp:  time.Now(),
-					}
-					h.mu.Lock()
-					h.handleViolationLocked(v, p)
-					h.mu.Unlock()
-					return nil
-				}
+			// Every pre-invocation control, via the shared gate. This path
+			// previously re-inlined only the read-only check and the rate
+			// limit, silently omitting per-tool safety validation — and this
+			// is the path `nox scan` actually uses, so a tool declaring
+			// requirements its policy forbids ran anyway.
+			if err := h.authorizeTool(gCtx, p, toolName); err != nil {
+				return nil // Non-fatal: the violation is already recorded.
 			}
 
-			// Rate limit check.
-			if p.rateLimiter != nil {
-				if err := p.rateLimiter.AllowRequest(gCtx); err != nil {
-					v := RuntimeViolation{
-						Type:       ViolationRateLimit,
-						PluginName: pluginName,
-						Message:    fmt.Sprintf("request rate limit exceeded: %v", err),
-						Timestamp:  time.Now(),
-					}
-					h.mu.Lock()
-					h.handleViolationLocked(v, p)
-					h.mu.Unlock()
-					return nil
-				}
-			}
-
-			// Bound this plugin by its own track's timeout, inside the group's
-			// longest-of-all deadline, so one plugin's larger allowance never
-			// extends another's.
 			invokeCtx := gCtx
 			if t := policy.ToolInvocationTimeout; t > 0 {
 				var cancel context.CancelFunc
@@ -523,46 +518,12 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 				return nil // Non-fatal: record as diagnostic.
 			}
 
-			// Bandwidth check.
-			if p.rateLimiter != nil {
-				size := estimateResponseSize(resp)
-				if err := p.rateLimiter.AllowBandwidth(gCtx, size); err != nil {
-					v := RuntimeViolation{
-						Type:       ViolationBandwidth,
-						PluginName: pluginName,
-						Message:    fmt.Sprintf("bandwidth limit exceeded (%d bytes): %v", size, err),
-						Timestamp:  time.Now(),
-					}
-					h.mu.Lock()
-					h.handleViolationLocked(v, p)
-					h.mu.Unlock()
-					return nil
-				}
+			// Bandwidth accounting, secret redaction and diagnostics, via the
+			// shared post-invocation path.
+			resp, err = h.processResponse(gCtx, p, resp)
+			if err != nil {
+				return nil // Non-fatal: the violation is already recorded.
 			}
-
-			// Secret redaction.
-			resp, redacted := h.redactor.RedactResponse(resp)
-			if redacted {
-				v := RuntimeViolation{
-					Type:       ViolationSecretLeaked,
-					PluginName: pluginName,
-					Message:    "plugin output contained secrets (redacted before delivery)", // nox:ignore SEC-163 -- error message not a secret
-					Timestamp:  time.Now(),
-				}
-				h.mu.Lock()
-				h.violations = append(h.violations, v)
-				h.diagnostics = append(h.diagnostics, Diagnostic{
-					Severity: "warning",
-					Message:  v.Error(),
-					Source:   pluginName,
-				})
-				h.mu.Unlock()
-				h.logger.Warn("secret redacted from plugin output", "plugin", pluginName)
-			}
-
-			h.mu.Lock()
-			h.collectDiagnostics(pluginName, resp)
-			h.mu.Unlock()
 
 			resultsMu.Lock()
 			results = append(results, indexedResp{index: i, plugin: p.Info().Name, resp: resp})
@@ -661,7 +622,7 @@ func (h *Host) InvokePostScan(ctx context.Context, result *core.ScanResult, work
 		// no secret redaction — which made nox's "never auto-applies fixes"
 		// guarantee bypassable by any plugin declaring a non-read-only tool
 		// with requires_scan_context.
-		if err := h.authorizeTool(ctx, pt.plugin, pt.tool); err != nil {
+		if err := h.authorizeToolWithoutTermination(ctx, pt.plugin, pt.tool); err != nil {
 			h.mu.Lock()
 			h.diagnostics = append(h.diagnostics, Diagnostic{
 				Severity: "error",

@@ -92,13 +92,7 @@ func yarnDescriptorNames(descriptor string) []string {
 			continue
 		}
 
-		name := spec
-		// Split on the LAST '@' so a leading scope '@' is preserved.
-		if idx := strings.LastIndex(spec, "@"); idx > 0 {
-			name = spec[:idx]
-		}
-		// Berry writes "lodash@npm:^4.17.15"; the protocol is part of the range.
-		name = strings.TrimSpace(name)
+		name := yarnSpecName(spec)
 		if name == "" || seen[name] {
 			continue
 		}
@@ -107,6 +101,34 @@ func yarnDescriptorNames(descriptor string) []string {
 	}
 
 	return names
+}
+
+// yarnSpecName extracts the package name from a single yarn descriptor spec.
+//
+// The separator is the FIRST '@' after any scope prefix, not the last. Ranges
+// routinely contain their own '@':
+//
+//	string-width-cjs@npm:string-width@^4.2.0   → string-width-cjs
+//	lodash@patch:lodash@npm%3A4.17.21#...      → lodash
+//	@foo/bar@npm:@baz/qux@^1.0.0               → @foo/bar
+//
+// Splitting on the last '@' pulls part of the range into the name, and the
+// npm-alias form appears in essentially every modern berry lockfile via cliui
+// and wrap-ansi. Returns "" for a fragment carrying no '@' at all, which is a
+// comma that appeared INSIDE one range ("foo@>=1.0.0, <2.0.0") rather than
+// between two — treating it as a package invents one that does not exist.
+func yarnSpecName(spec string) string {
+	// A scope's leading '@' is part of the name, so start the search past it.
+	start := 0
+	if strings.HasPrefix(spec, "@") {
+		start = 1
+	}
+
+	idx := strings.Index(spec[start:], "@")
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(spec[:start+idx])
 }
 
 // parsePnpmLock extracts packages from a pnpm lockfile.
@@ -130,7 +152,9 @@ func parsePnpmLock(content []byte) ([]Package, error) {
 			continue
 		}
 
-		// Top-level keys delimit sections.
+		// Top-level keys delimit sections. Only `packages:` is read: v9 also
+		// has a `snapshots:` section keyed identically, which would double
+		// every dependency, and `importers:` lists workspace members.
 		if !strings.HasPrefix(line, " ") {
 			inPackages = strings.HasPrefix(trimmed, "packages:")
 			continue
@@ -139,17 +163,25 @@ func parsePnpmLock(content []byte) ([]Package, error) {
 			continue
 		}
 
-		// Package keys are indented, start with '/', and end in ':'.
-		if !strings.HasPrefix(trimmed, "/") || !strings.HasSuffix(trimmed, ":") {
+		// Package keys are indented and end in ':'. Lockfile v5 and v6 prefix
+		// them with '/'; v9 — the default since 2024 — dropped the slash, so
+		// requiring it silently yielded zero packages for most current pnpm
+		// projects.
+		if !strings.HasSuffix(trimmed, ":") {
 			continue
 		}
 
 		key := strings.TrimSuffix(trimmed, ":")
+		key = strings.Trim(key, `'"`)
 		key = strings.TrimPrefix(key, "/")
-		// Peer-dependency suffixes: "/react-dom@18.2.0(react@18.2.0)".
-		if idx := strings.Index(key, "("); idx > 0 {
-			key = key[:idx]
+
+		// Ignore nested keys such as `resolution:` and `peerDependencies:`,
+		// which are indented further and carry no version.
+		if !strings.Contains(key, "@") && !strings.Contains(key, "/") {
+			continue
 		}
+
+		key = stripPnpmPeerSuffix(key)
 
 		name, version := splitPnpmKey(key)
 		if name == "" || version == "" {
@@ -161,10 +193,31 @@ func parsePnpmLock(content []byte) ([]Package, error) {
 	return pkgs, nil
 }
 
+// stripPnpmPeerSuffix removes the peer-dependency qualifier pnpm appends to a
+// package key. v6+ writes "(react@18.2.0)"; v5 wrote "_react@16.8.0". Leaving
+// either attached corrupts both name and version, so no advisory can match.
+func stripPnpmPeerSuffix(key string) string {
+	if idx := strings.Index(key, "("); idx > 0 {
+		key = key[:idx]
+	}
+	if idx := strings.Index(key, "_"); idx > 0 {
+		// Only a peer qualifier, not a legitimate underscore in a package
+		// name: the qualifier always carries an '@' after the underscore.
+		if strings.Contains(key[idx:], "@") {
+			key = key[:idx]
+		}
+	}
+	return key
+}
+
 // splitPnpmKey separates a pnpm package key into name and version, accepting
-// both the "name@version" (v6+) and "name/version" (v5) spellings.
+// both the "name@version" (v6+/v9) and "name/version" (v5) spellings.
+//
+// The v5 form is tried FIRST when the key has no '@' after the scope, because
+// "@scope/pkg/1.0.0" contains an '@' at index 0 that must not be treated as the
+// version separator.
 func splitPnpmKey(key string) (name, version string) {
-	// v6+: split on the last '@', which cannot be the scope marker at index 0.
+	// v6+/v9: "name@version", where a leading '@' is the scope marker.
 	if idx := strings.LastIndex(key, "@"); idx > 0 {
 		return key[:idx], key[idx+1:]
 	}
