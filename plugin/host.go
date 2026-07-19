@@ -270,11 +270,20 @@ func (h *Host) InvokeTool(ctx context.Context, toolName string, input map[string
 	return resp, nil
 }
 
+// AttributedResponse pairs a tool response with the plugin that produced it.
+// Attribution has to survive the fan-out: the response message carries no
+// producer identity, and without it the merge step cannot namespace
+// plugin-supplied fingerprints.
+type AttributedResponse struct {
+	PluginName string
+	Response   *pluginv1.InvokeToolResponse
+}
+
 // InvokeAll invokes a tool on all plugins that declare it.
 // Uses errgroup with a concurrency semaphore from Policy.MaxConcurrency.
 // Individual plugin errors become diagnostics, not fatal errors.
 // Enforcement (rate limiting, read-only, redaction) is applied per-plugin.
-func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]any, workspaceRoot string) ([]*pluginv1.InvokeToolResponse, error) {
+func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]any, workspaceRoot string) ([]AttributedResponse, error) {
 	h.mu.RLock()
 	var targets []*Plugin
 	for _, p := range h.plugins {
@@ -302,7 +311,7 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 
 	type indexedResp struct {
 		index int
-		resp  *pluginv1.InvokeToolResponse
+		resp  AttributedResponse
 	}
 
 	results := make([]indexedResp, 0, len(targets))
@@ -402,7 +411,7 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 			h.mu.Unlock()
 
 			resultsMu.Lock()
-			results = append(results, indexedResp{index: i, resp: resp})
+			results = append(results, indexedResp{index: i, resp: AttributedResponse{PluginName: pluginName, Response: resp}})
 			resultsMu.Unlock()
 			return nil
 		})
@@ -413,14 +422,14 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 	}
 
 	// Place responses at their original index to preserve ordering.
-	ordered := make([]*pluginv1.InvokeToolResponse, len(targets))
+	ordered := make([]AttributedResponse, len(targets))
 	for _, r := range results {
 		ordered[r.index] = r.resp
 	}
-	// Compact: remove nil entries from skipped plugins (violations, errors).
+	// Compact: remove empty entries from skipped plugins (violations, errors).
 	responses := ordered[:0]
 	for _, r := range ordered {
-		if r != nil {
+		if r.Response != nil {
 			responses = append(responses, r)
 		}
 	}
@@ -428,15 +437,16 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 }
 
 // MergeResults converts a single plugin response into domain types and
-// adds them to the ScanResult. This method is not thread-safe with respect
-// to FindingSet and AIInventory — call sequentially.
-func (h *Host) MergeResults(resp *pluginv1.InvokeToolResponse, result *core.ScanResult) {
+// adds them to the ScanResult. pluginName attributes the response to its
+// producer so finding fingerprints can be namespaced. This method is not
+// thread-safe with respect to FindingSet and AIInventory — call sequentially.
+func (h *Host) MergeResults(pluginName string, resp *pluginv1.InvokeToolResponse, result *core.ScanResult) {
 	if resp == nil || result == nil {
 		return
 	}
 
 	for _, pf := range resp.GetFindings() {
-		result.Findings.Add(ProtoFindingToGo(pf))
+		result.Findings.Add(ProtoFindingToGo(pf, pluginName))
 	}
 
 	for _, pp := range resp.GetPackages() {
@@ -455,10 +465,10 @@ func (h *Host) MergeResults(resp *pluginv1.InvokeToolResponse, result *core.Scan
 	}
 }
 
-// MergeAllResults merges multiple plugin responses sequentially.
-func (h *Host) MergeAllResults(responses []*pluginv1.InvokeToolResponse, result *core.ScanResult) {
-	for _, resp := range responses {
-		h.MergeResults(resp, result)
+// MergeAllResults merges multiple attributed plugin responses sequentially.
+func (h *Host) MergeAllResults(responses []AttributedResponse, result *core.ScanResult) {
+	for _, r := range responses {
+		h.MergeResults(r.PluginName, r.Response, result)
 	}
 }
 
@@ -504,7 +514,7 @@ func (h *Host) InvokePostScan(ctx context.Context, result *core.ScanResult, work
 			continue
 		}
 
-		h.MergeResults(resp, result)
+		h.MergeResults(pt.plugin.Info().Name, resp, result)
 
 		h.mu.Lock()
 		h.collectDiagnostics(pt.plugin.Info().Name, resp)

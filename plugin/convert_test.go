@@ -139,7 +139,7 @@ func TestFindingRoundTrip(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto)
+	roundTrip := ProtoFindingToGo(proto, "acme")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)
@@ -159,8 +159,11 @@ func TestFindingRoundTrip(t *testing.T) {
 	if roundTrip.Message != original.Message {
 		t.Errorf("Message mismatch: %q vs %q", roundTrip.Message, original.Message)
 	}
-	if roundTrip.Fingerprint != original.Fingerprint {
-		t.Errorf("Fingerprint mismatch: %q vs %q", roundTrip.Fingerprint, original.Fingerprint)
+	// Fingerprint is deliberately NOT round-tripped: the host re-derives it
+	// under the plugin's namespace so a plugin cannot dictate the value nox
+	// dedupes and suppresses on.
+	if roundTrip.Fingerprint == original.Fingerprint {
+		t.Error("Fingerprint was copied verbatim from the plugin; expected a namespaced value")
 	}
 	if !reflect.DeepEqual(roundTrip.Metadata, original.Metadata) {
 		t.Errorf("Metadata mismatch: %v vs %v", roundTrip.Metadata, original.Metadata)
@@ -168,9 +171,97 @@ func TestFindingRoundTrip(t *testing.T) {
 }
 
 func TestProtoFindingToGo_Nil(t *testing.T) {
-	got := ProtoFindingToGo(nil)
+	got := ProtoFindingToGo(nil, "acme")
 	if got.ID != "" || got.RuleID != "" {
 		t.Errorf("ProtoFindingToGo(nil) should return zero value, got %+v", got)
+	}
+}
+
+// A plugin that claims a core finding's fingerprint would, once merged into the
+// shared FindingSet, win first-wins dedup and erase the core finding — or match
+// a baselined entry and hide itself. The stored fingerprint must never be the
+// one the plugin asked for.
+func TestProtoFindingToGo_DoesNotTrustClaimedFingerprint(t *testing.T) {
+	loc := findings.Location{FilePath: "src/auth.go", StartLine: 42}
+	coreFP := findings.ComputeFingerprint("SEC-001", loc, "api_key = \"x\"")
+
+	got := ProtoFindingToGo(&pluginv1.Finding{
+		RuleId:      "SEC-001",
+		Message:     "benign",
+		Location:    GoLocationToProto(loc),
+		Fingerprint: coreFP,
+	}, "evil-plugin")
+
+	if got.Fingerprint == coreFP {
+		t.Error("plugin fingerprint collided with the core finding it forged")
+	}
+	if got.Fingerprint == "" {
+		t.Error("namespaced fingerprint must not be empty")
+	}
+}
+
+// Two plugins emitting byte-identical findings must still occupy distinct
+// fingerprint space, otherwise one plugin can suppress another's findings.
+func TestProtoFindingToGo_FingerprintIsolatedPerPlugin(t *testing.T) {
+	pf := &pluginv1.Finding{
+		RuleId:      "PLG-001",
+		Message:     "same message",
+		Location:    GoLocationToProto(findings.Location{FilePath: "a.go", StartLine: 1}),
+		Fingerprint: "identical-claim",
+	}
+
+	a := ProtoFindingToGo(pf, "plugin-a")
+	b := ProtoFindingToGo(pf, "plugin-b")
+
+	if a.Fingerprint == b.Fingerprint {
+		t.Errorf("plugin-a and plugin-b produced the same fingerprint %q", a.Fingerprint)
+	}
+}
+
+// Fingerprints feed baseline and VEX suppression, so they must be reproducible
+// across runs for the same inputs.
+func TestProtoFindingToGo_FingerprintDeterministic(t *testing.T) {
+	pf := &pluginv1.Finding{
+		RuleId:      "PLG-002",
+		Message:     "finding",
+		Location:    GoLocationToProto(findings.Location{FilePath: "b.go", StartLine: 7}),
+		Fingerprint: "claimed",
+	}
+
+	first := ProtoFindingToGo(pf, "acme")
+	second := ProtoFindingToGo(pf, "acme")
+
+	if first.Fingerprint != second.Fingerprint {
+		t.Errorf("fingerprint not deterministic: %q vs %q", first.Fingerprint, second.Fingerprint)
+	}
+}
+
+// A plugin that supplies no fingerprint still needs a stable, unique identity,
+// and two of its findings in one file must not collapse into one.
+func TestProtoFindingToGo_ComputesFingerprintWhenAbsent(t *testing.T) {
+	loc := GoLocationToProto(findings.Location{FilePath: "c.go", StartLine: 3})
+
+	first := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-003", Message: "one", Location: loc}, "acme")
+	second := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-003", Message: "two", Location: loc}, "acme")
+
+	if first.Fingerprint == "" {
+		t.Fatal("expected a host-computed fingerprint, got empty string")
+	}
+	if first.Fingerprint == second.Fingerprint {
+		t.Error("two distinct findings from one plugin shared a fingerprint")
+	}
+}
+
+// Distinct claimed fingerprints must survive as distinct stored fingerprints;
+// namespacing must not collapse a plugin's own findings together.
+func TestProtoFindingToGo_PreservesPluginFindingDistinctness(t *testing.T) {
+	loc := GoLocationToProto(findings.Location{FilePath: "d.go", StartLine: 1})
+
+	first := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-004", Location: loc, Fingerprint: "one"}, "acme")
+	second := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-004", Location: loc, Fingerprint: "two"}, "acme")
+
+	if first.Fingerprint == second.Fingerprint {
+		t.Error("distinct claimed fingerprints collapsed into one stored fingerprint")
 	}
 }
 
@@ -182,7 +273,7 @@ func TestFindingRoundTrip_EmptyMetadata(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto)
+	roundTrip := ProtoFindingToGo(proto, "acme")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)

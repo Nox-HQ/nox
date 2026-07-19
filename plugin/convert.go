@@ -11,19 +11,26 @@ import (
 
 // --- Proto → Go conversion ---
 
+// pluginRuleNamespace prefixes the rule ID fed into the fingerprint hash for
+// plugin-supplied findings, keeping their digests disjoint from core findings'.
+const pluginRuleNamespace = "plugin:"
+
 // ProtoFindingToGo converts a protobuf Finding to the domain Finding type.
-func ProtoFindingToGo(pf *pluginv1.Finding) findings.Finding {
+// pluginName identifies the plugin that produced the finding and is required:
+// it namespaces the fingerprint (see pluginFingerprint).
+func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding {
 	if pf == nil {
 		return findings.Finding{}
 	}
+	loc := ProtoLocationToGo(pf.GetLocation())
 	f := findings.Finding{
 		ID:          pf.GetId(),
 		RuleID:      pf.GetRuleId(),
 		Severity:    ProtoSeverityToGo(pf.GetSeverity()),
 		Confidence:  ProtoConfidenceToGo(pf.GetConfidence()),
-		Location:    ProtoLocationToGo(pf.GetLocation()),
+		Location:    loc,
 		Message:     pf.GetMessage(),
-		Fingerprint: pf.GetFingerprint(),
+		Fingerprint: pluginFingerprint(pluginName, pf, loc),
 	}
 	if m := pf.GetMetadata(); len(m) > 0 {
 		f.Metadata = make(map[string]string, len(m))
@@ -32,6 +39,33 @@ func ProtoFindingToGo(pf *pluginv1.Finding) findings.Finding {
 		}
 	}
 	return f
+}
+
+// pluginFingerprint derives the fingerprint nox stores for a plugin-supplied
+// finding.
+//
+// Plugin findings are merged into the same FindingSet as core findings, which
+// dedupes first-wins by fingerprint, and baseline/VEX suppression keys on the
+// same value. Storing the plugin's claimed fingerprint verbatim therefore hands
+// every plugin a forgery primitive: collide with a core finding to suppress it,
+// or match a baselined entry to hide itself. Hashing the plugin's name into the
+// digest confines each plugin to its own fingerprint space.
+//
+// The claimed fingerprint is demoted to hash input, never used as the output,
+// so a plugin keeps control over which of *its own* findings are considered the
+// same across runs — that is what makes plugin findings baseline-able — without
+// any say over collisions outside its namespace.
+func pluginFingerprint(pluginName string, pf *pluginv1.Finding, loc findings.Location) string {
+	// A plugin that supplies no fingerprint still needs a stable identity, so
+	// its message stands in. The fp:/msg: tags keep the two cases from aliasing
+	// (a claimed fingerprint that happens to equal another finding's message).
+	seed := "fp:" + pf.GetFingerprint()
+	if pf.GetFingerprint() == "" {
+		seed = "msg:" + pf.GetMessage()
+	}
+	// Reuse the core scheme so plugin fingerprints inherit its determinism and
+	// path normalisation, and so a fingerprint-version bump moves both in step.
+	return findings.ComputeFingerprint(pluginRuleNamespace+pluginName+":"+pf.GetRuleId(), loc, seed)
 }
 
 // ProtoLocationToGo converts a protobuf Location to the domain Location type.

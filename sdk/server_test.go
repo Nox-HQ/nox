@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
@@ -211,5 +212,94 @@ func TestServer_Serve_WritesAddr(t *testing.T) {
 	output := buf.String()
 	if !strings.HasPrefix(output, "NOX_PLUGIN_ADDR=") {
 		t.Errorf("expected NOX_PLUGIN_ADDR= prefix, got %q", output)
+	}
+}
+
+// writerFunc adapts a function to io.Writer so a test can observe the
+// handshake line the moment Serve emits it, without racing on a Buffer.
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// serveAndWaitForAddr starts srv in a goroutine and returns the advertised
+// address plus a stop function that cancels and waits for a clean shutdown.
+func serveAndWaitForAddr(t *testing.T, srv *PluginServer) (addr string, stop func()) {
+	t.Helper()
+
+	addrCh := make(chan string, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.Serve(ctx, WithAddrWriter(writerFunc(func(p []byte) (int, error) {
+			select {
+			case addrCh <- string(p):
+			default:
+			}
+			return len(p), nil
+		})))
+	}()
+
+	stop = func() {
+		cancel()
+		<-done
+	}
+
+	select {
+	case line := <-addrCh:
+		addr = strings.TrimSpace(strings.TrimPrefix(line, "NOX_PLUGIN_ADDR="))
+		return addr, stop
+	case <-time.After(5 * time.Second):
+		stop()
+		t.Fatal("timed out waiting for NOX_PLUGIN_ADDR handshake line")
+		return "", stop
+	}
+}
+
+// A plugin listener reachable from other hosts lets any local process — and,
+// depending on firewall posture, any LAN peer — invoke plugin tools mid-scan.
+// The listener must be loopback-only.
+func TestServer_Serve_BindsLoopbackOnly(t *testing.T) {
+	srv := NewPluginServer(NewManifest("test", "1.0.0").Build())
+
+	addr, stop := serveAndWaitForAddr(t, srv)
+	defer stop()
+
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("SplitHostPort(%q): %v", addr, err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		t.Fatalf("advertised host %q is not an IP literal", host)
+	}
+	if !ip.IsLoopback() {
+		t.Errorf("listener bound to %q, want a loopback address", host)
+	}
+}
+
+// The loopback bind must not break the handshake contract: the address printed
+// on stdout is the only thing the host has to dial, so it must stay connectable.
+func TestServer_Serve_AdvertisedAddrIsDialable(t *testing.T) {
+	srv := NewPluginServer(NewManifest("test", "1.0.0").Build())
+
+	addr, stop := serveAndWaitForAddr(t, srv)
+	defer stop()
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("NewClient(%q): %v", addr, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := pluginv1.NewPluginServiceClient(conn).GetManifest(ctx, &pluginv1.GetManifestRequest{ApiVersion: "v1"})
+	if err != nil {
+		t.Fatalf("GetManifest over advertised addr %q: %v", addr, err)
+	}
+	if resp.GetName() != "test" {
+		t.Errorf("manifest name = %q, want %q", resp.GetName(), "test")
 	}
 }

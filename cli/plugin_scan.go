@@ -97,17 +97,17 @@ func runPluginBinaries(ctx context.Context, target string, binaries []string, po
 	}
 
 	out := &core.PluginScanOutput{}
-	for _, resp := range responses {
-		if resp == nil {
+	for _, r := range responses {
+		if r.Response == nil {
 			continue
 		}
-		for _, pf := range resp.GetFindings() {
-			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf))
+		for _, pf := range r.Response.GetFindings() {
+			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf, r.PluginName))
 		}
-		for _, pe := range resp.GetEnrichments() {
+		for _, pe := range r.Response.GetEnrichments() {
 			out.Enrichments = append(out.Enrichments, plugin.ProtoEnrichmentToGo(pe))
 		}
-		for _, pg := range resp.GetGraphs() {
+		for _, pg := range r.Response.GetGraphs() {
 			out.Graphs = append(out.Graphs, plugin.ProtoGraphToGo(pg))
 		}
 	}

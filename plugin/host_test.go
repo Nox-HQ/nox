@@ -263,7 +263,7 @@ func TestHost_MergeResults_Findings(t *testing.T) {
 		},
 	}
 
-	h.MergeResults(resp, result)
+	h.MergeResults("acme", resp, result)
 
 	ff := result.Findings.Findings()
 	if len(ff) != 1 {
@@ -277,6 +277,55 @@ func TestHost_MergeResults_Findings(t *testing.T) {
 	}
 	if ff[0].Location.FilePath != "src/main.go" {
 		t.Errorf("Location.FilePath = %q, want %q", ff[0].Location.FilePath, "src/main.go")
+	}
+}
+
+// End-to-end form of the fingerprint-forgery attack: a plugin echoes a core
+// finding's fingerprint hoping first-wins Deduplicate will drop the real
+// finding. Both must survive the merge.
+func TestHost_MergeResults_PluginCannotSuppressCoreFinding(t *testing.T) {
+	h := newTestHost()
+	result := &core.ScanResult{
+		Findings:    findings.NewFindingSet(),
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+
+	loc := findings.Location{FilePath: "src/main.go", StartLine: 42}
+	coreFinding := findings.Finding{
+		RuleID:      "SEC-001",
+		Severity:    findings.SeverityCritical,
+		Location:    loc,
+		Message:     "hardcoded credential",
+		Fingerprint: findings.ComputeFingerprint("SEC-001", loc, "hardcoded credential"),
+	}
+	result.Findings.Add(coreFinding)
+
+	h.MergeResults("evil-plugin", &pluginv1.InvokeToolResponse{
+		Findings: []*pluginv1.Finding{{
+			RuleId:      "SEC-001",
+			Severity:    pluginv1.Severity_SEVERITY_INFO,
+			Location:    GoLocationToProto(loc),
+			Message:     "nothing to see here",
+			Fingerprint: coreFinding.Fingerprint,
+		}},
+	}, result)
+
+	result.Findings.Deduplicate()
+
+	ff := result.Findings.Findings()
+	if len(ff) != 2 {
+		t.Fatalf("len(Findings) = %d, want 2 (plugin finding suppressed the core finding)", len(ff))
+	}
+
+	var foundCore bool
+	for _, f := range ff {
+		if f.Fingerprint == coreFinding.Fingerprint && f.Message == coreFinding.Message {
+			foundCore = true
+		}
+	}
+	if !foundCore {
+		t.Error("core finding was displaced by the plugin's forged fingerprint")
 	}
 }
 
@@ -295,7 +344,7 @@ func TestHost_MergeResults_Packages(t *testing.T) {
 		},
 	}
 
-	h.MergeResults(resp, result)
+	h.MergeResults("acme", resp, result)
 
 	pkgs := result.Inventory.Packages()
 	if len(pkgs) != 2 {
@@ -320,7 +369,7 @@ func TestHost_MergeResults_AIComponents(t *testing.T) {
 		},
 	}
 
-	h.MergeResults(resp, result)
+	h.MergeResults("acme", resp, result)
 
 	if len(result.AIInventory.Components) != 1 {
 		t.Fatalf("len(Components) = %d, want 1", len(result.AIInventory.Components))
@@ -338,7 +387,7 @@ func TestHost_MergeResults_EmptyResponse(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	h.MergeResults(&pluginv1.InvokeToolResponse{}, result)
+	h.MergeResults("acme", &pluginv1.InvokeToolResponse{}, result)
 
 	if len(result.Findings.Findings()) != 0 {
 		t.Error("empty response should not add findings")
@@ -360,8 +409,8 @@ func TestHost_MergeResults_Nil(t *testing.T) {
 	}
 
 	// Should not panic.
-	h.MergeResults(nil, result)
-	h.MergeResults(&pluginv1.InvokeToolResponse{}, nil)
+	h.MergeResults("acme", nil, result)
+	h.MergeResults("acme", &pluginv1.InvokeToolResponse{}, nil)
 }
 
 func TestHost_MergeAllResults(t *testing.T) {
@@ -372,20 +421,20 @@ func TestHost_MergeAllResults(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	responses := []*pluginv1.InvokeToolResponse{
-		{
+	responses := []AttributedResponse{
+		{PluginName: "plugin-a", Response: &pluginv1.InvokeToolResponse{
 			Findings: []*pluginv1.Finding{
 				{Id: "f1", RuleId: "SEC-001", Severity: pluginv1.Severity_SEVERITY_HIGH},
 			},
-		},
-		{
+		}},
+		{PluginName: "plugin-b", Response: &pluginv1.InvokeToolResponse{
 			Findings: []*pluginv1.Finding{
 				{Id: "f2", RuleId: "SEC-002", Severity: pluginv1.Severity_SEVERITY_MEDIUM},
 			},
 			Packages: []*pluginv1.Package{
 				{Name: "pkg", Version: "1.0", Ecosystem: "go"},
 			},
-		},
+		}},
 	}
 
 	h.MergeAllResults(responses, result)
@@ -918,7 +967,7 @@ func TestHost_MergeResults_Graphs(t *testing.T) {
 		},
 	}
 
-	h.MergeResults(resp, result)
+	h.MergeResults("acme", resp, result)
 
 	if len(result.Graphs) != 1 {
 		t.Fatalf("expected 1 graph, got %d", len(result.Graphs))
@@ -955,7 +1004,7 @@ func TestHost_MergeResults_Enrichments(t *testing.T) {
 		},
 	}
 
-	h.MergeResults(resp, result)
+	h.MergeResults("acme", resp, result)
 
 	if len(result.Enrichments) != 1 {
 		t.Fatalf("expected 1 enrichment, got %d", len(result.Enrichments))
@@ -980,7 +1029,7 @@ func TestHost_MergeResults_GraphsAndEnrichments_Empty(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	h.MergeResults(&pluginv1.InvokeToolResponse{}, result)
+	h.MergeResults("acme", &pluginv1.InvokeToolResponse{}, result)
 
 	if len(result.Graphs) != 0 {
 		t.Error("empty response should not add graphs")
@@ -1211,20 +1260,20 @@ func TestHost_MergeAllResults_WithGraphsAndEnrichments(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	responses := []*pluginv1.InvokeToolResponse{
-		{
+	responses := []AttributedResponse{
+		{PluginName: "plugin-a", Response: &pluginv1.InvokeToolResponse{
 			Graphs: []*pluginv1.Graph{
 				{Name: "g1"},
 			},
 			Enrichments: []*pluginv1.Enrichment{
 				{FindingFingerprint: "fp-1", Kind: "triage"},
 			},
-		},
-		{
+		}},
+		{PluginName: "plugin-b", Response: &pluginv1.InvokeToolResponse{
 			Graphs: []*pluginv1.Graph{
 				{Name: "g2"},
 			},
-		},
+		}},
 	}
 
 	h.MergeAllResults(responses, result)
