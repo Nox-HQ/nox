@@ -161,7 +161,7 @@ sdk.WithMaxArtifactBytes(50 * 1024 * 1024)   // Maximum artifact size
 
 ### Track-Specific Profiles
 
-Each track has pre-built safety profiles. Use `plugin.ProfileForTrack(track)` to get defaults:
+`plugin.ProfileForTrack(track)` returns a suggested policy per track:
 
 | Track | Risk | Network | Confirmation |
 |-------|------|---------|-------------|
@@ -170,6 +170,28 @@ Each track has pre-built safety profiles. Use `plugin.ProfileForTrack(track)` to
 | ai-security | passive | none | no |
 | supply-chain | passive | *.osv.dev, *.github.com | no |
 | agent-assistance | passive | LLM APIs | no |
+
+**These profiles are suggestions, not the enforced policy.** The host does not
+apply them automatically. The policy actually enforced at registration is
+`DefaultPolicy()` — max risk class `passive`, and **empty allowlists for
+network hosts, file paths and environment variables** — overridden only by the
+operator's `.nox.yaml` `plugin_policy` block.
+
+The practical consequence for plugin authors: declaring any `network_hosts`,
+`file_paths` or `env_vars` in your manifest, or a risk class above `passive`,
+means your plugin is **rejected at registration** until the operator opts in.
+Being on the `dynamic-runtime` track does not grant localhost access on its
+own. Say so in your README, and give operators the block to paste:
+
+```yaml
+# .nox.yaml
+plugin_policy:
+  max_risk_class: active
+  allowed_network_hosts: ["localhost", "127.0.0.1"]
+```
+
+`ProfileForTrack` and `MergeWithUserPolicy` exist to help operators *derive*
+such a block for a track; they are not consulted by the host at runtime.
 
 ## Testing
 

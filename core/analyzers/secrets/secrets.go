@@ -123,6 +123,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	fs := findings.NewFindingSet()
 
 	for _, artifact := range artifacts {
+		// Honour cancellation between artifacts. A scan over a large tree can
+		// run for a long time; without this the analyzer would keep reading
+		// files after the caller's context was cancelled or its deadline
+		// passed, since nothing inside the loop touches ctx.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		// Skip lock files, checksums, minified bundles and tool state dirs
 		// wholesale: their content-addressed hashes match both the entropy
 		// rules and the provider-key regexes, producing thousands of false

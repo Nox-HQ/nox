@@ -142,3 +142,46 @@ func TestMergeWithUserPolicyNetworkOverride(t *testing.T) {
 		t.Errorf("merged network hosts = %v, want [custom.registry.example.com]", merged.AllowedNetworkHosts)
 	}
 }
+
+// TestHost_DoesNotAutoApplyTrackProfiles pins the gap between ProfileForTrack
+// and what the host actually enforces.
+//
+// docs/plugin-authoring.md previously presented the per-track profiles as
+// though they were the effective policy, so a plugin author would reasonably
+// expect a dynamic-runtime plugin to get localhost network access. It does not:
+// the host enforces DefaultPolicy() — passive, with empty allowlists — unless
+// the operator's .nox.yaml opts in. Documenting an enforced control that does
+// not exist is the more dangerous half of this, so if the host ever starts
+// consulting track profiles, this test should fail and the documentation must
+// be corrected in the same change.
+func TestHost_DoesNotAutoApplyTrackProfiles(t *testing.T) {
+	t.Parallel()
+
+	h := NewHost()
+
+	got := h.policy
+	want := DefaultPolicy()
+
+	if got.MaxRiskClass != want.MaxRiskClass {
+		t.Errorf("MaxRiskClass = %v, want %v", got.MaxRiskClass, want.MaxRiskClass)
+	}
+	if len(got.AllowedNetworkHosts) != 0 {
+		t.Errorf("expected an empty network allowlist, got %v", got.AllowedNetworkHosts)
+	}
+	if len(got.AllowedFilePaths) != 0 {
+		t.Errorf("expected an empty file-path allowlist, got %v", got.AllowedFilePaths)
+	}
+	if len(got.AllowedEnvVars) != 0 {
+		t.Errorf("expected an empty env-var allowlist, got %v", got.AllowedEnvVars)
+	}
+
+	// The dynamic-runtime profile is materially more permissive. Confirm that
+	// difference is real, so the test above is meaningful rather than vacuous.
+	profile := ProfileForTrack(registry.TrackDynamicRuntime)
+	if len(profile.AllowedNetworkHosts) == 0 {
+		t.Fatal("expected the dynamic-runtime profile to allow localhost; test premise is stale")
+	}
+	if profile.MaxRiskClass == want.MaxRiskClass {
+		t.Fatal("expected the dynamic-runtime profile to differ in risk class; test premise is stale")
+	}
+}

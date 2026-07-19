@@ -159,6 +159,11 @@ func RunScanWithOptions(target string, opts ScanOptions) (*ScanResult, error) {
 // every analyzer (including OSV network lookups) and bounds parallel analyzer
 // execution.
 //
+// Analyzers check ctx between artifacts, so cancellation takes effect within
+// one file rather than at the end of the walk. Discovery itself is not
+// interruptible: a cancelled scan still completes the directory traversal it
+// had already begun.
+//
 //nolint:gocritic // ScanOptions is a public API surface; passing by value keeps callers ergonomic.
 func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*ScanResult, error) {
 	if err := ctx.Err(); err != nil {
