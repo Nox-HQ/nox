@@ -7,6 +7,124 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-07-19
+
+### BREAKING CHANGES
+
+This is a minor release carrying breaking changes. The module path stays
+`github.com/nox-hq/nox` — a v2 tag would break `go get` for library consumers
+without a `/v2` path rename — so the breaks are listed here rather than
+signalled by the version number. Read this section before upgrading.
+
+- **`--vex` and `--terraform-plan` now fail when the path cannot be loaded.**
+  Previously a missing or malformed file was silently ignored, so a typo'd
+  path produced a clean-looking scan with no waivers applied and no plan
+  scanned. Pipelines relying on a broken path being skipped will now exit 2.
+
+- **Plugin track safety profiles are enforced.** A plugin's policy is now its
+  registry track's profile merged with `.nox.yaml plugin_policy`, rather than
+  `DefaultPolicy()` for everything. This *loosens* the default posture for
+  tracked plugins — a `dynamic-runtime` plugin gets localhost access without
+  the operator configuring it. Set `plugin_policy.ignore_track_profiles: true`
+  to restore the previous behaviour. Plugins installed with `--local`, or
+  before this release, have no recorded track and stay on the strict default.
+
+- **Go API.** `Host.MergeResults` and `Host.MergeAllResults` take the
+  producing plugin's name; `Host.InvokeAll` returns `[]AttributedResponse`
+  instead of `[]*pluginv1.InvokeToolResponse`; `ProtoFindingToGo` takes a
+  plugin name. `ScanOptions.NoCache` is removed — nothing read it.
+
+- **`-no-cache` is now a documented no-op.** The flag is still accepted so
+  existing scripts keep working, but the scan pipeline consults no incremental
+  cache and never did.
+
+### Added
+
+- **A scan now reports what it could not check.** Graceful degradation is only
+  safe if it is visible, and it was not: an OSV outage, a dead plugin, an
+  unparseable lockfile, a corrupt baseline and an unreadable file during
+  suppression all produced a clean exit 0, indistinguishable from a real pass.
+
+  `ScanResult.Degradations` records each incomplete check with what failed and
+  what may now be missing from the results. The CLI prints them to stderr even
+  under `--quiet` — quiet suppresses noise, not a warning that the results are
+  partial — and `--fail-on-degraded` makes CI treat "could not check" as
+  failure, for runners where OSV is firewalled or a required plugin is absent.
+
+  ```
+  [degraded] vulnerability lookup failed for 1 packages: ...
+    impact: dependency vulnerabilities are under-reported; this scan cannot
+            confirm the absence of known CVEs
+  ```
+
+  Silence is preserved where nothing is wrong: a missing baseline is normal
+  before the first `baseline write`, and files nox deliberately does not parse
+  (`go.sum`, `yarn.lock`) are not degradations. A warning that fires on
+  healthy scans is one operators learn to ignore.
+
+- **`--fail-on-degraded`** — exit non-zero if any check could not complete.
+
+- **`plugin_policy.ignore_track_profiles`** — force every plugin onto the
+  strict default policy regardless of track. Required because the override
+  semantics are one-directional: an operator can widen an allowlist but cannot
+  empty one, so without this there is no way to revoke a profile's grant.
+
+### Fixed
+
+- **Plugin-supplied fingerprints were trusted verbatim.** Plugin findings
+  merge into the same `FindingSet` as core findings, deduplicate first-wins,
+  and baseline and VEX suppression key on the same value — so a plugin could
+  claim a core finding's fingerprint and erase it, or claim a baselined one
+  and hide itself. Fingerprints are now derived host-side and namespaced by
+  plugin, so a plugin cannot reach outside its own findings while its
+  findings stay individually baseline-able.
+
+- **The plugin gRPC socket bound to all interfaces.** `net.Listen("tcp", ":0")`
+  with insecure credentials meant any local process — and depending on the host
+  firewall, any peer on the LAN — could invoke plugin tools for the lifetime of
+  a scan. Now binds `127.0.0.1:0`.
+
+- **Track safety profiles were documented but never applied.** The authoring
+  guide presented the per-track table as the policy in force while the host
+  enforced `DefaultPolicy()` for everything, so a `dynamic-runtime` plugin was
+  rejected at registration for declaring the localhost access its track was
+  documented to grant. The track is read from the registry entry the plugin
+  was installed from and never from the plugin itself — a self-declared track
+  would let a plugin choose its own sandbox.
+
+- **Warnings reached nobody.** The CLI never configured an slog handler, so
+  every `slog.Warn` in the codebase went nowhere — including the OSV
+  degradation warning added in 1.4.0 specifically to prevent silent failure.
+  `NOX_LOG_LEVEL` now controls verbosity.
+
+- **`license.deny` / `license.allow` produced no findings.** The config parsed
+  cleanly and was never wired to the dependency analyzer. Fixing it exposed a
+  second bug: npm license detection returned early when the root
+  `package.json` was missing, skipping `node_modules` entirely.
+
+- **`--rules` was silently ignored under `--staged` and `--history`.** The
+  staged scan dropped its options wholesale; the history scan never read them.
+
+- **Analyzers ignored context cancellation.** All four non-deps analyzers
+  accepted a context and never consulted it, so a cancelled scan kept reading
+  files until the walk finished. They now check between artifacts.
+
+- **A corrupt baseline was silently ignored**, changing what the gate enforces
+  under `baseline_mode` with no indication. A *missing* baseline stays silent.
+
+- **OSV advisory hydration could be blanked by a proxy.** Any JSON object
+  decodes into the advisory type, so an intercepting proxy answering 200 with
+  unrelated content produced a well-formed but empty record. Responses whose
+  ID does not match the request are now rejected. Severity also falls back to
+  the source database's label for CVSS v4-only advisories, which previously
+  collapsed to `medium`.
+
+- **The registry `deprecated` flag did nothing.** Carried in the index since
+  1.4.x but absent from the entry type, so `plugin search` and `plugin install`
+  went on recommending retired plugins silently. Now surfaced in search,
+  install (advisory, never blocking) and info.
+
+
 ## [1.10.0] - 2026-07-19
 
 ### Fixed
@@ -816,7 +934,9 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/nox-hq/nox/compare/v1.9.2...v1.10.0
 [0.6.0]: https://github.com/nox-hq/nox/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nox-hq/nox/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/nox-hq/nox/compare/v0.4.2...v0.4.3
