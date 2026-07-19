@@ -70,9 +70,20 @@ func realisticSecret(pattern string) string {
 		alphabet = lowerNum
 	}
 
+	// A linear-congruential walk over the alphabet, seeded off the length so
+	// different rules get different tokens, with no short-period repetition —
+	// real credentials are near-maximal entropy, and a generator that repeats
+	// digraphs would fail the very shape filter the rule applies to genuine
+	// tokens.
 	var b strings.Builder
-	for i := 0; b.Len() < length; i++ {
-		b.WriteByte(alphabet[(i*7+i*i*3)%len(alphabet)])
+	x := length*2654435761 + 40503
+	for b.Len() < length {
+		x = x*1103515245 + 12345
+		idx := (x >> 16) % len(alphabet)
+		if idx < 0 {
+			idx += len(alphabet)
+		}
+		b.WriteByte(alphabet[idx])
 	}
 	return b.String()[:length]
 }
@@ -215,5 +226,70 @@ func TestDegenerateRules_RejectOrdinaryCode(t *testing.T) {
 	if noisy > 0 {
 		t.Errorf("%d false positives on ordinary code: every one is a high-severity "+
 			"finding an operator must triage", noisy)
+	}
+}
+
+// cleanConfigValues are non-credential values that legitimately sit right next
+// to a vendor keyword in real configuration: hostnames, job names, environment
+// names, phone/account numbers, placeholders. The context requirement alone
+// does not stop these — the keyword IS adjacent — so they are what the shape
+// filter has to reject.
+var cleanConfigValues = []string{
+	"nightly-integration-suite",    // job name (has hyphens)
+	"production-eu-west-1-cluster", // environment name
+	"MobileAnalyticsProduction",    // project identifier
+	"staging-canary-deployment",    // deployment name
+	"441234567890123456",           // phone / account number (digits only)
+	"0000000000000000000000000000", // zero placeholder
+	"xxxxxxxxxxxxxxxxxxxxxxxxxxxx", // redacted placeholder
+	"YOUR_API_KEY_HERE_REPLACE_ME", // template
+	"1234567890123456789012345678", // sequential
+	"ExampleConfigurationValue123", // camel identifier
+}
+
+// TestDegenerateRules_RejectRealisticConfig measures false positives on values
+// that appear DIRECTLY beside their vendor keyword — the case the context
+// requirement cannot catch, where the shape filter earns its keep.
+//
+// It records a hard upper bound rather than asserting zero: a small residual
+// survives on values whose shape is genuinely ambiguous with a lowercase
+// credential (a run-together hostname like "buildserverhostname01" has the same
+// character profile as a real lowercase API key). Removing the last few would
+// require a dictionary/word heuristic that — measured directly — also rejects
+// real high-entropy keys such as an AWS secret access key, trading noise for
+// false negatives. The bound catches a regression without pretending the
+// residual is gone.
+func TestDegenerateRules_RejectRealisticConfig(t *testing.T) {
+	t.Parallel()
+
+	defs := degenerateRules(t)
+	analyzer := NewAnalyzer()
+
+	const maxFalsePositives = 12 // current: 9, all on hostname-shaped values
+
+	var fps []string
+	for _, rule := range defs {
+		keyword := "secret"
+		if len(rule.Keywords) > 0 {
+			keyword = rule.Keywords[0]
+		}
+		for _, v := range cleanConfigValues {
+			content := fmt.Sprintf("%s_setting = %q\n", keyword, v)
+			matches, err := analyzer.ScanFile("config.py", []byte(content))
+			if err != nil {
+				t.Fatalf("%s: scan error: %v", rule.ID, err)
+			}
+			for i := range matches {
+				if matches[i].RuleID == rule.ID {
+					fps = append(fps, fmt.Sprintf("%s on %q", rule.ID, v))
+				}
+			}
+		}
+	}
+
+	t.Logf("false positives on realistic config: %d (bound %d)", len(fps), maxFalsePositives)
+	if len(fps) > maxFalsePositives {
+		t.Errorf("false positives rose to %d, above the %d bound:\n  %s",
+			len(fps), maxFalsePositives, strings.Join(fps, "\n  "))
 	}
 }

@@ -3766,8 +3766,16 @@ func builtinSecretRules() []*rules.Rule {
 		// recall, unlike an entropy cutoff: real tokens and code identifiers
 		// occupy the same entropy range, so no threshold separates them.
 		var requireContext []string
-		if isAnchorlessPattern(d.pattern) && len(d.keywords) > 0 {
-			requireContext = d.keywords
+		if isAnchorlessPattern(d.pattern) {
+			if len(d.keywords) > 0 {
+				requireContext = d.keywords
+			}
+			// Layered with the context requirement: proximity establishes that
+			// the value is in the right place, shape establishes that it looks
+			// like a credential at all. Neither alone is sufficient — a
+			// hostname sits right next to `jenkins_url`, and a real key can
+			// score lower entropy than a Go identifier.
+			md["secret_shape"] = "true"
 		}
 
 		out = append(out, &rules.Rule{
