@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,8 +38,31 @@ func decodeJSON(t *testing.T, r *http.Request, v any) {
 // queryOSV tests
 // ---------------------------------------------------------------------------
 
-func TestQueryOSV_BatchQuery(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// osvFakeAPI returns a test server that models the REAL OSV API contract:
+// /v1/querybatch answers with vulnerability IDs ONLY (no severity, summary,
+// aliases or affected ranges), and full records are served exclusively from
+// /v1/vulns/{id}. Mocking querybatch as if it returned full records — as this
+// suite previously did — hides the fact that nox must hydrate, which is
+// precisely how every dependency finding came to be reported as "medium" with
+// an empty description and no fix version.
+//
+// details maps vulnerability ID to the full record served from /v1/vulns/{id};
+// an ID absent from the map yields 404 so callers can exercise the
+// hydration-failure path. vulnsFor maps a package name to the IDs querybatch
+// reports for it.
+func osvFakeAPI(t *testing.T, vulnsFor map[string][]string, details map[string]osvVuln) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			detail, found := details[id]
+			if !found {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			encodeJSON(t, w, detail)
+			return
+		}
+
 		if r.URL.Path != "/v1/querybatch" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			http.Error(w, "not found", http.StatusNotFound)
@@ -48,41 +72,37 @@ func TestQueryOSV_BatchQuery(t *testing.T) {
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
-		// Return vulns for lodash and express, none for others.
 		results := make([]osvBatchResult, len(req.Queries))
 		for i, q := range req.Queries {
-			switch q.Package.Name {
-			case "lodash":
-				results[i] = osvBatchResult{
-					Vulns: []osvVuln{
-						{
-							ID:      "GHSA-1234-5678-9012",
-							Summary: "Prototype pollution in lodash",
-							Severity: []osvSeverity{
-								{Type: "CVSS_V3", Score: "7.5"},
-							},
-							Aliases: []string{"CVE-2020-28500"},
-						},
-					},
-				}
-			case "express":
-				results[i] = osvBatchResult{
-					Vulns: []osvVuln{
-						{
-							ID:      "GHSA-abcd-efgh-ijkl",
-							Summary: "Path traversal in express",
-							Severity: []osvSeverity{
-								{Type: "CVSS_V3", Score: "9.1"},
-							},
-							Aliases: []string{"CVE-2024-1234"},
-						},
-					},
-				}
+			for _, id := range vulnsFor[q.Package.Name] {
+				// Deliberately ID-only: this is all the real API returns.
+				results[i].Vulns = append(results[i].Vulns, osvVuln{ID: id})
 			}
 		}
-
 		encodeJSON(t, w, osvBatchResponse{Results: results})
 	}))
+}
+
+func TestQueryOSV_BatchQuery(t *testing.T) {
+	srv := osvFakeAPI(t,
+		map[string][]string{
+			"lodash":  {"GHSA-1234-5678-9012"},
+			"express": {"GHSA-abcd-efgh-ijkl"},
+		},
+		map[string]osvVuln{
+			"GHSA-1234-5678-9012": {
+				ID:       "GHSA-1234-5678-9012",
+				Summary:  "Prototype pollution in lodash",
+				Severity: []osvSeverity{{Type: "CVSS_V3", Score: "7.5"}},
+				Aliases:  []string{"CVE-2020-28500"},
+			},
+			"GHSA-abcd-efgh-ijkl": {
+				ID:       "GHSA-abcd-efgh-ijkl",
+				Summary:  "Path traversal in express",
+				Severity: []osvSeverity{{Type: "CVSS_V3", Score: "9.1"}},
+				Aliases:  []string{"CVE-2024-1234"},
+			},
+		})
 	defer srv.Close()
 
 	pkgs := []Package{
@@ -113,6 +133,49 @@ func TestQueryOSV_BatchQuery(t *testing.T) {
 	}
 	if result[2][0].ID != "GHSA-1234-5678-9012" {
 		t.Errorf("expected GHSA-1234-5678-9012, got %s", result[2][0].ID)
+	}
+
+	// The fields below exist ONLY on the hydrated record. Asserting them is
+	// what makes this test capable of catching a regression to the ID-only
+	// querybatch data — the bug that made every finding medium-severity with
+	// an empty message and no fix version.
+	lodash := result[2][0]
+	if lodash.Summary != "Prototype pollution in lodash" {
+		t.Errorf("summary not hydrated: got %q", lodash.Summary)
+	}
+	if len(lodash.Severity) != 1 || lodash.Severity[0].Score != "7.5" {
+		t.Errorf("severity not hydrated: got %+v", lodash.Severity)
+	}
+	if len(lodash.Aliases) != 1 || lodash.Aliases[0] != "CVE-2020-28500" {
+		t.Errorf("aliases not hydrated: got %v", lodash.Aliases)
+	}
+	if got := mapOSVSeverity(lodash.Severity, lodash.DatabaseSpecific); got != findings.SeverityHigh {
+		t.Errorf("expected high severity after hydration, got %s", got)
+	}
+}
+
+// TestQueryOSV_HydrationFailureKeepsFinding pins the degradation contract: a
+// vulnerability whose detail fetch fails is still reported (with a
+// conservative severity) rather than silently dropped.
+func TestQueryOSV_HydrationFailureKeepsFinding(t *testing.T) {
+	// vulnsFor names an ID that details deliberately does not contain, so
+	// /v1/vulns/{id} answers 404.
+	srv := osvFakeAPI(t,
+		map[string][]string{"lodash": {"GHSA-missing-detail"}},
+		map[string]osvVuln{})
+	defer srv.Close()
+
+	pkgs := []Package{{Name: "lodash", Version: "4.17.20", Ecosystem: "npm"}}
+
+	result, err := queryOSV(context.Background(), srv.Client(), srv.URL, pkgs)
+	if err != nil {
+		t.Fatalf("queryOSV returned error: %v", err)
+	}
+	if len(result[0]) != 1 {
+		t.Fatalf("expected the finding to survive a failed detail fetch, got %d", len(result[0]))
+	}
+	if result[0][0].ID != "GHSA-missing-detail" {
+		t.Errorf("expected the stub ID to be preserved, got %s", result[0][0].ID)
 	}
 }
 
@@ -297,18 +360,133 @@ func TestMapOSVSeverity(t *testing.T) {
 			input:    []osvSeverity{},
 			expected: findings.SeverityMedium,
 		},
+		// The cases below carry CVSS vector strings, which is the form OSV
+		// actually publishes. These previously all collapsed to medium.
 		{
-			name:     "CVSS vector string (not a number)",
+			name:     "CVSS v3 vector scores 9.8 critical",
 			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+			expected: findings.SeverityCritical,
+		},
+		{
+			// CVE-2021-3121 (gogo/protobuf) — the record that exposed the bug.
+			name:     "CVSS v3 vector scores 8.6 high",
+			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H"}},
+			expected: findings.SeverityHigh,
+		},
+		{
+			name:     "CVSS v3 vector with changed scope",
+			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"}},
 			expected: findings.SeverityMedium,
+		},
+		{
+			name:     "CVSS v3 vector with no impact scores info",
+			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N"}},
+			expected: findings.SeverityInfo,
+		},
+		{
+			name:     "malformed vector falls back to medium",
+			input:    []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:X/AC:L"}},
+			expected: findings.SeverityMedium,
+		},
+		{
+			name:     "prefers v3 over v2 regardless of order",
+			input:    []osvSeverity{{Type: "CVSS_V2", Score: "2.1"}, {Type: "CVSS_V3", Score: "9.8"}},
+			expected: findings.SeverityCritical,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mapOSVSeverity(tt.input)
+			result := mapOSVSeverity(tt.input, osvDatabaseSpecific{})
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestMapOSVSeverity_DatabaseSpecificFallback covers records that carry no
+// parsable CVSS vector — notably CVSS v4-only advisories — where the coarse
+// GitHub severity label is the only signal available.
+func TestMapOSVSeverity_DatabaseSpecificFallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		sev      []osvSeverity
+		label    string
+		expected findings.Severity
+	}{
+		{"critical label", nil, "CRITICAL", findings.SeverityCritical},
+		{"high label", nil, "HIGH", findings.SeverityHigh},
+		{"github moderate means medium", nil, "MODERATE", findings.SeverityMedium},
+		{"low label", nil, "LOW", findings.SeverityLow},
+		{"lowercase label", nil, "high", findings.SeverityHigh},
+		{"unknown label falls back to medium", nil, "SPICY", findings.SeverityMedium},
+		{"no signal at all falls back to medium", nil, "", findings.SeverityMedium},
+		{
+			name:     "cvss v4 vector is not scored, label wins",
+			sev:      []osvSeverity{{Type: "CVSS_V4", Score: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"}},
+			label:    "CRITICAL",
+			expected: findings.SeverityCritical,
+		},
+		{
+			name:     "parsable vector beats the coarse label",
+			sev:      []osvSeverity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+			label:    "LOW",
+			expected: findings.SeverityCritical,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapOSVSeverity(tt.sev, osvDatabaseSpecific{Severity: tt.label})
+			if got != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, got)
+			}
+		})
+	}
+}
+
+// TestCVSS3BaseScore checks the base-score computation against vectors with
+// scores published in the CVSS v3.1 specification and the NVD.
+func TestCVSS3BaseScore(t *testing.T) {
+	tests := []struct {
+		vector string
+		want   float64
+	}{
+		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8},
+		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H", 8.6},
+		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", 7.5},
+		{"CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N", 5.5},
+		{"CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N", 4.7},
+		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N", 0.0},
+		{"CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.vector, func(t *testing.T) {
+			got, ok := cvssBaseScore(tt.vector)
+			if !ok {
+				t.Fatalf("expected %s to score, got ok=false", tt.vector)
+			}
+			if math.Abs(got-tt.want) > 0.05 {
+				t.Errorf("expected %.1f, got %.1f", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestCVSSBaseScore_Rejects(t *testing.T) {
+	for _, vector := range []string{
+		"",
+		"not a vector",
+		"CVSS:3.1/AV:N/AC:L", // missing required metrics
+		"CVSS:3.1/AV:Z/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", // unknown AV value
+		"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:X/C:H/I:H/A:H", // invalid scope
+		"CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+	} {
+		t.Run(vector, func(t *testing.T) {
+			if score, ok := cvssBaseScore(vector); ok {
+				t.Errorf("expected %q to be rejected, got score %.1f", vector, score)
 			}
 		})
 	}
@@ -417,31 +595,17 @@ func TestEcosystemToOSV(t *testing.T) {
 
 func TestScanArtifacts_WithOSV(t *testing.T) {
 	// Mock OSV server returning a vulnerability for lodash.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req osvBatchRequest
-		decodeJSON(t, r, &req)
-
-		results := make([]osvBatchResult, len(req.Queries))
-		for i, q := range req.Queries {
-			if q.Package.Name == "lodash" {
-				results[i] = osvBatchResult{
-					Vulns: []osvVuln{
-						{
-							ID:      "GHSA-test-vuln-0001",
-							Summary: "Prototype Pollution in lodash",
-							Severity: []osvSeverity{
-								{Type: "CVSS_V3", Score: "7.4"},
-							},
-							Aliases: []string{"CVE-2021-23337"},
-							Details: "lodash versions prior to 4.17.21 are vulnerable.",
-						},
-					},
-				}
-			}
-		}
-
-		encodeJSON(t, w, osvBatchResponse{Results: results})
-	}))
+	srv := osvFakeAPI(t,
+		map[string][]string{"lodash": {"GHSA-test-vuln-0001"}},
+		map[string]osvVuln{
+			"GHSA-test-vuln-0001": {
+				ID:       "GHSA-test-vuln-0001",
+				Summary:  "Prototype Pollution in lodash",
+				Severity: []osvSeverity{{Type: "CVSS_V3", Score: "7.4"}},
+				Aliases:  []string{"CVE-2021-23337"},
+				Details:  "lodash versions prior to 4.17.21 are vulnerable.",
+			},
+		})
 	defer srv.Close()
 
 	tmpDir := t.TempDir()
@@ -573,31 +737,17 @@ func TestScanArtifacts_OSVDisabled(t *testing.T) {
 }
 
 func TestScanArtifacts_VulnerabilityMetadata(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req osvBatchRequest
-		decodeJSON(t, r, &req)
-
-		results := make([]osvBatchResult, len(req.Queries))
-		for i, q := range req.Queries {
-			if q.Package.Name == "Django" {
-				results[i] = osvBatchResult{
-					Vulns: []osvVuln{
-						{
-							ID:      "GHSA-django-xss",
-							Summary: "XSS in Django admin",
-							Severity: []osvSeverity{
-								{Type: "CVSS_V3", Score: "6.1"},
-							},
-							Aliases: []string{"CVE-2023-12345", "PYSEC-2023-001"},
-							Details: "A cross-site scripting vulnerability exists in the Django admin.",
-						},
-					},
-				}
-			}
-		}
-
-		encodeJSON(t, w, osvBatchResponse{Results: results})
-	}))
+	srv := osvFakeAPI(t,
+		map[string][]string{"Django": {"GHSA-django-xss"}},
+		map[string]osvVuln{
+			"GHSA-django-xss": {
+				ID:       "GHSA-django-xss",
+				Summary:  "XSS in Django admin",
+				Severity: []osvSeverity{{Type: "CVSS_V3", Score: "6.1"}},
+				Aliases:  []string{"CVE-2023-12345", "PYSEC-2023-001"},
+				Details:  "A cross-site scripting vulnerability exists in the Django admin.",
+			},
+		})
 	defer srv.Close()
 
 	tmpDir := t.TempDir()
@@ -769,6 +919,18 @@ func TestNewAnalyzer_Defaults(t *testing.T) {
 // with a Dockerfile silently lost every real Go/npm/PyPI vulnerability finding.
 func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			if id != "GHSA-g7r4-m6w7-qqqr" {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			encodeJSON(t, w, osvVuln{
+				ID:      id,
+				Summary: "arbitrary file read in esbuild dev server",
+			})
+			return
+		}
+
 		var req osvBatchRequest
 		decodeJSON(t, r, &req)
 
@@ -785,13 +947,11 @@ func TestQueryOSV_SkipsUnknownEcosystem(t *testing.T) {
 			}
 		}
 
+		// ID-only, as the real querybatch endpoint returns.
 		results := make([]osvBatchResult, len(req.Queries))
 		for i, q := range req.Queries {
 			if q.Package.Name == "esbuild" {
-				results[i] = osvBatchResult{Vulns: []osvVuln{{
-					ID:      "GHSA-g7r4-m6w7-qqqr",
-					Summary: "arbitrary file read in esbuild dev server",
-				}}}
+				results[i] = osvBatchResult{Vulns: []osvVuln{{ID: "GHSA-g7r4-m6w7-qqqr"}}}
 			}
 		}
 		encodeJSON(t, w, osvBatchResponse{Results: results})

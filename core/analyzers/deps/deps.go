@@ -475,8 +475,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				pkg := pkgs[pkgIdx]
 				var domainVulns []Vulnerability
 
-				for _, ov := range osvVulns {
-					sev := mapOSVSeverity(ov.Severity)
+				for i := range osvVulns {
+					ov := &osvVulns[i]
+					sev := mapOSVSeverity(ov.Severity, ov.DatabaseSpecific)
 					domainVulns = append(domainVulns, Vulnerability{
 						ID:       ov.ID,
 						Summary:  ov.Summary,
@@ -498,7 +499,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						"ecosystem": pkg.Ecosystem,
 						"aliases":   aliases,
 					}
-					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem); fix != "" {
+					if fix := fixedVersion(ov, pkg.Name, pkg.Ecosystem); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
 						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)

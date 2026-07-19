@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	urlpkg "net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -44,6 +48,11 @@ type osvBatchResult struct {
 }
 
 // osvVuln is a single vulnerability from OSV.
+//
+// Note that /v1/querybatch populates ONLY ID (and "modified"). Every other
+// field here arrives exclusively from the per-vulnerability hydration call,
+// GET /v1/vulns/{id} — see hydrateVulns. Consuming these fields off a raw
+// querybatch response yields empty severity, summary, aliases and fix data.
 type osvVuln struct {
 	ID       string        `json:"id"`
 	Summary  string        `json:"summary"`
@@ -51,6 +60,17 @@ type osvVuln struct {
 	Aliases  []string      `json:"aliases"`
 	Details  string        `json:"details"`
 	Affected []osvAffected `json:"affected"`
+
+	// DatabaseSpecific carries source-database annotations. GitHub advisories
+	// populate a coarse severity label here, which we use as a fallback when
+	// no machine-parsable CVSS vector is present (notably for CVSS v4-only
+	// records).
+	DatabaseSpecific osvDatabaseSpecific `json:"database_specific"`
+}
+
+// osvDatabaseSpecific holds the subset of source-specific annotations we read.
+type osvDatabaseSpecific struct {
+	Severity string `json:"severity"`
 }
 
 // osvSeverity holds a CVSS or other severity score.
@@ -192,7 +212,119 @@ func queryOSV(ctx context.Context, client *http.Client, baseURL string, pkgs []P
 		}
 	}
 
+	// /v1/querybatch answers only "which packages are affected, by which IDs".
+	// Every field an operator actually needs — severity, summary, aliases, and
+	// the fixed version — lives on the full record, so hydrate each distinct ID
+	// via GET /v1/vulns/{id}. Cost scales with vulnerabilities found, not
+	// packages scanned: a 62-package Go module with one affected dependency
+	// costs 7 extra requests.
+	hydrateVulns(ctx, client, baseURL, result)
+
 	return result, nil
+}
+
+// osvHydrateConcurrency bounds in-flight per-vulnerability detail requests so a
+// badly vulnerable repo cannot open hundreds of sockets against OSV at once.
+const osvHydrateConcurrency = 8
+
+// hydrateVulns replaces each stub vulnerability in result (as returned by
+// /v1/querybatch, which carries only an ID) with its full OSV record fetched
+// from GET /v1/vulns/{id}. Distinct IDs are fetched once each, concurrently.
+//
+// Hydration is best-effort: an ID that fails to fetch keeps its stub record, so
+// the finding is still reported — with a conservative severity — rather than
+// dropped. Failures are logged, because a silently under-described finding is
+// indistinguishable from a fully-described one.
+//
+// Results are written back deterministically: concurrency affects only fetch
+// order, never the contents or ordering of result.
+func hydrateVulns(ctx context.Context, client *http.Client, baseURL string, result map[int][]osvVuln) {
+	ids := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, vulns := range result {
+		for i := range vulns {
+			if id := vulns[i].ID; id != "" && !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	sort.Strings(ids)
+
+	var mu sync.Mutex
+	details := make(map[string]osvVuln, len(ids))
+	var failed int
+
+	sem := make(chan struct{}, osvHydrateConcurrency)
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			detail, err := fetchVulnDetail(ctx, client, baseURL, id)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				failed++
+				return
+			}
+			details[id] = detail
+		}(id)
+	}
+	wg.Wait()
+
+	if failed > 0 {
+		slog.WarnContext(ctx, "some OSV vulnerability details could not be fetched; those findings keep a conservative severity and carry no fix version",
+			"failed", failed, "total", len(ids))
+	}
+
+	for pkgIdx, vulns := range result {
+		for i := range vulns {
+			if detail, ok := details[vulns[i].ID]; ok {
+				result[pkgIdx][i] = detail
+			}
+		}
+	}
+}
+
+// fetchVulnDetail retrieves the full OSV record for a single vulnerability ID.
+func fetchVulnDetail(ctx context.Context, client *http.Client, baseURL, id string) (osvVuln, error) {
+	url := strings.TrimRight(baseURL, "/") + "/v1/vulns/" + urlpkg.PathEscape(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return osvVuln{}, fmt.Errorf("creating OSV detail request for %s: %w", id, err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return osvVuln{}, fmt.Errorf("fetching OSV detail for %s: %w", id, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return osvVuln{}, fmt.Errorf("OSV detail for %s returned status %d", id, resp.StatusCode)
+	}
+
+	var detail osvVuln
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+		return osvVuln{}, fmt.Errorf("decoding OSV detail for %s: %w", id, err)
+	}
+
+	// Confirm we got back the record we asked for. Any JSON object decodes
+	// into osvVuln without error — an intercepting proxy or captive portal
+	// answering 200 with unrelated JSON would otherwise yield a well-formed
+	// but entirely empty vulnerability, silently blanking a real finding's
+	// severity and fix version.
+	if detail.ID != id {
+		return osvVuln{}, fmt.Errorf("OSV detail for %s returned mismatched record %q", id, detail.ID)
+	}
+	return detail, nil
 }
 
 // decodeBatchResponse reads and decodes an OSV batch response. It returns
@@ -208,32 +340,59 @@ func decodeBatchResponse(resp *http.Response) ([]osvBatchResult, error) {
 	return batchResp.Results, nil
 }
 
-// mapOSVSeverity converts OSV severity entries to a nox Severity.
-// It looks for a CVSS_V3 score first, then falls back to CVSS_V2.
-// If no score is found, it returns SeverityMedium as a conservative default.
-func mapOSVSeverity(sev []osvSeverity) findings.Severity {
-	for _, s := range sev {
-		if s.Type == "CVSS_V3" || s.Type == "CVSS_V2" {
-			return cvssToSeverity(s.Score)
+// mapOSVSeverity converts an OSV record's severity information to a nox
+// Severity, preferring the most precise source available:
+//
+//  1. A CVSS v3 vector in severity[] — the base score is computed from the
+//     vector per the CVSS v3.1 specification.
+//  2. A bare numeric score in severity[] (some databases publish this).
+//  3. The coarse database_specific.severity label (CRITICAL / HIGH /
+//     MODERATE / LOW), which is how we recover a real severity for records
+//     that carry only a CVSS v4 vector.
+//
+// It returns SeverityMedium only when none of the above is present, which is
+// a genuine "unknown", not — as was previously the case — the outcome for
+// every record OSV actually publishes.
+func mapOSVSeverity(sev []osvSeverity, dbSpecific osvDatabaseSpecific) findings.Severity {
+	// Prefer v3 over v2 regardless of ordering in the record.
+	for _, want := range []string{"CVSS_V3", "CVSS_V2"} {
+		for _, s := range sev {
+			if s.Type != want {
+				continue
+			}
+			if score, ok := cvssBaseScore(s.Score); ok {
+				return scoreToSeverity(score)
+			}
 		}
 	}
+
+	if s, ok := severityFromLabel(dbSpecific.Severity); ok {
+		return s
+	}
+
 	return findings.SeverityMedium
 }
 
-// cvssToSeverity converts a CVSS vector string or numeric score to a Severity.
-// It extracts the base score from either a bare number ("9.8") or a CVSS
-// vector string by looking for a trailing numeric value.
-func cvssToSeverity(score string) findings.Severity {
-	// Try parsing as a plain float first (e.g. "9.8").
-	f, err := strconv.ParseFloat(score, 64)
-	if err != nil {
-		// Try extracting the base score from a CVSS vector string.
-		// CVSS vectors look like "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-		// — the score is not embedded in the vector, so we can't parse it.
-		// Fall back to medium.
-		return findings.SeverityMedium
+// severityFromLabel maps a coarse textual severity label to a nox Severity.
+// GitHub advisories use "MODERATE" where most other sources say "MEDIUM".
+func severityFromLabel(label string) (findings.Severity, bool) {
+	switch strings.ToUpper(strings.TrimSpace(label)) {
+	case "CRITICAL":
+		return findings.SeverityCritical, true
+	case "HIGH":
+		return findings.SeverityHigh, true
+	case "MODERATE", "MEDIUM":
+		return findings.SeverityMedium, true
+	case "LOW":
+		return findings.SeverityLow, true
+	default:
+		return "", false
 	}
+}
 
+// scoreToSeverity buckets a CVSS base score using the standard qualitative
+// severity rating scale.
+func scoreToSeverity(f float64) findings.Severity {
 	switch {
 	case f >= 9.0:
 		return findings.SeverityCritical
@@ -246,6 +405,121 @@ func cvssToSeverity(score string) findings.Severity {
 	default:
 		return findings.SeverityInfo
 	}
+}
+
+// cvssBaseScore returns the CVSS base score for the given score field, which
+// OSV publishes either as a bare number ("9.8") or — far more commonly — as a
+// full CVSS vector string ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:H").
+//
+// Vectors are scored per the CVSS v3.1 specification, section 7.1. CVSS v4
+// vectors use a different, substantially more complex scoring algorithm and
+// are deliberately not attempted here; callers fall back to the coarse
+// database_specific label for those.
+func cvssBaseScore(score string) (float64, bool) {
+	score = strings.TrimSpace(score)
+	if score == "" {
+		return 0, false
+	}
+
+	if f, err := strconv.ParseFloat(score, 64); err == nil {
+		return f, true
+	}
+	if !strings.HasPrefix(score, "CVSS:3.") {
+		return 0, false
+	}
+	return cvss3BaseScore(score)
+}
+
+// cvss3Weights maps each CVSS v3 base metric abbreviation to its numeric
+// weight. Privileges Required is scope-dependent and handled separately.
+var cvss3Weights = map[string]map[string]float64{
+	"AV": {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.2},
+	"AC": {"L": 0.77, "H": 0.44},
+	"UI": {"N": 0.85, "R": 0.62},
+	"C":  {"H": 0.56, "L": 0.22, "N": 0},
+	"I":  {"H": 0.56, "L": 0.22, "N": 0},
+	"A":  {"H": 0.56, "L": 0.22, "N": 0},
+}
+
+// cvss3PRWeights maps Privileges Required to its weight. The value depends on
+// Scope: a changed scope raises the weight for L and H.
+var cvss3PRWeights = map[bool]map[string]float64{
+	false: {"N": 0.85, "L": 0.62, "H": 0.27}, // scope unchanged
+	true:  {"N": 0.85, "L": 0.68, "H": 0.50}, // scope changed
+}
+
+// cvss3BaseScore computes the CVSS v3.1 base score from a vector string.
+// It returns false when a required base metric is absent or carries an
+// unrecognised value — a malformed vector must not silently score as 0.0.
+func cvss3BaseScore(vector string) (float64, bool) {
+	metrics := make(map[string]string)
+	for _, part := range strings.Split(vector, "/") {
+		key, val, found := strings.Cut(part, ":")
+		if found {
+			metrics[key] = val
+		}
+	}
+
+	scopeChanged := metrics["S"] == "C"
+	if metrics["S"] != "C" && metrics["S"] != "U" {
+		return 0, false
+	}
+
+	weight := func(metric string) (float64, bool) {
+		val, ok := metrics[metric]
+		if !ok {
+			return 0, false
+		}
+		if metric == "PR" {
+			w, ok := cvss3PRWeights[scopeChanged][val]
+			return w, ok
+		}
+		w, ok := cvss3Weights[metric][val]
+		return w, ok
+	}
+
+	av, okAV := weight("AV")
+	ac, okAC := weight("AC")
+	pr, okPR := weight("PR")
+	ui, okUI := weight("UI")
+	c, okC := weight("C")
+	i, okI := weight("I")
+	a, okA := weight("A")
+	if !okAV || !okAC || !okPR || !okUI || !okC || !okI || !okA {
+		return 0, false
+	}
+
+	iss := 1 - ((1 - c) * (1 - i) * (1 - a))
+
+	var impact float64
+	if scopeChanged {
+		impact = 7.52*(iss-0.029) - 3.25*math.Pow(iss-0.02, 15)
+	} else {
+		impact = 6.42 * iss
+	}
+	if impact <= 0 {
+		return 0, true
+	}
+
+	exploitability := 8.22 * av * ac * pr * ui
+
+	base := impact + exploitability
+	if scopeChanged {
+		base *= 1.08
+	}
+	return cvssRoundUp(math.Min(base, 10)), true
+}
+
+// cvssRoundUp implements the CVSS v3.1 Roundup function: the smallest number
+// to one decimal place that is greater than or equal to the input. The integer
+// arithmetic mirrors the specification's reference implementation, which avoids
+// the floating-point edge cases a naive math.Ceil(x*10)/10 hits.
+func cvssRoundUp(x float64) float64 {
+	i := int(math.Round(x * 100000))
+	if i%10000 == 0 {
+		return float64(i) / 100000.0
+	}
+	return (math.Floor(float64(i)/10000) + 1) / 10.0
 }
 
 // upgradeCommand returns the canonical one-liner an operator can run to
