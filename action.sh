@@ -169,9 +169,19 @@ run_scan() {
   echo "exit-code=${exit_code}" >> "${GITHUB_OUTPUT}"
 
   # Count findings from findings.json if it exists.
+  #
+  # grep -c prints the count but EXITS 1 when there are zero matches, so a
+  # `|| echo "0"` fallback would fire on top of grep's own "0" and make
+  # findings_count the two-line value "0\n0". Writing that to GITHUB_OUTPUT
+  # emits a bare second line and fails the whole step with
+  # "Unable to process file command 'output' ... Invalid format '0'" — i.e. the
+  # action broke on every repository whose scan produced no findings. Swallow
+  # grep's exit status instead and default an empty result (unreadable file) to
+  # 0, so findings_count is always a single clean integer.
   local findings_count=0
   if [[ -f "${output_dir}/findings.json" ]]; then
-    findings_count=$(grep -c '"RuleID"' "${output_dir}/findings.json" 2>/dev/null || echo "0")
+    findings_count=$(grep -c '"RuleID"' "${output_dir}/findings.json" 2>/dev/null || true)
+    findings_count=${findings_count:-0}
     echo "findings-file=${output_dir}/findings.json" >> "${GITHUB_OUTPUT}"
   fi
   echo "findings-count=${findings_count}" >> "${GITHUB_OUTPUT}"
