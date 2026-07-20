@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-07-21
+
+### Fixed
+
+- **Documentation that demonstrates `nox:ignore` is no longer reported as a pile
+  of unused waivers.** 1.13.2 began reporting waivers that suppress nothing,
+  which is what you want for a mistargeted or stale waiver — but it also flagged
+  every fenced code block showing the syntax, because sample secrets in docs are
+  deliberately too short to match a rule. A directive inside a fenced code block
+  in a markdown file is now recognised as illustrative and skipped by that
+  report. It still suppresses a real finding on its target line, so a genuine
+  waiver written inside a doc keeps working.
+
 ## [1.13.2] - 2026-07-21
 
 ### Fixed
