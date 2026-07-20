@@ -1235,6 +1235,22 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ emptyInput) (m
 
 // Dashboard tool handler.
 
+// dashboardTooLargeNotice returns a structured JSON notice mirroring the
+// handleGetFindings "output_too_large" pattern. The dashboard is a single HTML
+// document, so a mid-document truncate() would yield broken, unparseable markup
+// with no signal to the caller that data was lost. Instead the dashboard
+// handlers fail closed once the rendered HTML crosses the response budget and
+// point the caller at the cheaper summary / list_findings tools.
+func dashboardTooLargeNotice(size int) string {
+	notice, _ := json.MarshalIndent(map[string]any{
+		"error":       "output_too_large",
+		"total_bytes": size,
+		"limit_bytes": maxOutputBytes,
+		"hint":        "the dashboard HTML exceeds the response budget — use summary for an aggregate overview, or list_findings with limit/offset to page through findings",
+	}, "", "  ")
+	return string(notice)
+}
+
 func (s *Server) handleDashboard(_ context.Context, input dashboardInput) (string, error) {
 	pc := s.getCache(input.Path)
 	if pc == nil {
@@ -1244,6 +1260,10 @@ func (s *Server) handleDashboard(_ context.Context, input dashboardInput) (strin
 	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return "", fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	if len(html) > maxOutputBytes {
+		return dashboardTooLargeNotice(len(html)), nil
 	}
 
 	return html, nil
@@ -1434,6 +1454,14 @@ func (s *Server) handleResourceDashboard(_ context.Context, uri string, _ map[st
 		return nil, fmt.Errorf("generating dashboard: %w", err)
 	}
 
+	if len(html) > maxOutputBytes {
+		return &mcp.ResourceContent{
+			URI:      uri,
+			MimeType: "application/json",
+			Text:     dashboardTooLargeNotice(len(html)),
+		}, nil
+	}
+
 	return &mcp.ResourceContent{
 		URI:      uri,
 		MimeType: "text/html",
@@ -1582,6 +1610,14 @@ func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, p
 	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return nil, fmt.Errorf("generating dashboard: %w", err)
+	}
+
+	if len(html) > maxOutputBytes {
+		return &mcp.ResourceContent{
+			URI:      uri,
+			MimeType: "application/json",
+			Text:     dashboardTooLargeNotice(len(html)),
+		}, nil
 	}
 
 	return &mcp.ResourceContent{
