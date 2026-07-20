@@ -441,14 +441,16 @@ func extractNpmPackageName(path string) string {
 
 // parseRequirementsTxt extracts pinned packages from a Python requirements.txt
 // file. It supports the == operator for exact pinning and also extracts the
-// version from >=, <=, ~=, and != specifiers (taking the version after the
-// operator). Lines without a version specifier are skipped.
+// version from >=, <=, ~=, !=, < and > specifiers (taking the version after the
+// leftmost operator). Lines without a version specifier are skipped.
 func parseRequirementsTxt(content []byte) ([]Package, error) {
 	var pkgs []Package
 
-	// Version specifier operators ordered from longest to shortest so that
-	// two-character operators match before single-character ones.
-	operators := []string{"==", ">=", "<=", "~=", "!="}
+	// All PEP 508 comparison operators, including the bare strict bounds
+	// "<" and ">". The two-character operators are listed before the
+	// single-character ones so that on an equal index (e.g. ">=" and ">"
+	// both start at the same position) the longer operator is preferred.
+	operators := []string{"==", ">=", "<=", "~=", "!=", "<", ">"}
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	for scanner.Scan() {
@@ -477,24 +479,38 @@ func parseRequirementsTxt(content []byte) ([]Package, error) {
 			}
 		}
 
-		// Try each operator to split name and version.
-		var name, version string
-		found := false
+		// Select the operator at the leftmost position in the line, not the
+		// first operator in the list. Compound specifiers such as
+		// "urllib3<1.27,>=1.21.1" must split on the "<" that precedes the
+		// name/version boundary; splitting on ">=" (which appears earlier in
+		// the operator list but later in the string) would corrupt the name.
+		// On an index tie the longer operator wins because two-character
+		// operators are ordered ahead of their single-character prefixes.
+		bestIdx := -1
+		var bestOp string
 		for _, op := range operators {
 			idx := strings.Index(line, op)
 			if idx == -1 {
 				continue
 			}
-			name = strings.TrimSpace(line[:idx])
+			if bestIdx == -1 || idx < bestIdx {
+				bestIdx = idx
+				bestOp = op
+			}
+		}
+
+		var name, version string
+		found := false
+		if bestIdx != -1 {
+			name = strings.TrimSpace(line[:bestIdx])
 			// Take only the first version (before any comma for
 			// compound specifiers like >=1.0,<2.0).
-			ver := strings.TrimSpace(line[idx+len(op):])
+			ver := strings.TrimSpace(line[bestIdx+len(bestOp):])
 			if comma := strings.Index(ver, ","); comma != -1 {
 				ver = strings.TrimSpace(ver[:comma])
 			}
 			version = ver
 			found = true
-			break
 		}
 
 		if !found || name == "" || version == "" {

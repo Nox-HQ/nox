@@ -1,6 +1,7 @@
 package sbom
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -734,6 +735,93 @@ func TestSPDX_DeclaredLicense(t *testing.T) {
 // ---------------------------------------------------------------------------
 // CycloneDX & SPDX: WriteToFile error path
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// CycloneDX: determinism when one CVE affects multiple packages (DEFECT 1)
+// ---------------------------------------------------------------------------
+
+// TestCycloneDX_SharedCVEDeterministic guards nox's hard determinism guarantee:
+// identical input must yield byte-identical output. When a single CVE affects
+// two packages, the vulnerability entries share an equal vuln.ID, so a sort keyed
+// only on vuln.ID leaves their relative order to Go's randomized map iteration.
+// Generating repeatedly must produce the exact same bytes every time.
+func TestCycloneDX_SharedCVEDeterministic(t *testing.T) {
+	t.Parallel()
+
+	build := func() *deps.PackageInventory {
+		inv := &deps.PackageInventory{}
+		inv.Add(deps.Package{Name: "express", Version: "4.17.1", Ecosystem: "npm"})
+		inv.Add(deps.Package{Name: "lodash", Version: "4.17.20", Ecosystem: "npm"})
+		// The same CVE affects both packages — equal vuln.ID, different refs.
+		shared := deps.Vulnerability{ID: "CVE-2021-0001", Summary: "Shared issue", Severity: "high"}
+		inv.SetVulnerabilities(0, []deps.Vulnerability{shared})
+		inv.SetVulnerabilities(1, []deps.Vulnerability{shared})
+		return inv
+	}
+
+	r := NewCycloneDXReporter("0.1.0")
+	want, err := r.Generate(build())
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for i := 0; i < 100; i++ {
+		got, err := r.Generate(build())
+		if err != nil {
+			t.Fatalf("generate run %d: %v", i, err)
+		}
+		if !bytes.Equal(want, got) {
+			t.Fatalf("run %d: output not byte-identical to first run\nfirst:\n%s\ngot:\n%s", i, want, got)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SPDX: licenseDeclared must be a valid SPDX expression (DEFECT 2)
+// ---------------------------------------------------------------------------
+
+// TestSPDX_DeclaredLicenseIsSPDXValid guards SPDX 2.3 conformance: licenseDeclared
+// must be a valid SPDX license expression, NOASSERTION, or NONE — never raw
+// free-text. Unrecognized strings must collapse to NOASSERTION; a valid SPDX id
+// must be preserved verbatim.
+func TestSPDX_DeclaredLicenseIsSPDXValid(t *testing.T) {
+	t.Parallel()
+
+	inv := &deps.PackageInventory{}
+	inv.Add(deps.Package{Name: "valid", Version: "1", Ecosystem: "npm", License: "MIT"})
+	inv.Add(deps.Package{Name: "spaced", Version: "1", Ecosystem: "npm", License: "Apache 2.0"})
+	inv.Add(deps.Package{Name: "freetext", Version: "1", Ecosystem: "npm", License: "see LICENSE file"})
+
+	r := NewSPDXReporter("0.1.0")
+	data, err := r.Generate(inv)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	var doc SPDXDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+
+	byName := map[string]string{}
+	for _, p := range doc.Packages {
+		byName[p.Name] = p.DeclaredLicense
+	}
+
+	if byName["valid"] != "MIT" {
+		t.Errorf("valid SPDX id should be preserved, got %q", byName["valid"])
+	}
+	if byName["spaced"] == "Apache 2.0" {
+		t.Errorf("raw non-SPDX license %q leaked into licenseDeclared", byName["spaced"])
+	}
+	if byName["spaced"] != "NOASSERTION" {
+		t.Errorf("expected NOASSERTION for %q, got %q", "Apache 2.0", byName["spaced"])
+	}
+	if byName["freetext"] == "see LICENSE file" {
+		t.Errorf("raw free-text license %q leaked into licenseDeclared", byName["freetext"])
+	}
+	if byName["freetext"] != "NOASSERTION" {
+		t.Errorf("expected NOASSERTION for free-text, got %q", byName["freetext"])
+	}
+}
 
 func TestCycloneDX_WriteToFile_ErrorOnInvalidPath(t *testing.T) {
 	r := NewCycloneDXReporter("0.1.0")

@@ -160,7 +160,16 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 			}
 		}
 		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].vuln.ID < entries[j].vuln.ID
+			// Sort by vuln.ID first, then by the package's original index as a
+			// deterministic tie-breaker. Entries are collected by ranging a map
+			// (randomized order in Go), so when one CVE affects several packages
+			// its entries share an equal vuln.ID; without this tie-breaker their
+			// relative order would vary run to run, breaking nox's byte-identical
+			// output guarantee.
+			if entries[i].vuln.ID != entries[j].vuln.ID {
+				return entries[i].vuln.ID < entries[j].vuln.ID
+			}
+			return entries[i].origIdx < entries[j].origIdx
 		})
 
 		for _, e := range entries {
@@ -307,8 +316,14 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 		spdxID := fmt.Sprintf("SPDXRef-Package-%d", i)
 		purl := buildPURL(ip.pkg)
 
+		// SPDX 2.3 requires licenseDeclared to be a valid SPDX license
+		// expression, NOASSERTION, or NONE. Free-text like "Apache 2.0" (with a
+		// space) or "see LICENSE file" would produce a spec-invalid document, so
+		// only emit the license when it is a recognized SPDX identifier and fall
+		// back to NOASSERTION otherwise. This mirrors the CycloneDX path's use of
+		// the spdxLicenseIDs whitelist.
 		declaredLicense := "NOASSERTION"
-		if ip.pkg.License != "" {
+		if spdxLicenseIDs[ip.pkg.License] {
 			declaredLicense = ip.pkg.License
 		}
 

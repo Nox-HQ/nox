@@ -485,6 +485,18 @@ func yamlBlockSpan(content []byte, pos int) []byte {
 	}
 	baseIndent := lineIndent(content, start)
 
+	// Whether the anchor line itself opens a sequence entry ("- ..."). This
+	// distinguishes the two same-indent cases below: a mapping-key anchor
+	// ("containers:") owns its equally-indented "-" children, but a sequence-entry
+	// anchor ("- name: app") is a sibling of the next equally-indented "-" and
+	// must stop before it.
+	anchorLineEnd := start
+	for anchorLineEnd < len(content) && content[anchorLineEnd] != '\n' {
+		anchorLineEnd++
+	}
+	anchorTrimmed := bytes.TrimSpace(content[start:anchorLineEnd])
+	anchorIsSeqItem := len(anchorTrimmed) > 0 && anchorTrimmed[0] == '-'
+
 	end := start
 	first := true
 	for end < len(content) {
@@ -498,12 +510,18 @@ func yamlBlockSpan(content []byte, pos int) []byte {
 				ind := lineIndent(content, end)
 				// A block sequence may be indented the SAME as its parent key
 				// (YAML allows `containers:` and its `- name:` items at equal
-				// indentation), so a same-indent line that is a sequence entry
-				// ("-") still belongs to the block. The block ends at the first
-				// line that is shallower, or at the same indent but a sibling
-				// mapping key rather than a sequence entry.
+				// indentation), so when the anchor is a mapping key a same-indent
+				// sequence entry ("-") still belongs to the block. But when the
+				// anchor is itself a sequence entry, the next same-indent "-" is a
+				// SIBLING list item, not a child, and must terminate the block —
+				// otherwise the anchor item would absorb its siblings' properties
+				// (a false negative). The block therefore ends at the first line
+				// that is shallower, or at the same indent when the line is a
+				// sibling: a mapping key, or a sequence entry when the anchor was
+				// one too.
 				isSeqItem := trimmed[0] == '-'
-				if ind < baseIndent || (ind == baseIndent && !isSeqItem) {
+				sameIndentSibling := !isSeqItem || anchorIsSeqItem
+				if ind < baseIndent || (ind == baseIndent && sameIndentSibling) {
 					break
 				}
 			}
