@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-20
+
+A large security-hardening and correctness release. Two adversarial audits of
+the scanner and its plugin trust boundary drove every change below; each fix
+ships with a test that fails without it, and the false-positive precision suite
+stays at 1.000/1.000 throughout.
+
+### Security
+
+- **The plugin↔host channel is now authenticated.** A plugin subprocess binds a
+  gRPC server on a loopback port for the duration of a scan. That port was
+  unauthenticated, so any other local process — or, behind a permissive
+  firewall, any LAN peer — could connect and drive the plugin's tools. The host
+  now passes a fresh per-launch token to the plugin and presents it on every
+  call; the plugin rejects anyone else.
+- **Plugin binaries are re-verified before they run.** The scan path trusted
+  `~/.nox/state.json` wholesale and launched whatever binary it named. It now
+  re-checks the executable against a digest recorded at install and refuses to
+  run a plugin whose binary changed since — so tampering can only stop a plugin,
+  never escalate one.
+- **`nox plugin update` and required-plugin install now enforce the trust
+  policy.** Only `nox plugin install` checked signature/trust violations; the
+  update and `.nox.yaml` auto-install paths were fail-open, so a higher version
+  in a configured registry (or a stale/MITM'd unsigned index) could be installed
+  unverified. All three paths now share one gate and fail closed.
+- **Secret redaction of plugin output no longer has blind spots.** Secrets
+  routed through a plugin's structured fields (a finding's file path, an AI
+  component's name/type/path, a diagnostic source, a graph node path) bypassed
+  redaction entirely; and the GitHub-token pattern missed `gho_`/`ghu_`/`ghr_`
+  and fine-grained `github_pat_` tokens. Both are fixed.
+- **An unrecognized plugin `risk_class` now fails closed.** A non-canonical value
+  (`RUNTIME`, `exec`, a trailing space) slipped past the risk-class ceiling
+  instead of being rejected.
+- **Archive extraction is bounded.** Plugin artifact extraction had no cap on
+  decompressed size, so a small archive could expand to hundreds of gigabytes
+  and fill the disk. Extraction is now capped (total bytes and entry count) and
+  aborts before writing an over-budget archive.
+- **MCP dashboard responses honor the output-size limit.** The dashboard tools
+  returned the entire findings/inventory as unbounded HTML, bypassing the 1 MB
+  cap every other tool enforces; they now return a structured "too large" notice
+  pointing at `summary`/`list_findings`.
+
+### Fixed
+
+- **Source under `prompts/` and `agents/` directories is now scanned.** Any real
+  source file (`.go`, `.ts`, `.py`, …) under a directory named `prompts` or
+  `agents` was misclassified as an AI component and silently skipped by taint,
+  SAST, and agent-flow analysis — the very code that most needs it. Such files
+  are now classified as source; genuine prompt/agent config artifacts still are
+  not.
+- **Go and Ruby components in an SBOM are no longer dropped from vulnerability
+  scanning.** Package-URL types (`golang`, `gem`) were not normalized to the
+  ecosystem names OSV expects (`go`, `rubygems`), so every Go and Ruby component
+  parsed from a CycloneDX/SPDX input was silently excluded from the OSV query.
+- **MCP rug-pull and server/tool-shadowing detection now runs.** MCP-015/023/024
+  were implemented and unit-tested but never invoked in a scan; a relational
+  pass now wires them in.
+- **57 previously-dead IaC rules now fire.** They used a regex feature Go's engine
+  rejects, so they silently never matched; a new block-scoped absence matcher
+  restores them, guarded against hardened configs.
+- **Five taint/SAST recall holes are closed** (inline source-as-sink-argument,
+  attribute-accessor sources, PHP concatenation and same-line function bodies,
+  JavaScript per-function scoping) with no new false positives.
+- **Vendor secret rules match the credential value, not the config key name**, so
+  they no longer false-positive on documentation while missing the real secret.
+- **Reports are valid and reproducible.** SARIF/SBOM validity fixes; CycloneDX
+  output is deterministic when one CVE affects several packages; SPDX
+  `licenseDeclared` is always a valid expression; the HTML report honors
+  `SOURCE_DATE_EPOCH`.
+- **`requirements.txt` strict `<`/`>` bounds parse correctly**, so those packages
+  are no longer dropped or mis-named (and thus missed by CVE lookup).
+- **`--tracked-only` no longer inverts its scope** on a non-git target, per-finding
+  metadata is isolated, and AI inventory output is deterministic.
+- **Policy-gate keywords are validated** (an invalid `fail_on` no longer silently
+  disables the gate) and de-duplication no longer drops distinct findings that
+  share a fingerprint.
+- **A latent absence-matcher span bug** that would absorb sibling YAML sequence
+  items is fixed before any rule could hit it.
+
 ## [1.12.2] - 2026-07-19
 
 ### Fixed
