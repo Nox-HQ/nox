@@ -191,9 +191,22 @@ func validateSafety(safety *pluginv1.SafetyRequirements, policy *Policy) []Polic
 		}
 	}
 
-	// Check risk class.
+	// Check risk class. The gate must FAIL CLOSED: an empty value is the
+	// legitimate "unset -> default" case and is allowed, but any non-empty value
+	// the host does not recognise is a violation. Comparing an unknown class by
+	// ordinal used to admit it (riskClassLevel returns -1 for unknowns and
+	// "-1 > 0" is false), letting "RUNTIME", "exec", "active " (trailing space)
+	// etc. slip past a passive ceiling. An unrecognised class is now rejected
+	// outright rather than compared.
 	if rc := safety.GetRiskClass(); rc != "" {
-		if riskClassLevel(RiskClass(rc)) > riskClassLevel(policy.MaxRiskClass) {
+		rcLevel := riskClassLevel(RiskClass(rc))
+		switch {
+		case rcLevel < 0:
+			violations = append(violations, PolicyViolation{
+				Field:   "risk_class",
+				Message: fmt.Sprintf("unrecognized risk class %q; expected one of %q, %q, %q", rc, RiskClassPassive, RiskClassActive, RiskClassRuntime),
+			})
+		case rcLevel > riskClassLevel(policy.MaxRiskClass):
 			violations = append(violations, PolicyViolation{
 				Field:   "risk_class",
 				Message: fmt.Sprintf("plugin requires %q but policy allows at most %q", rc, policy.MaxRiskClass),

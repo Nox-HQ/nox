@@ -161,6 +161,31 @@ func TestGenerateSuppressedNotIncluded(t *testing.T) {
 	}
 }
 
+// TestGenerateHonorsSourceDateEpoch guards nox's reproducible-output guarantee
+// for the HTML artifact (DEFECT 3): the embedded timestamp must come from
+// report.GeneratedAt(), which honors SOURCE_DATE_EPOCH like the JSON and SBOM
+// emitters, not wall-clock time.Now(). Without this the HTML report is never
+// byte-reproducible across runs.
+func TestGenerateHonorsSourceDateEpoch(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel.
+	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
+
+	r := NewReporter("test")
+	fs := findings.NewFindingSet()
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1700000000 == 2023-11-14T22:13:20Z.
+	const frozen = "2023-11-14T22:13:20Z"
+	html := string(data)
+	if !strings.Contains(html, frozen) {
+		t.Errorf("HTML report does not embed frozen SOURCE_DATE_EPOCH timestamp %q", frozen)
+	}
+}
+
 func TestWriteToFile(t *testing.T) {
 	t.Parallel()
 	r := NewReporter("test")
