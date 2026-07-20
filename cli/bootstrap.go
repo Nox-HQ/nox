@@ -122,7 +122,7 @@ func bootstrapBundledPlugins() {
 			if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 				continue
 			}
-			st.AddPlugin(&InstalledPlugin{
+			bundledIP := &InstalledPlugin{
 				Name:        canonicalName(name),
 				Version:     "bundled",
 				BinaryPath:  path,
@@ -130,7 +130,9 @@ func bootstrapBundledPlugins() {
 				RiskClass:   "passive",
 				InstalledAt: time.Now().UTC(),
 				UpdatedAt:   time.Now().UTC(),
-			})
+			}
+			bundledIP.RecordBinaryDigest()
+			st.AddPlugin(bundledIP)
 			changed = true
 			notices = append(notices, fmt.Sprintf(
 				"registered bundled plugin %s -> %s (disable: export NOX_NO_BUNDLED_PLUGINS=1)",

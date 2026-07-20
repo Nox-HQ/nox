@@ -193,7 +193,7 @@ func installOne(name, constraint string, st *State) error {
 	}
 
 	now := time.Now()
-	st.AddPlugin(&InstalledPlugin{
+	ip := &InstalledPlugin{
 		Name:        name,
 		Version:     ve.Version,
 		Digest:      artifact.Digest,
@@ -203,7 +203,9 @@ func installOne(name, constraint string, st *State) error {
 		Track:       string(trackForPlugin(ctx, client, name)),
 		InstalledAt: now,
 		UpdatedAt:   now,
-	})
+	}
+	ip.RecordBinaryDigest()
+	st.AddPlugin(ip)
 	return nil
 }
 

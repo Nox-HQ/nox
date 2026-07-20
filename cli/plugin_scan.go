@@ -68,6 +68,28 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 			})
 			continue
 		}
+
+		// Integrity gate: the binary the host is about to exec must match the
+		// digest measured when the plugin was installed and verified. state.json
+		// is writable by anything running as the user — including a plugin
+		// subprocess, the very principal the sandbox is meant to contain — so a
+		// plugin that runs once and then overwrites its own binary would
+		// otherwise be re-launched as a still-"trusted" plugin. Refusing on
+		// mismatch means tampering can only stop a plugin, never escalate it.
+		// Only enforced when a digest was recorded (installs predating the field,
+		// and any where the hash could not be read, fall through unchanged).
+		if ip.BinaryDigest != "" {
+			got, digErr := fileDigest(ip.BinaryPath)
+			if digErr != nil || got != ip.BinaryDigest {
+				missing = append(missing, core.Degradation{
+					Kind:   degrade.Plugin,
+					Detail: fmt.Sprintf("required plugin %q failed its integrity check: the binary at %s does not match the digest recorded at install", name, ip.BinaryPath),
+					Impact: "the plugin was not run because its binary changed since install; reinstall it with `nox plugin install` if the change is expected",
+				})
+				continue
+			}
+		}
+
 		binaries = append(binaries, installedPlugin{
 			path:  ip.BinaryPath,
 			track: registry.Track(ip.Track),

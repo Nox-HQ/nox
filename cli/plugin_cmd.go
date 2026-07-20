@@ -416,7 +416,7 @@ func runPluginInstall(args []string) int {
 	}
 
 	now := time.Now()
-	st.AddPlugin(&InstalledPlugin{
+	ip := &InstalledPlugin{
 		Name:        name,
 		Version:     ve.Version,
 		Digest:      artifact.Digest,
@@ -426,7 +426,9 @@ func runPluginInstall(args []string) int {
 		Track:       string(trackForPlugin(ctx, client, name)),
 		InstalledAt: now,
 		UpdatedAt:   now,
-	})
+	}
+	ip.RecordBinaryDigest()
+	st.AddPlugin(ip)
 
 	if err := SaveState(statePath, st); err != nil {
 		fmt.Fprintf(os.Stderr, "error: saving state: %v\n", err)
@@ -496,7 +498,7 @@ func runPluginUpdate(args []string) int {
 		}
 
 		now := time.Now()
-		st.AddPlugin(&InstalledPlugin{
+		newIP := &InstalledPlugin{
 			Name:        name,
 			Version:     ve.Version,
 			Digest:      artifact.Digest,
@@ -506,7 +508,9 @@ func runPluginUpdate(args []string) int {
 			Track:       string(trackForPlugin(ctx, client, name)),
 			InstalledAt: ip.InstalledAt,
 			UpdatedAt:   now,
-		})
+		}
+		newIP.RecordBinaryDigest()
+		st.AddPlugin(newIP)
 		updated++
 		fmt.Printf("Updated %s: %s -> %s\n", name, ip.Version, ve.Version)
 	}
@@ -741,14 +745,19 @@ func installLocalPlugin(name, path string) int {
 	}
 
 	now := time.Now()
-	st.AddPlugin(&InstalledPlugin{
+	localIP := &InstalledPlugin{
 		Name:        name,
 		Version:     "local",
 		BinaryPath:  abs,
 		TrustLevel:  "local",
 		InstalledAt: now,
 		UpdatedAt:   now,
-	})
+	}
+	// Record the digest even for local plugins: it does not imply marketplace
+	// trust (TrustLevel stays "local"), but it still lets the scan path detect
+	// if this binary is swapped out from under an installed reference.
+	localIP.RecordBinaryDigest()
+	st.AddPlugin(localIP)
 	if err := SaveState(statePath, st); err != nil {
 		fmt.Fprintf(os.Stderr, "error: saving state: %v\n", err)
 		return 2
