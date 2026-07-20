@@ -9,9 +9,9 @@ import (
 	"html/template"
 	"os"
 	"sort"
-	"time"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 )
 
 // Reporter generates standalone HTML reports from scan findings.
@@ -119,7 +119,10 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 
 	data := reportData{
 		ToolVersion: r.ToolVersion,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		// Use report.GeneratedAt() so the embedded timestamp honors
+		// SOURCE_DATE_EPOCH like the JSON and SBOM emitters, keeping the HTML
+		// artifact byte-reproducible across runs.
+		GeneratedAt: report.GeneratedAt(),
 		Counts:      counts,
 		Findings:    rows,
 		SevPercents: percents,
