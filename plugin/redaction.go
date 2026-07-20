@@ -21,7 +21,12 @@ func NewRedactor() *Redactor {
 		patterns: []*regexp.Regexp{
 			regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 			regexp.MustCompile(`(?i)aws_secret_access_key\s*[=:]\s*[A-Za-z0-9/+=]{40}`),
-			regexp.MustCompile(`gh[ps]_[A-Za-z0-9_]{36,}`),
+			// GitHub token family. The old `gh[ps]_` covered only personal (ghp_)
+			// and server (ghs_) tokens and leaked OAuth (gho_), user-to-server
+			// (ghu_), and refresh (ghr_) tokens, plus fine-grained PATs
+			// (github_pat_), through the primary free-text redaction path.
+			regexp.MustCompile(`gh[opsur]_[A-Za-z0-9_]{36,}`),
+			regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,}`),
 			regexp.MustCompile(`-{5}BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-{5}`),
 			regexp.MustCompile(`(?i)(api[_-]?key|apikey|api[_-]?secret)\s*[=:]\s*['"][A-Za-z0-9]{16,}['"]`),
 		},
@@ -41,12 +46,18 @@ func (r *Redactor) RedactResponse(resp *pluginv1.InvokeToolResponse) (*pluginv1.
 
 	// Redact findings.
 	for _, f := range resp.GetFindings() {
+		// Location.FilePath is a free-text string the plugin fully controls; a
+		// secret embedded there (e.g. a URL with credentials) reaches
+		// findings.json and SARIF, so it must be scanned like any message field.
+		loc, locRedacted := r.redactLocation(f.GetLocation())
+		anyRedacted = anyRedacted || locRedacted
+
 		nf := &pluginv1.Finding{
 			Id:          f.GetId(),
 			RuleId:      f.GetRuleId(),
 			Severity:    f.GetSeverity(),
 			Confidence:  f.GetConfidence(),
-			Location:    f.GetLocation(),
+			Location:    loc,
 			Fingerprint: f.GetFingerprint(),
 		}
 
@@ -69,12 +80,19 @@ func (r *Redactor) RedactResponse(resp *pluginv1.InvokeToolResponse) (*pluginv1.
 	// Copy packages as-is (structured identifiers, not free text).
 	out.Packages = resp.GetPackages()
 
-	// Redact AI components.
+	// Redact AI components. Name/Type/Path are plugin-controlled strings copied
+	// straight into ai.inventory.json (Path/Name) — a secret routed through any
+	// of them would otherwise bypass redaction entirely.
 	for _, ac := range resp.GetAiComponents() {
+		acName, rn := r.redactString(ac.GetName())
+		acType, rt := r.redactString(ac.GetType())
+		acPath, rp := r.redactString(ac.GetPath())
+		anyRedacted = anyRedacted || rn || rt || rp
+
 		nac := &pluginv1.AIComponent{
-			Name: ac.GetName(),
-			Type: ac.GetType(),
-			Path: ac.GetPath(),
+			Name: acName,
+			Type: acType,
+			Path: acPath,
 		}
 
 		if ac.GetDetails() != nil {
@@ -89,11 +107,14 @@ func (r *Redactor) RedactResponse(resp *pluginv1.InvokeToolResponse) (*pluginv1.
 		out.AiComponents = append(out.AiComponents, nac)
 	}
 
-	// Redact diagnostics.
+	// Redact diagnostics. Source is a plugin-controlled label; redact it too.
 	for _, d := range resp.GetDiagnostics() {
+		src, srcRedacted := r.redactString(d.GetSource())
+		anyRedacted = anyRedacted || srcRedacted
+
 		nd := &pluginv1.Diagnostic{
 			Severity: d.GetSeverity(),
-			Source:   d.GetSource(),
+			Source:   src,
 		}
 
 		msg, redacted := r.redactString(d.GetMessage())
@@ -150,10 +171,12 @@ func (r *Redactor) RedactResponse(resp *pluginv1.InvokeToolResponse) (*pluginv1.
 		anyRedacted = anyRedacted || redacted
 
 		for _, n := range g.GetNodes() {
+			nfp, fpRed := r.redactString(n.GetFilePath())
+			anyRedacted = anyRedacted || fpRed
 			nn := &pluginv1.GraphNode{
 				Id:       n.GetId(),
 				Kind:     n.GetKind(),
-				FilePath: n.GetFilePath(),
+				FilePath: nfp,
 			}
 			label, red := r.redactString(n.GetLabel())
 			nn.Label = label
@@ -181,6 +204,22 @@ func (r *Redactor) RedactResponse(resp *pluginv1.InvokeToolResponse) (*pluginv1.
 	}
 
 	return out, anyRedacted
+}
+
+// redactLocation returns a copy of loc with its plugin-controlled FilePath
+// scanned for secrets, preserving the line/column fields. nil in ⇒ nil out.
+func (r *Redactor) redactLocation(loc *pluginv1.Location) (*pluginv1.Location, bool) {
+	if loc == nil {
+		return nil, false
+	}
+	fp, redacted := r.redactString(loc.GetFilePath())
+	return &pluginv1.Location{
+		FilePath:    fp,
+		StartLine:   loc.GetStartLine(),
+		EndLine:     loc.GetEndLine(),
+		StartColumn: loc.GetStartColumn(),
+		EndColumn:   loc.GetEndColumn(),
+	}, redacted
 }
 
 // redactMap redacts every value in a string map, preserving nil so an absent
