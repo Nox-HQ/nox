@@ -165,6 +165,84 @@ Pillow[jpeg]==9.5.0
 	}
 }
 
+// TestParseRequirementsTxt_StrictBounds guards against a regression where
+// requirements.txt lines using bare "<" or ">" specifiers (valid PEP 508)
+// were dropped or corrupted. Two failure modes existed:
+//   - a strict-only bound (e.g. "Django<4") was dropped entirely because
+//     "<" and ">" were not in the operator set;
+//   - a compound line (e.g. "urllib3<1.27,>=1.21.1") was split on whichever
+//     operator appeared first in the operator LIST rather than the one at the
+//     leftmost position in the string, corrupting the package name (e.g.
+//     "urllib3<1.27,").
+//
+// Exercised through the real exported parser (ParseLockfile).
+func TestParseRequirementsTxt_StrictBounds(t *testing.T) {
+	analyzer := NewAnalyzer(WithOSVDisabled())
+
+	content := []byte("Django<4\nurllib3<1.27,>=1.21.1\nrequests>2.0\nflask==2.0.0\n")
+
+	pkgs, err := analyzer.ParseLockfile("/project/requirements.txt", content)
+	if err != nil {
+		t.Fatalf("ParseLockfile returned error: %v", err)
+	}
+
+	sort.Slice(pkgs, func(i, j int) bool {
+		return pkgs[i].Name < pkgs[j].Name
+	})
+
+	expected := []Package{
+		{Name: "Django", Version: "4", Ecosystem: "pypi"},
+		{Name: "flask", Version: "2.0.0", Ecosystem: "pypi"},
+		{Name: "requests", Version: "2.0", Ecosystem: "pypi"},
+		{Name: "urllib3", Version: "1.27", Ecosystem: "pypi"},
+	}
+
+	if len(pkgs) != len(expected) {
+		t.Fatalf("expected %d packages, got %d: %+v", len(expected), len(pkgs), pkgs)
+	}
+	for i, exp := range expected {
+		if pkgs[i] != exp {
+			t.Errorf("package[%d]: got %+v, want %+v", i, pkgs[i], exp)
+		}
+	}
+}
+
+// TestParseRequirementsTxt_OperatorSelection covers individual specifier
+// shapes: bare ">" / "<" alone, a compound "<...,>=..." (leftmost operator
+// wins), and confirms every previously-supported operator still parses.
+func TestParseRequirementsTxt_OperatorSelection(t *testing.T) {
+	tests := []struct {
+		name    string
+		line    string
+		wantPkg string
+		wantVer string
+	}{
+		{name: "strict greater alone", line: "pkg>1.0", wantPkg: "pkg", wantVer: "1.0"},
+		{name: "strict less alone", line: "pkg<2.0", wantPkg: "pkg", wantVer: "2.0"},
+		{name: "compound less then gte", line: "pkg<2,>=1", wantPkg: "pkg", wantVer: "2"},
+		{name: "exact", line: "pkg==1.2.3", wantPkg: "pkg", wantVer: "1.2.3"},
+		{name: "gte", line: "pkg>=1.2.3", wantPkg: "pkg", wantVer: "1.2.3"},
+		{name: "lte", line: "pkg<=1.2.3", wantPkg: "pkg", wantVer: "1.2.3"},
+		{name: "compatible", line: "pkg~=1.2.3", wantPkg: "pkg", wantVer: "1.2.3"},
+		{name: "not equal", line: "pkg!=1.2.3", wantPkg: "pkg", wantVer: "1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pkgs, err := parseRequirementsTxt([]byte(tt.line + "\n"))
+			if err != nil {
+				t.Fatalf("parseRequirementsTxt returned error: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("expected 1 package, got %d: %+v", len(pkgs), pkgs)
+			}
+			if pkgs[0].Name != tt.wantPkg || pkgs[0].Version != tt.wantVer {
+				t.Errorf("got %+v, want name=%q version=%q", pkgs[0], tt.wantPkg, tt.wantVer)
+			}
+		})
+	}
+}
+
 func TestParseRequirementsTxt_EmptyInput(t *testing.T) {
 	pkgs, err := parseRequirementsTxt([]byte("# only comments\n\n"))
 	if err != nil {
