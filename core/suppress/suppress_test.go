@@ -302,3 +302,42 @@ func TestScanForSuppressions_DisableTrailingComment(t *testing.T) {
 		t.Errorf("line = %d, want 1 (trailing comment applies to same line)", supps[0].Line)
 	}
 }
+
+// A nox:ignore inside a fenced code block in markdown is documentation showing
+// the syntax, not a waiver anyone expects to apply. It is flagged so the caller
+// can skip reporting it as unused — but it must still parse and still match, so
+// a genuine waiver written in a doc keeps working.
+func TestScanForSuppressions_MarkdownFenceIsDocExample(t *testing.T) {
+	md := "# Docs\n\nExample:\n\n```go\n// nox:ignore SEC-001 -- shown in docs\nvar k = \"AKIAEXAMPLEFAKEKEY\"\n```\n\n<!-- nox:ignore SEC-002 -- a real waiver, outside any fence -->\nreal line\n"
+
+	got := ScanForSuppressions([]byte(md), "README.md")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 suppressions, got %d: %+v", len(got), got)
+	}
+	byRule := map[string]Suppression{}
+	for _, s := range got {
+		byRule[s.RuleIDs[0]] = s
+	}
+	if !byRule["SEC-001"].DocExample {
+		t.Error("directive inside a fenced block should be marked DocExample")
+	}
+	if byRule["SEC-002"].DocExample {
+		t.Error("directive outside a fence must NOT be marked DocExample")
+	}
+	// Marking must not disturb matching: the fenced one still targets its line.
+	if !byRule["SEC-001"].MatchesFinding("SEC-001", byRule["SEC-001"].Line, time.Now()) {
+		t.Error("a fenced directive must still match a finding on its target line")
+	}
+}
+
+// The same directive in a non-markdown file is never a doc example.
+func TestScanForSuppressions_FenceOnlyAppliesToMarkdown(t *testing.T) {
+	src := "```\n// nox:ignore SEC-001 -- not markdown\nvar k = 1\n"
+	got := ScanForSuppressions([]byte(src), "main.go")
+	if len(got) != 1 {
+		t.Fatalf("expected 1 suppression, got %d", len(got))
+	}
+	if got[0].DocExample {
+		t.Error("backticks in a .go file must not mark a directive as a doc example")
+	}
+}

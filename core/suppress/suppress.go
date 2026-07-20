@@ -16,6 +16,7 @@ package suppress
 import (
 	"bufio"
 	"bytes"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -39,6 +40,24 @@ type Suppression struct {
 	// do not match, so the finding is reported — failing toward showing
 	// findings rather than hiding them — and the caller reports it.
 	InvalidExpiry string
+
+	// DocExample marks a directive written inside a fenced code block in a
+	// markdown file — i.e. documentation showing what a nox:ignore looks like,
+	// not a waiver an operator expects to apply. It changes nothing about
+	// matching: such a directive still suppresses a real finding on its target
+	// line, exactly as before. It only tells the caller not to report it as an
+	// unused waiver, because prose demonstrating the syntax waives nothing by
+	// design and that report would be pure noise. nox's own README trips this.
+	DocExample bool
+}
+
+// markdownExts are the file types whose fenced code blocks hold illustrative
+// directives rather than operative ones.
+var markdownExts = map[string]bool{".md": true, ".markdown": true, ".mdx": true}
+
+// isFence reports whether a trimmed line opens or closes a fenced code block.
+func isFence(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
 }
 
 // suppressionRE matches nox:ignore / nox:disable directives in any
@@ -65,8 +84,16 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 		lines = append(lines, scanner.Text())
 	}
 
+	// Fenced code blocks in markdown hold directives that illustrate the syntax
+	// rather than waive anything; track them so the caller can tell the two apart.
+	isMarkdown := markdownExts[strings.ToLower(filepath.Ext(filePath))]
+	inFence := false
+
 	for i, line := range lines {
 		lineNum := i + 1
+		if isMarkdown && isFence(strings.TrimSpace(line)) {
+			inFence = !inFence
+		}
 		match := suppressionRE.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -127,6 +154,7 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 			Reason:        reason,
 			Expires:       expires,
 			InvalidExpiry: invalidExpiry,
+			DocExample:    isMarkdown && inFence,
 		})
 	}
 

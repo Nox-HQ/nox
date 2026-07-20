@@ -551,3 +551,27 @@ func TestScan_UsedSuppressionIsNotReportedAsUnused(t *testing.T) {
 		t.Errorf("a waiver that applied must not be reported as unused: %+v", result.Degradations)
 	}
 }
+
+// Documentation that demonstrates nox:ignore must not be reported as a pile of
+// unused waivers. nox's own README shows the syntax in fenced code blocks whose
+// sample secrets are deliberately too short to match a rule, so every example
+// waived nothing and was reported — noise, in a file that is behaving correctly.
+func TestScan_MarkdownDocExamplesAreNotReportedUnused(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// A doc example in a fence (waives nothing) plus a real finding in the same
+	// file, so the file reaches the suppression pass at all.
+	md := "# Docs\n\nSuppress like this:\n\n```go\n// nox:ignore SEC-001 -- false positive in test data\nvar testKey = \"AKIAEXAMPLEFAKEKEY\"\n```\n\nA real token below:\n\njenkins_token = \"AbcdefghijklmnopqrstUVWX\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(md), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if hasDegradationKind(result, "suppression") {
+		t.Errorf("doc examples in fenced blocks must not be reported as unused waivers: %+v", result.Degradations)
+	}
+}
