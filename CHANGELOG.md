@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-07-21
+
 ### Fixed
 
 - **A `nox:ignore` that suppresses nothing is now reported.** A dedicated
