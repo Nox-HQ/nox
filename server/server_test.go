@@ -11,6 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/deps"
+	findingspkg "github.com/nox-hq/nox/core/findings"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"github.com/nox-hq/nox/plugin"
 	mcp "go.klarlabs.de/mcp"
@@ -1685,6 +1689,95 @@ func TestHandleDashboard_AfterScan(t *testing.T) {
 	}
 	if !strings.Contains(result, "<html") {
 		t.Fatalf("expected HTML content in dashboard")
+	}
+}
+
+// oversizedScanResult builds a ScanResult whose dashboard HTML exceeds
+// maxOutputBytes, used to exercise the output-size cap on the dashboard
+// handlers. The findings carry long messages so the rendered HTML crosses the
+// 1MB response budget.
+func oversizedScanResult(t *testing.T) *nox.ScanResult {
+	t.Helper()
+	fs := findingspkg.NewFindingSet()
+	msg := strings.Repeat("boundary violation in prompt context ", 4)
+	for i := 0; i < 20000; i++ {
+		fs.Add(findingspkg.NewFinding(
+			"SEC-100",
+			findingspkg.SeverityHigh,
+			findingspkg.ConfidenceHigh,
+			findingspkg.Location{FilePath: "cmd/service/handler.go", StartLine: i + 1, EndLine: i + 1},
+			msg,
+		))
+	}
+	return &nox.ScanResult{
+		Findings:    fs,
+		Inventory:   &deps.PackageInventory{},
+		AIInventory: ai.NewInventory(),
+	}
+}
+
+func TestGenerateDashboardHTML_OversizedExceedsBudget(t *testing.T) {
+	html, err := GenerateDashboardHTML(oversizedScanResult(t), "0.1.0", t.TempDir())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(html) <= maxOutputBytes {
+		t.Fatalf("expected oversized dashboard HTML > %d bytes, got %d", maxOutputBytes, len(html))
+	}
+}
+
+func TestHandleDashboard_OversizedReturnsNotice(t *testing.T) {
+	s := New("0.1.0", nil)
+	dir := t.TempDir()
+	s.setCache(dir, oversizedScanResult(t))
+
+	result, err := s.handleDashboard(context.Background(), dashboardInput{Path: dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) > maxOutputBytes {
+		t.Fatalf("dashboard response exceeded output budget: %d > %d bytes", len(result), maxOutputBytes)
+	}
+	if !strings.Contains(result, "output_too_large") {
+		t.Fatalf("expected structured output_too_large notice, got: %s", result[:min(len(result), 200)])
+	}
+}
+
+func TestHandleResourceDashboard_OversizedReturnsNotice(t *testing.T) {
+	s := New("0.1.0", nil)
+	dir := t.TempDir()
+	s.setCache(dir, oversizedScanResult(t))
+
+	content, err := s.handleResourceDashboard(context.Background(), "nox://dashboard", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(content.Text) > maxOutputBytes {
+		t.Fatalf("dashboard resource exceeded output budget: %d > %d bytes", len(content.Text), maxOutputBytes)
+	}
+	if !strings.Contains(content.Text, "output_too_large") {
+		t.Fatalf("expected structured output_too_large notice, got: %s", content.Text[:min(len(content.Text), 200)])
+	}
+}
+
+func TestHandleProjectResourceDashboard_OversizedReturnsNotice(t *testing.T) {
+	s := New("0.1.0", nil)
+	dir := t.TempDir()
+	s.setCache(dir, oversizedScanResult(t))
+
+	content, err := s.handleProjectResourceDashboard(
+		context.Background(),
+		"nox://projects/x/dashboard",
+		map[string]string{"project": dir},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(content.Text) > maxOutputBytes {
+		t.Fatalf("project dashboard resource exceeded output budget: %d > %d bytes", len(content.Text), maxOutputBytes)
+	}
+	if !strings.Contains(content.Text, "output_too_large") {
+		t.Fatalf("expected structured output_too_large notice, got: %s", content.Text[:min(len(content.Text), 200)])
 	}
 }
 
