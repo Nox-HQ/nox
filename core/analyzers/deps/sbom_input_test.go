@@ -104,7 +104,10 @@ func TestEcosystemFromPurl(t *testing.T) {
 		{"pkg:npm/express@4.18.2", "npm"},
 		{"pkg:maven/org.apache/commons@3.0", "maven"},
 		{"pkg:pypi/requests@2.31.0", "pypi"},
-		{"pkg:golang/github.com/foo/bar@1.0", "golang"},
+		// purl types differ from nox's ecosystem names for Go and Ruby; they
+		// must be normalized or OSV never queries these components.
+		{"pkg:golang/github.com/foo/bar@1.0", "go"},
+		{"pkg:gem/rails@7.0.0", "rubygems"},
 		{"", "unknown"},
 		{"invalid", "unknown"},
 	}
@@ -210,5 +213,24 @@ func TestParseSPDXInput_Success(t *testing.T) {
 	}
 	if pkgs[0].Name != "lodash" || pkgs[0].Version != "4.17.21" || pkgs[0].Ecosystem != "npm" {
 		t.Fatalf("unexpected package: %+v", pkgs[0])
+	}
+}
+
+// TestPurlEcosystemReachesOSV is the security assertion behind the
+// normalization: a Go or Ruby component parsed from an SBOM must map to an
+// ecosystem OSV.dev recognizes, or osvEcosystem returns false and the component
+// is silently dropped from the vulnerability batch — a clean bill of health for
+// the whole ecosystem. Before normalization, "golang"/"gem" failed this.
+func TestPurlEcosystemReachesOSV(t *testing.T) {
+	for _, purl := range []string{
+		"pkg:golang/github.com/foo/bar@1.0",
+		"pkg:gem/rails@7.0.0",
+		"pkg:npm/express@4.18.2",
+		"pkg:pypi/requests@2.31.0",
+	} {
+		eco := ecosystemFromPurl(purl)
+		if _, ok := osvEcosystem(eco); !ok {
+			t.Errorf("%s -> ecosystem %q not OSV-queryable; component would be dropped from scanning", purl, eco)
+		}
 	}
 }

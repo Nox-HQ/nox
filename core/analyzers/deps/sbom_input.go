@@ -137,5 +137,23 @@ func ecosystemFromPurl(purl string) string {
 	if len(parts) < 2 || parts[0] == "" {
 		return "unknown"
 	}
-	return parts[0]
+	return normalizePurlType(parts[0])
+}
+
+// normalizePurlType maps a Package-URL type to nox's internal ecosystem name.
+// The two differ for Go and Ruby: purl uses "golang"/"gem" where nox (and the
+// OSV mapping in osvEcosystem) use "go"/"rubygems". Returning the raw purl type
+// meant every Go and Ruby component parsed from a CycloneDX/SPDX SBOM was
+// dropped from the OSV batch — a silent clean bill of health for those whole
+// ecosystems. Types that already coincide (npm, pypi, cargo, maven, nuget) pass
+// through unchanged.
+func normalizePurlType(t string) string {
+	switch t {
+	case "golang":
+		return "go"
+	case "gem":
+		return "rubygems"
+	default:
+		return t
+	}
 }
