@@ -1203,6 +1203,12 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 			if suppressions[si].Expires != nil && timeNow().After(*suppressions[si].Expires) {
 				continue
 			}
+			// A directive inside a fenced code block in markdown is documentation
+			// showing the syntax, not a waiver anyone expects to apply — reporting
+			// it as unused is pure noise. nox's own README trips this.
+			if suppressions[si].DocExample {
+				continue
+			}
 			deg.Add(degrade.Suppression,
 				fmt.Sprintf("%s:%d waives %s but matched no finding",
 					filePath, suppressions[si].Line, strings.Join(suppressions[si].RuleIDs, ",")),
