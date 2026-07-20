@@ -81,6 +81,26 @@ func newOCIStoreWithPolicy(policyName string) *oci.Store {
 	)
 }
 
+// trustViolationsBlock is the single trust-policy gate shared by the install
+// and update paths. Store.Fetch is fail-open by contract: it records policy
+// violations in VerifyResult but still returns a runnable BinaryPath, delegating
+// enforcement to the caller. Having each caller re-implement that check is how
+// `nox plugin update` came to silently install artifacts `nox plugin install`
+// would refuse — so both now route through here.
+//
+// It returns the violation messages to surface and whether they are fatal under
+// the policy (never fatal for a permissive policy or an explicit
+// --allow-unverified). No violations ⇒ (nil, false).
+func trustViolationsBlock(vr trust.VerifyResult, policyName string, allowUnverified bool) (msgs []string, fatal bool) {
+	if len(vr.Violations) == 0 {
+		return nil, false
+	}
+	for _, v := range vr.Violations {
+		msgs = append(msgs, v.Message)
+	}
+	return msgs, !allowUnverified && policyName != "permissive"
+}
+
 // policyFromName resolves a config / flag string into a trust.Policy.
 // Empty / unknown names map to the default policy (TrustCommunity
 // minimum) — every published plugin in the official registry now
@@ -400,14 +420,13 @@ func runPluginInstall(args []string) int {
 	}
 	fmt.Println()
 
-	if len(artifact.VerifyResult.Violations) > 0 {
-		fatal := !allowUnverified && policyName != "permissive"
-		for _, v := range artifact.VerifyResult.Violations {
+	if msgs, fatal := trustViolationsBlock(artifact.VerifyResult, policyName, allowUnverified); len(msgs) > 0 {
+		for _, m := range msgs {
 			label := "warning"
 			if fatal {
 				label = "error"
 			}
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", label, v.Message)
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", label, m)
 		}
 		if fatal {
 			fmt.Fprintf(os.Stderr, "Install blocked by trust policy %q. Override with --allow-unverified or set plugins.trust_policy: permissive in .nox.yaml.\n", policyName)
@@ -469,7 +488,14 @@ func runPluginUpdate(args []string) int {
 	}
 
 	client := newRegistryClient(st)
-	store := newOCIStore()
+	// Update must enforce the same trust policy as install. It previously used
+	// the permissive-by-construction default store and never inspected
+	// VerifyResult, so a higher version published in a configured registry — or
+	// a MITM'd/stale unsigned index — was installed unverified. Resolve the
+	// operator's policy (.nox.yaml plugins.trust_policy, else "default") and
+	// build a policy-aware store so violations are both produced and gated.
+	policyName := resolveTrustPolicy("", false, false, false)
+	store := newOCIStoreWithPolicy(policyName)
 	ctx := context.Background()
 
 	updated := 0
@@ -494,6 +520,16 @@ func runPluginUpdate(args []string) int {
 		artifact, err := store.Fetch(ctx, name, ve)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot fetch %s@%s: %v\n", name, ve.Version, err)
+			continue
+		}
+
+		// Fail closed: a new version that violates the trust policy is skipped,
+		// not silently installed. The currently-installed version stays in place.
+		if msgs, fatal := trustViolationsBlock(artifact.VerifyResult, policyName, false); fatal {
+			for _, m := range msgs {
+				fmt.Fprintf(os.Stderr, "warning: not updating %s@%s: %s\n", name, ve.Version, m)
+			}
+			fmt.Fprintf(os.Stderr, "Skipped %s: new version blocked by trust policy %q (run `nox plugin install %s@%s --allow-unverified` to override).\n", name, policyName, name, ve.Version)
 			continue
 		}
 
