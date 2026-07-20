@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-07-20
+
+### Fixed
+
+- **The GitHub Action failed on any scan that produced no findings.** The action
+  counted findings with `grep -c … || echo "0"`; because `grep -c` exits non-zero
+  when there are zero matches, the fallback fired on top of grep's own `0` and
+  wrote a two-line `findings-count` value to `$GITHUB_OUTPUT`, failing the step
+  with *"Unable to process file command 'output' … Invalid format '0'"*. Any
+  repository whose scan found nothing — for example a PR-scoped, changed-files
+  gate on a change touching only `go.mod`/`go.sum` — saw its Nox gate go red for
+  no real reason. The count is now always a single clean integer.
+
 ## [1.13.0] - 2026-07-20
 
 A large security-hardening and correctness release. Two adversarial audits of

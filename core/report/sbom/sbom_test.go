@@ -746,7 +746,13 @@ func TestSPDX_DeclaredLicense(t *testing.T) {
 // only on vuln.ID leaves their relative order to Go's randomized map iteration.
 // Generating repeatedly must produce the exact same bytes every time.
 func TestCycloneDX_SharedCVEDeterministic(t *testing.T) {
-	t.Parallel()
+	// Freeze the clock. Byte-identical output is nox's reproducibility guarantee
+	// only WITH SOURCE_DATE_EPOCH set; otherwise the CycloneDX metadata timestamp
+	// is wall-clock (report.GeneratedAt -> time.Now at second resolution), so 100
+	// rapid Generate calls occasionally straddle a one-second boundary and this
+	// test flakes on the timestamp — not on the ordering it means to check.
+	// (t.Setenv precludes t.Parallel, which is why this test is not parallel.)
+	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
 
 	build := func() *deps.PackageInventory {
 		inv := &deps.PackageInventory{}
