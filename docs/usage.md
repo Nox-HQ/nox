@@ -936,6 +936,21 @@ INSERT INTO users (token) VALUES ('test-token');
 
 **Supported comment styles:** `//` (Go, JS, Java, C, Rust), `#` (Python, Ruby, Shell, YAML), `--` (SQL, Lua), `/*` (CSS, C), `<!--` (HTML, XML).
 
+**Keep a dedicated directive on one line.** A dedicated comment applies to the
+**next non-blank line**. If the reason wraps onto a second comment line, the
+waiver lands on that continuation comment instead of the code — the finding is
+still reported, with nothing to indicate the suppression missed:
+
+```go
+// nox:ignore SEC-001 -- this reason wraps onto
+// a second line, so the waiver targets THIS comment
+var testKey = "AKIAEXAMPLEFAKEKEY" // still reported
+```
+
+Write it on a single line, or put it as a trailing comment on the finding's own
+line. Consecutive `nox:ignore` comments are fine — stacked directives all apply
+to the next line of code.
+
 Suppressed findings are marked with `status: "suppressed"` in the output and do not count toward policy failure.
 
 ---
