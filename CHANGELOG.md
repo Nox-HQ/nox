@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `nox:ignore` that suppresses nothing is now reported.** A dedicated
+  directive applies to the next non-blank line, so a reason that wrapped onto a
+  second comment line made the waiver land on that continuation comment — the
+  finding below stayed reported, and nothing indicated the suppression had
+  missed. A mistyped rule ID, or a waiver left behind after the finding was
+  fixed, failed just as silently. Unused waivers now surface as a suppression
+  degradation naming the file, line and rule. Correctly-applied waivers and
+  deliberately-expired ones stay quiet (verified: nox's own self-scan, which
+  carries many `nox:ignore` comments, reports none).
+
 ## [1.13.1] - 2026-07-20
 
 ### Fixed

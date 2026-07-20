@@ -1165,14 +1165,50 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 		}
 
 		items := fs.Findings()
+		// Every matching suppression is marked used, not just the first: two
+		// waivers may legitimately cover the same finding, and breaking early
+		// would report the second as unused below.
+		used := make([]bool, len(suppressions))
 		for _, idx := range indices {
 			f := items[idx]
-			for _, s := range suppressions {
-				if s.MatchesFinding(f.RuleID, f.Location.StartLine, timeNow()) {
-					fs.SetStatus(idx, findings.StatusSuppressed)
-					break
+			suppressed := false
+			for si := range suppressions {
+				if suppressions[si].MatchesFinding(f.RuleID, f.Location.StartLine, timeNow()) {
+					used[si] = true
+					suppressed = true
 				}
 			}
+			if suppressed {
+				fs.SetStatus(idx, findings.StatusSuppressed)
+			}
+		}
+
+		// A waiver that suppressed nothing is reported. The operator believes a
+		// finding is waived when it is not, and nothing else says otherwise.
+		//
+		// The common cause is a dedicated directive whose reason wrapped onto a
+		// second comment line: the directive applies to the next non-blank line,
+		// so it lands on the continuation comment and the code below stays
+		// reported. A mistyped rule ID and a waiver left behind after the finding
+		// was fixed produce the same silence.
+		//
+		// An unparseable expiry is already reported above; do not say it twice.
+		// A correctly-parsed EXPIRED waiver is also excluded: it is meant to stop
+		// applying, so its findings returning is the feature working, not a
+		// mistake to warn about.
+		for si := range suppressions {
+			if used[si] || suppressions[si].InvalidExpiry != "" {
+				continue
+			}
+			if suppressions[si].Expires != nil && timeNow().After(*suppressions[si].Expires) {
+				continue
+			}
+			deg.Add(degrade.Suppression,
+				fmt.Sprintf("%s:%d waives %s but matched no finding",
+					filePath, suppressions[si].Line, strings.Join(suppressions[si].RuleIDs, ",")),
+				"this waiver is not suppressing anything — check the rule ID, whether the finding moved, "+
+					"and that a dedicated nox:ignore comment sits on the line directly above the code (a reason "+
+					"wrapped onto a second comment line takes the waiver with it)")
 		}
 	}
 }

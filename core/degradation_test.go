@@ -498,3 +498,56 @@ func TestScan_PathlessFindingIsNotASuppressionDegradation(t *testing.T) {
 			result.Degradations)
 	}
 }
+
+// A dedicated nox:ignore applies to the next non-blank line, so a reason that
+// wraps onto a second comment line makes the waiver land on that continuation
+// comment — the finding below stays reported and nothing said so. The operator
+// believed it was waived. An unused waiver is now surfaced.
+func TestScan_UnusedSuppressionIsReported(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// The reason wraps, so the directive targets the second comment line.
+	content := "# nox:ignore SEC-652 -- this reason wraps onto\n# a second comment line\njenkins_token = \"AbcdefghijklmnopqrstUVWX\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "conf.py"), []byte(content), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if !hasDegradationKind(result, "suppression") {
+		t.Errorf("a waiver that suppressed nothing must be reported; got %+v", result.Degradations)
+	}
+	// And it genuinely did not waive: the finding is still reported.
+	var stillReported bool
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "SEC-652" && f.Status != findings.StatusSuppressed {
+			stillReported = true
+		}
+	}
+	if !stillReported {
+		t.Error("expected the finding to remain reported when the waiver missed")
+	}
+}
+
+// The counterpart: a correctly-placed waiver suppresses its finding and must NOT
+// be reported as unused, or the new signal would be noise on every clean repo.
+func TestScan_UsedSuppressionIsNotReportedAsUnused(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := "# nox:ignore SEC-652 -- single-line reason\njenkins_token = \"AbcdefghijklmnopqrstUVWX\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "conf.py"), []byte(content), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if hasDegradationKind(result, "suppression") {
+		t.Errorf("a waiver that applied must not be reported as unused: %+v", result.Degradations)
+	}
+}
