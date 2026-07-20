@@ -71,9 +71,11 @@ func TestDefaultClassifier_AIComponent(t *testing.T) {
 		{"system.prompt", AIComponent},
 		{"system.prompt.md", AIComponent},
 		{"prompts/security.txt", AIComponent},
-		{"agents/scanner.go", AIComponent},
+		// Recognised source under prompts/ or agents/ is Source, not AIComponent,
+		// so taint/SAST/agentflow actually scan it. Non-source (.txt) stays AI.
+		{"agents/scanner.go", Source},
 		{"deep/nested/prompts/foo.txt", AIComponent},
-		{"deep/nested/agents/bar.py", AIComponent},
+		{"deep/nested/agents/bar.py", Source},
 	}
 
 	for _, tc := range cases {
@@ -849,7 +851,7 @@ func TestWalker_ClassifiesFileTypes(t *testing.T) {
 		"src/handler.ts":       Source,
 		"src/utils.py":         Source,
 		"prompts/security.txt": AIComponent,
-		"agents/scanner.go":    AIComponent,
+		"agents/scanner.go":    Source, // source under agents/ must reach taint/SAST
 		"README.md":            Unknown,
 		"build/app.dockerfile": Container,
 		"mcp.json":             AIComponent,

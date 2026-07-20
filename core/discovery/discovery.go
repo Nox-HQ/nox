@@ -272,7 +272,18 @@ func isAIComponent(name, normalised string) bool {
 	if strings.HasSuffix(name, ".prompt.md") {
 		return true
 	}
-	if containsSegment(normalised, "prompts") || containsSegment(normalised, "agents") {
+	// The prompts/ and agents/ directory heuristic is a weak, path-only signal.
+	// It must NOT claim files that are recognised source code: a .go/.ts/.py
+	// living under a prompts/ or agents/ directory is exactly the LLM-prompt and
+	// agent-driving code that most needs SAST, taint, and agentflow analysis —
+	// all of which skip any artifact whose Type is not Source, so misclassifying
+	// it as AIComponent silently drops it from those scans. The specific AI
+	// signals above (mcp.json, *.prompt, and the agent-config names below) stay
+	// authoritative; only this broad segment test yields to source. Such files
+	// are still enriched by the AI analyzer when their content carries AI SDK
+	// markers (see ai.ScanArtifacts's isSourceFile && isLikelyAIContent path).
+	if !sourceExtensions[filepath.Ext(name)] && !sourceNames[name] &&
+		(containsSegment(normalised, "prompts") || containsSegment(normalised, "agents")) {
 		return true
 	}
 	if isAgentConfig(name, normalised) {
