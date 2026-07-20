@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"io"
 	"net"
@@ -12,8 +13,38 @@ import (
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// pluginTokenEnv is the environment variable through which the host passes a
+// per-launch shared secret. When set, every RPC must present the matching token
+// or it is rejected — this is what closes the loopback port to callers other
+// than the host that spawned this plugin. The key and value must match the
+// host's (see plugin.StartBinary).
+const pluginTokenEnv = "NOX_PLUGIN_TOKEN"
+
+// pluginTokenMetaKey is the gRPC metadata key carrying the per-launch token.
+const pluginTokenMetaKey = "x-nox-plugin-token"
+
+// tokenAuthInterceptor rejects any unary RPC whose metadata does not carry the
+// expected per-launch token. Comparison is constant-time. It is only installed
+// when the host provided a token, so a plugin run standalone (e.g. by its author
+// during development) is unaffected; the real host always sets one.
+func tokenAuthInterceptor(token string) grpc.UnaryServerInterceptor {
+	want := []byte(token)
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "missing plugin auth token")
+		}
+		vals := md.Get(pluginTokenMetaKey)
+		if len(vals) != 1 || subtle.ConstantTimeCompare([]byte(vals[0]), want) != 1 {
+			return nil, status.Error(codes.Unauthenticated, "invalid plugin auth token")
+		}
+		return handler(ctx, req)
+	}
+}
 
 // PluginServer wraps a gRPC server implementing the PluginService with
 // the NOX_PLUGIN_ADDR stdout handshake protocol and signal handling.
@@ -85,7 +116,15 @@ func (s *PluginServer) Serve(ctx context.Context, opts ...ServeOption) error {
 		return fmt.Errorf("sdk: listen: %w", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	// Require the host's per-launch token on every RPC when one was provided.
+	// The host (plugin.StartBinary) always sets it, so in normal operation the
+	// loopback port only answers the host that spawned this plugin.
+	var serverOpts []grpc.ServerOption
+	if token := os.Getenv(pluginTokenEnv); token != "" {
+		serverOpts = append(serverOpts, grpc.UnaryInterceptor(tokenAuthInterceptor(token)))
+	}
+
+	grpcServer := grpc.NewServer(serverOpts...)
 	pluginv1.RegisterPluginServiceServer(grpcServer, s)
 
 	// Print the address for the host to connect to.

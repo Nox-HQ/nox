@@ -3,9 +3,12 @@ package plugin
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -14,11 +17,44 @@ import (
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // HostAPIVersion is the protocol version the host advertises during handshake.
 const HostAPIVersion = "v1"
+
+// pluginTokenEnv is the environment variable through which the host hands a
+// per-launch shared secret to the plugin subprocess it spawns. A plugin binds
+// an unauthenticated loopback gRPC port (see sdk.Serve); the token lets the
+// plugin authenticate the one caller allowed to drive it — the host that
+// launched it — and reject every other local process or LAN peer that connects
+// to the port during a scan.
+const pluginTokenEnv = "NOX_PLUGIN_TOKEN"
+
+// pluginTokenMetaKey is the gRPC metadata key carrying the per-launch token on
+// every RPC. It must match the key the SDK server checks.
+const pluginTokenMetaKey = "x-nox-plugin-token"
+
+// newLaunchToken returns a fresh 256-bit hex token. A crypto/rand failure is
+// returned to the caller rather than swallowed: the host must not fall back to
+// an unauthenticated channel.
+func newLaunchToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// tokenUnaryInterceptor attaches the per-launch token to every outgoing RPC so
+// the plugin can authenticate the caller as the host that spawned it.
+func tokenUnaryInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx = metadata.AppendToOutgoingContext(ctx, pluginTokenMetaKey, token)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
 
 // State represents the lifecycle state of a plugin connection.
 type State int
@@ -125,7 +161,21 @@ func NewPlugin(conn *grpc.ClientConn) *Plugin {
 // NOX_PLUGIN_ADDR=host:port line from its stdout, and establishes
 // a gRPC connection. The returned Plugin is in StateInit.
 func StartBinary(ctx context.Context, path string, args []string, timeout time.Duration) (*Plugin, error) {
+	// Per-launch shared secret authenticating this host to the plugin it spawns.
+	// Generated before the process starts so it can be passed in the child's
+	// environment; a crypto/rand failure aborts the launch rather than falling
+	// back to an unauthenticated channel.
+	token, err := newLaunchToken()
+	if err != nil {
+		return nil, fmt.Errorf("generating plugin auth token: %w", err)
+	}
+
 	cmd := exec.CommandContext(ctx, path, args...)
+	// Inherit the host environment and add the auth token. A foreign process
+	// that later connects to the plugin's loopback port cannot read this child's
+	// environment (on a correctly configured OS it is owner-only), so it cannot
+	// present the token and is rejected by the plugin's server interceptor.
+	cmd.Env = append(os.Environ(), pluginTokenEnv+"="+token)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
@@ -143,7 +193,10 @@ func StartBinary(ctx context.Context, path string, args []string, timeout time.D
 		return nil, fmt.Errorf("waiting for plugin address: %w", err)
 	}
 
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(tokenUnaryInterceptor(token)),
+	)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("dialing plugin at %s: %w", addr, err)
