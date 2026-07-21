@@ -63,6 +63,48 @@ resolve_version() {
   echo "${version}"
 }
 
+# fetch_asset downloads a release asset to a path, retrying transient failures,
+# and echoes the final HTTP status.
+#
+# The single-shot download this replaces failed a security gate on HTTP 403:
+# GitHub throttles release-asset downloads when many jobs fetch at once, and a
+# burst of plugin CI runs triggered exactly that. A gate that goes red for a
+# reason unrelated to security is one people learn to re-run without reading, so
+# a transient throttle must not decide the outcome.
+#
+# Retries are implemented as a loop rather than curl --retry-all-errors, which
+# needs curl >= 7.71; an unknown flag would break the action outright on older
+# curl, trading a rare flake for a hard failure. The Authorization header is sent
+# when a token is available, matching the version lookup above — curl drops it on
+# a cross-host redirect, so it never leaks to the storage backend.
+fetch_asset() {
+  local url="$1" out="$2"
+  local attempt=1 max=3 code=""
+
+  while :; do
+    code=$(curl -sSL -w "%{http_code}" -o "${out}" \
+      ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
+      "${url}" 2>/dev/null || true)
+
+    if [[ -f "${out}" ]] && [[ "${code}" == "200" ]]; then
+      echo "${code}"
+      return 0
+    fi
+
+    if (( attempt >= max )); then
+      echo "${code}"
+      return 1
+    fi
+
+    echo "Download of ${url##*/} returned HTTP ${code:-unknown}; retrying (${attempt}/${max})..." >&2
+    rm -f "${out}"
+    # Backoff base in seconds. Overridable so tests do not pay the real wait;
+    # unset in normal use, which keeps the 3s/6s spacing a throttle needs.
+    sleep $(( attempt * ${NOX_RETRY_BACKOFF_SECS:-3} ))
+    attempt=$(( attempt + 1 ))
+  done
+}
+
 # --- Download and install ---
 
 install_nox() {
@@ -77,7 +119,7 @@ install_nox() {
 
   echo "Downloading nox v${version} for ${platform}..."
   local http_code
-  http_code=$(curl -fsSL -w "%{http_code}" -o "${tmp_dir}/${archive}" "${url}" 2>/dev/null || true)
+  http_code=$(fetch_asset "${url}" "${tmp_dir}/${archive}" || true)
 
   if [[ ! -f "${tmp_dir}/${archive}" ]] || [[ "${http_code}" != "200" ]]; then
     echo "::error::Failed to download nox v${version} for ${platform} (HTTP ${http_code:-unknown})"
@@ -87,7 +129,7 @@ install_nox() {
   fi
 
   # Verify checksum if checksums.txt is available.
-  if curl -fsSL -o "${tmp_dir}/checksums.txt" "${checksums_url}" 2>/dev/null; then
+  if fetch_asset "${checksums_url}" "${tmp_dir}/checksums.txt" >/dev/null 2>&1; then
     local expected actual
     # Match the filename column EXACTLY (sha256sum format: "<hash>  <name>").
     # `grep "$archive"` would also match sibling rows like
