@@ -575,3 +575,67 @@ func TestScan_MarkdownDocExamplesAreNotReportedUnused(t *testing.T) {
 		t.Errorf("doc examples in fenced blocks must not be reported as unused waivers: %+v", result.Degradations)
 	}
 }
+
+// TestScan_SingleFileTargetResolvesRelativePaths guards the file-target case.
+//
+// A scan target may be a single file (`nox scan main.go`). Relative lookups were
+// joined onto that target as if it were a directory, producing paths like
+// main.go/.nox/baseline.json and main.go/main.go — neither of which can exist.
+// The consequences were not symmetrical: the baseline miss was merely reported,
+// but the failed re-read meant the file's nox:ignore comments were never
+// applied, so a single-file scan reported findings the operator had waived.
+//
+// Both halves are asserted here because fixing only the visible one would leave
+// the silent one in place.
+func TestScan_SingleFileTargetResolvesRelativePaths(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// The waiver sits on its own line, so it applies to the next non-blank
+	// line — the eval() call that AI-009 flags.
+	src := "import x\nresponse = get()\n# nox:ignore AI-009 -- reviewed\ndata = eval(response)\n"
+	file := filepath.Join(dir, "app.py")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("writing source: %v", err)
+	}
+
+	// Confirm the premise: without the waiver this file really does produce
+	// AI-009, or the assertion below would pass vacuously.
+	bare := filepath.Join(t.TempDir(), "app.py")
+	if err := os.WriteFile(bare, []byte("import x\nresponse = get()\ndata = eval(response)\n"), 0o644); err != nil {
+		t.Fatalf("writing control source: %v", err)
+	}
+	control, err := RunScanWithOptions(bare, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("control scan failed: %v", err)
+	}
+	var controlHasAI009 bool
+	for _, f := range control.Findings.Findings() {
+		if f.RuleID == "AI-009" {
+			controlHasAI009 = true
+		}
+	}
+	if !controlHasAI009 {
+		t.Fatal("premise broken: control file produced no AI-009, so the waiver assertion proves nothing")
+	}
+
+	result, err := RunScanWithOptions(file, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	// The waiver must be honoured on a file target exactly as on a directory.
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "AI-009" && f.Status != findings.StatusSuppressed {
+			t.Errorf("AI-009 reported despite an inline waiver; suppressions were not applied to a file target")
+		}
+	}
+
+	// And an absent baseline beside a file target is simply absent — not a
+	// degradation about a path that could never have existed.
+	for _, d := range result.Degradations {
+		if strings.Contains(d.Detail, "baseline") || strings.Contains(d.Detail, "inline suppressions") {
+			t.Errorf("unexpected degradation on a file target: %s", d.Detail)
+		}
+	}
+}
