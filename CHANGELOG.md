@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.6] - 2026-07-21
+
+### Fixed
+
+- **`nox fix --actions` could pin a GitHub Action backward, to an older commit
+  than the one already running.** It asked the GitHub Releases API for the
+  latest version and consulted tags only as a fallback "for repos without
+  Releases". That precedence is wrong: a Release is an announcement, but an
+  Action is consumed by *tag*, so a repository that tags `v1.0.1` without
+  cutting a Release is already serving it to every workflow pinned to `@v1`.
+  Against such a repository nox planned a pin to the stale Release's commit and
+  labelled it with the moving tag — a silent downgrade, performed by the feature
+  whose entire purpose is supply-chain pinning. Both sources are now compared
+  and the newer wins; on an exact version tie the more specific tag is preferred,
+  because only it still means the same commit tomorrow.
+
+- **Scanning a single file ignored that file's `nox:ignore` comments.**
+  `nox scan main.go` joined every relative path onto the target as if it were a
+  directory, producing `main.go/.nox/baseline.json` and `main.go/main.go`.
+  Neither can exist. The baseline miss was reported as a degradation, but the
+  failed re-read meant inline waivers were never parsed, so the scan reported
+  findings the operator had explicitly waived — with the explanation buried in a
+  message about a path they never wrote. Scanning one file is what a pre-commit
+  hook or editor integration does. Relative paths now resolve against the file's
+  directory, matching what config loading already did.
+
+- **A dependency CVE in the VS Code extension.** `brace-expansion` 2.1.1, reached
+  through `minimatch`, is vulnerable to exponential-time expansion of
+  consecutive non-expanding `{}` groups (GHSA-3jxr-9vmj-r5cp). Pinned to 2.1.2
+  via an `overrides` entry rather than by adding a dependency the extension does
+  not import.
+
+### Changed
+
+- **nox no longer excludes its own CI workflows from its own scan.** The
+  exclusion existed for one narrow reason — pinned commit SHAs and
+  `GITHUB_TOKEN` references read as high-entropy secrets — but it dropped the
+  whole file, silencing every analyzer rather than the noisy one. It hid 19 IaC
+  findings on nox's own workflows, including a high-severity mutable-tag pin.
+  Now scoped to the secrets analyzer alone.
+
+- **Cross-platform tests run before merge, not after.** The matrix was selected
+  by event, so macOS and Windows ran only on push to `main`; a Windows
+  regression could not be observed until it had already landed, and a red `main`
+  blocks nothing. Three Windows-only test defects had kept CI failing for over
+  100 consecutive runs. The matrix is now selected by what a change touches.
+
 ## [1.13.5] - 2026-07-21
 
 ### Fixed
@@ -1248,7 +1295,14 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.12.2...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.13.6...HEAD
+[1.13.6]: https://github.com/nox-hq/nox/compare/v1.13.5...v1.13.6
+[1.13.5]: https://github.com/nox-hq/nox/compare/v1.13.4...v1.13.5
+[1.13.4]: https://github.com/nox-hq/nox/compare/v1.13.3...v1.13.4
+[1.13.3]: https://github.com/nox-hq/nox/compare/v1.13.2...v1.13.3
+[1.13.2]: https://github.com/nox-hq/nox/compare/v1.13.1...v1.13.2
+[1.13.1]: https://github.com/nox-hq/nox/compare/v1.13.0...v1.13.1
+[1.13.0]: https://github.com/nox-hq/nox/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/nox-hq/nox/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/nox-hq/nox/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
