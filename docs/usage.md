@@ -478,6 +478,28 @@ nox fix --content --write
 choice (a UID, a pinned digest, an allowlist, a rotated secret) are never
 touched. It previews the diff and applies nothing without `--write`.
 
+#### What `fix` does not remediate
+
+`fix` covers dependencies, Action pins and mechanical configuration. It does
+**not** fix SAST findings — taint flows (`TAINT-*`) and the code-level `SEC-*`
+rules are reported and left alone.
+
+That is deliberate rather than unfinished. A taint finding says user input
+reaches a dangerous sink; removing it means choosing the right sanitiser for
+that specific sink, which depends on what the code is meant to do. The failure
+mode is not a broken build — it is inserting something the taint engine
+recognises as a sanitiser that does not actually sanitise, so the finding
+disappears while the vulnerability stays. nox would then be marking its own
+homework, and a green scan would mean less than it does now.
+
+The same logic is why a hardcoded secret is not auto-fixed. Moving the literal
+into an environment variable silences the rule, but the credential is already in
+the git history and is compromised the moment it is committed; the fix that
+matters is rotating it at the provider, which no tool can do for you.
+
+So: a clean `fix` run means the remediable classes were handled. It is not a
+statement that the SAST findings were.
+
 ### variants
 
 Report first-party code that reproduces the root-cause pattern of a known CVE —
