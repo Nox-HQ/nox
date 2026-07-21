@@ -247,6 +247,31 @@ func (r *Reporter) WriteToFile(fs *findings.FindingSet, path string) error {
 // severityToLevel maps a Nox severity to the corresponding SARIF level
 // string. Critical and high map to "error", medium to "warning", and low/info
 // to "note".
+// securitySeverity maps a nox severity to the SARIF `security-severity`
+// property GitHub Code Scanning reads. SARIF `level` alone only distinguishes
+// error/warning/note, so without this every nox alert arrived with no security
+// severity at all: the Code Scanning UI could not filter or sort by severity,
+// and severity-based alert rules had nothing to match on.
+//
+// The value is a CVSS-style score string, banded the way GitHub interprets it:
+// >= 9.0 critical, 7.0-8.9 high, 4.0-6.9 medium, < 4.0 low. Info is not a
+// security severity and is deliberately omitted (empty) rather than scored 0,
+// which would render as "low" and overstate it.
+func securitySeverity(s findings.Severity) string {
+	switch s {
+	case findings.SeverityCritical:
+		return "9.5"
+	case findings.SeverityHigh:
+		return "8.0"
+	case findings.SeverityMedium:
+		return "5.5"
+	case findings.SeverityLow:
+		return "2.0"
+	default:
+		return ""
+	}
+}
+
 func severityToLevel(s findings.Severity) string {
 	switch s {
 	case findings.SeverityCritical, findings.SeverityHigh:
@@ -307,14 +332,18 @@ func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []Reporti
 			continue
 		}
 		index[id] = len(catalog)
-		catalog = append(catalog, ReportingDescriptor{
+		desc := ReportingDescriptor{
 			ID:               id,
 			Name:             id,
 			ShortDescription: Message{Text: items[i].Message},
 			DefaultConfiguration: Configuration{
 				Level: severityToLevel(items[i].Severity),
 			},
-		})
+		}
+		if ss := securitySeverity(items[i].Severity); ss != "" {
+			desc.Properties = map[string]any{"security-severity": ss}
+		}
+		catalog = append(catalog, desc)
 	}
 	return catalog, index
 }
@@ -360,6 +389,10 @@ func (r *Reporter) buildCatalogFromRuleSet() (catalog []ReportingDescriptor, ind
 		// Emit rule tags in the standard SARIF taxonomy slot.
 		if len(rule.Tags) > 0 {
 			props["tags"] = rule.Tags
+		}
+		// GitHub Code Scanning classifies alerts by this, not by SARIF level.
+		if ss := securitySeverity(rule.Severity); ss != "" {
+			props["security-severity"] = ss
 		}
 		if len(props) > 0 {
 			desc.Properties = props
@@ -432,7 +465,7 @@ func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) (catalog [
 	for _, ri := range unique {
 		idx := len(catalog)
 		index[ri.id] = idx
-		catalog = append(catalog, ReportingDescriptor{
+		desc := ReportingDescriptor{
 			ID:   ri.id,
 			Name: ri.id,
 			ShortDescription: Message{
@@ -441,7 +474,11 @@ func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) (catalog [
 			DefaultConfiguration: Configuration{
 				Level: severityToLevel(ri.severity),
 			},
-		})
+		}
+		if ss := securitySeverity(ri.severity); ss != "" {
+			desc.Properties = map[string]any{"security-severity": ss}
+		}
+		catalog = append(catalog, desc)
 	}
 
 	return catalog, index
