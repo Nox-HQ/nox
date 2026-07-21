@@ -54,6 +54,9 @@
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
+  "overrides": {
+    "brace-expansion": "^2.1.2"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.75.0",
