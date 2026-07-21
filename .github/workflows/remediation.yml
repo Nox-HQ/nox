@@ -1,10 +1,24 @@
 name: Nox Remediation
 
+# Thin caller for the org-wide reusable workflow. Everything real — the pinned
+# nox version, the scan/fix/verify sequence, the token fallback — lives in
+# Nox-HQ/.github so a version bump happens once for every repository instead of
+# 21 times.
+#
+# Action-pin remediation additionally needs a NOX_TOKEN secret: the default
+# GITHUB_TOKEN cannot push changes under .github/workflows, and that scope is
+# not grantable through `permissions:`. Without it this still remediates
+# dependencies in full.
 on:
   schedule:
-    # Weekly Mon 03:00 UTC. Weekday-daily retired; dispatch on demand.
+    # Weekly Mon 03:00 UTC.
     - cron: '0 3 * * 1'
   workflow_dispatch:
+    inputs:
+      include-major:
+        description: 'Apply major-version bumps too (off by default; review manually).'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -12,52 +26,9 @@ permissions:
 
 jobs:
   remediate:
-    name: Scan and propose dependency upgrades
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          fetch-depth: 0
-          # create-pull-request inside the remediation action sets its own
-          # AUTHORIZATION extraheader. Without this, checkout's persisted one is
-          # still present and git sends both, which GitHub rejects:
-          #
-          #   remote: Duplicate header: "Authorization"
-          #   fatal: ... The requested URL returned error: 400
-          #
-          # This never showed up before because the PR step had never actually
-          # run: has-updates was computed from the package pass alone and was
-          # always false, so the failure sat latent behind it. Do not remove.
-          persist-credentials: false
-
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-
-      - uses: nox-hq/nox-remediate-action@bd80743be12912cec91111b9d0a988b7845788f0 # v1.0.2
-        with:
-          path: .
-          manifest-root: .
-          # Run the full test suite before opening the PR so reviewers
-          # don't get untested upgrades.
-          verify-cmd: 'go test ./...'
-          # Action-pin upgrades are OFF because GITHUB_TOKEN cannot push them:
-          #
-          #   ! [remote rejected] refusing to allow a GitHub App to create or
-          #     update workflow `.github/workflows/ci.yml` without `workflows`
-          #     permission
-          #
-          # That scope is not grantable through the `permissions:` block — it
-          # requires a PAT (or GitHub App installation token) carrying `workflow`.
-          # Dependabot updates workflow files because GitHub privileges it
-          # specially; a self-hosted workflow gets no such exemption.
-          #
-          # To enable: create a fine-grained PAT with Contents + Pull requests +
-          # Workflows write, store it as a secret, and pass it as github-token
-          # below alongside upgrade-actions: 'true'. Everything else is ready —
-          # the plan step already resolves pins correctly on nox >= 1.13.6.
-          #
-          # Left off rather than left failing: a weekly job that is always red
-          # is one nobody reads.
-          upgrade-actions: 'false'
-          pr-labels: 'security,dependencies,nox-remediation'
+    uses: Nox-HQ/.github/.github/workflows/nox-remediate.yml@main
+    secrets: inherit
+    with:
+      include-major: ${{ inputs.include-major || false }}
+      # nox's own suite is the gate on its own dependency upgrades.
+      verify-cmd: 'go test ./... -count=1'
