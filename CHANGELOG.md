@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.4] - 2026-07-21
+
 ### Fixed
 
 - **`nox plugin entry` emitted signature URLs for files that are never
