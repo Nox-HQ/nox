@@ -1,6 +1,9 @@
 package main
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,5 +178,111 @@ func TestIsSHA(t *testing.T) {
 	}
 	if isSHA("v4") || isSHA("main") {
 		t.Error("tags/branches are not SHAs")
+	}
+}
+
+// TestLatestTag_PrefersNewestTagOverStaleRelease guards against pinning an
+// action BACKWARD.
+//
+// latestTag used to return the GitHub Release and consult tags only as a
+// fallback for repos that publish no Releases. But an Action is consumed by
+// TAG, not by Release object, so a repo that tags v1.0.1 without cutting a
+// Release is already serving v1.0.1 to every workflow pinned to @v1.
+//
+// nox-hq/nox-remediate-action is exactly that shape, and the result was that
+// `nox fix -actions` planned to rewrite @v1 (serving v1.0.1) to v1.0.0's
+// commit — a silent downgrade, performed by the tool whose entire purpose is
+// supply-chain pinning. The fixture below reproduces that repository.
+func TestLatestTag_PrefersNewestTagOverStaleRelease(t *testing.T) {
+	t.Parallel()
+
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			_, _ = io.WriteString(w, `{"tag_name":"v1.0.0"}`)
+		case strings.HasSuffix(r.URL.Path, "/tags"):
+			// Newest first, as GitHub returns them, including the moving major.
+			_, _ = io.WriteString(w, `[{"name":"v1.0.1"},{"name":"v1.0.0"},{"name":"v1"}]`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	g := &githubResolver{client: srv.Client(), base: srv.URL}
+
+	got, err := g.latestTag("nox-hq/nox-remediate-action")
+	if err != nil {
+		t.Fatalf("latestTag: %v", err)
+	}
+	if got != "v1.0.1" {
+		t.Errorf("latestTag = %q, want v1.0.1 (the tag actually served; v1.0.0 is the stale Release)", got)
+	}
+
+	// Confirm the premise: the Release endpoint really was consulted, so this
+	// passes because both sources were compared rather than because the
+	// Release lookup silently failed.
+	var sawRelease bool
+	for _, h := range hits {
+		if strings.HasSuffix(h, "/releases/latest") {
+			sawRelease = true
+		}
+	}
+	if !sawRelease {
+		t.Error("premise broken: the Release endpoint was never queried")
+	}
+}
+
+// TestLatestTag_TiePrefersSpecificTag pins the moving-vs-specific choice.
+//
+// v1 and v1.0.1 can denote the same commit, but only the specific tag still
+// means that commit tomorrow — and it is what belongs in the `# version` pin
+// comment.
+func TestLatestTag_TiePrefersSpecificTag(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			w.WriteHeader(http.StatusNotFound) // repo publishes no Releases
+		case strings.HasSuffix(r.URL.Path, "/tags"):
+			_, _ = io.WriteString(w, `[{"name":"v2"},{"name":"v2.0.0"}]`)
+		}
+	}))
+	defer srv.Close()
+
+	g := &githubResolver{client: srv.Client(), base: srv.URL}
+	got, err := g.latestTag("some/action")
+	if err != nil {
+		t.Fatalf("latestTag: %v", err)
+	}
+	if got != "v2.0.0" {
+		t.Errorf("latestTag = %q, want v2.0.0 (specific beats the moving v2 on a tie)", got)
+	}
+}
+
+// TestLatestTag_FallsBackToReleaseWhenTagsUnavailable keeps a transient tags
+// failure from erroring out a run that already has a usable answer.
+func TestLatestTag_FallsBackToReleaseWhenTagsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/releases/latest") {
+			_, _ = io.WriteString(w, `{"tag_name":"v3.1.0"}`)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	g := &githubResolver{client: srv.Client(), base: srv.URL}
+	got, err := g.latestTag("some/action")
+	if err != nil {
+		t.Fatalf("latestTag should fall back to the Release, got error: %v", err)
+	}
+	if got != "v3.1.0" {
+		t.Errorf("latestTag = %q, want v3.1.0", got)
 	}
 }

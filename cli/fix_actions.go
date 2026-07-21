@@ -357,23 +357,51 @@ func (g *githubResolver) latest(repo string) (tag, sha string, err error) {
 	return tag, sha, nil
 }
 
+// latestTag returns the newest version an action actually serves.
+//
+// It used to return the GitHub Release and stop. Tags were consulted only as a
+// fallback "for repos without GitHub Releases". That is the wrong precedence: a
+// GitHub Release is an announcement, but an Action is consumed by TAG, so a
+// repository that tags v1.0.1 without cutting a Release is already serving
+// v1.0.1 to every workflow pinned to @v1.
+//
+// The consequence was a silent DOWNGRADE. nox-hq/nox-remediate-action has one
+// Release (v1.0.0) and tags v1.0.1 and v1; @v1 resolves to v1.0.1's commit.
+// `nox fix -actions` read the Release, decided "latest" was v1.0.0, and planned
+// to rewrite @v1 to v1.0.0's commit — moving the pinned action BACKWARD while
+// labelling it v1. A tool whose purpose is supply-chain pinning must never pin
+// to something older than what is already running, least of all silently.
+//
+// Both sources are now consulted and the newer wins.
 func (g *githubResolver) latestTag(repo string) (string, error) {
+	best := ""
+
+	// The Release, when present, is the maintainer's explicit statement of what
+	// is current, so it seeds the comparison.
 	var rel struct {
 		TagName string `json:"tag_name"`
 	}
 	if err := g.get("/repos/"+repo+"/releases/latest", &rel); err == nil && rel.TagName != "" {
-		return rel.TagName, nil
+		best = rel.TagName
 	}
-	// Fallback: newest tag (repos without GitHub Releases).
+
 	var tags []struct {
 		Name string `json:"name"`
 	}
 	if err := g.get("/repos/"+repo+"/tags?per_page=100", &tags); err != nil {
+		// Tags unreachable: fall back to the Release rather than failing, since
+		// a stale-but-real version beats no answer. Only error when neither
+		// source produced anything.
+		if best != "" {
+			return best, nil
+		}
 		return "", err
 	}
-	best := ""
 	for _, t := range tags {
-		if commentVerRe.MatchString(t.Name) && (best == "" || versionLess(best, t.Name)) {
+		if !commentVerRe.MatchString(t.Name) {
+			continue
+		}
+		if best == "" || preferTag(best, t.Name) {
 			best = t.Name
 		}
 	}
@@ -381,6 +409,28 @@ func (g *githubResolver) latestTag(repo string) (string, error) {
 		return "", fmt.Errorf("no version tag found")
 	}
 	return best, nil
+}
+
+// preferTag reports whether candidate should replace current as "latest".
+//
+// Higher version wins. On an exact version tie it prefers the MORE specific
+// tag, so a repo carrying both `v1.0.1` and the moving `v1` pins to v1.0.1 —
+// they denote the same commit, but only the specific one still means that
+// commit tomorrow, and it is what the pin comment should record.
+func preferTag(current, candidate string) bool {
+	switch cmpVersion(current, candidate) {
+	case -1:
+		return true
+	case 1:
+		return false
+	}
+	return specificity(candidate) > specificity(current)
+}
+
+// specificity counts the dotted components in a version tag: v1 → 1, v1.0 → 2,
+// v1.0.1 → 3.
+func specificity(tag string) int {
+	return len(strings.Split(strings.TrimPrefix(strings.TrimSpace(tag), "v"), "."))
 }
 
 func (g *githubResolver) tagSHA(repo, tag string) (string, error) {
