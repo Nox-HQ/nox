@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,13 @@ func TestStartBinary_TokenRoundTrip(t *testing.T) {
 		t.Skip("builds a plugin binary; skipped under -short")
 	}
 
+	// Windows will not exec a file without an executable extension: the built
+	// binary is found but rejected with "executable file not found in %PATH%".
+	// go build honours -o verbatim, so the suffix has to be added here.
 	bin := filepath.Join(t.TempDir(), "authplugin")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	build := exec.Command("go", "build", "-o", bin, "./testdata/authplugin")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building test plugin: %v\n%s", err, out)

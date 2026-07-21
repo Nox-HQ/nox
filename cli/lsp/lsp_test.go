@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -76,6 +77,23 @@ func drainMessages(t *testing.T, buf *bytes.Buffer) []outMessage {
 // TestServeFullFlow drives initialize -> didOpen -> shutdown -> exit against
 // in-memory streams and asserts a publishDiagnostics with a real AI-009
 // finding (from `eval(response)` in a temp .py file).
+// fileURI builds the file:// URI an LSP client would send for a local path.
+//
+// It cannot be url.URL{Scheme: "file", Path: p}.String() with a native path: a
+// Windows path (C:\dir\f.py) has no leading slash, so String() emits the opaque
+// form file:C:%5Cdir%5Cf.py. url.Parse then leaves Path empty, uriToPath
+// resolves nothing, and the scan silently returns zero diagnostics — which
+// looked like the LSP was broken on Windows when it is only this construction
+// that was. Real clients send file:///C:/dir/f.py, which uriToPath already
+// handles; producing that same form keeps the test honest about what ships.
+func fileURI(p string) string {
+	slashed := filepath.ToSlash(p)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed // drive-letter paths need the LSP leading slash
+	}
+	return (&url.URL{Scheme: "file", Path: slashed}).String()
+}
+
 func TestServeFullFlow(t *testing.T) {
 	dir := t.TempDir()
 	pyPath := filepath.Join(dir, "vuln.py")
@@ -83,7 +101,7 @@ func TestServeFullFlow(t *testing.T) {
 	if err := os.WriteFile(pyPath, []byte(src), 0o644); err != nil {
 		t.Fatalf("write temp py: %v", err)
 	}
-	uri := (&url.URL{Scheme: "file", Path: pyPath}).String()
+	uri := fileURI(pyPath)
 
 	var in bytes.Buffer
 	mustWrite(t, &in, map[string]interface{}{

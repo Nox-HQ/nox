@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,13 +17,25 @@ func TestRunContentFix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// findings.json referencing the two fixable lines.
-	findingsJSON := `{"findings":[
-	  {"RuleID":"IAC-007","Severity":"critical","Location":{"FilePath":"` + deploy + `","StartLine":3}},
-	  {"RuleID":"IAC-035","Severity":"high","Location":{"FilePath":"` + deploy + `","StartLine":4}}
-	]}`
+	// findings.json referencing the two fixable lines. Built with the JSON
+	// encoder rather than string concatenation: a Windows temp path contains
+	// backslashes, and pasting one straight into a JSON literal turns
+	// C:\Users into the invalid escapes \U and \A, so the document fails to
+	// parse and the fix finds nothing to do. That is a test artefact with no
+	// bearing on the product, but it read as a real failure.
+	findingsJSON, err := json.Marshal(map[string]any{
+		"findings": []map[string]any{
+			{"RuleID": "IAC-007", "Severity": "critical",
+				"Location": map[string]any{"FilePath": deploy, "StartLine": 3}},
+			{"RuleID": "IAC-035", "Severity": "high",
+				"Location": map[string]any{"FilePath": deploy, "StartLine": 4}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	inputPath := filepath.Join(dir, "findings.json")
-	if err := os.WriteFile(inputPath, []byte(findingsJSON), 0o644); err != nil {
+	if err := os.WriteFile(inputPath, findingsJSON, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
