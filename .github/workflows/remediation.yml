@@ -23,11 +23,17 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: nox-hq/nox-remediate-action@1c16a4bb803d73ca96a17760f847c9ad80e162cd # v1.0.1
+      - uses: nox-hq/nox-remediate-action@bd80743be12912cec91111b9d0a988b7845788f0 # v1.0.2
         with:
           path: .
           manifest-root: .
           # Run the full test suite before opening the PR so reviewers
           # don't get untested upgrades.
           verify-cmd: 'go test ./...'
+          # Upgrade GitHub Action pins too, not just Go modules. nox has no
+          # dependabot.yml, so nothing else does this — 8 pins were stale when
+          # this was turned on. Requires nox >= 1.13.6: earlier versions resolve
+          # a moving major tag to the latest GitHub Release, which pins BACKWARD
+          # when a newer tag exists without one.
+          upgrade-actions: 'true'
           pr-labels: 'security,dependencies,nox-remediation'
