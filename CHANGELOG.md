@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox plugin entry` emitted signature URLs for files that are never
+  published.** It wrote the cosign v3 names — a detached `checksums.txt.sig` and
+  `checksums.txt.sig.bundle` — but the plugin release workflows sign with cosign
+  v4, which writes a single `checksums.txt.sigstore.json` and no detached
+  signature. Registry entries therefore pointed at assets that did not exist, the
+  signature download returned 404, the artifact was classified `unverified`, and
+  `nox plugin install` was blocked by the default trust policy. Every plugin
+  version published after the move to cosign v4 was uninstallable. The bundle URL
+  is now the v4 name and the dead `.sig` URL is dropped.
+
 - **SARIF now carries `security-severity`, so GitHub Code Scanning can classify
   nox alerts.** SARIF's `level` only distinguishes error/warning/note, and nox
   emitted nothing else, so every alert arrived in Code Scanning with no security
