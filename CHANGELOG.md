@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The GitHub Action no longer fails a scan because a download was throttled.**
+  It fetched the nox binary and `checksums.txt` in a single unauthenticated
+  attempt, so an HTTP 403 — which GitHub returns when many jobs pull release
+  assets at once — failed the whole step. A burst of CI runs across the plugin
+  fleet triggered exactly that, turning a security gate red for a reason
+  unrelated to security. Both downloads now retry with backoff and send the
+  token when one is available. A download that keeps failing still fails, with
+  the final status reported.
+
 ## [1.13.4] - 2026-07-21
 
 ### Fixed
