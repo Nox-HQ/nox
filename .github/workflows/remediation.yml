@@ -23,7 +23,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: nox-hq/nox-remediate-action@v1
+      - uses: nox-hq/nox-remediate-action@1c16a4bb803d73ca96a17760f847c9ad80e162cd # v1.0.1
         with:
           path: .
           manifest-root: .

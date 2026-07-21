@@ -42,11 +42,33 @@ scan:
     - "core/analyzers/ai/rules.go"
     - "registry/trust/signature.go"
     - "cli/plugin_cmd.go"
-    # CI workflows and action scripts contain pinned commit SHAs, GITHUB_TOKEN refs, and Actions expressions (false positives)
-    - ".github/workflows/*.yml"
     - "action-pr-comment.sh"
     - "action.sh"
     # Documentation files contain example code snippets with token references
     - "docs/*.md"
     - "README.md"
     - "CHANGELOG.md"
+
+  # The secrets analyzer, and only it, is held off the CI workflows.
+  #
+  # This replaces a blanket `.github/workflows/*.yml` entry in scan.exclude
+  # above. That exclusion was added for one narrow reason — pinned commit SHAs
+  # and GITHUB_TOKEN references read as high-entropy secrets — but excluding the
+  # FILE silenced every analyzer on it, not just the noisy one. The cost was 19
+  # active IaC findings on nox's own workflows that no self-scan and no CI gate
+  # could see, including a high-severity IAC-013: nox-remediate-action was
+  # pinned to the mutable @v1 tag, which is exactly the supply-chain weakness
+  # nox ships a rule to detect. A scanner blind to its own CI is the one place
+  # it cannot afford to be.
+  #
+  # Scoped rather than deleted. The secrets analyzer currently reports nothing
+  # on these files, so this may already be unnecessary — but the entropy
+  # false positives it was written for are a real property of workflow files,
+  # and re-earning them by deleting the guard is not worth the noise. It is kept
+  # narrow so it can only ever silence the analyzer it names.
+  analyzer_rules:
+    - analyzer: secrets
+      paths:
+        - ".github/workflows/*.yml"
+      rules: ["*"]
+      action: skip_analyzer
