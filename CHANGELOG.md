@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **SARIF now carries `security-severity`, so GitHub Code Scanning can classify
+  nox alerts.** SARIF's `level` only distinguishes error/warning/note, and nox
+  emitted nothing else, so every alert arrived in Code Scanning with no security
+  severity: the UI could not filter or sort by it, and severity-based alert rules
+  had nothing to match on. Every rule descriptor now carries a CVSS-style score
+  banded the way GitHub reads it — critical 9.5, high 8.0, medium 5.5, low 2.0.
+  Info is deliberately omitted rather than scored 0, which would render as "low"
+  and overstate it.
+
 ## [1.13.3] - 2026-07-21
 
 ### Fixed

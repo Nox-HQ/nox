@@ -465,8 +465,14 @@ func TestRuleCatalogOmitsHelpWhenNoRemediation(t *testing.T) {
 	if entry.HelpURI != "" {
 		t.Fatalf("expected empty helpUri, got %q", entry.HelpURI)
 	}
-	if entry.Properties != nil {
-		t.Fatalf("expected nil properties for empty metadata, got %+v", entry.Properties)
+	// Empty metadata no longer means an empty property bag: every rule carries
+	// security-severity so GitHub Code Scanning can classify the alert. Nothing
+	// else should appear for a rule with no metadata, tags or mapping.
+	if len(entry.Properties) != 1 {
+		t.Fatalf("expected only security-severity in properties, got %+v", entry.Properties)
+	}
+	if entry.Properties["security-severity"] != "2.0" {
+		t.Fatalf("expected security-severity 2.0 for a low-severity rule, got %+v", entry.Properties)
 	}
 }
 
@@ -776,5 +782,62 @@ func TestWriteToFile_ErrorOnInvalidPath(t *testing.T) {
 	err := r.WriteToFile(fs, "/nonexistent/dir/results.sarif")
 	if err == nil {
 		t.Fatal("expected error writing to invalid path, got nil")
+	}
+}
+
+// GitHub Code Scanning classifies alerts by the `security-severity` property,
+// not by SARIF level. nox emitted none, so every alert arrived with no security
+// severity: the UI could not filter or sort by it and severity-based alert rules
+// had nothing to match. Every rule descriptor now carries it.
+func TestSARIF_EmitsSecuritySeverity(t *testing.T) {
+	fs := findings.NewFindingSet()
+	for _, tc := range []struct {
+		rule string
+		sev  findings.Severity
+	}{
+		{"R-CRIT", findings.SeverityCritical},
+		{"R-HIGH", findings.SeverityHigh},
+		{"R-MED", findings.SeverityMedium},
+		{"R-LOW", findings.SeverityLow},
+		{"R-INFO", findings.SeverityInfo},
+	} {
+		fs.Add(findings.Finding{
+			RuleID:   tc.rule,
+			Severity: tc.sev,
+			Message:  "m",
+			Location: findings.Location{FilePath: "a.go", StartLine: 1},
+		})
+	}
+
+	data, err := NewReporter("test", nil).Generate(fs)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	runs := doc["runs"].([]any)
+	ruleDescs := runs[0].(map[string]any)["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any)
+
+	got := map[string]string{}
+	for _, r := range ruleDescs {
+		rm := r.(map[string]any)
+		id, _ := rm["id"].(string)
+		if props, ok := rm["properties"].(map[string]any); ok {
+			if ss, ok := props["security-severity"].(string); ok {
+				got[id] = ss
+			}
+		}
+	}
+	want := map[string]string{"R-CRIT": "9.5", "R-HIGH": "8.0", "R-MED": "5.5", "R-LOW": "2.0"}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("%s security-severity = %q, want %q", id, got[id], w)
+		}
+	}
+	// Info is not a security severity: scoring it would render as "low".
+	if ss, ok := got["R-INFO"]; ok {
+		t.Errorf("info severity must not carry security-severity, got %q", ss)
 	}
 }
