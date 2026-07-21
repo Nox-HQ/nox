@@ -41,10 +41,23 @@ jobs:
           # Run the full test suite before opening the PR so reviewers
           # don't get untested upgrades.
           verify-cmd: 'go test ./...'
-          # Upgrade GitHub Action pins too, not just Go modules. nox has no
-          # dependabot.yml, so nothing else does this — 8 pins were stale when
-          # this was turned on. Requires nox >= 1.13.6: earlier versions resolve
-          # a moving major tag to the latest GitHub Release, which pins BACKWARD
-          # when a newer tag exists without one.
-          upgrade-actions: 'true'
+          # Action-pin upgrades are OFF because GITHUB_TOKEN cannot push them:
+          #
+          #   ! [remote rejected] refusing to allow a GitHub App to create or
+          #     update workflow `.github/workflows/ci.yml` without `workflows`
+          #     permission
+          #
+          # That scope is not grantable through the `permissions:` block — it
+          # requires a PAT (or GitHub App installation token) carrying `workflow`.
+          # Dependabot updates workflow files because GitHub privileges it
+          # specially; a self-hosted workflow gets no such exemption.
+          #
+          # To enable: create a fine-grained PAT with Contents + Pull requests +
+          # Workflows write, store it as a secret, and pass it as github-token
+          # below alongside upgrade-actions: 'true'. Everything else is ready —
+          # the plan step already resolves pins correctly on nox >= 1.13.6.
+          #
+          # Left off rather than left failing: a weekly job that is always red
+          # is one nobody reads.
+          upgrade-actions: 'false'
           pr-labels: 'security,dependencies,nox-remediation'
