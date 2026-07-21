@@ -49,15 +49,60 @@ jobs:
           version: v2.7.2
           only-new-issues: true
 
+  # Decide which operating systems the test matrix covers.
+  #
+  # This used to be inline: ubuntu-only on pull_request, all three on push to
+  # main. The intent was cost (macOS 10x, Windows 2x Actions minutes), but the
+  # effect was that a Windows break could not be seen until after merge — and
+  # since a red main blocks nothing, it stayed red. Main went 100+ consecutive
+  # runs without a single success, entirely on Test (windows-latest), while
+  # every PR reported green and five releases shipped over it.
+  #
+  # So the split is now by what changed rather than by event. Docs-only work
+  # still runs ubuntu alone; anything that can affect behaviour on another
+  # platform is tested on that platform BEFORE it merges. On any doubt —
+  # unreadable file list, API failure, a path we did not anticipate — this
+  # falls back to the full matrix. Spending minutes is recoverable; shipping an
+  # unverified platform is what already happened.
+  test-matrix:
+    name: Select test matrix
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "os=$FULL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                    --paginate -q '.[].filename') || files=""
+          if [ -z "$files" ]; then
+            echo "could not read the changed-file list; testing everywhere"
+            echo "os=$FULL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Inverted deliberately: list what is SAFE to skip cross-OS testing
+          # for, and treat everything else as needing it. A new file type then
+          # widens coverage by default instead of quietly escaping it.
+          if printf '%s\n' "$files" | grep -qvE '(\.(md|markdown|txt|png|jpe?g|svg|gif)$|^docs/|^LICENSE$)'; then
+            echo "os=$FULL" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs-only change; ubuntu is sufficient"
+            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Test (${{ matrix.os }})
+    needs: test-matrix
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # PRs use ubuntu only (macOS = 10x, Windows = 2x Actions minutes
-        # on public repos). Push to main keeps full cross-OS coverage.
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(needs.test-matrix.outputs.os) }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
