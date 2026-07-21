@@ -452,7 +452,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	if customPath != "" {
 		if !filepath.IsAbs(customPath) {
-			customPath = filepath.Join(target, customPath)
+			customPath = filepath.Join(ConfigRoot(target), customPath)
 		}
 		customRules, err := loadCustomRules(customPath)
 		if err != nil {
@@ -766,7 +766,7 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	if opts.TerraformPlanPath != "" {
 		tfPlanPath := opts.TerraformPlanPath
 		if !filepath.IsAbs(tfPlanPath) {
-			tfPlanPath = filepath.Join(target, tfPlanPath)
+			tfPlanPath = filepath.Join(ConfigRoot(target), tfPlanPath)
 		}
 		tfFindings, tfErr := iac.ScanTerraformPlan(tfPlanPath)
 		if tfErr != nil {
@@ -788,9 +788,9 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		baselinePath = cfg.Policy.BaselinePath
 	}
 	if baselinePath == "" {
-		baselinePath = baseline.DefaultPath(target)
+		baselinePath = baseline.DefaultPath(ConfigRoot(target))
 	} else if !filepath.IsAbs(baselinePath) {
-		baselinePath = filepath.Join(target, baselinePath)
+		baselinePath = filepath.Join(ConfigRoot(target), baselinePath)
 	}
 	applyBaseline(allFindings, baselinePath, deg)
 
@@ -804,7 +804,7 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	// that would leave every waiver unapplied.
 	if vexPath != "" {
 		if !filepath.IsAbs(vexPath) {
-			vexPath = filepath.Join(target, vexPath)
+			vexPath = filepath.Join(ConfigRoot(target), vexPath)
 		}
 		vexDoc, vexErr := vex.LoadVEX(vexPath)
 		if vexErr != nil {
@@ -1111,6 +1111,28 @@ func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
 	return cr <= tr
 }
 
+// ConfigRoot returns the directory that paths relative to a scan target
+// resolve against — the baseline, the VEX document, custom rules, a Terraform
+// plan, and the source files findings point at.
+//
+// A target may be a single file (`nox scan main.go`), and joining a relative
+// path onto a file path yields main.go/.nox/baseline.json, which cannot exist.
+// Every such lookup then failed: the baseline was reported unloadable, and the
+// file could not be re-read to apply its nox:ignore comments — so a single-file
+// scan silently reported findings the operator had waived. Resolving against
+// the file's directory is both what the operator means and what the rest of the
+// scan already assumes: for a file target, finding paths are recorded relative
+// to that same directory.
+//
+// A target that cannot be stat'd is returned unchanged, leaving the caller's
+// existing error handling to report it rather than guessing here.
+func ConfigRoot(target string) string {
+	if fi, err := os.Stat(target); err == nil && !fi.IsDir() {
+		return filepath.Dir(target)
+	}
+	return target
+}
+
 // applySuppressions reads files that have findings and marks suppressed findings.
 func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations) {
 	// Group findings by file.
@@ -1132,7 +1154,7 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 
 		fullPath := filePath
 		if !filepath.IsAbs(fullPath) {
-			fullPath = filepath.Join(target, fullPath)
+			fullPath = filepath.Join(ConfigRoot(target), fullPath)
 		}
 
 		content, err := os.ReadFile(fullPath)
