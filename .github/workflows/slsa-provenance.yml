@@ -84,7 +84,7 @@ jobs:
       actions: read       # required by the reusable workflow
       id-token: write     # OIDC token for sigstore keyless signing
       contents: write     # upload provenance to the release
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@361859811395a7dfc81e24fb4dfe843a59715a40 # v2.1.0-rc.3
     with:
       base64-subjects: ${{ needs.subjects.outputs.hashes }}
       upload-assets: true
