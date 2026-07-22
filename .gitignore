@@ -56,3 +56,8 @@ cli/.github/
 
 # Relicta
 .relicta/
+
+# Local tool scratch: an MCP server writes SHA-named idempotency markers
+# ("session" / "durable", 7 bytes each) into ./data/cache/ of whatever
+# directory it is launched from. Not produced by nox and not project data.
+/data/cache/

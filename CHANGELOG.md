@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The GitHub Action exposes `fail-on-degraded`.** nox has had the flag since
+  1.11.0, but the Action never mapped it, so a workflow could not make "a check
+  did not complete" fail the build without dropping to a raw `run` step — the
+  gate most likely to rely on it was the one that could not reach it. An
+  invariant test now fails the build if any declared Action input is not wired
+  through to `action.sh`, which is the defect class that hid this one: an input
+  can be declared and documented while silently never reaching the scanner.
+
+### Changed
+
+- **An exit 2 under `fail-on-degraded` no longer reports itself as a crash.**
+  nox returns 2 both for a hard error and for an incomplete scan, and the Action
+  annotated both as "Nox scan failed with exit code 2" — sending the reader to
+  look for a failure that did not happen, when the scan had in fact run and
+  written its reports. The annotation now names the degradation case and points
+  at `meta.degradations`.
+
 ## [1.13.6] - 2026-07-21
 
 ### Fixed

@@ -1123,7 +1123,30 @@ jobs:
 | `output` | `nox-results` | Output directory for reports |
 | `version` | `latest` | Nox version to install (e.g., `0.1.0` or `latest`) |
 | `fail-on-findings` | `true` | Fail the step if findings are detected |
+| `fail-on-degraded` | `false` | Fail the step if any check could not complete (OSV lookup, plugin, lockfile parse) |
 | `annotate` | `true` | Post inline PR annotations for findings |
+| `severity-threshold` | — | Report only findings at or above this severity (`critical`, `high`, `medium`, `low`) |
+| `min-confidence` | — | Report only findings at or above this confidence (`high`, `medium`, `low`) |
+| `vex` | — | Path to an OpenVEX waiver document |
+| `changed-since` | — | Scan only files changed since this git ref (e.g. `origin/main`) |
+| `offline` | `false` | Guarantee zero network: no API, no token, no telemetry |
+| `pr-comment` | `false` | Post inline PR review comments with finding details |
+| `max-comments` | `25` | Maximum number of inline PR comments to post |
+| `min-severity` | `low` | Minimum severity for PR comments |
+
+`fail-on-degraded` is worth setting on a gate you actually rely on. Without it,
+an OSV outage, a required plugin that failed to install, or a lockfile nox
+cannot parse produces a green step that proves nothing — a scan that could not
+look is indistinguishable from one that found nothing. The degraded exit
+outranks the findings verdict, and reports are written before it, so the job
+still uploads its SARIF:
+
+```yaml
+      - uses: nox-hq/nox@v1
+        with:
+          format: sarif
+          fail-on-degraded: 'true'
+```
 
 **Action outputs:**
 
@@ -1132,7 +1155,7 @@ jobs:
 | `findings-count` | Number of findings detected |
 | `sarif-file` | Path to `results.sarif` (if generated) |
 | `findings-file` | Path to `findings.json` (if generated) |
-| `exit-code` | Raw nox exit code (`0`/`1`/`2`) |
+| `exit-code` | Raw nox exit code (`0` no findings, `1` findings, `2` error or an incomplete check under `fail-on-degraded`) |
 
 **Generate all formats and upload as artifact:**
 
