@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-22
+
 ### Added
 
 - **The GitHub Action exposes `fail-on-degraded`.** nox has had the flag since
@@ -25,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   look for a failure that did not happen, when the scan had in fact run and
   written its reports. The annotation now names the degradation case and points
   at `meta.degradations`.
+
+- **Dependency upgrades in the shipped binary**: `google.golang.org/grpc`
+  1.82.0 → 1.82.1 and `golang.org/x/text` 0.38.0 → 0.39.0, applied by nox's own
+  remediation run.
 
 ## [1.13.6] - 2026-07-21
 
