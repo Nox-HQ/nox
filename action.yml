@@ -62,6 +62,10 @@ inputs:
     description: 'Guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry).'
     required: false
     default: 'false'
+  fail-on-degraded:
+    description: 'Fail the step if any check could not complete (OSV lookup, plugin, lockfile parse). A scan that could not look is otherwise indistinguishable from one that found nothing.'
+    required: false
+    default: 'false'
 
 outputs:
   findings-count:
@@ -74,7 +78,7 @@ outputs:
     description: 'Path to findings.json (if generated)'
     value: ${{ steps.scan.outputs.findings-file }}
   exit-code:
-    description: 'Raw nox exit code (0 = no findings, 1 = findings, 2 = error)'
+    description: 'Raw nox exit code (0 = no findings, 1 = findings, 2 = error, or an incomplete check under fail-on-degraded)'
     value: ${{ steps.scan.outputs.exit-code }}
 
 runs:
@@ -98,4 +102,5 @@ runs:
         INPUT_VEX: ${{ inputs.vex }}
         INPUT_CHANGED_SINCE: ${{ inputs.changed-since }}
         INPUT_OFFLINE: ${{ inputs.offline }}
+        INPUT_FAIL_ON_DEGRADED: ${{ inputs.fail-on-degraded }}
       run: bash "${{ github.action_path }}/action.sh"

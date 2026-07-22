@@ -205,6 +205,9 @@ run_scan() {
   if [[ "${INPUT_OFFLINE:-false}" == "true" ]]; then
     extra_args+=(--offline)
   fi
+  if [[ "${INPUT_FAIL_ON_DEGRADED:-false}" == "true" ]]; then
+    extra_args+=(--fail-on-degraded)
+  fi
   "${install_dir}/nox" --format "${scan_format}" --output "${output_dir}" -q scan "${scan_path}" "${extra_args[@]}" || exit_code=$?
 
   # Set outputs.
@@ -262,7 +265,16 @@ run_scan() {
       fi
       ;;
     2)
-      echo "::error::Nox scan failed with exit code 2"
+      # nox exits 2 both for a hard error and for an incomplete scan under
+      # --fail-on-degraded. Reporting the second as "scan failed" sends the
+      # reader looking for a crash that did not happen: the scan ran and wrote
+      # its reports, but a check could not complete. nox names the specific
+      # degradations on stderr; point at them rather than restating the code.
+      if [[ "${INPUT_FAIL_ON_DEGRADED:-false}" == "true" ]]; then
+        echo "::error::Nox exited 2 — either a scan error, or a check did not complete while fail-on-degraded is set. See the [degraded] lines above and meta.degradations in findings.json."
+      else
+        echo "::error::Nox scan failed with exit code 2"
+      fi
       ;;
     *)
       echo "::error::Nox scan failed with unexpected exit code ${exit_code}"
