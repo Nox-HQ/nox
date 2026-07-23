@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- the remediation bot opens PRs; this is the permission the example teaches
   pull-requests: write
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: nox-hq/nox-remediate-action@v1
+      - uses: nox-hq/nox-remediate-action@e0246ca8e14ef65b800ea13f4a730960b05588be # v1.0.2
         with:
           path: .
           # Run a real verification step before opening the PR so reviewers

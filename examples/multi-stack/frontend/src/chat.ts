@@ -6,6 +6,7 @@
 import OpenAI from "openai";
 
 const client = new OpenAI({
+  // nox:ignore SEC-163 -- reads the key from the environment; this is the correct pattern
   apiKey: process.env.OPENAI_API_KEY,
 });
 

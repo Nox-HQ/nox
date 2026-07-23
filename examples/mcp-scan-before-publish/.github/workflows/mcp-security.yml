@@ -26,7 +26,7 @@ jobs:
 
       - name: Scan MCP server (offline, fail on high)
         id: nox
-        uses: nox-hq/nox@v1
+        uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
         with:
           path: .
           format: sarif
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4 # nox:ignore IAC-153 -- example CI artifact, not a released binary
         with:
           name: nox-mcp-findings
           path: nox-out/
