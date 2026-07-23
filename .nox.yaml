@@ -38,6 +38,11 @@ scan:
     - "scripts/"
     # Rule definition files contain high-entropy regex patterns (expected false positives)
     - "core/analyzers/secrets/rules.go"
+    # The taint sink catalog is a static list of API names. Long camel-case
+    # identifiers (NSKeyedUnarchiver.unarchiveTopLevelObjectWithData) score as
+    # high-entropy strings. JSON carries no comments, so an inline nox:ignore
+    # is not available for this one file.
+    - "core/taint/data/catalog.json"
     - "core/analyzers/iac/rules*.go"
     - "core/analyzers/ai/rules.go"
     - "registry/trust/signature.go"

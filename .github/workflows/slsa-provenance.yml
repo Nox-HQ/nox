@@ -11,7 +11,7 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
-  workflow_dispatch:
+  workflow_dispatch: # nox:ignore IAC-308 -- provenance can be regenerated for an existing release on demand
     inputs:
       tag:
         description: "Release tag to backfill provenance for (e.g. v0.10.1). Leave blank to attest the latest published release."
@@ -82,8 +82,8 @@ jobs:
     needs: subjects
     permissions:
       actions: read       # required by the reusable workflow
-      id-token: write     # OIDC token for sigstore keyless signing
-      contents: write     # upload provenance to the release
+      id-token: write # nox:ignore IAC-306 -- OIDC is the keyless-signing mechanism for the attestation (OIDC token for sigstore keyless signing)
+      contents: write # nox:ignore IAC-314 -- uploads the provenance attestation to the release (upload provenance to the release)
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@361859811395a7dfc81e24fb4dfe843a59715a40 # v2.1.0-rc.3
     with:
       base64-subjects: ${{ needs.subjects.outputs.hashes }}

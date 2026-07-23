@@ -22,7 +22,7 @@ on:
   # the PR gate (changed-files only) would miss.
   schedule:
     - cron: '0 6 * * 1' # Mondays 06:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch: {} # nox:ignore IAC-308 -- used to run the full OS matrix on a branch before merge
 
 permissions:
   contents: write # nox:ignore IAC-314 -- needed for badge commits and SARIF upload
@@ -30,7 +30,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: true # nox:ignore IAC-309 -- superseded pushes need not finish
 
 jobs:
   lint:
@@ -111,7 +111,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run tests with coverage
-        shell: bash
+        shell: bash # nox:ignore IAC-193 -- composite-style step, not Ansible
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage summary
@@ -370,7 +370,7 @@ jobs:
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload
 
       - name: Upload scan results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI scan artifact, not a released binary; release artifacts are signed and attested in release.yml
         if: always()
         with:
           name: nox-results
@@ -437,7 +437,7 @@ jobs:
         with:
           sarif_file: nox-pr/results.sarif
           category: nox-pr
-        continue-on-error: true
+        continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload for the PR-scoped scan
 
       - name: Upload PR scan artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
