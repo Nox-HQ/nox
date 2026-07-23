@@ -31,6 +31,7 @@ def personalize():
     # is trained to defer to system content, so this inverts the trust
     # boundary entirely.
     persona = request.json["persona"]
+    # nox:ignore AGENTFLOW-001,TAINT-AI-001 -- deliberate; safe.py is the fixed form
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[

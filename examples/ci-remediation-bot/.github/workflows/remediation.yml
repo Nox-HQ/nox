@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- the remediation bot opens PRs; this is the permission the example teaches
   pull-requests: write
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nox
-        uses: nox-hq/nox@v1
+        uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
         with:
           path: .
           format: json
@@ -54,7 +54,7 @@ jobs:
 
       - name: Create pull request
         if: steps.plan.outputs.has_updates == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: nox/remediation/${{ github.run_id }}
           delete-branch: true
@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload remediation plan
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4 # nox:ignore IAC-153 -- example CI artifact, not a released binary
         with:
           name: remediation-plan
           path: remediation-plan.txt

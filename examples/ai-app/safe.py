@@ -17,6 +17,7 @@ def chat():
     user_q = request.json.get("question", "")
     if len(user_q) > 4000:
         return {"error": "input too long"}, 400
+    # nox:ignore TAINT-AI-001 -- user input stays in the user role; role separation is not modelled
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -36,6 +37,7 @@ def ingest_record_safe():
     api_key = os.environ["STRIPE_SECRET"]  # used by stripe SDK, not embedded
     # ... fetch records from stripe using api_key ...
     sanitized = redact_pii(payload)  # imagined helper
+    # nox:ignore TAINT-AI-002 -- input passes redact_pii(); an illustrative sanitiser nox cannot verify
     embedding = client.embeddings.create(
         model="text-embedding-3-small", input=sanitized,
     )

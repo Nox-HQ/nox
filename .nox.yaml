@@ -44,6 +44,15 @@ scan:
     - "cli/plugin_cmd.go"
     - "action-pr-comment.sh"
     - "action.sh"
+    # Deliberately-unsafe example configs. mcp.json carries a literal
+    # GitHub-token-shaped string whose own value tells the reader not to do
+    # this, and vex.json is a sample waiver document; both are JSON, which
+    # cannot carry an inline nox:ignore. Scoped to the two files rather than
+    # the examples/ tree, so every other example stays scanned. (The token is
+    # deliberately not quoted here — writing it into this file made nox report
+    # a real SEC-003 against the config itself.)
+    - "examples/ai-app/mcp.json"
+    - "examples/ci-baseline/vex.json"
     # Documentation files contain example code snippets with token references
     - "docs/*.md"
     - "README.md"

@@ -1,0 +1,14 @@
+# Declares the example's real dependencies. Without a manifest, nox's
+# slopsquatting check (SLOP-001) cannot tell an import of a real package from a
+# hallucinated one, and correctly flagged every import in this directory. The
+# demo exists to show the AI-security findings, not that one.
+#
+# Deliberately unpinned. Pinning a version here would assert that this example
+# is tested against it and would report that release's CVEs as findings of
+# nox's own repo — which is how the first draft of this file scored worse than
+# having no manifest at all.
+flask
+openai
+langchain
+pinecone
+requests
