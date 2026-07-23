@@ -13,7 +13,7 @@ on:
   schedule:
     # Weekly Mon 03:00 UTC.
     - cron: '0 3 * * 1'
-  workflow_dispatch:
+  workflow_dispatch: # nox:ignore IAC-308 -- remediation is run on demand as well as on schedule
     inputs:
       include-major:
         description: 'Apply major-version bumps too (off by default; review manually).'
@@ -21,7 +21,7 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- opens the remediation PR
   pull-requests: write
 
 jobs:

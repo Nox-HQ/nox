@@ -7,8 +7,8 @@ on:
 
 permissions:
   contents: write # nox:ignore IAC-314 -- needed for creating GitHub releases
-  packages: write # needed for pushing to ghcr.io
-  id-token: write # needed for cosign keyless signing
+  packages: write # nox:ignore IAC-315 -- pushing the release image to ghcr.io (needed for pushing to ghcr.io)
+  id-token: write # nox:ignore IAC-306 -- OIDC is the keyless-signing mechanism; removing it unsigns the release (needed for cosign keyless signing)
 
 jobs:
   release:
