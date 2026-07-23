@@ -100,6 +100,31 @@ Nox has a gRPC-based plugin system with an SDK for building custom security anal
 - The SDK is located at `sdk/` and provides conformance testing, builders, and helpers.
 - Plugins are organized into 10 security tracks. See [docs/track-catalog.md](docs/track-catalog.md) for track descriptions and requirements.
 
+## Cutting a Release
+
+1. Open a `docs(changelog): X.Y.Z` PR that stamps the `Unreleased` section with
+   the version and date. Include anything that ships inside the binary — a
+   dependency bump that arrives as a `chore` commit still changes the artifact,
+   and someone auditing the release should not have to read the git log to find
+   it.
+2. Merge it, then tag that commit and push:
+
+   ```bash
+   git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
+   ```
+
+   The tag push triggers `release.yml`, which publishes signed binaries, the
+   GHCR image, the Homebrew formula, and moves the floating `v1` tag.
+3. **Verify the release rather than the workflow.** A green run is not proof:
+   v1.9.0 published unsigned because `sign`, `docker` and `update-major-tag` all
+   declare `needs: release`, and a stale tap token failed that job. Check that
+   `v1` resolves to the release commit, and verify a signature by hand —
+   [docs/VERIFICATION.md](docs/VERIFICATION.md).
+4. **Sync the website changelog.** [nox-hq.dev](https://github.com/Nox-HQ/nox-hq.dev)
+   generates its `/changelog` page from this file via `npm run sync:changelog`,
+   and nothing runs it automatically. Skip it and the page that exists to say
+   what is new is a release behind.
+
 ## Reporting Issues
 
 - Use the [GitHub issue tracker](https://github.com/nox-hq/nox/issues) to report bugs or request features.
