@@ -3,7 +3,7 @@ name: Dependabot Auto-merge
 on: pull_request
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- enables auto-merge on Dependabot PRs
   pull-requests: write
 
 jobs:

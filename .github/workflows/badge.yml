@@ -13,19 +13,19 @@ on:
     types: [published]      # primary trigger — every published release
   schedule:
     - cron: "17 6 * * 1"    # weekly safety net (Mon). Release+CI events keep badges fresh.
-  workflow_dispatch:
+  workflow_dispatch: # nox:ignore IAC-308 -- badge refresh is run on demand after a release
   workflow_run:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- opens the badge-refresh PR
   pull-requests: write
 
 concurrency:
   group: badge-refresh
-  cancel-in-progress: true
+  cancel-in-progress: true # nox:ignore IAC-309 -- only the newest badge scan is meaningful
 
 jobs:
   refresh:

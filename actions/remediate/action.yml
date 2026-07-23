@@ -78,7 +78,10 @@ runs:
   using: 'composite'
   steps:
     - name: Install Nox
-      uses: nox-hq/nox@v1
+      # Pinned by commit SHA, not the floating @v1 tag: IAC-013 is nox's own
+      # rule, and an action that remediates supply-chain risk must not itself
+      # consume a mutable ref.
+      uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
       with:
         path: ${{ inputs.path }}
         format: ${{ inputs.scan-format }}
@@ -88,7 +91,7 @@ runs:
 
     - name: Build remediation plan
       id: plan
-      shell: bash
+      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
       env:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
@@ -97,7 +100,7 @@ runs:
 
     - name: Apply remediation
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true'
-      shell: bash
+      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
       env:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
@@ -106,7 +109,7 @@ runs:
 
     - name: Verify changes
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.verify-cmd != ''
-      shell: bash
+      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
       working-directory: ${{ inputs.manifest-root }}
       run: ${{ inputs.verify-cmd }}
 
@@ -126,7 +129,7 @@ runs:
 
     - name: Upload remediation plan
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0 # nox:ignore IAC-153 -- remediation plan for PR review, not a released binary
       with:
         name: nox-remediation-plan
         path: ${{ inputs.scan-output }}/remediation-plan.txt
