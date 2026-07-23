@@ -171,6 +171,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if inEmbeddedBlob(lang, content, &results[i]) {
 				continue
 			}
+			// inEmbeddedBlob consults lexctx, which reports LangUnknown for
+			// markup and stylesheets — so an inline `data:` URI in .html/.css/.md
+			// was never covered. The marker is unambiguous in raw bytes.
+			if inDataURIPayload(content, &results[i]) {
+				continue
+			}
 			// Drop a bare provider-prefix match with no token body — the literal
 			// `"glpat-"` or the `sk_live_` inside a `// prefix (ghp_, sk_live_, …)`
 			// comment that a pattern-vocabulary file must name. A live credential
