@@ -1337,8 +1337,12 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-121", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?im)^\s*FROM\s+\S`,
-			absenceProperty: `(?i)HEALTHCHECK`,
+			absenceAnchor: `(?im)^[ \t]*FROM\s+\S`,
+			// Anchored to a real HEALTHCHECK instruction at line start, not the
+			// bare keyword: an unanchored match treated `# ... HEALTHCHECK ...`
+			// in a comment as the instruction being present and silenced the
+			// rule. Mirrors IAC-122's USER and IAC-125's CMD anchoring.
+			absenceProperty: `(?im)^\s*HEALTHCHECK\s`,
 			absenceSpan:     "file",
 			description:     "Dockerfile missing HEALTHCHECK instruction",
 			cwe:             "CWE-693", keywords: []string{"HEALTHCHECK"},
@@ -1349,7 +1353,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-122", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?im)^\s*FROM\s+\S`,
+			absenceAnchor:   `(?im)^[ \t]*FROM\s+\S`,
 			absenceProperty: `(?im)^\s*USER\s+\S`,
 			absenceSpan:     "file",
 			description:     "Dockerfile has no USER instruction (runs as root by default)",
@@ -1361,7 +1365,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-123", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?im)^\s*COPY\s+\S+\s+\S`,
+			absenceAnchor:   `(?im)^[ \t]*COPY\s+\S+\s+\S`,
 			absenceProperty: `(?i)--chown`,
 			absenceSpan:     "line-continued",
 			description:     "Dockerfile COPY without --chown flag",
@@ -1373,8 +1377,11 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-124", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?im)^\s*FROM\s+\S`,
-			absenceProperty: `(?i)LABEL\s+maintainer`,
+			absenceAnchor: `(?im)^[ \t]*FROM\s+\S`,
+			// Anchored to a real LABEL instruction at line start: an unanchored
+			// match let `# LABEL maintainer is deprecated` in a comment satisfy
+			// the rule. Same false-negative class as IAC-121.
+			absenceProperty: `(?im)^\s*LABEL\s+maintainer`,
 			absenceSpan:     "file",
 			description:     "Dockerfile missing LABEL maintainer",
 			cwe:             "CWE-1059", keywords: []string{"LABEL", "maintainer"},
@@ -1385,7 +1392,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-125", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
-			absenceAnchor:   `(?im)^\s*CMD\s+\S`,
+			absenceAnchor:   `(?im)^[ \t]*CMD\s+\S`,
 			absenceProperty: `(?im)^\s*CMD\s+\[`,
 			absenceSpan:     "line",
 			description:     "Dockerfile CMD uses shell form instead of exec form",
@@ -1397,7 +1404,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-126", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
-			absenceAnchor:   `(?im)^\s*RUN\s+.*apt-get\s+install`,
+			absenceAnchor:   `(?im)^[ \t]*RUN\s+.*apt-get\s+install`,
 			absenceProperty: `(?i)--no-install-recommends`,
 			absenceSpan:     "line-continued",
 			description:     "Dockerfile apt-get install without --no-install-recommends",
@@ -1409,7 +1416,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-127", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
-			absenceAnchor:   `(?im)^\s*RUN\s+.*pip\s+install`,
+			absenceAnchor:   `(?im)^[ \t]*RUN\s+.*pip\s+install`,
 			absenceProperty: `(?i)--no-cache-dir`,
 			absenceSpan:     "line-continued",
 			description:     "Dockerfile pip install without --no-cache-dir",
@@ -1431,7 +1438,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-129", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
-			absenceAnchor:   `(?im)^\s*RUN\s+.*apk\s+add`,
+			absenceAnchor:   `(?im)^[ \t]*RUN\s+.*apk\s+add`,
 			absenceProperty: `(?i)--no-cache`,
 			absenceSpan:     "line-continued",
 			description:     "Dockerfile apk add without --no-cache",

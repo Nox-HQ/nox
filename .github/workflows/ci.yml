@@ -370,7 +370,7 @@ jobs:
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload
 
       - name: Upload scan results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI scan artifact, not a released binary; release artifacts are signed and attested in release.yml
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI scan artifact, not a released binary; release artifacts carry SLSA provenance (release.yml)
         if: always()
         with:
           name: nox-results
