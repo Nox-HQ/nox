@@ -240,6 +240,70 @@ func (m *AbsenceMatcher) compile(pattern string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
+// stripLineComments blanks out `#` line comments so a keyword that appears only
+// in a comment cannot satisfy an absence rule's required property. A comment can
+// never fulfil a "the config must contain X" requirement, so removing comments
+// before the property check is semantically correct.
+//
+// It is deliberately conservative, because for an absence rule wrongly cutting
+// real content turns a present property into an absent one — a false positive,
+// the worse failure for a security scanner. A `#` is treated as a comment only
+// when it is preceded by whitespace (or starts the line) AND no quote has
+// appeared earlier on that line. When a quote precedes the `#`, the line is left
+// untouched: `#` inside a quoted YAML value or a JSON string, or after any
+// quoted scalar, is never stripped. The rare "trailing comment after a quoted
+// value on the same line" is left as-is (property still satisfied, same as
+// before) rather than risk cutting a quoted value.
+//
+// The result is only used for the boolean property check; finding locations
+// come from the anchor match against the original content, so the stripped copy
+// need not preserve offsets.
+func stripLineComments(content []byte) []byte {
+	var out []byte
+	for lineStart := 0; lineStart <= len(content); {
+		nl := bytes.IndexByte(content[lineStart:], '\n')
+		var line []byte
+		if nl < 0 {
+			line = content[lineStart:]
+		} else {
+			line = content[lineStart : lineStart+nl]
+		}
+
+		if cut := commentCut(line); cut >= 0 {
+			line = bytes.TrimRight(line[:cut], " \t")
+		}
+		out = append(out, line...)
+
+		if nl < 0 {
+			break
+		}
+		out = append(out, '\n')
+		lineStart += nl + 1
+	}
+	return out
+}
+
+// commentCut returns the index at which a `#` line comment begins, or -1 if the
+// line has none. A `#` opens a comment only when it starts the line (after
+// optional whitespace) or is preceded by whitespace, and no quote has appeared
+// earlier on the line — so a `#` inside a quoted value, or after any quoted
+// scalar, is never treated as a comment.
+func commentCut(line []byte) int {
+	sawQuote := false
+	prevSpace := true
+	for i := range len(line) {
+		c := line[i]
+		if c == '"' || c == '\'' {
+			sawQuote = true
+		}
+		if c == '#' && prevSpace && !sawQuote {
+			return i
+		}
+		prevSpace = c == ' ' || c == '\t'
+	}
+	return -1
+}
+
 // Match reports each AbsenceAnchor occurrence whose span lacks AbsenceProperty
 // (and, when set, contains AbsenceRequire). The returned MatchResult points at
 // the anchor so the finding lands on the resource declaration.
@@ -269,7 +333,11 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	// companion PodDisruptionBudget is a separate manifest, or a Dockerfile
 	// missing a HEALTHCHECK entirely.
 	if rule.AbsenceSpan == "file" || rule.AbsenceSpan == "" {
-		if propRe.Match(content) {
+		// The property is matched against comment-stripped content: a keyword
+		// mentioned only in a comment cannot fulfil a "must be present"
+		// requirement. The anchor, the requirement and the finding location
+		// stay on the original content.
+		if propRe.Match(stripLineComments(content)) {
 			return nil
 		}
 		if requireRe != nil && !requireRe.Match(content) {
@@ -288,7 +356,7 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		if requireRe != nil && !requireRe.Match(span) {
 			continue
 		}
-		if propRe.Match(span) {
+		if propRe.Match(stripLineComments(span)) {
 			continue
 		}
 		r := makeMatchResult(content, lineStarts, loc)

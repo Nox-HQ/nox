@@ -126,6 +126,49 @@ COPY /a /b
 	}
 }
 
+// The same comment-keyword class as IAC-121, but through a YAML trailing
+// comment rather than a Dockerfile line. IAC-153 fires when an artifact upload
+// has no attestation; its property is the bare keyword `(?i)attest`, matched
+// over the whole file. A trailing comment containing "attest" (a nox:ignore
+// reason, a note) satisfied it and silenced the rule. Anchoring does not apply
+// to a free keyword, so this is fixed by stripping comments before the
+// property match — see core/rules stripLineComments.
+func TestWorkflowAbsenceRule_KeywordInTrailingCommentDoesNotSatisfy(t *testing.T) {
+	a := NewAnalyzer()
+
+	// Upload step with no attestation, but a comment mentions "attested".
+	// IAC-153 must still fire.
+	commented := `on: [push]
+jobs:
+  build:
+    steps:
+      - uses: actions/upload-artifact@abc123 # artifacts are attested in release.yml
+`
+	got, err := a.ScanFile(".github/workflows/ci.yml", []byte(commented))
+	if err != nil {
+		t.Fatalf("scan commented: %v", err)
+	}
+	if !hasRule(got, "IAC-153") {
+		t.Error("IAC-153 did not fire when 'attested' appeared only in a trailing comment")
+	}
+
+	// A genuine attestation step present: IAC-153 must NOT fire.
+	present := `on: [push]
+jobs:
+  build:
+    steps:
+      - uses: actions/attest-build-provenance@abc123
+      - uses: actions/upload-artifact@abc123
+`
+	got, err = a.ScanFile(".github/workflows/ci.yml", []byte(present))
+	if err != nil {
+		t.Fatalf("scan present: %v", err)
+	}
+	if hasRule(got, "IAC-153") {
+		t.Error("IAC-153 fired even though a real attestation step is present")
+	}
+}
+
 func hasRule(results []findings.Finding, ruleID string) bool {
 	for _, r := range results {
 		if r.RuleID == ruleID {
