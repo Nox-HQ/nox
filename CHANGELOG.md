@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-26
+
+### Fixed
+
+- **`IAC-348` no longer fires on `artifacts.when: always`.** The rule matched
+  the two words with a bare pattern, but everything it says is about job
+  execution — "CI job runs regardless of previous failures", with a remediation
+  warning about deployment jobs running after test failures. Under `artifacts:`
+  the same words mean *upload the artifacts even when the job failed*, which for
+  a scanner is the point: the run you most want `results.sarif` from is the one
+  that failed the gate. nox flagged its own GitLab example for doing the right
+  thing. A job-level `when: always` still fires, and a file containing both
+  keeps the job one — the same context-confusion class as `IAC-193` on
+  `shell: bash`.
+
+- **`nox fix --actions` no longer breaks reusable workflows, and no longer
+  pins prereleases.** Two defects, both of which fired on this repository.
+  It rewrote a reusable-workflow reference to a digest, but `slsa-verifier`
+  resolves a trusted builder's identity from the ref, so pinning
+  `slsa-github-generator` by SHA makes it unverifiable; upstream requires a tag
+  "contrary to the GitHub best practice for third-party actions ... but
+  intentional due to limits in GitHub Actions". And tag filtering used a
+  substring match, so `v2.1.0-rc.3` passed as `v2.1.0`, tied it once the suffix
+  was discarded, then won the specificity tiebreak on dotted components — so a
+  release candidate was chosen over its own release. Reusable workflows (any
+  path under `.github/workflows/`) are now left alone; an action published in a
+  subdirectory is still pinned.
+
+- **SLSA provenance is generated again, and its absence now fails the build.**
+  The pin above had made the generator unverifiable, and the run failed in a way
+  where every job except an internal `final` step reported success. Nothing
+  downstream inspected the release, so v1.14.0 through v1.17.0 shipped with no
+  attestation at all while the project advertised SLSA Level 3. Those releases
+  have been backfilled. A new job now reads the release and fails if no in-toto
+  asset is present, because a green provenance job is not evidence that
+  provenance exists.
+
+- **A failing weekly dependency-CVE audit now raises an issue.** It runs only on
+  the schedule, so its failures went to the Actions tab and nowhere else — when
+  it began failing on a real advisory it failed every Monday for weeks with
+  nothing surfacing it. One issue is reused rather than filed weekly.
+
+- **The VS Code extension declares the editor version it actually needs.** It
+  advertised `^1.75.0` while its own `vscode-languageclient` dependency required
+  `^1.82.0`; VS Code gates installation on that field, so users on 1.75–1.81
+  could install an extension that failed at activation.
+
+### Changed
+
+- **The VS Code extension moves to `vscode-languageclient` 10 and TypeScript 7**,
+  with `moduleResolution: node16` — the legacy `node` setting predates `exports`
+  maps, so v10's `vscode-languageclient/node` subpath was invisible to the
+  compiler. `engines.vscode` rises to `^1.91.0` accordingly, landed together
+  with the dependency so the manifest is never ahead of what it can serve.
+
+- **The build moves to Go 1.26.5**, and the workflows read the toolchain from
+  `go.mod` rather than repeating a hardcoded version in three places.
+
+### Added
+
+- **CI type-checks the VS Code extension.** It previously had none: no workflow
+  ran `npm ci` or `tsc`, so every dependency bump to it merged on a green tick
+  that had never compiled it — which is how a ReDoS advisory reached this
+  repository through its toolchain. The job caught a broken bump on its first
+  run.
+
+- **Dependabot configuration.** `dependabot-auto-merge.yml` had been present
+  with no `dependabot.yml`, so it sat there with nothing to merge and no update
+  was ever proposed. Covers the Go module, GitHub Actions, the extension's npm
+  tree, and the Dockerfile base image.
+
 ## [1.17.0] - 2026-07-25
 
 ### Changed
