@@ -19,14 +19,18 @@
 //     and rejects any feed whose bytes do not match — this catches truncation,
 //     tampering, and accidental corruption. Verification fails closed: a feed
 //     that does not verify is never trusted, and never crashes the scanner.
-//   - The format reserves an Ed25519 signature over the same canonical bytes,
-//     so a feed can later be Sigstore/cosign-signed exactly like a plugin
-//     artifact. Signature verification is a pluggable hook (SignatureVerifier);
-//     nothing here stands up real signing infrastructure, but the consumer has
-//     a verification seam and can be configured to require a valid signature.
+//   - The format carries an Ed25519 signature over the same canonical bytes, so
+//     a feed is authenticated exactly like a plugin artifact. Signing is done
+//     out of band by the publish pipeline (see Sign and cmd/slopfeed); nox
+//     verifies against a pinned public key via a pluggable hook
+//     (SignatureVerifier) and can be configured to require a valid signature.
 //
-// The package has no network access and no side effects. It depends only on
-// the standard library, so it does not couple core to the registry package.
+// A local feed (Load/Bundled) touches no network. A remote feed (LoadRemote)
+// fetches over HTTP(S), verifies digest AND signature before use, and caches the
+// verified bytes content-addressed on disk so subsequent scans are offline and
+// deterministic. Verification always gates use: only bytes that verify are
+// cached or returned. The package depends only on the standard library, so it
+// does not couple core to the registry package.
 package feed
 
 import (
