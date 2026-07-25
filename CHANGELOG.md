@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-07-25
+
 ### Security
 
 - **`brace-expansion` in the VS Code extension is bumped past a newly-published
