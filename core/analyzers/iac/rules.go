@@ -44,7 +44,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*USER\s+root\s*$`,
+			pattern:     `(?im)^[ \t]*USER\s+root\s*$`,
 			description: "Dockerfile runs as root user",
 			cwe:         "CWE-250", keywords: []string{"user root"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -54,7 +54,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-002", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*FROM\s+[a-zA-Z0-9._/-]+\s*$|(?im)^\s*FROM\s+\S+:latest\b`,
+			pattern:     `(?im)^[ \t]*FROM\s+[a-zA-Z0-9._/-]+\s*$|(?im)^[ \t]*FROM\s+\S+:latest\b`,
 			description: "Dockerfile uses unpinned base image (latest or no tag)",
 			cwe:         "CWE-829", keywords: []string{"from"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -64,7 +64,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-003", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
-			pattern:     `(?im)^\s*ADD\s+`,
+			pattern:     `(?im)^[ \t]*ADD\s+`,
 			description: "Dockerfile uses ADD instead of COPY",
 			cwe:         "CWE-829", keywords: []string{"add"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -74,7 +74,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-022", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*ARG\s+(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DB_PASS|MYSQL_PASSWORD|POSTGRES_PASSWORD)\b`,
+			pattern:     `(?im)^[ \t]*ARG\s+(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DB_PASS|MYSQL_PASSWORD|POSTGRES_PASSWORD)\b`,
 			description: "Secret value passed as Docker build argument",
 			cwe:         "CWE-798", keywords: []string{"arg"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -94,7 +94,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-024", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*RUN\s+.*\bsudo\b`,
+			pattern:     `(?im)^[ \t]*RUN\s+.*\bsudo\b`,
 			description: "Dockerfile RUN uses sudo (unnecessary in Docker build)",
 			cwe:         "CWE-250", keywords: []string{"sudo"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -104,7 +104,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-025", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:     `(?im)^\s*(COPY|ADD)\s+--chmod=777\b`,
+			pattern:     `(?im)^[ \t]*(COPY|ADD)\s+--chmod=777\b`,
 			description: "Dockerfile COPY/ADD sets world-writable permissions",
 			cwe:         "CWE-732", keywords: []string{"chmod=777"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -312,7 +312,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-028", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?im)^\s*-\s*(SYS_ADMIN|SYS_PTRACE|NET_RAW|SYS_MODULE|DAC_OVERRIDE)\s*$`,
+			pattern:     `(?im)^[ \t]*-\s*(SYS_ADMIN|SYS_PTRACE|NET_RAW|SYS_MODULE|DAC_OVERRIDE)\s*$`,
 			description: "Container adds dangerous Linux capability",
 			cwe:         "CWE-250", keywords: []string{"sys_admin", "sys_ptrace", "net_raw"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -1428,7 +1428,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-128", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?im)^\s*EXPOSE\s+22\b`,
+			pattern:     `(?im)^[ \t]*EXPOSE\s+22\b`,
 			description: "Dockerfile exposes SSH port 22",
 			cwe:         "CWE-284", keywords: []string{"EXPOSE", "22"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -1450,7 +1450,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-130", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*ENV\s+(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|AWS_SECRET_ACCESS_KEY|DATABASE_PASSWORD|DB_PASSWORD)\s*=`,
+			pattern:     `(?im)^[ \t]*ENV\s+(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|AWS_SECRET_ACCESS_KEY|DATABASE_PASSWORD|DB_PASSWORD)\s*=`,
 			description: "Dockerfile ENV sets a variable with a secret-like name",
 			cwe:         "CWE-798", keywords: []string{"ENV", "PASSWORD", "SECRET", "TOKEN", "API_KEY"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
@@ -1706,7 +1706,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-152", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:     `(?im)^\s+steps\s*:\s*\n(\s+-\s+(uses|run)\s*:.*\n){15,}`,
+			pattern:     `(?im)^[ \t]+steps\s*:\s*\n(\s+-\s+(uses|run)\s*:.*\n){15,}`,
 			description: "GitHub Actions workflow has many steps - consider reusable workflows",
 			cwe:         "CWE-1059", keywords: []string{"steps", "uses"},
 			filePatterns: []string{"*.yml", "*.yaml"},
@@ -1802,7 +1802,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-161", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^\s*provider\s+"[^"]+"\s*\{\s*$`,
+			pattern:     `(?im)^[ \t]*provider\s+"[^"]+"\s*\{\s*$`,
 			description: "Terraform provider without version constraints",
 			cwe:         "CWE-829", keywords: []string{"provider", "required_providers"},
 			filePatterns: []string{"*.tf"},

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A blank line before a Dockerfile instruction no longer mis-locates the
+  finding or changes its fingerprint.** 16 regex-pattern IaC rules anchored with
+  `(?im)^\s*KEYWORD`, and `\s` matches newlines — so under multiline matching a
+  blank line before the flagged instruction (e.g. `USER root`, `ADD`, a `sudo`
+  RUN) let `^\s*` begin the match on the *preceding blank line*. The finding was
+  reported on the blank line, and its matched content gained a leading newline
+  that perturbed the v2 fingerprint — a false-positive/false-negative pair under
+  a semantics-preserving edit that also broke baseline matching. Anchored with
+  `^[ \t]*`, which cannot cross a newline (the same correction the absence
+  anchors got). Found by nox's own metamorphic corpus oracle.
+
 ### Security
 
 - **`brace-expansion` in the VS Code extension is bumped past a newly-published

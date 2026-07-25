@@ -872,7 +872,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-341", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:      `(?im)^\s*HEALTHCHECK\s+NONE`,
+			pattern:      `(?im)^[ \t]*HEALTHCHECK\s+NONE`,
 			description:  "Dockerfile disables healthcheck",
 			cwe:          "CWE-693",
 			keywords:     []string{"HEALTHCHECK", "NONE"},
@@ -883,7 +883,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-342", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?im)^\s*EXPOSE\s+(?:22|3389|5900)\b`,
+			pattern:      `(?im)^[ \t]*EXPOSE\s+(?:22|3389|5900)\b`,
 			description:  "Dockerfile exposes remote access port",
 			cwe:          "CWE-284",
 			keywords:     []string{"EXPOSE", "22", "3389"},
@@ -894,7 +894,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-343", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?im)^\s*ENV\s+(?:PASSWORD|SECRET|TOKEN|API_KEY)\s*=`,
+			pattern:      `(?im)^[ \t]*ENV\s+(?:PASSWORD|SECRET|TOKEN|API_KEY)\s*=`,
 			description:  "Dockerfile sets secret in ENV instruction",
 			cwe:          "CWE-798",
 			keywords:     []string{"ENV", "PASSWORD", "SECRET"},
@@ -905,7 +905,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-344", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:      `(?im)^\s*COPY\s+--from=\S+\s+/etc/shadow`,
+			pattern:      `(?im)^[ \t]*COPY\s+--from=\S+\s+/etc/shadow`,
 			description:  "Dockerfile copies shadow file from build stage",
 			cwe:          "CWE-538",
 			keywords:     []string{"shadow"},
@@ -916,7 +916,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-345", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:      `(?im)^\s*RUN\s+.*apt-get\s+install\s+.*\*`,
+			pattern:      `(?im)^[ \t]*RUN\s+.*apt-get\s+install\s+.*\*`,
 			description:  "Dockerfile apt-get install using wildcard package names",
 			cwe:          "CWE-693",
 			keywords:     []string{"apt-get", "install"},
@@ -986,7 +986,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-351", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:      `(?im)^\s*(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)\s*:\s*['"]?[A-Za-z0-9]`,
+			pattern:      `(?im)^[ \t]*(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)\s*:\s*['"]?[A-Za-z0-9]`,
 			description:  "CI variable with hardcoded secret",
 			cwe:          "CWE-798",
 			keywords:     []string{"PASSWORD", "SECRET", "TOKEN"},
