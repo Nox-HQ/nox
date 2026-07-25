@@ -1,0 +1,6 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+WORKDIR /app
+COPY --chown=nonroot:nonroot app /app/app
+USER nonroot
+HEALTHCHECK CMD ["/app/app", "healthcheck"]
+ENTRYPOINT ["/app/app"]

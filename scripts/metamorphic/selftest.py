@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Positive controls for the metamorphic harness.
+"""Positive controls for the metamorphic harness AND the corpus sweep.
 
-A green run of harness.py is only trustworthy if we can show the harness would
-have gone red on a real bug. These controls exercise the three pieces that a
-false "no violations" could hide:
+A green run is only trustworthy if we can show the tooling would have gone red on
+a real bug. These controls exercise every piece a false "no violations" could
+hide, for both the per-PR gate (harness.py) and the corpus oracle (sweep.py):
 
   PC1  detection      — a genuinely finding-removing edit MUST be reported.
   PC2  line-shift      — a pure blank-line shift MUST NOT be reported.
@@ -12,6 +12,13 @@ false "no violations" could hide:
   PC4  synthetic FN bug — emulates the historical "comment mentioning
                           HEALTHCHECK hides IAC-121" bug by hand and shows the
                           diff logic flags it as a disappeared finding.
+  PC5  sweep coverage  — collect_coverage tallies real rules from a real scan.
+  PC6  sweep triage red — a planted verified violation is ranked high-risk
+                          (flips_under_edit); the sweep provably goes red.
+  PC7  sweep line-shift — an end-to-end sweep over a clean file yields ZERO new
+                          verified violations (the core invariance, at sweep scope).
+  PC8  known-issues    — the baseline suppresses a matching violation but a
+                         NON-matching (new) violation survives to fail.
 
 A gate that cannot go red is worthless — this is mandatory and runs in CI.
 
@@ -19,9 +26,12 @@ Run:  python3 scripts/metamorphic/selftest.py --bin ./nox   (exit 0 = all pass)
 """
 import argparse
 import os
+import shutil
 import sys
+import tempfile
 
 import harness as H
+import sweep as S
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--bin", default=H.DEFAULT_BIN)
@@ -80,6 +90,65 @@ atext = "FROM alpine:3.19\n# HEALTHCHECK\nCOPY app /app\n"
 v4 = H.diff_findings(before_fp, btext, after_fp, atext)
 check("PC4 synthetic HEALTHCHECK FN caught",
       any(x["direction"] == "disappeared" and x["ruleid"] == "IAC-121" for x in v4))
+
+# ---------------------------------------------------------------------------
+# Sweep-mode controls (the corpus oracle).
+# ---------------------------------------------------------------------------
+
+# PC5 — coverage collection tallies real rules off a real scan. TAINT-002 is the
+# os.system sink in the corpus seed; it must appear with a real construct count.
+cov = S.collect_coverage([(SEED, "tp_injection.py")], nox)
+check("PC5 sweep coverage",
+      "TAINT-002" in cov and cov["TAINT-002"]["fires"] >= 1,
+      f"(rules={sorted(cov)})")
+
+# PC6 — a planted verified violation MUST rank as high-risk (flips_under_edit).
+# This is the sweep's own "goes red": a rule whose finding flips under a trivial
+# edit is surfaced at the top of the triage, not silently dropped.
+planted = [{"ruleid": "IAC-121", "direction": "disappeared"}]
+suspects = S.rank_suspicious({"IAC-121": {"seeds": {"x"}, "constructs": {"a"},
+                                          "fires": 1}}, planted)
+top = suspects[0] if suspects else {}
+check("PC6 sweep triage flags planted FN as high-risk",
+      top.get("ruleid") == "IAC-121" and top.get("risk") == "high"
+      and "flips_under_edit" in top.get("signals", []),
+      str(suspects[:1]))
+
+# PC7 — an end-to-end sweep over a single CLEAN corpus file must yield zero NEW
+# verified violations (pure line-shift invariance holds at sweep scope). Uses a
+# secrets file that fires findings but has no line-shift bug.
+clean = os.path.join(H.REPO_ROOT, "testdata", "metamorphic-corpus",
+                     "python", "config_secrets.py")
+_tmp_root = tempfile.mkdtemp(prefix="nox-sweep-selftest-")
+_results = tempfile.mkdtemp(prefix="nox-sweep-selftest-out-")
+try:
+    shutil.copy(clean, os.path.join(_tmp_root, "config_secrets.py"))
+    rep = S.sweep([_tmp_root], nox, _results, known_issues=[])
+    check("PC7 sweep line-shift invariance (clean file, 0 new violations)",
+          rep["verified_violation_count"] == 0 and rep["rules_exercised"] > 0,
+          f"(rules_exercised={rep['rules_exercised']}, "
+          f"new={rep['verified_violation_count']})")
+finally:
+    shutil.rmtree(_tmp_root, ignore_errors=True)
+    shutil.rmtree(_results, ignore_errors=True)
+
+# PC8 — the known-issues baseline suppresses exactly what it names and nothing
+# more. A matching violation is moved to `known`; a violation of the SAME rule on
+# a DIFFERENT seed stays `new` (so a regression elsewhere still fails).
+known = [{
+    "id": "TEST-ENTRY", "ruleids": ["IAC-001"],
+    "seeds": ["seed/known.Dockerfile"],
+    "mutation_classes": ["blank_line_before_each"],
+}]
+viol_known = {"ruleid": "IAC-001", "seed": "seed/known.Dockerfile",
+              "direction": "disappeared", "mutation": "blank_line_before_each"}
+viol_new = {"ruleid": "IAC-001", "seed": "seed/other.Dockerfile",
+            "direction": "disappeared", "mutation": "blank_line_before_each"}
+new_v, known_v = S.partition_known([dict(viol_known), dict(viol_new)], known)
+check("PC8 known-issues baseline suppresses only the named violation",
+      len(known_v) == 1 and known_v[0]["seed"] == "seed/known.Dockerfile"
+      and len(new_v) == 1 and new_v[0]["seed"] == "seed/other.Dockerfile",
+      f"(new={[x['seed'] for x in new_v]}, known={[x['seed'] for x in known_v]})")
 
 print()
 if fails:
