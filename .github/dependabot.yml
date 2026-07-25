@@ -1,0 +1,64 @@
+# Dependabot configuration.
+#
+# This file was missing while .github/workflows/dependabot-auto-merge.yml was
+# present, so the auto-merge workflow sat there with nothing to merge:
+# Dependabot never opened a pull request against this repository at all.
+#
+# The cost was invisible and specific to what nox is. Every action here is
+# pinned to a commit SHA, because nox ships IAC-013 to flag actions pinned to a
+# mutable tag — but a SHA pin is frozen by definition, so without something
+# proposing new ones the pins silently age. This repository sat on
+# actions/setup-go v6.4.0 while the plugin repositories, which do have this
+# config, had already moved to v7.0.0. A security scanner whose own supply
+# chain quietly falls behind is the wrong advertisement.
+#
+# Dependabot understands SHA pins: it bumps the digest and rewrites the
+# trailing `# vX.Y.Z` comment, so IAC-013 stays satisfied after every update.
+#
+# Layout and cadence follow the plugin repositories so the fleet behaves the
+# same way everywhere.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - go
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+
+  # The VS Code extension. Its toolchain is where the brace-expansion ReDoS
+  # (GHSA-mh99-v99m-4gvg) reached this repository, which had to be caught by a
+  # self-scan and fixed by hand.
+  - package-ecosystem: npm
+    directory: /editors/vscode
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - javascript
+
+  # Base image for the published container.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker
