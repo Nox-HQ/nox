@@ -56,12 +56,14 @@ func toStatement(d *stmtDraft) taint.Statement {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
 		for call, a := range d.sinkArgs {
 			st.SinkArgs[call] = taint.SinkArgInfo{
-				TaintedArgVars:  append([]string(nil), a.taintedArgVars...),
-				ArgCount:        a.argCount,
-				ShellTrue:       a.shellTrue,
-				FirstArgTainted: a.firstArgTainted,
-				PositionalVars:  copyPositional(a.positionalVars),
-				PositionalArgs:  append([]string(nil), a.positionalArgs...),
+				TaintedArgVars:        append([]string(nil), a.taintedArgVars...),
+				ArgCount:              a.argCount,
+				ShellTrue:             a.shellTrue,
+				FirstArgTainted:       a.firstArgTainted,
+				PositionalVars:        copyPositional(a.positionalVars),
+				PositionalArgs:        append([]string(nil), a.positionalArgs...),
+				PromptRoles:           copyRoles(a.promptRoles),
+				PromptHasStaticSystem: a.promptStaticSystem,
 			}
 		}
 	}
@@ -77,6 +79,19 @@ func copyPositional(src [][]string) [][]string {
 	out := make([][]string, len(src))
 	for i := range src {
 		out[i] = append([]string(nil), src[i]...)
+	}
+	return out
+}
+
+// copyRoles copies the prompt-role map so the foundation's SinkArgInfo never
+// aliases the extractor's internal map. nil stays nil (no role structure).
+func copyRoles(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		out[k] = v
 	}
 	return out
 }
@@ -257,6 +272,18 @@ func (e *StructuralEngine) forwardPass(
 				if inlineCleared[v][sink.VulnClass] {
 					continue // sanitized inline at the sink call
 				}
+				// Role-aware gating for LLM prompt sinks: reaching an LLM is necessary
+				// but not sufficient. Determine the chat role the tainted value lands
+				// in; suppress ONLY the recommended pattern (user role behind a static
+				// system message), keep every system/developer/unknown placement. See
+				// promptSinkRole / taint.SuppressPromptRole.
+				sinkRole := ""
+				if sink.VulnClass == taint.VulnPromptInjection {
+					sinkRole = promptSinkRole(info, v)
+					if taint.SuppressPromptRole(sinkRole, info.PromptHasStaticSystem) {
+						continue // untrusted content confined to the user role (safe pattern)
+					}
+				}
 				flows = append(flows, taint.Flow{
 					Source:     ti.src,
 					SourceLine: ti.srcLine,
@@ -268,6 +295,7 @@ func (e *StructuralEngine) forwardPass(
 					FuncName:   unit.FuncName,
 					Language:   unit.Language,
 					Via:        append([]string(nil), ti.via...),
+					SinkRole:   sinkRole,
 				})
 				break // one flow per sink call is enough
 			}

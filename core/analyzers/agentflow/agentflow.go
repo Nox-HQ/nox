@@ -197,12 +197,26 @@ func (a *Analyzer) analyzeUnit(unit *taint.Unit) []findings.Finding {
 			}
 			// If a sanitizer wraps the value at the call site, treat it as cleared.
 			inlineSafe := a.stmtHasSanitizer(lang, st)
+			// Role-awareness: reaching an LLM is necessary but not sufficient. The
+			// same call's message array tells us WHERE the untrusted value lands. A
+			// value confined to the user role behind a static system message is the
+			// recommended pattern (suppressed); a value in the system/developer role
+			// inverts the trust boundary (kept); an undetermined role is kept
+			// conservatively. Determined for Python only (see detectPromptRoles).
+			roles, staticSystem := promptRoleInfo(st, rawCall)
 			for _, v := range promptArgVars(st, rawCall) {
 				src, ok := untrusted[v]
 				if !ok || inlineSafe {
 					continue
 				}
-				out = append(out, a.untrustedToPromptFinding(unit, st, rawCall, v, src, untrustedLine[v]))
+				role := taint.PromptRoleUnknown
+				if r, known := roles[v]; known {
+					role = r
+				}
+				if taint.SuppressPromptRole(role, staticSystem) {
+					continue // untrusted content confined to the user role (safe pattern)
+				}
+				out = append(out, a.untrustedToPromptFinding(unit, st, rawCall, v, src, untrustedLine[v], role))
 				break
 			}
 		}
@@ -339,10 +353,14 @@ func (a *Analyzer) stmtHasSanitizer(lang string, st *taint.Statement) bool {
 }
 
 // untrustedToPromptFinding builds the AGENTFLOW-001 finding at the prompt call.
-func (a *Analyzer) untrustedToPromptFinding(unit *taint.Unit, st *taint.Statement, call, srcVar string, src taint.Source, srcLine int) findings.Finding {
+// role is the chat role the tainted value lands in ("system"/"developer"/"user"/
+// "unknown"), recorded on the finding so the role-based verdict is auditable. A
+// system/developer role is the trust-inverting injection; an unknown role is a
+// conservatively-kept ambiguous case.
+func (a *Analyzer) untrustedToPromptFinding(unit *taint.Unit, st *taint.Statement, call, srcVar string, src taint.Source, srcLine int, role string) findings.Finding {
 	msg := fmt.Sprintf(
-		"Untrusted input (%s via %q) reaches LLM prompt call %q without sanitization — the model can be goal-hijacked (ASI01).",
-		src.Kind, srcVar, call,
+		"Untrusted input (%s via %q) reaches LLM prompt call %q in the %s role without sanitization — the model can be goal-hijacked (ASI01).",
+		src.Kind, srcVar, call, role,
 	)
 	return findings.Finding{
 		RuleID:     ruleUntrustedToPrompt,
@@ -359,9 +377,31 @@ func (a *Analyzer) untrustedToPromptFinding(unit *taint.Unit, st *taint.Statemen
 			"source_call": src.Call,
 			"source_var":  srcVar,
 			"source_line": fmt.Sprintf("%d", srcLine),
+			"sink_role":   role,
 			"function":    unit.FuncName,
 		},
 	}
+}
+
+// promptRoleInfo returns the per-variable chat-role map and the static-system-message
+// flag for a specific prompt call in st, resolved from the extractor's per-call
+// argument evidence (with dotted-suffix fallback so a framework/aliased prefix
+// resolves). Both are empty/false when the call is not chat-message-shaped or the
+// language is not Python, in which case every reaching value keeps its conservative
+// (role-blind) verdict.
+func promptRoleInfo(st *taint.Statement, rawCall string) (map[string]string, bool) {
+	if st.SinkArgs == nil {
+		return nil, false
+	}
+	if info, ok := st.SinkArgs[rawCall]; ok {
+		return info.PromptRoles, info.PromptHasStaticSystem
+	}
+	for _, key := range suffixKeys(rawCall) {
+		if info, ok := st.SinkArgs[key]; ok {
+			return info.PromptRoles, info.PromptHasStaticSystem
+		}
+	}
+	return nil, false
 }
 
 // outputToSinkFinding builds the AGENTFLOW-002 finding at the dangerous sink.

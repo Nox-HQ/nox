@@ -191,6 +191,62 @@ def handler():
 	}
 }
 
+// scanFindings runs the analyzer and returns the full findings for metadata
+// assertions (scan() projects to rule IDs only).
+func scanFindings(t *testing.T, arts ...discovery.Artifact) []findingRec {
+	t.Helper()
+	a := NewAnalyzer()
+	fs, err := a.ScanArtifacts(context.Background(), arts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+	items := fs.Findings()
+	out := make([]findingRec, 0, len(items))
+	for i := range items {
+		out = append(out, findingRec{ruleID: items[i].RuleID, meta: items[i].Metadata})
+	}
+	return out
+}
+
+type findingRec struct {
+	ruleID string
+	meta   map[string]string
+}
+
+// TestAnalyzerRoleAwarePromptInjection is the end-to-end proof at the analyzer
+// boundary: the system-role prompt injection fires TAINT-AI-001 and carries the
+// auditable sink_role=system metadata, while the user-role-behind-static-system
+// pattern produces no finding at all.
+func TestAnalyzerRoleAwarePromptInjection(t *testing.T) {
+	dir := t.TempDir()
+	sys := writeArtifact(t, dir, "sys.py", `def personalize():
+    persona = request.args.get("persona")
+    client.chat.completions.create(messages=[{"role": "system", "content": persona}, {"role": "user", "content": "hi"}])
+`)
+	recs := scanFindings(t, sys)
+	var got *findingRec
+	for i := range recs {
+		if recs[i].ruleID == "TAINT-AI-001" {
+			got = &recs[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("system-role injection did not fire TAINT-AI-001; got %v", recs)
+	}
+	if got.meta["sink_role"] != "system" {
+		t.Errorf("sink_role = %q, want system", got.meta["sink_role"])
+	}
+
+	dir2 := t.TempDir()
+	safe := writeArtifact(t, dir2, "safe.py", `def chat():
+    user_q = request.args.get("q")
+    client.chat.completions.create(messages=[{"role": "system", "content": "Answer concisely."}, {"role": "user", "content": user_q}])
+`)
+	if ids := scan(t, safe); len(ids) != 0 {
+		t.Fatalf("user-role-behind-static-system must be clean of TAINT-AI-001, got %v", ids)
+	}
+}
+
 func TestAnalyzerRules(t *testing.T) {
 	rs := NewAnalyzer().Rules()
 	want := map[string]bool{"TAINT-001": false, "TAINT-002": false, "TAINT-005": false}

@@ -56,6 +56,12 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 		}
 	}
 	sortStrings(info.taintedArgVars)
+	// Role-awareness for LLM prompt sinks: if this call is chat-message-shaped
+	// (a messages=[{role,content}] list or a system= parameter), map each argument
+	// variable to the chat role it lands in and note whether a static system message
+	// establishes the instruction/data boundary. Populated for Python only; other
+	// languages keep the role-blind behavior (documented in detectPromptRoles).
+	info.promptRoles, info.promptStaticSystem = detectPromptRoles(lang, c.rawArgs, c.codeArgs)
 	return info
 }
 

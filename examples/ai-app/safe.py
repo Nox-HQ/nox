@@ -13,11 +13,11 @@ client = OpenAI()
 
 @app.post("/chat")
 def chat():
-    # User input stays in the user role; system content is static.
+    # User input stays in the user role; system content is static. nox models
+    # role placement, so this recommended pattern is not flagged (no waiver needed).
     user_q = request.json.get("question", "")
     if len(user_q) > 4000:
         return {"error": "input too long"}, 400
-    # nox:ignore TAINT-AI-001 -- user input stays in the user role; role separation is not modelled
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
