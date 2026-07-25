@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-07-25
+
+### Fixed
+
+- **`scan.exclude` now binds analysis plugins.** A plugin's `scan` tool is
+  handed only the workspace root and walks the tree itself, so it never saw the
+  exclusions the operator wrote. Requiring the code-analysis plugins on nox's
+  own repository took a clean grade-A self-scan (3 findings) to grade F (47),
+  and 38 of those 47 were on paths `.nox.yaml` explicitly excludes —
+  principally the intentionally-vulnerable fixture corpora that exist to be
+  found by the precision and metamorphic harnesses, not by the self-scan.
+  Plugin findings are now filtered host-side through the same matcher the
+  walker uses, rather than by passing the patterns down: a plugin is
+  third-party code and cannot be relied on to honour an exclusion it is merely
+  told about.
+
+- **Plugin findings are recorded relative to the scan root, like every other
+  finding.** They carried absolute paths, so the same file appeared under two
+  spellings. The unused-waiver check groups by path, so a file with both core
+  and plugin findings was evaluated twice, each pass testing every waiver in
+  the file against only its own subset — reporting four live waivers on this
+  repository's Dockerfile as dead. The v2 fingerprint also hashes the path, so
+  a plugin finding's identity embedded an absolute machine path and no baseline
+  could match it on another machine or in CI. A repository-scoped finding (one
+  naming the workspace root rather than a file, such as a missing private
+  registry configuration) is now canonicalised to the empty path the
+  suppression pass already reads as "repository-scoped rather than located",
+  instead of failing to read a directory and degrading a healthy scan.
+
+- **One gated plugin no longer disables every other plugin.** Registration was
+  all-or-nothing per phase: requiring all installed plugins hit one declaring
+  `needs_confirmation`, and the rejection aborted registration for the rest, so
+  the scan fell back to built-in findings having silently run none of them —
+  the exact failure degradations exist to prevent. Each plugin now registers
+  independently and a rejected one is degraded on its own, naming the policy it
+  violated.
+
+- **`nox:ignore` written in documentation is no longer parsed as a waiver.**
+  Because a waiver that matches nothing is reported, prose describing the
+  syntax produced false "waives X but matched no finding" degradations against
+  correct source — and that signal is the one used to find genuinely dead
+  waivers. A directive's grammar is `nox:ignore <IDs> [-- reason]`: free prose
+  after the rule IDs means the line describes a directive rather than issues
+  one. A directive inside a string literal is a program printing the syntax,
+  and one nested inside a comment that already began the line is an example —
+  the `DocExample` marking that already covered markdown fenced blocks now
+  covers source comments too. Both guards fail toward keeping the directive, so
+  an unrecognised language behaves exactly as before.
+
+- **Dead waivers are found in every scanned file, not only files that already
+  had a finding.** The check was driven by findings grouped by path, so a
+  waiver in an otherwise-clean file was invisible — which is exactly where a
+  dead waiver hides, since the usual way one dies is the finding it covered
+  getting fixed. Ten such waivers in nox's own source are removed here, each
+  verified inert by deleting it and re-scanning. Removing a waiver can only
+  cause a finding to be reported, never hidden. Files without a `nox:` marker
+  are skipped before parsing, so the sweep costs no measurable scan time.
+
 ## [1.16.0] - 2026-07-25
 
 ### Added
