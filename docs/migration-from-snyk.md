@@ -11,7 +11,7 @@ coverage.
 |---|---|---|
 | `snyk test` (deps) | `nox scan` (VULN-001..003) | OSV-backed; offline cache; same JSON shape goal |
 | `snyk monitor` | `nox scan --output dir/` + commit findings.json | Nox is CI-driven; no SaaS state |
-| Reachability analysis | `nox-plugin-reachability` (bundled by default) | Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet — all 7 covered |
+| Reachability analysis | `nox-plugin-reachability` (one `nox plugin install`) | Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet — all 7 covered |
 | Snyk fix / pull requests | `nox fix --input findings.json` | Go ecosystem today; npm/pypi/cargo on roadmap |
 | `snyk ignore` policy file | `vex.json` (OpenVEX) | Standard format; `nox vex init` bootstraps |
 | Snyk Code (SAST) | core SEC + `nox-plugin-sast` | Secrets in core, code-injection in plugin |
@@ -36,7 +36,7 @@ coverage.
   `--no-osv`).
 - **Deterministic + diff-friendly outputs** — same input, same
   fingerprints; baseline / diff / VEX flow is git-native.
-- **Multi-language reachability** — bundled by default, no separate
+- **Multi-language reachability** — one `nox plugin install`, no separate
   install. Snyk's reachability is a paid tier and per-language.
 
 ## What you give up

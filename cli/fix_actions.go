@@ -22,6 +22,24 @@ import (
 // (a SHA or a tag), 4=trailing comment (optional, e.g. " # v4").
 var usesRe = regexp.MustCompile(`^(\s*(?:-\s+)?uses:\s*)([A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._/-]+)?)@([A-Za-z0-9._-]+)(\s*#.*)?$`)
 
+// isReusableWorkflowRef reports whether a `uses:` target is a reusable
+// WORKFLOW rather than an action.
+//
+// These must keep their tag. slsa-verifier resolves a trusted builder's
+// identity from the ref, so pinning slsa-github-generator by digest makes it
+// unverifiable; upstream is explicit that its builders "MUST be referenced by
+// tag ... contrary to the GitHub best practice for third-party actions ... but
+// intentional due to limits in GitHub Actions". Pinning it anyway removed SLSA
+// provenance from six nox releases, and did so quietly: every job except
+// `final` still reported success.
+//
+// GitHub requires reusable workflows to live in .github/workflows/, which is
+// what distinguishes them from an action published in a subdirectory such as
+// anchore/sbom-action/download-syft — that one is an action and stays pinned.
+func isReusableWorkflowRef(full string) bool {
+	return strings.Contains(full, "/.github/workflows/")
+}
+
 // actionPin is one `uses:` occurrence found in a workflow file.
 type actionPin struct {
 	file    string
@@ -47,6 +65,21 @@ func (p *actionPin) currentVersion() string {
 }
 
 var commentVerRe = regexp.MustCompile(`v?\d+(?:\.\d+){0,2}`)
+
+// releaseTagRe matches a tag that denotes a RELEASE — the whole tag, not a
+// prefix of it.
+//
+// commentVerRe is a substring match, which is right for pulling a version out
+// of a trailing comment but wrong for deciding whether a tag is a release:
+// `v2.1.0-rc.3` contains `v2.1.0`, so it passed. It then parsed to [2,1,0]
+// because parseVer discards the suffix, TIEING the real v2.1.0 — and the
+// specificity tiebreak counts dotted components, of which the candidate has
+// four to the release's three, so the RELEASE CANDIDATE was judged more
+// specific and won. `nox fix --actions` duly replaced a stable @v2.1.0 with a
+// release candidate's commit in the workflow that generates this project's
+// SLSA provenance. Anchored, so a prerelease or build-metadata suffix is
+// simply not a release.
+var releaseTagRe = regexp.MustCompile(`^v?\d+(?:\.\d+){0,2}$`)
 
 func commentVersion(comment string) string {
 	return commentVerRe.FindString(comment)
@@ -123,6 +156,12 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 	// Group rewrites per file so each file is read/written once.
 	perFile := map[string][]rewrite{}
 	for _, p := range pins {
+		// A reusable workflow keeps its tag: pinning it by digest makes it
+		// unverifiable to slsa-verifier. See isReusableWorkflowRef.
+		if isReusableWorkflowRef(p.full) {
+			skipped++
+			continue
+		}
 		cur := p.currentVersion()
 		if cur == "" {
 			skipped++ // tracks a branch (e.g. @main reusable workflow) — leave it
@@ -398,8 +437,8 @@ func (g *githubResolver) latestTag(repo string) (string, error) {
 		return "", err
 	}
 	for _, t := range tags {
-		if !commentVerRe.MatchString(t.Name) {
-			continue
+		if !releaseTagRe.MatchString(t.Name) {
+			continue // prereleases and build metadata are not candidates
 		}
 		if best == "" || preferTag(best, t.Name) {
 			best = t.Name
@@ -418,6 +457,14 @@ func (g *githubResolver) latestTag(repo string) (string, error) {
 // they denote the same commit, but only the specific one still means that
 // commit tomorrow, and it is what the pin comment should record.
 func preferTag(current, candidate string) bool {
+	// A prerelease never outranks a release. latestTag already filters them
+	// out, but the ranking primitive must be right on its own: the specificity
+	// tiebreak counts dotted components, and `v2.1.0-rc.3` has one more than
+	// `v2.1.0`, so without this it declares the release candidate the more
+	// specific tag and pins it.
+	if cur, cand := releaseTagRe.MatchString(current), releaseTagRe.MatchString(candidate); cur != cand {
+		return cand // prefer the candidate only when IT is the release
+	}
 	switch cmpVersion(current, candidate) {
 	case -1:
 		return true
