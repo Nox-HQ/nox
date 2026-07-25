@@ -454,6 +454,25 @@ The VS Code extension in [`editors/vscode`](../editors/vscode) is a thin client
 over it (`npm install && npm run compile`, then F5 in the Extension Development
 Host). A JetBrains plugin is the same shape against the same server.
 
+### mcp
+
+Baseline an MCP server's tool manifest and detect drift (a rug-pull: a server
+that shows a benign manifest at review time, then serves a changed or malicious
+one later). Drift is emitted as findings, flowing into `findings.json` /
+`results.sarif` and gating CI like any scan.
+
+```bash
+nox mcp baseline -- nox serve      # capture .nox/mcp-baseline.json (commit it)
+nox mcp drift    -- nox serve      # re-capture and report drift (exit 1 on drift)
+nox mcp show                       # print the stored baseline
+```
+
+The baseline is local, sorted JSON — diff it, commit it, review drift in PRs.
+**Security:** these commands launch the server as a subprocess; never run an
+untrusted MCP server un-sandboxed. See
+[mcp-drift-baseline.md](./mcp-drift-baseline.md) for the full model, rule/severity
+mapping, and sandbox guidance.
+
 ### fix
 
 Generate remediations from a prior scan's `findings.json`.
