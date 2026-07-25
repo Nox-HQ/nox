@@ -52,28 +52,101 @@ func TestBootstrap_RegistersExistingPlugin(t *testing.T) {
 // TestBootstrap_RegistersExistingPlugin. It mirrors the production
 // bootstrap logic but takes binDir as an argument so the test can
 // supply a temp directory without monkey-patching os.Executable.
+//
+// It calls the production syncBundledPlugins rather than restating its
+// logic: a seam that re-implements what it is meant to cover passes
+// while the real code is broken, which is exactly how the stale-path bug
+// below survived.
 func registerPluginsFromDir(binDir string) error {
 	st, err := LoadState(DefaultStatePath())
 	if err != nil {
 		return err
 	}
-	for _, name := range bundledPlugins {
-		if st.FindPlugin(canonicalName(name)) != nil {
-			continue
-		}
-		path := filepath.Join(binDir, name)
-		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		st.AddPlugin(&InstalledPlugin{
-			Name:       canonicalName(name),
-			Version:    "bundled",
-			BinaryPath: path,
-			TrustLevel: "bundled",
-			RiskClass:  "passive",
-		})
-	}
+	syncBundledPlugins(st, binDir)
 	return SaveState(DefaultStatePath(), st)
+}
+
+// An upgrade moves the shipped plugin: the release that registered it is
+// deleted, and the recorded path with it. The record must follow the
+// binary, or the plugin silently stops running while state still claims
+// it is installed.
+func TestBootstrap_RepointsMovedBundledPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Executable + symlinks behave differently on Windows; covered in integration tests")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	oldDir := t.TempDir()
+	oldPath := filepath.Join(oldDir, "nox-plugin-reachability")
+	if err := os.WriteFile(oldPath, []byte("#!/bin/sh\n# v1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := registerPluginsFromDir(oldDir); err != nil {
+		t.Fatalf("initial register: %v", err)
+	}
+
+	// The upgrade: a new prefix holds the binary, the old one is gone.
+	newDir := t.TempDir()
+	newPath := filepath.Join(newDir, "nox-plugin-reachability")
+	if err := os.WriteFile(newPath, []byte("#!/bin/sh\n# v2\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(oldDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := registerPluginsFromDir(newDir); err != nil {
+		t.Fatalf("re-register: %v", err)
+	}
+
+	st, err := LoadState(DefaultStatePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := st.FindPlugin("reachability")
+	if p == nil {
+		t.Fatal("reachability record disappeared")
+	}
+	if p.BinaryPath != newPath {
+		t.Errorf("BinaryPath = %q, want %q — the record still points at the deleted install", p.BinaryPath, newPath)
+	}
+	if _, err := os.Stat(p.BinaryPath); err != nil {
+		t.Errorf("recorded binary is not usable: %v", err)
+	}
+}
+
+// A plugin the operator installed deliberately outranks the shipped
+// copy; re-pointing must never reach across and overwrite it.
+func TestBootstrap_LeavesOperatorInstalledPluginAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Executable + symlinks behave differently on Windows; covered in integration tests")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	st, err := LoadState(DefaultStatePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosen := "/opt/operator/nox-plugin-reachability"
+	st.AddPlugin(&InstalledPlugin{
+		Name:       "reachability",
+		Version:    "0.7.1",
+		BinaryPath: chosen,
+		TrustLevel: "community",
+		RiskClass:  "passive",
+	})
+
+	shipped := t.TempDir()
+	if err := os.WriteFile(filepath.Join(shipped, "nox-plugin-reachability"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if n := syncBundledPlugins(st, shipped); len(n) != 0 {
+		t.Errorf("notices = %v, want none — the operator's choice was touched", n)
+	}
+	if got := st.FindPlugin("reachability"); got.BinaryPath != chosen || got.Version != "0.7.1" {
+		t.Errorf("record = %+v, want the operator's 0.7.1 at %q", got, chosen)
+	}
 }
 
 func TestCanonicalName(t *testing.T) {
