@@ -39,29 +39,49 @@ func main() {
 		dryRun   = flag.Bool("dry-run", false, "generate + select candidates but make no network calls; print a summary")
 		timeout  = flag.Duration("timeout", 20*time.Second, "per-request HTTP timeout")
 		printTop = flag.Int("print", 20, "print the top-N produced entries to stderr")
+		signKey  = flag.String("sign-key", "", "PEM Ed25519 private key (PKCS#8 or raw) used to sign the feed; when set, the written feed carries an Ed25519 signature over its canonical bytes")
+		keyID    = flag.String("key-id", "", "free-form identifier recorded in the signature (key rotation / audit)")
+		pubOut   = flag.String("pubkey-out", "", "path to write the signer's public key PEM; defaults to <out>.pub.pem when --sign-key is set")
 	)
 	flag.Parse()
 
-	if err := run(*out, *limit, *sleep, *timeout, *version, *dryRun, *printTop); err != nil {
+	opts := runOptions{
+		out: *out, limit: *limit, sleep: *sleep, timeout: *timeout, version: *version,
+		dryRun: *dryRun, printTop: *printTop, signKey: *signKey, keyID: *keyID, pubOut: *pubOut,
+	}
+	if err := run(opts); err != nil {
 		fmt.Fprintln(os.Stderr, "slopfeed:", err)
 		os.Exit(1)
 	}
 }
 
-func run(out string, limit int, sleep, timeout time.Duration, version string, dryRun bool, printTop int) error {
+// runOptions bundles the generator's parameters. It grew past a comfortable
+// positional-argument count once signing was added.
+type runOptions struct {
+	out            string
+	limit          int
+	sleep, timeout time.Duration
+	version        string
+	dryRun         bool
+	printTop       int
+	signKey, keyID string
+	pubOut         string
+}
+
+func run(o runOptions) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	cands := generateCandidates()
-	selected := stratifiedSelect(cands, limit)
+	selected := stratifiedSelect(cands, o.limit)
 	fmt.Fprintf(os.Stderr, "generated %d candidates; checking %d (stratified)\n", len(cands), len(selected))
 
-	if dryRun {
+	if o.dryRun {
 		summarize(selected)
 		return nil
 	}
 
-	chk := newChecker(&http.Client{Timeout: timeout}, sleep)
+	chk := newChecker(&http.Client{Timeout: o.timeout}, o.sleep)
 	today := time.Now().UTC().Format("2006-01-02")
 
 	var (
@@ -104,27 +124,42 @@ func run(out string, limit int, sleep, timeout time.Duration, version string, dr
 
 	f := &feed.Feed{
 		SchemaVersion: feed.SchemaVersion,
-		Version:       version,
+		Version:       o.version,
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		Source:        "cmd/slopfeed",
 		Entries:       entries,
 	}
 	f.SetDigest()
 
+	// Sign the feed when a signing key is provided. Sign re-derives the digest
+	// over the canonical entry bytes and attaches the Ed25519 signature nox
+	// verifies against a pinned public key. The public key is written next to the
+	// feed so the publish pipeline can attach it as a downloadable trust anchor.
+	if o.signKey != "" {
+		pubOut := o.pubOut
+		if pubOut == "" {
+			pubOut = o.out + ".pub.pem"
+		}
+		if _, err := signFeed(f, o.signKey, o.keyID, pubOut); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "signed feed with key %q (public key -> %s)\n", o.keyID, pubOut)
+	}
+
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshalling feed: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(out, data, 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", out, err)
+	if err := os.WriteFile(o.out, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", o.out, err)
 	}
 
 	fmt.Fprintf(os.Stderr,
 		"\nwrote %s\n  entries: %d  (unregistered %d / registered %d / inconclusive %d)\n  requests: %d  digest: %s\n",
-		out, len(entries), nUnreg, nReg, nInconc, chk.requests, f.Digest)
-	if printTop > 0 {
-		n := printTop
+		o.out, len(entries), nUnreg, nReg, nInconc, chk.requests, f.Digest)
+	if o.printTop > 0 {
+		n := o.printTop
 		if n > len(entries) {
 			n = len(entries)
 		}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -256,7 +257,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// stays off and the failure is recorded as a visible degradation.
 	var slopOpts []slop.Option
 	if fp := cfg.Scan.Slop.Feed; fp != "" {
-		if loaded, ferr := loadSlopFeed(target, cfg.Scan.Slop); ferr != nil {
+		if loaded, ferr := loadSlopFeed(ctx, target, cfg.Scan.Slop, opts.Offline); ferr != nil {
 			degradations.Add(degrade.SlopFeed,
 				fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", fp, ferr),
 				"the SLOP-002 predictive dimension is disabled; high-risk slopsquat targets are not being flagged from the feed")
@@ -581,12 +582,20 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 }
 
 // loadSlopFeed resolves and verifies the predictive slopsquat feed named in the
-// config. The special value "bundled" loads the feed embedded in the binary;
-// any other value is a file path resolved relative to the scan root (unless
-// absolute). Verification is offline and fails closed: a digest mismatch,
-// decode error, or an unmet signature requirement returns an error and the
-// caller disables the predictive dimension rather than trusting the feed.
-func loadSlopFeed(target string, cfg SlopConfig) (*feed.Loaded, error) {
+// config. The value selects the source:
+//   - "bundled"         — the feed embedded in the binary
+//   - an http(s):// URL — a remotely published feed, fetched over the network,
+//     verified (digest + signature), and cached locally so later scans are
+//     offline and deterministic
+//   - any other value   — a file path resolved relative to the scan root
+//
+// Verification fails closed everywhere: a digest mismatch, decode error, unmet
+// signature requirement, fetch failure with no usable cache, or (offline) a
+// missing cache returns an error, and the caller disables the predictive
+// dimension and records a degradation rather than trusting the feed. When
+// offline is set, a URL feed never touches the network — it is served from the
+// verified cache or the load fails closed.
+func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*feed.Loaded, error) {
 	opts := feed.VerifyOptions{RequireSignature: cfg.RequireSignature}
 	if cfg.SignatureKeyPath != "" {
 		keyPath := cfg.SignatureKeyPath
@@ -617,11 +626,57 @@ func loadSlopFeed(target string, cfg SlopConfig) (*feed.Loaded, error) {
 		return loaded, nil
 	}
 
+	if isRemoteFeed(cfg.Feed) {
+		ttl := feed.DefaultRefreshInterval
+		if cfg.Refresh != "" {
+			parsed, err := parseFeedRefresh(cfg.Refresh)
+			if err != nil {
+				return nil, fmt.Errorf("parsing slop.refresh %q: %w", cfg.Refresh, err)
+			}
+			ttl = parsed
+		}
+		cacheDir := cfg.CacheDir
+		if cacheDir != "" && !filepath.IsAbs(cacheDir) {
+			cacheDir = filepath.Join(scanRootDir(target), cacheDir)
+		}
+		return feed.LoadRemote(ctx, feed.RemoteOptions{
+			URL:      cfg.Feed,
+			CacheDir: cacheDir,
+			TTL:      ttl,
+			Offline:  offline,
+			Verify:   opts,
+		})
+	}
+
 	path := cfg.Feed
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(scanRootDir(target), path)
 	}
 	return feed.Load(path, opts)
+}
+
+// isRemoteFeed reports whether a feed value names a remotely fetched feed rather
+// than a local path or the bundled feed.
+func isRemoteFeed(v string) bool {
+	return strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://")
+}
+
+// parseFeedRefresh parses a refresh interval: a standard Go duration, or a
+// bare "<n>d" days form (which time.ParseDuration does not accept). It matches
+// the "7d"/"24h" style used elsewhere in .nox.yaml.
+func parseFeedRefresh(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if rest, ok := strings.CutSuffix(s, "d"); ok {
+		days, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil {
+			return 0, fmt.Errorf("invalid days value %q", s)
+		}
+		if days < 0 {
+			return 0, fmt.Errorf("negative refresh interval %q", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
 }
 
 // scanRootDir returns the directory a relative config path is resolved against:

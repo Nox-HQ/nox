@@ -375,10 +375,21 @@ type OSVConfig struct {
 // docs/slopsquat-feed.md.
 type SlopConfig struct {
 	// Feed selects the predictive blocklist. Empty (default) disables the
-	// predictive dimension entirely. The special value "bundled" uses the feed
-	// shipped in the nox binary; any other value is a path to a feed JSON file
-	// (relative to the scan root or absolute).
+	// predictive dimension entirely. Accepted values:
+	//   - "bundled"          — the feed shipped in the nox binary
+	//   - an http(s):// URL  — a remotely published, signature-verified feed
+	//                          (fetched, verified, and cached locally; offline
+	//                          after the first successful fetch)
+	//   - any other value    — a path to a feed JSON file (relative to the scan
+	//                          root or absolute)
 	Feed string `yaml:"feed"`
+	// CacheDir overrides where a remote feed's verified bytes are cached. Empty
+	// defaults to $HOME/.nox/cache/slopfeed. Only used for http(s) feeds.
+	CacheDir string `yaml:"cache_dir"`
+	// Refresh sets how long a cached remote feed is treated as fresh before a
+	// refetch is attempted (a Go duration such as "24h" or "7d"). Within it, no
+	// network call is made. Empty defaults to 24h. Only used for http(s) feeds.
+	Refresh string `yaml:"refresh"`
 	// RequireSignature, when true, rejects a feed that is unsigned or whose
 	// signature does not verify — the predictive dimension then stays off rather
 	// than trusting an unverified feed. Digest integrity is always enforced
