@@ -521,8 +521,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 				"findings these plugins would have produced are missing from this scan")
 		}
 		if out != nil {
-			for i := range out.Findings {
-				allFindings.Add(out.Findings[i])
+			kept, dropped := filterPluginFindingsByExclude(out.Findings, target, cfg.Scan.Exclude)
+			for i := range kept {
+				allFindings.Add(kept[i])
+			}
+			if dropped > 0 {
+				slog.DebugContext(ctx, "plugin findings dropped by scan.exclude",
+					"dropped", dropped, "kept", len(kept))
 			}
 			pluginEnrichments = out.Enrichments
 			pluginGraphs = out.Graphs
@@ -1235,6 +1240,94 @@ func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
 	return cr <= tr
 }
 
+// filterPluginFindingsByExclude drops plugin findings whose path matches the
+// scan's `scan.exclude` patterns, returning the survivors and the drop count.
+//
+// A plugin's `scan` tool walks the workspace root itself and is handed only
+// workspace_root, so it never sees `scan.exclude`. That made any required
+// analysis plugin re-surface exactly the files the operator excluded: on nox's
+// own repo, requiring the code-analysis plugins took a clean grade-A self-scan
+// (3 findings) to grade F (47), and 38 of those 47 were on excluded paths —
+// principally the intentionally-vulnerable fixture corpora
+// (testdata/precision-suite, testdata/metamorphic-corpus) that exist to be
+// found by the precision and metamorphic harnesses, not by the self-scan.
+//
+// The boundary is enforced here, host-side, rather than by passing the patterns
+// down: a plugin is third-party code and cannot be relied on to honour an
+// exclusion it is merely told about. Filtering through the same
+// discovery.IsIgnored matcher the walker uses means "excluded" means the same
+// thing no matter which analyzer produced the finding.
+//
+// Paths are made relative to the scan root before matching, since patterns like
+// "testdata/" are written relative to the repository while plugins commonly
+// report absolute paths. A finding with no path is repository-scoped and is
+// never excluded — there is no path for a pattern to match.
+func filterPluginFindingsByExclude(in []findings.Finding, target string, patterns []string) (kept []findings.Finding, dropped int) {
+	if len(in) == 0 {
+		return in, 0
+	}
+
+	// The root must be absolute to be comparable: plugins report absolute
+	// paths (they are handed an absolute workspace_root), while the target is
+	// commonly ".". filepath.Rel refuses to relate a relative base to an
+	// absolute path, so a relative root left every plugin path absolute and no
+	// root-relative pattern could ever match it.
+	root := ConfigRoot(target)
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	kept = make([]findings.Finding, 0, len(in))
+	for i := range in {
+		p := in[i].Location.FilePath
+		if p == "" {
+			kept = append(kept, in[i])
+			continue
+		}
+		rel := p
+		if filepath.IsAbs(rel) {
+			if r, err := filepath.Rel(root, rel); err == nil {
+				rel = r
+			}
+		}
+		rel = filepath.ToSlash(rel)
+		// The finding names the scan root itself: it is repository-scoped, not
+		// located in a file (nox/depconfusion's DEPCONF-002, "no private
+		// registry config for this ecosystem", is a property of the repo). The
+		// empty path is the canonical spelling for that — the suppression pass
+		// already reads it as "repository-scoped rather than located" — and it
+		// keeps the absolute machine path out of the v2 fingerprint, which
+		// otherwise made such a finding unbaselineable anywhere but the machine
+		// that produced it.
+		if rel == "." {
+			f := in[i]
+			f.Location.FilePath = ""
+			kept = append(kept, f)
+			continue
+		}
+		// A path outside the scan root cannot be described by a root-relative
+		// pattern, and is not ours to rewrite; keep it as reported.
+		if strings.HasPrefix(rel, "../") {
+			kept = append(kept, in[i])
+			continue
+		}
+		if len(patterns) > 0 && discovery.IsIgnored(rel, patterns) {
+			dropped++
+			continue
+		}
+		// Record the finding against the same root-relative path convention
+		// core findings use. Left absolute, the same physical file appeared
+		// under two spellings: the unused-waiver check (which groups by path)
+		// then tested every waiver in the file against only one group's
+		// findings and reported live waivers as dead, and the v2 fingerprint
+		// hashed a machine-specific absolute path so no baseline could match
+		// across machines.
+		f := in[i]
+		f.Location.FilePath = rel
+		kept = append(kept, f)
+	}
+	return kept, dropped
+}
+
 // ConfigRoot returns the directory that paths relative to a scan target
 // resolve against — the baseline, the VEX document, custom rules, a Terraform
 // plan, and the source files findings point at.
@@ -1279,6 +1372,17 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 		fullPath := filePath
 		if !filepath.IsAbs(fullPath) {
 			fullPath = filepath.Join(ConfigRoot(target), fullPath)
+		}
+
+		// The same reasoning as the empty path above, one step further: a
+		// repository-scoped finding may name the workspace root itself rather
+		// than a file. nox/depconfusion's DEPCONF-002 ("no private registry
+		// config for the npm ecosystem") is a property of the repository, not
+		// of any one file, so it reports the root — and reading a directory
+		// failed, degrading a perfectly healthy scan. A directory holds no
+		// nox:ignore comments, so nothing was missed and nothing is reported.
+		if fi, statErr := os.Stat(fullPath); statErr == nil && fi.IsDir() {
+			continue
 		}
 
 		content, err := os.ReadFile(fullPath)

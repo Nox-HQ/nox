@@ -25,6 +25,10 @@ func init() {
 // installed under. The track selects the safety profile the host enforces, so
 // it travels with the path rather than being looked up again later.
 type installedPlugin struct {
+	// name is the registry name (e.g. "nox/taint-analysis"), carried so a
+	// registration failure can name the plugin it degraded rather than only
+	// its cache path.
+	name  string
 	path  string
 	track registry.Track
 }
@@ -91,6 +95,7 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		}
 
 		binaries = append(binaries, installedPlugin{
+			name:  name,
 			path:  ip.BinaryPath,
 			track: registry.Track(ip.Track),
 		})
@@ -137,10 +142,22 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 		plugin.WithIgnoreTrackProfiles(ignoreTrackProfiles),
 	)
 	defer func() { _ = host.Close() }()
+	// Per-plugin registration, for the same reason as the scan phase: one
+	// rejected plugin must not stop the others from annotating the findings.
+	registered := 0
 	for _, bin := range binaries {
 		if regErr := host.RegisterBinaryWithTrack(ctx, bin.path, nil, bin.track); regErr != nil {
-			return fmt.Errorf("registering plugin %q: %w", bin.path, regErr)
+			label := bin.name
+			if label == "" {
+				label = bin.path
+			}
+			fmt.Fprintf(os.Stderr, "[plugin warn] %s: not registered for post-scan: %v\n", label, regErr)
+			continue
 		}
+		registered++
+	}
+	if registered == 0 {
+		return nil
 	}
 
 	if invErr := host.InvokePostScan(ctx, result, absTarget); invErr != nil {
@@ -222,10 +239,33 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 	)
 	defer func() { _ = host.Close() }()
 
+	// Register each plugin independently. A plugin the host rejects — a policy
+	// gate such as needs_confirmation, a failed handshake, a binary that is not
+	// a plugin at all — is degraded on its own and the rest still run.
+	// Aborting the batch here meant one gated plugin silently disabled every
+	// other required detector, which is the failure mode degradations exist to
+	// prevent: the scan looked clean because nothing ran.
+	var regDegradations []core.Degradation
+	registered := 0
 	for _, bin := range binaries {
 		if regErr := host.RegisterBinaryWithTrack(ctx, bin.path, nil, bin.track); regErr != nil {
-			return nil, fmt.Errorf("registering plugin %q: %w", bin.path, regErr)
+			label := bin.name
+			if label == "" {
+				label = bin.path
+			}
+			regDegradations = append(regDegradations, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q was not registered: %v", label, regErr),
+				Impact: "findings this plugin would have produced are missing from this scan; other plugins still ran",
+			})
+			continue
 		}
+		registered++
+	}
+	if registered == 0 {
+		// Nothing registered: return the degradations so the operator learns
+		// why, rather than an empty success.
+		return &core.PluginScanOutput{Degradations: regDegradations}, nil
 	}
 
 	// Run the analysis `scan` tool across every plugin that declares it.
@@ -237,7 +277,7 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		return nil, fmt.Errorf("invoking analysis plugins: %w", err)
 	}
 
-	out := &core.PluginScanOutput{}
+	out := &core.PluginScanOutput{Degradations: regDegradations}
 	for _, r := range responses {
 		if r.Response == nil {
 			continue
