@@ -520,3 +520,32 @@ jobs:
           name: nox-deps-audit
           path: nox-deps/
           retention-days: 14
+
+  # The VS Code extension had no CI at all: no workflow ran `npm ci` or `tsc`,
+  # so a dependency bump to its toolchain merged on a green tick that had never
+  # compiled it. That is how GHSA-mh99-v99m-4gvg (brace-expansion ReDoS) got in
+  # — found later by a self-scan and fixed by hand — and Dependabot now opens
+  # TypeScript and vscode-languageclient MAJOR bumps against this tree, which
+  # nothing would have type-checked.
+  #
+  # Type-check only (`--noEmit`): the extension is published from a tagged
+  # release, so CI's job is to prove the source still compiles against the
+  # declared dependency set, not to produce a build artifact.
+  vscode-extension:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: Install
+        working-directory: editors/vscode
+        run: npm ci
+      - name: Type-check
+        working-directory: editors/vscode
+        run: npx tsc -p ./ --noEmit
