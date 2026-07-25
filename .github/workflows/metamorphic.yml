@@ -1,0 +1,57 @@
+name: Metamorphic rule-robustness gate
+
+# Enforces a metamorphic relation on nox's own detection rules:
+#
+#   A *semantics-preserving* edit to a file must not change nox's finding set.
+#
+# Three real nox rule bugs had exactly this shape (a blank line before a
+# Dockerfile COPY -> false positive; a comment mentioning HEALTHCHECK -> false
+# negative). This gate mutates the labeled corpus + synthetic Dockerfile/
+# workflow seeds with inert edits (blank lines, whitespace, CRLF, keyword
+# comments), scans before/after with a freshly built nox, and fails on any
+# finding that appears or disappears under such an edit.
+#
+# Deterministic: sorted seeds, fixed mutation order, no randomness, nox run
+# with --offline. The self-test (positive controls) proves the gate can go red.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  metamorphic:
+    name: Metamorphic invariance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build nox
+        run: make build
+
+      - name: Positive-control self-test
+        # A gate that cannot go red is worthless. This proves the harness
+        # flags a real finding-removing edit, ignores pure line shifts, and
+        # catches a planted HEALTHCHECK false negative.
+        run: python3 scripts/metamorphic/selftest.py --bin ./nox
+
+      - name: Metamorphic invariance sweep
+        # Exits non-zero on any surviving violation, writing a minimal repro.
+        run: python3 scripts/metamorphic/harness.py --bin ./nox --results metamorphic-out
+
+      - name: Upload repros on failure
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI diagnostic repro bundle, not a released binary; release artifacts are signed and attested in release.yml
+        if: failure()
+        with:
+          name: metamorphic-repros
+          path: metamorphic-out/
+          if-no-files-found: ignore
+          retention-days: 14
