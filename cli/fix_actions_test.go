@@ -286,3 +286,101 @@ func TestLatestTag_FallsBackToReleaseWhenTagsUnavailable(t *testing.T) {
 		t.Errorf("latestTag = %q, want v3.1.0", got)
 	}
 }
+
+// A reusable workflow must NOT be rewritten to a digest.
+//
+// slsa-verifier resolves a trusted builder's identity from the ref, so pinning
+// slsa-github-generator by SHA makes it unverifiable — upstream states the
+// builders "MUST be referenced by tag ... contrary to the GitHub best practice
+// for third-party actions ... but intentional due to limits in GitHub Actions".
+// This tool pinned it anyway, and SLSA provenance vanished from six nox
+// releases while every job but `final` reported success.
+//
+// The discriminator is the path: GitHub requires reusable workflows to live in
+// .github/workflows/. An action published in a subdirectory
+// (anchore/sbom-action/download-syft) is NOT a reusable workflow and must keep
+// being pinned.
+func TestIsReusableWorkflowRef(t *testing.T) {
+	cases := []struct {
+		full string
+		want bool
+	}{
+		{"slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml", true},
+		{"owner/repo/.github/workflows/build.yaml", true},
+		{"anchore/sbom-action/download-syft", false},
+		{"actions/checkout", false},
+		{"github/codeql-action/upload-sarif", false},
+		{"owner/repo/some/nested/action.yml", false},
+	}
+	for _, tc := range cases {
+		if got := isReusableWorkflowRef(tc.full); got != tc.want {
+			t.Errorf("isReusableWorkflowRef(%q) = %v, want %v", tc.full, got, tc.want)
+		}
+	}
+}
+
+// A prerelease must never be chosen as "latest".
+//
+// v2.1.0-rc.3 parsed to [2,1,0] — the -rc.3 was discarded — so it TIED v2.1.0,
+// and the specificity tiebreak then counted its dots (4 vs 3) and declared the
+// release candidate the more specific tag. `nox fix --actions` therefore
+// replaced a stable @v2.1.0 with a release candidate's commit, in the workflow
+// that produces this project's supply-chain attestations.
+func TestReleaseTagRe_RejectsPrereleases(t *testing.T) {
+	release := []string{"v1", "v1.2", "v1.2.3", "1.2.3"}
+	pre := []string{
+		"v2.1.0-rc.3", "v2.1.0-rc.0", "v1.0.0-beta", "v1.0.0-alpha.1",
+		"v2.1.0.pre.rc.3", "v1.2.3+build.5",
+	}
+	for _, r := range release {
+		if !releaseTagRe.MatchString(r) {
+			t.Errorf("release tag %q was rejected", r)
+		}
+	}
+	for _, p := range pre {
+		if releaseTagRe.MatchString(p) {
+			t.Errorf("prerelease tag %q was accepted as a release", p)
+		}
+	}
+}
+
+// The exact regression, end to end through the comparison used to pick latest:
+// given both tags, the release must win.
+func TestPreferTag_ReleaseBeatsItsOwnReleaseCandidate(t *testing.T) {
+	if preferTag("v2.1.0", "v2.1.0-rc.3") {
+		t.Error("v2.1.0-rc.3 was preferred over v2.1.0 — a release candidate must never outrank its release")
+	}
+}
+
+// The exact regression, end to end: the line `nox fix --actions` rewrote on
+// 2026-07-22, which removed SLSA provenance from six nox releases. The
+// reusable workflow must come out byte-identical, while an ordinary action in
+// the same file is still pinned — the skip must be surgical, not a blanket
+// "leave anything with a path alone".
+func TestRunActionsFix_LeavesReusableWorkflowsTagged(t *testing.T) {
+	root := t.TempDir()
+	p := writeWFPin(t, root, "slsa.yml", `jobs:
+  provenance:
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+  other:
+    steps:
+      - uses: anchore/sbom-action/download-syft@1111111111111111111111111111111111111111 # v0.24.0
+`)
+	res := fakeResolver{
+		"slsa-framework/slsa-github-generator": {"v2.2.0", "dddddddddddddddddddddddddddddddddddddddd"},
+		"anchore/sbom-action":                  {"v0.25.0", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+	}
+	runActionsFix(root, false, false, res)
+
+	got, _ := os.ReadFile(p)
+	want := `jobs:
+  provenance:
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+  other:
+    steps:
+      - uses: anchore/sbom-action/download-syft@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee # v0.25.0
+`
+	if string(got) != want {
+		t.Errorf("reusable workflow was rewritten, or the sibling action was not:\n%s", got)
+	}
+}
