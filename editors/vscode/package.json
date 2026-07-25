@@ -6,7 +6,7 @@
   "publisher": "nox-hq",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "https://github.com/nox-hq/nox" },
-  "engines": { "vscode": "^1.75.0" },
+  "engines": { "vscode": "^1.82.0" },
   "categories": ["Linters", "Programming Languages"],
   "activationEvents": [
     "onLanguage:go",
