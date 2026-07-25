@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **AI prompt-injection findings are now role-aware — untrusted input reaching
+  the *user* role behind a static system prompt no longer fires.** Reaching an
+  LLM is necessary but not sufficient for a prompt-injection: `TAINT-AI-001` and
+  `AGENTFLOW-001` fired whenever untrusted input reached a chat call, so the
+  *recommended* pattern — user input placed in the `user` role while the `system`
+  message stays static — was reported identically to the vulnerable pattern that
+  interpolates it into the `system` role. Findings now carry a `sink_role`
+  (`system`/`developer`/`user`/`unknown`) and suppress only the safe case:
+  `user` role with a static, untainted system message present. Every system- or
+  developer-role placement still fires, and ambiguity fails toward reporting —
+  a dynamically-built message array, an unreadable role, or a non-Python call
+  site keeps the finding, because a missed system-role injection is worse than
+  an extra one. Python call sites only for now; other languages keep their prior
+  always-report behavior (#319).
+
 - **A `data:` URI payload is no longer mistaken for a secret.** A base64-encoded
   image inlined in HTML/CSS/Markdown reported as vendor API keys — nox's own
   dashboard, which carries a base64 PNG logo on one 28 KB line, produced 8
