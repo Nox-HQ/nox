@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `data:` URI payload is no longer mistaken for a secret.** A base64-encoded
+  image inlined in HTML/CSS/Markdown reported as vendor API keys — nox's own
+  dashboard, which carries a base64 PNG logo on one 28 KB line, produced 8
+  high-severity "LOB / ELK API Key" findings from inside the image. The
+  suppression for embedded blobs already existed but consulted a lexer, which
+  returns no language for markup and stylesheets, so it never ran on the file
+  types most likely to hold an inline image. The `;base64,` marker is
+  unambiguous in raw bytes and now needs no language. Scoped to the payload
+  span: a real credential elsewhere in the same file is still reported (#308).
+
+- **Dockerfile "missing instruction" rules are no longer fooled by a comment or
+  a blank line.** Two defects, opposite directions. A comment that merely
+  *mentioned* an instruction disabled the check: `# no HEALTHCHECK needed`
+  satisfied `IAC-121`, and `# LABEL maintainer is deprecated` satisfied
+  `IAC-124` — a false negative, the check silenced by a comment claiming the
+  instruction exists. And a blank line before a `COPY --chown` fired `IAC-123`:
+  the anchor `^\s*COPY` matched from the preceding blank line because `\s`
+  spans newlines, so the span was computed from the wrong line and the `--chown`
+  went unseen — a false positive on idiomatic Dockerfiles. Instruction
+  properties are now anchored to line start, and the anchors use `[ \t]*` rather
+  than `\s*` (#311).
+
+- **A keyword in a comment no longer satisfies an absence rule's required
+  property.** The wider form of the rule above: a file-span rule whose property
+  is a free keyword was satisfied by that keyword appearing in any comment.
+  `IAC-153` ("artifact upload without attestation") never fired when a trailing
+  comment said `# attested elsewhere`. The matcher now strips `#` comments
+  before the property check — a comment cannot fulfil a "must be present"
+  requirement. Conservative by construction: a `#` inside a quoted value, a JSON
+  string or a URL fragment is never stripped, so no absent-property false
+  positive is introduced (#314).
+
 ## [1.14.0] - 2026-07-22
 
 ### Added
