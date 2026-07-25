@@ -111,7 +111,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run tests with coverage
-        shell: bash # nox:ignore IAC-193 -- composite-style step, not Ansible
+        shell: bash
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage summary

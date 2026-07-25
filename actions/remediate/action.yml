@@ -91,7 +91,7 @@ runs:
 
     - name: Build remediation plan
       id: plan
-      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
+      shell: bash
       env:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
@@ -100,7 +100,7 @@ runs:
 
     - name: Apply remediation
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true'
-      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
+      shell: bash
       env:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
@@ -109,7 +109,7 @@ runs:
 
     - name: Verify changes
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.verify-cmd != ''
-      shell: bash  # nox:ignore IAC-193 -- composite GHA action, not Ansible
+      shell: bash
       working-directory: ${{ inputs.manifest-root }}
       run: ${{ inputs.verify-cmd }}
 
