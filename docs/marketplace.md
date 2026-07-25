@@ -117,17 +117,30 @@ nox registry add https://registry.acme.internal/nox/index.json --name acme
 Multiple registries are merged; the first match wins. Conflicts are
 operator-resolvable with `nox registry remove`.
 
-## Bundled plugins
+## No bundled plugins
 
-The default nox release archive includes one plugin pre-bundled:
+The nox release archive contains the `nox` binary only. Every plugin,
+reachability included, is installed from the registry:
 
-- `nox-plugin-reachability` — multi-language reachability annotation.
-  Auto-registered on first run via `bootstrapBundledPlugins`. Operators
-  who want it disabled run `nox plugin remove reachability`.
+```sh
+nox plugin install nox/reachability
+```
 
-Bundled plugins coexist with registry-installed ones. The bundled
-binary lives next to the main `nox` binary; registry-installed ones
-live in `~/.nox/plugins/`.
+or declared under `plugins.required` in `.nox.yaml`, which the scan
+auto-installs.
+
+Reachability used to ship inside the archive and register itself on first
+run. That was removed because a plugin shipped in every release is neither
+optional nor built in, and it paid the costs of both: a process boundary and
+a sandbox policy for code as trusted as nox itself, plus release coupling and
+a separate "bundled" trust level with failure modes of its own. Two were
+live — a record pointing into the package manager's install prefix went stale
+on every upgrade, and the release pre-hook compiled the plugin once for the
+release runner, so the macOS and Windows archives shipped a Linux x86-64
+binary that could not execute at all.
+
+An install carrying an old bundled record has it removed on first run, with a
+notice explaining how to reinstall the plugin.
 
 ## Trust model
 

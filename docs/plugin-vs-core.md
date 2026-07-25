@@ -45,7 +45,7 @@ Anything that fails any of these is a **plugin**.
 
 | Plugin | Track | Why plugin |
 |---|---|---|
-| reachability | core-analysis | Language-specific parsers (Go AST, Rust crate, Java import) inflate binary; bundled by default |
+| reachability | core-analysis | Language-specific parsers (Go AST, Rust crate, Java import) inflate binary, and golang.org/x/vuln pulls the Go analysis toolchain into core |
 | taint-analysis | core-analysis | Heavyweight AST + interprocedural call graphs |
 | arch-lint | core-analysis | Org-specific dependency rules |
 | sast | core-analysis | Language-specific code-injection patterns (SQLi, XSS, path traversal) |
