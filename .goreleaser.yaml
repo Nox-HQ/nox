@@ -7,24 +7,6 @@ before:
   hooks:
     - go mod tidy
     - go test ./...
-    # Pre-build the reachability plugin so the archive can ship it
-    # alongside the nox binary. The plugin lives in its own module;
-    # goreleaser's builds: stanza can't follow nested go.mod files
-    # directly, so a pre-hook produces the sibling artifact which the
-    # archive includes via files:. Output goes to top-level `bundled/`
-    # — recent GoReleaser asserts dist/ is empty after before-hooks
-    # run, so we cannot land artifacts there ahead of the build phase.
-    - mkdir -p bundled
-    # Build the bundled plugin from its PUBLISHED module, not from a copy in
-    # this tree.
-    #
-    # It used to build from plugins/nox-plugin-reachability, which had forked
-    # from the repository that actually releases this plugin -- so the
-    # reachability shipped inside the nox archive was different code from the
-    # reachability published under the same name and version. Sourcing the
-    # released module makes the bundled binary and the standalone release the
-    # same artifact by construction.
-    - sh -c 'GOFLAGS=-trimpath CGO_ENABLED=0 GOBIN=$(pwd)/bundled go install -ldflags="-s -w" github.com/nox-hq/nox-plugin-reachability@v0.7.0'
 
 builds:
   - id: nox
@@ -59,11 +41,6 @@ archives:
     files:
       - LICENSE
       - README.md
-      # Bundle the reachability plugin so vulnerable-dep call-graph
-      # analysis works out of the box without a separate plugin
-      # install. Built by the pre-hook above into bundled/.
-      - src: bundled/nox-plugin-reachability
-        dst: bin/nox-plugin-reachability
 
 checksum:
   name_template: 'checksums.txt'
@@ -140,10 +117,8 @@ brews:
     license: "Apache-2.0"
     install: |
       bin.install "nox"
-      bin.install "bin/nox-plugin-reachability"
     test: |
       system "#{bin}/nox", "--help"
-      system "#{bin}/nox-plugin-reachability", "--help" rescue true
     # "auto" already skips prereleases/snapshots. SKIP_BREW additionally skips
     # when the release workflow found TAP_GITHUB_TOKEN cannot reach the tap, so
     # an expired packaging credential cannot fail the release and take cosign
