@@ -86,7 +86,7 @@ runs:
   steps:
     - name: Run Nox Security Scanner
       id: scan
-      shell: bash # nox:ignore IAC-193 -- composite GHA action, not Ansible
+      shell: bash
       env:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_FORMAT: ${{ inputs.format }}

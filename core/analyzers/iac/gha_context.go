@@ -1,6 +1,7 @@
 package iac
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -70,9 +71,60 @@ func ApplyGHAContext(findingsList []findings.Finding, fileContent map[string][]b
 	return applyGHAContext(findingsList, fileContent)
 }
 
+// ansibleRuleIDs is the set of rule IDs belonging to the Ansible family,
+// derived from the rule table itself so a rule added there is covered here
+// without a second list to keep in sync.
+var ansibleRuleIDs = func() map[string]bool {
+	ids := make(map[string]bool)
+	for _, r := range builtinAnsibleRules() {
+		ids[r.ID] = true
+	}
+	return ids
+}()
+
+// isGitHubActionsFile reports whether a path is a GitHub Actions workflow or a
+// composite action definition.
+//
+// Composite actions are included deliberately. The workflows-only prefix left
+// `action.yml` uncovered, and a composite step is REQUIRED to declare `shell:`
+// — which is precisely the construct that was being misread as Ansible. Four
+// of the five IAC-193 waivers in nox's own tree were on action.yml files.
+func isGitHubActionsFile(path string) bool {
+	p := filepath.ToSlash(path)
+	if strings.HasPrefix(p, ghaWorkflowsPrefix) || strings.Contains(p, "/"+ghaWorkflowsPrefix) {
+		return true
+	}
+	switch filepath.Base(p) {
+	case "action.yml", "action.yaml":
+		return true
+	}
+	return false
+}
+
 // applyGHAContext is the unexported implementation called by ApplyGHAContext
 // and by the IaC analyzer's own post-pass.
 func applyGHAContext(findingsList []findings.Finding, fileContent map[string][]byte) []findings.Finding {
+	// An Ansible rule cannot mean what it says on a GitHub Actions file: a
+	// workflow is not a playbook. Every Ansible rule is scoped to `*.yml` /
+	// `*.yaml`, i.e. every YAML file in the repository, so `shell: bash` in a
+	// composite action — which the step is required to declare — matched
+	// IAC-193 "Ansible task uses shell module". These are dropped rather than
+	// downgraded, because the finding is categorically wrong rather than less
+	// severe; a downgrade would leave an operator triaging a rule that could
+	// never apply. nox's own tree carried five waivers papering over this.
+	//
+	// Detection is by path, not content: an Ansible playbook is an ordinary
+	// .yml file that never lives at .github/workflows/ or action.yml, so real
+	// playbooks are untouched.
+	kept := findingsList[:0]
+	for _, f := range findingsList {
+		if ansibleRuleIDs[f.RuleID] && isGitHubActionsFile(f.Location.FilePath) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	findingsList = kept
+
 	for i := range findingsList {
 		f := &findingsList[i]
 		path := f.Location.FilePath
