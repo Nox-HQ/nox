@@ -87,6 +87,8 @@ func Classify(lang Lang, content []byte) []Region {
 		return scanDart(content)
 	case LangGroovy:
 		return scanGroovy(content)
+	case LangYAML, LangDockerfile:
+		return scanConfig(content)
 	default:
 		return []Region{{Start: 0, End: len(content), Kind: KindCode}}
 	}
