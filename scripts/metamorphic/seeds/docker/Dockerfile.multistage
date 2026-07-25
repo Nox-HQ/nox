@@ -1,0 +1,8 @@
+FROM golang:1.22 AS build
+WORKDIR /src
+COPY . .
+RUN go build -o /bin/app ./...
+
+FROM debian:bookworm
+COPY --from=build /bin/app /usr/local/bin/app
+ENTRYPOINT ["/usr/local/bin/app"]
