@@ -364,7 +364,7 @@ func (h *Host) processResponse(ctx context.Context, p *Plugin, resp *pluginv1.In
 		v := RuntimeViolation{
 			Type:       ViolationSecretLeaked,
 			PluginName: pluginName,
-			Message:    "plugin output contained secrets (redacted before delivery)", // nox:ignore SEC-163 -- error message not a secret
+			Message:    "plugin output contained secrets (redacted before delivery)",
 			Timestamp:  time.Now(),
 		}
 		h.mu.Lock()

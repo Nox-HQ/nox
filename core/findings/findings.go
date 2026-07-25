@@ -512,7 +512,6 @@ func matchAnyPattern(path string, patterns []string) bool {
 	return false
 }
 
-// nox:ignore SEC-659 -- false positive: strings.Split is not an API key
 func matchPathPattern(path, pattern string) bool {
 	pathParts := strings.Split(path, "/")
 	patternParts := strings.Split(pattern, "/")
@@ -546,12 +545,10 @@ func (fs *FindingSet) OverrideSeverityByRuleIDAndPath(ruleID, pathPattern string
 	}
 }
 
-// nox:ignore SEC-659 -- false positive: function name triggers Split API Key detector
-
 // OverrideSeverityByRulePatternsAndPaths changes the severity of findings that match
 // any of the given rule patterns (with wildcard support) AND any of the given path patterns.
 // This enables conditional severity overrides (e.g., downgrade all VULN-* findings in node_modules to info).
-func (fs *FindingSet) OverrideSeverityByRulePatternsAndPaths(rulePatterns, pathPatterns []string, severity Severity) { // nox:ignore SEC-659
+func (fs *FindingSet) OverrideSeverityByRulePatternsAndPaths(rulePatterns, pathPatterns []string, severity Severity) {
 	for i := range fs.items {
 		finding := &fs.items[i]
 		if matchRulePatterns(finding.RuleID, rulePatterns) && matchAnyPattern(finding.Location.FilePath, pathPatterns) {

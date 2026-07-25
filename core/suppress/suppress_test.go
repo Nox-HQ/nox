@@ -420,3 +420,85 @@ func TestScanForSuppressions_ProseAndStringsAreNotDirectives(t *testing.T) {
 		})
 	}
 }
+
+// A directive nested inside a comment that already started the line is an
+// EXAMPLE, not a waiver: this package's own doc comment lists the supported
+// spellings (`//\t// nox:ignore SEC-001 -- …`), and a comment describing the
+// parser quotes one inline. Both were read as live directives.
+//
+// It stayed invisible while the unused-waiver check only looked at files that
+// already had a finding; sweeping clean files surfaced six of them in this one
+// file. DocExample already existed for markdown fenced blocks — the same idea,
+// extended to the code blocks and inline quotes that appear in source comments.
+//
+// Marking, not dropping: a doc example still matches a finding on its target
+// line exactly as a markdown one does. It is only excluded from "this waiver
+// suppresses nothing", where it would be pure noise.
+func TestScanForSuppressions_NestedInCommentIsDocExample(t *testing.T) {
+	cases := []struct {
+		name, path, line string
+		wantDoc          bool
+	}{
+		{
+			name:    "go doc comment code block",
+			path:    "suppress.go",
+			line:    "//\t// nox:ignore SEC-001 -- false positive in test",
+			wantDoc: true,
+		},
+		{
+			name:    "go doc comment listing the yaml spelling",
+			path:    "suppress.go",
+			line:    "//\t# nox:ignore SEC-001,SEC-002",
+			wantDoc: true,
+		},
+		{
+			name:    "go doc comment listing the html spelling",
+			path:    "suppress.go",
+			line:    "//\t<!-- nox:ignore AI-001 -->",
+			wantDoc: true,
+		},
+		{
+			name:    "prose comment quoting a directive inline",
+			path:    "suppress.go",
+			line:    "\t// contains `echo \"nox: use '// nox:ignore RULE-ID -- reason'\"`, which was",
+			wantDoc: true,
+		},
+		// Real waivers: the directive's own marker starts the comment.
+		{
+			name:    "real: own-line directive",
+			path:    "main.go",
+			line:    "\t\t// nox:ignore IAC-123 -- reviewed",
+			wantDoc: false,
+		},
+		{
+			name:    "real: trailing directive after code",
+			path:    "main.go",
+			line:    "\tfoo() // nox:ignore SEC-163 -- em dash not hex",
+			wantDoc: false,
+		},
+		{
+			name:    "real: yaml trailing directive",
+			path:    "ci.yml",
+			line:    "  contents: write # nox:ignore IAC-314 -- needed for releases",
+			wantDoc: false,
+		},
+		{
+			name:    "real: yaml own-line directive",
+			path:    "ci.yml",
+			line:    "# nox:ignore SEC-001,SEC-002 -- reviewed",
+			wantDoc: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ScanForSuppressions([]byte(tc.line+"\n"), tc.path)
+			if len(got) == 0 {
+				t.Fatalf("no directive parsed at all from: %s", tc.line)
+			}
+			if got[0].DocExample != tc.wantDoc {
+				t.Errorf("DocExample=%v, want %v\n  line: %s", got[0].DocExample, tc.wantDoc, tc.line)
+			}
+		})
+	}
+}

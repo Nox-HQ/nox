@@ -95,6 +95,36 @@ func stringSubmatches(s string, loc []int) []string {
 // because its shape is unambiguous — remains the documented spelling.
 var ruleIDToken = regexp.MustCompile(`^\w+-[\w-]+`)
 
+// commentStarters are the comment openers suppressionRE recognises, longest
+// first so `<!--` is not mistaken for `--`.
+var commentStarters = []string{"<!--", "/*", "//", "--", "#"}
+
+// nestedInComment reports whether a directive sits inside a comment that
+// already began earlier on the line — which makes it an example rather than a
+// waiver.
+//
+// This package's own doc comment lists every supported spelling as an indented
+// code block (`//\t// nox:ignore SEC-001 -- …`), and comments describing the
+// parser quote directives inline. Both were read as live waivers, so once the
+// unused-waiver check started sweeping files with no findings, this one file
+// reported six waivers that never existed.
+//
+// The test is positional and needs no language knowledge: if the line's first
+// non-whitespace content opens a comment and the directive's own marker is not
+// that opener, the directive is written *inside* prose. A real waiver either
+// starts its line's comment or follows code (`foo() // nox:ignore …`), and
+// both keep matchStart at the comment opener.
+func nestedInComment(line string, matchStart int) bool {
+	trimmed := strings.TrimLeft(line, " \t")
+	indent := len(line) - len(trimmed)
+	for _, m := range commentStarters {
+		if strings.HasPrefix(trimmed, m) {
+			return matchStart > indent
+		}
+	}
+	return false
+}
+
 // directiveTailOK reports whether what follows a directive's rule IDs is
 // consistent with a directive rather than prose.
 //
@@ -232,7 +262,7 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 			Reason:        reason,
 			Expires:       expires,
 			InvalidExpiry: invalidExpiry,
-			DocExample:    isMarkdown && inFence,
+			DocExample:    (isMarkdown && inFence) || nestedInComment(line, loc[0]),
 		})
 	}
 
