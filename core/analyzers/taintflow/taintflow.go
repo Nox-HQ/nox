@@ -195,6 +195,13 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 		meta["interprocedural"] = "true"
 		meta["via"] = strings.Join(flow.Via, " -> ")
 	}
+	// For a role-aware prompt-injection (LLM) sink, record the chat role the
+	// tainted value lands in so the verdict is auditable: "system"/"developer" is
+	// the trust-inverting injection this keeps; a user-role placement behind a
+	// static system message was already suppressed upstream and never reaches here.
+	if flow.SinkRole != "" {
+		meta["sink_role"] = flow.SinkRole
+	}
 	return findings.Finding{
 		RuleID:     sink.RuleID,
 		Severity:   severityForClass(sink.VulnClass),

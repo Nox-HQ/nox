@@ -72,6 +72,14 @@ type sinkArgDraft struct {
 	// SOURCE used directly as a sink argument (sink(source())), which binds no
 	// variable and is otherwise invisible to variable propagation.
 	positionalArgs []string
+	// promptRoles maps a variable appearing inside a chat/LLM prompt argument to the
+	// chat role of the message it lands in (see taint.SinkArgInfo.PromptRoles). Only
+	// populated for Python chat-message-shaped calls; nil otherwise.
+	promptRoles map[string]string
+	// promptStaticSystem records that the call carries a static (untainted) system
+	// message — the data boundary that makes user-role untrusted content the safe
+	// pattern (see taint.SinkArgInfo.PromptHasStaticSystem).
+	promptStaticSystem bool
 }
 
 // extractUnits parses content into unit drafts for the given language. It walks

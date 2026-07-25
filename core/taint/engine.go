@@ -73,6 +73,23 @@ type SinkArgInfo struct {
 	// variable and so is invisible to variable-based propagation. Keyword arguments
 	// are excluded. Best-effort; empty when unobserved.
 	PositionalArgs []string
+	// PromptRoles maps a variable that appears inside a chat/LLM prompt argument to
+	// the chat role of the message it lands in ("system", "developer", "user", …).
+	// It is populated only for chat-message-shaped LLM calls (an OpenAI/Anthropic
+	// messages=[{role,content}] list or a system= parameter) and is empty for every
+	// other call. It is the evidence a role-aware consumer uses to tell a
+	// trust-inverting system-role injection (untrusted content in the system role)
+	// from the recommended pattern (untrusted content confined to the user role).
+	// A variable absent from the map has an undetermined role — the caller MUST
+	// treat that conservatively (keep the finding), never as safe.
+	PromptRoles map[string]string
+	// PromptHasStaticSystem is true when the same chat/LLM call carries a system (or
+	// developer) message whose content is a static literal with no interpolated
+	// variable — the data boundary that makes untrusted content in the user role
+	// the recommended, non-injection pattern. It is false when no such message
+	// exists or the system content is itself variable/tainted. A user-role flow is
+	// only downgraded to safe when this is true.
+	PromptHasStaticSystem bool
 }
 
 // Unit is a single intraprocedural scope (typically one function body) presented
@@ -109,6 +126,15 @@ type Flow struct {
 	// (e.g. ["wrap", "run"]). Empty for a purely intraprocedural flow. It lets a
 	// finding explain the summary-composed path. Deterministically ordered.
 	Via []string
+	// SinkRole records, for a prompt-injection (LLM) sink, the chat role the
+	// tainted value lands in: "system"/"developer" (a trust-inverting injection),
+	// "user"/other recognized role, or "unknown" when the role could not be
+	// determined (dynamic message construction). Empty for every non-LLM sink. It
+	// makes the role-based verdict auditable on the emitted finding. A user-role
+	// flow behind a static system message is suppressed by the engine and never
+	// reaches a Flow, so SinkRole on an emitted prompt-injection flow is "system",
+	// "developer", "unknown", or another non-user role that was kept conservatively.
+	SinkRole string
 }
 
 // TaintEngine analyzes one intraprocedural Unit and returns the taint flows that

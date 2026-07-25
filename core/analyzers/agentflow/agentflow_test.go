@@ -151,6 +151,56 @@ func TestAgentflow(t *testing.T) {
 			want: ruleOutputToSink,
 		},
 
+		// -------- Role-aware AGENTFLOW-001 (P3) --------
+		// Reaching an LLM is necessary but not sufficient: WHERE the untrusted value
+		// lands is the differentiator. These three cases encode the design contract.
+		{
+			// TRUE POSITIVE kept: untrusted value in the SYSTEM role inverts the
+			// trust boundary (a real prompt injection).
+			name: "tainted value in system role fires",
+			file: "sys.py",
+			src: `def personalize():
+    persona = request.args.get("persona")
+    openai.chat.completions.create(messages=[{"role": "system", "content": persona}, {"role": "user", "content": "hi"}])
+`,
+			want: ruleUntrustedToPrompt,
+		},
+		{
+			// TRUE POSITIVE kept: f-string interpolation into the system role.
+			name: "tainted value in system role via f-string fires",
+			file: "sysf.py",
+			src: `def personalize():
+    persona = request.args.get("persona")
+    openai.chat.completions.create(messages=[{"role": "system", "content": f"You are a {persona} bot."}, {"role": "user", "content": "hi"}])
+`,
+			want: ruleUntrustedToPrompt,
+		},
+		{
+			// FALSE POSITIVE removed: untrusted value confined to the user role,
+			// behind a STATIC system message — the recommended data-boundary pattern
+			// (this is exactly examples/ai-app/safe.py).
+			name: "tainted value in user role behind static system does not fire",
+			file: "usr.py",
+			src: `def chat():
+    user_q = request.args.get("q")
+    openai.chat.completions.create(messages=[{"role": "system", "content": "Answer concisely."}, {"role": "user", "content": user_q}])
+`,
+			want:    "",
+			notWant: ruleUntrustedToPrompt,
+		},
+		{
+			// CONSERVATIVE: the message array is built dynamically (a bare variable),
+			// so the landing role is undetermined — keep the finding.
+			name: "dynamic message construction still fires",
+			file: "dyn.py",
+			src: `def chat():
+    q = request.args.get("q")
+    msgs = [{"role": "system", "content": q}]
+    openai.chat.completions.create(messages=msgs)
+`,
+			want: ruleUntrustedToPrompt,
+		},
+
 		// -------- No-fire cases --------
 		{
 			name: "hardcoded constant prompt does not fire",
