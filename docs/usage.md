@@ -720,6 +720,31 @@ scan:
 
 This is useful for reducing noise from dependencies in `node_modules/` or test fixtures.
 
+### Predictive Slopsquat Feed (SLOP-002)
+
+The SLOP analyzer can consume a versioned, offline **predictive slopsquat
+blocklist** — a signed, content-addressed list of package names an LLM is likely
+to hallucinate that were verified *unregistered (squattable)* when the feed was
+generated. When an imported name matches a high-risk entry, `SLOP-002` fires with
+a severity derived from the entry's risk tier.
+
+It is **opt-in and off by default**: with no feed configured the analyzer's
+`SLOP-001` behavior is unchanged. Enabling a feed is purely additive.
+
+```yaml
+scan:
+  slop:
+    feed: bundled                 # ship-in-binary feed; or a path to a feed JSON
+    require_signature: false      # reject unsigned/bad-signature feeds
+    signature_key_path: keys/slopsquat.pub.pem   # PEM Ed25519 public key
+```
+
+No network is touched at scan time — only the out-of-band generator
+(`cmd/slopfeed`) queries registries. A malformed, tampered, or digest-mismatched
+feed fails closed (predictive dimension off, a visible `slop_feed` degradation
+recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
+trust model, regeneration, and the responsible-disclosure note.
+
 ### Conditional Severity
 
 Override severity based on rule patterns and paths:

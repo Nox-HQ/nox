@@ -10,7 +10,7 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	cat := Catalog()
 
 	// We expect 1553 built-in rules across all analyzers (SEC + DATA + AI
-	// + IAC + VULN + SLOP-001 slopsquatting + VARIANT-001..006 CVE variants
+	// + IAC + VULN + SLOP-001/002 slopsquatting + VARIANT-001..006 CVE variants
 	// + PROV-001/002 provenance). AI includes AI-PI-* (LLM01),
 	// AI-EMBED-* (LLM06), MCP-* families: MCP-001..008 (server
 	// hardening), MCP-009..014 (tool poisoning, OWASP MCP03),
@@ -27,8 +27,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// deleted (SEC-356..SEC-370 and SEC-430..SEC-433): they fired on
 	// password-less URLs, and the credential-aware DSN rules SEC-073/074/076
 	// already cover connection strings carrying userinfo credentials.
-	if got := len(cat); got != 1528 {
-		t.Errorf("Catalog() returned %d rules, want 1528", got)
+	// 1529 = 1528 plus SLOP-002 (predictive slopsquat-target match, emitted by
+	// the slop analyzer when a verified blocklist feed is loaded).
+	if got := len(cat); got != 1529 {
+		t.Errorf("Catalog() returned %d rules, want 1529", got)
 	}
 }
 

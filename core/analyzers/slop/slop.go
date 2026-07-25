@@ -17,16 +17,45 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
 
-// Analyzer performs phantom-import detection.
-type Analyzer struct{}
+// Analyzer performs phantom-import detection and, when a predictive feed is
+// loaded, high-risk slopsquat-target detection (SLOP-002).
+type Analyzer struct {
+	// feed is an optional, verified predictive slopsquat blocklist. When nil
+	// (the default), the analyzer's behavior is exactly the reactive SLOP-001
+	// check and nothing else — no feed means zero behavior change. When set, an
+	// imported name that matches a feed entry additionally raises a distinct
+	// SLOP-002 predictive finding; the SLOP-001 baseline is never altered.
+	feed *feed.Loaded
+}
 
-// NewAnalyzer returns a slop analyzer.
-func NewAnalyzer() *Analyzer { return &Analyzer{} }
+// Option configures an Analyzer.
+type Option func(*Analyzer)
+
+// WithFeed attaches a verified predictive slopsquat blocklist. Passing a nil
+// feed is a no-op, so callers can wire it unconditionally.
+func WithFeed(f *feed.Loaded) Option {
+	return func(a *Analyzer) {
+		if f != nil {
+			a.feed = f
+		}
+	}
+}
+
+// NewAnalyzer returns a slop analyzer. With no options it is the reactive
+// SLOP-001 analyzer; WithFeed adds the predictive SLOP-002 dimension.
+func NewAnalyzer(opts ...Option) *Analyzer {
+	a := &Analyzer{}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
 
 // Rules returns the rule set for the slopsquatting analyzer.
 func (a *Analyzer) Rules() *rules.RuleSet {
@@ -45,7 +74,36 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-1357"},
 	})
+	rs.Add(&rules.Rule{
+		ID:          "SLOP-002",
+		Version:     "1.0",
+		Description: "Imported package matches a known high-risk slopsquat target from the predictive blocklist feed",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"dependency", "supply-chain", "slopsquatting", "ai", "predictive", "owasp-asi04", "owasp-llm03"},
+		Remediation: "This source file imports a package name that appears on a predictive slopsquat blocklist: a name an LLM is likely to hallucinate that was verified UNREGISTERED (squattable) when the feed was generated. Either the name is a phantom import (a hallucinated dependency you should remove) or — if the package is now installed — it may be a squat an attacker registered after the feed date. Do not install or run it until you confirm, on the official registry, that the package exists, is the one you intend, and is published by a trusted maintainer. Prefer the real upstream package the name imitates.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/1357.html",
+			"https://genai.owasp.org/llmrisk/llm03-supply-chain/",
+		},
+		Metadata: map[string]string{"cwe": "CWE-1357"},
+	})
 	return rs
+}
+
+// predictiveSeverity maps a feed risk tier to a SLOP-002 finding severity. The
+// mapping is deliberately one notch below the tier's face value: SLOP-002 is a
+// predictive heuristic ("this name is a known squat target"), not proof of
+// compromise, so a critical-tier target is reported High, not Critical.
+func predictiveSeverity(tier string) findings.Severity {
+	switch tier {
+	case feed.TierCritical:
+		return findings.SeverityHigh
+	case feed.TierHigh:
+		return findings.SeverityMedium
+	default: // medium and anything unexpected
+		return findings.SeverityLow
+	}
 }
 
 // manifestBasenames are the dependency manifests slop reads to learn which
@@ -109,6 +167,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // each undeclared external package (deduplicated per package within the file).
 func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string, content []byte, declared *declaredSet, local map[string]struct{}) {
 	seen := make(map[string]struct{})
+	seenPred := make(map[string]struct{})
 	for _, imp := range extractImports(eco, content) {
 		pkg, ok := packageName(eco, imp.spec)
 		if !ok {
@@ -120,6 +179,16 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 		if _, isLocal := local[pkg]; isLocal && eco == ecoPyPI {
 			continue // first-party Python module
 		}
+
+		// Predictive dimension (additive, opt-in): when a feed is loaded and the
+		// imported name matches a high-risk squattable target, raise a distinct
+		// SLOP-002 finding. This runs BEFORE the declared-manifest check because
+		// a name that is already declared/installed and on the blocklist is the
+		// dangerous "you may have installed the squat" case that SLOP-001, which
+		// only fires on unresolved imports, cannot catch. With no feed loaded
+		// this block is skipped entirely — zero behavior change.
+		a.emitPredictive(fs, eco, path, pkg, imp, seenPred)
+
 		if declaredHas(declared, eco, pkg) {
 			continue
 		}
@@ -140,6 +209,45 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 			},
 		})
 	}
+}
+
+// emitPredictive raises a SLOP-002 finding when a loaded feed classifies pkg as
+// a high-risk slopsquat target. It is a no-op when no feed is loaded, so the
+// analyzer's baseline (SLOP-001) output is identical with or without a feed.
+// Findings are deduplicated per package within a file.
+func (a *Analyzer) emitPredictive(fs *findings.FindingSet, eco ecosystem, path, pkg string, imp importRef, seen map[string]struct{}) {
+	if a.feed == nil {
+		return
+	}
+	entry, ok := a.feed.Lookup(string(eco), pkg)
+	if !ok {
+		return
+	}
+	if _, dup := seen[pkg]; dup {
+		return
+	}
+	seen[pkg] = struct{}{}
+	fs.Add(findings.Finding{
+		RuleID:     "SLOP-002",
+		Severity:   predictiveSeverity(entry.Tier),
+		Confidence: findings.ConfidenceMedium,
+		Location:   findings.Location{FilePath: path, StartLine: imp.line, EndLine: imp.line},
+		Message: "Imported package \"" + pkg + "\" is a known high-risk slopsquat target (" + entry.Tier +
+			" tier): a name an LLM is likely to hallucinate that was verified unregistered on " + entry.VerifiedAt +
+			". Verify it on the official registry before installing or running it.",
+		Metadata: map[string]string{
+			"package":      pkg,
+			"ecosystem":    string(eco),
+			"import":       imp.spec,
+			"tier":         entry.Tier,
+			"pattern":      entry.Pattern,
+			"neighbor_of":  entry.NeighborOf,
+			"verified_at":  entry.VerifiedAt,
+			"feed_version": a.feed.Version(),
+			"feed_digest":  a.feed.Digest(),
+			"cwe":          "CWE-1357",
+		},
+	})
 }
 
 func declaredHas(d *declaredSet, eco ecosystem, pkg string) bool {
