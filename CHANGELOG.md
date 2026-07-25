@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-25
+
+### Added
+
+- **`nox confirm` — an opt-in, active loop that turns a static AI prompt-injection
+  finding into a confirmed (or refuted) exploit.** Static analysis can prove that
+  untrusted input *reaches* an LLM; it cannot prove the model *obeys* it. `nox
+  confirm` closes that gap: it reads a prior scan's `findings.json`, selects the
+  AI findings (`AGENTFLOW-001`, `TAINT-AI-001`, `AI-PI-*`), fires an adversarial
+  corpus at a running target, and writes `confirmations.json` with a per-finding
+  **CONFIRMED** / **UNCONFIRMED** verdict — separating a true positive from a
+  false positive that static analysis alone cannot. The verdict is
+  **reflection-immune**: a response is scored a hijack only on a signal the model
+  had to *produce* (the uppercase transform of a lowercase seed the payload
+  carried, or a secret canary that lives only in the app's trusted system header
+  and is never sent), so an app that merely echoes the payload can never
+  false-confirm — an invariant asserted at startup, with the command failing
+  closed if it is ever broken. This is a **distinct, active** command, never part
+  of `nox scan`: it **refuses to run without `--authorize`**, the `--target` is
+  operator-supplied, and nox states plainly that isolating the target is the
+  operator's responsibility. Exit `1` on ≥1 confirmed exploit makes it
+  CI-gateable. See `docs/confirm.md`.
+
+- **Remote, signature-verified distribution for the predictive slopsquat feed
+  (`SLOP-002`).** `scan.slop.feed` now accepts an `https://` URL in addition to
+  the bundled feed. A remote feed is fetched, verified against both a SHA-256
+  content digest **and** an Ed25519 signature bound to an operator-pinned key,
+  then cached content-addressed (mirroring the plugin-registry cache) — a
+  tampered payload, a wrong signing identity, or an unsigned feed under
+  `require_signature` is rejected and recorded as a degradation, never trusted.
+  It fails closed and stays offline-friendly: a verified feed serves from cache
+  with no network, a fetch error falls back to last-known-good, and offline with
+  no cache refuses rather than silently scanning without the dimension. **Off by
+  default** — no feed configured is byte-identical to before. A scheduled
+  `slopfeed-publish` workflow regenerates, signs, and publishes the feed and its
+  public key as release assets, giving a stable URL operators pin by key.
+  Ed25519-with-a-published-key rather than cosign keyless, deliberately: keyless
+  verification needs a network round-trip at scan time, which would break the
+  offline/deterministic guarantee. See `docs/slopsquat-feed.md`.
+
 ## [1.15.0] - 2026-07-25
 
 ### Added
