@@ -114,29 +114,9 @@ func bootstrapBundledPlugins() {
 	}
 
 	if os.Getenv("NOX_NO_BUNDLED_PLUGINS") == "" {
-		for _, name := range bundledPlugins {
-			if st.FindPlugin(canonicalName(name)) != nil {
-				continue
-			}
-			path := filepath.Join(binDir, name)
-			if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
-				continue
-			}
-			bundledIP := &InstalledPlugin{
-				Name:        canonicalName(name),
-				Version:     "bundled",
-				BinaryPath:  path,
-				TrustLevel:  "bundled",
-				RiskClass:   "passive",
-				InstalledAt: time.Now().UTC(),
-				UpdatedAt:   time.Now().UTC(),
-			}
-			bundledIP.RecordBinaryDigest()
-			st.AddPlugin(bundledIP)
+		if bundledNotices := syncBundledPlugins(st, binDir); len(bundledNotices) > 0 {
+			notices = append(notices, bundledNotices...)
 			changed = true
-			notices = append(notices, fmt.Sprintf(
-				"registered bundled plugin %s -> %s (disable: export NOX_NO_BUNDLED_PLUGINS=1)",
-				canonicalName(name), path))
 		}
 	}
 
@@ -146,6 +126,62 @@ func bootstrapBundledPlugins() {
 			fmt.Fprintf(os.Stderr, "[nox bootstrap] %s\n", n)
 		}
 	}
+}
+
+// syncBundledPlugins registers the plugins shipped beside the nox binary
+// and keeps existing records pointing at them. It returns one notice per
+// change; an empty slice means state is already correct.
+//
+// Re-pointing is the part that is easy to leave out and expensive to
+// omit. The path recorded at registration names the install prefix of
+// that release — a Homebrew Cellar directory, say — and upgrading
+// deletes it. A record written once and never revisited therefore
+// dangles for the life of the install: `doctor` reports "binary missing"
+// while `scan` says nothing at all and silently falls back to whatever
+// else provides the plugin. That is how a repository ends up analysed by
+// a plugin build several versions behind the one the operator installed,
+// with no output anywhere saying so.
+//
+// Only records this function created (TrustLevel "bundled") are touched,
+// so a plugin the operator installed deliberately is never overwritten
+// by the shipped copy.
+func syncBundledPlugins(st *State, binDir string) []string {
+	var notices []string
+	for _, name := range bundledPlugins {
+		path := filepath.Join(binDir, name)
+		info, err := os.Stat(path)
+		usable := err == nil && info.Mode().IsRegular()
+
+		if existing := st.FindPlugin(canonicalName(name)); existing != nil {
+			if existing.TrustLevel == "bundled" && usable && existing.BinaryPath != path {
+				existing.BinaryPath = path
+				existing.RecordBinaryDigest()
+				existing.UpdatedAt = time.Now().UTC()
+				notices = append(notices, fmt.Sprintf(
+					"re-pointed bundled plugin %s -> %s (previous location is gone)",
+					canonicalName(name), path))
+			}
+			continue
+		}
+		if !usable {
+			continue
+		}
+		bundledIP := &InstalledPlugin{
+			Name:        canonicalName(name),
+			Version:     "bundled",
+			BinaryPath:  path,
+			TrustLevel:  "bundled",
+			RiskClass:   "passive",
+			InstalledAt: time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
+		}
+		bundledIP.RecordBinaryDigest()
+		st.AddPlugin(bundledIP)
+		notices = append(notices, fmt.Sprintf(
+			"registered bundled plugin %s -> %s (disable: export NOX_NO_BUNDLED_PLUGINS=1)",
+			canonicalName(name), path))
+	}
+	return notices
 }
 
 // canonicalName strips the nox-plugin- prefix so registry lookups by
