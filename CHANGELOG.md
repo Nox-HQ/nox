@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.2] - 2026-07-25
+
+### Fixed
+
+- **Ansible rules no longer fire on GitHub Actions files.** Every Ansible rule
+  is scoped to `*.yml` / `*.yaml`, which is every YAML file in a repository —
+  workflows and composite actions included. So `shell: bash`, which a composite
+  action step is *required* to declare, matched `IAC-193` "Ansible task uses
+  shell module". A GitHub Actions file is not an Ansible playbook, so the
+  finding is categorically wrong rather than merely less severe; these are
+  dropped rather than downgraded like the other GitHub Actions false positives,
+  because a downgrade still leaves an operator triaging a rule that could never
+  apply. Composite actions are now covered as well as workflows: the existing
+  context pass keyed off the `.github/workflows/` prefix alone, which left
+  `action.yml` — exactly where `shell:` is mandatory — uncovered. Real Ansible
+  playbooks still fire; detection is by path, and a playbook is an ordinary
+  `.yml` that never lives at `.github/workflows/` or `action.yml`.
+
 ## [1.16.1] - 2026-07-25
 
 ### Fixed
