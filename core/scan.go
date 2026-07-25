@@ -2,6 +2,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -566,7 +567,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,
 	// baseline matching, and VEX.
-	if err := refineFindings(allFindings, cfg, opts, target, degradations); err != nil {
+	// Every file the scan looked at, so waivers in files that produced no
+	// finding are still checked for deadness.
+	scannedPaths := make([]string, 0, len(artifacts))
+	for i := range artifacts {
+		scannedPaths = append(scannedPaths, artifacts[i].Path)
+	}
+	if err := refineFindings(allFindings, cfg, opts, target, degradations, scannedPaths); err != nil {
 		return nil, err
 	}
 
@@ -808,7 +815,7 @@ func singleFileArtifacts(path string, cfg *ScanConfig) ([]discovery.Artifact, er
 // conditional severity, dedup + deterministic sort, inline suppressions,
 // optional terraform-plan findings, baseline matching, and VEX. It is stage 3
 // of the scan pipeline.
-func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string, deg *degrade.Degradations) error {
+func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string, deg *degrade.Degradations, scanned []string) error {
 	// Config rule disabling and severity overrides.
 	if len(cfg.Scan.Rules.Disable) > 0 {
 		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
@@ -886,7 +893,7 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 
-	applySuppressions(allFindings, target, deg)
+	applySuppressions(allFindings, target, deg, scanned)
 
 	// Scan a terraform plan if provided. A plan path is only ever set because
 	// the operator asked for it, so a plan that cannot be read or parsed is an
@@ -1350,14 +1357,74 @@ func ConfigRoot(target string) string {
 	return target
 }
 
-// applySuppressions reads files that have findings and marks suppressed findings.
-func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations) {
+// sweepWaiversInCleanFiles reports waivers in files that produced no finding.
+//
+// The unused-waiver check is driven by findings grouped by path, so it only
+// ever examined files that already had one. A waiver in an otherwise-clean
+// file was invisible — and that is exactly where a dead waiver is most likely
+// to hide, since the usual way one dies is the finding it covered getting
+// fixed. The gap surfaced by accident: enabling analysis plugins spread
+// findings across many more files and five dead waivers in nox's own source
+// appeared at once, purely because those files now had some unrelated finding.
+// Whether a waiver is reported must not depend on whether something else in
+// the same file happened to fire.
+//
+// Every waiver found here is by definition unused: the file produced no
+// finding for it to suppress. Expired and doc-example directives are excluded
+// on the same grounds as the main path.
+func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degrade.Degradations, scanned []string) {
+	if len(scanned) == 0 {
+		return
+	}
+	root := ConfigRoot(target)
+	for _, rel := range scanned {
+		if _, hasFindings := byFile[rel]; hasFindings {
+			continue // already evaluated against its own findings
+		}
+		fullPath := rel
+		if !filepath.IsAbs(fullPath) {
+			fullPath = filepath.Join(root, fullPath)
+		}
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			// A file the scan just read that cannot be read now is not worth a
+			// degradation of its own: it produced no findings, so no waiver of
+			// the operator's is going unapplied.
+			continue
+		}
+		// Cheap reject before parsing: the directive keyword must appear at all.
+		if !bytes.Contains(content, []byte("nox:")) {
+			continue
+		}
+		for _, s := range suppress.ScanForSuppressions(content, rel) {
+			if s.DocExample || s.InvalidExpiry != "" {
+				continue
+			}
+			if s.Expires != nil && timeNow().After(*s.Expires) {
+				continue
+			}
+			deg.Add(degrade.Suppression,
+				fmt.Sprintf("%s:%d waives %s but matched no finding",
+					rel, s.Line, strings.Join(s.RuleIDs, ",")),
+				"this waiver is not suppressing anything — the finding it covered may have been fixed, "+
+					"in which case remove the waiver; otherwise check the rule ID and that a dedicated "+
+					"nox:ignore comment sits on the line directly above the code")
+		}
+	}
+}
+
+// applySuppressions reads files that have findings and marks suppressed
+// findings. scanned lists every file the scan looked at, so waivers in files
+// that produced no finding are still checked — see sweepWaiversInCleanFiles.
+func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations, scanned []string) {
 	// Group findings by file.
 	byFile := make(map[string][]int)
 	items := fs.Findings()
 	for i := range items {
 		byFile[items[i].Location.FilePath] = append(byFile[items[i].Location.FilePath], i)
 	}
+
+	defer sweepWaiversInCleanFiles(byFile, target, deg, scanned)
 
 	for filePath, indices := range byFile {
 		// A finding with no file path has no file to read suppressions from —

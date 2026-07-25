@@ -437,7 +437,7 @@ func (s *Server) registerResources(srv *mcp.Server) {
 		Name("Project AI Inventory").
 		Description("AI inventory for a specific project").
 		MimeType("application/json").
-		Handler(s.handleProjectResourceAIInventory) // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
+		Handler(s.handleProjectResourceAIInventory)
 
 	srv.Resource("nox://project/{project}/dashboard").
 		Name("Project Dashboard").
@@ -1575,7 +1575,7 @@ func (s *Server) handleProjectResourceSPDX(_ context.Context, uri string, params
 	}, nil
 }
 
-func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) { // nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- function name, not a key
+func (s *Server) handleProjectResourceAIInventory(_ context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
 	path, err := s.resolveProjectPath(params)
 	if err != nil {
 		return nil, err

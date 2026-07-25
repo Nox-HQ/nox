@@ -103,7 +103,7 @@ func bootstrapBundledPlugins() {
 			st.Sources = append(st.Sources, defaultRegistrySource)
 			changed = true
 			notices = append(notices, fmt.Sprintf(
-				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)", // nox:ignore SEC-161,SEC-162 -- env var name in user-facing notice, not a credential
+				"registered official plugin registry %s (disable: export NOX_NO_DEFAULT_REGISTRY=1)",
 				defaultRegistrySource.URL))
 		} else if migrateLegacyRegistrySource(st) {
 			// An existing install already HAS an "official" source, so the
