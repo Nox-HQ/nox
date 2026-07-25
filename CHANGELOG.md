@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.3] - 2026-07-25
+
+### Fixed
+
+- **A bundled plugin is re-pointed when the binary moves.** Bundled plugins
+  were registered once and never revisited, and the recorded path names the
+  install prefix of that release — a Homebrew Cellar directory, say — which an
+  upgrade deletes. Nothing recovered from that, and almost nothing reported it:
+  `nox doctor` said "binary missing" while `nox scan` said nothing at all and
+  silently fell back to whatever else provided the plugin, or ran without it.
+  Observed on a real install, where bundled reachability stayed registered
+  against a deleted `0.8.1` prefix, so every scan quietly used a community
+  build several versions behind the one shipped. Bootstrap now re-points a
+  bundled record whose recorded path no longer matches the shipped binary and
+  re-records its digest, so the integrity gate does not then refuse the
+  correctly-located file. Only records nox created itself (trust level
+  `bundled`) are touched — a plugin the operator installed deliberately is
+  never overwritten. The gap was invisible because the test seam restated the
+  production loop rather than calling it, so the test exercised a copy with the
+  same defect and passed; it now calls the same function bootstrap runs.
+
 ## [1.16.2] - 2026-07-25
 
 ### Fixed
