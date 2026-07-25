@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`brace-expansion` in the VS Code extension is bumped past a newly-published
+  ReDoS.** GHSA-mh99-v99m-4gvg affects every `brace-expansion` up to 5.0.8, so
+  the 2.1.2 pin an earlier release added (to fix a *different* brace-expansion
+  advisory) became vulnerable when this one was published. Reached transitively
+  through `minimatch` in the extension's build toolchain — not the extension's
+  runtime — but a high-severity advisory nonetheless. The `overrides` entry now
+  forces `^5.0.8`; the extension still compiles clean and nox's own self-scan
+  returns to grade A.
+
 ### Fixed
 
 - **A `data:` URI payload is no longer mistaken for a secret.** A base64-encoded
