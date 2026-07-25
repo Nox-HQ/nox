@@ -103,3 +103,42 @@ jobs:
       base64-subjects: ${{ needs.subjects.outputs.hashes }}
       upload-assets: true
       upload-tag-name: ${{ needs.subjects.outputs.tag }}
+
+  # Assert the attestation actually reached the release.
+  #
+  # This exists because the provenance job's exit code turned out not to mean
+  # what everyone assumed. When the generator was SHA-pinned it became
+  # unverifiable, and the run failed in a way where `subjects`, `generator` and
+  # `upload-assets` all reported SUCCESS and only an internal `final` step
+  # exited 27 — attributing it, misleadingly, to "no subjects supplied".
+  # Nothing downstream looked at the release itself, so six consecutive
+  # releases (v1.14.0 through v1.17.0) shipped with no provenance at all over
+  # three days, while the project advertised SLSA Level 3 and every release
+  # workflow was green.
+  #
+  # A green job is not evidence the artifact exists. This checks the artifact.
+  verify:
+    name: Provenance attached
+    needs: [subjects, provenance]
+    if: always() && needs.subjects.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Assert the release carries an in-toto attestation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.subjects.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          names=$(gh release view "$TAG" --repo "$REPO" --json assets \
+                    --jq '[.assets[].name | select(test("intoto"))] | join(" ")')
+          if [ -z "$names" ]; then
+            echo "::error title=Provenance missing::$TAG has no in-toto attestation asset."
+            echo "The provenance job may report success while the attestation never attaches —"
+            echo "that is exactly how v1.14.0..v1.17.0 shipped unattested. Re-run with:"
+            echo "  gh workflow run slsa-provenance.yml -f tag=$TAG"
+            exit 1
+          fi
+          echo "$TAG carries provenance: $names"

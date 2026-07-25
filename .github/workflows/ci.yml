@@ -478,6 +478,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
+      issues: write # raises the issue that makes a failing weekly audit visible
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -520,6 +521,40 @@ jobs:
           name: nox-deps-audit
           path: nox-deps/
           retention-days: 14
+
+      # Surface a failing audit where someone will see it.
+      #
+      # This job runs only on the weekly schedule, so its failures land in the
+      # Actions tab and nowhere else. When it began failing on a real
+      # advisory (brace-expansion, GHSA-3jxr-9vmj-r5cp) it failed every week
+      # from June 22 onward with nothing raising it — the CVE was eventually
+      # found by other means. A scheduled security check that fails silently
+      # is worse than no check, because the green-by-default impression is
+      # stronger than the absence of a signal.
+      #
+      # One issue is reused rather than filed weekly: a new issue every Monday
+      # trains people to close them unread.
+      - name: Raise a dependency-CVE issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Weekly dependency CVE audit is failing"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+                       --search "$title in:title" --json number --jq '.[0].number // empty')
+          body="The scheduled dependency-CVE audit failed. Run: $RUN_URL
+
+          Fixable advisories block this job; unfixable ones only warn. See the
+          \`nox-deps-audit\` artifact on the run for the findings, and
+          \`nox fix_plan\` for the proposed bumps."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+              --label dependencies --body "$body"
+          fi
 
   # The VS Code extension had no CI at all: no workflow ran `npm ci` or `tsc`,
   # so a dependency bump to its toolchain merged on a green tick that had never
