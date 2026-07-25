@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // Suppression represents a single inline suppression directive found in source.
@@ -72,6 +74,52 @@ var suppressionRE = regexp.MustCompile(
 // expiresRE extracts an expires:YYYY-MM-DD from the reason text.
 var expiresRE = regexp.MustCompile(`expires:(\d{4}-\d{2}-\d{2})`)
 
+// stringSubmatches rebuilds FindStringSubmatch's []string result from the
+// index pairs FindStringSubmatchIndex returns, so the match position is
+// available (for the string-literal test) without scanning the line twice.
+// A group that did not participate yields "".
+func stringSubmatches(s string, loc []int) []string {
+	out := make([]string, len(loc)/2)
+	for i := range out {
+		if loc[2*i] >= 0 {
+			out[i] = s[loc[2*i]:loc[2*i+1]]
+		}
+	}
+	return out
+}
+
+// ruleIDToken matches a single rule identifier in the space-separated form
+// (`nox:ignore SEC-161 SEC-162 -- reason`). A hyphen is required so a prose
+// word cannot be mistaken for another rule ID; every catalog rule is
+// PREFIX-NUMBER, and the comma-separated form — which needs no such guard
+// because its shape is unambiguous — remains the documented spelling.
+var ruleIDToken = regexp.MustCompile(`^\w+-[\w-]+`)
+
+// directiveTailOK reports whether what follows a directive's rule IDs is
+// consistent with a directive rather than prose.
+//
+// Accepted: nothing, a comment terminator, a `--` reason, or further
+// space-separated rule IDs before either of those. Anything else means the
+// line is describing the syntax, not using it.
+func directiveTailOK(rest string) bool {
+	rest = strings.TrimSpace(rest)
+	for {
+		rest = strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(rest, "*/"), "-->"))
+		if rest == "" {
+			return true
+		}
+		if strings.HasPrefix(rest, "--") {
+			// The reason separator (and `-->`, already trimmed above).
+			return true
+		}
+		tok := ruleIDToken.FindString(rest)
+		if tok == "" {
+			return false
+		}
+		rest = strings.TrimSpace(rest[len(tok):])
+	}
+}
+
 // ScanForSuppressions scans file content for nox:ignore directives and returns
 // all suppressions found. Each suppression targets either the same line
 // (trailing comment) or the next non-blank, non-comment line.
@@ -89,13 +137,43 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 	isMarkdown := markdownExts[strings.ToLower(filepath.Ext(filePath))]
 	inFence := false
 
+	// A directive written inside a string literal is a program printing the
+	// syntax, not a waiver on that line — nox's own pre-commit hook installer
+	// contains `echo "nox: use '// nox:ignore RULE-ID -- reason'"`, which was
+	// read as waiving a rule called RULE-ID.
+	//
+	// Deliberately classified one line at a time rather than over the whole
+	// file: a string that opens and closes on the directive's own line is
+	// unambiguous, while a region spanning many lines is usually an artifact
+	// (an unterminated or raw string) and treating a directive inside one as
+	// prose would silently drop a real waiver. Only a positive, single-line
+	// string identification suppresses the directive.
+	lang := lexctx.LangFromPath(filePath)
+
 	for i, line := range lines {
 		lineNum := i + 1
 		if isMarkdown && isFence(strings.TrimSpace(line)) {
 			inFence = !inFence
 		}
-		match := suppressionRE.FindStringSubmatch(line)
-		if match == nil {
+		loc := suppressionRE.FindStringSubmatchIndex(line)
+		if loc == nil {
+			continue
+		}
+		match := stringSubmatches(line, loc)
+
+		if lexctx.KindAt(lexctx.Classify(lang, []byte(line)), loc[0]) == lexctx.KindString {
+			continue
+		}
+
+		// A directive's grammar is `nox:ignore <IDs> [-- reason]`: after the
+		// rule IDs the line must end, close the comment, or introduce a reason
+		// with `--`. Free prose after the IDs means the text is *describing* a
+		// directive rather than issuing one — a doc comment that wrapped so
+		// that "…holds no nox:ignore comments, so nothing was missed" began a
+		// line was read as waiving a rule named "comments". Because a waiver
+		// that matches nothing is reported, that produced a false "dead waiver"
+		// degradation against correct code.
+		if !directiveTailOK(line[loc[1]:]) {
 			continue
 		}
 
