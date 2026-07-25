@@ -19,6 +19,14 @@ scan:
     # the sweep scans them explicitly in isolated temp dirs; the self-scan must
     # not flag them. See scripts/metamorphic/README.md.
     - "testdata/metamorphic-corpus/"
+    # Intentionally-vulnerable ground-truth apps for the `nox confirm` static→
+    # dynamic loop: the vulnerable one splices untrusted input into the SYSTEM
+    # role (the exact AGENTFLOW-001/TAINT-AI-001 anti-pattern), and both carry a
+    # test canary. They exist to be flagged and then dynamically confirmed; the
+    # entrypoint-parser test scans them explicitly. Same rationale as the
+    # precision corpora — the self-scan must not flag fixtures. Python has no
+    # inline nox:ignore for the multiple rules involved, so the dir is excluded.
+    - "core/confirm/testdata/"
     - "testdata/precision-suite-php/"
     - "testdata/precision-suite-java/"
     - "testdata/precision-suite-ruby/"
