@@ -135,7 +135,7 @@ func run(args []string) int {
 	// Register any plugin binaries shipped alongside the main binary.
 	// Idempotent; runs once per invocation and is silent on failure so
 	// it never blocks the user-facing CLI.
-	bootstrapBundledPlugins()
+	bootstrapState()
 
 	args = extractInterspersedArgs(args)
 	fs := flag.NewFlagSet("nox", flag.ContinueOnError)
