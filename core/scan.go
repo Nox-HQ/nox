@@ -21,6 +21,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
+	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
@@ -248,7 +249,22 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}))
 	}
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
-	slopAnalyzer := slop.NewAnalyzer()
+	// The SLOP analyzer gains a predictive dimension only when a feed is
+	// configured (default: off, exact reactive behavior preserved). Loading is
+	// offline: a file read plus digest/signature verification, no network. A
+	// misconfigured or tampered feed fails closed — the predictive dimension
+	// stays off and the failure is recorded as a visible degradation.
+	var slopOpts []slop.Option
+	if fp := cfg.Scan.Slop.Feed; fp != "" {
+		if loaded, ferr := loadSlopFeed(target, cfg.Scan.Slop); ferr != nil {
+			degradations.Add(degrade.SlopFeed,
+				fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", fp, ferr),
+				"the SLOP-002 predictive dimension is disabled; high-risk slopsquat targets are not being flagged from the feed")
+		} else {
+			slopOpts = append(slopOpts, slop.WithFeed(loaded))
+		}
+	}
+	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	// A signature database that fails to parse leaves every VARIANT-* rule
@@ -562,6 +578,59 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Degradations: degradations.Items(),
 		SASTProfile:  cfg.Scan.SAST.ResolvedProfile(),
 	}, nil
+}
+
+// loadSlopFeed resolves and verifies the predictive slopsquat feed named in the
+// config. The special value "bundled" loads the feed embedded in the binary;
+// any other value is a file path resolved relative to the scan root (unless
+// absolute). Verification is offline and fails closed: a digest mismatch,
+// decode error, or an unmet signature requirement returns an error and the
+// caller disables the predictive dimension rather than trusting the feed.
+func loadSlopFeed(target string, cfg SlopConfig) (*feed.Loaded, error) {
+	opts := feed.VerifyOptions{RequireSignature: cfg.RequireSignature}
+	if cfg.SignatureKeyPath != "" {
+		keyPath := cfg.SignatureKeyPath
+		if !filepath.IsAbs(keyPath) {
+			keyPath = filepath.Join(scanRootDir(target), keyPath)
+		}
+		pem, err := os.ReadFile(keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading signature key %s: %w", keyPath, err)
+		}
+		verifier, err := feed.PEMEd25519Verifier(pem)
+		if err != nil {
+			return nil, fmt.Errorf("parsing signature key: %w", err)
+		}
+		opts.Verifier = verifier
+	}
+
+	if cfg.Feed == "bundled" {
+		loaded, err := feed.Bundled()
+		if err != nil {
+			return nil, err
+		}
+		// A signature requirement cannot be met by the unsigned bundled feed;
+		// surface that clearly rather than silently ignoring the requirement.
+		if cfg.RequireSignature {
+			return nil, fmt.Errorf("the bundled feed is unsigned but require_signature is set")
+		}
+		return loaded, nil
+	}
+
+	path := cfg.Feed
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(scanRootDir(target), path)
+	}
+	return feed.Load(path, opts)
+}
+
+// scanRootDir returns the directory a relative config path is resolved against:
+// the target itself when it is a directory, or its parent when it is a file.
+func scanRootDir(target string) string {
+	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		return filepath.Dir(target)
+	}
+	return target
 }
 
 // discoverArtifacts walks the target, honoring .gitignore and config excludes,

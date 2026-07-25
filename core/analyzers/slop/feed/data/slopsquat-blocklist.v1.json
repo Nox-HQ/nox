@@ -1,0 +1,620 @@
+{
+  "schema_version": "slopsquat-blocklist/v1",
+  "version": "2026.07.25",
+  "generated_at": "2026-07-25T10:30:22Z",
+  "source": "cmd/slopfeed",
+  "digest": "sha256:f9ae0d9a50569e6ab8a6ed2e138a69f13fdcb8f51160eccfb3b73620ab9871e1",
+  "entries": [
+    {
+      "name": "axios-retry-async",
+      "ecosystem": "npm",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `axios-retry-async`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "anthropic-async",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `anthropic-async`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "anthropic-helpers",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `anthropic-helpers`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "django-rest-auth-jwt",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `django-rest-auth-jwt`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "fastapi-auth",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `fastapi-auth`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "langchain-helpers",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `langchain-helpers`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "openai-utils",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `openai-utils`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "pydantic-utils",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `pydantic-utils`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-cache-async",
+      "ecosystem": "pypi",
+      "pattern": "obvious",
+      "risk": 0.82,
+      "tier": "critical",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [obvious]: 'obvious API' name an LLM invents for a common task. An attacker could register this name today and capture installs of hallucinated `requests-cache-async`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "numpys",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "numpy",
+      "risk": 0.78,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'numpy' (pluralised). An attacker could register this name today and capture installs of hallucinated `numpys`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "djangos",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "django",
+      "risk": 0.764,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'django' (pluralised). An attacker could register this name today and capture installs of hallucinated `djangos`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "pydantics",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "pydantic",
+      "risk": 0.754,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'pydantic' (pluralised). An attacker could register this name today and capture installs of hallucinated `pydantics`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "sqlalchemys",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "sqlalchemy",
+      "risk": 0.749,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'sqlalchemy' (pluralised). An attacker could register this name today and capture installs of hallucinated `sqlalchemys`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "boto3s",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "boto3",
+      "risk": 0.743,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'boto3' (pluralised). An attacker could register this name today and capture installs of hallucinated `boto3s`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "vites",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "vite",
+      "risk": 0.738,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'vite' (pluralised). An attacker could register this name today and capture installs of hallucinated `vites`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "aiohttps",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "aiohttp",
+      "risk": 0.738,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'aiohttp' (pluralised). An attacker could register this name today and capture installs of hallucinated `aiohttps`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "eslints",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "eslint",
+      "risk": 0.733,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'eslint' (pluralised). An attacker could register this name today and capture installs of hallucinated `eslints`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "httpxs",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "httpx",
+      "risk": 0.733,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'httpx' (pluralised). An attacker could register this name today and capture installs of hallucinated `httpxs`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "prettiers",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "prettier",
+      "risk": 0.728,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'prettier' (pluralised). An attacker could register this name today and capture installs of hallucinated `prettiers`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "pytests",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "pytest",
+      "risk": 0.728,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'pytest' (pluralised). An attacker could register this name today and capture installs of hallucinated `pytests`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "typescripts",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "typescript",
+      "risk": 0.723,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'typescript' (pluralised). An attacker could register this name today and capture installs of hallucinated `typescripts`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "react-js",
+      "ecosystem": "npm",
+      "pattern": "composition",
+      "neighbor_of": "react",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-js'. An attacker could register this name today and capture installs of hallucinated `react-js`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-cli",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-cli'. An attacker could register this name today and capture installs of hallucinated `requests-cli`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-helpers",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-helpers'. An attacker could register this name today and capture installs of hallucinated `requests-helpers`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-js",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-js'. An attacker could register this name today and capture installs of hallucinated `requests-js`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-kit",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-kit'. An attacker could register this name today and capture installs of hallucinated `requests-kit`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-py",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-py'. An attacker could register this name today and capture installs of hallucinated `requests-py`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-sdk",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-sdk'. An attacker could register this name today and capture installs of hallucinated `requests-sdk`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-toolkit",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-toolkit'. An attacker could register this name today and capture installs of hallucinated `requests-toolkit`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requests-x",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "requests",
+      "risk": 0.72,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-x'. An attacker could register this name today and capture installs of hallucinated `requests-x`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "richs",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "rich",
+      "risk": 0.718,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'rich' (pluralised). An attacker could register this name today and capture installs of hallucinated `richs`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "express-js",
+      "ecosystem": "npm",
+      "pattern": "composition",
+      "neighbor_of": "express",
+      "risk": 0.716,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-js'. An attacker could register this name today and capture installs of hallucinated `express-js`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "express-py",
+      "ecosystem": "npm",
+      "pattern": "composition",
+      "neighbor_of": "express",
+      "risk": 0.716,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-py'. An attacker could register this name today and capture installs of hallucinated `express-py`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "express-x",
+      "ecosystem": "npm",
+      "pattern": "composition",
+      "neighbor_of": "express",
+      "risk": 0.716,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-x'. An attacker could register this name today and capture installs of hallucinated `express-x`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "numpy-api",
+      "ecosystem": "pypi",
+      "pattern": "composition",
+      "neighbor_of": "numpy",
+      "risk": 0.716,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [composition]: compositional: popular stem + '-api'. An attacker could register this name today and capture installs of hallucinated `numpy-api`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "vitests",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "vitest",
+      "risk": 0.712,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'vitest' (pluralised). An attacker could register this name today and capture installs of hallucinated `vitests`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "scipys",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "scipy",
+      "risk": 0.712,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'scipy' (pluralised). An attacker could register this name today and capture installs of hallucinated `scipys`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "matplotlibs",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "matplotlib",
+      "risk": 0.702,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'matplotlib' (pluralised). An attacker could register this name today and capture installs of hallucinated `matplotlibs`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "sveltes",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "svelte",
+      "risk": 0.697,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'svelte' (pluralised). An attacker could register this name today and capture installs of hallucinated `sveltes`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "pillows",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "pillow",
+      "risk": 0.697,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'pillow' (pluralised). An attacker could register this name today and capture installs of hallucinated `pillows`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "zods",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "zod",
+      "risk": 0.692,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'zod' (pluralised). An attacker could register this name today and capture installs of hallucinated `zods`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "beautifulsoup4s",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "beautifulsoup4",
+      "risk": 0.692,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'beautifulsoup4' (pluralised). An attacker could register this name today and capture installs of hallucinated `beautifulsoup4s`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "yups",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "yup",
+      "risk": 0.686,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'yup' (pluralised). An attacker could register this name today and capture installs of hallucinated `yups`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "seleniums",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "selenium",
+      "risk": 0.686,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'selenium' (pluralised). An attacker could register this name today and capture installs of hallucinated `seleniums`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "celerys",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "celery",
+      "risk": 0.681,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'celery' (pluralised). An attacker could register this name today and capture installs of hallucinated `celerys`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "sequelizes",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "sequelize",
+      "risk": 0.666,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'sequelize' (pluralised). An attacker could register this name today and capture installs of hallucinated `sequelizes`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "psycopg2s",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "psycopg2",
+      "risk": 0.666,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'psycopg2' (pluralised). An attacker could register this name today and capture installs of hallucinated `psycopg2s`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "prismas",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "prisma",
+      "risk": 0.66,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'prisma' (pluralised). An attacker could register this name today and capture installs of hallucinated `prismas`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "nodemons",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "nodemon",
+      "risk": 0.655,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'nodemon' (pluralised). An attacker could register this name today and capture installs of hallucinated `nodemons`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "pyyamls",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "pyyaml",
+      "risk": 0.655,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'pyyaml' (pluralised). An attacker could register this name today and capture installs of hallucinated `pyyamls`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "socket.ios",
+      "ecosystem": "npm",
+      "pattern": "typo",
+      "neighbor_of": "socket.io",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'socket.io' (pluralised). An attacker could register this name today and capture installs of hallucinated `socket.ios`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "jinja2s",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "jinja2",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'jinja2' (pluralised). An attacker could register this name today and capture installs of hallucinated `jinja2s`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "reqeusts",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `reqeusts`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requesst",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `requesst`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requetss",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `requetss`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "requsets",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `requsets`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "reuqests",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `reuqests`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "rqeuests",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "requests",
+      "risk": 0.65,
+      "tier": "high",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'requests' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `rqeuests`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "nmupy",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "numpy",
+      "risk": 0.647,
+      "tier": "medium",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'numpy' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `nmupy`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "numyp",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "numpy",
+      "risk": 0.647,
+      "tier": "medium",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'numpy' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `numyp`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "nupmy",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "numpy",
+      "risk": 0.647,
+      "tier": "medium",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'numpy' (transposed adjacent chars). An attacker could register this name today and capture installs of hallucinated `nupmy`.",
+      "verified_at": "2026-07-25"
+    },
+    {
+      "name": "tenacitys",
+      "ecosystem": "pypi",
+      "pattern": "typo",
+      "neighbor_of": "tenacity",
+      "risk": 0.645,
+      "tier": "medium",
+      "reason": "UNREGISTERED (404 confirmed twice on 2026-07-25) and matches a high-likelihood hallucination pattern [typo]: edit-distance-1 typo of 'tenacity' (pluralised). An attacker could register this name today and capture installs of hallucinated `tenacitys`.",
+      "verified_at": "2026-07-25"
+    }
+  ]
+}
