@@ -14,6 +14,15 @@
 // static binary, and every classifier here degrades gracefully: an unknown
 // language yields one big code region, so gating on lexctx is never worse than
 // today's behavior (it only ever removes matches that are provably non-code).
+//
+// This package is the single source of truth for lexical context in Nox. No
+// analyzer or matcher should reinvent "is this byte inside a comment, a string,
+// or an encoded blob" with its own hand-rolled scanner — reach for Classify /
+// KindAt / InCode / SuppressNonCode / InDataBlob (whole-file, offset-based) or
+// HashCommentStart (a single line of a #-comment config format) instead. Four
+// separate rule false-positive/false-negative bugs were all the same shape — a
+// pattern trusted in a lexical context where it cannot mean what the rule
+// assumed — and unifying that judgement here retires the whole class.
 package lexctx
 
 import (
@@ -50,6 +59,8 @@ const (
 	LangElixir     // Elixir — # comments (no block comments), "…" (#{…} interp), '…' charlist, """…"""/'''…''' heredocs, ~s()/~r()/~w() sigils, ?c char code
 	LangClojure    // Clojure — ; comments, "…" (Java escapes), #"…" regex, \c char literals; s-expression Lisp
 	LangGroovy     // Groovy — //, /*…*/ (non-nesting), "…" ($var/${…} GString), '…' (plain), """…"""/'''…''' (multiline), /…/ slashy (regex), $/…/$ dollar-slashy
+	LangYAML       // YAML / GitHub Actions workflows — # line comments, '…' / "…" quoted scalars
+	LangDockerfile // Dockerfile / Containerfile — # line comments, '…' / "…" quoted arguments
 )
 
 // String returns a stable, lowercase label for the language. Used in metadata
@@ -98,6 +109,10 @@ func (l Lang) String() string {
 		return "clojure"
 	case LangGroovy:
 		return "groovy"
+	case LangYAML:
+		return "yaml"
+	case LangDockerfile:
+		return "dockerfile"
 	default:
 		return "unknown"
 	}
@@ -189,6 +204,13 @@ var filenameToLang = map[string]Lang{
 // extension-only on purpose: it is deterministic, offline, and cheap, and a
 // wrong guess only costs us the FP-suppression benefit for that file (never
 // correctness) because the scanner degrades to a single code region.
+//
+// Note: LangYAML and LangDockerfile are deliberately NOT mapped here. They are
+// reachable via Classify (and the absence matcher's HashCommentStart), but the
+// secrets, taint, ai, and agentflow analyzers all gate on LangFromPath, so
+// mapping .yml/.yaml/Dockerfile would silently change their behavior on every
+// such file. That is a separate, larger decision; the comment-context
+// unification keeps LangFromPath's answers unchanged.
 func LangFromPath(path string) Lang {
 	ext := strings.ToLower(filepath.Ext(path))
 	if l, ok := extToLang[ext]; ok {

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // MatchResult describes a single match of a rule pattern within file content.
@@ -240,20 +242,19 @@ func (m *AbsenceMatcher) compile(pattern string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// stripLineComments blanks out `#` line comments so a keyword that appears only
-// in a comment cannot satisfy an absence rule's required property. A comment can
-// never fulfil a "the config must contain X" requirement, so removing comments
+// stripLineComments removes `#` line comments so a keyword that appears only in
+// a comment cannot satisfy an absence rule's required property. A comment can
+// never fulfil a "the config must contain X" requirement, so dropping comments
 // before the property check is semantically correct.
 //
-// It is deliberately conservative, because for an absence rule wrongly cutting
-// real content turns a present property into an absent one — a false positive,
-// the worse failure for a security scanner. A `#` is treated as a comment only
-// when it is preceded by whitespace (or starts the line) AND no quote has
-// appeared earlier on that line. When a quote precedes the `#`, the line is left
-// untouched: `#` inside a quoted YAML value or a JSON string, or after any
-// quoted scalar, is never stripped. The rare "trailing comment after a quoted
-// value on the same line" is left as-is (property still satisfied, same as
-// before) rather than risk cutting a quoted value.
+// The decision of where a comment begins is delegated to lexctx — the single
+// source of truth for lexical context in Nox — via lexctx.HashCommentStart, so
+// no analyzer reinvents "is this `#` a live comment or part of a quoted value".
+// That classifier is deliberately conservative in the safe direction: a `#`
+// inside a quoted YAML value, a JSON string, or a URL fragment is never treated
+// as a comment. This matters because for an absence rule wrongly cutting real
+// content turns a present property into an absent one — a false positive, the
+// worse failure for a security scanner.
 //
 // The result is only used for the boolean property check; finding locations
 // come from the anchor match against the original content, so the stripped copy
@@ -269,7 +270,7 @@ func stripLineComments(content []byte) []byte {
 			line = content[lineStart : lineStart+nl]
 		}
 
-		if cut := commentCut(line); cut >= 0 {
+		if cut := lexctx.HashCommentStart(line); cut >= 0 {
 			line = bytes.TrimRight(line[:cut], " \t")
 		}
 		out = append(out, line...)
@@ -281,27 +282,6 @@ func stripLineComments(content []byte) []byte {
 		lineStart += nl + 1
 	}
 	return out
-}
-
-// commentCut returns the index at which a `#` line comment begins, or -1 if the
-// line has none. A `#` opens a comment only when it starts the line (after
-// optional whitespace) or is preceded by whitespace, and no quote has appeared
-// earlier on the line — so a `#` inside a quoted value, or after any quoted
-// scalar, is never treated as a comment.
-func commentCut(line []byte) int {
-	sawQuote := false
-	prevSpace := true
-	for i := range len(line) {
-		c := line[i]
-		if c == '"' || c == '\'' {
-			sawQuote = true
-		}
-		if c == '#' && prevSpace && !sawQuote {
-			return i
-		}
-		prevSpace = c == ' ' || c == '\t'
-	}
-	return -1
 }
 
 // Match reports each AbsenceAnchor occurrence whose span lacks AbsenceProperty
