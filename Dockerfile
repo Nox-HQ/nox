@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o nox ./cli
 
 # Runtime stage — distroless for minimal attack surface
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35
 
 LABEL org.opencontainers.image.title="nox" \
       org.opencontainers.image.description="Language-agnostic security scanner with first-class AI application security" \
