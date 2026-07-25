@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-25
+
+### Changed
+
+- **Reachability is a regular plugin; nox no longer bundles anything.** The
+  release archive contained one plugin, registered automatically on first run.
+  That was never a coherent shape: the plugin system exists for optional,
+  independently-versioned extension, so a plugin present in every release is
+  neither optional nor built in, and it paid the costs of both — a process
+  boundary and a sandbox policy for code as trusted as nox itself, plus release
+  coupling and a separate "bundled" trust level with failure modes of its own.
+
+  Two of those were live. The record named the binary inside the install
+  prefix, which the package manager deletes on upgrade, so it dangled — the
+  defect 1.16.3 repaired, though the record still sat at the mercy of the next
+  upgrade. And the release pre-hook built the plugin with no `GOOS`/`GOARCH`,
+  compiling once for the linux/amd64 release runner while the archive step
+  copied that single binary into every platform's archive: on a current
+  darwin/arm64 install the shipped plugin was an ELF x86-64 executable sitting
+  beside a Mach-O arm64 nox, and running it exited 126. For as long as bundling
+  existed, the plugin could not execute at all on four of six platform
+  archives — which is why the stale path went unnoticed, since the fallback was
+  doing the work regardless.
+
+  Reachability now installs like every other plugin, from the registry it is
+  already published to and signed in: `nox plugin install nox/reachability`, or
+  by declaring it under `plugins.required` in `.nox.yaml`, which the scan
+  auto-installs.
+
+  **This removes reachability from a fresh offline install.** An existing
+  install has its bundled record retired on first run with a notice naming the
+  install command, rather than left claiming a plugin nox no longer ships. On
+  Linux the bundled binary did work, so for those installs this is a real
+  change in behaviour and is reported rather than silent; a plugin the operator
+  installed themselves is never touched.
+
+### Added
+
+- **Dependabot configuration.** `dependabot-auto-merge.yml` had been present
+  without a `dependabot.yml`, so it sat there with nothing to merge and no
+  update was ever proposed against this repository. Every action here is pinned
+  to a commit SHA — nox ships `IAC-013` to flag mutable tags — and a SHA pin is
+  frozen by definition, so the pins aged silently: this repository was on
+  `actions/setup-go` v6.4.0 while the plugin repositories had moved to v7.0.0.
+  Covers the root Go module, GitHub Actions, the VS Code extension's npm tree,
+  and the Dockerfile base image.
+
 ## [1.16.3] - 2026-07-25
 
 ### Fixed

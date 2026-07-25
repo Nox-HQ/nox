@@ -3,19 +3,32 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/nox-hq/nox/registry"
 )
 
-// bundledPlugins is the set of plugin binary names that ship in the nox
-// archive next to the main binary. On first run after install, the
-// bootstrap registers them in state so users get the functionality
-// without an explicit `nox plugin install`.
-var bundledPlugins = []string{
-	"nox-plugin-reachability",
+// retiredBundledPlugins are the plugins nox used to ship inside its own
+// release archive and register automatically on first run.
+//
+// Bundling is gone. It was never a coherent shape: the plugin system exists
+// for optional, independently-versioned extension, so a plugin that ships in
+// every release paid for both models at once — a process boundary and a
+// sandbox policy for code as trusted as nox itself, plus release coupling and
+// a bespoke "bundled" trust level with its own failure modes. Two of those
+// modes were live in this tree: a record pointing into the package manager's
+// install prefix went stale on every upgrade, and the pre-hook that built the
+// plugin compiled it once for the release runner, so the macOS and Windows
+// archives shipped a Linux x86-64 binary that could not execute at all.
+//
+// Reachability is now installed like every other plugin:
+//
+//	nox plugin install nox/reachability
+//
+// or by declaring it under plugins.required in .nox.yaml, which the scan
+// auto-installs.
+var retiredBundledPlugins = []string{
+	"reachability",
 }
 
 // defaultRegistrySource is the official nox plugin registry. Auto-added
@@ -58,30 +71,21 @@ func migrateLegacyRegistrySource(st *State) bool {
 	return false
 }
 
-// bootstrapBundledPlugins registers any plugin binaries that ship in the
-// same directory as the running nox binary, plus the official plugin
-// registry. Called once at CLI startup; idempotent (existing
-// registrations are left alone). Errors are logged-only — bootstrap
-// never blocks the CLI from running.
+// bootstrapState wires up the official plugin registry and retires the
+// records left by the removed bundled-plugin mechanism. Called once at CLI
+// startup; idempotent. Errors are logged-only — bootstrap never blocks the
+// CLI from running.
 //
-// Operator opt-outs:
+// It no longer looks for plugin binaries beside the nox executable: nox does
+// not ship any. See retiredBundledPlugins.
 //
-//	NOX_NO_BUNDLED_PLUGINS=1  — skip bundled-plugin registration
+// Operator opt-out:
+//
 //	NOX_NO_DEFAULT_REGISTRY=1 — skip default-registry auto-add
 //
-// First-run registrations print a one-line notice on stderr so the
-// operator sees what got auto-wired and how to disable it.
-func bootstrapBundledPlugins() {
-	noxBin, err := os.Executable()
-	if err != nil {
-		return
-	}
-	noxBin, err = filepath.EvalSymlinks(noxBin)
-	if err != nil {
-		return
-	}
-	binDir := filepath.Dir(noxBin)
-
+// Changes print a one-line notice on stderr so the operator sees what got
+// auto-wired, or what was removed and how to get it back.
+func bootstrapState() {
 	statePath := DefaultStatePath()
 	st, err := LoadState(statePath)
 	if err != nil {
@@ -113,11 +117,9 @@ func bootstrapBundledPlugins() {
 		}
 	}
 
-	if os.Getenv("NOX_NO_BUNDLED_PLUGINS") == "" {
-		if bundledNotices := syncBundledPlugins(st, binDir); len(bundledNotices) > 0 {
-			notices = append(notices, bundledNotices...)
-			changed = true
-		}
+	if retired := retireBundledPlugins(st); len(retired) > 0 {
+		notices = append(notices, retired...)
+		changed = true
 	}
 
 	if changed {
@@ -128,58 +130,33 @@ func bootstrapBundledPlugins() {
 	}
 }
 
-// syncBundledPlugins registers the plugins shipped beside the nox binary
-// and keeps existing records pointing at them. It returns one notice per
-// change; an empty slice means state is already correct.
+// retireBundledPlugins removes the records the old bundling bootstrap wrote,
+// returning one notice per removal.
 //
-// Re-pointing is the part that is easy to leave out and expensive to
-// omit. The path recorded at registration names the install prefix of
-// that release — a Homebrew Cellar directory, say — and upgrading
-// deletes it. A record written once and never revisited therefore
-// dangles for the life of the install: `doctor` reports "binary missing"
-// while `scan` says nothing at all and silently falls back to whatever
-// else provides the plugin. That is how a repository ends up analysed by
-// a plugin build several versions behind the one the operator installed,
-// with no output anywhere saying so.
+// Leaving them is not an option. The record names a binary inside the install
+// prefix, and nox no longer ships that binary, so the path is wrong as soon as
+// the package manager cleans up — state would go on claiming an installed
+// plugin that is not there, which is precisely the shape that made the
+// original defect invisible: `doctor` reports "binary missing" while `scan`
+// says nothing at all and quietly runs without the plugin.
 //
-// Only records this function created (TrustLevel "bundled") are touched,
-// so a plugin the operator installed deliberately is never overwritten
-// by the shipped copy.
-func syncBundledPlugins(st *State, binDir string) []string {
+// The notice is deliberately actionable. On Linux the bundled binary did work,
+// so for those installs this is a real change in behaviour and has to be
+// visible rather than a silent loss of analysis.
+//
+// Only records the old bootstrap created (TrustLevel "bundled") are touched; a
+// plugin the operator installed themselves is not ours to retire.
+func retireBundledPlugins(st *State) []string {
 	var notices []string
-	for _, name := range bundledPlugins {
-		path := filepath.Join(binDir, name)
-		info, err := os.Stat(path)
-		usable := err == nil && info.Mode().IsRegular()
-
-		if existing := st.FindPlugin(canonicalName(name)); existing != nil {
-			if existing.TrustLevel == "bundled" && usable && existing.BinaryPath != path {
-				existing.BinaryPath = path
-				existing.RecordBinaryDigest()
-				existing.UpdatedAt = time.Now().UTC()
-				notices = append(notices, fmt.Sprintf(
-					"re-pointed bundled plugin %s -> %s (previous location is gone)",
-					canonicalName(name), path))
-			}
+	for _, name := range retiredBundledPlugins {
+		existing := st.FindPlugin(name)
+		if existing == nil || existing.TrustLevel != "bundled" {
 			continue
 		}
-		if !usable {
-			continue
-		}
-		bundledIP := &InstalledPlugin{
-			Name:        canonicalName(name),
-			Version:     "bundled",
-			BinaryPath:  path,
-			TrustLevel:  "bundled",
-			RiskClass:   "passive",
-			InstalledAt: time.Now().UTC(),
-			UpdatedAt:   time.Now().UTC(),
-		}
-		bundledIP.RecordBinaryDigest()
-		st.AddPlugin(bundledIP)
+		st.RemovePlugin(name)
 		notices = append(notices, fmt.Sprintf(
-			"registered bundled plugin %s -> %s (disable: export NOX_NO_BUNDLED_PLUGINS=1)",
-			canonicalName(name), path))
+			"%s is no longer bundled with nox; install it with `nox plugin install nox/%s` "+
+				"or add it to plugins.required in .nox.yaml", name, name))
 	}
 	return notices
 }
