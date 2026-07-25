@@ -1,0 +1,16 @@
+name: PR Title Check
+on: pull_request_target
+permissions: write-all
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Echo PR title
+        run: echo "Reviewing ${{ github.event.pull_request.title }}"
+      - name: Comment
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          echo "$BODY" > body.txt

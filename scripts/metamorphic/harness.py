@@ -581,14 +581,20 @@ def main():
         c["repro_dir"] = os.path.relpath(write_repro(results_dir, c, i),
                                          results_dir)
 
+    # The JSON report is a committed/uploaded artifact people diff, so it is kept
+    # deterministic: no wall-clock (elapsed is printed to stdout only) and no
+    # absolute paths (binary is shown relative to the repo when possible).
+    try:
+        binary_display = os.path.relpath(nox.binary, REPO_ROOT)
+    except ValueError:
+        binary_display = os.path.basename(nox.binary)
     report = {
-        "nox_binary": nox.binary,
+        "nox_binary": binary_display,
         "seed_roots": [os.path.relpath(r, REPO_ROOT) for r in seed_roots
                        if os.path.isdir(r)],
         "seed_file_count": len(seeds),
         "mutations_applied": stats["mutations_applied"],
         "total_nox_scans": nox.scans,
-        "elapsed_seconds": round(elapsed, 1),
         "candidate_violations": stats["candidates"],
         "verified_violations": len(survivors),
         "unique_verified_violations": len(unique),
@@ -606,7 +612,7 @@ def main():
     print(f"seed files:            {report['seed_file_count']}")
     print(f"mutations applied:     {report['mutations_applied']}")
     print(f"total nox scans:       {report['total_nox_scans']}")
-    print(f"elapsed:               {report['elapsed_seconds']}s")
+    print(f"elapsed:               {round(elapsed, 1)}s")
     print(f"candidate violations:  {report['candidate_violations']}")
     print(f"verified violations:   {report['verified_violations']}")
     print(f"unique verified:       {report['unique_verified_violations']}")

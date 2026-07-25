@@ -1,0 +1,15 @@
+{
+  "schema": "nox-metamorphic-known-issues/v1",
+  "description": "Verified metamorphic violations that are pre-existing, separately-tracked nox defects. The corpus deliberately keeps the constructs that trip them so the oracle keeps watching (it will catch a NEW rule with the same shape, or a regression), but these specific (rule, seed, mutation) combinations do not fail the weekly sweep. Each entry must scope itself with non-empty ruleids AND seeds so a baseline can never blanket-suppress a class of future bugs. Remove an entry once the underlying rule is fixed; the sweep will then go green on its own and a re-introduction will fail.",
+  "known_issues": [
+    {
+      "id": "IAC-DOCKERFILE-INTERLEAVED-BLANK-LINESHIFT",
+      "ruleids": ["IAC-001", "IAC-003", "IAC-024"],
+      "seeds": ["testdata/metamorphic-corpus/docker/Dockerfile.root-installer"],
+      "mutation_classes": ["blank_line_before_each", "blank_line_after_each"],
+      "directions": ["appeared", "disappeared"],
+      "found_by": "scripts/metamorphic/sweep.py (metamorphic corpus oracle)",
+      "note": "Dockerfile IAC rules that anchor to an explicit instruction (IAC-001 `USER root`, IAC-003 `ADD`, IAC-024 `sudo`) mis-locate and re-fingerprint under an INTERLEAVED blank line. A pure leading shift (blank lines at the top) is handled correctly — the finding's line tracks and the fingerprint is stable — but a blank line inserted *before* the flagged instruction leaves nox reporting the stale (pre-shift) line number, which now points at the blank line, and perturbs the v2 fingerprint. Blank lines between Dockerfile instructions are semantics-preserving, so this is a false-negative/false-positive pair under a no-op edit. Confirmed with a minimal one-blank-line repro on a canonical Dockerfile (FROM/RUN/ADD/RUN/COPY/USER root/ENTRYPOINT). Root cause is in nox's Dockerfile IAC location/fingerprint mapping (detection logic), which is out of scope for the oracle workstream. Re-verify at any time with: python3 scripts/metamorphic/sweep.py --bin ./nox --no-known-issues"
+    }
+  ]
+}

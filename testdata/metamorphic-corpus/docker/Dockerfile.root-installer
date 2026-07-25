@@ -1,0 +1,7 @@
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y curl sudo ca-certificates
+ADD https://example.com/install.sh /tmp/install.sh
+RUN chmod +x /tmp/install.sh && /tmp/install.sh
+COPY entrypoint.sh /entrypoint.sh
+USER root
+ENTRYPOINT ["/entrypoint.sh"]

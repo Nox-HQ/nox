@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+# Local sweep / harness output (reports + repros). CI uploads these as
+# artifacts; they are never committed.
+.sweep-out/
+.harness-out/
+metamorphic-out/

@@ -14,6 +14,11 @@ scan:
     - "core/analyzers/deps/testdata/lockfiles/"
     - "testdata/precision-corpus/"
     - "testdata/precision-suite/"
+    # Intentionally finding-bearing inputs for the metamorphic corpus oracle
+    # (scripts/metamorphic/sweep.py). Same rationale as the precision corpora:
+    # the sweep scans them explicitly in isolated temp dirs; the self-scan must
+    # not flag them. See scripts/metamorphic/README.md.
+    - "testdata/metamorphic-corpus/"
     - "testdata/precision-suite-php/"
     - "testdata/precision-suite-java/"
     - "testdata/precision-suite-ruby/"
