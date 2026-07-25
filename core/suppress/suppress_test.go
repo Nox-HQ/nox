@@ -341,3 +341,82 @@ func TestScanForSuppressions_FenceOnlyAppliesToMarkdown(t *testing.T) {
 		t.Error("backticks in a .go file must not mark a directive as a doc example")
 	}
 }
+
+// `nox:ignore` appearing in PROSE or in a STRING LITERAL is documentation
+// about the syntax, not a waiver. Both forms were parsed as real directives,
+// and because a waiver that matches nothing is reported, nox produced false
+// "waives X but matched no finding" degradations against its own source —
+// the instrumentation accusing correct code of carrying dead waivers.
+//
+// The two real instances, both from nox's own tree:
+//
+//   - a doc comment that wrapped so the phrase "…holds no nox:ignore comments,
+//     so nothing was missed" began a line, parsed as waiving rule "comments";
+//   - pre-commit help text, `echo "nox: use '// nox:ignore RULE-ID -- reason'"`,
+//     parsed as waiving rule "RULE-ID".
+//
+// A directive's grammar is `nox:ignore <IDs> [-- reason]`: after the rule IDs
+// the line must end, close the comment, or introduce a reason with `--`.
+// Free prose after the IDs means the text is describing a directive, not
+// issuing one. And a directive inside a string literal is a program printing
+// the syntax, never a waiver on the string's own line.
+func TestScanForSuppressions_ProseAndStringsAreNotDirectives(t *testing.T) {
+	cases := []struct {
+		name, path, line string
+		want             bool // true = a real directive
+	}{
+		{
+			name: "prose: wrapped doc comment mentioning the directive",
+			path: "scan.go",
+			line: "\t\t// nox:ignore comments, so nothing was missed and nothing is reported.",
+			want: false,
+		},
+		{
+			name: "string literal: help text teaching the syntax",
+			path: "protect_cmd.go",
+			line: `    echo "nox: use '// nox:ignore RULE-ID -- reason' to suppress false positives"`,
+			want: false,
+		},
+		// Everything below is a real waiver and must keep working.
+		{
+			name: "real: rule id with reason",
+			path: "scan.go",
+			line: "\tfoo() // nox:ignore SEC-163 -- em dash in string not hex",
+			want: true,
+		},
+		{
+			name: "real: bare rule id, end of line",
+			path: "scan.go",
+			line: "\t// nox:ignore IAC-123",
+			want: true,
+		},
+		{
+			name: "real: comma-separated list",
+			path: "server.go",
+			line: "\t// nox:ignore SEC-659,SEC-506,SEC-574,SEC-664 -- reviewed",
+			want: true,
+		},
+		{
+			name: "real: space-separated list with reason",
+			path: "corpus.go",
+			line: "\tX = \"y\" // nox:ignore SEC-161 SEC-162 SEC-163 -- test canary, not a live secret",
+			want: true,
+		},
+		{
+			name: "real: yaml hash comment",
+			path: "ci.yml",
+			line: "  contents: write # nox:ignore IAC-314 -- needed for releases",
+			want: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ScanForSuppressions([]byte(tc.line+"\n"), tc.path)
+			isDirective := len(got) > 0 && !got[0].DocExample
+			if isDirective != tc.want {
+				t.Errorf("directive=%v, want %v\n  line: %s\n  parsed: %+v", isDirective, tc.want, tc.line, got)
+			}
+		})
+	}
+}
