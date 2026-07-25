@@ -36,6 +36,14 @@ const (
 	// suppression comments, so its findings are reported unsuppressed.
 	Suppression Kind = "suppression"
 
+	// SlopFeed means a predictive slopsquat blocklist feed was configured but
+	// could not be loaded or verified (missing, malformed, digest mismatch, or a
+	// required signature that did not verify). The scan continues with the
+	// predictive SLOP-002 dimension disabled — failing closed rather than
+	// trusting an unverified feed — so its absence of predictive findings must
+	// not be read as "no high-risk slopsquat targets present".
+	SlopFeed Kind = "slop_feed"
+
 	// MCP means a file that structurally looks like an MCP client config
 	// (named mcp.json or containing an mcpServers object) could not be parsed,
 	// or an MCP pin store existed but could not be read. Either way an MCP

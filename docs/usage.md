@@ -454,6 +454,25 @@ The VS Code extension in [`editors/vscode`](../editors/vscode) is a thin client
 over it (`npm install && npm run compile`, then F5 in the Extension Development
 Host). A JetBrains plugin is the same shape against the same server.
 
+### mcp
+
+Baseline an MCP server's tool manifest and detect drift (a rug-pull: a server
+that shows a benign manifest at review time, then serves a changed or malicious
+one later). Drift is emitted as findings, flowing into `findings.json` /
+`results.sarif` and gating CI like any scan.
+
+```bash
+nox mcp baseline -- nox serve      # capture .nox/mcp-baseline.json (commit it)
+nox mcp drift    -- nox serve      # re-capture and report drift (exit 1 on drift)
+nox mcp show                       # print the stored baseline
+```
+
+The baseline is local, sorted JSON — diff it, commit it, review drift in PRs.
+**Security:** these commands launch the server as a subprocess; never run an
+untrusted MCP server un-sandboxed. See
+[mcp-drift-baseline.md](./mcp-drift-baseline.md) for the full model, rule/severity
+mapping, and sandbox guidance.
+
 ### fix
 
 Generate remediations from a prior scan's `findings.json`.
@@ -719,6 +738,31 @@ scan:
 ```
 
 This is useful for reducing noise from dependencies in `node_modules/` or test fixtures.
+
+### Predictive Slopsquat Feed (SLOP-002)
+
+The SLOP analyzer can consume a versioned, offline **predictive slopsquat
+blocklist** — a signed, content-addressed list of package names an LLM is likely
+to hallucinate that were verified *unregistered (squattable)* when the feed was
+generated. When an imported name matches a high-risk entry, `SLOP-002` fires with
+a severity derived from the entry's risk tier.
+
+It is **opt-in and off by default**: with no feed configured the analyzer's
+`SLOP-001` behavior is unchanged. Enabling a feed is purely additive.
+
+```yaml
+scan:
+  slop:
+    feed: bundled                 # ship-in-binary feed; or a path to a feed JSON
+    require_signature: false      # reject unsigned/bad-signature feeds
+    signature_key_path: keys/slopsquat.pub.pem   # PEM Ed25519 public key
+```
+
+No network is touched at scan time — only the out-of-band generator
+(`cmd/slopfeed`) queries registries. A malformed, tampered, or digest-mismatched
+feed fails closed (predictive dimension off, a visible `slop_feed` degradation
+recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
+trust model, regeneration, and the responsible-disclosure note.
 
 ### Conditional Severity
 

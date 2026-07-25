@@ -127,6 +127,7 @@ type ScanSettings struct {
 	AnalyzerRules        []AnalyzerRuleConfig    `yaml:"analyzer_rules"`
 	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
 	OSV                  OSVConfig               `yaml:"osv"`
+	Slop                 SlopConfig              `yaml:"slop"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
 	SAST                 SASTConfig              `yaml:"sast"`
@@ -364,6 +365,31 @@ type EntropyConfig struct {
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
 type OSVConfig struct {
 	Disabled bool `yaml:"disabled"`
+}
+
+// SlopConfig enables the SLOP analyzer's predictive slopsquat dimension
+// (SLOP-002). It is off by default: with no Feed configured the analyzer keeps
+// exactly its reactive SLOP-001 behavior and adds no findings. The feed is a
+// versioned, content-addressed, offline data file — no network is touched at
+// scan time (only the out-of-band generator queries registries). See
+// docs/slopsquat-feed.md.
+type SlopConfig struct {
+	// Feed selects the predictive blocklist. Empty (default) disables the
+	// predictive dimension entirely. The special value "bundled" uses the feed
+	// shipped in the nox binary; any other value is a path to a feed JSON file
+	// (relative to the scan root or absolute).
+	Feed string `yaml:"feed"`
+	// RequireSignature, when true, rejects a feed that is unsigned or whose
+	// signature does not verify — the predictive dimension then stays off rather
+	// than trusting an unverified feed. Digest integrity is always enforced
+	// regardless of this setting. Verifying a signature requires a configured
+	// public key (SignatureKeyPath); without one, a required signature fails
+	// closed.
+	RequireSignature bool `yaml:"require_signature"`
+	// SignatureKeyPath points at a PEM-encoded Ed25519 public key used to verify
+	// the feed signature. Optional; when set, a present signature is verified
+	// against it (and a bad signature is always a hard failure).
+	SignatureKeyPath string `yaml:"signature_key_path"`
 }
 
 // RulesConfig allows disabling rules or overriding their severity.
