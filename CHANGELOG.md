@@ -7,18 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [1.15.0] - 2026-07-25
 
-- **A blank line before a Dockerfile instruction no longer mis-locates the
-  finding or changes its fingerprint.** 16 regex-pattern IaC rules anchored with
-  `(?im)^\s*KEYWORD`, and `\s` matches newlines — so under multiline matching a
-  blank line before the flagged instruction (e.g. `USER root`, `ADD`, a `sudo`
-  RUN) let `^\s*` begin the match on the *preceding blank line*. The finding was
-  reported on the blank line, and its matched content gained a leading newline
-  that perturbed the v2 fingerprint — a false-positive/false-negative pair under
-  a semantics-preserving edit that also broke baseline matching. Anchored with
-  `^[ \t]*`, which cannot cross a newline (the same correction the absence
-  anchors got). Found by nox's own metamorphic corpus oracle.
+### Added
+
+- **Predictive slopsquatting (`SLOP-002`), via a signed, versioned feed.** Where
+  `SLOP-001` reactively flags an import of a package that exists nowhere,
+  `SLOP-002` flags an import whose *name* matches a curated list of high-risk
+  targets an LLM is likely to hallucinate and that are currently unregistered —
+  a name an attacker could claim to catch hallucinated installs. The feed is a
+  versioned JSON document bound by a SHA-256 content digest with an optional
+  Ed25519 signature (the same trust model as the plugin registry), parsed
+  fail-closed: an unknown schema, a digest mismatch, or a required-but-invalid
+  signature disables the dimension and records a visible degradation rather than
+  crashing or trusting bad data. **Off by default** — with no feed configured,
+  behaviour is byte-identical to before. Enable via `.nox.yaml`
+  `scan.slop: {feed: bundled}`; a 62-name PyPI/npm feed ships bundled, and
+  `cmd/slopfeed` regenerates it (read-only registry queries, never accusing a
+  registered package). Learning stays central and signed; enforcement stays
+  local, offline and deterministic.
+
+- **`nox mcp baseline` / `nox mcp drift` — rug-pull detection for MCP servers.**
+  `nox mcp baseline -- <server-cmd>` captures a reviewable baseline of an MCP
+  server's tool manifest to `.nox/mcp-baseline.json` (sorted, diffable, commit
+  it); `nox mcp drift` re-captures and reports drift — an added/removed tool, a
+  changed description, a widened schema — as findings (`MCP-DRIFT-001..006`,
+  a new code-exec tool critical, a poisoned description high) that flow through
+  the normal findings.json / SARIF path, exiting non-zero for CI. This is the
+  safe form of on-device adaptation: the baseline is data you diff and review,
+  not a mutating rule. Both commands launch a user-supplied server subprocess
+  and print a sandbox reminder — untrusted servers must be isolated; nox does
+  not sandbox for you.
 
 ### Security
 
@@ -32,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns to grade A.
 
 ### Fixed
+
+- **A blank line before a Dockerfile instruction no longer mis-locates the
+  finding or changes its fingerprint.** 16 regex-pattern IaC rules anchored with
+  `(?im)^\s*KEYWORD`, and `\s` matches newlines — so under multiline matching a
+  blank line before the flagged instruction (e.g. `USER root`, `ADD`, a `sudo`
+  RUN) let `^\s*` begin the match on the *preceding blank line*. The finding was
+  reported on the blank line, and its matched content gained a leading newline
+  that perturbed the v2 fingerprint — a false-positive/false-negative pair under
+  a semantics-preserving edit that also broke baseline matching. Anchored with
+  `^[ \t]*`, which cannot cross a newline (the same correction the absence
+  anchors got). Found by nox's own metamorphic corpus oracle.
 
 - **AI prompt-injection findings are now role-aware — untrusted input reaching
   the *user* role behind a static system prompt no longer fires.** Reaching an
