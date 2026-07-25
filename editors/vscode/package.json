@@ -6,7 +6,7 @@
   "publisher": "nox-hq",
   "license": "Apache-2.0",
   "repository": { "type": "git", "url": "https://github.com/nox-hq/nox" },
-  "engines": { "vscode": "^1.75.0" },
+  "engines": { "vscode": "^1.91.0" },
   "categories": ["Linters", "Programming Languages"],
   "activationEvents": [
     "onLanguage:go",
@@ -52,7 +52,7 @@
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^10.1.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.8"
@@ -60,6 +60,6 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.75.0",
-    "typescript": "^5.4.0"
+    "typescript": "^7.0.2"
   }
 }
