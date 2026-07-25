@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -37,7 +38,77 @@ func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
 // ScanFile delegates to the underlying rules engine to scan the given file
 // content and returns any IaC-related findings.
 func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, error) {
-	return a.engine.ScanFile(path, content)
+	results, err := a.engine.ScanFile(path, content)
+	if err != nil {
+		return nil, err
+	}
+	return dropArtifactsWhenAlways(results, content), nil
+}
+
+// dropArtifactsWhenAlways removes IAC-348 findings whose `when: always` sits
+// inside an `artifacts:` block.
+//
+// The rule matches the two words with a bare pattern, but everything it says
+// is about JOB EXECUTION: "CI job runs regardless of previous failures", and a
+// remediation warning that running deployment jobs after test failures can push
+// broken code to production. Under `artifacts:` the same words mean upload the
+// artifacts even when the job failed — which for a scanner is the entire point,
+// since the run you most want the SARIF from is the one that failed the gate.
+// nox's own GitLab example was flagged for doing the right thing.
+//
+// Dropped rather than downgraded, for the same reason as the Ansible rules on
+// GitHub Actions files: a lower-severity finding still puts a rule in front of
+// an operator that could not apply here.
+//
+// Block membership is decided by indentation — the nearest enclosing key at a
+// shallower indent — which is enough for the mapping shapes CI files use and
+// needs no YAML parser on this path.
+func dropArtifactsWhenAlways(in []findings.Finding, content []byte) []findings.Finding {
+	if len(in) == 0 {
+		return in
+	}
+	var lines []string
+	kept := in[:0]
+	for _, f := range in {
+		if f.RuleID != "IAC-348" {
+			kept = append(kept, f)
+			continue
+		}
+		if lines == nil {
+			lines = strings.Split(string(content), "\n")
+		}
+		if enclosingKey(lines, f.Location.StartLine) == "artifacts" {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
+}
+
+// enclosingKey returns the mapping key that encloses a 1-based line, or "" if
+// the line is top-level or out of range.
+func enclosingKey(lines []string, line int) string {
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	indent := func(s string) int { return len(s) - len(strings.TrimLeft(s, " \t")) }
+	target := indent(lines[line-1])
+	for i := line - 2; i >= 0; i-- {
+		l := lines[i]
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if indent(l) >= target {
+			continue
+		}
+		key, _, found := strings.Cut(trimmed, ":")
+		if !found {
+			return ""
+		}
+		return strings.TrimSpace(strings.TrimPrefix(key, "- "))
+	}
+	return ""
 }
 
 // ScanArtifacts reads each artifact file from disk, scans it for IaC

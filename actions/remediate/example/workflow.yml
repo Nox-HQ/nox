@@ -3,7 +3,7 @@ name: Nox Remediation
 on:
   schedule:
     - cron: '0 3 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch: # nox:ignore IAC-308 -- the example teaches on-demand remediation alongside the schedule
 
 permissions:
   contents: write # nox:ignore IAC-314 -- the remediation bot opens PRs; this is the permission the example teaches
