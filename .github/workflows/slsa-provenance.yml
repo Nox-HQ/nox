@@ -84,7 +84,21 @@ jobs:
       actions: read       # required by the reusable workflow
       id-token: write # nox:ignore IAC-306 -- OIDC is the keyless-signing mechanism for the attestation (OIDC token for sigstore keyless signing)
       contents: write # nox:ignore IAC-314 -- uploads the provenance attestation to the release (upload provenance to the release)
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0-rc.3
+    # MUST be referenced by tag, not by SHA. slsa-verifier resolves the
+    # trusted builder's identity from the ref, so a digest pin makes the
+    # generator unverifiable and the run fails in `upload-assets` with
+    # `final` exiting 27 — with every earlier job still reporting success,
+    # which is why this went unnoticed. Upstream states it explicitly:
+    # "the GitHub Actions provided in this repository as builders and
+    # generators MUST be referenced by tag ... contrary to the GitHub best
+    # practice for third-party actions ... but intentional due to limits in
+    # GitHub Actions." It must also be the full `@vX.Y.Z`; `@vX.Y` or `@vX`
+    # fail. See slsa-framework/slsa-verifier#12.
+    #
+    # No waiver is needed: IAC-013 flags MUTABLE tags (@v2, @v2.1), and a full
+    # @vX.Y.Z is what the rule already considers acceptable — which is exactly
+    # the form upstream requires. The rule and the constraint agree here.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: ${{ needs.subjects.outputs.hashes }}
       upload-assets: true
