@@ -1,6 +1,7 @@
 package findings
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -221,6 +222,114 @@ func TestFindingSet_Deduplicate(t *testing.T) {
 
 	if len(fs.Findings()) != 2 {
 		t.Fatalf("expected 2 findings after dedup, got %d", len(fs.Findings()))
+	}
+}
+
+// sinkAnchored builds a flow finding shaped like the built-in taint model's:
+// located at the sink, with no sink_line metadata.
+func sinkAnchored(rule, path string, sinkLine, sourceLine int, sourceVar string) Finding {
+	return Finding{
+		RuleID:   rule,
+		Location: Location{FilePath: path, StartLine: sinkLine},
+		Message:  "built-in: " + sourceVar + " reaches a sink",
+		Metadata: map[string]string{
+			"source_line": strconv.Itoa(sourceLine),
+			"source_var":  sourceVar,
+		},
+	}
+}
+
+// sourceAnchored builds a flow finding shaped like the taint-analysis plugin's:
+// located at the source, with the sink line carried in metadata.
+func sourceAnchored(rule, path string, sinkLine, sourceLine int, sourceVar string) Finding {
+	return Finding{
+		RuleID:   rule,
+		Location: Location{FilePath: path, StartLine: sourceLine},
+		Message:  "plugin: " + sourceVar + " flows to a sink",
+		Metadata: map[string]string{
+			"sink_line":   strconv.Itoa(sinkLine),
+			"source_line": strconv.Itoa(sourceLine),
+			"source_var":  sourceVar,
+		},
+	}
+}
+
+func TestFindingSet_DeduplicateFlows_CollapsesToSinkAnchor(t *testing.T) {
+	t.Parallel()
+
+	for _, order := range []string{"builtin-first", "plugin-first"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+			builtin := sinkAnchored("TAINT-001", "sqli.go", 12, 11, "q")
+			plugin := sourceAnchored("TAINT-001", "./sqli.go", 12, 11, "q")
+
+			fs := NewFindingSet()
+			if order == "builtin-first" {
+				fs.Add(builtin)
+				fs.Add(plugin)
+			} else {
+				fs.Add(plugin)
+				fs.Add(builtin)
+			}
+			fs.DeduplicateFlows()
+
+			got := fs.Findings()
+			if len(got) != 1 {
+				t.Fatalf("one flow reported from both ends must collapse to 1 finding, got %d", len(got))
+			}
+			// The sink anchor wins regardless of which analyzer reported first:
+			// the result must not depend on analyzer ordering.
+			if got[0].Location.StartLine != 12 {
+				t.Fatalf("kept the finding at line %d, want the sink line 12", got[0].Location.StartLine)
+			}
+		})
+	}
+}
+
+func TestFindingSet_DeduplicateFlows_KeepsDistinctFlows(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// Same rule and file, but a different variable, a different source line and
+	// a different sink line: three genuinely distinct vulnerabilities.
+	fs.Add(sinkAnchored("TAINT-001", "app.go", 12, 11, "q"))
+	fs.Add(sourceAnchored("TAINT-001", "app.go", 12, 11, "other"))
+	fs.Add(sourceAnchored("TAINT-001", "app.go", 12, 9, "q"))
+	fs.Add(sourceAnchored("TAINT-001", "app.go", 40, 11, "q"))
+
+	fs.DeduplicateFlows()
+
+	if len(fs.Findings()) != 4 {
+		t.Fatalf("distinct flows must all survive, got %d of 4", len(fs.Findings()))
+	}
+}
+
+func TestFindingSet_DeduplicateFlows_IgnoresNonFlowFindings(t *testing.T) {
+	t.Parallel()
+
+	fs := NewFindingSet()
+	// No flow metadata at all: two secrets on the same line of the same file
+	// under one rule are not a flow and must never be collapsed by this pass.
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 3}, Message: "aws key"})
+	fs.Add(Finding{RuleID: "SEC-001", Location: Location{FilePath: "a.go", StartLine: 3}, Message: "gcp key"})
+	// Partial flow metadata is not enough to identify a flow either.
+	fs.Add(Finding{
+		RuleID:   "TAINT-001",
+		Location: Location{FilePath: "a.go", StartLine: 12},
+		Message:  "no source var",
+		Metadata: map[string]string{"source_line": "11"},
+	})
+	fs.Add(Finding{
+		RuleID:   "TAINT-001",
+		Location: Location{FilePath: "a.go", StartLine: 12},
+		Message:  "no source line",
+		Metadata: map[string]string{"source_var": "q"},
+	})
+
+	fs.DeduplicateFlows()
+
+	if len(fs.Findings()) != 4 {
+		t.Fatalf("findings without flow identity must be untouched, got %d of 4", len(fs.Findings()))
 	}
 }
 
