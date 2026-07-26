@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-07-26
+
+### Added
+
+- **`nox fix --outdated` now covers seven ecosystems**, up from Go alone: Go,
+  npm, PyPI, Cargo, RubyGems, Composer and NuGet.
+
+  Go resolves through `go list -m -u -json all`, which already understands
+  replace directives, retractions and the module graph. The rest query their own
+  registry directly, so *planning* needs no toolchain installed; only applying an
+  upgrade shells out to the native command.
+
+  Currency needs two things vulnerability scanning does not, which is why the
+  dependency analyzer could not simply be reused. **Directness**: packages are
+  parsed from lockfiles, which are flat and contain the whole transitive
+  closure, so upgrading one writes an explicit requirement for something the
+  project never imports. Names therefore come from the manifest (`package.json`,
+  `Cargo.toml`, `Gemfile`, `composer.json`, `*.csproj`, `requirements.txt`) and
+  resolved versions from the lockfile — a manifest range like `^4.18.0` is not a
+  version, and one with no lockfile entry is skipped rather than assigned a
+  version it does not have. **The latest version**, which only a registry can
+  answer.
+
+  Every registry invites the wrong answer in a different way, and each is pinned
+  by a test: npm publishes channels under `dist-tags` where only `latest` is
+  stable; crates.io reports `max_version` (including prereleases) beside
+  `max_stable_version`; Packagist returns newest-first but mixes in
+  `dev-<branch>` aliases and release candidates; and NuGet returns an
+  *ascending* list with prereleases interleaved, so the last element is often a
+  beta. A package with no stable release yields no suggestion at all.
+
+  A registry that cannot answer produces a `degraded:` line and never an empty
+  string — `""` is indistinguishable from "already current", so one
+  rate-limited registry would otherwise report a whole project as up to date.
+  The all-current message is suppressed whenever any check failed.
+
+  Maven and Gradle are parsed by the scanner but deliberately have no currency
+  resolver: `maven-metadata.xml` has no single "latest stable" and Gradle has no
+  canonical upgrade command, so applying would mean rewriting build files — a
+  different risk class from running `bundle update`. (#378, #381)
+
+### Fixed
+
+- Two defects that only live requests could surface, both invisible to stubbed
+  tests. npm's full packument for `typescript` and `@types/node` each exceed
+  8 MB, truncating the response and reporting every dependency as un-checkable;
+  nox now requests the abbreviated document. And crates.io answers **HTTP 403**
+  to clients that send no `User-Agent`, which Go's HTTP client does not set by
+  default — so every Cargo lookup failed in reality while passing every test.
+  Both now have regression tests. (#381)
+
 ## [1.20.0] - 2026-07-26
 
 ### Added
