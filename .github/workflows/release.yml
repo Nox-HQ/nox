@@ -54,6 +54,143 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
 
+      # Smoke-test the built binary before publishing it.
+      #
+      # WHY: twice this month a release shipped in which `nox scan` did not run
+      # AT ALL, rather than running and reporting something wrong:
+      #
+      #   - `nox plugin install nox/taint-analysis@*` began 404ing, and the
+      #     install step precedes the scan, so 15 downstream repos ran a dead
+      #     security job for a week before anyone noticed;
+      #   - `-vex` rejected a spec-current OpenVEX v0.2.0 document (#389),
+      #     failing at load time with exit 2 before scanning anything.
+      #
+      # Neither produced a wrong finding. Both produced NO findings — which is
+      # strictly worse, because an empty report is indistinguishable from a
+      # clean one at a glance, and both surfaced only on upgrade, when a user is
+      # least likely to suspect the scanner itself.
+      #
+      # Every assertion below therefore names a rule family that MUST fire on a
+      # fixture built to trigger it. Asserting merely that findings.json is
+      # non-empty would pass on `{"findings":[]}` — a binary with its entire
+      # rule engine removed would ship green. Each family is a separate code
+      # path (secrets = local regex, VULN-001 = OSV network lookup, IaC =
+      # Dockerfile parser), so one dead subsystem cannot hide behind another.
+      - name: Smoke-test the built binary
+        run: |
+          set -euo pipefail
+          go build -o /tmp/nox-smoke ./cli
+          work="$(mktemp -d)"
+          # Results and the VEX document live OUTSIDE the fixture. With
+          # `-output "$work/out"` the second scan ingests the first scan's own
+          # findings.json, which silently defeats the suppression assertion
+          # below (and is the same self-corrupting-tree bug that once had the
+          # release tarball overwriting the checkout it was scanning).
+          res="$(mktemp -d)"
+
+          # Fixture: one hardcoded credential, one dependency with a known
+          # advisory, one insecure Dockerfile.
+          cat > "$work/main.go" <<'GO'
+          package main
+
+          import "fmt"
+
+          const awsKey = "AKIAIOSFODNN7EXAMPLE"
+          const awsSecret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+          func main() { fmt.Println(awsKey, awsSecret) }
+          GO
+          printf 'module smoke\n\ngo 1.21\n\nrequire github.com/gin-gonic/gin v1.6.0\n' > "$work/go.mod"
+          cat > "$work/Dockerfile" <<'DOCKER'
+          FROM alpine:latest
+          USER root
+          RUN chmod 777 /tmp
+          DOCKER
+
+          # A plugin the scan must not DEPEND on: a registry outage should cost
+          # the taint rules, never the scan. This is the 2026-07-19 failure.
+          /tmp/nox-smoke plugin install nox/taint-analysis@0.7.0 || \
+            echo "::warning title=Plugin unavailable::continuing; the scan must not depend on it"
+
+          set +e
+          /tmp/nox-smoke scan "$work" -format json -output "$res/base"
+          code=$?
+          set -e
+          f="$res/base/findings.json"
+          if [ "$code" -gt 1 ]; then
+            echo "::error title=Smoke test failed::nox scan exited $code — it did not run to completion. Releasing this would ship a binary that cannot scan."
+            exit 1
+          fi
+          if [ ! -s "$f" ]; then
+            echo "::error title=Smoke test failed::no findings.json was written."
+            exit 1
+          fi
+
+          fail=0
+          assert_rule() {
+            n=$(jq --arg p "$1" '[.findings[]? | select(.RuleID | startswith($p))] | length' "$f")
+            if [ "$n" -eq 0 ]; then
+              echo "::error title=Smoke test failed::no $1* findings on a fixture built to trigger them — the $2 detector is not running."
+              fail=1
+            else
+              echo "  ok: $1* fired ($n findings) — $2"
+            fi
+          }
+          assert_rule SEC  "secret detection"
+          assert_rule VULN "dependency advisories (OSV)"
+          assert_rule IAC  "IaC/Dockerfile analysis"
+
+          deps=$(jq '.summary.dependencies // .dependencies // 0' "$f" 2>/dev/null || echo 0)
+          echo "  dependencies resolved: $deps"
+
+          # VEX, in the CURRENT spec version, where `vulnerability` and
+          # `products` are objects rather than strings (#389). Built from a
+          # finding the scan just produced, so it cannot rot when advisories
+          # change. Asserting that something was SUPPRESSED proves the document
+          # was parsed *and* applied — merely loading it would regress silently.
+          vuln=$(jq -r '[.findings[]? | select(.RuleID=="VULN-001") | .Metadata.vuln_id] | first // empty' "$f")
+          if [ -n "$vuln" ]; then
+            jq -n --arg v "$vuln" '{
+              "@context": "https://openvex.dev/ns/v0.2.0",
+              "@id": "https://example.com/vex/smoke",
+              "author": "smoke-test",
+              "timestamp": "2026-01-01T00:00:00Z",
+              "version": 1,
+              "statements": [{
+                "vulnerability": {"@id": $v, "name": $v},
+                "products": [{"@id": "pkg:golang/github.com/gin-gonic/gin@v1.6.0"}],
+                "status": "not_affected",
+                "justification": "vulnerable_code_not_present"
+              }]
+            }' > "$res/vex.json"
+
+            set +e
+            /tmp/nox-smoke scan "$work" -format json -output "$res/vexed" -vex "$res/vex.json"
+            vcode=$?
+            set -e
+            if [ "$vcode" -gt 1 ]; then
+              echo "::error title=Smoke test failed::scan with -vex exited $vcode — a spec-current OpenVEX v0.2.0 document was rejected (regression of #389)."
+              fail=1
+            else
+              # Suppressed findings REMAIN in findings.json, tagged with a
+              # vex_* Status -- so comparing array lengths before/after would
+              # always see zero change and quietly assert nothing.
+              sup=$(jq '[.findings[]? | select(.Status? // "" | startswith("vex_"))] | length' "$res/vexed/findings.json")
+              if [ "$sup" -eq 0 ]; then
+                echo "::error title=Smoke test failed::-vex suppressed nothing though the document targets $vuln. It loaded but was not applied."
+                fail=1
+              else
+                echo "  ok: VEX applied — $sup finding(s) suppressed as vex_not_affected"
+              fi
+            fi
+          else
+            echo "::error title=Smoke test failed::no VULN-001 finding to build a VEX document from; the VEX path went untested."
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "smoke test passed: scan ran, every detector family fired, VEX applied"
+
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: '~> v2'
