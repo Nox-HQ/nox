@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-07-26
+
 ### Changed
 
 - **Ten duplicate IaC rule IDs retired; one condition, one finding.** Fourteen
@@ -27,6 +29,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pattern so no waiver is widened. Nothing needs to be rewritten. What changes
   is the count and the ID: gates or dashboards keyed on a retired ID should move
   to the surviving one (see "Retired rule IDs" in docs/usage.md).
+
+### Fixed
+
+- **`nox scan --staged` ignored every command-line flag.** The staged scan was
+  invoked with an empty options struct, so `--offline`, `--no-osv`,
+  `--rules`, `--baseline`, `--vex` and the rest were silently dropped — while
+  `.nox.yaml` was still honoured, because the staged run copies the config into
+  its temporary worktree. Config therefore beat an explicit flag, with no error
+  and no warning. This is the `nox protect` / `install-hook` pre-commit path, so
+  a hook told to scan `--offline` could still reach the network for OSV lookups.
+  The core had already grown `RunStagedScanWithOptions`; this call site was never
+  updated to use it. (#362)
+
+- Flag-over-config precedence is now contract-tested across all thirteen settings
+  that can be set in both places, each including the case that makes this class
+  of bug possible: a flag passed **explicitly with a value equal to its default**,
+  which a naive implementation cannot distinguish from an omitted flag. (#362)
+
+### Added
+
+- **Release smoke test.** Before a release publishes, the built binary scans a
+  fixture carrying a hardcoded credential, a vulnerable dependency and an
+  insecure Dockerfile, and asserts each rule family fires and that a VEX document
+  is parsed *and applied*. Two regressions this month stopped the scan running
+  entirely rather than reporting wrongly; an empty report is indistinguishable
+  from a clean one at a glance. (#390)
+
+- **Rule behaviour diff.** Pull requests touching rules scan sha-pinned real
+  repositories with the last release and the candidate build, and report the
+  per-rule delta. Corpus precision is measured on labelled fixtures and does not
+  predict real repositories. A scan that fails to run is fatal; a rule delta is
+  reported for review rather than failing the build, since most rule changes are
+  intentional. (#390)
+
+- A build-time guard rejects any two IaC rules that fire on the same input, so a
+  new duplicate cannot be introduced. (#394)
 
 ## [1.22.1] - 2026-07-26
 
