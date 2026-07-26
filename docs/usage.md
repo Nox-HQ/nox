@@ -532,6 +532,49 @@ not a feature — there is nothing for a scanner to implement. If you want
 automatic revocation, enable GitHub secret scanning alongside nox; the two do
 not overlap on this point.
 
+#### `nox verify-secrets`: is the credential still live?
+
+What nox *can* do is ask the issuer whether a detected credential still works,
+using the leaked credential itself — which needs no privilege beyond what is
+already public.
+
+```bash
+nox scan . -format json -output out
+nox verify-secrets --input out/findings.json
+```
+
+```
+  SEC-003  config/app.js:1   LIVE   authenticates against the GitHub API (ghp_…)
+
+checked 1 credential(s); 1 still authenticate
+```
+
+That distinction is the difference between a backlog item and an incident. "This
+looks like a GitHub token" can wait; "this is a working token" cannot, because
+the credential is already public and removing the file does not invalidate it.
+Exit status is 1 when anything still authenticates, so a pipeline can act on it
+without parsing output.
+
+Two properties are deliberate and enforced by tests:
+
+- **The endpoints are compiled in.** Verification sends a live credential to a
+  third party, which is defensible only because that party is the issuer. If the
+  endpoint were configurable, this command would be a way to exfiltrate every
+  secret in a repository — point it at a host you control and they are delivered
+  to you. No flag, config key or environment variable redirects them.
+- **The secret never appears in output.** Reports show a provider prefix and an
+  ellipsis. The point is to report that a credential works, not to reproduce it
+  somewhere new.
+
+Anything other than a clear yes or no — rate limiting, an outage — reports
+`unknown`. Calling a live credential `revoked` because the issuer was briefly
+unreachable would be worse than not checking at all.
+
+Currently covers GitHub tokens (`SEC-003`, `SEC-213`, `SEC-435`, `SEC-495`,
+`SEC-496`). AWS is absent on purpose: verifying an AWS key requires SigV4
+request signing and the paired secret access key, which is a different shape of
+work rather than another entry in a table.
+
 So: a clean `fix` run means the remediable classes were handled. It is not a
 statement that the SAST findings were.
 
