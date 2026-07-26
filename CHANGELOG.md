@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Five rule-precision defects that put false high/critical findings on the
+  gate.** Each fired on ordinary code containing no credential and no
+  vulnerability, and all five land in the high/critical band the shared CI gate
+  fails on, so each one blocked a repository outright.
+
+  `SEC-147` matched the Resend prefix at the seam of an identifier —
+  `TestSessionSto`**`re_`**`LoadsLegacySnapshot…` supplies `re_` and 38
+  alphanumerics — and reported a high-severity API key on a Go test function
+  name. `SEC-003` and `SEC-213` had the same seam for `ghs_`. All three now
+  require a word boundary on the left; an issued key never continues a
+  preceding word.
+
+  `SEC-435` required its `gh[pousr]_` prefix and exactly ONE further character,
+  so any five-character run beginning `ghs_` was a GitHub token — including
+  `"ghs_fake_install_token"`, a shape GitHub does not issue. It now requires
+  the issued shape (prefix plus 36 alphanumerics), which costs no detection:
+  every well-formed token is already covered by `SEC-003`/`SEC-213`/`SEC-215`/
+  `SEC-216`/`SEC-217`.
+
+  `SEC-004` reported **critical** on an HTML `placeholder=` attribute holding
+  `-----BEGIN RSA PRIVATE KEY-----`. That is the hint shown in an empty field,
+  telling a user what to paste; the key material is theirs and arrives at
+  runtime. Matches inside display-text attributes (`placeholder`, `aria-label`,
+  `alt`, `title`, `label`) are dropped. `value=` and every other attribute are
+  untouched — a key really can be pasted into one of those.
+
+  `SEC-240`, the Terraform password-field rule, fired on a Go doc comment:
+  its separator alternation includes `,`, so
+  `// "bot_token" pops a password input, "imap_password" pops …` parses as a
+  field, a separator and a quoted value. A comment holds prose describing
+  configuration, not configuration. The assignment-shaped rules — derived from
+  the rule table, not a hand-kept list — no longer match inside comments.
+  Provider rules are unchanged: a full token in a comment is a real leak and is
+  still reported, as is a credential genuinely left in a commented-out
+  assignment, which the generic keyword rules still catch.
+
+  `AI-049` ("AI output passed to eval/exec", CWE-95) fired on textbook
+  parameterised SQL — ``db.Exec(`INSERT INTO schedules (id, prompt) VALUES (?,
+  ?)`)`` — because the AI-vocabulary token it gates on was a *column name*
+  inside the query text. `database/sql`'s `Exec` evaluates SQL, not code, so
+  CWE-95 cannot apply to it. A call executing a SQL statement is dropped. The
+  discriminator is the SQL text, not the receiver: `db.Exec(model_output)`, a
+  model emitting raw SQL that is then executed, still fires.
+
 ## [1.18.0] - 2026-07-26
 
 ### Fixed

@@ -138,7 +138,9 @@ func builtinSecretRules() []*rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "SEC-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `gh[pso]_[A-Za-z0-9_]{36,}`,
+			// \b on the left — same seam as SEC-147: `TestProcessHigh|s_Lows…`
+			// supplies `ghs_` followed by 36+ identifier characters.
+			pattern:     `\bgh[pso]_[A-Za-z0-9_]{36,}`,
 			description: "GitHub Personal Access Token detected",
 			cwe:         "CWE-798", keywords: []string{"ghp_", "ghs_", "gho_"},
 			remediation: "Revoke the token at github.com/settings/tokens and generate a new one. Use GITHUB_TOKEN environment variable or GitHub Actions secrets.",
@@ -1276,7 +1278,11 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-147", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `re_[A-Za-z0-9]{32,}`,
+			// \b on the left: without it the prefix matches at the seam of an
+			// ordinary identifier — `TestSessionSto|re_Loads…` supplies `re_`
+			// plus 38 alphanumerics. An issued key never continues a preceding
+			// word; it follows a quote, an `=` or whitespace.
+			pattern:     `\bre_[A-Za-z0-9]{32,}`,
 			description: "Resend API Key detected",
 			cwe:         "CWE-798", keywords: []string{"re_"},
 			remediation: "Rotate the exposed key immediately. Use environment variables or a secrets manager.",
@@ -1830,7 +1836,7 @@ func builtinSecretRules() []*rules.Rule {
 
 		{
 			id: "SEC-213", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?:ghu|ghs)_[0-9a-zA-Z]{36}`,
+			pattern:     `\b(?:ghu|ghs)_[0-9a-zA-Z]{36}`,
 			description: "Identified a GitHub App Token, which may compromise GitHub application integrations and source code security.",
 			cwe:         "CWE-798", keywords: []string{"ghu_", "ghs_"},
 			remediation: "Imported from Gitleaks: github-app-token",
@@ -3173,7 +3179,13 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-428", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`, description: "Detected OpenSSH Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-429", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`, description: "Detected PGP Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-434", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `bootstrap\.servers`, description: "Detected Kafka", cwe: "CWE-798", keywords: []string{"kafka"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-435", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `gh[pousr]_[A-Za-z0-9_]`, description: "Detected GitHub Token", cwe: "CWE-798", keywords: []string{"github"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// The pattern carried a single body character (`gh[pousr]_[A-Za-z0-9_]`),
+		// so any five-character run beginning `ghs_` was a high-severity GitHub
+		// token — including `"ghs_fake_install_token"`, a shape GitHub does not
+		// issue. GitHub tokens are the prefix plus 36 alphanumerics, and every
+		// well-formed one is already covered by SEC-003/SEC-213/SEC-215/SEC-216/
+		// SEC-217, so requiring the issued shape here costs no detection.
+		{id: "SEC-435", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\bgh[pousr]_[A-Za-z0-9]{36}`, description: "Detected GitHub Token", cwe: "CWE-798", keywords: []string{"github"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-436", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `glpat-`, description: "Detected GitLab Token", cwe: "CWE-798", keywords: []string{"gitlab"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-437", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `xox[baprs]-[A-Za-z0-9-]{20,}`, description: "Detected Slack Token", cwe: "CWE-798", keywords: []string{"slack"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.0},
 		{id: "SEC-438", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_`, description: "Detected Stripe Key", cwe: "CWE-798", keywords: []string{"stripe"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

@@ -191,6 +191,20 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if isPlaceholderFinding(content, &results[i]) {
 				continue
 			}
+			// A secret shown inside a display-text HTML/JSX attribute
+			// (`placeholder=`, `aria-label=`, `title=`) is the instruction
+			// telling a user what to paste, not key material the repository
+			// holds.
+			if inDisplayTextAttribute(content, &results[i]) {
+				continue
+			}
+			// An assignment-shaped config-field rule that matched inside a
+			// comment found prose describing a field, not a field being
+			// assigned. Provider rules are untouched — a full token in a
+			// comment is a real leak.
+			if dropConfigFieldRuleInComment(lang, content, &results[i]) {
+				continue
+			}
 			fs.Add(results[i])
 		}
 
