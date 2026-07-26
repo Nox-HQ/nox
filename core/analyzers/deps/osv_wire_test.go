@@ -242,6 +242,56 @@ func TestOSVWire_HydratesEveryOperatorFacingField(t *testing.T) {
 	}
 }
 
+// TestOSVWire_MultiRangeAdvisoryRemediatesForwards checks the whole path, not
+// just the selection: the installed version has to reach fixedVersion from the
+// call site, and the remediation command has to carry the version that was
+// selected.
+//
+// Shaped after GHSA-47m2-4cr7-mhcw, where reporting the first range's fix told
+// operators running 0.54.0 to move to 0.49.1.
+func TestOSVWire_MultiRangeAdvisoryRemediatesForwards(t *testing.T) {
+	t.Parallel()
+
+	srv := fakeOSV(t,
+		map[string][]string{"leftpad": {"GHSA-branches"}},
+		map[string]string{
+			"GHSA-branches": `{
+				"id": "GHSA-branches",
+				"summary": "Panic on undecryptable packets",
+				"affected": [
+					{
+						"package": {"name":"leftpad","ecosystem":"npm"},
+						"ranges": [{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"0.49.1"}]}]
+					},
+					{
+						"package": {"name":"leftpad","ecosystem":"npm"},
+						"ranges": [{"type":"SEMVER","events":[{"introduced":"0.50.0"},{"fixed":"0.54.1"}]}]
+					}
+				]
+			}`,
+		})
+	defer srv.Close()
+
+	items := scanOneNPMPackage(t, srv, "leftpad", "0.54.0")
+
+	var f *findings.Finding
+	for i := range items {
+		if items[i].RuleID == "VULN-001" {
+			f = &items[i]
+			break
+		}
+	}
+	if f == nil {
+		t.Fatal("no VULN-001 finding was emitted")
+	}
+	if got := f.Metadata["fixed_in"]; got != "0.54.1" {
+		t.Errorf("fixed_in = %q, want 0.54.1 — 0.49.1 is below the installed 0.54.0 and following it downgrades", got)
+	}
+	if got := f.Metadata["remediation_command"]; !strings.Contains(got, "0.54.1") {
+		t.Errorf("remediation_command = %q, want it to name 0.54.1", got)
+	}
+}
+
 // TestApplyVulnDetails_CopiesEveryField is the structural guard for the bug
 // that shipped twice in this file.
 //
