@@ -315,8 +315,8 @@ func TestStagedScanOptionsPreservesFlags(t *testing.T) {
 	got := stagedScanOptions(root, in)
 
 	for _, c := range []struct{ name, got, want string }{
-		{"CustomRulesPath", got.CustomRulesPath, filepath.Join(root, "rules/custom.yaml")},
-		{"VEXPath", got.VEXPath, filepath.Join(root, "waivers/vex.json")},
+		{"CustomRulesPath", got.CustomRulesPath, filepath.Join(root, "rules", "custom.yaml")},
+		{"VEXPath", got.VEXPath, filepath.Join(root, "waivers", "vex.json")},
 		{"BaselinePath", got.BaselinePath, filepath.Join(root, "baseline.json")},
 		{"TerraformPlanPath", got.TerraformPlanPath, filepath.Join(root, "plan.json")},
 	} {
