@@ -7,7 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-07-26
+
+Six fixes, every one of them a case where nox reported something that was not
+true, or failed for a reason that had nothing to do with security. Four of the
+six blocked a repository outright.
+
 ### Fixed
+
+- **A throttled version lookup no longer fails the security gate.** The action
+  resolves `version: latest` through the GitHub API, and GitHub answers 403 when
+  rate-limiting. `resolve_version` was a bare `curl -fsSL`, which exits non-zero
+  on any 403 — so the action died before it ever reached `fetch_asset`, the
+  function directly below it that had already been hardened against exactly this
+  throttle. The symptom was distinctive and uninformative: `Nox PR Gate` failing
+  in nine seconds with one log line, `curl: (22) The requested URL returned
+  error: 403`, followed by a second red check when the SARIF upload found no
+  file. Two failed checks, no scan performed, neither of them about security.
+
+  Underneath it, the reason the throttle was reachable at all: `action.sh` has
+  always sent `Authorization: Bearer ${GITHUB_TOKEN}` when that variable is set,
+  but `action.yml`'s `env:` block never mapped it. A composite action's step
+  sees only what that block maps, so the header expanded to nothing on **every
+  run**, and both the version lookup and the asset download went out anonymous —
+  against the 60-requests-per-hour budget shared by every job on the runner's IP
+  address. A burst of CI runs hits that routinely.
+
+  Both halves are fixed: the lookup retries on the same schedule as the
+  download, and the token now reaches the script. If you would rather not depend
+  on the lookup at all, pinning an explicit `version:` skips it entirely — the
+  failure message now says so. (#375)
+
+- **`VULN-001` no longer tells you to downgrade.** The remediation advice
+  reported the first version listed as fixed for an advisory, which is not
+  necessarily one that is newer than what you have installed — for a vulnerable
+  package on a maintained older line, the suggestion could move you backwards.
+  Fix versions are now resolved against the affected-range intervals and the
+  installed version, so the recommendation is always forward. (#372)
+
+- **One dataflow reported from both ends is now one finding.** A taint path
+  discovered from its source and again from its sink produced two findings for a
+  single flow, inflating counts and, on a gated repository, presenting the same
+  problem twice. Flows are deduplicated on rule, path, source line, sink line
+  and source variable. (#373)
+
+- **A location-less finding no longer breaks the whole SARIF upload.** GitHub
+  rejects an entire submission — every finding in it — when any result carries
+  an empty `artifactLocation.uri`, with `locationFromSarifResult: expected
+  artifact location`. One finding that could not be tied to a file therefore
+  discarded the report. Findings without a location now emit no `locations`
+  array at all, which SARIF permits, and the rest of the report uploads. (#370)
+
+- **An explicit `-format` is no longer overridden by `.nox.yaml`.** A flag given
+  on the command line lost to the config file, so the one way to override a
+  project setting for a single run did not work. The flags now default to empty
+  so that "absent" is distinguishable from "set to the default", and an
+  explicitly-passed value wins. Same fix for `-output`. (#371)
 
 - **Five rule-precision defects that put false high/critical findings on the
   gate.** Each fired on ordinary code containing no credential and no
@@ -51,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inside the query text. `database/sql`'s `Exec` evaluates SQL, not code, so
   CWE-95 cannot apply to it. A call executing a SQL statement is dropped. The
   discriminator is the SQL text, not the receiver: `db.Exec(model_output)`, a
-  model emitting raw SQL that is then executed, still fires.
+  model emitting raw SQL that is then executed, still fires. (#374)
 
 ## [1.18.0] - 2026-07-26
 
