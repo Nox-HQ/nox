@@ -455,6 +455,16 @@ func runPluginInstall(args []string) int {
 	}
 
 	fmt.Printf("Installed %s@%s (%s)\n", name, ve.Version, trustLevel)
+
+	// Installing is a machine-level action; enabling is a project-level one.
+	// Saying so here is the difference between a user's next scan working and
+	// them concluding the plugin found nothing. Only shown when the project
+	// does not already require it, so the common case stays quiet. See #376.
+	if cwd, wdErr := os.Getwd(); wdErr == nil {
+		if !projectEnablesPlugin(requiredPluginsForDir(cwd), name) {
+			fmt.Print(enablePluginHint(name))
+		}
+	}
 	return 0
 }
 
@@ -582,13 +592,37 @@ func runPluginList(args []string) int {
 		return 0
 	}
 
+	// ACTIVE answers the question the other four columns cannot: whether this
+	// plugin will actually run here. Installed-but-not-required is a normal
+	// state, not an error, but it is indistinguishable from "enabled and found
+	// nothing" once a scan comes back quiet. See #376.
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	required := requiredPluginsForDir(cwd)
+
+	var inactive int
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tINSTALLED")
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tINSTALLED\tACTIVE HERE")
 	for i := range st.Plugins {
 		p := &st.Plugins[i]
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Version, p.TrustLevel, p.InstalledAt.Format("2006-01-02"))
+		active := "no"
+		if projectEnablesPlugin(required, p.Name) {
+			active = "yes"
+		} else {
+			inactive++
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			p.Name, p.Version, p.TrustLevel, p.InstalledAt.Format("2006-01-02"), active)
 	}
 	_ = w.Flush()
+
+	if inactive > 0 {
+		fmt.Printf("\n%d installed plugin(s) will not run in this directory: they are not listed\n"+
+			"under plugins.required in .nox.yaml. Plugins are opt-in per project so that a\n"+
+			"scan does not depend on what happens to be installed on the machine.\n", inactive)
+	}
 	return 0
 }
 
