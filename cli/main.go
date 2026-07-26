@@ -149,8 +149,12 @@ func run(args []string) int {
 		versionFlag bool
 	)
 
-	fs.StringVar(&formatFlag, "format", "json", "output formats: json,sarif,cdx,spdx,all (comma-separated)")
-	fs.StringVar(&outputDir, "output", ".", "output directory for report files")
+	// Defaults are deliberately EMPTY so "flag absent" is distinguishable from
+	// "flag explicitly set to the default". The built-in defaults are applied by
+	// resolveOutputFormat/resolveOutputDir after config is read. See the comment
+	// on those functions.
+	fs.StringVar(&formatFlag, "format", "", "output formats: json,sarif,cdx,spdx,all (comma-separated) (default \"json\")")
+	fs.StringVar(&outputDir, "output", "", "output directory for report files (default \".\")")
 	fs.StringVar(&rulesFlag, "rules", "", "path to custom rules YAML file or directory")
 	fs.BoolVar(&quietFlag, "quiet", false, "suppress all output except errors")
 	fs.BoolVar(&quietFlag, "q", false, "suppress all output except errors (shorthand)")
@@ -300,6 +304,45 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
+// resolveOutputFormat picks the output format from the CLI flag, then
+// .nox.yaml, then the built-in default.
+//
+// The previous form compared the flag's VALUE to its default —
+// `if formatFlag == "json" && cfg.Output.Format != ""` — so an explicit
+// `-format json` was indistinguishable from the flag being absent, and config
+// overrode a value the caller had deliberately typed. The comment above it
+// said CLI flags take precedence, which is what everyone assumed.
+//
+// It disabled the security gate on two repositories: CI ran
+// `nox scan … -format json,sarif` and gated on findings.json, both repos had
+// `output.format: sarif` in .nox.yaml, so findings.json was never written and
+// the gating step skipped on the missing file — and a skipped step is a green
+// check. Exit 0, no warning, 20 and 63 ungated SARIF results.
+//
+// The flags now default to empty, so "absent" is representable and config can
+// fill it in without ever overriding an argument that was actually passed.
+func resolveOutputFormat(flagValue, configValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if configValue != "" {
+		return configValue
+	}
+	return "json"
+}
+
+// resolveOutputDir applies the same precedence to the output directory, which
+// carried the identical defect against ".".
+func resolveOutputDir(flagValue, configValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if configValue != "" {
+		return configValue
+	}
+	return "."
+}
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -404,13 +447,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
-	// Apply output defaults from config (CLI flags take precedence).
-	if formatFlag == "json" && cfg.Output.Format != "" {
-		formatFlag = cfg.Output.Format
-	}
-	if outputDir == "." && cfg.Output.Directory != "" {
-		outputDir = cfg.Output.Directory
-	}
+	// Precedence is flag > config > default.
+	formatFlag = resolveOutputFormat(formatFlag, cfg.Output.Format)
+	outputDir = resolveOutputDir(outputDir, cfg.Output.Directory)
 
 	formats := parseFormats(formatFlag)
 
