@@ -140,8 +140,12 @@ jobs:
           assert_rule VULN "dependency advisories (OSV)"
           assert_rule IAC  "IaC/Dockerfile analysis"
 
-          deps=$(jq '.summary.dependencies // .dependencies // 0' "$f" 2>/dev/null || echo 0)
-          echo "  dependencies resolved: $deps"
+          # Distinct vulnerable packages. findings.json carries no dependency
+          # total (top-level keys are meta/findings only), so the previous
+          # `.summary.dependencies` read printed a flat 0 while the scan
+          # reported 2 -- a misleading zero in an otherwise green log.
+          pkgs=$(jq -r '[.findings[]? | .Metadata.package? // empty] | unique | length' "$f")
+          echo "  distinct vulnerable packages: $pkgs"
 
           # VEX, in the CURRENT spec version, where `vulnerability` and
           # `products` are objects rather than strings (#389). Built from a
