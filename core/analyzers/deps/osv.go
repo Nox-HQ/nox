@@ -106,13 +106,68 @@ type osvEvent struct {
 	Limit        string `json:"limit,omitempty"`
 }
 
-// fixedVersion returns the lowest fixed version listed across the affected
-// entries that match the given package name + ecosystem. Returns "" when
-// the OSV record names no fix (an unfixed vulnerability).
-func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
+// affectedInterval is one contiguous affected range from an OSV record:
+// versions from introduced (inclusive) up to fixed (exclusive), or through
+// lastAffected (inclusive). fixed is empty when the interval names no fix —
+// an unfixed release branch.
+type affectedInterval struct {
+	introduced   string
+	fixed        string
+	lastAffected string
+}
+
+// covers reports whether the installed version falls inside the interval.
+//
+// A version we cannot order is never treated as covered. Guessing there would
+// put us back to picking a fix at random, which is the whole defect.
+func (iv affectedInterval) covers(installed string) bool {
+	if !comparableVersion(installed) {
+		return false
+	}
+	// "0" is OSV's "since the beginning"; comparing against it directly would
+	// exclude prereleases of 0.0.0, which sort below it.
+	if iv.introduced != "" && iv.introduced != "0" {
+		if !comparableVersion(iv.introduced) || compareGoVersions(installed, iv.introduced) < 0 {
+			return false
+		}
+	}
+	switch {
+	case iv.fixed != "":
+		return comparableVersion(iv.fixed) && compareGoVersions(installed, iv.fixed) < 0
+	case iv.lastAffected != "":
+		return comparableVersion(iv.lastAffected) && compareGoVersions(installed, iv.lastAffected) <= 0
+	}
+	return true // introduced with no upper bound: still unfixed
+}
+
+// comparableVersion reports whether v carries an ordering compareGoVersions can
+// be trusted with. A value whose leading segment is not numeric — "latest",
+// "unknown", a git SHA, an empty string — does not.
+func comparableVersion(v string) bool {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	lead, _, _ := strings.Cut(v, ".")
+	lead, _, _ = strings.Cut(lead, "-")
+	lead, _, _ = strings.Cut(lead, "+")
+	if lead == "" {
+		return false
+	}
+	for _, r := range lead {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// affectedIntervals expands the affected entries matching the given package
+// name + ecosystem into flat intervals. OSV expresses a package's affected
+// versions either as several `affected` entries with one range each or as one
+// range with several introduced/fixed pairs; both mean the same thing, and both
+// occur in real advisories, so both are flattened here.
+func affectedIntervals(vuln *osvVuln, pkgName, ecosystem string) []affectedInterval {
 	want := strings.ToLower(pkgName)
 	wantEco := ecosystemToOSV(ecosystem)
-	var first string
+	var out []affectedInterval
 	for _, aff := range vuln.Affected {
 		if !strings.EqualFold(aff.Package.Name, want) {
 			continue
@@ -121,14 +176,71 @@ func fixedVersion(vuln *osvVuln, pkgName, ecosystem string) string {
 			continue
 		}
 		for _, r := range aff.Ranges {
+			cur := affectedInterval{}
+			open := false
 			for _, e := range r.Events {
-				if e.Fixed != "" && first == "" {
-					first = e.Fixed
+				switch {
+				case e.Introduced != "":
+					if open {
+						out = append(out, cur)
+					}
+					cur, open = affectedInterval{introduced: e.Introduced}, true
+				case e.Fixed != "":
+					cur.fixed = e.Fixed
+					out = append(out, cur)
+					cur, open = affectedInterval{}, false
+				case e.LastAffected != "":
+					cur.lastAffected = e.LastAffected
+					out = append(out, cur)
+					cur, open = affectedInterval{}, false
 				}
+			}
+			if open {
+				out = append(out, cur)
 			}
 		}
 	}
-	return first
+	return out
+}
+
+// fixedVersion returns the version the installed one must move to in order to
+// clear the advisory, or "" when that cannot be established.
+//
+// An advisory covering a package with maintained release branches names one fix
+// per branch. Reporting any fix other than the one for the branch in use is not
+// a cosmetic mislabel: the fix for an older branch is a *lower* version than
+// what is installed, so the remediation reads as a downgrade — to something
+// plausibly vulnerable to a different advisory, and certainly a functional
+// regression. So the interval containing the installed version selects the fix,
+// not the order the advisory happens to list its ranges in.
+//
+// "" is returned whenever no interval contains the installed version: outside
+// the ranges, on a branch with no fix yet, or with a version string that cannot
+// be ordered. That is a genuine "we do not know", and any answer invented to
+// fill it would reintroduce the defect in a new form. The finding itself still
+// stands — OSV matched the installed version server-side, so a disagreement
+// here is our range arithmetic falling short, not evidence of a false positive.
+func fixedVersion(vuln *osvVuln, pkgName, ecosystem, installed string) string {
+	intervals := affectedIntervals(vuln, pkgName, ecosystem)
+
+	// A single interval leaves nothing to select between, and its bounds are
+	// the ones OSV already matched the installed version against.
+	if len(intervals) == 1 {
+		return intervals[0].fixed
+	}
+
+	best := ""
+	for _, iv := range intervals {
+		if iv.fixed == "" || !iv.covers(installed) {
+			continue
+		}
+		// Overlapping intervals are malformed data, but if they occur the
+		// smallest upgrade that clears the advisory is the honest answer.
+		if best == "" || compareGoVersions(iv.fixed, best) < 0 {
+			best = iv.fixed
+		}
+	}
+	return best
 }
 
 // queryOSV queries the OSV.dev batch API for known vulnerabilities affecting

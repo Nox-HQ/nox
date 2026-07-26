@@ -615,7 +615,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						"ecosystem": pkg.Ecosystem,
 						"aliases":   aliases,
 					}
-					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem); fix != "" {
+					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
 						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)

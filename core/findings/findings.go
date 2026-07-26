@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -227,6 +228,120 @@ func (fs *FindingSet) Deduplicate() {
 		unique = append(unique, finding)
 	}
 	fs.items = unique
+}
+
+// flowKey identifies one source→sink dataflow independently of which end of it
+// a finding chose to anchor to.
+type flowKey struct {
+	ruleID     string
+	path       string
+	sourceLine string
+	sinkLine   string
+	sourceVar  string
+}
+
+// flowIdentity returns the dataflow a finding describes, and whether it
+// describes one at all. A finding qualifies only if it names the tainted
+// variable and the line its value came from; anything else is not a flow report
+// and is never a candidate for flow collapsing.
+//
+// The sink line is read from metadata when present and otherwise taken from the
+// finding's own location: an analyzer that does not say where the sink is is
+// anchored at it. That convention is what lets a source-anchored finding and a
+// sink-anchored one about the same flow produce the same key.
+func flowIdentity(f *Finding) (flowKey, bool) {
+	sourceLine, sourceVar := f.Metadata["source_line"], f.Metadata["source_var"]
+	if sourceLine == "" || sourceVar == "" {
+		return flowKey{}, false
+	}
+	sinkLine := f.Metadata["sink_line"]
+	if sinkLine == "" {
+		sinkLine = strconv.Itoa(f.Location.StartLine)
+	}
+	return flowKey{
+		ruleID:     f.RuleID,
+		path:       normaliseFilePath(f.Location.FilePath),
+		sourceLine: sourceLine,
+		sinkLine:   sinkLine,
+		sourceVar:  sourceVar,
+	}, true
+}
+
+// anchoredAtSink reports whether a flow finding sits on its sink line.
+func anchoredAtSink(f *Finding) bool {
+	sinkLine := f.Metadata["sink_line"]
+	return sinkLine == "" || sinkLine == strconv.Itoa(f.Location.StartLine)
+}
+
+// preferFlowFinding reports whether a should be kept over b when both describe
+// the same flow. The sink anchor wins — that is where the fix goes, and it is
+// the anchor already recorded in existing baselines. The remaining tiebreaks
+// (line, then fingerprint) exist only to make the choice independent of the
+// order analyzers happened to run in.
+func preferFlowFinding(a, b *Finding) bool {
+	if as, bs := anchoredAtSink(a), anchoredAtSink(b); as != bs {
+		return as
+	}
+	if a.Location.StartLine != b.Location.StartLine {
+		return a.Location.StartLine < b.Location.StartLine
+	}
+	return a.Fingerprint < b.Fingerprint
+}
+
+// DeduplicateFlows collapses findings that describe the SAME source→sink
+// dataflow but disagree about which end of it to report.
+//
+// Deduplicate cannot do this. Its key is the fingerprint, which hashes the
+// finding's message, plus the location — and two analyzers describing one flow
+// word it differently and anchor it differently, so they collide on neither.
+// The concrete case is Nox's built-in taint model and the nox/taint-analysis
+// plugin: for one tainted variable reaching one sink, the built-in reports the
+// sink line and the plugin reports the source line, under the same rule ID. One
+// vulnerability then costs two alerts and two baseline entries, and no baseline
+// can suppress both because the fingerprints differ.
+//
+// Identity is (rule, normalised path, source line, sink line, source variable),
+// taken from the flow metadata analyzers already emit. Nothing weaker would be
+// safe and nothing stronger is needed: two findings agreeing on all five are
+// the same flow by any definition, and requiring more — the source kind, say —
+// would let two engines that classify one HTTP source differently keep
+// double-reporting it.
+//
+// Only a finding carrying that metadata participates, so this cannot touch a
+// finding that is not a flow report, and a flow no other analyzer found is
+// always kept. The collapse also only ever discards the source-anchored member
+// of a pair, so a plugin cannot use it to displace a core finding.
+func (fs *FindingSet) DeduplicateFlows() {
+	best := make(map[flowKey]int, len(fs.items))
+	drop := make(map[int]struct{})
+	for i := range fs.items {
+		key, ok := flowIdentity(&fs.items[i])
+		if !ok {
+			continue
+		}
+		prev, seen := best[key]
+		if !seen {
+			best[key] = i
+			continue
+		}
+		keep, discard := prev, i
+		if preferFlowFinding(&fs.items[i], &fs.items[prev]) {
+			keep, discard = i, prev
+		}
+		best[key] = keep
+		drop[discard] = struct{}{}
+	}
+	if len(drop) == 0 {
+		return
+	}
+	kept := make([]Finding, 0, len(fs.items)-len(drop))
+	for i := range fs.items {
+		if _, dropped := drop[i]; dropped {
+			continue
+		}
+		kept = append(kept, fs.items[i])
+	}
+	fs.items = kept
 }
 
 // SuppressDuplicateVulnClass drops a finding from suppressRulePrefix when
