@@ -99,11 +99,14 @@ type Message struct {
 
 // Result is a single finding expressed in SARIF format.
 type Result struct {
-	RuleID       string            `json:"ruleId"`
-	RuleIndex    int               `json:"ruleIndex"`
-	Level        string            `json:"level"`
-	Message      Message           `json:"message"`
-	Locations    []Location        `json:"locations"`
+	RuleID    string  `json:"ruleId"`
+	RuleIndex int     `json:"ruleIndex"`
+	Level     string  `json:"level"`
+	Message   Message `json:"message"`
+	// omitempty matters: a nil slice would serialise as `"locations": null`,
+	// which is no more acceptable to a consumer than an empty uri. A
+	// location-less result must have no locations KEY at all.
+	Locations    []Location        `json:"locations,omitempty"`
 	Fingerprints map[string]string `json:"fingerprints"`
 	// Properties carries the finding's Metadata — the reachability class, the
 	// vuln class, and the original-severity downgrade audit trail. Without it a
@@ -185,16 +188,40 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			idx = 0
 		}
 
-		phys := PhysicalLocation{
-			ArtifactLocation: ArtifactLocation{URI: encodeURI(f.Location.FilePath)},
-		}
-		if f.Location.StartLine > 0 {
-			phys.Region = &Region{
-				StartLine:   f.Location.StartLine,
-				StartColumn: f.Location.StartColumn,
-				EndLine:     f.Location.EndLine,
-				EndColumn:   f.Location.EndColumn,
+		// A finding with no file is reported WITHOUT a location, never with an
+		// empty one.
+		//
+		// Some verdicts are about the dependency graph rather than a line of
+		// source — a reachability class, or a repository-scoped "no private
+		// registry configured" — and arrive with an empty path. Writing that
+		// through produced `"uri": ""`, and GitHub rejects the SUBMISSION for
+		// it, not the offending result:
+		//
+		//	locationFromSarifResult: expected artifact location
+		//
+		// So one location-less finding from one plugin cost a repository its
+		// entire code-scanning upload, while the same scan looked clean
+		// locally. Any analyzer can emit this shape, so the containment
+		// belongs here rather than in each of them.
+		//
+		// The result is kept: SARIF permits a result with no locations, and
+		// dropping it would trade a broken upload for a silently missing
+		// verdict — the worse failure for a security tool. An absent array
+		// cannot trip "expected artifact location"; an empty-uri entry does.
+		var locations []Location
+		if f.Location.FilePath != "" {
+			phys := PhysicalLocation{
+				ArtifactLocation: ArtifactLocation{URI: encodeURI(f.Location.FilePath)},
 			}
+			if f.Location.StartLine > 0 {
+				phys.Region = &Region{
+					StartLine:   f.Location.StartLine,
+					StartColumn: f.Location.StartColumn,
+					EndLine:     f.Location.EndLine,
+					EndColumn:   f.Location.EndColumn,
+				}
+			}
+			locations = []Location{{PhysicalLocation: phys}}
 		}
 
 		result := Result{
@@ -202,7 +229,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			RuleIndex:    idx,
 			Level:        severityToLevel(f.Severity),
 			Message:      Message{Text: f.Message},
-			Locations:    []Location{{PhysicalLocation: phys}},
+			Locations:    locations,
 			Fingerprints: map[string]string{"nox/v1": f.Fingerprint},
 			Properties:   sarifProperties(f),
 		}
