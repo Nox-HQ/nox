@@ -29,6 +29,7 @@ func runFix(args []string) int {
 		manifestRoot string
 		doActions    bool
 		onlyActions  bool
+		doOutdated   bool
 		doContent    bool
 		write        bool
 	)
@@ -38,6 +39,7 @@ func runFix(args []string) int {
 	fs.StringVar(&manifestRoot, "root", ".", "directory containing the project's manifest (go.mod)")
 	fs.BoolVar(&doActions, "actions", false, "also upgrade outdated GitHub Actions pins in .github/workflows (needs GITHUB_TOKEN)")
 	fs.BoolVar(&onlyActions, "actions-only", false, "only upgrade GitHub Actions pins; skip the package-dependency pass")
+	fs.BoolVar(&doOutdated, "outdated", false, "upgrade dependencies that are merely out of date (opt-in currency pass; reaches the network, Go only)")
 	fs.BoolVar(&doContent, "content", false, "generate deterministic patches for mechanical IAC misconfigurations (previews the diff; add --write to apply)")
 	fs.BoolVar(&write, "write", false, "with --content: apply the patches instead of only previewing them")
 	if err := fs.Parse(args); err != nil {
@@ -48,6 +50,13 @@ func runFix(args []string) int {
 	// rewrites the flagged lines with their one unambiguous secure value.
 	if doContent {
 		return runContentFix(inputPath, write)
+	}
+
+	// --outdated is a currency pass, not a security pass: it acts on the
+	// passage of time rather than on a finding, so it needs no findings.json.
+	// Handled before the deps path so it does not require a scan to have run.
+	if doOutdated {
+		return runOutdatedFix(manifestRoot, dryRun, includeMajor)
 	}
 
 	// GitHub Actions remediation runs independently of findings.json — it
