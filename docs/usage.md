@@ -543,21 +543,25 @@ currency upgrades are reported as `OUTDATED`, never as `VULN-001`.
 
 Scope and guarantees:
 
-- **Go, npm, PyPI and Cargo.** Go resolves through `go list -m -u -json all`,
-  which already understands replace directives, retractions and the module
-  graph. The others query their own registry (`registry.npmjs.org`, `pypi.org`,
-  `crates.io`) directly, so planning needs no toolchain — only *applying* an
-  upgrade shells out to `npm`/`pip`/`cargo`. Maven, Gradle, NuGet, Composer and
-  RubyGems are parsed by the scanner but have no currency resolver yet; they are
-  reported as such rather than silently ignored.
-- **Latest STABLE, never a prerelease.** npm publishes channels under
-  `dist-tags` where only `latest` is stable, and crates.io reports both
-  `max_version` (which includes prereleases) and `max_stable_version`. Picking
-  the wrong field would quietly propose a beta.
+- **Seven ecosystems:** Go, npm, PyPI, Cargo, RubyGems, Composer and NuGet. Go
+  resolves through `go list -m -u -json all`, which already understands replace
+  directives, retractions and the module graph. The rest query their own
+  registry directly, so planning needs no toolchain — only *applying* an upgrade
+  shells out to `npm` / `pip` / `cargo` / `bundle` / `composer` / `dotnet`.
+  Maven and Gradle are parsed by the scanner but have no currency resolver:
+  `maven-metadata.xml` has no single "latest stable" and Gradle has no canonical
+  upgrade command, so they are reported as unresolved rather than guessed at.
+- **Latest STABLE, never a prerelease.** Every registry expresses this
+  differently and most of them invite the wrong answer: npm publishes channels
+  under `dist-tags` where only `latest` is stable; crates.io reports
+  `max_version` (including prereleases) beside `max_stable_version`; Packagist
+  returns newest-first but mixes in `dev-<branch>` aliases; and NuGet returns an
+  *ascending* list with prereleases interleaved, so its last element is often a
+  beta. A package with no stable release yields no suggestion at all.
 - **Direct dependencies only.** Indirect ones belong to the lockfile resolver —
   bumping them writes explicit requirements for packages you do not import.
   Directness comes from the *manifest* (`go.mod`, `package.json`, `Cargo.toml`,
-  `requirements.txt`); the resolved current version comes from the lockfile,
+  `requirements.txt`, `Gemfile`, `composer.json`, `*.csproj`); the resolved current version comes from the lockfile,
   because a manifest range like `^4.18.0` is not a version. A range with no
   lockfile entry is skipped rather than assigned a version it does not have.
 - **Never downgrades.** A replace directive or retracted version can make

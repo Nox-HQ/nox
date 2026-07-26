@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -236,5 +237,242 @@ func TestNpmResolver_RequestsTheAbbreviatedPackument(t *testing.T) {
 	if gotAccept != "application/vnd.npm.install-v1+json" {
 		t.Errorf("Accept = %q, want the abbreviated-packument media type; "+
 			"the full document is large enough to truncate", gotAccept)
+	}
+}
+
+// Second batch of ecosystems. Each registry answers "latest" in a different
+// shape, and two of the three actively invite picking a prerelease.
+func TestRegistryResolvers_SecondBatch(t *testing.T) {
+	cases := []struct {
+		name, eco, path, body, want string
+	}{
+		{
+			// RubyGems is the easy one: .version is already the latest stable.
+			name: "rubygems", eco: "rubygems", path: "/api/v1/gems/rails.json",
+			body: `{"name":"rails","version":"8.1.3"}`, want: "8.1.3",
+		},
+		{
+			// Packagist returns versions NEWEST-FIRST, mixed with branch
+			// aliases (dev-master) and prereleases. Taking [0] blindly can
+			// yield "dev-main".
+			name: "packagist", eco: "composer", path: "/p2/monolog/monolog.json",
+			body: `{"packages":{"monolog/monolog":[
+				{"version":"dev-main"},
+				{"version":"3.11.0-RC1"},
+				{"version":"3.10.0"},
+				{"version":"3.9.0"}]}}`,
+			want: "3.10.0",
+		},
+		{
+			// NuGet returns ASCENDING versions INCLUDING prereleases, so the
+			// last element is frequently a beta. Verified against the live API:
+			// newtonsoft.json ends 13.0.4, 13.0.5-beta1 — versions[-1] is the
+			// beta and 13.0.4 is the answer.
+			name: "nuget", eco: "nuget", path: "/v3-flatcontainer/newtonsoft.json/index.json",
+			body: `{"versions":["13.0.3-beta1","13.0.3","13.0.4-beta1","13.0.4","13.0.5-beta1"]}`,
+			want: "13.0.4",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.path {
+					t.Errorf("requested %q, want %q", r.URL.Path, tc.path)
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			got, err := resolveLatest(tc.eco, pkgNameForPath(tc.path, tc.eco), srv.URL)
+			if err != nil {
+				t.Fatalf("resolveLatest: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("latest = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// NuGet ids are case-insensitive but the flat-container path must be lowercase,
+// so a manifest saying `Newtonsoft.Json` has to become `newtonsoft.json` or the
+// request 404s and the package reports as un-checkable.
+func TestNugetResolver_LowercasesThePackageID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"versions":["13.0.4"]}`))
+	}))
+	defer srv.Close()
+
+	if _, err := resolveLatest("nuget", "Newtonsoft.Json", srv.URL); err != nil {
+		t.Fatalf("resolveLatest: %v", err)
+	}
+	if gotPath != "/v3-flatcontainer/newtonsoft.json/index.json" {
+		t.Errorf("path = %q; the NuGet id must be lowercased", gotPath)
+	}
+}
+
+// A package with only prereleases published has no stable version. Returning
+// the prerelease anyway would push a beta into someone's manifest; returning
+// nothing is the honest answer and the planner treats it as "no update".
+func TestRegistryResolvers_NoStableRelease(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"versions":["1.0.0-alpha","1.0.0-beta"]}`))
+	}))
+	defer srv.Close()
+
+	got, err := resolveLatest("nuget", "somepkg", srv.URL)
+	if err != nil {
+		t.Fatalf("resolveLatest: %v", err)
+	}
+	if got != "" {
+		t.Errorf("latest = %q — no stable release exists, so there is nothing to propose", got)
+	}
+}
+
+func TestDirectDeps_RubyGems(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "Gemfile", `
+source "https://rubygems.org"
+gem "rails", "~> 8.1"
+gem 'puma'
+gem "rspec", require: false
+`)
+	writeManifest(t, dir, "Gemfile.lock", `
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rails (8.1.3)
+    puma (6.4.2)
+    rspec (3.13.0)
+    concurrent-ruby (1.2.3)
+`)
+
+	byName := map[string]string{}
+	for _, d := range directDeps(dir) {
+		if d.eco == "rubygems" {
+			byName[d.name] = d.version
+		}
+	}
+	for name, want := range map[string]string{"rails": "8.1.3", "puma": "6.4.2", "rspec": "3.13.0"} {
+		if byName[name] != want {
+			t.Errorf("rubygems %s = %q, want %q", name, byName[name], want)
+		}
+	}
+	if _, ok := byName["concurrent-ruby"]; ok {
+		t.Error("concurrent-ruby is transitive but was reported as direct")
+	}
+}
+
+func TestDirectDeps_Composer(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "composer.json", `{
+	  "require":     { "monolog/monolog": "^3.0", "php": ">=8.1" },
+	  "require-dev": { "phpunit/phpunit": "^10.0" }
+	}`)
+	writeManifest(t, dir, "composer.lock", `{
+	  "packages":     [{"name":"monolog/monolog","version":"3.10.0"},
+	                   {"name":"psr/log","version":"3.0.0"}],
+	  "packages-dev": [{"name":"phpunit/phpunit","version":"10.5.0"}]
+	}`)
+
+	byName := map[string]string{}
+	for _, d := range directDeps(dir) {
+		if d.eco == "composer" {
+			byName[d.name] = d.version
+		}
+	}
+	if byName["monolog/monolog"] != "3.10.0" {
+		t.Errorf("monolog = %q, want 3.10.0", byName["monolog/monolog"])
+	}
+	if byName["phpunit/phpunit"] != "10.5.0" {
+		t.Errorf("phpunit = %q, want 10.5.0", byName["phpunit/phpunit"])
+	}
+	// "php" is a platform requirement, not a package — Packagist has no such
+	// entry and querying it would produce a spurious degraded line.
+	if _, ok := byName["php"]; ok {
+		t.Error("the php platform requirement was treated as a package")
+	}
+	if _, ok := byName["psr/log"]; ok {
+		t.Error("psr/log is transitive but was reported as direct")
+	}
+}
+
+// A resolver without an applier plans an upgrade nox cannot perform: the plan
+// prints, the operator agrees, and applyUpgrade then fails with "ecosystem not
+// supported". Worse, planRegistryCurrency reads the command name out of
+// supportedFixEcosystems, so a missing entry renders a plan line with an empty
+// command.
+//
+// This is the same declared-but-dead shape as the fail-on-degraded action input
+// and the GITHUB_TOKEN that action.yml never mapped: two halves that must agree
+// and nothing connecting them. Fail the build instead.
+func TestEveryCurrencyEcosystemCanAlsoApply(t *testing.T) {
+	for eco := range registryBase {
+		if supportedFixEcosystems[eco] == "" {
+			t.Errorf("ecosystem %q has a currency resolver but no entry in "+
+				"supportedFixEcosystems, so --outdated would plan an upgrade it cannot apply", eco)
+		}
+	}
+	// Go resolves through the toolchain rather than a registry, so it is absent
+	// from registryBase but must still be appliable.
+	if supportedFixEcosystems["go"] == "" {
+		t.Error("go lost its applier")
+	}
+}
+
+// NuGet declares direct dependencies as <PackageReference> in the project file,
+// and there is no lockfile in a default project — the Include/Version pair IS
+// the resolved version, so unlike npm or Cargo there is no second file to read.
+func TestDirectDeps_NuGet(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "App.csproj", `<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <ProjectReference Include="../Other/Other.csproj" />
+  </ItemGroup>
+</Project>`)
+
+	byName := map[string]string{}
+	for _, d := range directDeps(dir) {
+		if d.eco == "nuget" {
+			byName[d.name] = d.version
+		}
+	}
+	if byName["Newtonsoft.Json"] != "13.0.3" {
+		t.Errorf("Newtonsoft.Json = %q, want 13.0.3", byName["Newtonsoft.Json"])
+	}
+	if byName["Serilog"] != "3.1.1" {
+		t.Errorf("Serilog = %q, want 3.1.1", byName["Serilog"])
+	}
+	// A ProjectReference is a sibling project, not a package.
+	if _, ok := byName["../Other/Other.csproj"]; ok {
+		t.Error("a ProjectReference was treated as a NuGet package")
+	}
+}
+
+// crates.io answers HTTP 403 to requests without a descriptive User-Agent, and
+// Go's http.Client sends none by default. Every cargo lookup failed against the
+// live registry while passing against every stub here — the second bug in this
+// file that only a real request could surface.
+func TestResolvers_SendAUserAgent(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte(`{"crate":{"max_stable_version":"1.0.0"}}`))
+	}))
+	defer srv.Close()
+
+	if _, err := resolveLatest("cargo", "serde", srv.URL); err != nil {
+		t.Fatalf("resolveLatest: %v", err)
+	}
+	if !strings.Contains(gotUA, "nox") {
+		t.Errorf("User-Agent = %q; crates.io 403s anonymous clients", gotUA)
 	}
 }

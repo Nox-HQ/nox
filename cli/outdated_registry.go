@@ -45,9 +45,12 @@ type directDep struct {
 // registryBase maps an ecosystem to its default registry root. Overridable per
 // call so tests can point at a stub.
 var registryBase = map[string]string{
-	"npm":   "https://registry.npmjs.org",
-	"pypi":  "https://pypi.org",
-	"cargo": "https://crates.io",
+	"npm":      "https://registry.npmjs.org",
+	"pypi":     "https://pypi.org",
+	"cargo":    "https://crates.io",
+	"rubygems": "https://rubygems.org",
+	"composer": "https://repo.packagist.org",
+	"nuget":    "https://api.nuget.org",
 }
 
 var httpClient = &http.Client{Timeout: 20 * time.Second}
@@ -74,6 +77,15 @@ func resolveLatest(eco, pkg, base string) (string, error) {
 		url = base + "/pypi/" + pkg + "/json"
 	case "cargo":
 		url = base + "/api/v1/crates/" + pkg
+	case "rubygems":
+		url = base + "/api/v1/gems/" + pkg + ".json"
+	case "composer":
+		url = base + "/p2/" + pkg + ".json"
+	case "nuget":
+		// NuGet ids are case-insensitive, but the flat-container path is not:
+		// `Newtonsoft.Json` 404s where `newtonsoft.json` succeeds, and a 404
+		// here would report a perfectly ordinary package as un-checkable.
+		url = base + "/v3-flatcontainer/" + strings.ToLower(pkg) + "/index.json"
 	default:
 		return "", fmt.Errorf("ecosystem %q has no currency resolver yet", eco)
 	}
@@ -82,6 +94,12 @@ func resolveLatest(eco, pkg, base string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s registry: %w", eco, err)
 	}
+	// crates.io rejects requests without a descriptive User-Agent with HTTP 403
+	// — Go's client sends none by default, so every cargo lookup failed against
+	// the live registry while passing against stubs. Sent to all registries:
+	// identifying the client is expected etiquette and some others rate-limit
+	// anonymous traffic harder.
+	req.Header.Set("User-Agent", "nox (+https://github.com/nox-hq/nox)")
 	if eco == "npm" {
 		// The full packument for a popular package is enormous — typescript and
 		// @types/node both exceed 8 MB, which silently truncated the read and
@@ -141,8 +159,64 @@ func resolveLatest(eco, pkg, base string) (string, error) {
 			return doc.Crate.MaxStable, nil
 		}
 		return doc.Crate.Max, nil
+	case "rubygems":
+		var doc struct {
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(body, &doc); err != nil {
+			return "", fmt.Errorf("parsing rubygems response for %s: %w", pkg, err)
+		}
+		return doc.Version, nil
+	case "composer":
+		var doc struct {
+			Packages map[string][]struct {
+				Version string `json:"version"`
+			} `json:"packages"`
+		}
+		if err := json.Unmarshal(body, &doc); err != nil {
+			return "", fmt.Errorf("parsing packagist response for %s: %w", pkg, err)
+		}
+		// Newest first, but mixed with branch aliases (dev-main) and
+		// prereleases, so the first entry is often not a released version.
+		for _, v := range doc.Packages[pkg] {
+			if isStableVersion(v.Version) {
+				return v.Version, nil
+			}
+		}
+		return "", nil
+	case "nuget":
+		var doc struct {
+			Versions []string `json:"versions"`
+		}
+		if err := json.Unmarshal(body, &doc); err != nil {
+			return "", fmt.Errorf("parsing nuget response for %s: %w", pkg, err)
+		}
+		// ASCENDING and including prereleases, so the last element is
+		// frequently a beta — verified against the live API, where
+		// newtonsoft.json ends 13.0.4, 13.0.5-beta1. Walk backwards to the
+		// highest stable rather than taking the tail.
+		for i := len(doc.Versions) - 1; i >= 0; i-- {
+			if isStableVersion(doc.Versions[i]) {
+				return doc.Versions[i], nil
+			}
+		}
+		return "", nil
 	}
 	return "", fmt.Errorf("unreachable resolver for %q", eco)
+}
+
+// isStableVersion reports whether a version string is a plain release rather
+// than a prerelease or a branch alias. SemVer puts prerelease data after a
+// hyphen; Packagist additionally publishes `dev-<branch>` pseudo-versions, and
+// NuGet mixes `-beta`/`-rc` straight into its ascending version list.
+//
+// Returning a prerelease from a currency pass would push a beta into someone's
+// manifest, which is the one thing an unattended upgrade must never do.
+func isStableVersion(v string) bool {
+	if v == "" || strings.HasPrefix(v, "dev-") {
+		return false
+	}
+	return !strings.Contains(v, "-")
 }
 
 // pkgNameForPath recovers the package name from a stub registry path. Test
@@ -155,6 +229,12 @@ func pkgNameForPath(path, eco string) string {
 		return strings.TrimSuffix(strings.TrimPrefix(path, "/pypi/"), "/json")
 	case "cargo":
 		return strings.TrimPrefix(path, "/api/v1/crates/")
+	case "rubygems":
+		return strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/gems/"), ".json")
+	case "composer":
+		return strings.TrimSuffix(strings.TrimPrefix(path, "/p2/"), ".json")
+	case "nuget":
+		return strings.TrimSuffix(strings.TrimPrefix(path, "/v3-flatcontainer/"), "/index.json")
 	}
 	return path
 }
@@ -168,6 +248,9 @@ func directDeps(root string) []directDep {
 	out = append(out, npmDirectDeps(root)...)
 	out = append(out, cargoDirectDeps(root)...)
 	out = append(out, pypiDirectDeps(root)...)
+	out = append(out, rubygemsDirectDeps(root)...)
+	out = append(out, composerDirectDeps(root)...)
+	out = append(out, nugetDirectDeps(root)...)
 	return out
 }
 
@@ -342,4 +425,135 @@ func planRegistryCurrency(root string, includeMajor bool, base map[string]string
 		})
 	}
 	return plan, degraded
+}
+
+var gemfileLine = regexp.MustCompile(`^\s*gem\s+["']([^"']+)["']`)
+var gemfileLockSpec = regexp.MustCompile(`^\s{4}([A-Za-z0-9._-]+) \(([^)]+)\)`)
+
+// rubygemsDirectDeps takes names from the Gemfile's `gem "name"` lines and
+// resolved versions from Gemfile.lock.
+//
+// Gemfile.lock indents direct and transitive specs differently: entries under
+// `specs:` are indented four spaces, their dependencies six. Matching on the
+// four-space form alone would still include transitive gems that happen to be
+// top-level specs, which is why names come from the Gemfile.
+func rubygemsDirectDeps(root string) []directDep {
+	raw := readIfPresent(filepath.Join(root, "Gemfile"))
+	if raw == nil {
+		return nil
+	}
+	names := map[string]bool{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if m := gemfileLine.FindStringSubmatch(line); m != nil {
+			names[m[1]] = true
+		}
+	}
+
+	resolved := map[string]string{}
+	if lock := readIfPresent(filepath.Join(root, "Gemfile.lock")); lock != nil {
+		for _, line := range strings.Split(string(lock), "\n") {
+			if m := gemfileLockSpec.FindStringSubmatch(line); m != nil {
+				resolved[m[1]] = m[2]
+			}
+		}
+	}
+
+	var out []directDep
+	for name := range names {
+		out = append(out, directDep{eco: "rubygems", name: name, version: resolved[name]})
+	}
+	return out
+}
+
+// composerDirectDeps reads require/require-dev from composer.json and resolved
+// versions from composer.lock.
+//
+// Platform requirements (php, ext-*, lib-*, composer-*) are dropped: they are
+// constraints on the runtime, not packages, and Packagist has no entry for
+// them — querying one would produce a spurious "could not determine" line for
+// something that was never a dependency.
+func composerDirectDeps(root string) []directDep {
+	raw := readIfPresent(filepath.Join(root, "composer.json"))
+	if raw == nil {
+		return nil
+	}
+	var manifest struct {
+		Require    map[string]string `json:"require"`
+		RequireDev map[string]string `json:"require-dev"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil
+	}
+
+	resolved := map[string]string{}
+	if lock := readIfPresent(filepath.Join(root, "composer.lock")); lock != nil {
+		var doc struct {
+			Packages    []struct{ Name, Version string } `json:"packages"`
+			PackagesDev []struct{ Name, Version string } `json:"packages-dev"`
+		}
+		if err := json.Unmarshal(lock, &doc); err == nil {
+			for _, set := range [][]struct{ Name, Version string }{doc.Packages, doc.PackagesDev} {
+				for _, p := range set {
+					resolved[p.Name] = strings.TrimPrefix(p.Version, "v")
+				}
+			}
+		}
+	}
+
+	var out []directDep
+	for _, set := range []map[string]string{manifest.Require, manifest.RequireDev} {
+		for name := range set {
+			if isComposerPlatformRequirement(name) {
+				continue
+			}
+			out = append(out, directDep{eco: "composer", name: name, version: resolved[name]})
+		}
+	}
+	return out
+}
+
+// isComposerPlatformRequirement reports whether a composer `require` key names
+// the runtime rather than a package. A real package is always `vendor/name`.
+func isComposerPlatformRequirement(name string) bool {
+	if !strings.Contains(name, "/") {
+		return true // "php", "hhvm"
+	}
+	for _, p := range []string{"ext-", "lib-", "composer-"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+var packageRefRe = regexp.MustCompile(`<PackageReference\s+Include="([^"]+)"\s+Version="([^"]+)"`)
+
+// nugetDirectDeps reads <PackageReference> entries from every project file in
+// root. Unlike npm or Cargo there is no lockfile in a default project: the
+// Include/Version pair in the .csproj IS the resolved version.
+//
+// <ProjectReference> is deliberately not matched — it names a sibling project
+// on disk, not a package, and Packagist-style lookups for it would 404.
+func nugetDirectDeps(root string) []directDep {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []directDep
+	seen := map[string]bool{}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || (!strings.HasSuffix(n, ".csproj") && !strings.HasSuffix(n, ".fsproj") && !strings.HasSuffix(n, ".vbproj")) {
+			continue
+		}
+		raw := readIfPresent(filepath.Join(root, n))
+		for _, m := range packageRefRe.FindAllStringSubmatch(string(raw), -1) {
+			if seen[m[1]] {
+				continue
+			}
+			seen[m[1]] = true
+			out = append(out, directDep{eco: "nuget", name: m[1], version: m[2]})
+		}
+	}
+	return out
 }
