@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-07-26
+
+### Fixed
+
+- **`nox plugin list` now says whether an installed plugin will actually run.**
+  Installing a plugin puts it on the machine; listing it under
+  `plugins.required` in the project's `.nox.yaml` is what enables it for a
+  scan. That separation is deliberate — nox's first design constraint is that
+  the same inputs produce the same outputs with no hidden state, so a globally
+  installed plugin that ran automatically would make findings depend on which
+  plugins happen to be present, and two developers on one repository would get
+  different results.
+
+  Nothing said so at the point it mattered. `nox plugin install` reported
+  success, `nox plugin list` showed four columns all describing a plugin that
+  was about to do nothing, and the scan came back quiet — which reads as "the
+  plugin found nothing" rather than "the plugin never ran". The degradation
+  model already reports required-but-not-installed, unusable-binary and
+  integrity-mismatch; installed-but-not-listed was the one state with no
+  signal, and unlike the others it is the expected result of following the
+  install instructions.
+
+  `plugin list` gains an `ACTIVE HERE` column reflecting the current
+  directory's `plugins.required`, plus a note when any installed plugin is
+  inactive. `plugin install` prints the `.nox.yaml` snippet to add, and only
+  when the project does not already require it. Scan behaviour is unchanged.
+  (#377)
+
+- **The documentation was teaching the model that caused the confusion.** The
+  README called declaring plugins "Recommended", which reads as a best practice
+  rather than the thing that enables a plugin, and then offered "One-shot
+  install (no manifest)" as an alternative path — which a reader takes to mean
+  scanning works without the manifest. It does not. The commands in that
+  section (`search`, `info`, `list`, `call`, `update`, `remove`) genuinely need
+  no manifest because they address a plugin by name and never load `.nox.yaml`;
+  only `scan` consults it. Reworded in the README and `docs/marketplace.md`.
+
 ## [1.19.0] - 2026-07-26
 
 Six fixes, every one of them a case where nox reported something that was not
