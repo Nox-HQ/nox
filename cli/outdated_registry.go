@@ -78,7 +78,7 @@ func resolveLatest(eco, pkg, base string) (string, error) {
 		return "", fmt.Errorf("ecosystem %q has no currency resolver yet", eco)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx // short-lived CLI call with a client timeout
+	req, err := http.NewRequest(http.MethodGet, url, http.NoBody) //nolint:noctx // short-lived CLI call with a client timeout
 	if err != nil {
 		return "", fmt.Errorf("%s registry: %w", eco, err)
 	}
@@ -312,10 +312,7 @@ func pypiDirectDeps(root string) []directDep {
 // rate-limiting must not make a project look up to date. Each is returned as a
 // degradation string so the caller can print them, matching nox's "report what
 // you could not check" model.
-func planRegistryCurrency(root string, includeMajor bool, base map[string]string) (upgradePlan, []string) {
-	var plan upgradePlan
-	var degraded []string
-
+func planRegistryCurrency(root string, includeMajor bool, base map[string]string) (plan upgradePlan, degraded []string) {
 	for _, d := range directDeps(root) {
 		if d.version == "" {
 			// A range pin with no lockfile entry: there is no single current
