@@ -1,0 +1,92 @@
+# Diff rule behaviour on REAL repositories between the last release and this PR.
+#
+# WHY: nox's corpus precision is measured at 1.00, and that number does not
+# predict behaviour on real repositories. A sweep of ~270 baselined findings
+# across a fleet found the secret and AI rules producing 13 false positives out
+# of 13, while VULN-001 and IAC-013 were 21 real out of 23. Synthetic fixtures
+# cannot show that, because they contain exactly what the rule author expected.
+#
+# Every rule-precision regression shipped so far was invisible until someone
+# upgraded and noticed by hand. This makes the change visible at review time.
+name: Rule behaviour diff
+
+on:
+  pull_request:
+    paths:
+      - 'core/analyzers/**'
+      - 'core/rules/**'
+      - 'scripts/rule-diff.sh'
+      - 'scripts/rule-diff-corpus.json'
+      - '.github/workflows/rule-diff.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diff:
+    name: Rule behaviour diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build candidate
+        run: go build -o /tmp/nox-candidate ./cli
+
+      - name: Fetch last released nox as the baseline
+        run: |
+          set -euo pipefail
+          tag="$(curl -fsSL https://api.github.com/repos/nox-hq/nox/releases/latest | jq -r .tag_name)"
+          ver="${tag#v}"
+          echo "baseline: $tag"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "$tmp/nox.tar.gz" \
+            "https://github.com/nox-hq/nox/releases/download/${tag}/nox_${ver}_linux_amd64.tar.gz"
+          tar xzf "$tmp/nox.tar.gz" -C "$tmp"
+          mv "$tmp/nox" /tmp/nox-baseline
+          /tmp/nox-baseline version
+
+      - name: Diff rule behaviour
+        id: diff
+        run: |
+          set +e
+          # $? after a pipe is tee's status, not the script's -- reading it
+          # would report success no matter what the harness found.
+          ./scripts/rule-diff.sh /tmp/nox-baseline /tmp/nox-candidate | tee /tmp/diff.txt
+          code="${PIPESTATUS[0]}"
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        # Exit 2 means a scan did not RUN -- unambiguous, so it fails the job.
+        #
+        # Exit 1 means rule behaviour changed. That is deliberately NOT a
+        # failure: most rule PRs change behaviour on purpose, and a check that
+        # goes red every time it works correctly is one people learn to ignore.
+        # It is a report, and it says so -- unlike a gate that was accidentally
+        # neutered into always-green, which is the failure mode this repo has
+        # been bitten by. The delta lands in the job summary for the reviewer.
+        if: always()
+        run: |
+          code="${{ steps.diff.outputs.code }}"
+          {
+            echo "## Rule behaviour vs last release"
+            echo
+            echo '```'
+            cat /tmp/diff.txt 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$code" in
+            0) echo "No rule-level change on the corpus." ;;
+            1) echo "::notice title=Rule behaviour changed::Review the delta in the job summary and confirm each change is intended. This is a report, not a gate." ;;
+            *) echo "::error title=Rule diff could not run::The harness failed (exit $code) -- a scan produced no findings.json, or the corpus is unusable. This check verified nothing."
+               exit 1 ;;
+          esac
