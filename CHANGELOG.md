@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-07-26
+
+### Added
+
+- **`nox fix --outdated` — an opt-in dependency currency pass.** By default
+  `fix` upgrades a dependency only when a `VULN-001` finding names a `fixed_in`
+  version: it acts on evidence of a vulnerability, not on the passage of time.
+  That is the right default for a security tool, but it means `fix` cannot stand
+  in for a version bumper, because a package that is merely old is never
+  touched.
+
+  The gap was observable rather than theoretical. `nox-remediate` ran green
+  across all 18 plugin repositories on 2026-07-22, and every one of them was
+  still on `github.com/nox-hq/nox v1.17.0` days later — working exactly as
+  designed, and not doing the currency job at all, because it was never that
+  job.
+
+  `--outdated` is deliberately a separate flag. A security fix is something an
+  operator wants applied without argument; routine version churn is a choice
+  with its own risk of breaking a build. Folded together, you could no longer
+  tell from the fact that `fix` changed something whether there had been a
+  vulnerability — so currency upgrades report as `OUTDATED` and never as
+  `VULN-001`.
+
+  Narrow on purpose: Go only (`go list -m -u -json all` is an authoritative
+  answer to "what is newer"); direct dependencies only, since indirect ones are
+  `go mod tidy`'s business; major bumps held unless `--include-major`; and it
+  never downgrades — a replace directive or a retracted version can make
+  `go list` report an "update" that is not newer, which is the defect fixed for
+  `VULN-001` in #372 and must not reappear on a new path.
+
+  This is the first thing in `fix` that reaches the network, which is
+  unavoidable: whether a newer release exists cannot be answered offline. It
+  runs only behind the flag and never during a scan, so the offline-first
+  guarantee for scanning is unchanged. (#378)
+
+### Fixed
+
+- Documented that `--outdated`, like `--content`, is a mode rather than a
+  modifier: it returns before the dependency and Action passes, so
+  `nox fix --outdated --actions` does the currency pass only and silently skips
+  Action pins. Two invocations are needed for both.
+
 ## [1.19.1] - 2026-07-26
 
 ### Fixed

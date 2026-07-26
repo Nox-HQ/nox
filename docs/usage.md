@@ -555,6 +555,16 @@ Scope and guarantees:
   offline. It runs only behind this flag, never as part of a scan, so nox's
   offline-first scanning guarantee is unaffected.
 
+`--outdated` is a *mode*, not a modifier: like `--content`, it returns before
+the dependency and Action passes run. `nox fix --outdated --actions` therefore
+does the currency pass **only** and silently skips Action pins. To do both, run
+two commands:
+
+```bash
+nox fix --actions --input findings.json --root .
+nox fix --outdated --root .
+```
+
 ### variants
 
 Report first-party code that reproduces the root-cause pattern of a known CVE —
