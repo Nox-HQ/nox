@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-07-26
+
+### Added
+
+- **`nox verify-secrets` — asks the issuer whether a detected credential still
+  works.** A detected secret and a live secret are different findings. "This
+  looks like a GitHub token" is a backlog item; "this is a working token" is an
+  incident, because the credential is already public and deleting the file does
+  not invalidate it. Only the issuer can tell the two apart, and the check needs
+  no privilege beyond the leaked credential itself.
+
+  ```
+  nox verify-secrets --input out/findings.json
+
+    SEC-003  config/app.js:1   LIVE   authenticates against the GitHub API (ghp_…)
+    checked 1 credential(s); 1 still authenticate
+  ```
+
+  Exit status is 1 when anything still authenticates, so a pipeline can act on
+  it without parsing output.
+
+  This is deliberately **not** revocation. Revoking a credential means calling
+  the provider's API with *another* credential, usually one more privileged than
+  the key that leaked — a nox that could revoke your AWS keys would hold AWS
+  admin credentials and be a better target than the leak it defends against.
+
+  Two properties hold the feature together and are enforced by tests. **The
+  endpoints are compiled in**: verification transmits a live credential to a
+  third party, which is defensible only because that party is the issuer, and a
+  configurable endpoint would make this an exfiltration primitive inside a
+  security scanner. **The secret never appears in output** — not in a message
+  and not in an error; the transport failure is deliberately not wrapped,
+  because a `url.Error` carries the request and the request carries the
+  credential.
+
+  Anything other than a clear yes or no — rate limiting, an outage — reports
+  `unknown`. Calling a live credential `revoked` because the issuer was briefly
+  unreachable would be worse than not checking at all.
+
+  `findings.json` still contains no secrets: a finding carries a file and a
+  column range, and verification re-reads the file at that location, so reports
+  remain shareable. A location that no longer fits the file is an error rather
+  than a best guess.
+
+  Covers GitHub tokens (`SEC-003`, `SEC-213`, `SEC-435`, `SEC-495`, `SEC-496`).
+  AWS is absent deliberately: verifying an AWS key needs SigV4 request signing
+  and the paired secret access key, which is a different shape of work rather
+  than another entry in a table. (#386)
+
 ## [1.21.0] - 2026-07-26
 
 ### Added
