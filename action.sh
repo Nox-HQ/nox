@@ -34,25 +34,65 @@ detect_platform() {
 
 # --- Version resolution ---
 
+# api_get fetches a GitHub API URL and echoes the response body, retrying
+# transient failures on the same schedule as fetch_asset below.
+#
+# It exists because the version lookup used to be a bare `curl -fsSL`, which
+# exits non-zero on any 403 and so killed the action before it ever reached the
+# retry-hardened download. GitHub answers 403 for rate limiting, and the
+# anonymous budget is 60 requests/hour shared across a runner IP — a burst of
+# plugin CI runs hits it routinely. The result was a red security gate whose
+# only log line was `curl: (22) ... error: 403`, followed by a second red check
+# when the SARIF upload found no file. Neither had anything to do with security.
+#
+# The API base is overridable so tests can point at a stub; it is not a
+# supported input.
+api_get() {
+  local url="$1"
+  local attempt=1 max=3 code="" tmp
+  tmp="$(mktemp)"
+
+  while :; do
+    # The Authorization header pattern uses ${GITHUB_TOKEN:+...}, which the
+    # secrets analyzer flags as SEC-161/SEC-163; the env-var name is not a
+    # secret. (Inline `# nox:ignore ...` comments break multiline shell
+    # commands — leave them out of pipelines.)
+    code=$(curl -sSL -w "%{http_code}" -o "${tmp}" \
+      -H "Accept: application/vnd.github+json" \
+      ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
+      "${url}" 2>/dev/null || true)
+
+    if [[ "${code}" == "200" ]]; then
+      cat "${tmp}"
+      rm -f "${tmp}"
+      return 0
+    fi
+
+    if (( attempt >= max )); then
+      rm -f "${tmp}"
+      return 1
+    fi
+
+    echo "GitHub API returned HTTP ${code:-unknown}; retrying (${attempt}/${max})..." >&2
+    sleep $(( attempt * ${NOX_RETRY_BACKOFF_SECS:-3} ))
+    attempt=$(( attempt + 1 ))
+  done
+}
+
 resolve_version() {
   local version="$1"
 
   if [[ "${version}" == "latest" ]]; then
     local tag
-    # The Authorization header pattern below uses ${GITHUB_TOKEN:+...}
-    # which the secrets analyzer flags as SEC-161/SEC-163; the env-var
-    # name is not a secret. (Inline `# nox:ignore ...` comments break
-    # multiline shell commands — leave them out of pipelines.)
-    tag=$(curl -fsSL \
-      -H "Accept: application/vnd.github+json" \
-      ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-      "https://api.github.com/repos/${REPO}/releases/latest" \
-      | grep -o '"tag_name":\s*"[^"]*"' \
+    tag=$(api_get "${NOX_API_BASE:-https://api.github.com}/repos/${REPO}/releases/latest" \
+      | grep -o '"tag_name":[[:space:]]*"[^"]*"' \
       | head -1 \
       | cut -d'"' -f4)
 
     if [[ -z "${tag}" ]]; then
-      echo "::error::Failed to resolve latest nox version from GitHub releases"
+      echo "::error::Failed to resolve latest nox version from GitHub releases." \
+        "If this says HTTP 403 above it is GitHub rate limiting, not a missing" \
+        "release — pin an explicit \`version:\` to skip the lookup entirely."
       exit 2
     fi
 

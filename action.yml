@@ -88,6 +88,13 @@ runs:
       id: scan
       shell: bash
       env:
+        # A composite action's step sees only what this block maps. action.sh
+        # has always sent `Authorization: Bearer ${GITHUB_TOKEN}` when the
+        # variable is set, but nothing ever set it — so both the version lookup
+        # and the asset download went out anonymous, against the 60-per-hour
+        # budget shared by every job on the runner's IP, and were throttled with
+        # a 403 accordingly.
+        GITHUB_TOKEN: ${{ github.token }}
         INPUT_PATH: ${{ inputs.path }}
         INPUT_FORMAT: ${{ inputs.format }}
         INPUT_OUTPUT: ${{ inputs.output }}
