@@ -366,6 +366,63 @@ six blocked a repository outright.
   was ever proposed. Covers the Go module, GitHub Actions, the extension's npm
   tree, and the Dockerfile base image.
 
+## [1.17.1] - 2026-07-25
+
+Backfilled on 2026-07-26: this release shipped without notes. Everything below
+was in the tag and has been in users' hands since; it is recorded here because a
+release with no changelog entry is one nobody can audit.
+
+### Fixed
+
+- **SLSA provenance was silently absent from six releases.** `slsa-verifier`
+  resolves a trusted builder's identity *from the ref*, so pinning
+  `slsa-github-generator` by commit SHA makes the attestation unverifiable —
+  contrary to the usual best practice for third-party actions, and stated as a
+  MUST by the generator's own documentation. The generator's `subjects`,
+  `generator` and `upload-assets` steps all reported success and only the
+  `final` step failed, so v1.14.0 through v1.17.0 published with **no
+  provenance at all** while the project advertised SLSA Level 3. The workflow
+  now references the generator by tag. Verify any release with
+  `gh release view <tag> --json assets` and look for `multiple.intoto.jsonl`: a
+  green workflow run is not evidence the asset attached. (#354)
+
+- **`nox fix --actions` caused that, and no longer can.** Two defects in the
+  pin resolver, both of which fired on this repository. It rewrote *reusable
+  workflow* references to a digest, which is what unpinned the SLSA generator;
+  reusable workflows are now never rewritten. And its tag filter used a
+  substring match, so `v2.1.0-rc.3` matched a search for `v2.1.0`, parsed to
+  the same version, and won the specificity tiebreak — meaning a release
+  candidate could outrank the release. Prereleases can no longer outrank a
+  release. (#356)
+
+- **The VS Code extension declared a version it could not honour.**
+  `engines.vscode` advertised `^1.75.0` while its own `vscode-languageclient`
+  dependency required `^1.82.0`. VS Code gates installation on that field, so
+  anyone on 1.75–1.81 could install the extension and have it fail at
+  activation. (#358)
+
+- **The extension could not resolve modern package exports.** It compiled under
+  TypeScript's legacy `node` module resolution, which predates the `exports`
+  field, so `vscode-languageclient/node` was invisible to it (TS2307). Now
+  `node16`. (#359)
+
+### Added
+
+- **CI for the VS Code extension.** It had none: no workflow ran `npm ci` or
+  `tsc`, so every change to it — and every dependency bump — merged on a green
+  tick that had never compiled it. That is how GHSA-mh99-v99m-4gvg
+  (brace-expansion ReDoS) reached this repository, found later by a self-scan
+  rather than by CI. The type-check job caught a real breakage on its first
+  run. (#357)
+
+### Changed
+
+- Go 1.26.5, and the last hardcoded toolchain pins removed. (#360)
+- Dependency updates: `vscode-languageclient` 10.1.0, `typescript` 7.0.2,
+  `@types/node` 26.1.1, `golang.org/x/sync` 0.22.0, `golang.org/x/term` 0.45.0,
+  `openai-go` 3.46.0, and base-image bumps for golang and distroless.
+  (#341, #345, #346, #348, #349, #363)
+
 ## [1.17.0] - 2026-07-25
 
 ### Changed
