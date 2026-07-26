@@ -189,6 +189,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
 				continue
 			}
+			// AI-049 asserts an eval/code-execution sink (CWE-95). A call
+			// executing a SQL statement is a database sink, and the AI token
+			// the rule gated on is a column name inside the query text — see
+			// isSQLStatementExec.
+			if results[i].RuleID == "AI-049" && isSQLStatementExec(content, &results[i]) {
+				continue
+			}
 			fs.Add(results[i])
 		}
 
