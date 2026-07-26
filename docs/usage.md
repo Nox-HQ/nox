@@ -514,7 +514,23 @@ homework, and a green scan would mean less than it does now.
 The same logic is why a hardcoded secret is not auto-fixed. Moving the literal
 into an environment variable silences the rule, but the credential is already in
 the git history and is compromised the moment it is committed; the fix that
-matters is rotating it at the provider, which no tool can do for you.
+matters is rotating it at the provider.
+
+nox will not do that for you, and the reason is worth stating rather than
+implying. Revoking a credential means calling the provider's API with *another*
+credential — usually one more privileged than the key that leaked. A scanner
+that could revoke your AWS keys is a scanner holding AWS admin credentials, and
+that makes it the highest-value target in your organisation: compromising it
+would be strictly worse than the leak it was defending against. It also
+contradicts what nox is — read-only by default, no required external services.
+
+The one system that does close this loop is GitHub's secret scanning partner
+program, and it manages it by being the host rather than by being more capable:
+AWS, Stripe, npm and others have onboarded an endpoint that GitHub reports
+matches to, and they revoke on their side. That is an ecosystem relationship,
+not a feature — there is nothing for a scanner to implement. If you want
+automatic revocation, enable GitHub secret scanning alongside nox; the two do
+not overlap on this point.
 
 So: a clean `fix` run means the remediable classes were handled. It is not a
 statement that the SAST findings were.
