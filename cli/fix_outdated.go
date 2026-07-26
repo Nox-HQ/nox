@@ -23,10 +23,10 @@ import (
 // longer tell, from the fact that it changed something, whether there had been
 // a vulnerability.
 //
-// Go only for now. `go list -m -u -json all` is an authoritative, deterministic
-// source of "what is newer", and the toolchain is already a hard requirement of
-// the Go path in applyUpgrade. Other ecosystems report as unsupported rather
-// than being guessed at.
+// Go resolves through the toolchain (`go list -m -u -json all`), which already
+// understands replace directives, retractions and the module graph — none of
+// which a bare proxy query honours. Every other ecosystem resolves against its
+// own registry; see outdated_registry.go.
 
 // goModuleUpdate is the `Update` field `go list -m -u` attaches to a module
 // that has a newer version available.
@@ -134,15 +134,45 @@ func goListModules(root string) ([]goModuleStatus, error) {
 // OUTDATED means "newer version exists", not "you were vulnerable" — conflating
 // them would inflate what a remediation PR appears to have fixed.
 func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
-	mods, err := goListModules(manifestRoot)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 2
+	var plan upgradePlan
+	var degraded []string
+
+	// Go is resolved through the toolchain rather than a registry call:
+	// `go list -m -u` already understands replace directives, retractions and
+	// the module graph, none of which a proxy query would honour. Absent go.mod
+	// is not an error — a JavaScript project has nothing to report here.
+	if _, statErr := os.Stat(filepath.Join(manifestRoot, "go.mod")); statErr == nil {
+		mods, err := goListModules(manifestRoot)
+		if err != nil {
+			degraded = append(degraded, fmt.Sprintf("go: %v", err))
+		} else {
+			goPlan := planCurrencyUpgrades(mods, includeMajor)
+			plan.actions = append(plan.actions, goPlan.actions...)
+			plan.skipped += goPlan.skipped
+			plan.majorSkipped += goPlan.majorSkipped
+		}
 	}
 
-	plan := planCurrencyUpgrades(mods, includeMajor)
+	// Everything else resolves against its own registry.
+	regPlan, regDegraded := planRegistryCurrency(manifestRoot, includeMajor, registryBase)
+	plan.actions = append(plan.actions, regPlan.actions...)
+	plan.skipped += regPlan.skipped
+	plan.majorSkipped += regPlan.majorSkipped
+	degraded = append(degraded, regDegraded...)
+
+	// Report what could not be checked before reporting what was found, so a
+	// short list is never mistaken for a clean bill of health. This is the same
+	// contract as the scan degradations model.
+	for _, d := range degraded {
+		fmt.Fprintf(os.Stderr, "degraded: could not determine the latest version — %s\n", d)
+	}
+
 	if len(plan.actions) == 0 {
-		fmt.Println("nox fix --outdated: all direct dependencies are current.")
+		if len(degraded) > 0 {
+			fmt.Printf("nox fix --outdated: no upgrades found, but %d dependency check(s) could not complete (see above).\n", len(degraded))
+		} else {
+			fmt.Println("nox fix --outdated: all direct dependencies are current.")
+		}
 		if plan.majorSkipped > 0 {
 			fmt.Printf("note: %d major-bump upgrade(s) held back (use --include-major to apply)\n", plan.majorSkipped)
 		}
@@ -172,8 +202,14 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	// Only tidy when every upgrade landed. Tidying over a partial application
 	// can rewrite go.mod around a state the operator did not intend.
 	if failed == 0 {
-		if err := tidyEco(manifestRoot, "go"); err != nil {
-			fmt.Fprintf(os.Stderr, "warn: go mod tidy failed: %v\n", err)
+		used := map[string]bool{}
+		for _, a := range plan.actions {
+			used[a.ecosystem] = true
+		}
+		for eco := range used {
+			if err := tidyEco(manifestRoot, eco); err != nil {
+				fmt.Fprintf(os.Stderr, "warn: %s tidy failed: %v\n", eco, err)
+			}
 		}
 		return 0
 	}

@@ -166,10 +166,13 @@ type upgradePlan struct {
 // directly. Other ecosystems get counted as skipped — operators can
 // still see the fixed_in metadata in findings.json, just not auto-apply.
 var supportedFixEcosystems = map[string]string{
-	"go":    "go get",
-	"npm":   "npm install",
-	"pypi":  "pip install",
-	"cargo": "cargo update",
+	"go":       "go get",
+	"npm":      "npm install",
+	"pypi":     "pip install",
+	"cargo":    "cargo update",
+	"rubygems": "bundle update",
+	"composer": "composer update",
+	"nuget":    "dotnet add package",
 }
 
 // planUpgrades extracts upgrade actions from VULN findings. Skips
@@ -249,6 +252,12 @@ func applyUpgrade(manifestRoot string, a upgradeAction) error {
 		return applyPyPIUpgrade(manifestRoot, a)
 	case "cargo":
 		return applyCargoUpgrade(manifestRoot, a)
+	case "rubygems":
+		return applyRubyGemsUpgrade(manifestRoot, a)
+	case "composer":
+		return applyComposerUpgrade(manifestRoot, a)
+	case "nuget":
+		return applyNuGetUpgrade(manifestRoot, a)
 	}
 	return fmt.Errorf("ecosystem %q not supported by applyUpgrade", a.ecosystem)
 }
@@ -280,6 +289,28 @@ func applyPyPIUpgrade(manifestRoot string, a upgradeAction) error {
 // rewrites Cargo.lock.
 func applyCargoUpgrade(manifestRoot string, a upgradeAction) error {
 	return runIn(manifestRoot, "cargo", "update", "-p", a.pkg, "--precise", strings.TrimPrefix(a.toVersion, "v"))
+}
+
+// applyRubyGemsUpgrade runs `bundle update <gem> --conservative`.
+//
+// Deliberately not a Gemfile rewrite: the Gemfile constraint is the operator's
+// declared intent, and bundler resolving within it is the behaviour a Ruby
+// project expects. If the constraint pins below the latest release, bundler
+// says so rather than nox silently editing the pin away.
+func applyRubyGemsUpgrade(manifestRoot string, a upgradeAction) error {
+	return runIn(manifestRoot, "bundle", "update", a.pkg, "--conservative")
+}
+
+// applyComposerUpgrade runs `composer update <vendor/pkg> --with-dependencies`.
+// Composer resolves within the composer.json constraint for the same reason.
+func applyComposerUpgrade(manifestRoot string, a upgradeAction) error {
+	return runIn(manifestRoot, "composer", "update", a.pkg, "--with-dependencies")
+}
+
+// applyNuGetUpgrade runs `dotnet add package <id> --version <v>`, which
+// rewrites the PackageReference in the project file.
+func applyNuGetUpgrade(manifestRoot string, a upgradeAction) error {
+	return runIn(manifestRoot, "dotnet", "add", "package", a.pkg, "--version", strings.TrimPrefix(a.toVersion, "v"))
 }
 
 func runIn(dir, name string, args ...string) error {

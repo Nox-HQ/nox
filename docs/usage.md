@@ -543,14 +543,34 @@ currency upgrades are reported as `OUTDATED`, never as `VULN-001`.
 
 Scope and guarantees:
 
-- **Go only.** `go list -m -u -json all` is an authoritative answer to "what is
-  newer"; other ecosystems are not guessed at.
-- **Direct dependencies only.** Indirect ones are `go mod tidy`'s business —
+- **Seven ecosystems:** Go, npm, PyPI, Cargo, RubyGems, Composer and NuGet. Go
+  resolves through `go list -m -u -json all`, which already understands replace
+  directives, retractions and the module graph. The rest query their own
+  registry directly, so planning needs no toolchain — only *applying* an upgrade
+  shells out to `npm` / `pip` / `cargo` / `bundle` / `composer` / `dotnet`.
+  Maven and Gradle are parsed by the scanner but have no currency resolver:
+  `maven-metadata.xml` has no single "latest stable" and Gradle has no canonical
+  upgrade command, so they are reported as unresolved rather than guessed at.
+- **Latest STABLE, never a prerelease.** Every registry expresses this
+  differently and most of them invite the wrong answer: npm publishes channels
+  under `dist-tags` where only `latest` is stable; crates.io reports
+  `max_version` (including prereleases) beside `max_stable_version`; Packagist
+  returns newest-first but mixes in `dev-<branch>` aliases; and NuGet returns an
+  *ascending* list with prereleases interleaved, so its last element is often a
+  beta. A package with no stable release yields no suggestion at all.
+- **Direct dependencies only.** Indirect ones belong to the lockfile resolver —
   bumping them writes explicit requirements for packages you do not import.
+  Directness comes from the *manifest* (`go.mod`, `package.json`, `Cargo.toml`,
+  `requirements.txt`, `Gemfile`, `composer.json`, `*.csproj`); the resolved current version comes from the lockfile,
+  because a manifest range like `^4.18.0` is not a version. A range with no
+  lockfile entry is skipped rather than assigned a version it does not have.
 - **Never downgrades.** A replace directive or retracted version can make
   `go list` report an "update" that is not newer; those are dropped.
 - **Major bumps held** unless `--include-major`, and counted so you can see
   something is waiting.
+- **A registry that cannot answer is reported, not assumed current.** An
+  unreachable or rate-limiting registry produces a `degraded:` line, never a
+  silent "up to date" — the same contract as scan degradations.
 - **Reaches the network.** This is the one thing that cannot be answered
   offline. It runs only behind this flag, never as part of a scan, so nox's
   offline-first scanning guarantee is unaffected.
