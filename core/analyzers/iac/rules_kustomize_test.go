@@ -12,8 +12,10 @@ import (
 
 func TestKustomizeRules_Count(t *testing.T) {
 	rules := builtinKustomizeRules()
-	if got := len(rules); got != 15 {
-		t.Errorf("expected 15 Kustomize rules, got %d", got)
+	// 14, not 15: IAC-237 (privileged: true) was retired into IAC-007 in
+	// #394 -- three rules reported that one condition.
+	if got := len(rules); got != 14 {
+		t.Errorf("expected 14 Kustomize rules, got %d", got)
 	}
 }
 
@@ -185,7 +187,7 @@ resources:
 }
 
 // ---------------------------------------------------------------------------
-// IAC-237: privileged: true in Kustomize overlay
+// IAC-237 (retired into IAC-007): privileged: true in Kustomize overlay
 // ---------------------------------------------------------------------------
 
 func TestDetect_KustomizePrivilegedContainer(t *testing.T) {
@@ -212,18 +214,7 @@ patchesStrategicMerge:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	found := false
-	for _, f := range results {
-		if f.RuleID == "IAC-237" {
-			found = true
-			if f.Severity != findings.SeverityHigh {
-				t.Errorf("expected severity high, got %s", f.Severity)
-			}
-		}
-	}
-	if !found {
-		t.Error("expected IAC-237 to be detected")
-	}
+	assertRetiredIntoSurvivor(t, results, "IAC-237", "IAC-007", findings.SeverityCritical)
 }
 
 // ---------------------------------------------------------------------------

@@ -161,7 +161,11 @@ func LoadVEX(path string) (*Document, error) {
 //  2. The finding's Fingerprint, when the VEX statement carries a
 //     matching _nox_fingerprint aux field — pins a waiver to a
 //     specific occurrence rather than a whole rule class.
-//  3. (VULN-001 only) The CVE / GHSA identifiers in the finding's
+//  3. A retired rule ID the finding inherited, or the fingerprint that
+//     retired rule would have produced here (see
+//     findings.Finding.RetiredRuleIDs). Retiring a duplicate rule ID
+//     must not un-waive what an operator already accepted under it.
+//  4. (VULN-001 only) The CVE / GHSA identifiers in the finding's
 //     vuln_id and aliases metadata. Operators can keep waiving by
 //     CVE without learning nox-specific rule IDs.
 //
@@ -197,7 +201,25 @@ func ApplyVEX(fs *findings.FindingSet, doc *Document) int {
 				matched = &stmt
 			}
 		}
-		// 3. CVE / GHSA aliases for VULN-001 findings.
+		// 3. Waivers written against a rule ID that has since been retired
+		//    into this one, by ID or by pinned fingerprint.
+		if matched == nil {
+			for _, id := range f.RetiredRuleIDs {
+				if stmt, ok := stmtByID[strings.ToUpper(id)]; ok {
+					matched = &stmt
+					break
+				}
+			}
+		}
+		if matched == nil {
+			for _, fp := range f.AliasFingerprints {
+				if stmt, ok := stmtByFingerprint[fp]; ok {
+					matched = &stmt
+					break
+				}
+			}
+		}
+		// 4. CVE / GHSA aliases for VULN-001 findings.
 		if matched == nil && f.RuleID == "VULN-001" {
 			for _, id := range collectVulnIDs(f) {
 				if stmt, ok := stmtByID[strings.ToUpper(id)]; ok {

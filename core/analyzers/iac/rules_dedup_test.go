@@ -6,8 +6,46 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
+
+// assertRetiredIntoSurvivor is the check a retirement has to pass: the
+// condition the retired ID reported is still detected, exactly once, by the
+// rule that absorbed it — and the retired ID is still attached to that finding
+// as an alias, which is what keeps a baseline entry, a VEX statement or a
+// nox:ignore comment written against it matching.
+//
+// A retirement that merely deletes a rule passes "no duplicate" and fails here.
+func assertRetiredIntoSurvivor(t *testing.T, results []findings.Finding, retired, survivor string, want findings.Severity) {
+	t.Helper()
+
+	var matches []findings.Finding
+	for i := range results {
+		switch results[i].RuleID {
+		case retired:
+			t.Errorf("%s is retired but was still emitted", retired)
+		case survivor:
+			matches = append(matches, results[i])
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected exactly one %s finding (the condition %s used to double-report), got %d",
+			survivor, retired, len(matches))
+	}
+	f := matches[0]
+	if f.Severity != want {
+		t.Errorf("%s severity = %s, want %s", survivor, f.Severity, want)
+	}
+	if !f.MatchesRuleID(retired) {
+		t.Errorf("%s finding does not answer to the retired ID %s (RetiredRuleIDs=%v) — "+
+			"every waiver written against %s stops matching", survivor, retired, f.RetiredRuleIDs, retired)
+	}
+	if len(f.AliasFingerprints) == 0 {
+		t.Errorf("%s finding carries no alias fingerprint for %s — baselines keyed on the "+
+			"retired ID cannot match", survivor, retired)
+	}
+}
 
 // Two rules that fire on the same line for the same condition report one issue
 // twice. IAC-018 ("Workflow step suppresses failures with continue-on-error",
@@ -147,33 +185,94 @@ var allowedOverlap = map[struct{ a, b string }]bool{
 }
 
 // knownDuplicateRulePairs are pairs that DO double-report the same condition and
-// are not yet fixed. Nearly all follow one shape: rules_expanded.go (IAC-266 to
-// IAC-500) re-implements a condition rules.go (IAC-001 to IAC-185) already
+// are not yet fixed. Nearly all followed one shape: rules_expanded.go (IAC-266 to
+// IAC-500) re-implemented a condition rules.go (IAC-001 to IAC-185) already
 // covered, because the files are concatenated by builtinIaCRules with nothing
 // comparing them.
 //
-// Fixing one means retiring an ID and aliasing it, so existing baselines keep
-// matching instead of silently un-waiving; that is a behavioural change with
-// migration consequences, so it is deliberately not bundled into this test.
+// It is EMPTY, and that is the point: the 14 pairs it tracked were retired in
+// #394. Ten IDs (IAC-237, IAC-283, IAC-287, IAC-291, IAC-292, IAC-310, IAC-312,
+// IAC-321, IAC-333, IAC-337) were absorbed by the older rule that already
+// reported their condition, each declaring the retirement in that rule's
+// `retires` list so baselines, VEX statements and nox:ignore comments written
+// against the retired ID keep matching. Two pairs were not duplicates but
+// generic patterns swallowing specific ones — `encrypt\w*` over
+// `storage_encrypted`, `replicas` over `minReplicas` — and were fixed by
+// bounding the generic pattern with `\b` instead, so both rules survive.
 //
-// Like knownUncompilableIaCRules, this set must only ever SHRINK. Remove a pair
-// when it is fixed; the guard below then requires it to stay fixed. A NEW
-// duplicate fails the build.
-var knownDuplicateRulePairs = map[struct{ a, b string }]string{
-	{"IAC-005", "IAC-037"}: "generic `encrypt* = false` also matches the specific `storage_encrypted = false`",
-	{"IAC-007", "IAC-065"}: "privileged: true",
-	{"IAC-007", "IAC-237"}: "privileged: true (three rules cover this one condition)",
-	{"IAC-065", "IAC-237"}: "privileged: true",
-	{"IAC-017", "IAC-312"}: "deprecated ::set-output",
-	{"IAC-018", "IAC-310"}: "continue-on-error: true, reported low AND medium",
-	{"IAC-026", "IAC-291"}: "hostPID: true",
-	{"IAC-027", "IAC-292"}: "hostIPC: true",
-	{"IAC-030", "IAC-287"}: "automountServiceAccountToken: true",
-	{"IAC-036", "IAC-283"}: "publicly_accessible = true",
-	{"IAC-042", "IAC-321"}: "enable_https_traffic_only = false",
-	{"IAC-111", "IAC-333"}: "enable_secure_boot = false",
-	{"IAC-116", "IAC-337"}: "require_ssl = false",
-	{"IAC-141", "IAC-399"}: "minReplicas: 1",
+// Like knownUncompilableIaCRules, this set must only ever SHRINK. Nothing may
+// be added to it: a NEW duplicate fails the build, and the fix is to retire an
+// ID (with its alias) or to narrow the pattern, not to record the overlap here.
+var knownDuplicateRulePairs = map[struct{ a, b string }]string{}
+
+// partiallyRetiredIDs are IDs that survive as rules while ONE branch of what
+// they used to match moved to another rule. IAC-065 is the only one: its
+// `Privileged: true` branch went to IAC-007 (which reported the same condition
+// at critical), while its `User: 0|root` branch — the CloudFormation ECS
+// contribution nothing else makes — stayed.
+//
+// Such an ID is unusual enough to be listed rather than inferred: it means a
+// waiver naming it also reaches the rule that absorbed the moved branch, at the
+// lines where the moved pattern matches. That is deliberate — it is the same
+// condition under a new ID — but it is not something to introduce by accident.
+var partiallyRetiredIDs = map[string]bool{"IAC-065": true}
+
+// TestIaCRuleRetirements_AreWellFormed checks the migration data itself. A
+// retirement whose pattern does not compile, or that names a live rule by
+// mistake, silently stops keeping old waivers alive — the failure mode is
+// invisible in a scan and only shows up as red gates in consuming repos.
+func TestIaCRuleRetirements_AreWellFormed(t *testing.T) {
+	all := builtinIaCRules()
+
+	live := make(map[string]bool, len(all))
+	for _, r := range all {
+		live[r.ID] = true
+	}
+
+	declaredBy := map[string]string{}
+	retirements := 0
+	for _, r := range all {
+		for _, retired := range r.Retires {
+			retirements++
+			if retired.ID == "" {
+				t.Errorf("%s retires a rule with no ID", r.ID)
+			}
+			if retired.ID == r.ID {
+				t.Errorf("%s retires itself", r.ID)
+			}
+			if prev, dup := declaredBy[retired.ID]; dup {
+				t.Errorf("%s is retired by both %s and %s; one finding would answer to it twice",
+					retired.ID, prev, r.ID)
+			}
+			declaredBy[retired.ID] = r.ID
+
+			if retired.Pattern == "" {
+				t.Errorf("%s retires %s with no pattern, so it cannot reproduce that rule's "+
+					"fingerprints and every baseline entry for %s stops matching",
+					r.ID, retired.ID, retired.ID)
+				continue
+			}
+			if _, err := regexp.Compile(retired.Pattern); err != nil {
+				t.Errorf("%s retires %s with an uncompilable pattern %q: %v",
+					r.ID, retired.ID, retired.Pattern, err)
+			}
+			if live[retired.ID] && !partiallyRetiredIDs[retired.ID] {
+				t.Errorf("%s is retired by %s but is still a live rule; either it was never "+
+					"retired or the alias widens %s's waivers to a rule that still fires",
+					retired.ID, r.ID, retired.ID)
+			}
+		}
+	}
+	if retirements == 0 {
+		t.Fatal("no rule declares a retirement; either the retirements were dropped or this " +
+			"test is looking at the wrong rule set")
+	}
+	for id := range partiallyRetiredIDs {
+		if !live[id] {
+			t.Errorf("%s is listed as partially retired but no longer exists; retire it fully "+
+				"and drop it from partiallyRetiredIDs", id)
+		}
+	}
 }
 
 // literalProbe turns a regex into a plain string that the regex matches, or

@@ -616,8 +616,11 @@ func TestDetect_CustomDockerfileExtension(t *testing.T) {
 
 func TestAllIaCRules_Count(t *testing.T) {
 	rules := builtinIaCRules()
-	if got := len(rules); got != 500 {
-		t.Errorf("expected 500 IaC rules, got %d", got)
+	// 490, not 500: ten duplicate IDs were retired in #394 (see
+	// knownDuplicateRulePairs). Each lives on as an alias on the rule that
+	// absorbed it, so the drop is in rule COUNT only, not in coverage.
+	if got := len(rules); got != 490 {
+		t.Errorf("expected 490 IaC rules, got %d", got)
 	}
 }
 

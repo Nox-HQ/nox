@@ -76,17 +76,9 @@ func builtinKustomizeRules() []rules.Rule {
 			remediation:  "Move sensitive values from configMapGenerator to secretGenerator and use external secret management (e.g., Sealed Secrets, SOPS, or an external secrets operator).",
 			references:   []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
-		{
-			id: "IAC-237", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)privileged:\s*true`,
-			description:  "Kustomize patch enables privileged containers",
-			cwe:          "CWE-250",
-			keywords:     []string{"privileged"},
-			filePatterns: kustomizeFilePatterns,
-			tags:         []string{"iac", "kustomize", "privilege"},
-			remediation:  "Avoid running containers in privileged mode. Use specific Linux capabilities (securityContext.capabilities.add) instead of granting full host access.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
-		},
+		// IAC-237 retired into IAC-007, which already reported this condition.
+		// IAC-007's `retires` carries the alias that keeps waivers written
+		// against IAC-237 matching.
 		{
 			id: "IAC-238", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
 			pattern:      `(?i)count:\s*1\b`,

@@ -1428,6 +1428,26 @@ func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degra
 	}
 }
 
+// suppressionCovers reports whether an inline directive waives a finding,
+// under the finding's own rule ID or under a retired ID it inherited.
+//
+// The retired-ID leg is what keeps `# nox:ignore IAC-310` working after
+// IAC-310 was retired into IAC-018: the comment names an ID the scanner no
+// longer emits, and without this the waived finding would come back reported
+// under the surviving ID. See findings.Finding.RetiredRuleIDs.
+func suppressionCovers(s suppress.Suppression, f *findings.Finding) bool {
+	now := timeNow()
+	if s.MatchesFinding(f.RuleID, f.Location.StartLine, now) {
+		return true
+	}
+	for _, id := range f.RetiredRuleIDs {
+		if s.MatchesFinding(id, f.Location.StartLine, now) {
+			return true
+		}
+	}
+	return false
+}
+
 // applySuppressions reads files that have findings and marks suppressed
 // findings. scanned lists every file the scan looked at, so waivers in files
 // that produced no finding are still checked — see sweepWaiversInCleanFiles.
@@ -1505,7 +1525,7 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 			f := items[idx]
 			suppressed := false
 			for si := range suppressions {
-				if suppressions[si].MatchesFinding(f.RuleID, f.Location.StartLine, timeNow()) {
+				if suppressionCovers(suppressions[si], &f) {
 					used[si] = true
 					suppressed = true
 				}

@@ -25,6 +25,12 @@ type iacRule struct {
 	// Used e.g. by IAC-013 to declare a trusted-publisher allowlist that the
 	// regex matcher consumes via a post-filter.
 	extraMetadata map[string]string
+	// retires lists rule IDs this rule absorbed, with the pattern each of them
+	// carried at retirement. It is what keeps baselines, VEX statements and
+	// nox:ignore comments written against the retired ID matching — see
+	// rules.RetiredRule. Retiring an ID without it un-waives, in every
+	// consuming repo, findings an operator explicitly accepted.
+	retires []rules.RetiredRule
 	// absence* fields, when set, switch the rule to the block-scoped absence
 	// matcher (matcher_type "absence") instead of a plain regex. They replace
 	// the RE2-incompatible negative-lookahead patterns that never compiled: the
@@ -128,7 +134,25 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-005", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)encrypt\w*\s*=\s*(false|"false")`,
+			// `\b` keeps this generic rule off attributes that a specific rule
+			// owns. Without it `encrypt\w*` matched the tail of
+			// `storage_encrypted = false`, so IAC-037 (RDS storage encryption,
+			// high confidence) and this rule (low confidence, generic message)
+			// both reported one line. The boundary makes the split legible:
+			// this rule covers attributes NAMED encrypt* (`encrypted = false`
+			// on an EBS volume), a prefixed attribute belongs to the rule that
+			// knows the resource. Surviving matches keep their exact matched
+			// text, so their fingerprints — and any baseline entry — are
+			// unchanged.
+			//
+			// The cost is prefixed attributes that no specific rule covers yet
+			// (`at_rest_encryption_enabled = false`, `transit_encryption_enabled
+			// = false` on ElastiCache): they are no longer reported. RE2 has no
+			// negative lookbehind, so a boundary is the only way to keep this
+			// pattern off the specific rules' ground, and a low-confidence
+			// generic message was never the right home for them — a rule per
+			// resource is.
+			pattern:     `(?i)\bencrypt\w*\s*=\s*(false|"false")`,
 			description: "Terraform resource has encryption disabled",
 			cwe:         "CWE-311", keywords: []string{"encrypt"},
 			filePatterns: []string{"*.tf", "*.tfvars"},
@@ -153,6 +177,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-284", keywords: []string{"publicly_accessible"},
 			filePatterns: []string{"*.tf", "*.tfvars"},
 			tags:         []string{"iac", "terraform", "database", "network"},
+			retires:      []rules.RetiredRule{{ID: "IAC-283", Pattern: `(?i)publicly_accessible\s*=\s*true`}},
 			remediation:  "Set publicly_accessible = false and access the database through a VPC, bastion host, or VPN. Public database instances are a common attack vector.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
 		},
@@ -213,6 +238,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-319", keywords: []string{"enable_https_traffic_only"},
 			filePatterns: []string{"*.tf"},
 			tags:         []string{"iac", "terraform", "azure", "encryption"},
+			retires:      []rules.RetiredRule{{ID: "IAC-321", Pattern: `(?i)enable_https_traffic_only\s*=\s*false`}},
 			remediation:  "Set enable_https_traffic_only = true to enforce HTTPS on Azure storage accounts. HTTP traffic exposes data to eavesdropping and tampering.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/319.html"},
 		},
@@ -252,13 +278,25 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-007", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `(?i)privileged\s*:\s*true`,
-			description: "Kubernetes pod running as privileged",
+			// The single rule for `privileged: true`. IAC-065 (CloudFormation
+			// ECS) and IAC-237 (Kustomize) reported the same condition, so one
+			// line produced three findings at two severities. Absorbing them
+			// costs two things they could do that this could not: the quoted
+			// `Privileged: "true"` form, and *.template files. Both are
+			// covered here now, and `retires` keeps their waivers working.
+			pattern:     `(?i)privileged\s*:\s*(?:true|"true")`,
+			description: "Container runs in privileged mode",
 			cwe:         "CWE-250", keywords: []string{"privileged"},
-			filePatterns: []string{"*.yaml", "*.yml"},
-			tags:         []string{"iac", "kubernetes", "privilege"},
-			remediation:  "Set privileged: false in the pod security context. If specific capabilities are needed, use securityContext.capabilities.add with only what is required and drop ALL others. Enable readOnlyRootFilesystem: true where possible. Set runAsNonRoot: true and specify a non-root runAsUser. Apply Pod Security Standards.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://kubernetes.io/docs/concepts/security/pod-security-standards/"},
+			filePatterns: []string{"*.yaml", "*.yml", "*.template"},
+			tags:         []string{"iac", "kubernetes", "cloudformation", "kustomize", "privilege"},
+			retires: []rules.RetiredRule{
+				// Only IAC-065's privileged branch moved here; its root-user
+				// branch stayed behind and IAC-065 still reports it.
+				{ID: "IAC-065", Pattern: `(?i)Privileged\s*:\s*(true|"true")`},
+				{ID: "IAC-237", Pattern: `(?i)privileged:\s*true`},
+			},
+			remediation: "Set privileged: false (Kubernetes securityContext, ECS ContainerDefinitions.Privileged, or the Kustomize patch that sets it). If specific capabilities are needed, use securityContext.capabilities.add with only what is required and drop ALL others. Enable readOnlyRootFilesystem: true where possible. Set runAsNonRoot: true and specify a non-root runAsUser. Apply Pod Security Standards.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/250.html", "https://kubernetes.io/docs/concepts/security/pod-security-standards/"},
 		},
 		{
 			id: "IAC-008", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -297,6 +335,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-250", keywords: []string{"hostpid"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "privilege"},
+			retires:      []rules.RetiredRule{{ID: "IAC-291", Pattern: `(?i)hostPID:\s*true`}},
 			remediation:  "Remove hostPID: true. Sharing the host PID namespace allows the container to see and signal all processes on the host, breaking process isolation.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
@@ -307,6 +346,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-250", keywords: []string{"hostipc"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "privilege"},
+			retires:      []rules.RetiredRule{{ID: "IAC-292", Pattern: `(?i)hostIPC:\s*true`}},
 			remediation:  "Remove hostIPC: true. Sharing the host IPC namespace allows containers to access shared memory and IPC resources of other host processes.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
@@ -337,6 +377,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-269", keywords: []string{"automountserviceaccounttoken"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "privilege"},
+			retires:      []rules.RetiredRule{{ID: "IAC-287", Pattern: `(?i)automountServiceAccountToken:\s*true`}},
 			remediation:  "Set automountServiceAccountToken: false unless the pod requires Kubernetes API access. Mounted tokens can be used for lateral movement if the pod is compromised.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/269.html"},
 		},
@@ -461,11 +502,17 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-017", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:     `::set-output\s+name=`,
+			// Case-insensitive so it covers everything the retired IAC-312
+			// caught. IAC-312 dropped the `::` prefix entirely, which is what
+			// makes the workflow command a command; without it the pattern
+			// also matched prose about set-output. That looseness is not
+			// carried over.
+			pattern:     `(?i)::set-output\s+name=`,
 			description: "Workflow uses deprecated set-output command",
 			cwe:         "CWE-77", keywords: []string{"set-output"},
 			filePatterns: []string{"*.yml", "*.yaml"},
 			tags:         []string{"iac", "github-actions", "deprecated"},
+			retires:      []rules.RetiredRule{{ID: "IAC-312", Pattern: `(?i)set-output\s+name=`}},
 			remediation:  "Replace ::set-output with $GITHUB_OUTPUT environment file. The set-output command is deprecated and vulnerable to log injection attacks.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/77.html", "https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/"},
 		},
@@ -476,8 +523,13 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-755", keywords: []string{"continue-on-error"},
 			filePatterns: []string{"*.yml", "*.yaml"},
 			tags:         []string{"iac", "github-actions", "error-handling"},
-			remediation:  "Avoid continue-on-error: true as it can mask security check failures. If needed, check the step outcome explicitly and fail on security-critical errors.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/755.html"},
+			// The retired IAC-310 reported this at medium; keeping the older
+			// ID's low is the conservative half of an arbitrary split — a
+			// deliberately non-blocking step is a hygiene signal, and a gate
+			// keyed on medium should not start failing because of a de-dup.
+			retires:     []rules.RetiredRule{{ID: "IAC-310", Pattern: `(?i)continue-on-error:\s*true`}},
+			remediation: "Avoid continue-on-error: true as it can mask security check failures. If needed, check the step outcome explicitly and fail on security-critical errors.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/755.html"},
 		},
 
 		// =================================================================
@@ -720,12 +772,20 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-065", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(?:Privileged\s*:\s*(true|"true")|User\s*:\s*["']?(?:0|root)["']?)`,
-			description: "CloudFormation ECS task definition runs as privileged or root",
-			cwe:         "CWE-250", keywords: []string{"Privileged", "ContainerDefinitions", "TaskDefinition"},
+			// The privileged branch moved to IAC-007, which reported the same
+			// condition at critical. What is left is this rule's own
+			// contribution — a container definition running as root — and its
+			// matched text is unchanged, so existing findings keep their
+			// fingerprints and their baseline entries.
+			pattern:     `(?i)User\s*:\s*["']?(?:0|root)["']?`,
+			description: "CloudFormation ECS task definition runs as root",
+			// Keywords stay as they were: they gate at file level, so trimming
+			// "Privileged" here would stop scanning files this rule still has
+			// something to say about, for no gain.
+			cwe: "CWE-250", keywords: []string{"Privileged", "ContainerDefinitions", "TaskDefinition"},
 			filePatterns: []string{"*.template", "*.json", "*.yaml", "*.yml"},
 			tags:         []string{"iac", "cloudformation", "aws", "privilege"},
-			remediation:  "Set Privileged to false and avoid running as root (User: 0) in ECS task definitions. Use non-root users and drop unnecessary Linux capabilities.",
+			remediation:  "Avoid running as root (User: 0) in ECS task definitions. Use a non-root user and drop unnecessary Linux capabilities. Privileged mode is reported separately by IAC-007.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
 		{
@@ -1234,6 +1294,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-693", keywords: []string{"enable_secure_boot", "enableSecureBoot"},
 			filePatterns: []string{"*.tf", "*.yaml", "*.yml", "*.json"},
 			tags:         []string{"iac", "gcp", "integrity"},
+			retires:      []rules.RetiredRule{{ID: "IAC-333", Pattern: `(?i)enable_secure_boot\s*=\s*false`}},
 			remediation:  "Enable Shielded VM features (secure boot, vTPM, integrity monitoring) on compute instances. Shielded VMs protect against rootkits and boot-level malware.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
@@ -1286,6 +1347,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			cwe:         "CWE-319", keywords: []string{"require_ssl", "requireSsl"},
 			filePatterns: []string{"*.tf", "*.yaml", "*.yml", "*.json"},
 			tags:         []string{"iac", "gcp", "database", "encryption"},
+			retires:      []rules.RetiredRule{{ID: "IAC-337", Pattern: `(?i)require_ssl\s*=\s*false`}},
 			remediation:  "Set require_ssl to true to enforce SSL connections to Cloud SQL instances. Unencrypted connections expose database traffic to eavesdropping.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/319.html"},
 		},
@@ -1580,7 +1642,12 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-141", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)replicas\s*:\s*1\s*$`,
+			// `\b` stops the Deployment rule from also claiming an HPA's
+			// `minReplicas: 1` (IAC-399) — and `maxReplicas`, `readyReplicas`
+			// and every other *Replicas key. A YAML key is always preceded by
+			// whitespace or a line start, so real `replicas: 1` matches are
+			// unaffected, matched text included.
+			pattern:     `(?im)\breplicas\s*:\s*1\s*$`,
 			description: "Kubernetes Deployment with single replica (no high availability)",
 			cwe:         "CWE-693", keywords: []string{"replicas"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -2101,6 +2168,7 @@ func convertIaCRules(defs []iacRule) []rules.Rule {
 			Metadata:     md,
 			Remediation:  defs[i].remediation,
 			References:   defs[i].references,
+			Retires:      defs[i].retires,
 		}
 		if defs[i].absenceAnchor != "" {
 			r.MatcherType = "absence"

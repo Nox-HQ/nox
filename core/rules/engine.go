@@ -114,6 +114,15 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			// here so callers who do not use FindingSet still get a stable
 			// fingerprint.
 			f.Fingerprint = findings.ComputeFingerprint(f.RuleID, f.Location, mr.MatchText)
+			// A rule that absorbed a retired ID also carries that ID's
+			// identity here, so waivers written before the retirement keep
+			// matching. See RetiredRule.
+			if len(rule.Retires) > 0 {
+				if lines == nil {
+					lines = splitLines(content)
+				}
+				f.RetiredRuleIDs, f.AliasFingerprints = retiredIdentities(rule, lineAt(lines, mr.Line), f.Location)
+			}
 			fpShort := f.Fingerprint
 			if len(fpShort) > 12 {
 				fpShort = fpShort[:12]
@@ -133,6 +142,15 @@ const contextWindow = 4
 // splitLines splits content into lines without a trailing-newline empty entry.
 func splitLines(content []byte) []string {
 	return strings.Split(string(content), "\n")
+}
+
+// lineAt returns the 1-based line, or "" when it is out of range.
+func lineAt(lines []string, line1 int) string {
+	idx := line1 - 1
+	if idx < 0 || idx >= len(lines) {
+		return ""
+	}
+	return lines[idx]
 }
 
 // commentPrefixes are the leading tokens that mark a line as a comment across
