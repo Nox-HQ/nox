@@ -34,24 +34,7 @@ func runExplain(args []string) int {
 	}
 
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
-
-	var (
-		model     string
-		baseURL   string
-		batchSize int
-		output    string
-		pluginDir string
-		enrich    string
-		timeout   time.Duration
-	)
-
-	fs.StringVar(&model, "model", "gpt-4o", "LLM model name")
-	fs.StringVar(&baseURL, "base-url", "", "custom OpenAI-compatible API base URL")
-	fs.IntVar(&batchSize, "batch-size", 10, "findings per LLM request")
-	fs.StringVar(&output, "output", "explanations.json", "output file path")
-	fs.StringVar(&pluginDir, "plugin-dir", "", "directory containing plugin binaries for enrichment")
-	fs.StringVar(&enrich, "enrich", "", "comma-separated list of read-only plugin tools to invoke for enrichment")
-	fs.DurationVar(&timeout, "timeout", 2*time.Minute, "timeout per LLM request")
+	ef := registerExplainFlags(fs)
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
@@ -71,6 +54,11 @@ func runExplain(args []string) int {
 		return 2
 	}
 	applyExplainDefaults(fs, cfg)
+
+	// Read the settled values only after config has filled in the flags left
+	// absent — flag > config > default is complete at this point.
+	model, baseURL, batchSize := ef.model, ef.baseURL, ef.batchSize
+	output, pluginDir, enrich, timeout := ef.output, ef.pluginDir, ef.enrich, ef.timeout
 
 	// Check for API key.
 	apiKeyEnv := "OPENAI_API_KEY"
@@ -175,6 +163,36 @@ func runExplain(args []string) int {
 	}
 	fmt.Println("[done]")
 	return 0
+}
+
+// explainFlags holds the explain command's flag-backed settings. Every field is
+// dual-source: settable on the command line and under `explain:` in .nox.yaml.
+type explainFlags struct {
+	model     string
+	baseURL   string
+	batchSize int
+	output    string
+	pluginDir string
+	enrich    string
+	timeout   time.Duration
+}
+
+// registerExplainFlags binds the explain flags onto fs and returns their
+// destinations. Registration is a single function so the precedence contract
+// tests exercise the real flag names, types and defaults instead of a
+// hand-rolled copy — a copy had already drifted (it declared -timeout as a
+// string where production registers a Duration), and a test built on a
+// different flag set cannot catch a precedence bug in the real one.
+func registerExplainFlags(fs *flag.FlagSet) *explainFlags {
+	f := &explainFlags{}
+	fs.StringVar(&f.model, "model", "gpt-4o", "LLM model name")
+	fs.StringVar(&f.baseURL, "base-url", "", "custom OpenAI-compatible API base URL")
+	fs.IntVar(&f.batchSize, "batch-size", 10, "findings per LLM request")
+	fs.StringVar(&f.output, "output", "explanations.json", "output file path")
+	fs.StringVar(&f.pluginDir, "plugin-dir", "", "directory containing plugin binaries for enrichment")
+	fs.StringVar(&f.enrich, "enrich", "", "comma-separated list of read-only plugin tools to invoke for enrichment")
+	fs.DurationVar(&f.timeout, "timeout", 2*time.Minute, "timeout per LLM request")
+	return f
 }
 
 // applyExplainDefaults applies .nox.yaml explain settings as defaults for any

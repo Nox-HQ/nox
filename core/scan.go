@@ -1112,8 +1112,15 @@ func RunStagedScanWithOptions(repoRoot string, opts ScanOptions) (*ScanResult, e
 	// ChangedSince is cleared because the temp directory is not a git
 	// repository — a staged scan already IS a changed-files scan, and leaving
 	// the ref set would make discovery fail.
+	//
+	// TrackedOnly is cleared for the same reason, and it costs nothing: the
+	// staged set is by definition a subset of the tracked set, so the flag's
+	// guarantee already holds. Leaving it set would make --staged --tracked-only
+	// fail with "requires a git repository", which is true of the temp directory
+	// and false of what the operator asked for.
 	stagedOpts := opts
 	stagedOpts.ChangedSince = ""
+	stagedOpts.TrackedOnly = false
 
 	result, err := RunScanWithOptions(tmpDir, stagedOpts)
 	if err != nil {

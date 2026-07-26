@@ -345,6 +345,40 @@ func resolveOutputDir(flagValue, configValue string) string {
 	return "."
 }
 
+// stagedScanOptions adapts the scan options for a --staged run.
+//
+// `nox scan --staged` reconstructs the git index into a temporary directory and
+// scans that, copying .nox.yaml across so project config still applies. The CLI
+// used to call nox.RunStagedScan(target), which passes ScanOptions{} — so every
+// flag the operator typed (--rules, --vex, --baseline, --offline, --no-osv,
+// --tf-plan, --tracked-only, --no-respect-gitignore) was silently dropped while
+// the config file was still honoured. That is #362's inversion again: config
+// beat an explicit flag, with no error and no warning. It sat on the pre-commit
+// hook path, which is `nox scan --staged`.
+//
+// Path-valued options are resolved here rather than in the scan pipeline: the
+// pipeline joins relative paths against the scan root, which under --staged is
+// the temp directory, so a relative --rules/--vex/--baseline would resolve to a
+// file that does not exist there. Anchoring them to the real target preserves
+// the same "relative to the scan target" meaning a non-staged run has.
+func stagedScanOptions(target string, opts nox.ScanOptions) nox.ScanOptions {
+	root := nox.ConfigRoot(target)
+	opts.CustomRulesPath = absAgainst(root, opts.CustomRulesPath)
+	opts.VEXPath = absAgainst(root, opts.VEXPath)
+	opts.BaselinePath = absAgainst(root, opts.BaselinePath)
+	opts.TerraformPlanPath = absAgainst(root, opts.TerraformPlanPath)
+	return opts
+}
+
+// absAgainst anchors a relative path to root. Empty and absolute paths are
+// returned unchanged so "flag absent" stays representable as "".
+func absAgainst(root, p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(root, p)
+}
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -474,10 +508,22 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Println("[discover] walking directory...")
 	}
 
+	opts := nox.ScanOptions{
+		CustomRulesPath:    rulesPath,
+		DisableOSV:         noOSVFlag,
+		Offline:            offlineFlag,
+		VEXPath:            vexFlag,
+		TerraformPlanPath:  tfPlanFlag,
+		ChangedSince:       changedSinceFlag,
+		NoRespectGitignore: noRespectGitignoreFlg,
+		TrackedOnly:        trackedOnlyFlag,
+		BaselinePath:       baselineFlag,
+	}
+
 	var result *nox.ScanResult
 	switch {
 	case stagedFlag:
-		result, err = nox.RunStagedScan(target)
+		result, err = nox.RunStagedScanWithOptions(target, stagedScanOptions(target, opts))
 	case historyFlag:
 		historyOpts := nox.HistoryScanOptions{
 			MaxDepth:    historyDepthFlag,
@@ -485,17 +531,6 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 		result, err = nox.RunHistoryScan(target, &historyOpts)
 	default:
-		opts := nox.ScanOptions{
-			CustomRulesPath:    rulesPath,
-			DisableOSV:         noOSVFlag,
-			Offline:            offlineFlag,
-			VEXPath:            vexFlag,
-			TerraformPlanPath:  tfPlanFlag,
-			ChangedSince:       changedSinceFlag,
-			NoRespectGitignore: noRespectGitignoreFlg,
-			TrackedOnly:        trackedOnlyFlag,
-			BaselinePath:       baselineFlag,
-		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
 	if err != nil {
