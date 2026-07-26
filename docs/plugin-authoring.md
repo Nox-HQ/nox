@@ -92,6 +92,28 @@ func handleScan(ctx context.Context, req sdk.ToolRequest) (*pluginv1.InvokeToolR
 }
 ```
 
+### Reporting a dataflow
+
+A plugin that reports a source→sink flow under a rule ID core also emits
+(`TAINT-*`) must say which flow it found, or the same vulnerability is
+reported twice: core anchors a flow at its sink, plugins commonly anchor at
+the source, and the two locations and wordings give two fingerprints that no
+baseline can suppress together.
+
+Emit three metadata keys and nox will collapse the pair, keeping the sink
+anchor:
+
+```go
+    .WithMetadata("source_line", "11").  // where the untrusted value entered
+    .WithMetadata("source_var", "q").    // the tainted identifier
+    .WithMetadata("sink_line", "12").    // where it reached the sink
+```
+
+Omit `sink_line` if the finding is already located at the sink. A finding
+missing `source_line` or `source_var` is not treated as a flow report and is
+never collapsed — including a flow no other analyzer found, which is always
+kept.
+
 ### Tool Request
 
 ```go

@@ -883,6 +883,14 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		)
 	}
 
+	// Collapse one dataflow reported from both ends. The built-in taint model
+	// anchors a flow at its sink; the taint-analysis plugin anchors the same
+	// flow at its source. Neither the fingerprint nor the location matches, so
+	// one vulnerability survives as two findings and two baseline entries.
+	// Runs before the class suppression below, which is location-keyed and
+	// would otherwise be comparing against the wrong end of the flow.
+	allFindings.DeduplicateFlows()
+
 	// Drop a taint finding when another analyzer already reports the same vuln
 	// class at the same location — e.g. the taint engine's TAINT-003 SSTI sink
 	// firing on a render_template_string call that a variants CVE signature
