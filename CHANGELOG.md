@@ -38,10 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *ascending* list with prereleases interleaved, so the last element is often a
   beta. A package with no stable release yields no suggestion at all.
 
-  A registry that cannot answer produces a `degraded:` line and never an empty
-  string — `""` is indistinguishable from "already current", so one
-  rate-limited registry would otherwise report a whole project as up to date.
-  The all-current message is suppressed whenever any check failed.
+  **Anything that could not be checked is reported rather than assumed
+  current.** A registry that cannot answer produces a `degraded:` line and never
+  an empty string — `""` is indistinguishable from "already current", so one
+  rate-limited registry would otherwise mark a whole project up to date. The
+  same applies to a manifest that exists but cannot be parsed (which would
+  otherwise drop its entire ecosystem from the run without a word) and to a
+  directory containing no supported manifest at all (which reported everything
+  as current having examined nothing). The all-current message is suppressed
+  whenever any check failed to complete: there is a real difference between
+  "checked seven ecosystems and everything is current" and "found nothing to
+  check", and only one of them is good news. (#383)
 
   Maven and Gradle are parsed by the scanner but deliberately have no currency
   resolver: `maven-metadata.xml` has no single "latest stable" and Gradle has no
