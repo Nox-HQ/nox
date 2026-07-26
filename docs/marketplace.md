@@ -51,7 +51,13 @@ Auto-install on scan: every `nox scan` checks the manifest and
 installs missing entries silently. Operators bypass with
 `nox scan --no-auto-install` or by setting `auto_install: false`.
 
-### One-shot CLI (no manifest)
+### Working with plugins directly (no manifest)
+
+These commands address a plugin by name and do not consult `.nox.yaml`.
+Installing a plugin does not by itself make it participate in `nox scan` — it
+has to be listed under `plugins.required` for that, so that a scan's results do
+not depend on what happens to be installed on the machine. `nox plugin list`
+reports which installed plugins are active in the current directory.
 
 ```bash
 nox plugin search ai
