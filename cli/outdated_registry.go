@@ -244,14 +244,85 @@ func pkgNameForPath(path, eco string) string {
 // rather than failing: a repo with a broken package.json should still get its
 // Cargo dependencies checked.
 func directDeps(root string) []directDep {
-	var out []directDep
-	out = append(out, npmDirectDeps(root)...)
-	out = append(out, cargoDirectDeps(root)...)
-	out = append(out, pypiDirectDeps(root)...)
-	out = append(out, rubygemsDirectDeps(root)...)
-	out = append(out, composerDirectDeps(root)...)
-	out = append(out, nugetDirectDeps(root)...)
-	return out
+	deps, _ := directDepsWithNotes(root)
+	return deps
+}
+
+// manifestForEco names the file that declares direct dependencies for each
+// registry-resolved ecosystem, so their presence can be reported on.
+var manifestForEco = map[string]string{
+	"npm":      "package.json",
+	"cargo":    "Cargo.toml",
+	"pypi":     "requirements.txt",
+	"rubygems": "Gemfile",
+	"composer": "composer.json",
+}
+
+// directDepsWithNotes enumerates direct dependencies and returns notes about
+// anything it could NOT check.
+//
+// Both notes matter for the same reason. A manifest that exists but does not
+// parse drops its whole ecosystem from the run, and a tree with no manifests at
+// all was never checked in the first place — reporting either as "all
+// dependencies are current" is the reassuring-but-empty result this project has
+// had to dig out of CI repeatedly. "Report what you could not check" is the
+// scan degradations contract; it applies here too.
+func directDepsWithNotes(root string) (deps []directDep, notes []string) {
+	deps = append(deps, npmDirectDeps(root)...)
+	deps = append(deps, cargoDirectDeps(root)...)
+	deps = append(deps, pypiDirectDeps(root)...)
+	deps = append(deps, rubygemsDirectDeps(root)...)
+	deps = append(deps, composerDirectDeps(root)...)
+	deps = append(deps, nugetDirectDeps(root)...)
+
+	// A manifest on disk that yielded nothing is either empty or unparseable.
+	// Either way the operator should hear about it rather than lose the
+	// ecosystem silently.
+	found := 0
+	for eco, file := range manifestForEco {
+		if readIfPresent(filepath.Join(root, file)) == nil {
+			continue
+		}
+		found++
+		sawEco := false
+		for _, d := range deps {
+			if d.eco == eco {
+				sawEco = true
+				break
+			}
+		}
+		if !sawEco {
+			notes = append(notes, fmt.Sprintf("%s exists but no dependencies could be read from it", file))
+		}
+	}
+	if hasGoMod(root) || hasProjectFile(root) {
+		found++
+	}
+	if found == 0 {
+		notes = append(notes, fmt.Sprintf("no supported manifest found in %s — nothing was checked", root))
+	}
+	return deps, notes
+}
+
+func hasGoMod(root string) bool {
+	_, err := os.Stat(filepath.Join(root, "go.mod"))
+	return err == nil
+}
+
+// hasProjectFile reports whether a .NET project file is present. NuGet has no
+// single canonical manifest name, so it is detected by extension.
+func hasProjectFile(root string) bool {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if !e.IsDir() && (strings.HasSuffix(n, ".csproj") || strings.HasSuffix(n, ".fsproj") || strings.HasSuffix(n, ".vbproj")) {
+			return true
+		}
+	}
+	return false
 }
 
 func readIfPresent(path string) []byte {
@@ -396,7 +467,9 @@ func pypiDirectDeps(root string) []directDep {
 // degradation string so the caller can print them, matching nox's "report what
 // you could not check" model.
 func planRegistryCurrency(root string, includeMajor bool, base map[string]string) (plan upgradePlan, degraded []string) {
-	for _, d := range directDeps(root) {
+	deps, notes := directDepsWithNotes(root)
+	degraded = append(degraded, notes...)
+	for _, d := range deps {
 		if d.version == "" {
 			// A range pin with no lockfile entry: there is no single current
 			// version to compare, so there is nothing honest to say.
@@ -405,7 +478,7 @@ func planRegistryCurrency(root string, includeMajor bool, base map[string]string
 		}
 		latest, err := resolveLatest(d.eco, d.name, base[d.eco])
 		if err != nil {
-			degraded = append(degraded, fmt.Sprintf("%s/%s: %v", d.eco, d.name, err))
+			degraded = append(degraded, fmt.Sprintf("could not determine the latest version of %s %s: %v", d.eco, d.name, err))
 			continue
 		}
 		if latest == "" || !versionLess(d.version, latest) {
