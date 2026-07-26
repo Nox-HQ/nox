@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-07-26
+
+### Fixed
+
+- **`nox scan -vex` accepts OpenVEX v0.2.0 documents.** The current spec — and
+  what `nox vex init` output is fed back into — models `vulnerability` and
+  `products` as objects (`{"@id": "CVE-…", "name": "CVE-…"}`) rather than
+  strings. `core/vex` typed both as strings, so loading such a document failed
+  with exit 2 *before the scan ran*, reporting no findings at all. Both shapes
+  are now accepted, preferring `@id` over `name`. (#389)
+
+### Added
+
+- **Release smoke test.** The built binary is now scanned against a fixture
+  carrying a hardcoded credential, a dependency with a known advisory, and an
+  insecure Dockerfile before a release is published, asserting each rule family
+  fires and that a VEX document is parsed *and applied*. Two regressions this
+  month stopped the scan running entirely rather than reporting wrongly — an
+  empty report is indistinguishable from a clean one at a glance. (#390)
+
 ## [1.22.0] - 2026-07-26
 
 ### Added
