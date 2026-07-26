@@ -519,6 +519,42 @@ matters is rotating it at the provider, which no tool can do for you.
 So: a clean `fix` run means the remediable classes were handled. It is not a
 statement that the SAST findings were.
 
+#### `--outdated`: currency, not security
+
+By default `fix` upgrades a dependency only when a `VULN-001` finding names a
+`fixed_in` version. It acts on evidence of a vulnerability, not on the passage
+of time — so a dependency that is merely old is never touched.
+
+That is the right default, but it leaves a gap if `fix` is the only thing
+maintaining your dependencies: outdated-but-not-vulnerable packages drift
+indefinitely. `--outdated` is the opt-in currency pass.
+
+```bash
+nox fix --outdated --dry-run     # what is behind, and by how much
+nox fix --outdated               # apply, then `go mod tidy`
+nox fix --outdated --include-major
+```
+
+It is a separate flag on purpose. A security fix is something you want applied
+without argument; routine version churn is a choice with its own risk of
+breaking a build. Kept together, you could no longer tell from the fact that
+`fix` changed something whether there had been a vulnerability at all — so
+currency upgrades are reported as `OUTDATED`, never as `VULN-001`.
+
+Scope and guarantees:
+
+- **Go only.** `go list -m -u -json all` is an authoritative answer to "what is
+  newer"; other ecosystems are not guessed at.
+- **Direct dependencies only.** Indirect ones are `go mod tidy`'s business —
+  bumping them writes explicit requirements for packages you do not import.
+- **Never downgrades.** A replace directive or retracted version can make
+  `go list` report an "update" that is not newer; those are dropped.
+- **Major bumps held** unless `--include-major`, and counted so you can see
+  something is waiting.
+- **Reaches the network.** This is the one thing that cannot be answered
+  offline. It runs only behind this flag, never as part of a scan, so nox's
+  offline-first scanning guarantee is unaffected.
+
 ### variants
 
 Report first-party code that reproduces the root-cause pattern of a known CVE —
