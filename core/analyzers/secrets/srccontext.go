@@ -122,8 +122,22 @@ func dropConfigFieldRuleInComment(lang lexctx.Lang, content []byte, f *findings.
 	if len(regions) == 0 {
 		return false
 	}
-	// Every byte of the match must be comment. A match that leaks out of a
-	// comment into code is suspect but not clearly prose, so it is kept.
-	return lexctx.KindAt(regions, start) == lexctx.KindComment &&
-		lexctx.KindAt(regions, end-1) == lexctx.KindComment
+	// EVERY region the match overlaps must be comment. Testing only the two
+	// endpoints would accept a match that begins in one comment, crosses code,
+	// and ends in the next — and a match leaking out of a comment into code is
+	// suspect but not clearly prose, so it is kept.
+	overlapped := false
+	for _, r := range regions {
+		if r.End <= start {
+			continue
+		}
+		if r.Start >= end {
+			break
+		}
+		if r.Kind != lexctx.KindComment {
+			return false
+		}
+		overlapped = true
+	}
+	return overlapped
 }
