@@ -648,7 +648,11 @@ See [`docs/plugin-authoring.md`](docs/plugin-authoring.md) for the full SDK guid
 
 The official registry is auto-added on first run; no `nox registry add` needed for the public set. Operators add private registries on top.
 
-**Recommended: declare plugins in `.nox.yaml`** so anyone cloning your project gets the right set automatically:
+**Declaring plugins in `.nox.yaml` is what makes them run during a scan.**
+Installing a plugin puts it on the machine; listing it under `plugins.required`
+is what enables it for a project. That separation is deliberate — it keeps a
+scan's results from depending on which plugins happen to be installed, so
+everyone cloning your project gets the same set and the same findings:
 
 ```yaml
 # .nox.yaml
@@ -669,7 +673,11 @@ nox scan .                        # auto-installs missing required plugins
 nox scan . --no-auto-install      # opt out
 ```
 
-**One-shot install (no manifest):**
+**Working with plugins directly (no manifest).** These commands address a
+plugin by name and do not consult `.nox.yaml`. Note that `nox plugin install`
+alone does *not* make a plugin participate in `nox scan` — add it to
+`plugins.required` for that. `nox plugin list` shows which installed plugins
+are active in the current directory:
 
 ```bash
 # Search and install (registry auto-configured)
