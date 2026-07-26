@@ -7,6 +7,23 @@ name: Refresh security badge
 # is labelled `badge` and auto-merged once required checks pass —
 # branch protection is satisfied because the merge comes from a PR,
 # not a direct push.
+#
+# That last sentence was false for as long as this workflow existed, for two
+# independent reasons, and PR #397 sat permanently unmergeable as a result:
+#
+#   1. GitHub does not start workflow runs for events raised by GITHUB_TOKEN.
+#      A PR opened with that token therefore reports NO checks at all, so the
+#      required contexts (Lint, Test, Build & Scan) can never pass and
+#      auto-merge can never fire. Opening with NOX_TOKEN — a PAT, already
+#      present because GITHUB_TOKEN cannot push under .github/workflows — makes
+#      the PR behave like a human one and actually run CI.
+#   2. The commit message carried `[skip ci]`, which suppresses CI even when
+#      the token would have triggered it. Belt and braces on the same mistake.
+#
+# The token falls back to GITHUB_TOKEN when NOX_TOKEN is absent: that restores
+# the old (stuck) behaviour rather than failing the run outright, so a fork or
+# a repo without the secret still refreshes badges and merely needs a manual
+# merge.
 
 on:
   release:
@@ -79,8 +96,8 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "ci: refresh security badges [skip ci]"
+          token: ${{ secrets.NOX_TOKEN || secrets.GITHUB_TOKEN }}
+          commit-message: "ci: refresh security badges"
           title: "ci: refresh security badges"
           body: |
             Automated refresh of `.github/nox-badge.svg` and the
