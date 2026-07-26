@@ -392,3 +392,72 @@ func TestStatement_RoundTripsThroughNoxsOwnWriter(t *testing.T) {
 		t.Errorf("round trip lost data: %+v", back)
 	}
 }
+
+// TestApplyVEX_RetiredRuleID: a statement naming a rule ID that has since been
+// retired into another rule still applies to the surviving finding — otherwise
+// retiring a duplicate ID re-opens everything waived under it.
+func TestApplyVEX_RetiredRuleID(t *testing.T) {
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		RuleID:         "IAC-018",
+		Fingerprint:    "current-fp",
+		Message:        "Workflow step suppresses failures with continue-on-error",
+		RetiredRuleIDs: []string{"IAC-310"},
+	})
+
+	doc := &Document{Statements: []Statement{{
+		VulnerabilityID: "IAC-310",
+		Status:          StatusNotAffected,
+		Justification:   "deliberately non-blocking step",
+	}}}
+	if applied := ApplyVEX(fs, doc); applied != 1 {
+		t.Fatalf("ApplyVEX applied %d statements, want 1", applied)
+	}
+	if got := fs.Findings()[0].Status; got != findings.StatusVEXNotAffected {
+		t.Errorf("status = %q, want %q", got, findings.StatusVEXNotAffected)
+	}
+}
+
+// TestApplyVEX_RetiredFingerprintPin: the same for an occurrence-pinned
+// statement, whose _nox_fingerprint was recorded under the retired ID.
+func TestApplyVEX_RetiredFingerprintPin(t *testing.T) {
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		RuleID:            "IAC-018",
+		Fingerprint:       "current-fp",
+		Message:           "Workflow step suppresses failures with continue-on-error",
+		AliasFingerprints: []string{"legacy-fp"},
+	})
+
+	doc := &Document{Statements: []Statement{{
+		VulnerabilityID: "IAC-310",
+		Status:          StatusFixed,
+		NoxFingerprint:  "legacy-fp",
+	}}}
+	if applied := ApplyVEX(fs, doc); applied != 1 {
+		t.Fatalf("ApplyVEX applied %d statements, want 1", applied)
+	}
+	if got := fs.Findings()[0].Status; got != findings.StatusVEXFixed {
+		t.Errorf("status = %q, want %q", got, findings.StatusVEXFixed)
+	}
+}
+
+// TestApplyVEX_UnrelatedRetiredIDIsNotMatched: the alias is an exact ID list,
+// not a family match.
+func TestApplyVEX_UnrelatedRetiredIDIsNotMatched(t *testing.T) {
+	fs := findings.NewFindingSet()
+	fs.Add(findings.Finding{
+		RuleID:         "IAC-018",
+		Fingerprint:    "current-fp",
+		Message:        "Workflow step suppresses failures with continue-on-error",
+		RetiredRuleIDs: []string{"IAC-310"},
+	})
+
+	doc := &Document{Statements: []Statement{{
+		VulnerabilityID: "IAC-311",
+		Status:          StatusNotAffected,
+	}}}
+	if applied := ApplyVEX(fs, doc); applied != 0 {
+		t.Errorf("ApplyVEX applied %d statements for an unrelated ID, want 0", applied)
+	}
+}

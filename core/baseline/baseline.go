@@ -110,11 +110,34 @@ func (b *Baseline) Save(path string) error {
 
 // Match returns the matching baseline entry for a finding, or nil if none.
 // Expired entries are not matched.
+//
+// A finding that inherited a retired rule ID is also looked up under the
+// fingerprint that retired rule would have produced (see
+// findings.Finding.AliasFingerprints). Without that fallback, retiring a
+// duplicate rule ID would silently un-baseline every finding accepted under it:
+// the fingerprint hashes the rule ID, so the entry an operator committed would
+// simply stop matching and the finding would resurface as new.
 func (b *Baseline) Match(f *findings.Finding) *Entry {
 	if f == nil {
 		return nil
 	}
-	e, ok := b.index[f.Fingerprint]
+	if e := b.lookup(f.Fingerprint); e != nil {
+		return e
+	}
+	for _, fp := range f.AliasFingerprints {
+		if e := b.lookup(fp); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// lookup returns the unexpired entry for a fingerprint, or nil.
+func (b *Baseline) lookup(fingerprint string) *Entry {
+	if fingerprint == "" {
+		return nil
+	}
+	e, ok := b.index[fingerprint]
 	if !ok {
 		return nil
 	}

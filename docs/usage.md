@@ -1187,6 +1187,18 @@ Nox's canonical findings format. Contains all findings with fingerprints, severi
 }
 ```
 
+A finding reported by a rule that absorbed a retired rule ID carries two extra
+fields, omitted everywhere else (see [Retired rule IDs](#retired-rule-ids)):
+
+```json
+      "RetiredRuleIDs": ["IAC-310"],
+      "AliasFingerprints": ["faae53ee..."]
+```
+
+`RetiredRuleIDs` are the IDs this finding also answers to, and
+`AliasFingerprints` the fingerprints those rules would have produced for it —
+what a baseline or VEX document written before the retirement holds.
+
 ### results.sarif
 
 SARIF 2.1.0 format, compatible with GitHub Code Scanning. Upload directly:
@@ -1618,7 +1630,43 @@ nox scan . -q || exit 1
 
 ## Built-in Rules Reference
 
-Nox ships with **1506 built-in rules** across five analyzer suites: Secrets (938), AI Security (50), IAC (500), Data Protection (12), and Dependencies (6).
+Nox ships with **1496 built-in rules** across five analyzer suites: Secrets (938), AI Security (50), IAC (490), Data Protection (12), and Dependencies (6).
+
+### Retired rule IDs
+
+When two rules turn out to report the same condition, one ID is retired and the
+other keeps reporting it. Your waivers do not need to be rewritten: a retired ID
+stays valid everywhere it was already accepted.
+
+- a `.nox/baseline.json` entry written against the retired ID keeps matching;
+- an OpenVEX statement naming it — by ID or by `_nox_fingerprint` — still applies;
+- a `# nox:ignore <retired-id>` comment still suppresses;
+- `scan.rules.disable: [<retired-id>]` still switches the condition off.
+
+The alias is bounded by the retired rule's own pattern, so it only ever covers
+the lines that rule actually matched. It never widens a waiver to a condition
+the retired ID never reported.
+
+What does change is the count: one finding per condition instead of two, under
+the surviving ID and at that rule's severity. If you gate or report on a retired
+ID specifically, switch to the surviving one.
+
+| Retired | Now reported as | Condition |
+|---------|-----------------|-----------|
+| IAC-237 | IAC-007 | `privileged: true` |
+| IAC-283 | IAC-036 | `publicly_accessible = true` |
+| IAC-287 | IAC-030 | `automountServiceAccountToken: true` |
+| IAC-291 | IAC-026 | `hostPID: true` |
+| IAC-292 | IAC-027 | `hostIPC: true` |
+| IAC-310 | IAC-018 | `continue-on-error: true` |
+| IAC-312 | IAC-017 | deprecated `::set-output` |
+| IAC-321 | IAC-042 | `enable_https_traffic_only = false` |
+| IAC-333 | IAC-111 | `enable_secure_boot = false` |
+| IAC-337 | IAC-116 | `require_ssl = false` |
+
+IAC-065 (CloudFormation ECS task definition) is a partial case: it still reports
+`User: 0` / `User: root`, while the `Privileged: true` half it shared with
+IAC-007 is now reported by IAC-007 alone.
 
 ### Secrets Rules (938 rules)
 
@@ -1855,7 +1903,7 @@ IaC rules detect security misconfigurations in container definitions, cloud infr
 
 | Rule | Severity | Confidence | CWE | Description |
 |------|----------|------------|-----|-------------|
-| IAC-007 | Critical | High | CWE-250 | Kubernetes pod running as privileged |
+| IAC-007 | Critical | High | CWE-250 | Container runs in privileged mode |
 | IAC-008 | High | High | CWE-284 | Kubernetes pod uses host network |
 | IAC-009 | Critical | High | CWE-250 | Kubernetes pod allows privilege escalation |
 | IAC-010 | High | High | CWE-250 | Kubernetes pod running as root (runAsUser: 0) |

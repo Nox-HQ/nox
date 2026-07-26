@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Ten duplicate IaC rule IDs retired; one condition, one finding.** Fourteen
+  pairs of IaC rules fired on the same condition, so a single misconfiguration
+  was reported twice — often at two different severities, which made a
+  severity-keyed gate depend on which ID it happened to read. `continue-on-error:
+  true` was both low (IAC-018) and medium (IAC-310); `privileged: true` was
+  covered three times over. IAC-237, IAC-283, IAC-287, IAC-291, IAC-292,
+  IAC-310, IAC-312, IAC-321, IAC-333 and IAC-337 are retired into the older rule
+  that already reported their condition. Two of the fourteen were not duplicates
+  but generic patterns swallowing specific ones (`encrypt\w*` over
+  `storage_encrypted`, `replicas` over `minReplicas`); both rules survive, with
+  the generic one bounded so the two no longer overlap. (#394)
+
+  **Existing waivers keep working.** A retired ID stays valid in baselines, VEX
+  statements, `nox:ignore` comments and `scan.rules.disable` — the rule that
+  absorbed it reproduces its fingerprints, bounded by the retired rule's own
+  pattern so no waiver is widened. Nothing needs to be rewritten. What changes
+  is the count and the ID: gates or dashboards keyed on a retired ID should move
+  to the surviving one (see "Retired rule IDs" in docs/usage.md).
+
 ## [1.22.1] - 2026-07-26
 
 ### Fixed

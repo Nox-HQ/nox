@@ -29,8 +29,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// already cover connection strings carrying userinfo credentials.
 	// 1529 = 1528 plus SLOP-002 (predictive slopsquat-target match, emitted by
 	// the slop analyzer when a verified blocklist feed is loaded).
-	if got := len(cat); got != 1529 {
-		t.Errorf("Catalog() returned %d rules, want 1529", got)
+	// 1519 = 1529 minus the ten duplicate IaC rules retired in #394 (IAC-237,
+	// IAC-283, IAC-287, IAC-291, IAC-292, IAC-310, IAC-312, IAC-321, IAC-333,
+	// IAC-337): each reported a condition an older rule already reported, and
+	// each lives on as an alias on that rule so existing waivers keep matching.
+	if got := len(cat); got != 1519 {
+		t.Errorf("Catalog() returned %d rules, want 1519", got)
 	}
 }
 
@@ -67,7 +71,9 @@ func TestCatalogLookup(t *testing.T) {
 		{"SEC-001", "AWS Access Key ID detected"},
 		{"SEC-002", "AWS Secret Access Key detected"},
 		{"AI-004", "MCP server exposes file system write tool without restrictions"},
-		{"IAC-007", "Kubernetes pod running as privileged"},
+		// Reworded when IAC-007 absorbed IAC-065's privileged branch (ECS)
+		// and IAC-237 (Kustomize) in #394 -- it is no longer k8s-only.
+		{"IAC-007", "Container runs in privileged mode"},
 	}
 
 	for _, tt := range tests {

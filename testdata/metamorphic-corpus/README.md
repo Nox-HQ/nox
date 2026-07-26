@@ -32,15 +32,16 @@ the vulnerable and the safe shape of a pattern to tell "precise" from "overfit".
 ## Coverage (rules exercised on current `main`)
 
 The sweep reports `rules_exercised` and a full per-rule coverage map in
-`triage_report.json`. As of the current corpus it exercises **38 distinct
-rules** across six families:
+`triage_report.json`. As of the current corpus it exercises **37 distinct
+rules** across six families (IAC-283 was retired into IAC-036 in #394, which
+the corpus already exercises, so the same construct is still covered):
 
 ```
 AI-002, AI-006,
 CONT-001,
 IAC-001, IAC-003, IAC-004, IAC-005, IAC-006, IAC-012, IAC-013, IAC-014,
 IAC-024, IAC-036, IAC-037, IAC-040, IAC-121, IAC-122, IAC-123, IAC-124,
-IAC-126, IAC-127, IAC-167, IAC-282, IAC-283, IAC-315, IAC-317, IAC-318,
+IAC-126, IAC-127, IAC-167, IAC-282, IAC-315, IAC-317, IAC-318,
 SEC-001, SEC-003, SEC-023, SEC-030, SEC-080, SEC-086, SEC-508,
 SLOP-001,
 TAINT-001, TAINT-002, TAINT-006

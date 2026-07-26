@@ -212,17 +212,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Set skip_final_snapshot = false and provide a final_snapshot_identifier. Without a final snapshot, all data is permanently lost when the RDS instance is destroyed.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-283", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)publicly_accessible\s*=\s*true`,
-			description:  "Terraform resource is publicly accessible",
-			cwe:          "CWE-284",
-			keywords:     []string{"publicly_accessible", "true"},
-			filePatterns: tfFilePatterns,
-			tags:         []string{"iac", "terraform", "network"},
-			remediation:  "Set publicly_accessible = false and access the resource through a VPN, bastion host, or VPC endpoint. Public-facing databases and caches are common attack targets.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
-		},
+		// IAC-283 retired into IAC-036, which already reported this condition.
+		// IAC-036's `retires` carries the alias that keeps waivers written
+		// against IAC-283 matching.
 		{
 			id: "IAC-284", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)enable_key_rotation\s*=\s*false`,
@@ -260,17 +252,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Define NetworkPolicy resources to restrict ingress and egress traffic for workloads. Without NetworkPolicies, pods can communicate with any other pod in the cluster.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-287", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)automountServiceAccountToken:\s*true`,
-			description:  "K8s pod automounts service account token",
-			cwe:          "CWE-284",
-			keywords:     []string{"automountServiceAccountToken"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "privilege"},
-			remediation:  "Set automountServiceAccountToken: false unless the pod needs to access the Kubernetes API. Mounted tokens can be exploited if the pod is compromised.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
-		},
+		// IAC-287 retired into IAC-030, which already reported this condition.
+		// IAC-030's `retires` carries the alias that keeps waivers written
+		// against IAC-287 matching.
 		{
 			id: "IAC-288", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)roleRef:(?:.*\n){0,3}.*name:\s*['"]?cluster-admin`,
@@ -304,28 +288,12 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Replace wildcard verbs with specific verbs (get, list, watch, create, update, delete). Wildcard verbs grant all operations including escalate and impersonate.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
-		{
-			id: "IAC-291", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)hostPID:\s*true`,
-			description:  "K8s pod uses host PID namespace",
-			cwe:          "CWE-250",
-			keywords:     []string{"hostPID"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "privilege"},
-			remediation:  "Remove hostPID: true unless absolutely required. Sharing the host PID namespace allows the container to see and signal all host processes, enabling privilege escalation.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
-		},
-		{
-			id: "IAC-292", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)hostIPC:\s*true`,
-			description:  "K8s pod uses host IPC namespace",
-			cwe:          "CWE-250",
-			keywords:     []string{"hostIPC"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "privilege"},
-			remediation:  "Remove hostIPC: true. Sharing the host IPC namespace allows the container to access shared memory segments on the host, which can be exploited for data exfiltration.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
-		},
+		// IAC-291 retired into IAC-026, which already reported this condition.
+		// IAC-026's `retires` carries the alias that keeps waivers written
+		// against IAC-291 matching.
+		// IAC-292 retired into IAC-027, which already reported this condition.
+		// IAC-027's `retires` carries the alias that keeps waivers written
+		// against IAC-292 matching.
 		{
 			id: "IAC-293", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)hostPath:\s*\n\s*path:\s*['"]?/`,
@@ -517,17 +485,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Ensure that cancelling in-progress runs is intentional. For deployment workflows, cancellation may leave infrastructure in a partially applied state.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-310", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)continue-on-error:\s*true`,
-			description:  "GHA step continues on error",
-			cwe:          "CWE-755",
-			keywords:     []string{"continue-on-error"},
-			filePatterns: ghaFilePatterns,
-			tags:         []string{"iac", "github-actions", "error-handling"},
-			remediation:  "Remove continue-on-error: true unless the failure is intentionally non-blocking. Ignoring errors can mask security scan failures and broken tests.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/755.html"},
-		},
+		// IAC-310 retired into IAC-018, which already reported this condition.
+		// IAC-018's `retires` carries the alias that keeps waivers written
+		// against IAC-310 matching.
 		{
 			id: "IAC-311", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)ACTIONS_ALLOW_UNSECURE_COMMANDS`,
@@ -539,17 +499,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Remove ACTIONS_ALLOW_UNSECURE_COMMANDS and migrate to the GITHUB_OUTPUT and GITHUB_ENV file-based alternatives. The old set-env and add-path commands are vulnerable to injection.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/78.html"},
 		},
-		{
-			id: "IAC-312", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)set-output\s+name=`,
-			description:  "GHA uses deprecated set-output command",
-			cwe:          "CWE-693",
-			keywords:     []string{"set-output"},
-			filePatterns: ghaFilePatterns,
-			tags:         []string{"iac", "github-actions", "best-practice"},
-			remediation:  "Replace ::set-output with the $GITHUB_OUTPUT file. The set-output command is deprecated and may be removed in a future runner version.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-312 retired into IAC-017, which already reported this condition.
+		// IAC-017's `retires` carries the alias that keeps waivers written
+		// against IAC-312 matching.
 		{
 			id: "IAC-313", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)save-state\s+name=`,
@@ -642,17 +594,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 		// =================================================================
 		// Azure (IAC-321 to IAC-330)
 		// =================================================================
-		{
-			id: "IAC-321", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)enable_https_traffic_only\s*=\s*false`,
-			description:  "Azure storage allows HTTP traffic",
-			cwe:          "CWE-319",
-			keywords:     []string{"enable_https_traffic_only"},
-			filePatterns: tfFilePatterns,
-			tags:         []string{"iac", "terraform", "azure", "transport-security"},
-			remediation:  "Set enable_https_traffic_only = true to enforce HTTPS for all storage account traffic. HTTP traffic is unencrypted and vulnerable to interception.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/319.html"},
-		},
+		// IAC-321 retired into IAC-042, which already reported this condition.
+		// IAC-042's `retires` carries the alias that keeps waivers written
+		// against IAC-321 matching.
 		{
 			id: "IAC-322", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)min_tls_version\s*=\s*['"]?TLS1_0`,
@@ -778,17 +722,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Set enable_integrity_monitoring = true to detect unauthorized changes to the boot sequence and kernel. Disabling it removes a key defense against persistent malware.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-333", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)enable_secure_boot\s*=\s*false`,
-			description:  "GCP shielded VM secure boot disabled",
-			cwe:          "CWE-693",
-			keywords:     []string{"enable_secure_boot"},
-			filePatterns: tfFilePatterns,
-			tags:         []string{"iac", "terraform", "gcp", "security"},
-			remediation:  "Set enable_secure_boot = true to ensure only verified boot software runs. Disabling secure boot allows unsigned or modified bootloaders and kernels.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-333 retired into IAC-111, which already reported this condition.
+		// IAC-111's `retires` carries the alias that keeps waivers written
+		// against IAC-333 matching.
 		{
 			id: "IAC-334", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
 			pattern:      `(?i)resource\s*['"]google_storage_bucket['"]`,
@@ -822,17 +758,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Enable require_ssl in the ip_configuration settings to enforce encrypted connections to the Cloud SQL instance. Unencrypted connections expose data in transit.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-337", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)require_ssl\s*=\s*false`,
-			description:  "GCP SQL instance without SSL enforcement",
-			cwe:          "CWE-319",
-			keywords:     []string{"require_ssl"},
-			filePatterns: tfFilePatterns,
-			tags:         []string{"iac", "terraform", "gcp", "transport-security"},
-			remediation:  "Set require_ssl = true to enforce SSL/TLS connections to the Cloud SQL instance. Without SSL enforcement, database traffic is transmitted in plain text.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/319.html"},
-		},
+		// IAC-337 retired into IAC-116, which already reported this condition.
+		// IAC-116's `retires` carries the alias that keeps waivers written
+		// against IAC-337 matching.
 		{
 			id: "IAC-338", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)value\s*=\s*['"]?0\.0\.0\.0/0`,

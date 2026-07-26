@@ -131,6 +131,48 @@ type Finding struct {
 	Fingerprint string
 	Metadata    map[string]string
 	Status      Status `json:"Status,omitempty"`
+
+	// RetiredRuleIDs are the IDs of retired rules that reported THIS finding's
+	// condition at THIS location before they were retired, and AliasFingerprints
+	// are the fingerprints those rules would have produced here.
+	//
+	// They exist so a waiver written before the retirement keeps working. A
+	// baseline entry is keyed on a fingerprint that hashes the rule ID, and a
+	// VEX statement or nox:ignore comment names the rule ID outright, so
+	// retiring a duplicate ID would otherwise un-waive every finding accepted
+	// under it — turning gates red across every consuming repo for a change
+	// that fixed a double-report.
+	//
+	// Both are populated only where the retired rule's own pattern actually
+	// matches, so an alias never reaches a location the retired rule never
+	// reported. That is what keeps an ID-level waiver from widening: it still
+	// covers exactly the conditions it used to cover.
+	//
+	// Nil for the overwhelming majority of findings; omitted from JSON when
+	// empty, but serialized when present so the scan cache round-trips them
+	// (a cache hit must not quietly drop a waiver).
+	RetiredRuleIDs    []string `json:",omitempty"`
+	AliasFingerprints []string `json:",omitempty"`
+}
+
+// MatchesRuleID reports whether id addresses this finding — either its current
+// rule ID or one of the retired IDs it inherited (see RetiredRuleIDs). Use it
+// wherever an operator names a rule in a waiver, so waivers written against a
+// retired ID keep applying. Comparison is case-insensitive, matching the VEX
+// path's existing behaviour.
+func (f *Finding) MatchesRuleID(id string) bool {
+	if id == "" {
+		return false
+	}
+	if strings.EqualFold(f.RuleID, id) {
+		return true
+	}
+	for _, retired := range f.RetiredRuleIDs {
+		if strings.EqualFold(retired, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewFinding constructs a Finding with a normalized location. It is the
@@ -475,19 +517,26 @@ func (fs *FindingSet) SortByPriority() {
 	})
 }
 
-// RemoveByRuleIDs removes all findings whose RuleID matches any of the given IDs.
+// RemoveByRuleIDs removes all findings whose RuleID matches any of the given
+// IDs. A retired ID a finding inherited counts as a match (see RetiredRuleIDs):
+// `rules.disable: [IAC-310]` in a config written before IAC-310 was retired is
+// still an instruction to drop that condition, and honouring it is what stops a
+// rule merge from re-enabling a rule the operator switched off.
 func (fs *FindingSet) RemoveByRuleIDs(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	disabled := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		disabled[id] = struct{}{}
-	}
 	kept := make([]Finding, 0, len(fs.items))
 	for i := range fs.items {
 		finding := fs.items[i]
-		if _, skip := disabled[finding.RuleID]; !skip {
+		skip := false
+		for _, id := range ids {
+			if finding.MatchesRuleID(id) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
 			kept = append(kept, finding)
 		}
 	}

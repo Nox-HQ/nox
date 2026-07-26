@@ -81,6 +81,11 @@ type Rule struct {
 	// AbsenceRequire, when non-empty, additionally requires its pattern to be
 	// present in the span before the rule fires (e.g. an IAM statement that
 	// grants "Resource": "*"). All four are RE2 regexes and must compile.
+	// Retires lists rule IDs this rule absorbed. See RetiredRule: it is the
+	// migration half of retiring a duplicate ID, without which every baseline
+	// entry and VEX statement written against the retired ID stops matching.
+	Retires []RetiredRule `yaml:"retires"`
+
 	AbsenceAnchor   string `yaml:"absence_anchor"`
 	AbsenceProperty string `yaml:"absence_property"`
 	AbsenceRequire  string `yaml:"absence_require"`
