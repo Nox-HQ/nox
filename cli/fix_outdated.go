@@ -144,7 +144,7 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	if _, statErr := os.Stat(filepath.Join(manifestRoot, "go.mod")); statErr == nil {
 		mods, err := goListModules(manifestRoot)
 		if err != nil {
-			degraded = append(degraded, fmt.Sprintf("go: %v", err))
+			degraded = append(degraded, fmt.Sprintf("could not enumerate Go modules: %v", err))
 		} else {
 			goPlan := planCurrencyUpgrades(mods, includeMajor)
 			plan.actions = append(plan.actions, goPlan.actions...)
@@ -164,7 +164,7 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	// short list is never mistaken for a clean bill of health. This is the same
 	// contract as the scan degradations model.
 	for _, d := range degraded {
-		fmt.Fprintf(os.Stderr, "degraded: could not determine the latest version — %s\n", d)
+		fmt.Fprintf(os.Stderr, "degraded: %s\n", d)
 	}
 
 	if len(plan.actions) == 0 {

@@ -568,9 +568,13 @@ Scope and guarantees:
   `go list` report an "update" that is not newer; those are dropped.
 - **Major bumps held** unless `--include-major`, and counted so you can see
   something is waiting.
-- **A registry that cannot answer is reported, not assumed current.** An
-  unreachable or rate-limiting registry produces a `degraded:` line, never a
-  silent "up to date" — the same contract as scan degradations.
+- **Anything unchecked is reported, not assumed current.** An unreachable or
+  rate-limiting registry, a manifest that exists but cannot be parsed, and a
+  directory with no supported manifest at all each produce a `degraded:` line —
+  and the "all dependencies are current" message is suppressed whenever one
+  appears. There is a real difference between "checked seven ecosystems and
+  everything is current" and "found nothing to check", and only one of them is
+  good news. Same contract as scan degradations.
 - **Reaches the network.** This is the one thing that cannot be answered
   offline. It runs only behind this flag, never as part of a scan, so nox's
   offline-first scanning guarantee is unaffected.

@@ -476,3 +476,47 @@ func TestResolvers_SendAUserAgent(t *testing.T) {
 		t.Errorf("User-Agent = %q; crates.io 403s anonymous clients", gotUA)
 	}
 }
+
+// "all direct dependencies are current" on a tree with no manifests is the
+// exact failure this project keeps finding elsewhere: a reassuring message
+// where nothing was actually checked. There is a real difference between
+// "checked seven ecosystems, everything current" and "found nothing to check".
+func TestDirectDeps_ReportsWhenNoManifestExists(t *testing.T) {
+	_, notes := directDepsWithNotes(t.TempDir())
+	if len(notes) == 0 {
+		t.Fatal("an empty directory produced no note; --outdated would report it as all-current")
+	}
+	joined := strings.Join(notes, " ")
+	if !strings.Contains(joined, "no supported manifest") {
+		t.Errorf("note does not say a manifest was missing: %q", joined)
+	}
+}
+
+// A manifest that exists but cannot be parsed must be reported, not skipped.
+// Silently dropping it means the ecosystem disappears from the run while the
+// summary still reads as a clean result.
+func TestDirectDeps_ReportsUnparseableManifest(t *testing.T) {
+	dir := t.TempDir()
+	writeManifest(t, dir, "package.json", `{ this is not json`)
+	// A valid second ecosystem, to prove one broken manifest does not stop the
+	// others being checked.
+	writeManifest(t, dir, "Cargo.toml", "[package]\nname=\"x\"\n\n[dependencies]\nserde = \"1.0.100\"\n")
+	writeManifest(t, dir, "Cargo.lock", "[[package]]\nname = \"serde\"\nversion = \"1.0.100\"\n")
+
+	deps, notes := directDepsWithNotes(dir)
+
+	var sawCargo bool
+	for _, d := range deps {
+		if d.eco == "cargo" && d.name == "serde" {
+			sawCargo = true
+		}
+	}
+	if !sawCargo {
+		t.Error("a broken package.json stopped Cargo from being checked")
+	}
+
+	joined := strings.Join(notes, " ")
+	if !strings.Contains(joined, "package.json") {
+		t.Errorf("the unparseable package.json was dropped silently: %q", joined)
+	}
+}
