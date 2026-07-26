@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Real repositories scanned by scripts/rule-diff.sh to detect rule-behaviour",
+    "changes between two nox builds. Chosen for VARIETY of the surfaces nox",
+    "actually gets pointed at -- Go services, Terraform/Kubernetes manifests,",
+    "Dockerfiles, GitHub Actions workflows, JS/TS dependency trees -- not for",
+    "being clean. A repo with real findings is more useful here than one without.",
+    "",
+    "Pinned by commit sha so the diff reflects a change in NOX, never a change in",
+    "the repo. Bumping a sha is a deliberate act: re-read the delta it produces",
+    "before committing it, or the corpus stops being a control.",
+    "",
+    "Keep this list small. It runs on every release; breadth matters more than",
+    "depth, and each entry costs a clone plus two full scans."
+  ],
+  "repos": [
+    {
+      "name": "chronos",
+      "url": "https://github.com/klarlabs-studio/chronos",
+      "sha": "d969c13ea6c1cc28183e0ee6ed56628869fef2d7",
+      "why": "Go service with Dockerfile, compose, and 8 GitHub Actions workflows; carries a committed baseline and an OpenVEX document, so it exercises suppression paths too"
+    },
+    {
+      "name": "warden",
+      "url": "https://github.com/klarlabs-studio/warden",
+      "sha": "f3af9e3a2f9bc85c2513845368f06049586525d6",
+      "why": "Go CLI with signing/provenance code -- dense in crypto and credential-shaped strings, which is where secret rules over-fire"
+    }
+  ]
+}
