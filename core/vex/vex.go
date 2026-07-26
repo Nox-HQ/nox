@@ -43,6 +43,91 @@ type Statement struct {
 	NoxFingerprint string   `json:"_nox_fingerprint,omitempty"`
 }
 
+// UnmarshalJSON accepts both OpenVEX shapes for `vulnerability` and `products`.
+//
+// The spec changed them from plain strings to objects in v0.2.0:
+//
+//	v0.0.1 / v0.1.0    "vulnerability": "CVE-2024-1234"
+//	v0.2.0             "vulnerability": {"@id": "CVE-2024-1234", "name": "..."}
+//
+//	v0.0.1 / v0.1.0    "products": ["pkg:golang/example"]
+//	v0.2.0             "products": [{"@id": "pkg:golang/example"}]
+//
+// Reading only the older shape made nox reject documents that declare the
+// current spec version, and it failed at LOAD time — before any scanning — so
+// a repo that adopted v0.2.0 got no scan at all rather than a scan with
+// unapplied waivers. Accepting both is the whole fix; nox keeps WRITING the
+// string form, which every reader still understands.
+func (s *Statement) UnmarshalJSON(data []byte) error {
+	// The alias sheds the method set, so the embedded decode does not recurse.
+	type alias Statement
+	aux := struct {
+		Vulnerability json.RawMessage `json:"vulnerability"`
+		Products      json.RawMessage `json:"products"`
+		*alias
+	}{alias: (*alias)(s)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	id, err := scalarOrObjectID(aux.Vulnerability)
+	if err != nil {
+		return fmt.Errorf("vulnerability: %w", err)
+	}
+	s.VulnerabilityID = id
+	products, err := scalarOrObjectIDs(aux.Products)
+	if err != nil {
+		return fmt.Errorf("products: %w", err)
+	}
+	s.Products = products
+	return nil
+}
+
+// scalarOrObjectID reads an identifier written either as a bare string or as an
+// object carrying "@id" / "name". "@id" wins because it is the spec's identity
+// field; "name" is the human-facing label and is only a fallback.
+func scalarOrObjectID(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		return str, nil
+	}
+	var obj struct {
+		ID   string `json:"@id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return "", fmt.Errorf("expected a string or an object with @id/name: %w", err)
+	}
+	if obj.ID != "" {
+		return obj.ID, nil
+	}
+	return obj.Name, nil
+}
+
+// scalarOrObjectIDs is scalarOrObjectID over a list, tolerating a mixed array.
+func scalarOrObjectIDs(raw json.RawMessage) ([]string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("expected an array: %w", err)
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		id, err := scalarOrObjectID(item)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
 // Document is a simplified OpenVEX document.
 type Document struct {
 	Context    string      `json:"@context,omitempty"`
