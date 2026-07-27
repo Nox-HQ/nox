@@ -3,12 +3,22 @@
   "recall": 1,
   "f1": 1,
   "fp": 0,
-  "tp": 35,
+  "tp": 37,
   "fn": 0,
-  "findings_per_issue": 1.0606060606060606,
+  "findings_per_issue": 1.0571428571428572,
   "rules": [
     {
       "rule_id": "AI-002",
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "rule_id": "DATA-001",
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "rule_id": "DATA-005",
       "precision": 1,
       "recall": 1
     },

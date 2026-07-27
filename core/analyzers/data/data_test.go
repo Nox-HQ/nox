@@ -69,8 +69,10 @@ func TestDataRuleMatches(t *testing.T) {
 			name:     "DATA-001: Email address in config",
 			ruleID:   "DATA-001",
 			severity: findings.SeverityMedium,
-			positive: "admin_email = user@example.com\n",
-			negative: "// TODO: add email support later\n",
+			positive: "admin_email = jane.doe@acmecorp.io\n",
+			// example.com is reserved by RFC 2606 for documentation, so an
+			// address there is not PII. See TestDATA001_ReservedDomains.
+			negative: "admin_email = jane.doe@example.com\n",
 		},
 		{
 			name:     "DATA-002: US Social Security Number",
@@ -111,8 +113,11 @@ func TestDataRuleMatches(t *testing.T) {
 			name:     "DATA-005: Hardcoded IP address",
 			ruleID:   "DATA-005",
 			severity: findings.SeverityMedium,
-			positive: "server = '192.168.1.100'\n",
-			negative: "message = 'the server is running'\n",
+			positive: "server = '8.8.8.8'\n",
+			// 192.168/16 is RFC 1918 private space — not a public address,
+			// which is what this rule claims to find. See
+			// TestDATA005_NonPublicRanges.
+			negative: "server = '192.168.1.100'\n",
 		},
 		{
 			name:     "DATA-006: Date of birth",
@@ -207,11 +212,11 @@ func TestDataRuleMatches(t *testing.T) {
 
 func TestAllRules_PositiveMatch(t *testing.T) {
 	examples := map[string]string{
-		"DATA-001": "email = user@example.com\n",
+		"DATA-001": "email = jane.doe@acmecorp.io\n",
 		"DATA-002": "ssn = 123-45-6789\n",
 		"DATA-003": "card = 4111111111111111\n",
 		"DATA-004": "phone = '555-123-4567'\n",
-		"DATA-005": "server = '10.0.0.1'\n",
+		"DATA-005": "server = '8.8.8.8'\n",
 		"DATA-006": "dob = '1990-01-15'\n",
 		"DATA-007": "iban = DE89370400440532013000\n",
 		"DATA-008": "nino = AB123456C\n",
@@ -317,7 +322,7 @@ func TestScanArtifacts_MixedFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	// File with PII (email address).
-	piiFile := writeFile(t, dir, "config.env", "admin_email = user@example.com\n")
+	piiFile := writeFile(t, dir, "config.env", "admin_email = jane.doe@acmecorp.io\n")
 	// Clean file with no PII.
 	cleanFile := writeFile(t, dir, "clean.go", "package main\n\nfunc main() {}\n")
 	// File with SSN.
@@ -363,8 +368,8 @@ func TestScanArtifacts_Deduplicates(t *testing.T) {
 	// Two files with identical content should produce findings that are
 	// NOT deduplicated because they have different file paths (different
 	// fingerprints).
-	file1 := writeFile(t, dir, "a.env", "email = user@example.com\n")
-	file2 := writeFile(t, dir, "b.env", "email = user@example.com\n")
+	file1 := writeFile(t, dir, "a.env", "email = jane.doe@acmecorp.io\n")
+	file2 := writeFile(t, dir, "b.env", "email = jane.doe@acmecorp.io\n")
 
 	artifacts := []discovery.Artifact{
 		{Path: "a.env", AbsPath: file1, Type: discovery.Config, Size: 30},

@@ -1,0 +1,19 @@
+# Clean sample: every value here is a placeholder that exists to be safe.
+#
+# The IPs are loopback, RFC 1918 private, link-local and the RFC 5737
+# documentation nets; the addresses are at the RFC 2606 / RFC 6761 reserved
+# domains and TLDs. All are the correct thing for a developer to write in a
+# config, and none discloses infrastructure or PII. Any finding here is a FALSE
+# POSITIVE — DATA-005 used to report all six IPs as a "public IP address"
+# because its pattern matched every dotted quad.
+server:
+  bind_host: 127.0.0.1
+  advertise_addr: 0.0.0.0
+  database_host: 10.0.0.5
+  cache_host: 192.168.1.10
+  link_local_ip: 169.254.10.20
+  docs_example_host: 203.0.113.9
+contacts:
+  support_email: support@example.com
+  staging_email: noreply@staging.example
+  fixture_email: qa@myapp.test

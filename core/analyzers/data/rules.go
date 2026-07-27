@@ -17,6 +17,11 @@ type dataRule struct {
 	keywords    []string
 	remediation string
 	references  []string
+	// validate is an optional post-match predicate (see
+	// rules.Rule.ValidateMatch). Rules whose pattern can only find a candidate
+	// — an IPv4-shaped or email-shaped token — use it to decide in Go whether
+	// that particular value is reportable. See validate.go.
+	validate func(matchText string) bool
 }
 
 // builtinDataRules returns all built-in data sensitivity detection rules.
@@ -30,6 +35,10 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`,
 			description: "Email address in code or config",
 			cwe:         "CWE-359", keywords: []string{"@"},
+			// RFC 2606 / RFC 6761 reserved domains and TLDs exist so that
+			// documentation, examples and tests have an address to use. They
+			// are not PII. See isReportableEmailMatch.
+			validate:    isReportableEmailMatch,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
@@ -62,6 +71,12 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)(?:ip|host|server|addr)\s*[=:]\s*['"]?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)`,
 			description: "Hardcoded public IP address in configuration",
 			cwe:         "CWE-200", keywords: []string{"ip", "host", "server", "addr"},
+			// The pattern matches any dotted quad; "public" is decided here.
+			// Without this the rule fired on `host: 127.0.0.1` and
+			// `addr: 10.0.0.5` — the common case in real configuration and the
+			// exact opposite of what the description promises. See
+			// isPublicIPv4Match.
+			validate:    isPublicIPv4Match,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/200.html"},
 		},
@@ -126,18 +141,19 @@ func builtinDataRules() []*rules.Rule {
 	out := make([]*rules.Rule, len(defs))
 	for i := range defs {
 		out[i] = &rules.Rule{
-			ID:          defs[i].id,
-			Version:     "1.0",
-			Description: defs[i].description,
-			Severity:    defs[i].severity,
-			Confidence:  defs[i].confidence,
-			MatcherType: "regex",
-			Pattern:     defs[i].pattern,
-			Keywords:    defs[i].keywords,
-			Tags:        []string{"data-sensitivity", "pii"},
-			Metadata:    map[string]string{"cwe": defs[i].cwe},
-			Remediation: defs[i].remediation,
-			References:  defs[i].references,
+			ID:            defs[i].id,
+			Version:       "1.0",
+			Description:   defs[i].description,
+			Severity:      defs[i].severity,
+			Confidence:    defs[i].confidence,
+			MatcherType:   "regex",
+			Pattern:       defs[i].pattern,
+			Keywords:      defs[i].keywords,
+			Tags:          []string{"data-sensitivity", "pii"},
+			Metadata:      map[string]string{"cwe": defs[i].cwe},
+			Remediation:   defs[i].remediation,
+			References:    defs[i].references,
+			ValidateMatch: defs[i].validate,
 		}
 	}
 	return out

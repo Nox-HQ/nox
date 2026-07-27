@@ -44,7 +44,7 @@ nox bench --precision testdata/precision-suite --baseline testdata/precision-sui
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite` scores
-**precision 1.00 / recall 1.00 / F1 1.00** (35 TP, 0 FP, 0 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (37 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits is a true positive, and both Go clean
 stressors (`clean_html_autoescape.go`, `clean_field_safe.go`) fire nothing — and
 recall is back to 1.00 now that the Go tier-2 gaps are closed. The second Go tier
@@ -54,6 +54,17 @@ engine missed — three XSS-to-response sinks and one map-value container taint 
 dropping recall to 0.89. Those were closed by building the engine (an
 XSS-to-response sink family + container-level index/field taint), not by curating
 the corpus. See "Go coverage" below for what each fix added.
+
+A configuration tier (`tp_data_pii.yaml`, `clean_data_placeholders.yaml`) was
+added alongside the DATA-005 / DATA-001 precision fix, and named **nine honest
+false positives** on landing: DATA-005's pattern matched every dotted quad
+despite the rule being titled "public IP address", so it reported all six
+loopback / RFC 1918 / link-local / RFC 5737 addresses in the clean sample, and
+DATA-001 reported all three RFC 2606 / RFC 6761 reserved documentation
+addresses. Measured on this corpus, DATA-005 scored **precision 0.14** and
+DATA-001 **precision 0.25**, dropping corpus precision to 0.80 / F1 0.89. Both
+are now 1.00 with recall unchanged at 1.00 — closed by deciding publicness in
+Go against a `netip.Prefix` table rather than by widening the regex.
 
 For the historical record, recall dipped to 0.79 when the *first* realistic **Go**
 samples landed (six FNs: injection / traversal / SSRF / deserialization / SSTI),
@@ -183,6 +194,12 @@ language for the first time):
 | `tp_field_taint.go` | cmd injection laundered through a struct field | TAINT-002 | TP (container-level field taint) |
 | `tp_container_taint.go` | cmd injection through a map value **and** a slice element | TAINT-002 (×2) | TP ×2 (container-level index/element taint) |
 
+True positives — configuration (annotated ground truth):
+
+| File | What it exercises | Correct rule | nox today |
+| --- | --- | --- | --- |
+| `tp_data_pii.yaml` | publicly routable IPv4 + mailbox at a registrable domain in config | DATA-005 / DATA-001 | TP |
+
 Clean stressors (zero annotations — any finding is a false positive):
 
 | File | Noise class | nox today |
@@ -204,6 +221,7 @@ Clean stressors (zero annotations — any finding is a false positive):
 | `clean_identifiers.go` | UUID, git SHA, hex colors, **SRI integrity hash** | clean (SRI fix) |
 | `clean_html_autoescape.go` | `html/template` context-aware auto-escaping of user data | clean (correct escaping → not a sink) |
 | `clean_field_safe.go` | struct field sanitized (`strconv.Atoi`, `filepath.Base`) before the sink | clean (sanitizer recognized) |
+| `clean_data_placeholders.yaml` | loopback / RFC 1918 / link-local IPs and RFC 2606 + RFC 6761 reserved email domains | clean (DATA-005/001 range + reserved-domain predicates) |
 
 Grow this corpus over time; the honest way to raise the number is to fix the
 rules the corpus indicts, not to curate the corpus to pass. When a rule fix
