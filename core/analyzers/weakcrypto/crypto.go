@@ -124,8 +124,9 @@ var cPattern = regexp.MustCompile(
 		`|\bkCCAlgorithm(?:DES|3DES|RC4|RC2)\b` +
 		`|\bkCCOptionECBMode\b`)
 
-// languages holds one entry per language core's SAST supports, or none at all
-// where the deliberate decision was to stay silent (see the shell entry).
+// languages holds one entry per language core's SAST supports. Two entries —
+// PHP and shell — are deliberately narrower than the language's full weak-crypto
+// surface; each says why in place.
 //
 // Each pattern targets a CALL or a package-qualified symbol rather than the
 // bare algorithm name, so a comment, a variable called `md5sum`, or a string in
