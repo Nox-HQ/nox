@@ -1,0 +1,9 @@
+# True positives for the data-sensitivity rules. Both values below are the real
+# thing: a publicly routable IPv4 address and a mailbox at an ordinary
+# registrable domain, hardcoded into configuration. These are the recall side of
+# the DATA-005 precision fix — if a future exclusion silences them, the rule has
+# been gutted rather than sharpened.
+service:
+  name: reporting-api
+  dns_server: 8.8.8.8  # nox-expect: DATA-005
+  oncall_contact: jane.doe@acmecorp.io  # nox-expect: DATA-001

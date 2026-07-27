@@ -64,6 +64,26 @@ type Rule struct {
 	// identifier also rejects the key.
 	RequireContextKeywords []string `yaml:"require_context_keywords"`
 
+	// ValidateMatch is an optional post-match predicate: the engine keeps a
+	// match only when it returns true for the matched text. It is set
+	// programmatically by built-in rules (there is no YAML spelling — a
+	// predicate is code, not data) and is nil for every rule that does not
+	// need one.
+	//
+	// It exists for the class of rule whose *candidate* is cheap to express as
+	// a regex but whose *decision* is not. DATA-005 is the motivating case: RE2
+	// can find an IPv4-shaped token in one line of pattern, but deciding
+	// whether that address is publicly routable means excluding a dozen
+	// numeric ranges (RFC 1918, loopback, CGNAT, multicast, the RFC 5737
+	// documentation nets). Written as a regex that is an unreviewable wall of
+	// alternations; written as a netip.Prefix table it is a list anyone can
+	// check against the RFCs. Match broadly, then decide in Go.
+	//
+	// The predicate receives only the matched text, so it stays a pure
+	// function of the match and cannot smuggle in file or line state — the
+	// line-windowed context filters above remain the tool for that.
+	ValidateMatch func(matchText string) bool `yaml:"-"`
+
 	// Absence* fields drive the block-scoped absence matcher (MatcherType
 	// "absence"). They restore IaC "resource present but hardening property
 	// missing" detections that Go's RE2 regexp cannot express: those were

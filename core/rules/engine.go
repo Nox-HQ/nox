@@ -66,6 +66,13 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 		results := matcher.Match(content, rule)
 		for _, mr := range results {
+			// Post-match predicate: the rule inspects its own match text and
+			// vetoes it. Runs before the line-windowed filters because it is
+			// the cheapest of the three and needs no line splitting.
+			if rule.ValidateMatch != nil && !rule.ValidateMatch(mr.MatchText) {
+				continue
+			}
+
 			// Precision filters: drop matches in comments or defensive
 			// contexts when the rule opts in. Lines are computed lazily.
 			if rule.IgnoreInComments || len(rule.ExcludeContextKeywords) > 0 ||
