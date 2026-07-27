@@ -309,12 +309,16 @@ func leadingCallHead(code string) (head string, end int) {
 	if head == "" || strings.HasPrefix(head, ".") {
 		return "", 0
 	}
-	// Reject keywords used as statement heads.
-	firstSeg := head
-	if dot := strings.IndexByte(head, '.'); dot >= 0 {
-		firstSeg = head[:dot]
-	}
-	if isKeyword(firstSeg) {
+	// Reject keywords used as statement heads (`return x` is not a call to
+	// `return`). Only a BARE head can be a keyword statement: no language writes
+	// `return.foo(...)`, so a DOTTED chain whose first segment happens to be in the
+	// shared keyword set is a call on a module or type that merely shares the name
+	// — Elixir's `String.trim` / `Map.get` / `List.first` / `Stream.map`, Java's
+	// `String.format`, C#'s `Uri.EscapeDataString`. Those are real, frequently
+	// tainted call heads; rejecting them dropped the sink entirely. The shared set
+	// carries Dart's built-in type names, so this distinction is what keeps them
+	// from suppressing calls across every other language.
+	if !strings.Contains(head, ".") && isKeyword(head) {
 		return "", 0
 	}
 	return head, i

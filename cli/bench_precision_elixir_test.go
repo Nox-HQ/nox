@@ -18,11 +18,12 @@ func elixirSuitePath() string {
 // if any gated metric regressed (precision/recall/F1 dropped, or FP /
 // findings-per-issue rose).
 //
-// Elixir recall is intentionally below 1.0 — its two dominant dataflow idioms,
-// the pipe operator `|>` and pattern matching, are more than a flat per-line
-// recognizer can follow, so the suite carries two documented honest false
-// negatives (a multi-stage pipe and a destructuring pattern match; see
-// testdata/precision-suite-elixir/README.md). Pinning the number here means
+// Elixir recall is intentionally below 1.0 — of its two dominant dataflow
+// idioms, the pipe operator `|>` is now followed to the end of the chain, but
+// pattern matching is still more than a flat per-line recognizer can follow, so
+// the suite carries one documented honest false negative (a destructuring
+// pattern match; see testdata/precision-suite-elixir/README.md). Pinning the
+// number here means
 // Elixir PRECISION can no longer silently regress: a change that makes the suite
 // noisier fails CI. When the suite legitimately improves, this test reports the
 // improvement and tells you to refresh baseline.json.
