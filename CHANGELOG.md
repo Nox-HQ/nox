@@ -101,6 +101,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on, and the absence of a finding is not evidence that a file generates its
   secrets safely.
 
+### Fixed
+
+- **`CRYPTO-001` missed the one-shot digest call, which is the commoner one.**
+  The rule matched the CONSTRUCTOR form and nothing else, so `md5.New()` was
+  reported and `md5.Sum(b)` — in the same file, same package — was not.
+  `sha1` behaved identically. `Sum()` is the more idiomatic of the two calls, so
+  the shape being missed was the one people actually write: a scan of
+  `klarlabs-studio/agent-go` reported 10 findings before and 18 after, every new
+  one a `Sum()` call the rule had been silent about, and none removed.
+
+  The constructor-only pattern existed for a good reason — matching the bare
+  word `md5` would flag a variable named `md5sum` and the word in a comment. The
+  fix keeps that property by matching the package-qualified call
+  (`md5.Sum(`/`md5.New(`) rather than the algorithm name, so an identifier and
+  prose still do not match. Both call shapes are now asserted together in one
+  test so they cannot drift apart again. (#402)
+
+### Changed
+
+- **`CRYPTO-001` now covers all 15 languages core's SAST supports, up from 5.**
+  The rule was Go, Python, JavaScript, TypeScript and Java only; C, C++, C#,
+  Kotlin, Objective-C, PHP, Ruby, Rust, Shell and Swift were silent, as were the
+  JS/TS variant extensions (`.jsx`, `.mjs`, `.cjs`, `.tsx`, `.mts`, `.cts`).
+  Coverage now also includes 3DES and ECB mode alongside MD5, SHA-1, DES and
+  RC4, and — as in Go — both the streaming and one-shot call shapes wherever a
+  language offers both (`MD5_Init` *and* `MD5()`; `MD5.Create()` *and*
+  `MD5.HashData()`).
+
+  **Two languages are deliberately narrower than they could be.** PHP does not
+  match bare `md5()`/`sha1()`: they are global functions, among the most-called
+  in the language, and overwhelmingly used for cache keys, ETags and Gravatar
+  hashes (which the Gravatar protocol *requires* to be MD5). Flagging them would
+  put a finding in nearly every PHP file in existence, and a rule like that gets
+  globally disabled — taking the genuinely broken `mcrypt_*` and
+  `openssl_encrypt(…, 'des-ecb', …)` detections down with it. Shell does not
+  match `md5sum`/`sha1sum`/`shasum`, which verify downloads against accidental
+  corruption rather than an attacker; only `openssl enc` with a broken cipher is
+  matched there.
+
+  Patterns stay bound per extension. `Digest::MD5` is a Ruby constant path,
+  `md5::compute` is a Rust path and `MD5(` is an OpenSSL C function; a test
+  feeds every language's positive corpus through every other language's
+  extension and requires zero matches, so one language's vocabulary cannot
+  manufacture findings in another's files. Two known-noisy shapes are excluded
+  by name: `Cipher.getInstance("RSA/ECB/OAEP…")`, where JCA's "ECB" is a
+  historical misnomer for correct RSA padding, and `printf("MD5 (%s)…")`, which
+  is OpenSSL's own output format rather than a call.
+
+  The rule reports **zero findings on nox's own repository**, before and after.
+  (#405)
+
 ## [1.23.0] - 2026-07-26
 
 ### Changed
