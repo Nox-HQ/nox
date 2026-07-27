@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **World-writable file and directory modes are now reported (`PERM-001`,
+  `PERM-002`).** A fleet that drops gosec in favour of nox loses G301
+  (`MkdirAll`), G302 (`Chmod`) and G306 (`WriteFile`) outright — 22 findings
+  across 14 Go repositories with no nox equivalent. `os.WriteFile`,
+  `os.OpenFile`, `os.Chmod`, `os.Mkdir`, `os.MkdirAll` and `ioutil.WriteFile`
+  are matched on the Go AST, so a permission literal in a comment, a string, or
+  a same-named project helper is not a finding. Both octal spellings, mode
+  conversions (`os.FileMode(0777)`, `fs.FileMode(…)`) and OR chains are
+  evaluated. (#405)
+
+  **The threshold is the world-write bit (`0o002`), not gosec's 0600/0750.**
+  Under gosec's defaults `0o644` and `0o755` are findings, which in this
+  repository alone would be 503 of them — those modes are Go's own idiomatic
+  defaults, so reporting them is a preference rather than a vulnerability
+  signal, and it is why gosec's permission rules are among the most-suppressed
+  in the fleet. World-writable is different in kind: any local user can rewrite
+  the contents, no idiom requires it, and the finding is actionable without
+  knowing what the file holds. World-readable and group-writable are
+  deliberately not reported. A world-writable directory carrying
+  `os.ModeSticky` is the /tmp model and is not reported either.
+
+  Medium severity at high confidence, matching gosec's own rating for the
+  family. Note that a gate keyed on net-new critical/high will not fail on
+  these; lower the threshold or key on `PERM-*` to make them blocking. The mode
+  must be a literal in the call — a named constant needs `go/types` and is not
+  reported, which is the correct direction to fail.
+
 ## [1.23.0] - 2026-07-26
 
 ### Changed

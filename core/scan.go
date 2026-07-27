@@ -19,6 +19,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
@@ -268,6 +269,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
+	filepermsAnalyzer := fileperms.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	// A signature database that fails to parse leaves every VARIANT-* rule
 	// unable to match. The scan would otherwise report zero variant findings
@@ -351,6 +353,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		},
 		func(c context.Context) error {
 			fs, err := cryptoAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		},
+		func(c context.Context) error {
+			fs, err := filepermsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
@@ -445,6 +455,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		allRules.Add(r)
 	}
 	for _, r := range cryptoAnalyzer.Rules().Rules() {
+		allRules.Add(r)
+	}
+	for _, r := range filepermsAnalyzer.Rules().Rules() {
 		allRules.Add(r)
 	}
 	for _, r := range slopAnalyzer.Rules().Rules() {
