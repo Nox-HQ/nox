@@ -70,6 +70,7 @@ func extractCPP(lines []logicalLine) []unitDraft {
 		}
 
 		if !isCPPStructuralLine(trimmed) {
+			ll = shapeCPPConstructorDecl(ll)
 			if st, ok := recognizeStatement(langCPP, ll); ok {
 				applyCPPBufferBuilder(&st)
 				cur.stmts = append(cur.stmts, st)
@@ -538,4 +539,107 @@ func matchParenBackward(s string, closeIdx int) int {
 		}
 	}
 	return -1
+}
+
+// shapeCPPConstructorDecl rewrites a C++ variable declaration whose initializer
+// is a CONSTRUCTOR call — `std::ifstream in(path);` — into the assignment form
+// `in = std::ifstream(path)` the shared recognizer already understands.
+//
+// Without it the recognizer reads `in(path)` as a call to a function named `in`
+// (the VARIABLE), so the constructed type never appears as the callee and a sink
+// keyed on the type (`ifstream`, opening an attacker-controlled path) never
+// fires. The declared variable is also left unbound.
+//
+// It fires only on the unambiguous shape: exactly two tokens before a balanced
+// argument list that ends the statement, no top-level `=`, the second token a
+// plain identifier, and the FIRST token recognizably a type — namespace- or
+// class-qualified (`std::ifstream`, containing `::` or `.`) or upper-case
+// initial (`Foo bar(x)`). Requiring that keeps built-in-typed function
+// PROTOTYPES (`int helper(int a);`), which reach this same path, from being
+// rewritten into a call to `int`.
+func shapeCPPConstructorDecl(ll logicalLine) logicalLine {
+	code := strings.TrimSpace(ll.code)
+	if code == "" || !strings.HasSuffix(code, ")") {
+		return ll
+	}
+	if splitAssignmentIndexCPP(code) >= 0 {
+		return ll
+	}
+	open := strings.IndexByte(code, '(')
+	if open < 0 {
+		return ll
+	}
+	if _, end := balancedArgs(code, open); end != len(code) {
+		return ll
+	}
+	head := strings.Fields(code[:open])
+	if len(head) != 2 {
+		return ll
+	}
+	typeTok, name := head[0], head[1]
+	// A DECLARED name may legitimately collide with the shared keyword set
+	// (`std::ifstream in(path)` — `in` is Python's membership operator), so the
+	// name is only required to be a bare identifier. The keyword guard belongs on
+	// the TYPE token below, which is what keeps `return foo(bar)` out.
+	if !isBareIdent(name) {
+		return ll
+	}
+	qualified := strings.Contains(typeTok, "::") || strings.Contains(typeTok, ".")
+	upper := typeTok != "" && typeTok[0] >= 'A' && typeTok[0] <= 'Z'
+	if !qualified && !upper {
+		return ll
+	}
+	if isKeyword(strings.SplitN(typeTok, "::", 2)[0]) {
+		return ll
+	}
+	args := code[open:]
+	indent := ll.code[:len(ll.code)-len(strings.TrimLeft(ll.code, " \t"))]
+	rewritten := indent + name + " = " + typeTok + args
+	return logicalLine{line: ll.line, code: rewritten, raw: rewritten}
+}
+
+// splitAssignmentIndexCPP returns the index of a top-level `=` assignment in
+// code, or -1. Mirrors splitAssignment's operator filtering without building the
+// two halves.
+func splitAssignmentIndexCPP(code string) int {
+	depth := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '=':
+			if depth != 0 {
+				continue
+			}
+			if i+1 < len(code) && code[i+1] == '=' {
+				i++
+				continue
+			}
+			if i > 0 {
+				switch code[i-1] {
+				case '=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^':
+					continue
+				}
+			}
+			return i
+		}
+	}
+	return -1
+}
+
+// isBareIdent reports whether s is a single identifier — like isSimpleIdent but
+// WITHOUT the keyword exclusion, for positions where a declared name may shadow
+// a keyword from another language in the shared set.
+func isBareIdent(s string) bool {
+	if s == "" || !isIdentStart(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isIdentPart(s[i]) {
+			return false
+		}
+	}
+	return true
 }

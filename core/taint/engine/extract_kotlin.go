@@ -79,6 +79,14 @@ func extractKotlin(lines []logicalLine) []unitDraft {
 			cur.stmts = append(cur.stmts, st)
 		}
 
+		// A scope function's lambda parameter aliases its receiver, so bind it
+		// before the lambda body's statements (which arrive on later lines).
+		if b, ok := scopeFunctionBinding(ll); ok {
+			if st, ok := recognizeStatement(langKotlin, b); ok {
+				cur.stmts = append(cur.stmts, st)
+			}
+		}
+
 		if closesFun {
 			cur = module
 			funDepth = -1

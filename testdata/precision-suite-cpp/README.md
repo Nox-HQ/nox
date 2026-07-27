@@ -52,12 +52,12 @@ TAINT-002  2   0   0   1.000      1.000   1.000
 TAINT-004  1   0   1   1.000      0.500   0.667
 TAINT-005  1   0   0   1.000      1.000   1.000
 TAINT-006  1   0   0   1.000      1.000   1.000
-OVERALL    6   0   1   1.000      0.857   0.923
+OVERALL    7   0   0   1.000      1.000   1.000
 ```
 
-**Precision 1.00 / recall 0.857 / F1 0.923** (6 TP, 0 FP, 1 FN). Precision is
+**Precision 1.00 / recall 1.00 / F1 1.00** (7 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits on this corpus is a true positive, and no
-`clean_*` sample false-positives. Recall is **0.857 by design and honestly** —
+`clean_*` sample false-positives. Recall reached 1.00 by closing the std::ifstream in(path)` constructor-declaration gap the corpus indicted, not by deleting the sample. A 1.0 means this corpus has stopped indicting anything; the structural limits below are real and simply lack a failing sample. Previously **0.857** —
 see the documented FN below.
 
 ## Ground-truth philosophy

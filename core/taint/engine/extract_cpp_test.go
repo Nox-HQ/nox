@@ -154,3 +154,26 @@ func TestExtractCPPConstMethodHeader(t *testing.T) {
 	// The name is the final dotted segment after `::`->`.` normalization.
 	findUnit(t, units, "describe")
 }
+
+// TestShapeCPPConstructorDecl: `std::ifstream in(path)` is a declaration whose
+// initializer is a constructor call. Read literally it looks like a call to a
+// function named `in` (the VARIABLE), so the constructed type never appeared as
+// the callee and a sink keyed on it could not fire.
+func TestShapeCPPConstructorDecl(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"    std.ifstream in(path)", "    in = std.ifstream(path)"},
+		{"    std::ofstream out(p)", "    out = std::ofstream(p)"},
+		{"    Foo bar(baz)", "    bar = Foo(baz)"},
+		// Not the shape: leave untouched.
+		{"    foo(bar)", "    foo(bar)"},                   // ordinary call
+		{"    int helper(int a)", "    int helper(int a)"}, // builtin-typed prototype
+		{"    return foo(bar)", "    return foo(bar)"},     // keyword head
+		{"    auto x = mk(y)", "    auto x = mk(y)"},       // already an assignment
+		{"    Foo bar(baz) extra", "    Foo bar(baz) extra"},
+	} {
+		got := shapeCPPConstructorDecl(logicalLine{line: 1, code: tc.in, raw: tc.in})
+		if got.code != tc.want {
+			t.Errorf("shape(%q) = %q, want %q", tc.in, got.code, tc.want)
+		}
+	}
+}
