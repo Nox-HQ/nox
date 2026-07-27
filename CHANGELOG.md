@@ -152,6 +152,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The rule reports **zero findings on nox's own repository**, before and after.
   (#405)
 
+- **`MEMSAFE-001` — integer truncation that sizes memory.** A value narrowed to
+  a smaller integer type, or flipped signed→unsigned, and then used as a
+  `make()` size or a slice bound. A wire-decoded length converted
+  `uint32`→`int32` goes negative above 2³¹ and panics the allocation; a length
+  truncated to `uint8` silently mis-frames anything longer than 255 bytes. Both
+  were found in widely deployed networking libraries while validating the rule.
+  Medium severity, so it reports rather than gates. (#405)
+
+  **This is deliberately not gosec's `G115`.** Measured before implementation,
+  gosec's own rule produced 96 findings across sixteen fleet repositories plus
+  nox itself, with **zero** true positives — `int32(len(out))` filling protobuf
+  count fields, `byte(addr>>24)` extracting an IPv4 octet, `byte(nano%10)`
+  formatting a digit. That is how a rule earns 63 blanket suppressions. Nox
+  reports only the shape where truncation is a memory-safety bug, and stays
+  silent on all 96. On `segmentio/kafka-go`, gosec reports 156 findings of which
+  two are a real bug; this rule reports one, and it is the bug.
+
+  Masks, modulo, logical shifts on unsigned values, comparison guards written
+  through a conversion (`if uint32(r) <= MaxLatin1`), and `len`-derived values
+  narrowed to 32 bits or more are all suppressed — each one a class observed
+  firing on correct code. A bare index `s[i]` is not treated as a sink: it is
+  syntactically indistinguishable from a map lookup, and Go bounds-checks slice
+  indexes anyway.
+
+  **`go/types` was evaluated and rejected**, with the cost written down in
+  `docs/design/go-integer-overflow.md`. Full `G115` parity needs type
+  resolution, every Go importer needs a resolvable module graph and a toolchain,
+  and nox scans checked-out trees offline in containers that have neither. The
+  measured price is 64% of gosec's findings on nox's own source — all of which
+  were false positives anyway. Conversions whose operand type is not provable
+  from the enclosing function are not reported.
+
+  `G103` (`unsafe`), `G602` (slice bounds) and `G104` (unhandled errors) are
+  **not** implemented, with reasons: all 20 fleet `G103` findings are in
+  generated protobuf code, `G602`'s useful half is this rule's slice-bound sink,
+  and `G104` is already covered by `errcheck` in the fleet's golangci config —
+  duplicating it would reintroduce exactly the double-reporting that retired
+  `nox-plugin-sast`.
+
 ## [1.23.0] - 2026-07-26
 
 ### Changed
