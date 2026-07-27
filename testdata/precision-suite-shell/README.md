@@ -20,16 +20,20 @@ As committed, `nox bench --precision testdata/precision-suite-shell` scores:
 | Metric | Value |
 | --- | --- |
 | **Precision** | **1.00** (0 false positives) |
-| **Recall** | **0.82** |
-| **F1** | **0.90** |
-| TP / FP / FN | 9 / 0 / 2 |
-| findings-per-issue | 0.82 |
+| **Recall** | **1.00** |
+| **F1** | **1.00** |
+| TP / FP / FN | 11 / 0 / 0 |
+| findings-per-issue | 1.00 |
 
-Per rule: TAINT-002 (cmd injection) 3/4, TAINT-004 (traversal) 2/2, TAINT-005
-(code injection) 2/3, TAINT-006 (SSRF) 2/2. **Precision is 1.00** — every finding
+Per rule: TAINT-002 (cmd injection) 4/4, TAINT-004 (traversal) 2/2, TAINT-005
+(code injection) 3/3, TAINT-006 (SSRF) 2/2. **Precision is 1.00** — every finding
 nox emits is a true positive, and all four clean stressors fire nothing.
 
-## Why shell recall is the lowest of any supported language
+A 1.0 does NOT mean shell dataflow is solved — it means this corpus has stopped
+indicting anything. The limits below are real and simply lack a failing sample;
+adding one is how the number stays honest.
+
+## Why shell recall is the hardest of any supported language
 
 This is expected and honest. Unlike Python/Ruby/JS (function-call-shaped, so an
 `f(x)` call site and its arguments are unambiguous), **shell is command-oriented
@@ -42,24 +46,47 @@ straight-line eval/command patterns that carry the bulk of real shell injection
 and honestly misses the dynamic ones. The recall gap is the truth, not a defect
 to paper over.
 
-### The two honest false negatives (`tp_known_fns.sh`)
+### CLOSED: the two `local`-laundering false negatives (`tp_known_fns.sh`)
 
-Both FNs share one root cause: **taint laundered through a `local`-declared
-variable inside a function**. The recognizer skips `local` / `declare` / `export`
-/ `readonly` lines (they are treated as structural scaffolding), so the declared
-variable is never marked tainted and a downstream `eval "$arg"` / `bash -c
-"$target"` is missed:
+Both shared one root cause: **taint laundered through a `local`-declared
+variable inside a function**. `local` / `declare` / `export` / `readonly` lines
+were skipped wholesale as structural scaffolding, so the declared variable was
+never marked tainted and a downstream `eval "$arg"` / `bash -c "$target"` was
+missed.
 
-```bash
-launder_eval() {
-  local arg="$1"      # <- `local` line skipped: arg never tainted
-  eval "$arg"         # nox-expect: TAINT-005  (MISSED — false negative)
-}
-```
+A declaration that INITIALIZES (`local arg="$1"`) is an assignment and is now
+recognized as one: the keyword and any option flags are blanked to spaces
+(width-preserving, so the code and raw views stay aligned) and the assignment
+underneath is read normally. A BARE declaration (`local a b c`, `declare -A
+map`) still skips — it carries no dataflow, and reading it as a command would
+invent a call to `local`.
 
-Closing this means modeling `local x="$1"` as a tainted assignment without
-over-tainting the many benign `local` uses — the open work, deferred honestly
-rather than hacked in.
+The feared cost — "over-tainting the many benign `local` uses" — did not
+materialize, because `local x=RHS` only taints when RHS is actually a source:
+`local count=0` stays clean. What it DID do was expose four latent
+sink-modelling bugs, which had been invisible only because no tainted value ever
+reached them. Measured on 87 real-world shell scripts (452 declaration
+assignments), the recall fix alone added **five** false positives; all four
+causes are now fixed:
+
+| Bug | Effect |
+| --- | --- |
+| `isShellCommandByte` stopped at `-`, though its own doc comment said command names may contain `-`, `.` and `/` | `exec-add-path` truncated to `exec`, an exact-match command-injection sink — any tainted argument to any `exec-*` helper was CWE-78 |
+| `exec` matched on an I/O redirection | `exec 200>"$lock"` rebinds a file descriptor and executes nothing, but was reported as command injection |
+| fetch commands ignored argument position | `curl --output "$path" "$url"` writes `$path`; a tainted output path was reported as the SSRF-controlling value |
+| path-qualified commands were unrecognized | `/usr/bin/curl "$u"` resolved to no callee at all, losing the sink (a recall bug found while fixing the above) |
+
+After all four, the same 87-script corpus yields **one** new finding, and it is a
+genuine `argv → url → curl` dataflow (`curl -fSL -o "$tarball" "$url"` where
+`url` interpolates `$1`). Its exploitability is arguable — the scheme and host
+are literal, so only a path segment is attacker-controlled — but that is a
+question about how the SSRF rule should treat a partially-tainted URL, not an
+extractor defect. It is recorded here rather than suppressed.
+
+A crash was also fixed on the way: the double-quote scanner treated `\` as
+escaping the next byte without checking one existed, so a word ending in a lone
+backslash ran the index past the end of the line. It was latent only because
+nothing sliced the raw view by that index.
 
 ## Precision: the hard part for shell
 
