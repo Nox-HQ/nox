@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -99,6 +100,61 @@ end
 	}
 	if !found {
 		t.Errorf("piped System.cmd reads = %v, want to include cmd", sink.reads)
+	}
+}
+
+// TestExtractElixirMultiStagePipe: a value piped through TWO-plus stages
+// (`x |> f() |> g()`) must reach the final sink, not just the first stage.
+// Desugaring peels one pipe per rewrite (`a |> f() |> g()` → `f(a) |> g()`), so
+// the rewrite has to run to fixpoint; stopping after one stage leaves the sink
+// holding no argument and loses the flow. This is the elixir suite's documented
+// `run_piped/1` false negative.
+func TestExtractElixirMultiStagePipe(t *testing.T) {
+	// The source expression is piped INLINE, with no intermediate binding — the
+	// exact shape of the suite's run_piped/1 sample. A bound variable would leak a
+	// line-level read and mask the gap.
+	src := []byte(`def handle(conn) do
+  conn.params["cmd"] |> String.trim() |> :os.cmd()
+end
+`)
+	units := extractUnits(lexctx.LangElixir, src)
+	u := findUnit(t, units, "handle")
+	sink := stmtWithCall(t, u, "os.cmd")
+	if sink.line == 0 {
+		t.Fatalf("final pipe stage os.cmd not recognized: %+v", u.stmts)
+	}
+	found := false
+	for _, c := range sink.chains {
+		if strings.Contains(c, "conn.params") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("multi-stage piped os.cmd chains = %v, want to include conn.params", sink.chains)
+	}
+}
+
+// TestExtractElixirThreeStagePipe: the fixpoint rewrite must not stop at two —
+// an arbitrary-length chain lands the value in the final sink.
+func TestExtractElixirThreeStagePipe(t *testing.T) {
+	src := []byte(`def handle(conn) do
+  conn.params["cmd"] |> String.trim() |> String.downcase() |> :os.cmd()
+end
+`)
+	units := extractUnits(lexctx.LangElixir, src)
+	u := findUnit(t, units, "handle")
+	sink := stmtWithCall(t, u, "os.cmd")
+	if sink.line == 0 {
+		t.Fatalf("final pipe stage os.cmd not recognized: %+v", u.stmts)
+	}
+	found := false
+	for _, c := range sink.chains {
+		if strings.Contains(c, "conn.params") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("three-stage piped os.cmd chains = %v, want to include conn.params", sink.chains)
 	}
 }
 

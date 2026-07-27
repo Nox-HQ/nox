@@ -15,17 +15,15 @@ import "strings"
 //   - a leading `:` on an Erlang-module chain (`:os.cmd`, `:erlang.binary_to_term`)
 //     is stripped so the chain reads as `os.cmd` / `erlang.binary_to_term` and
 //     resolves against the catalog by suffix.
-//   - the pipe operator `x |> f(args)` is rewritten to `f(x, args)` (best-effort)
-//     so the shared recognizer sees the piped value as the FIRST argument of f —
-//     this is how a tainted value flowing through a pipe into a sink is caught.
+//   - the pipe operator `x |> f(args)` is rewritten to `f(x, args)`, applied to
+//     fixpoint so a MULTI-stage chain (`a |> f() |> g()`) nests all the way down
+//     to `g(f(a))` — this is how a tainted value flowing through a pipe into a
+//     sink is caught, however many hops downstream the sink sits.
 //   - paren-less calls (`IO.puts x`, `System.halt 1`) are rewritten to a
 //     parenthesized form so the shared call recognizer sees `IO.puts(...)`.
 //
 // HONEST LIMITS (recall is lower than the function-call-shaped languages, by
 // design and documented in testdata/precision-suite-elixir/README.md):
-//   - The pipe rewrite is per-line and best-effort: a MULTI-stage pipe chain
-//     (`a |> f() |> g()`) only binds the value into the FIRST stage; a value that
-//     reaches a sink two-or-more pipe hops downstream is missed.
 //   - Pattern-matching binds only a SIMPLE-ident LHS (`x = expr`). A destructuring
 //     match (`%{"q" => q} = conn.params`, `[h | t] = list`, `{:ok, v} = ...`) does
 //     not surface `q`/`v` as a tainted binding — a documented false negative.
@@ -355,41 +353,50 @@ func stripElixirErlangColon(s string) string {
 	return string(b)
 }
 
-// desugarElixirPipe rewrites the FIRST top-level pipe `lhs |> callee(args)` on the
-// line into `callee(lhs, args)` so the shared recognizer sees the piped value as
-// the callee's first positional argument. It is best-effort and per-line: only
-// the first pipe stage is rewritten (a multi-stage chain binds the value into the
-// first stage only, a documented recall limit). Both views are transformed
-// identically so they stay aligned; if the rewrite would break alignment it is
-// skipped (returning the inputs unchanged) so the recognizer never sees a
-// mismatched pair.
+// desugarElixirPipe rewrites a top-level pipe chain `a |> f(args) |> g()` on the
+// line into the equivalent nesting `g(f(a, args))`, so the shared recognizer sees
+// the piped value as the first positional argument of EVERY stage — including the
+// final one, which is where the sink usually is.
+//
+// One rewrite consumes exactly the leftmost pipe (`a |> f() |> g()` becomes
+// `f(a) |> g()`), so the transform is applied to fixpoint: each pass strictly
+// removes one `|>`, which both walks the whole chain and guarantees termination.
+// Rewriting only the first stage — as this did before — bound the value into the
+// head of the chain and lost any sink two or more hops downstream.
+//
+// Both views are transformed identically so they stay aligned; if a stage cannot
+// be rewritten the chain stops there (keeping what was already desugared) so the
+// recognizer never sees a mismatched pair.
 func desugarElixirPipe(code, raw string) (newCode, newRaw string) {
-	pipe := elixirTopLevelPipe(code)
-	if pipe < 0 {
-		return code, raw
-	}
-	lhs := strings.TrimSpace(code[:pipe])
-	rhsStart := pipe + 2 // past `|>`
-	rhs := code[rhsStart:]
-	// The RHS must be a call `callee(args)` or a paren-less callee. Locate the
-	// callee head and its argument list.
-	rewritten, ok := rewritePipeStage(lhs, rhs)
-	if !ok {
-		return code, raw
-	}
-	newCode = rewritten
-	// Apply the SAME structural rewrite to the raw view by reconstructing it from
-	// the raw halves, so both views carry the piped value identically. When raw is
-	// not aligned to code we fall back to the code rewrite for both (argument
-	// counting then uses the code view, which is safe).
-	if len(raw) == len(code) {
-		rawLHS := strings.TrimSpace(raw[:pipe])
-		rawRHS := raw[rhsStart:]
-		if newRaw, ok := rewritePipeStage(rawLHS, rawRHS); ok {
-			return newCode, newRaw
+	// Guard against a pathological line; the loop already terminates on its own
+	// because every pass removes one pipe.
+	const maxPipeStages = 64
+	for range maxPipeStages {
+		pipe := elixirTopLevelPipe(code)
+		if pipe < 0 {
+			break
 		}
+		lhs := strings.TrimSpace(code[:pipe])
+		rhsStart := pipe + 2 // past `|>`
+		// The RHS must be a call `callee(args)` or a paren-less callee. Locate the
+		// callee head and its argument list.
+		rewritten, ok := rewritePipeStage(lhs, code[rhsStart:])
+		if !ok {
+			break
+		}
+		// Apply the SAME structural rewrite to the raw view by reconstructing it
+		// from the raw halves, so both views carry the piped value identically.
+		// Once raw is no longer aligned to code it follows the code rewrite
+		// (argument counting then uses the code view, which is safe).
+		nextRaw := rewritten
+		if len(raw) == len(code) {
+			if rr, ok := rewritePipeStage(strings.TrimSpace(raw[:pipe]), raw[rhsStart:]); ok {
+				nextRaw = rr
+			}
+		}
+		code, raw = rewritten, nextRaw
 	}
-	return newCode, newCode
+	return code, raw
 }
 
 // rewritePipeStage rewrites `lhs` piped into the call expression `rhs` as

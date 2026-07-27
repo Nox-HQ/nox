@@ -73,6 +73,83 @@ func TestCompareBaseline(t *testing.T) {
 // regressing even when the overall numbers are untouched — the exact blind spot
 // an overall-only floor has. It also proves the schema is backward compatible: a
 // baseline with no `rules` section skips per-rule enforcement.
+// TestImprovedUnderFiringDensity is the mirror of the gate: for a suite already
+// below the 1.00 ideal, sliding FURTHER below means it started missing even more
+// findings, so it must not be advertised as an improvement worth snapshotting.
+func TestImprovedUnderFiringDensity(t *testing.T) {
+	t.Parallel()
+
+	base := Baseline{Precision: 1.0, Recall: 0.857, F1: 0.923, FP: 0, TP: 12, FN: 2, FindingsPerIssue: 0.857}
+
+	// Density alone falls further below the ideal, with every other metric flat.
+	worse := Baseline{Precision: 1.0, Recall: 0.857, F1: 0.923, FP: 0, TP: 12, FN: 2, FindingsPerIssue: 0.6}
+	if Improved(base, worse) {
+		t.Error("a density drop further below the 1.00 ideal must not count as an improvement")
+	}
+
+	// Climbing toward the ideal is the real improvement.
+	better := Baseline{Precision: 1.0, Recall: 0.857, F1: 0.923, FP: 0, TP: 12, FN: 2, FindingsPerIssue: 0.95}
+	if !Improved(base, better) {
+		t.Error("a density rise toward the 1.00 ideal must count as an improvement")
+	}
+}
+
+// TestCompareBaselineUnderFiringDensity pins the direction of the
+// findings-per-issue gate. The metric's ideal is 1.00: below it the scanner is
+// MISSING findings, above it the scanner is duplicating them. A suite carrying
+// honest false negatives sits below 1.0, so closing one of those FNs necessarily
+// raises the number — toward the ideal. Gating it as strictly lower-is-better
+// reported every such recall win as a regression, which would have forced each
+// genuine improvement to be laundered through a baseline regeneration. Only
+// movement past the 1.00 ideal (real over-firing) is a regression.
+func TestCompareBaselineUnderFiringDensity(t *testing.T) {
+	t.Parallel()
+
+	// An under-firing suite: 12 findings across 14 annotated issues.
+	base := Baseline{Precision: 1.0, Recall: 0.857, F1: 0.923, FP: 0, TP: 12, FN: 2, FindingsPerIssue: 0.857}
+
+	tests := []struct {
+		name    string
+		current Baseline
+		want    []string
+	}{
+		{
+			name:    "closing a false negative raises density toward 1.0 and is not a regression",
+			current: Baseline{Precision: 1.0, Recall: 0.929, F1: 0.963, FP: 0, TP: 13, FN: 1, FindingsPerIssue: 0.929},
+			want:    nil,
+		},
+		{
+			name:    "reaching the 1.00 ideal is not a regression",
+			current: Baseline{Precision: 1.0, Recall: 1.0, F1: 1.0, FP: 0, TP: 14, FN: 0, FindingsPerIssue: 1.0},
+			want:    nil,
+		},
+		{
+			name:    "over-firing past the ideal is a regression",
+			current: Baseline{Precision: 1.0, Recall: 1.0, F1: 1.0, FP: 0, TP: 14, FN: 0, FindingsPerIssue: 1.6},
+			want:    []string{"findings_per_issue"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := CompareBaseline(base, tt.current)
+			names := make([]string, len(got))
+			for i := range got {
+				names[i] = got[i].Metric
+			}
+			if len(names) != len(tt.want) {
+				t.Fatalf("regressions = %v, want %v", names, tt.want)
+			}
+			for i := range tt.want {
+				if names[i] != tt.want[i] {
+					t.Errorf("regression[%d] = %s, want %s", i, names[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestCompareBaselinePerRule(t *testing.T) {
 	t.Parallel()
 
@@ -206,6 +283,11 @@ func TestImproved(t *testing.T) {
 		{"fewer FPs is an improvement", Baseline{Precision: 0.30, Recall: 0.80, F1: 0.44, FP: 10, FindingsPerIssue: 3.0}, true},
 		{"lower density is an improvement", Baseline{Precision: 0.30, Recall: 0.80, F1: 0.44, FP: 18, FindingsPerIssue: 1.5}, true},
 		{"a regression is not an improvement", Baseline{Precision: 0.20, Recall: 0.80, F1: 0.44, FP: 18, FindingsPerIssue: 3.0}, false},
+		// Density is distance-from-1.00, so overshooting the ideal is not a win:
+		// 3.0 -> 0.2 swaps heavy duplication for heavy under-firing (distance
+		// 2.0 -> 0.8 is closer, so this one IS an improvement), but a suite that
+		// starts under 1.00 and falls further is strictly worse. Covered below.
+		{"overshooting from over-firing to closer-but-under is an improvement", Baseline{Precision: 0.30, Recall: 0.80, F1: 0.44, FP: 18, FindingsPerIssue: 0.9}, true},
 	}
 
 	for _, tt := range tests {

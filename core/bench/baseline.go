@@ -133,7 +133,17 @@ func CompareBaseline(base, current Baseline) []Regression {
 	if current.FP > base.FP+fpTolerance {
 		out = append(out, Regression{"fp", float64(base.FP), float64(current.FP)})
 	}
-	if current.FindingsPerIssue > base.FindingsPerIssue+baselineEpsilon {
+	// findings-per-issue is a distance-from-ideal metric, not a lower-is-better
+	// one: 1.00 means every annotated issue produced exactly one finding. Below
+	// 1.00 the scanner is MISSING findings; above it, duplicating them. A suite
+	// that carries honest false negatives therefore sits under 1.00, and closing
+	// one of those FNs necessarily raises the number toward the ideal. Gating on
+	// a bare rise flagged those recall wins as regressions and would have forced
+	// every real improvement through a baseline regeneration. Only a rise past
+	// the ideal — genuine over-firing — regresses, so the ceiling is
+	// max(baseline, 1.0): a suite already over-firing may not get worse, and a
+	// suite under-firing may climb to 1.00 freely.
+	if ceiling := max(base.FindingsPerIssue, 1.0); current.FindingsPerIssue > ceiling+baselineEpsilon {
 		out = append(out, Regression{"findings_per_issue", base.FindingsPerIssue, current.FindingsPerIssue})
 	}
 	// Per-rule floors: any individual rule whose precision OR recall dropped
@@ -189,5 +199,20 @@ func Improved(base, current Baseline) bool {
 		current.Recall > base.Recall+baselineEpsilon ||
 		current.F1 > base.F1+baselineEpsilon ||
 		current.FP < base.FP ||
-		current.FindingsPerIssue < base.FindingsPerIssue-baselineEpsilon
+		// Closer to the 1.00 ideal in EITHER direction, mirroring the gate in
+		// CompareBaseline. A bare drop is not an improvement: for a suite that
+		// already under-fires, falling further below 1.00 means it started
+		// missing even more findings.
+		densityDistance(current.FindingsPerIssue) < densityDistance(base.FindingsPerIssue)-baselineEpsilon
+}
+
+// densityDistance is how far a findings-per-issue value sits from the 1.00
+// ideal — one finding per annotated issue. Under 1.00 the scanner misses
+// findings, over it duplicates them; the distance makes both directions
+// comparable.
+func densityDistance(v float64) float64 {
+	if v < 1.0 {
+		return 1.0 - v
+	}
+	return v - 1.0
 }

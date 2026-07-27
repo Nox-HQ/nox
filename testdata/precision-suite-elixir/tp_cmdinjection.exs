@@ -21,11 +21,11 @@ defmodule TpCmdInjection do
     Port.open(prog) # nox-expect: TAINT-002
   end
 
-  # HONEST FALSE NEGATIVE (multi-stage pipe): the tainted value flows through a
-  # TWO-hop pipe chain (`|> String.trim() |> :os.cmd()`) before reaching the
-  # sink. nox's per-line pipe desugaring only binds the value into the FIRST
-  # stage, so a value sunk two-plus hops downstream is missed. A correct scanner
-  # fires TAINT-002; nox does not — documented in README.md.
+  # Multi-stage pipe: the tainted value flows through a TWO-hop pipe chain
+  # (`|> String.trim() |> :os.cmd()`) before reaching the sink. Pipe desugaring
+  # runs to fixpoint — each rewrite peels the leftmost `|>`, so the chain nests
+  # into `:os.cmd(String.trim(conn.params["cmd"]))` and the value lands in the
+  # FINAL stage, where the sink is. Caught since the fixpoint rewrite landed.
   def run_piped(conn) do
     conn.params["cmd"] |> String.trim() |> :os.cmd() # nox-expect: TAINT-002
   end
