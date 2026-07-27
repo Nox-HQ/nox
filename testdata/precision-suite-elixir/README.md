@@ -20,13 +20,13 @@ As committed, `nox bench --precision testdata/precision-suite-elixir` scores:
 | Metric | Value |
 | --- | --- |
 | **Precision** | **1.00** (0 false positives) |
-| **Recall** | **0.93** |
-| **F1** | **0.96** |
-| TP / FP / FN | 13 / 0 / 1 |
-| findings-per-issue | 0.93 |
+| **Recall** | **1.00** |
+| **F1** | **1.00** |
+| TP / FP / FN | 14 / 0 / 0 |
+| findings-per-issue | 1.00 |
 
 Per rule: TAINT-001 (SQLi) 1/1, TAINT-002 (cmd injection) 4/4, TAINT-004 (path
-traversal) 3/4, TAINT-005 (code injection / deserialization) 2/2, TAINT-006
+traversal) 4/4, TAINT-005 (code injection / deserialization) 2/2, TAINT-006
 (SSRF) 3/3. **Precision is 1.00** — every finding nox emits is a true positive,
 and all four clean stressors fire nothing.
 
@@ -66,18 +66,23 @@ is a false positive:
 - **clean_generated.exs** — a machine-generated banner, constant lookup tables,
   and a constant fixture `File.read` — no untrusted input anywhere.
 
-## Why Elixir recall is below 1.0 (the honest false negative)
+## Elixir's two dominant idioms are both modeled now
 
-Elixir's two dominant dataflow idioms are the **pipe operator** `|>` and
-**pattern matching**. The pipe is now followed to the end of the chain; pattern
-matching still is not, and that is the one remaining annotated false negative —
-measurable rather than hand-waved:
+The **pipe operator** `|>` is followed to the end of the chain, and **pattern
+matching** now binds destructured names.
 
-1. **Destructuring pattern match** (`tp_pathtraversal.exs`
-   `read_destructured/1`): `%{"file" => path} = conn.params`. nox binds only a
-   **simple-ident** LHS (`x = expr`), so a map / tuple / list destructuring match
-   never marks the extracted variable tainted. A correct scanner fires TAINT-004;
-   nox does not.
+### Closed: destructuring pattern match (`tp_pathtraversal.exs` `read_destructured/1`)
+
+`%{"file" => path} = conn.params` bound nothing: only a **simple-ident** LHS
+(`x = expr`) was tracked, so a map / tuple / list match never marked the
+extracted variable tainted. A destructuring LHS now emits one binding statement
+per extracted name, carrying the RHS's source evidence — `%{"file" => path}`,
+`%{query: q}`, `{:ok, body}` and `[head | tail]` all bind. A name is in binding
+position when it is neither an atom (`:ok`) nor a keyword key (`query:`); module
+aliases and `_` are skipped.
+
+A 1.0 means this corpus has stopped indicting anything, not that Elixir dataflow
+is solved. The limits below are real and simply lack a failing sample.
 
 ### Closed: multi-stage pipe (`tp_cmdinjection.exs` `run_piped/1`)
 

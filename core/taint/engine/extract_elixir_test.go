@@ -190,3 +190,35 @@ Code.eval_string(x)
 		t.Fatalf("Code.eval_string not recognized in module unit: %+v", u.stmts)
 	}
 }
+
+// TestElixirDestructuredNames: a destructuring pattern-match binds names the
+// single-assignee model cannot express, so the extracted variable never carried
+// the RHS's taint.
+func TestElixirDestructuredNames(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		want []string
+	}{
+		{`%{      => path} = conn.params`, []string{"path"}},
+		{`%{query: q} = conn`, []string{"q"}},
+		{`{:ok, body} = fetch()`, []string{"body"}},
+		{`[head | tail] = list`, []string{"head", "tail"}},
+		// Not a destructuring bind: the ordinary assignment path handles it, so
+		// nothing must be doubled here.
+		{`x = conn.params`, nil},
+		{`conn.params`, nil},
+		{`a == b`, nil},
+	} {
+		got := elixirDestructuredNames(tc.code)
+		if len(got) != len(tc.want) {
+			t.Errorf("names(%q) = %v, want %v", tc.code, got, tc.want)
+			continue
+		}
+		for i := range tc.want {
+			if got[i] != tc.want[i] {
+				t.Errorf("names(%q) = %v, want %v", tc.code, got, tc.want)
+				break
+			}
+		}
+	}
+}

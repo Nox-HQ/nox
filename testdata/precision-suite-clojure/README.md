@@ -44,12 +44,12 @@ where the honest false negatives live (see below).
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-clojure` scores
-**precision 1.00 / recall 0.77 / F1 0.87** (10 TP, 0 FP, 3 FN). Precision is
+**precision 1.00 / recall 0.92 / F1 0.96** (12 TP, 0 FP, 1 FN). Precision is
 perfect — every finding nox emits is a true positive, and every clean stressor
 (parameterized jdbc vector, `Integer/parseInt` coercion, placeholder creds,
 data-URI blob, generated banner) fires nothing — while recall is the lowest of any
-language, held down by three honest false negatives in threading-macro and
-higher-order forms the recognizer cannot follow.
+language, held down by ONE honest false negative: the threading-macro form. The
+two higher-order-dispatch gaps (`apply`, `map`) are closed — see below.
 
 That gap is **honest, not curated**: the FN samples are annotated as the true
 positives a correct scanner should fire, so the number tells the truth. The way to
@@ -74,8 +74,8 @@ expected to MISS — the Lisp recall gap):
 | File (line) | What flows | Rule | nox today | Why it is missed |
 | --- | --- | --- | --- | --- |
 | `tp_threading.clj` — `run-threaded` | `(:params req)` threaded via `->`/`->>` into `shell/sh` | TAINT-002 | **FN** | threading macros reorder the value's argument position; the positional recognizer sees `sh` called with only literal args |
-| `tp_threading.clj` — `run-apply` | tainted seq spread into `sh` via `apply` | TAINT-002 | **FN** | the call head is `apply`, not `shell/sh`; the sink is reached indirectly |
-| `tp_threading.clj` — `fetch-all` | `map client/get` over tainted URLs | TAINT-006 | **FN** | the sink is a HOF argument, never a literal call head |
+| `tp_threading.clj` — `run-apply` | tainted seq spread into `sh` via `apply` | TAINT-002 | **caught** | the statement is re-attributed to the dispatched symbol |
+| `tp_threading.clj` — `fetch-all` | `map client/get` over tainted URLs | TAINT-006 | **caught** | same re-attribution |
 
 Clean stressors (zero annotations — any finding is a false positive):
 
@@ -92,9 +92,14 @@ Clean stressors (zero annotations — any finding is a false positive):
 - **Threading macros** (`->`, `->>`, `as->`, `some->`, `cond->`) rewrite argument
   position at read time; the recognizer does not desugar them, so a value threaded
   into a sink is missed. This is the dominant recall gap.
-- **Higher-order dispatch** — `apply`, `map`, `partial`, `comp`, `reduce` — passes
-  the sink or the tainted value as data, so the sink never appears as a literal
-  call head.
+- **Higher-order dispatch — CLOSED for the dispatcher family.** `apply`, `map`,
+  `mapv`, `pmap`, `mapcat`, `keep`, `filter`, `remove`, `some`, `every?` and
+  `run!` take the function to invoke as their FIRST argument, so a sink reached
+  through them was never a literal call head. The statement is now re-attributed
+  to the dispatched SYMBOL and the remaining arguments scored against it. Only a
+  bare symbol is re-attributed — an inline `#(...)`/`fn` literal has no name to
+  attribute the flow to and leaves the dispatcher as callee. `partial` and `comp`
+  build a function rather than invoking one and are still not modeled.
 - **Destructuring binds** — `{:keys [a b]}`, `[x & xs]` — are not tracked; only a
   bare-symbol binding target taints. A value bound through destructuring is lost.
 - **`slurp` of a URL** is SSRF, not path traversal, but the recognizer cannot tell

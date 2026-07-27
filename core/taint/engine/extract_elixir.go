@@ -65,6 +65,21 @@ func extractElixir(lines []logicalLine) []unitDraft {
 		shaped := shapeElixirLine(ll)
 		if st, ok := recognizeStatement(langElixir, shaped); ok {
 			cur.stmts = append(cur.stmts, st)
+			// A DESTRUCTURING pattern-match (`%{"q" => q} = conn.params`) binds
+			// names the single-assignee model cannot express, so recognizeStatement
+			// reports no assignee and the extracted variable never carries the
+			// RHS's taint. Emit one additional binding statement per extracted
+			// name, carrying the same RHS source evidence.
+			for _, name := range elixirDestructuredNames(shaped.code) {
+				cur.stmts = append(cur.stmts, stmtDraft{
+					line:     st.line,
+					assigns:  name,
+					calls:    st.calls,
+					reads:    st.reads,
+					chains:   st.chains,
+					sinkArgs: map[string]sinkArgDraft{},
+				})
+			}
 		}
 	}
 
@@ -505,4 +520,97 @@ func addElixirParenlessCallParens(code, raw string) (newCode, newRaw string) {
 // variable name (letters, digits, underscore).
 func isElixirNameByte(b byte) bool {
 	return isIdentPart(b)
+}
+
+// elixirDestructuredNames returns the variable names bound by a destructuring
+// pattern-match on the LHS of `pattern = expr` — the map, tuple and list
+// patterns Elixir uses everywhere:
+//
+//	%{"file" => path} = conn.params      -> [path]
+//	%{query: q} = conn                   -> [q]
+//	{:ok, body} = fetch()                -> [body]
+//	[head | tail] = list                 -> [head tail]
+//
+// Only a PATTERN LHS yields names; a simple `x = expr` is already handled by the
+// ordinary assignment path and returns nothing here, so no binding is doubled.
+//
+// A name is in binding position when it is neither an atom (`:ok`, preceded by
+// `:`) nor a keyword key (`query:`, followed by `:`). Module aliases (an
+// upper-case first letter) and the `_` wildcard are skipped: neither is a
+// taint-carrying binding. String keys are already blanked in the code view.
+func elixirDestructuredNames(code string) []string {
+	eq := elixirTopLevelPatternAssign(code)
+	if eq < 0 {
+		return nil
+	}
+	lhs := strings.TrimSpace(code[:eq])
+	if lhs == "" || isSimpleIdent(lhs) {
+		return nil
+	}
+	switch lhs[0] {
+	case '%', '{', '[':
+	default:
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for i := 0; i < len(lhs); {
+		if !isIdentStart(lhs[i]) {
+			i++
+			continue
+		}
+		start := i
+		for i < len(lhs) && isIdentPart(lhs[i]) {
+			i++
+		}
+		name := lhs[start:i]
+		// A keyword key (`query:`) names a field, not a binding.
+		if i < len(lhs) && lhs[i] == ':' {
+			continue
+		}
+		// An atom (`:ok`) is a literal, not a binding.
+		if start > 0 && lhs[start-1] == ':' {
+			continue
+		}
+		if name == "_" || isKeyword(name) || (name[0] >= 'A' && name[0] <= 'Z') {
+			continue
+		}
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// elixirTopLevelPatternAssign returns the index of the top-level `=` match
+// operator in code, or -1. It skips `==`/`<=`/`>=`/`!=` comparisons and any `=`
+// nested inside brackets (a `%{a => b}` arrow is not a match, and its `>` is
+// already excluded by requiring the previous byte not be `=`).
+func elixirTopLevelPatternAssign(code string) int {
+	depth := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '=':
+			if depth != 0 {
+				continue
+			}
+			if i+1 < len(code) && (code[i+1] == '=' || code[i+1] == '>') {
+				i++
+				continue
+			}
+			if i > 0 {
+				switch code[i-1] {
+				case '=', '!', '<', '>', ':', '+', '-', '*', '/':
+					continue
+				}
+			}
+			return i
+		}
+	}
+	return -1
 }

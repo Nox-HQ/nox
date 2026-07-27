@@ -118,3 +118,50 @@ func TestExtractClojureJdbcConcatFirstArg(t *testing.T) {
 		t.Errorf("jdbc/query concat should carry id as a tainted arg; got %+v", info)
 	}
 }
+
+// TestExtractClojureHOFDispatch: `apply` and `map` pass the real callee as DATA,
+// so a sink reached through them never appears as a literal call head and the
+// flow was invisible. The statement is re-attributed to the dispatched symbol.
+func TestExtractClojureHOFDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name, src, wantCallee, wantRead string
+	}{
+		{"apply", "(defn f [req]\n  (let [args (:params req)]\n    (apply shell/sh \"sh\" \"-c\" args)))\n", "shell/sh", "args"},
+		{"map", "(defn f [req]\n  (let [urls (:params req)]\n    (map client/get urls)))\n", "client/get", "urls"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			units := extractUnits(lexctx.LangClojure, []byte(tc.src))
+			u := findUnit(t, units, "f")
+			var found *stmtDraft
+			for i := range u.stmts {
+				for _, c := range u.stmts[i].calls {
+					if c == tc.wantCallee {
+						found = &u.stmts[i]
+					}
+				}
+			}
+			if found == nil {
+				t.Fatalf("dispatched callee %q not attributed: %+v", tc.wantCallee, u.stmts)
+			}
+			if !containsStr(found.reads, tc.wantRead) {
+				t.Errorf("reads = %v, want to include %q", found.reads, tc.wantRead)
+			}
+		})
+	}
+}
+
+// TestExtractClojureHOFDispatchKeepsInlineFn is the precision guard: only a bare
+// SYMBOL is re-attributed. An inline `#(...)` or `fn` literal has no name to
+// attribute the flow to and must leave the dispatcher as the callee.
+func TestExtractClojureHOFDispatchKeepsInlineFn(t *testing.T) {
+	src := []byte("(defn f [req]\n  (let [urls (:params req)]\n    (map #(str % \"x\") urls)))\n")
+	units := extractUnits(lexctx.LangClojure, src)
+	u := findUnit(t, units, "f")
+	for _, st := range u.stmts {
+		for _, c := range st.calls {
+			if c == "#" || c == "%" {
+				t.Errorf("inline fn literal re-attributed as callee %q: %+v", c, st)
+			}
+		}
+	}
+}

@@ -330,6 +330,21 @@ func clojureCallStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	}
 	st := stmtDraft{line: clojureLine(code, f.children[0].start), sinkArgs: map[string]sinkArgDraft{}}
 
+	// A higher-order dispatcher passes the real callee as DATA: `(apply shell/sh
+	// "sh" "-c" args)` and `(map client/get urls)` both invoke a sink that never
+	// appears as a literal call head, so the flow was invisible. Re-attribute the
+	// statement to the dispatched function and drop it from the argument list, so
+	// the remaining arguments are scored against the sink they actually reach.
+	// Only a bare SYMBOL is re-attributed — an inline `#(...)`/`fn` literal is
+	// left alone, and the symbol still has to BE a catalog sink to report.
+	argStart := 1
+	if clojureHOFDispatchers[callee] && len(f.children) > 2 {
+		if sym := clojureNormalizeCallee(clojureAtomText(code, f.children[1])); sym != "" && isClojureCalleeStart(sym[0]) {
+			callee = sym
+			argStart = 2
+		}
+	}
+
 	// A jdbc query/execute passes its SQL as a `["… ?" v]` parameterized VECTOR
 	// (the value is a bind arg, SAFE) or as a `(str "…" v)` concat (the value is
 	// interpolated into the SQL string, UNSAFE). A variable inside a bind vector is
@@ -341,7 +356,7 @@ func clojureCallStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	info := sinkArgDraft{}
 	var allReads []string
 	seen := map[string]struct{}{}
-	for i := 1; i < len(f.children); i++ {
+	for i := argStart; i < len(f.children); i++ {
 		arg := f.children[i]
 		var vars []string
 		if jdbcParam && arg.delim == '[' && clojureVectorIsParamBind(code, arg) {
@@ -707,4 +722,16 @@ func isClojureSpecial(s string) bool {
 		return true
 	}
 	return false
+}
+
+// clojureHOFDispatchers are the core higher-order functions that take the
+// function to invoke as their FIRST argument. For taint purposes the flow runs
+// through them into that function, so a sink reached this way is a real flow
+// even though the sink is never a literal call head.
+var clojureHOFDispatchers = map[string]bool{
+	"apply": true,
+	"map":   true, "mapv": true, "pmap": true, "mapcat": true,
+	"keep": true, "filter": true, "remove": true,
+	"run!": true, "doseq": false, // doseq binds, it does not dispatch
+	"some": true, "every?": true,
 }

@@ -77,6 +77,14 @@ func extractGroovy(lines []logicalLine) []unitDraft {
 			cur.stmts = append(cur.stmts, st)
 		}
 
+		// A scope function's lambda parameter aliases its receiver, so bind it
+		// before the lambda body's statements (which arrive on later lines).
+		if b, ok := scopeFunctionBinding(ll); ok {
+			if st, ok := recognizeStatement(langGroovy, b); ok {
+				cur.stmts = append(cur.stmts, st)
+			}
+		}
+
 		if closesMethod {
 			cur = module
 			methodDepth = -1

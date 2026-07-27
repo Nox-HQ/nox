@@ -1,18 +1,13 @@
-// Command injection through a Kotlin SCOPE-FUNCTION chain — a labeled FALSE
-// NEGATIVE nox's flat line-recognizer does not catch. The untrusted value is read
-// and immediately piped into a `.let { }` lambda whose receiver (`cmd`) is passed
-// to Runtime.getRuntime().exec, with no intermediate `val` binding. This is a real
-// CWE-78 bug a correct scanner would fire TAINT-002 on — it is kept in the corpus,
-// not deleted, because removing a hard true positive to inflate recall would defeat
-// the point of an honest measurement suite.
+// Command injection through a Kotlin SCOPE-FUNCTION chain. The untrusted value
+// is read and piped straight into a `.let { }` lambda whose parameter is passed
+// to Runtime.getRuntime().exec, with no intermediate `val` binding. CWE-78.
 //
-// Why nox misses it: taint is introduced from source CALLS assigned to a variable,
-// and propagated through variable reads. Here the source result is never bound to a
-// name — it flows straight into the `.let { cmd -> ... }` lambda, and the recognizer
-// does not model a scope-function lambda's parameter as an alias of its receiver.
-// The `cmd` inside the lambda is therefore never marked tainted, so the .exec sink
-// does not fire. Closing this needs scope-function/lambda-receiver modeling — future
-// work, not a curation trick. See testdata/precision-suite-kotlin/README.md.
+// A scope function's lambda parameter ALIASES its receiver: `cmd` here IS the
+// value `.let` was applied to. On seeing the lambda header the recognizer now
+// emits that binding (`cmd = request.getParameter(...)`), so statements in the
+// body — which arrive on later lines — resolve `cmd` as tainted and the sink
+// fires. This was a documented false negative until the aliasing landed; it is
+// kept as the regression test for it.
 package com.example
 
 import javax.servlet.http.HttpServletRequest

@@ -1,11 +1,11 @@
 {
   "precision": 1,
-  "recall": 0.8571428571428571,
-  "f1": 0.923076923076923,
+  "recall": 1,
+  "f1": 1,
   "fp": 0,
-  "tp": 6,
-  "fn": 1,
-  "findings_per_issue": 0.8571428571428571,
+  "tp": 7,
+  "fn": 0,
+  "findings_per_issue": 1,
   "rules": [
     {
       "rule_id": "TAINT-001",
@@ -20,7 +20,7 @@
     {
       "rule_id": "TAINT-004",
       "precision": 1,
-      "recall": 0.5
+      "recall": 1
     },
     {
       "rule_id": "TAINT-005",
