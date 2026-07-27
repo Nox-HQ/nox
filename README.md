@@ -238,6 +238,20 @@ Detects personally identifiable information (PII) and sensitive data patterns in
 | Infrastructure | DATA-005 | Hardcoded public IP addresses |
 | Personal | DATA-006 | Date of birth fields |
 
+### Memory safety (Go)
+
+| Rule | Description |
+|------|-------------|
+| MEMSAFE-001 | Integer truncation reaching a `make()` size or a slice bound — a narrowed or sign-flipped length that wraps (CWE-190) |
+
+Deliberately much narrower than gosec's `G115`, which reports every narrowing
+conversion: measured across sixteen Go repositories, that produced 96 findings
+and no real bugs. This rule reports only truncation that sizes memory, and
+suppresses masks, modulo, unsigned shifts, guarded values and length-derived
+values. Conversions whose operand type is not provable from the enclosing
+function are not reported — nox parses Go with `go/ast`, not `go/types`. See
+[`docs/design/go-integer-overflow.md`](docs/design/go-integer-overflow.md).
+
 ## Configuration
 
 Create a `.nox.yaml` in your project root to customize scan behavior:

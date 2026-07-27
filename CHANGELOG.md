@@ -7,6 +7,192 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-07-27
+
+### Added
+
+- **World-writable file and directory modes are now reported (`PERM-001`,
+  `PERM-002`).** A fleet that drops gosec in favour of nox loses G301
+  (`MkdirAll`), G302 (`Chmod`) and G306 (`WriteFile`) outright — 22 findings
+  across 14 Go repositories with no nox equivalent. `os.WriteFile`,
+  `os.OpenFile`, `os.Chmod`, `os.Mkdir`, `os.MkdirAll` and `ioutil.WriteFile`
+  are matched on the Go AST, so a permission literal in a comment, a string, or
+  a same-named project helper is not a finding. Both octal spellings, mode
+  conversions (`os.FileMode(0777)`, `fs.FileMode(…)`) and OR chains are
+  evaluated. (#405)
+
+  **The threshold is the world-write bit (`0o002`), not gosec's 0600/0750.**
+  Under gosec's defaults `0o644` and `0o755` are findings, which in this
+  repository alone would be 503 of them — those modes are Go's own idiomatic
+  defaults, so reporting them is a preference rather than a vulnerability
+  signal, and it is why gosec's permission rules are among the most-suppressed
+  in the fleet. World-writable is different in kind: any local user can rewrite
+  the contents, no idiom requires it, and the finding is actionable without
+  knowing what the file holds. World-readable and group-writable are
+  deliberately not reported. A world-writable directory carrying
+  `os.ModeSticky` is the /tmp model and is not reported either.
+
+  Medium severity at high confidence, matching gosec's own rating for the
+  family. Note that a gate keyed on net-new critical/high will not fail on
+  these; lower the threshold or key on `PERM-*` to make them blocking. The mode
+  must be a literal in the call — a named constant needs `go/types` and is not
+  reported, which is the correct direction to fail.
+
+- **`HARDEN-001` / `HARDEN-002` — TLS misconfiguration in Go source.** Nothing in
+  nox modelled `tls.Config`. Certificate validation could be switched off
+  anywhere in a Go codebase and no rule said a word — a gap that matters now that
+  teams are dropping gosec from their golangci config and running nox as the only
+  code-level security tool. `HARDEN-001` reports `InsecureSkipVerify: true`
+  (**high** — verification off means the connection is authenticated against
+  nobody, and only critical/high fails a typical CI gate); `HARDEN-002` reports a
+  `MinVersion` below TLS 1.2 (**medium** — RFC 8996 deprecates TLS 1.0/1.1, but
+  the peer is still authenticated and a legacy floor is sometimes a defensible
+  choice). Both cover the composite-literal and the post-construction assignment
+  forms, resolve an aliased `crypto/tls` import, and carry `gosec: G402` in
+  metadata. (#405)
+
+  **This one is parsed, not pattern-matched.** `InsecureSkipVerify:\s*true` also
+  matches a comment — grpc's xds credentials contain "InsecureSkipVerify needs to
+  be set to true because …" — and no regex can tell `true` from a variable. The
+  rule uses `go/parser`, which nox already depends on for Go taint extraction, so
+  the check is exact and adds no dependency. Measured over 117,731 real Go files
+  in a module cache: 72 findings, every sampled one a genuine assignment; a loose
+  regex over the same corpus returns 82, of which 12 are comments.
+
+  **Deliberately not reported**, so nobody has to discover it the hard way:
+  `InsecureSkipVerify: skipVerify` (a variable's value is not resolvable without
+  `go/types`, and reporting it anyway would fire on every config-driven client),
+  and `_test.go` files (tests legitimately dial httptest servers with self-signed
+  certificates; a high-severity finding on each would get the rule suppressed
+  wholesale). A struct that is not provably a `crypto/tls.Config` — a wrapper
+  with its own `InsecureSkipVerify` field, or an assignment whose receiver type
+  needs `go/types` — is still reported, at medium confidence.
+
+- Findings from `HARDEN-*` and `CRYPTO-*` now carry a family label in the scan
+  summary ("Transport Security", "Weak Crypto") instead of falling into "Other",
+  where a broken primitive was invisible at a glance. (#405)
+
+- **`CRYPTO-002`** — predictable randomness (CWE-338): a `math/rand` or
+  `math/rand/v2` draw used for a security-bearing value in Go. High severity,
+  medium confidence. This is the class gosec reports as G404, which Go
+  codebases lost when they dropped gosec from their lint config. (#405)
+
+  **It does not flag `math/rand`.** `math/rand` is the *correct* tool for retry
+  jitter, backoff spread, load balancing, sampling, shuffling and test
+  fixtures, and those call sites outnumber the dangerous ones. The rule fires
+  only where the names around the draw say the value is security-bearing — the
+  variable, struct field, buffer, called function or enclosing generator
+  function resolves to a word like `token`, `secret`, `key`, `nonce`, `salt`,
+  `password`, `session`, `iv`, `apikey`, `csrf`, `otp` or `auth` — and a word
+  like `jitter`, `backoff`, `retry`, `sample`, `shuffle` or `cache` anywhere in
+  that context vetoes it outright. `crypto/rand` is never flagged: the file is
+  parsed and the import path resolved, so `rand.Read` from `crypto/rand` (the
+  fix this rule recommends, and identical in text) is distinguished from
+  `rand.Read` from `math/rand`.
+
+  **Measured before shipping, on real code.** Across the Go module cache, 851
+  non-test files that import `math/rand` produce 4 findings; a fleet of 23 Go
+  repositories (7,720 files) produces 0, and every one of gosec's 9 G404
+  reports in that same fleet is a documented-benign jitter, chaos-test or
+  simulation call that this rule correctly stays silent on.
+
+  **It misses things, by construction.** A generator whose variables and
+  function are named neutrally is not caught, nor is a value that reaches a
+  security name a statement later, nor a dot-imported `math/rand`. Recall was
+  traded away for silence on purpose: this rule is intended to be safe to gate
+  on, and the absence of a finding is not evidence that a file generates its
+  secrets safely.
+
+### Fixed
+
+- **`CRYPTO-001` missed the one-shot digest call, which is the commoner one.**
+  The rule matched the CONSTRUCTOR form and nothing else, so `md5.New()` was
+  reported and `md5.Sum(b)` — in the same file, same package — was not.
+  `sha1` behaved identically. `Sum()` is the more idiomatic of the two calls, so
+  the shape being missed was the one people actually write: a scan of
+  `klarlabs-studio/agent-go` reported 10 findings before and 18 after, every new
+  one a `Sum()` call the rule had been silent about, and none removed.
+
+  The constructor-only pattern existed for a good reason — matching the bare
+  word `md5` would flag a variable named `md5sum` and the word in a comment. The
+  fix keeps that property by matching the package-qualified call
+  (`md5.Sum(`/`md5.New(`) rather than the algorithm name, so an identifier and
+  prose still do not match. Both call shapes are now asserted together in one
+  test so they cannot drift apart again. (#402)
+
+### Changed
+
+- **`CRYPTO-001` now covers all 15 languages core's SAST supports, up from 5.**
+  The rule was Go, Python, JavaScript, TypeScript and Java only; C, C++, C#,
+  Kotlin, Objective-C, PHP, Ruby, Rust, Shell and Swift were silent, as were the
+  JS/TS variant extensions (`.jsx`, `.mjs`, `.cjs`, `.tsx`, `.mts`, `.cts`).
+  Coverage now also includes 3DES and ECB mode alongside MD5, SHA-1, DES and
+  RC4, and — as in Go — both the streaming and one-shot call shapes wherever a
+  language offers both (`MD5_Init` *and* `MD5()`; `MD5.Create()` *and*
+  `MD5.HashData()`).
+
+  **Two languages are deliberately narrower than they could be.** PHP does not
+  match bare `md5()`/`sha1()`: they are global functions, among the most-called
+  in the language, and overwhelmingly used for cache keys, ETags and Gravatar
+  hashes (which the Gravatar protocol *requires* to be MD5). Flagging them would
+  put a finding in nearly every PHP file in existence, and a rule like that gets
+  globally disabled — taking the genuinely broken `mcrypt_*` and
+  `openssl_encrypt(…, 'des-ecb', …)` detections down with it. Shell does not
+  match `md5sum`/`sha1sum`/`shasum`, which verify downloads against accidental
+  corruption rather than an attacker; only `openssl enc` with a broken cipher is
+  matched there.
+
+  Patterns stay bound per extension. `Digest::MD5` is a Ruby constant path,
+  `md5::compute` is a Rust path and `MD5(` is an OpenSSL C function; a test
+  feeds every language's positive corpus through every other language's
+  extension and requires zero matches, so one language's vocabulary cannot
+  manufacture findings in another's files. Two known-noisy shapes are excluded
+  by name: `Cipher.getInstance("RSA/ECB/OAEP…")`, where JCA's "ECB" is a
+  historical misnomer for correct RSA padding, and `printf("MD5 (%s)…")`, which
+  is OpenSSL's own output format rather than a call.
+
+  The rule reports **zero findings on nox's own repository**, before and after.
+  (#405)
+
+- **`MEMSAFE-001` — integer truncation that sizes memory.** A value narrowed to
+  a smaller integer type, or flipped signed→unsigned, and then used as a
+  `make()` size or a slice bound. A wire-decoded length converted
+  `uint32`→`int32` goes negative above 2³¹ and panics the allocation; a length
+  truncated to `uint8` silently mis-frames anything longer than 255 bytes. Both
+  were found in widely deployed networking libraries while validating the rule.
+  Medium severity, so it reports rather than gates. (#405)
+
+  **This is deliberately not gosec's `G115`.** Measured before implementation,
+  gosec's own rule produced 96 findings across sixteen fleet repositories plus
+  nox itself, with **zero** true positives — `int32(len(out))` filling protobuf
+  count fields, `byte(addr>>24)` extracting an IPv4 octet, `byte(nano%10)`
+  formatting a digit. That is how a rule earns 63 blanket suppressions. Nox
+  reports only the shape where truncation is a memory-safety bug, and stays
+  silent on all 96. On `segmentio/kafka-go`, gosec reports 156 findings of which
+  two are a real bug; this rule reports one, and it is the bug.
+
+  Masks, modulo, logical shifts on unsigned values, comparison guards written
+  through a conversion (`if uint32(r) <= MaxLatin1`), and `len`-derived values
+  narrowed to 32 bits or more are all suppressed — each one a class observed
+  firing on correct code. A bare index `s[i]` is not treated as a sink: it is
+  syntactically indistinguishable from a map lookup, and Go bounds-checks slice
+  indexes anyway.
+
+  **`go/types` was evaluated and rejected**, with the cost written down in
+  `docs/design/go-integer-overflow.md`. Full `G115` parity needs type
+  resolution, every Go importer needs a resolvable module graph and a toolchain,
+  and nox scans checked-out trees offline in containers that have neither. The
+  measured price is 64% of gosec's findings on nox's own source — all of which
+  were false positives anyway. Conversions whose operand type is not provable
+  from the enclosing function are not reported.
+
+  `G103` (`unsafe`), `G602` (slice bounds) and `G104` (unhandled errors) are
+  **not** implemented, with reasons: all 20 fleet `G103` findings are in
+  generated protobuf code, `G602`'s useful half is this rule's slice-bound sink,
+  and `G104` is already covered by `errcheck` in the fleet's golangci config —
+  duplicating it would reintroduce exactly the double-reporting that retired
+  `nox-plugin-sast`.
+
 ## [1.23.0] - 2026-07-26
 
 ### Changed
