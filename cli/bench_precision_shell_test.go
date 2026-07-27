@@ -19,13 +19,17 @@ func shellSuitePath() string {
 // if any gated metric regressed (precision/recall/F1 dropped, or FP /
 // findings-per-issue rose).
 //
-// Shell deliberately scores the LOWEST recall of any supported language — its
-// paren-less, word-splitting, dynamically-constructed command grammar is more
-// than a flat per-line recognizer can follow, so the suite carries honest false
-// negatives (see testdata/precision-suite-shell/README.md). Pinning the number
-// here means shell PRECISION can no longer silently regress: a change that makes
-// the suite noisier fails CI. When the suite legitimately improves, this test
-// reports the improvement and tells you to refresh baseline.json.
+// Shell's paren-less, word-splitting, dynamically-constructed command grammar is
+// the hardest of any supported language for a flat per-line recognizer. The
+// suite's last two false negatives — taint laundered through a `local`-declared
+// variable — are now closed, so it scores 1.0 (see
+// testdata/precision-suite-shell/README.md).
+//
+// That 1.0 means the corpus has stopped INDICTING anything, not that shell
+// dataflow is solved; the README's open limits (word-splitting, arrays,
+// pipeline-fed commands) are real and simply lack a failing sample. Pinning the
+// number here means shell precision can no longer silently regress: a change
+// that makes the suite noisier fails CI.
 func TestPrecisionSuiteBaselineShell(t *testing.T) {
 	dir := shellSuitePath()
 

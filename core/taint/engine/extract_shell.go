@@ -18,10 +18,12 @@ import "strings"
 // Function bodies (`f() {` or `function f {`) open their own unit keyed by name;
 // everything else accumulates into the module-level unit (funcName "").
 //
-// HONEST LIMITS (recall is the lowest of any supported language, by design):
-// word-splitting, globbing, arrays, `${var//a/b}` transforms, arithmetic
-// re-entry, and `xargs`/pipeline-fed commands are constructs a flat, per-line
-// recognizer cannot follow. A miss only weakens recall (a false negative), never
+// A declaration builtin that INITIALIZES (`local x="$1"`, `export u="$2"`) is an
+// assignment and is recognized as one; a bare declaration (`local a b`) is not.
+//
+// HONEST LIMITS (by design): word-splitting, globbing, arrays, `${var//a/b}`
+// transforms, arithmetic re-entry, and `xargs`/pipeline-fed commands are
+// constructs a flat, per-line recognizer cannot follow. A miss only weakens recall (a false negative), never
 // correctness — an unrecognized line simply yields no statement. Precision is
 // defended: a properly QUOTED expansion `"$var"` passed to a NON-sink command is
 // naturally clean because that command is not in the catalog, and the actual
@@ -47,6 +49,14 @@ func extractShell(lines []logicalLine) []unitDraft {
 			units = append(units, u)
 			cur = u
 			continue
+		}
+		// A declaration builtin that introduces an ASSIGNMENT (`local x="$1"`)
+		// carries real dataflow and must not be skipped with the bare
+		// declarations. Blanking the keyword lets the assignment underneath be
+		// recognized normally.
+		if decl, ok := stripShellDeclPrefix(ll); ok {
+			ll = decl
+			trimmed = strings.TrimSpace(ll.code)
 		}
 		if isShellStructuralLine(trimmed) {
 			continue
@@ -198,6 +208,75 @@ func isShellStructuralLine(trimmed string) bool {
 	return false
 }
 
+// shellDeclKeywords are the declaration builtins that may prefix an assignment.
+// Each declares a variable and may also initialize it in the same word.
+var shellDeclKeywords = map[string]bool{
+	"local":    true,
+	"declare":  true,
+	"export":   true,
+	"readonly": true,
+	"typeset":  true,
+}
+
+// stripShellDeclPrefix blanks a leading declaration builtin, and any option
+// flags it carries, to SPACES when what follows is a real `NAME=value`
+// assignment — so `local arg="$1"` is recognized as the assignment it is and the
+// declared variable can carry taint.
+//
+// Blanking rather than slicing keeps every byte offset intact, so the code and
+// raw views stay mutually aligned (the recognizer slices raw by offsets found in
+// code) and the assignment recognizer, which already skips leading whitespace,
+// needs no change.
+//
+// A BARE declaration (`local a b c`, `declare -A map`, `local count`) declares
+// without initializing: it carries no dataflow, so ok=false leaves it to be
+// skipped as scaffolding. Reading one as a command would invent a call to
+// `local`/`declare`.
+func stripShellDeclPrefix(ll logicalLine) (logicalLine, bool) {
+	code := ll.code
+	i := 0
+	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+		i++
+	}
+	kwStart := i
+	for i < len(code) && isShellIdentByte(code[i]) {
+		i++
+	}
+	if !shellDeclKeywords[code[kwStart:i]] {
+		return ll, false
+	}
+	// The keyword must be a standalone word (`localx=1` is an ordinary
+	// assignment to a variable that merely starts with the keyword's letters).
+	if i >= len(code) || (code[i] != ' ' && code[i] != '\t') {
+		return ll, false
+	}
+	// Skip any option flags between the keyword and the name (`local -r`,
+	// `declare -i`, `declare -A`).
+	end := i
+	for {
+		j := end
+		for j < len(code) && (code[j] == ' ' || code[j] == '\t') {
+			j++
+		}
+		if j >= len(code) || code[j] != '-' {
+			break
+		}
+		for j < len(code) && code[j] != ' ' && code[j] != '\t' {
+			j++
+		}
+		end = j
+	}
+	// Only a real assignment underneath earns the rewrite.
+	if _, _, ok := splitShellAssignment(code[end:]); !ok {
+		return ll, false
+	}
+	out := logicalLine{line: ll.line, code: blankRange(code, kwStart, end), raw: ll.raw}
+	if len(ll.raw) == len(code) {
+		out.raw = blankRange(ll.raw, kwStart, end)
+	}
+	return out, true
+}
+
 // shellAssignment recognizes a `NAME=value` assignment (no whitespace around the
 // `=`, LHS a bare shell identifier). It surfaces the RHS reads (variable
 // expansions and source markers) so a `x=$1` taints x from the `$1` source and a
@@ -282,7 +361,15 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 		for i < len(code) && isShellCommandByte(code[i]) {
 			i++
 		}
-		callee = code[calleeStart:i]
+		token := code[calleeStart:i]
+		// A command word may be path-qualified (`/usr/bin/curl`, `./tool.sh`), so
+		// a leading `/` or `.` is a valid start; shellCalleeName then reduces the
+		// token to the bare final segment the catalog is keyed on. A lone `.`
+		// (the source builtin) was already handled above.
+		if token == "" || (!isShellIdentStart(token[0]) && token[0] != '/' && token[0] != '.') {
+			return stmtDraft{}, false
+		}
+		callee = shellCalleeName(token)
 		if callee == "" || !isShellIdentStart(callee[0]) {
 			return stmtDraft{}, false
 		}
@@ -290,6 +377,13 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 	// Normalize a leading `command`/`builtin`/`exec` wrapper to its target so
 	// `command eval x` still resolves eval.
 	// (Kept simple: only the bare callee is used.)
+
+	// `exec` with a REDIRECTION and no command word (`exec 200>"$f"`, `exec >log`)
+	// rebinds the shell's own file descriptors — it executes nothing, so a tainted
+	// path there is not command injection. Only `exec CMD ...` is the sink.
+	if callee == "exec" && shellStartsWithRedirection(code[i:]) {
+		return stmtDraft{}, false
+	}
 
 	st := stmtDraft{line: ll.line, assigns: "", sinkArgs: map[string]sinkArgDraft{}}
 
@@ -315,8 +409,23 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 	// For `sh`/`bash`-style callees, the tainted string may be the argument to
 	// `-c`; we still surface it as a read + tainted arg below via the generic
 	// expansion collection.
+	// On a fetch command, the argument after an output-file flag names a LOCAL
+	// FILE, not a remote URL — `curl --output "$path" "$url"` fetches $url and
+	// writes $path. Treating a tainted $path as the SSRF-controlling value
+	// reported the wrong thing entirely, so those slots carry no tainted arg.
+	fetch := shellFetchCommands[callee]
+	skipNext := false
 	for idx, a := range args {
 		vars := shellArgVars(a)
+		if skipNext {
+			skipNext = false
+			info.positionalVars = append(info.positionalVars, nil)
+			allReads = append(allReads, vars...)
+			continue
+		}
+		if fetch && shellFileArgFlags[strings.TrimSpace(a.raw)] {
+			skipNext = true
+		}
 		info.positionalVars = append(info.positionalVars, append([]string(nil), vars...))
 		if len(vars) > 0 {
 			info.argCount++
@@ -351,6 +460,40 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 	return st, true
 }
 
+// shellFetchCommands are the URL-fetching commands whose SSRF sink is controlled
+// by the URL argument specifically, so their local-file flags must be excluded.
+var shellFetchCommands = map[string]bool{"curl": true, "wget": true}
+
+// shellFileArgFlags are the fetch-command flags whose FOLLOWING argument names a
+// local file (an output path, a log, a cookie jar) rather than a remote URL.
+// Only consulted for shellFetchCommands, so `-c` here is curl's cookie-jar and
+// never `sh -c`.
+var shellFileArgFlags = map[string]bool{
+	"-o": true, "--output": true,
+	"-O": true, "--output-document": true,
+	"-D": true, "--dump-header": true,
+	"-c": true, "--cookie-jar": true,
+	"--output-file": true, "-a": true, "--append-output": true,
+	"--trace": true, "--trace-ascii": true,
+	"-K": true, "--config": true,
+}
+
+// shellStartsWithRedirection reports whether the text after a command word
+// begins with an I/O redirection (`>`, `>>`, `<`, `2>`, `200>&-`) rather than an
+// argument. Used to tell `exec 200>"$f"` (FD rebinding) from `exec cmd` (which
+// replaces the shell with a command).
+func shellStartsWithRedirection(rest string) bool {
+	i := 0
+	for i < len(rest) && (rest[i] == ' ' || rest[i] == '\t') {
+		i++
+	}
+	// An optional leading file-descriptor number.
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		i++
+	}
+	return i < len(rest) && (rest[i] == '>' || rest[i] == '<')
+}
+
 // shellHasDashCFlag reports whether a `-c` flag word appears in the raw args of
 // a command, marking the `sh -c` / `bash -c` execute-a-string shape.
 func shellHasDashCFlag(rawArgs string) bool {
@@ -366,6 +509,7 @@ func shellHasDashCFlag(rawArgs string) bool {
 // single-quoted (fully literal — its `$` expansions are inert).
 type shellArg struct {
 	code        string // code-view text of the word (literals blanked, expansions kept)
+	raw         string // raw-view text of the word, needed to read literal FLAG words
 	singleQuote bool   // true when the word is wholly single-quoted (no expansion)
 }
 
@@ -380,7 +524,7 @@ func splitShellArgs(code, raw string) []shellArg {
 		// Fall back to a plain whitespace split of the code view.
 		var out []shellArg
 		for _, f := range strings.Fields(code) {
-			out = append(out, shellArg{code: f})
+			out = append(out, shellArg{code: f, raw: f})
 		}
 		return out
 	}
@@ -416,7 +560,10 @@ func splitShellArgs(code, raw string) []shellArg {
 			if c == '"' {
 				i++
 				for i < n && raw[i] != '"' {
-					if raw[i] == '\\' {
+					// A backslash escapes the next byte — but only when there IS a
+					// next byte. Without the bound check a word ending in a lone
+					// backslash advanced i past the end of the string.
+					if raw[i] == '\\' && i+1 < n {
 						i++
 					}
 					i++
@@ -428,12 +575,18 @@ func splitShellArgs(code, raw string) []shellArg {
 			}
 			i++
 		}
-		wordEnd := i
+		// Defensive clamp: every scanner branch above is bounded by n, but the
+		// slices below must never be able to run off the end of either view.
+		wordEnd := min(i, n)
 		codeWord := ""
 		if wordEnd <= len(code) {
 			codeWord = code[wordStart:wordEnd]
 		}
-		out = append(out, shellArg{code: codeWord, singleQuote: singleQuoted && !strings.ContainsAny(codeWord, "$")})
+		out = append(out, shellArg{
+			code:        codeWord,
+			raw:         raw[wordStart:wordEnd],
+			singleQuote: singleQuoted && !strings.ContainsAny(codeWord, "$"),
+		})
 	}
 	return out
 }
@@ -596,9 +749,11 @@ func shellCommandSubCallees(code string) []string {
 			inner++
 		}
 		if inner > start {
-			callee := code[start:inner]
-			if isShellIdentStart(callee[0]) {
-				addUniqueName(&out, seen, callee)
+			token := code[start:inner]
+			if isShellIdentStart(token[0]) {
+				if callee := shellCalleeName(token); callee != "" {
+					addUniqueName(&out, seen, callee)
+				}
 			}
 		}
 		i = inner
@@ -660,9 +815,24 @@ func isShellIdentByte(b byte) bool {
 }
 
 // isShellCommandByte reports whether b can appear inside a command name token.
-// Command names may include `/`, `.`, and `-` (paths and hyphenated commands),
-// but the callee we key on is normalized to the bare final segment elsewhere; a
-// leading `.` (the source/dot builtin) is handled specially.
+// Command names may include `/`, `.`, and `-` (paths and hyphenated commands);
+// shellCalleeName normalizes the scanned token to its bare final segment. A
+// leading `.` (the source/dot builtin) is handled specially by the caller.
+//
+// Accepting `-` is what keeps a hyphenated command NAME whole. Stopping at the
+// hyphen truncated `exec-add-path` — an ordinary user-defined function — to
+// `exec`, which is an exact-match command-injection sink, so any tainted
+// argument to it was reported as CWE-78.
 func isShellCommandByte(b byte) bool {
-	return isShellIdentByte(b)
+	return isShellIdentByte(b) || b == '-' || b == '.' || b == '/'
+}
+
+// shellCalleeName normalizes a scanned command token to the name the catalog is
+// keyed on: its final path segment, so `/usr/bin/curl` and `./curl` both resolve
+// as `curl`. A token that is all separators yields "".
+func shellCalleeName(token string) string {
+	if idx := strings.LastIndexByte(token, '/'); idx >= 0 {
+		return token[idx+1:]
+	}
+	return token
 }
