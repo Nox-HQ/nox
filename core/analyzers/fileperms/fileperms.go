@@ -238,12 +238,19 @@ func scanSource(path string, content []byte) []findings.Finding {
 		if spec.kind == kindDir {
 			ruleID, what = ruleDir, "directory"
 		}
+		// Chmod does not create anything, it re-modes an existing path; saying
+		// "creates" there would misdescribe the call the reader is looking at.
+		msg := fmt.Sprintf("%s creates a world-writable %s (mode %s)",
+			name, what, formatMode(mode.bits))
+		if name == "os.Chmod" {
+			msg = fmt.Sprintf("%s makes a %s world-writable (mode %s)",
+				name, what, formatMode(mode.bits))
+		}
 		out = append(out, findings.Finding{
 			RuleID:     ruleID,
 			Severity:   findings.SeverityMedium,
 			Confidence: findings.ConfidenceHigh,
-			Message: fmt.Sprintf("%s creates a world-writable %s (mode %s)",
-				name, what, formatMode(mode.bits)),
+			Message:    msg,
 			Location: findings.Location{
 				FilePath:  path,
 				StartLine: pos.Line,
