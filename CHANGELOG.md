@@ -36,8 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   must be a literal in the call — a named constant needs `go/types` and is not
   reported, which is the correct direction to fail.
 
-### Added
-
 - **`HARDEN-001` / `HARDEN-002` — TLS misconfiguration in Go source.** Nothing in
   nox modelled `tls.Config`. Certificate validation could be switched off
   anywhere in a Go codebase and no rule said a word — a gap that matters now that
@@ -71,6 +69,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Findings from `HARDEN-*` and `CRYPTO-*` now carry a family label in the scan
   summary ("Transport Security", "Weak Crypto") instead of falling into "Other",
   where a broken primitive was invisible at a glance. (#405)
+
+- **`CRYPTO-002`** — predictable randomness (CWE-338): a `math/rand` or
+  `math/rand/v2` draw used for a security-bearing value in Go. High severity,
+  medium confidence. This is the class gosec reports as G404, which Go
+  codebases lost when they dropped gosec from their lint config. (#405)
+
+  **It does not flag `math/rand`.** `math/rand` is the *correct* tool for retry
+  jitter, backoff spread, load balancing, sampling, shuffling and test
+  fixtures, and those call sites outnumber the dangerous ones. The rule fires
+  only where the names around the draw say the value is security-bearing — the
+  variable, struct field, buffer, called function or enclosing generator
+  function resolves to a word like `token`, `secret`, `key`, `nonce`, `salt`,
+  `password`, `session`, `iv`, `apikey`, `csrf`, `otp` or `auth` — and a word
+  like `jitter`, `backoff`, `retry`, `sample`, `shuffle` or `cache` anywhere in
+  that context vetoes it outright. `crypto/rand` is never flagged: the file is
+  parsed and the import path resolved, so `rand.Read` from `crypto/rand` (the
+  fix this rule recommends, and identical in text) is distinguished from
+  `rand.Read` from `math/rand`.
+
+  **Measured before shipping, on real code.** Across the Go module cache, 851
+  non-test files that import `math/rand` produce 4 findings; a fleet of 23 Go
+  repositories (7,720 files) produces 0, and every one of gosec's 9 G404
+  reports in that same fleet is a documented-benign jitter, chaos-test or
+  simulation call that this rule correctly stays silent on.
+
+  **It misses things, by construction.** A generator whose variables and
+  function are named neutrally is not caught, nor is a value that reaches a
+  security name a statement later, nor a dot-imported `math/rand`. Recall was
+  traded away for silence on purpose: this rule is intended to be safe to gate
+  on, and the absence of a finding is not evidence that a file generates its
+  secrets safely.
 
 ## [1.23.0] - 2026-07-26
 

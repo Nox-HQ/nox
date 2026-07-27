@@ -86,6 +86,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-327"},
 	})
+	rs.Add(randRule())
 	return rs
 }
 
@@ -97,13 +98,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err := ctx.Err(); err != nil {
 			return fs, err
 		}
-		re, ok := weakByExt[strings.ToLower(filepath.Ext(art.Path))]
-		if !ok {
+		ext := strings.ToLower(filepath.Ext(art.Path))
+		re, weakOK := weakByExt[ext]
+		// Insecure randomness (CRYPTO-002) is Go-only; see rand.go.
+		randOK := ext == ".go"
+		if !weakOK && !randOK {
 			continue
 		}
 		// Test files are skipped: fixtures deliberately exercise weak
 		// primitives (including this analyzer's own tests), and flagging them
-		// is noise that trains people to ignore the rule.
+		// is noise that trains people to ignore the rule. The same holds for
+		// predictable randomness, where determinism in a test is a feature.
 		if isTestPath(art.Path) {
 			continue
 		}
@@ -114,7 +119,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		lineComment := lineCommentFor(strings.ToLower(filepath.Ext(art.Path)))
+		if randOK {
+			scanInsecureRandom(fs, art, content)
+		}
+		if !weakOK {
+			continue
+		}
+
+		lineComment := lineCommentFor(ext)
 
 		for i, line := range strings.Split(string(content), "\n") {
 			loc := re.FindStringIndex(line)
