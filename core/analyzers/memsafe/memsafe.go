@@ -550,12 +550,12 @@ func (s *funcScan) markBound(name, lit ast.Expr, op token.Token) {
 	if !ok {
 		return
 	}
-	max, ok := literalBound(lit, op)
+	limit, ok := literalBound(lit, op)
 	if !ok {
 		return
 	}
-	if prev, seen := s.bounds[id.Name]; !seen || max < prev {
-		s.bounds[id.Name] = max
+	if prev, seen := s.bounds[id.Name]; !seen || limit < prev {
+		s.bounds[id.Name] = limit
 	}
 }
 
@@ -614,11 +614,11 @@ func (s *funcScan) selfBounded(e ast.Expr, to intKind) bool {
 	}
 	switch v.Op {
 	case token.AND, token.REM:
-		max, ok := literalBound(v.Y, v.Op)
+		limit, ok := literalBound(v.Y, v.Op)
 		if !ok {
 			return false
 		}
-		return fitsIn(max, to)
+		return fitsIn(limit, to)
 	case token.SHR:
 		from, ok := s.exprKind(v.X)
 		if !ok || from.signed {
@@ -664,9 +664,9 @@ func nonNegative(e ast.Expr) bool {
 	return false
 }
 
-// fitsIn reports whether every value with magnitude at most max is
+// fitsIn reports whether every value with magnitude at most limit is
 // representable in kind k.
-func fitsIn(max uint64, k intKind) bool {
+func fitsIn(limit uint64, k intKind) bool {
 	bits := uint(k.bits)
 	if k.signed {
 		bits--
@@ -674,7 +674,7 @@ func fitsIn(max uint64, k intKind) bool {
 	if bits >= 64 {
 		return true
 	}
-	return max < (uint64(1) << bits)
+	return limit < (uint64(1) << bits)
 }
 
 // parseUintLit parses a Go integer literal (decimal, hex, octal, binary, with
@@ -815,7 +815,7 @@ func (s *funcScan) report() []findings.Finding {
 
 // assignPairs returns the 1:1 left- and right-hand sides of an assignment or
 // short var declaration, or nil for anything else.
-func assignPairs(n ast.Node) ([]ast.Expr, []ast.Expr) {
+func assignPairs(n ast.Node) (lhs, rhs []ast.Expr) {
 	switch v := n.(type) {
 	case *ast.AssignStmt:
 		if len(v.Lhs) == len(v.Rhs) {
@@ -823,11 +823,11 @@ func assignPairs(n ast.Node) ([]ast.Expr, []ast.Expr) {
 		}
 	case *ast.ValueSpec:
 		if len(v.Names) == len(v.Values) {
-			lhs := make([]ast.Expr, len(v.Names))
+			names := make([]ast.Expr, len(v.Names))
 			for i, n := range v.Names {
-				lhs[i] = n
+				names[i] = n
 			}
-			return lhs, v.Values
+			return names, v.Values
 		}
 	}
 	return nil, nil
@@ -877,7 +877,7 @@ func (s *funcScan) check(e ast.Expr, how string) (findings.Finding, bool) {
 		if s.guarded[n] {
 			return findings.Finding{}, false
 		}
-		if max, ok := s.bounds[n]; ok && fitsIn(max, to) {
+		if limit, ok := s.bounds[n]; ok && fitsIn(limit, to) {
 			return findings.Finding{}, false
 		}
 	}
