@@ -1,10 +1,9 @@
-# Honest FALSE NEGATIVE (documented): the tainted value is piped into
-# Invoke-Expression rather than passed as a positional argument. This is a real
-# CWE-95 code injection — a correct scanner SHOULD fire TAINT-005 — but nox's
-# flat line/statement recognizer does not model PowerShell pipeline dataflow
-# (`$x | Cmdlet` binds $x to the cmdlet's pipeline input, which the recognizer
-# does not track). The annotation below therefore scores as a recall gap, which
-# is exactly the point of the honest suite: PowerShell recall is moderate and the
-# number must show it. See README.md "What this corpus reveals".
+# Pipeline dataflow (CWE-95 code injection): the tainted value is piped into
+# Invoke-Expression rather than passed as a positional argument. `$x | Cmdlet`
+# binds $x to the cmdlet's pipeline input, which is a real argument position —
+# this executes $x exactly as `Invoke-Expression $x` would. The recognizer splits
+# the line at every top-level `|` and folds the stages left into nested calls, so
+# the value reaches the final stage. Was a documented false negative until that
+# landed; kept as the regression test for it.
 $payload = $args[0]
 $payload | Invoke-Expression  # nox-expect: TAINT-005

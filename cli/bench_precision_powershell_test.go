@@ -20,13 +20,15 @@ func powershellSuitePath() string {
 // committed baseline snapshot, and fails if any gated metric regressed
 // (precision/recall/F1 dropped, or FP / findings-per-issue rose).
 //
-// PowerShell recall is intentionally moderate — the flat line/statement
-// recognizer does not model pipeline dataflow, so the suite carries one honest,
-// documented false negative (`tp_pipeline_fn.ps1`; see
-// testdata/precision-suite-powershell/README.md), scoring recall below 1.0.
-// Pinning that number here means PowerShell precision can no longer silently
-// regress and the known FN cannot be quietly hidden; the precision floor (0.90)
-// is asserted directly so no new PowerShell false positive can creep in.
+// The suite now scores 1.0 across the board: its last honest false negative,
+// pipeline dataflow (`$x | Invoke-Expression`, `tp_pipeline_fn.ps1`), was closed
+// by folding pipeline stages into nested positional calls. Pinning that here
+// means the flow cannot silently stop being detected, and the precision floor
+// (0.90) is asserted directly so no new PowerShell false positive can creep in.
+//
+// A suite at 1.0 has stopped indicting anything, so it no longer measures the
+// recognizer's real limits — see the README's still-open list (splatting,
+// receiver typing). Adding a sample that FAILS is what keeps this honest.
 func TestPrecisionSuiteBaselinePowerShell(t *testing.T) {
 	dir := powershellSuitePath()
 

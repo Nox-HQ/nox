@@ -17,27 +17,36 @@ import "strings"
 //   - the `$` variable sigil is deleted (like PHP), so `$cmd`/`$env:X`/`$args`
 //     become the plain identifiers the engine's variable tracking and the
 //     catalog's source keys expect;
+//
 //   - the static-member separator `::` becomes `.` and a leading type accelerator
 //     `[Namespace.Type]` is unwrapped, so `[IO.File]::ReadAllText($p)` reads as
 //     the dotted chain `IO.File.ReadAllText($p)` matched by the `.ReadAllText`
 //     suffix;
+//
 //   - a `[int]` / `[long]` cast is rewritten to a call `int(...)` / `long(...)`
 //     so numeric coercion is recognized as a sanitizer;
+//
 //   - a cmdlet's `Verb-Noun` hyphen is normalized to an underscore (`Verb_Noun`)
 //     because the shared token scanner treats `-` as an operator; the catalog is
 //     keyed on the same underscore form (see the `powershell` block comment);
+//
 //   - a paren-less command call (`Invoke-Expression $u`, `Get-Content $p`,
 //     `Invoke-WebRequest -Uri $url`) is wrapped in parentheses so the shared call
 //     recognizer sees a call, with the (possibly `-Param`-prefixed) argument text
 //     preserved as the call's arguments;
+//
 //   - the call operator `& $cmd args` is rewritten to a synthetic call
 //     `InvokeOperator($cmd args)` (a command-injection sink) so an indirect
-//     invocation of a tainted command is caught.
+//     invocation of a tainted command is caught;
+//
+//   - a pipeline `a | Cmd1 args | Cmd2` is split at every top-level `|` and
+//     folded left into nested positional calls `Cmd2(Cmd1(a, args))`, because
+//     binding to a cmdlet's pipeline input is a real argument position.
 //
 // Its honest limits (documented in testdata/precision-suite-powershell/README.md):
-// pipelines (`$x | Invoke-Expression`), splatting (`@params`), and paren-less
-// arguments that span the pipeline are only partially modeled, so PowerShell
-// recall is moderate.
+// splatting (`@params`) hides arguments inside an untracked hashtable, and
+// method-suffix sinks are matched by name rather than by proving the receiver's
+// .NET type.
 func extractPowerShell(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
