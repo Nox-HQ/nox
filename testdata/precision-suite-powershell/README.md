@@ -33,18 +33,18 @@ nox bench --precision testdata/precision-suite-powershell --baseline testdata/pr
 ## What this corpus reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-powershell` scores
-**precision 1.00 / recall 0.857 / F1 0.923** (6 TP, 0 FP, 1 FN).
+**precision 1.00 / recall 1.00 / F1 1.00** (7 TP, 0 FP, 0 FN).
 
 Precision is perfect — every finding nox emits on this corpus is a true positive,
-and every clean stressor fires nothing. Recall is **intentionally below 1.0**:
-PowerShell recall is moderate by design, and the corpus carries one honest,
-documented false negative so the number tells the truth rather than being curated
-to a misleading 1.0.
+and every clean stressor fires nothing. Recall reached 1.0 the way the corpus
+always demanded: by fixing the recognizer the corpus indicted (pipeline
+dataflow), not by deleting the failing sample. `tp_pipeline_fn.ps1` is retained
+as a regression test for exactly that flow.
 
-The honest way to raise the number is to fix the recognizer the corpus indicts
-(model pipeline dataflow), never to delete the failing sample. When a legitimate
-engine improvement flips the FN, `TestPrecisionSuiteBaselinePowerShell` reports
-the gain and tells you to refresh `baseline.json`.
+A 1.0 here means this corpus has stopped measuring — it no longer indicts
+anything. The open limits below (splatting, `-match` semantics, receiver typing)
+are real and simply lack a sample; adding one that fails is the way to keep the
+number honest.
 
 ### Sample inventory
 
@@ -58,7 +58,7 @@ True positives (annotated ground truth):
 | `tp_sqlinjection.ps1` | SQL injection | `Invoke-Sqlcmd -Query "…$id"` | TAINT-001 (CWE-89) | TP |
 | `tp_pathtraversal.ps1` | path traversal | `Get-Content -Path $path` | TAINT-004 (CWE-22) | TP |
 | `tp_ssrf.ps1` | SSRF | `Invoke-WebRequest -Uri $url` | TAINT-006 (CWE-918) | TP |
-| `tp_pipeline_fn.ps1` | code injection | `$payload \| Invoke-Expression` | TAINT-005 | **FN (honest)** |
+| `tp_pipeline_fn.ps1` | code injection | `$payload \| Invoke-Expression` | TAINT-005 | caught |
 
 Clean stressors (zero annotations — any finding is a false positive):
 
@@ -106,12 +106,19 @@ What nox catches in PowerShell today:
 | Path traversal | `Get-Content $p` / `Import-Csv` / `[IO.File]::ReadAllText` | TAINT-004 | CWE-22 |
 | SSRF | `Invoke-WebRequest $url` / `iwr` / `curl` / `Invoke-RestMethod` | TAINT-006 | CWE-918 |
 
-### Still-open limits (the honest FNs)
+### Still-open limits
 
-- **Pipeline dataflow — the documented FN.** `$x | Invoke-Expression` binds `$x`
-  to the cmdlet's pipeline input; the flat recognizer does not track this, so
-  `tp_pipeline_fn.ps1` is a genuine recall gap (TAINT-005 not fired). Modeling
-  `|` pipeline binding is the next indictment.
+- **Pipeline dataflow — CLOSED.** `$x | Invoke-Expression` binds `$x` to the
+  cmdlet's pipeline input, which is a real argument position. The line is now
+  split at every top-level `|` and folded left into nested positional calls
+  (`a | Cmd1 args | Cmd2` becomes `Cmd2(Cmd1(a, args))`), so the value reaches
+  the final stage where the sink is. Stages are split-and-folded rather than
+  peeled one at a time because PowerShell cmdlets are paren-LESS: peeling the
+  leftmost pipe would swallow the remaining `| Cmd2` text into Cmd1's argument
+  list. Pipe positions are read from the CODE view, where string bodies are
+  blanked, so a regex alternation (`'^start|stop$'`) is never mistaken for a
+  pipeline; `||`, the PowerShell 7 pipeline-CHAIN operator, is skipped because
+  it passes no value.
 - **Splatting.** `Invoke-WebRequest @params` where `$params` is a hashtable of
   arguments hides the tainted URL inside an untracked structure.
 - **`-match` is not a laundering sanitizer.** Regex validation with `-match` does

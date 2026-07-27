@@ -124,3 +124,54 @@ func stmtWithAssignPS(t *testing.T, u unitDraft, name string) stmtDraft {
 	t.Fatalf("no assignment to %q in unit %q; stmts=%+v", name, u.funcName, u.stmts)
 	return stmtDraft{}
 }
+
+// TestExtractPowerShellPipelineSink: `$x | Invoke-Expression` binds $x to the
+// cmdlet's PIPELINE input, which is a real argument position — the value is as
+// executed as it would be in `Invoke-Expression $x`. The recognizer models the
+// pipeline by rewriting it into that positional form. This is the suite's
+// documented tp_pipeline_fn.ps1 false negative.
+func TestExtractPowerShellPipelineSink(t *testing.T) {
+	src := []byte("$payload = $args[0]\n$payload | Invoke-Expression\n")
+	units := extractUnits(lexctx.LangPowerShell, src)
+	u := findUnit(t, units, "")
+	sink := stmtWithCall(t, u, "Invoke_Expression")
+	if sink.line == 0 {
+		t.Fatalf("piped Invoke-Expression not recognized: %+v", u.stmts)
+	}
+	if !containsStr(sink.reads, "payload") {
+		t.Errorf("piped Invoke_Expression reads = %v, want to include payload", sink.reads)
+	}
+}
+
+// TestExtractPowerShellMultiStagePipeline: a value carried through several
+// pipeline stages still reaches the final cmdlet, where the sink is.
+func TestExtractPowerShellMultiStagePipeline(t *testing.T) {
+	src := []byte("$payload = $args[0]\n$payload | Out-String | Invoke-Expression\n")
+	units := extractUnits(lexctx.LangPowerShell, src)
+	u := findUnit(t, units, "")
+	sink := stmtWithCall(t, u, "Invoke_Expression")
+	if sink.line == 0 {
+		t.Fatalf("final pipeline stage Invoke-Expression not recognized: %+v", u.stmts)
+	}
+	if !containsStr(sink.reads, "payload") {
+		t.Errorf("multi-stage piped Invoke_Expression reads = %v, want to include payload", sink.reads)
+	}
+}
+
+// TestExtractPowerShellPipeInStringIsNotAPipeline is the precision guard for the
+// rewrite above. A `|` inside a STRING — an alternation in a regex literal, the
+// shape clean_validated.ps1 uses — is not a pipeline operator. Pipe positions are
+// therefore taken from the code view, where string bodies are blanked, never from
+// the raw text. Misreading one would splice a sink out of a comparison.
+func TestExtractPowerShellPipeInStringIsNotAPipeline(t *testing.T) {
+	src := []byte("$action = $args[0]\nif ($action -match '^start|stop$') { Write-Output 'ok' }\n")
+	units := extractUnits(lexctx.LangPowerShell, src)
+	u := findUnit(t, units, "")
+	for _, st := range u.stmts {
+		for _, c := range st.calls {
+			if c == "stop$'" || c == "stop" {
+				t.Errorf("a | inside a string literal was treated as a pipeline: calls = %v", st.calls)
+			}
+		}
+	}
+}

@@ -11,11 +11,133 @@ import "strings"
 // `[int]$x`), the `& ` call operator before paren-less wrapping, and the cmdlet
 // hyphen normalization before the call recognizer scans identifiers.
 func shapePowerShellLine(ll logicalLine) logicalLine {
-	return logicalLine{
-		line: ll.line,
-		code: shapePowerShellExpr(ll.code),
-		raw:  shapePowerShellExpr(ll.raw),
+	code := shapePowerShellExpr(ll.code)
+	raw := shapePowerShellExpr(ll.raw)
+	// The pipeline rewrite runs last and needs BOTH views at once: a `|` is only
+	// an operator when it is not inside a string, and string bodies are blanked
+	// in the code view alone. Deciding from raw would read a regex alternation
+	// (`'^start|stop$'`) as a pipeline.
+	code, raw = desugarPowerShellPipeline(code, raw)
+	return logicalLine{line: ll.line, code: code, raw: raw}
+}
+
+// desugarPowerShellPipeline rewrites a pipeline `a | Cmd1 args | Cmd2` into the
+// nested positional form `Cmd2(Cmd1(a, args))`. Binding to a cmdlet's PIPELINE
+// input is a real argument position — `$x | Invoke-Expression` executes `$x`
+// exactly as `Invoke-Expression $x` does — so the value has to land in the
+// callee's argument list for the shared recognizer to see the flow.
+//
+// Stages are split at every top-level `|` and folded left, rather than peeled
+// one at a time: PowerShell cmdlets are paren-LESS, so a leftmost-peel would
+// swallow the remaining `| Cmd2` text into Cmd1's argument list.
+//
+// Pipe positions come from the CODE view (string bodies blanked) and the same
+// structural rewrite is applied to raw while the two stay aligned; once
+// alignment is lost raw follows code, matching how the Elixir pipe desugars.
+func desugarPowerShellPipeline(code, raw string) (newCode, newRaw string) {
+	pipes := powerShellTopLevelPipes(code)
+	if len(pipes) == 0 {
+		return code, raw
 	}
+	// An assignment left of the first pipe keeps its LHS: `$out = $x | Cmd`.
+	prefixEnd := 0
+	if eq := topLevelAssignIndex(code); eq >= 0 && eq < pipes[0] {
+		prefixEnd = eq + 1
+	}
+	rewritten, ok := foldPowerShellPipeline(code, prefixEnd, pipes)
+	if !ok {
+		return code, raw
+	}
+	if len(raw) == len(code) {
+		if rr, ok := foldPowerShellPipeline(raw, prefixEnd, pipes); ok {
+			return rewritten, rr
+		}
+	}
+	return rewritten, rewritten
+}
+
+// foldPowerShellPipeline folds the pipeline in s (whose top-level pipes sit at
+// the byte offsets in pipes, all at or past prefixEnd) into nested calls,
+// preserving everything before prefixEnd verbatim. Returns ok=false when a stage
+// past the first has no recognizable command head, leaving the line unshaped
+// rather than half-rewritten.
+func foldPowerShellPipeline(s string, prefixEnd int, pipes []int) (string, bool) {
+	prefix := s[:prefixEnd]
+	acc := strings.TrimSpace(s[prefixEnd:pipes[0]])
+	if acc == "" {
+		return "", false
+	}
+	for i, p := range pipes {
+		end := len(s)
+		if i+1 < len(pipes) {
+			end = pipes[i+1]
+		}
+		stage := strings.TrimSpace(s[p+1 : end])
+		bound, ok := bindPowerShellStage(acc, stage)
+		if !ok {
+			return "", false
+		}
+		acc = bound
+	}
+	return prefix + acc, true
+}
+
+// bindPowerShellStage binds acc as the leading argument of one pipeline stage:
+// `Cmd -Flag v` with acc becomes `Cmd(acc, -Flag v)`, and a bare `Cmd` becomes
+// `Cmd(acc)`. Returns ok=false when the stage does not start with a command head
+// (a scriptblock or a variable stage, which carries no callee to attribute the
+// flow to).
+func bindPowerShellStage(acc, stage string) (string, bool) {
+	i := 0
+	for i < len(stage) && (isIdentPart(stage[i]) || stage[i] == '.') {
+		i++
+	}
+	head := stage[:i]
+	if head == "" || strings.HasPrefix(head, ".") || isKeyword(head) {
+		return "", false
+	}
+	rest := strings.TrimSpace(stage[i:])
+	if rest == "" {
+		return head + "(" + acc + ")", true
+	}
+	// An already-parenthesized stage `Cmd(a)` takes acc as its first argument.
+	if strings.HasPrefix(rest, "(") && strings.HasSuffix(rest, ")") {
+		inner := strings.TrimSpace(rest[1 : len(rest)-1])
+		if inner == "" {
+			return head + "(" + acc + ")", true
+		}
+		return head + "(" + acc + ", " + inner + ")", true
+	}
+	return head + "(" + acc + ", " + rest + ")", true
+}
+
+// powerShellTopLevelPipes returns the byte offsets of every pipeline `|` in code
+// that is not nested inside brackets or braces. A `||` (the PowerShell 7
+// pipeline-CHAIN operator, which passes no value) is skipped: it is control
+// flow, not dataflow. A `|` inside a string is already blanked in the code view.
+func powerShellTopLevelPipes(code string) []int {
+	var out []int
+	depth := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '|':
+			if i+1 < len(code) && code[i+1] == '|' {
+				i++ // `||` chain operator: passes no value
+				continue
+			}
+			if i > 0 && code[i-1] == '|' {
+				continue
+			}
+			if depth == 0 {
+				out = append(out, i)
+			}
+		}
+	}
+	return out
 }
 
 // shapePowerShellExpr applies the PowerShell → shared-recognizer rewrites to one
