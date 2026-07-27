@@ -36,6 +36,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   must be a literal in the call — a named constant needs `go/types` and is not
   reported, which is the correct direction to fail.
 
+### Added
+
+- **`HARDEN-001` / `HARDEN-002` — TLS misconfiguration in Go source.** Nothing in
+  nox modelled `tls.Config`. Certificate validation could be switched off
+  anywhere in a Go codebase and no rule said a word — a gap that matters now that
+  teams are dropping gosec from their golangci config and running nox as the only
+  code-level security tool. `HARDEN-001` reports `InsecureSkipVerify: true`
+  (**high** — verification off means the connection is authenticated against
+  nobody, and only critical/high fails a typical CI gate); `HARDEN-002` reports a
+  `MinVersion` below TLS 1.2 (**medium** — RFC 8996 deprecates TLS 1.0/1.1, but
+  the peer is still authenticated and a legacy floor is sometimes a defensible
+  choice). Both cover the composite-literal and the post-construction assignment
+  forms, resolve an aliased `crypto/tls` import, and carry `gosec: G402` in
+  metadata. (#405)
+
+  **This one is parsed, not pattern-matched.** `InsecureSkipVerify:\s*true` also
+  matches a comment — grpc's xds credentials contain "InsecureSkipVerify needs to
+  be set to true because …" — and no regex can tell `true` from a variable. The
+  rule uses `go/parser`, which nox already depends on for Go taint extraction, so
+  the check is exact and adds no dependency. Measured over 117,731 real Go files
+  in a module cache: 72 findings, every sampled one a genuine assignment; a loose
+  regex over the same corpus returns 82, of which 12 are comments.
+
+  **Deliberately not reported**, so nobody has to discover it the hard way:
+  `InsecureSkipVerify: skipVerify` (a variable's value is not resolvable without
+  `go/types`, and reporting it anyway would fire on every config-driven client),
+  and `_test.go` files (tests legitimately dial httptest servers with self-signed
+  certificates; a high-severity finding on each would get the rule suppressed
+  wholesale). A struct that is not provably a `crypto/tls.Config` — a wrapper
+  with its own `InsecureSkipVerify` field, or an assignment whose receiver type
+  needs `go/types` — is still reported, at medium confidence.
+
+- Findings from `HARDEN-*` and `CRYPTO-*` now carry a family label in the scan
+  summary ("Transport Security", "Weak Crypto") instead of falling into "Other",
+  where a broken primitive was invisible at a glance. (#405)
+
 ## [1.23.0] - 2026-07-26
 
 ### Changed

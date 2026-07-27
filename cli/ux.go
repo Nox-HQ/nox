@@ -49,6 +49,12 @@ func familyOf(ruleID string) string {
 		return "Reachability"
 	case strings.HasPrefix(ruleID, "TAINT-"):
 		return "Taint Flow"
+	case strings.HasPrefix(ruleID, "HARDEN-"):
+		return "Transport Security"
+	// CRYPTO- shipped without a label and fell into "Other", where a broken
+	// primitive is invisible in the summary line. Same fix, one line.
+	case strings.HasPrefix(ruleID, "CRYPTO-"):
+		return "Weak Crypto"
 	default:
 		return "Other"
 	}
