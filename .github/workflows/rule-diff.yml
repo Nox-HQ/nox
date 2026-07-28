@@ -15,6 +15,12 @@ on:
     paths:
       - 'core/analyzers/**'
       - 'core/rules/**'
+      # The taint engine and the lexer that feeds it change rule behaviour just
+      # as directly as an analyzer does, and were outside this filter: a run of
+      # taint-model PRs shipped without this job ever firing, and one of them
+      # carried a false-positive class that every precision suite scored 1.00 on.
+      - 'core/taint/**'
+      - 'core/lexctx/**'
       - 'scripts/rule-diff.sh'
       - 'scripts/rule-diff-corpus.json'
       - '.github/workflows/rule-diff.yml'
