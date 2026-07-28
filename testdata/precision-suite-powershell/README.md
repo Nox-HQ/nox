@@ -42,7 +42,7 @@ dataflow), not by deleting the failing sample. `tp_pipeline_fn.ps1` is retained
 as a regression test for exactly that flow.
 
 A 1.0 here means this corpus has stopped measuring — it no longer indicts
-anything. The open limits below (splatting, `-match` semantics, receiver typing)
+anything. The open limits below (`-match` semantics, receiver typing)
 are real and simply lack a sample; adding one that fails is the way to keep the
 number honest.
 
@@ -119,8 +119,11 @@ What nox catches in PowerShell today:
   blanked, so a regex alternation (`'^start|stop$'`) is never mistaken for a
   pipeline; `||`, the PowerShell 7 pipeline-CHAIN operator, is skipped because
   it passes no value.
-- **Splatting.** `Invoke-WebRequest @params` where `$params` is a hashtable of
-  arguments hides the tainted URL inside an untracked structure.
+- **Splatting — NOT a limit (this entry was stale).** `Invoke-WebRequest @params`
+  where `$params` is a hashtable built from a source IS reported: the hashtable
+  is tainted at its assignment and carries into the splatted call. Verified with
+  `$p = @{Uri = $args[0]}; Invoke-WebRequest @p`, which fires TAINT-006. The
+  claim is corrected rather than deleted so the record shows it was checked.
 - **`-match` is not a laundering sanitizer.** Regex validation with `-match` does
   not reclassify the validated variable; `clean_validated.ps1` is clean because
   the sink argument is a constant, not because `-match` neutralizes the input.

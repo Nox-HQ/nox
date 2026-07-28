@@ -20,18 +20,26 @@ As committed, `nox bench --precision testdata/precision-suite-shell` scores:
 | Metric | Value |
 | --- | --- |
 | **Precision** | **1.00** (0 false positives) |
-| **Recall** | **1.00** |
-| **F1** | **1.00** |
-| TP / FP / FN | 11 / 0 / 0 |
-| findings-per-issue | 1.00 |
+| **Recall** | **0.85** |
+| **F1** | **0.92** |
+| TP / FP / FN | 11 / 0 / 2 |
+| findings-per-issue | 0.85 |
 
 Per rule: TAINT-002 (cmd injection) 4/4, TAINT-004 (traversal) 2/2, TAINT-005
 (code injection) 3/3, TAINT-006 (SSRF) 2/2. **Precision is 1.00** — every finding
 nox emits is a true positive, and all four clean stressors fire nothing.
 
-A 1.0 does NOT mean shell dataflow is solved — it means this corpus has stopped
-indicting anything. The limits below are real and simply lack a failing sample;
-adding one is how the number stays honest.
+Recall is deliberately BELOW 1.0 again. It reached 1.0 when the `local`
+laundering gap closed, at which point the corpus could only catch regressions and
+could no longer say what the recognizer still cannot do — so `tp_pipeline_fed.sh`
+was added, pinning two real misses where a tainted value reaches a sink through a
+PIPELINE rather than as a literal argument (`xargs curl`, `xargs -I{} sh -c`).
+The drop from 1.00 to 0.85 is the corpus getting harder, not the engine getting
+worse: precision is still 1.000 with zero false positives.
+
+Two entries that used to appear in the limits list — ARRAYS and `${var//a/b}`
+transforms — were checked and are NOT limits; both propagate today. The stale
+claims are corrected rather than left standing.
 
 ## Why shell recall is the hardest of any supported language
 
