@@ -2023,6 +2023,13 @@ func initGitRepo(t *testing.T, files map[string]string) string {
 	// git init
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		// Git may fork `gc --auto` on commit, which keeps writing into
+		// .git/objects after the command returns; t.TempDir cleanup then
+		// races it and RemoveAll fails with "directory not empty".
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto", "GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto", "GIT_CONFIG_VALUE_1=false")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
@@ -2149,6 +2156,13 @@ func TestRunHistoryScan_EmptyRepo(t *testing.T) {
 	// Init an empty repo with no commits.
 	cmd := exec.Command("git", "init")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		// Git may fork `gc --auto` on commit, which keeps writing into
+		// .git/objects after the command returns; t.TempDir cleanup then
+		// races it and RemoveAll fails with "directory not empty".
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto", "GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto", "GIT_CONFIG_VALUE_1=false")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
