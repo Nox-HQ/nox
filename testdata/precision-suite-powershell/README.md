@@ -33,7 +33,7 @@ nox bench --precision testdata/precision-suite-powershell --baseline testdata/pr
 ## What this corpus reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-powershell` scores
-**precision 1.00 / recall 1.00 / F1 1.00** (7 TP, 0 FP, 0 FN).
+**precision 1.00 / recall 1.00 / F1 1.00** (8 TP, 0 FP, 0 FN).
 
 Precision is perfect — every finding nox emits on this corpus is a true positive,
 and every clean stressor fires nothing. Recall reached 1.0 the way the corpus
@@ -123,7 +123,8 @@ What nox catches in PowerShell today:
   where `$params` is a hashtable built from a source IS reported: the hashtable
   is tainted at its assignment and carries into the splatted call. Verified with
   `$p = @{Uri = $args[0]}; Invoke-WebRequest @p`, which fires TAINT-006. The
-  claim is corrected rather than deleted so the record shows it was checked.
+  claim is corrected rather than deleted so the record shows it was checked, and
+  `tp_splatting.ps1` pins the behaviour so it cannot drift back.
 - **`-match` is not a laundering sanitizer.** Regex validation with `-match` does
   not reclassify the validated variable; `clean_validated.ps1` is clean because
   the sink argument is a constant, not because `-match` neutralizes the input.

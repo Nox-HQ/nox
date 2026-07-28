@@ -71,41 +71,42 @@ string.
 | `clean_rawstring_blob.dart` | a base64 `data:` URI and a regex token in `r'...'` raw strings — data blobs, not code |
 | `clean_generated.dart` | `Process.run` / `db.rawQuery` appear only in comments (incl. a nested block comment) — lexctx classifies them as comment, never code |
 
-## The recall gap — and a question about this sample's ground truth
+## The recall gap (honest false negatives)
 
-`tp_ssrf_field.dart` is the corpus's one unmet expectation. Its stated premise is
-field/receiver taint: a tainted URL stored into a member field, fetched later by
-a bare call. That class of limit is real, and it was closed for Swift and
-Objective-C by receiver taint (a field assignment now binds the receiver).
+`tp_known_fns.dart` carries two real flows nox does not catch. Both are the Dart
+side of a capability the engine HAS but scopes per language, because each is an
+over-approximation that can only widen taint and is enabled where a corpus
+demanded it:
 
-**It did not close here, and inspection suggests the sample itself is the
-problem — not the engine.** Recorded rather than quietly fixed, because
-repairing it is a corpus-design decision:
+- **cross-method flow through an instance FIELD** — the source lands in a field
+  in one method and the sink reads it in another. Shared state is joined across
+  units for Ruby (`@ivar`) and Perl (`our`); Dart is not in that set.
+- **taint laundered through a LIST ELEMENT** — binding a container from an
+  element assignment is enabled for Perl only.
 
-- The header comment says the tainted URL is stored into `req.url` and fetched
-  by `client.send(req)`. **The code does neither.** The URL is the constant
-  `Uri.parse('http://internal/')`; the tainted value reaches a request HEADER via
-  `req.headers.add('X-Forwarded', raw)`; and `req.followRedirects = true` assigns
-  a literal, so its `// tainted redirect target laundered via a field` comment
-  does not describe the line it sits on.
-- Attacker data therefore never influences WHERE the request goes, so the
-  annotated **CWE-918 does not hold for the code as written**. Making nox fire
-  here would mean treating any taint reaching an HTTP request object as SSRF,
-  which generalises into false positives on every request carrying a
-  user-supplied header value.
-- The comment also mixes two libraries: `client.send(req)` is a `package:http`
-  idiom, while the code uses `dart:io`'s `HttpClient.openUrl`.
-- The field-assignment premise does not appear in real code. Across **1213 real
-  Dart files** (dart-lang http/shelf/args/collection, flutter/samples,
-  json_serializable) there is **not one** `request.url = ...` assignment; a URL
-  is set through the constructor. `client.send(request)` is common (122 uses),
-  but the request is built with its URL, not mutated into one.
+Closing either is a matter of opting Dart in and measuring, not of new
+machinery.
 
-Three repairs are defensible and they are not equivalent — rewrite the code to
-match the comment, reclassify away from CWE-918, or drop the sample. Each is a
-different claim about what nox should detect, so the choice belongs to whoever
-owns the corpus. Until then the expectation stands unmet and recall stays below
-1.0, which is the honest state.
+### Withdrawn: `tp_ssrf_field.dart`
+
+It was annotated CWE-918 on a field/receiver-taint premise, and did not survive
+inspection:
+
+- its comment described a tainted URL stored into `req.url` and fetched by
+  `client.send(req)`. The code did neither — the URL was the constant
+  `Uri.parse('http://internal/')`, the tainted value reached a request HEADER,
+  and `req.followRedirects = true` assigned a literal despite a comment calling
+  it a tainted redirect target. Attacker data never influenced WHERE the request
+  went, so the annotated CWE did not hold for the code as written.
+- the comment mixed two libraries: `client.send(req)` is `package:http`, the code
+  used `dart:io`'s `HttpClient.openUrl`.
+- the premise is not realizable in Dart. `HttpClientRequest` exposes no settable
+  URL field, and across **1213 real Dart files** there is not one
+  `request.url = ...` assignment — URLs are constructor-set.
+
+Correct SSRF coverage already existed in `tp_ssrf.dart`, so the sample was
+replaced by the two gaps above rather than repaired into an idiom Dart does not
+have.
 
 ## Why precision is the gate
 
