@@ -7,6 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-07-28
+
+Taint recall across nine languages, and the reason it took this long to notice
+the gaps: the guard that was supposed to catch them had never run.
+
+### Added
+
+- **Twelve of the thirteen documented taint recall gaps are closed**, across
+  Clojure, C++, Dart, Elixir, Groovy, Kotlin, Objective-C, Perl, PowerShell,
+  Ruby, Shell and Swift. Each was a construct where a real flow reached a real
+  sink and nox stayed silent, and each was annotated in a precision suite as
+  ground truth rather than left undocumented. Several turned out to share one
+  cause, which is why they closed in groups:
+
+  - **Pipelines and threading.** Elixir's `|>` bound the value into the first
+    stage only; PowerShell's `$x | Cmdlet` was not modelled at all; Clojure's
+    `->`/`->>`/`some->`/`cond->` rewrite argument position at read time. All
+    three now carry the value to the stage where the sink is. The shapes are not
+    interchangeable — PowerShell cmdlets are paren-less, so peeling one pipe at
+    a time swallows the rest of the chain, and Clojure needs the threaded value
+    to have a NAME because the engine taints a variable at its binding. (#414,
+    #415, #419)
+  - **Lambda and higher-order dispatch.** Kotlin's `.let { }` and Groovy's
+    `.with { }` are one concept — the lambda parameter aliases its receiver.
+    Clojure's `apply` and `map` pass the real callee as data, so the sink is
+    never a literal call head. (#417)
+  - **Receiver and container binding.** An assignment to a member field
+    (`task.arguments = [...]` then a bare `task.launch()`) or a container element
+    (`$args{cmd} = $ENV{CMD}`) bound no name, so the taint was lost at the store.
+    Both bind now, field-insensitively, enabled per language as a corpus demands
+    it. (#418, #420)
+  - **Cross-unit shared state.** A source landing in a Ruby `@ivar` or a Perl
+    `our` global in one method and read by a sink in another is now joined. Only
+    syntactically shared names participate — a local never joins, so same-named
+    locals in one file do not collapse into one variable. (#420)
+  - **Declarations that also assign.** `local x="$1"`, `std::ifstream in(path)`
+    and `%{"file" => path} = conn.params` each bind a value the recognizer
+    previously discarded. (#416, #417)
+
+  All nineteen precision suites hold **precision 1.000 with zero false
+  positives**. Validated against roughly **15,700 real files** across nine
+  languages — cloned projects including ring, reitit, compojure, clj-http,
+  Phoenix, Plug, Ecto, apache/groovy, Spock, Grails, dart-lang and flutter — with
+  findings diffed by fingerprint between builds.
+
+### Fixed
+
+- **`DATA-005` was titled "hardcoded public IP" and matched every dotted quad**,
+  so loopback and RFC 1918 addresses — the common case in real configuration —
+  were reported. `DATA-001` and `DATA-005` also flagged the RFC 2606/5737
+  reserved documentation values that exist precisely so examples have an address
+  to use. Candidates are now parsed and classified in code rather than by
+  regex alternation. On the release corpus this is `DATA-005` 3 findings to 0 on
+  one repository and **`DATA-001` 112 findings to 2** on another. (#413)
+- **A Clojure keyword inside a data literal was recorded as a source**, so
+  CONSTRUCTING a request map — what every test fixture, mock and benchmark in the
+  ecosystem does — marked the value untrusted. A keyword is a source only in
+  function position, `(:headers req)`, which reads a request; as a key it builds
+  one. Found on real projects; all twenty precision suites scored 1.000 on it.
+  (#421)
+- **Four shell sink-modelling defects** exposed by the `local` fix, each a false
+  positive on real scripts: `isShellCommandByte` stopped at `-` despite its own
+  comment saying otherwise, truncating `exec-add-path` to the `exec` sink; `exec`
+  matched an I/O redirection that executes nothing; `curl --output "$path"` had
+  its output path treated as the SSRF-controlling value; and path-qualified
+  commands (`/usr/bin/curl`) resolved to no callee. (#416)
+- **A crash on malformed input.** The shell double-quote scanner treated `\` as
+  escaping the next byte without checking one existed, running the index past
+  end-of-line. A scanner must not panic on input it is pointed at. (#416)
+- **The precision ratchet misread its own metric.** `findings-per-issue` is a
+  distance-from-1.00 measure, but was gated as strictly lower-is-better, so
+  closing a false negative — which necessarily raises it toward the ideal — was
+  reported as a regression. Every genuine recall fix would have needed laundering
+  through a baseline regeneration. (#414)
+
+### Changed
+
+- **The rule-behaviour diff now covers the taint engine.** It runs two builds
+  over pinned real repositories and reports what changed per rule, and it had
+  never fired on a taint change: the path filter covered `core/analyzers/**` and
+  `core/rules/**`, while every taint change lives in `core/taint/**`. Six taint
+  pull requests merged unguarded. `core/taint/**` and `core/lexctx/**` are now in
+  the filter, and the corpus — previously two Go/IaC repositories, which could
+  not have shown a taint regression in any language — gains three entries chosen
+  by measuring which produce signal, not by intuition. (#422)
+- **The precision suites carry failing samples again.** Eighteen of nineteen had
+  reached recall 1.0, at which point a corpus can only detect regressions and can
+  no longer say what the engine cannot do. Seven annotated false negatives now
+  stand — Clojure `partial`/`comp`/`as->`, shell `xargs`/pipeline-fed commands,
+  Dart cross-method fields and list elements — each verified to miss before being
+  added, each naming what would close it. The corresponding recall numbers are
+  deliberately below 1.0; precision is unchanged at 1.000. (#424, #425)
+- **Three limits documented that no longer existed** — shell arrays, shell
+  `${var//a/b}` transforms and PowerShell splatting — were corrected and pinned
+  with regression samples. A documented gap that is not real is the same defect
+  as an unguarded one, in the other direction. (#424, #425)
+- **A partially tainted URL is still reported as SSRF**, and `docs/design/
+  sast-taint.md` now says why, with the number that justifies it: across ~14,000
+  real files the engine emits 8 `TAINT-006` findings in total, 2 of them this
+  class. Narrowing it needs URL-structure modelling; the doc names what would
+  change the decision. (#423)
+- **`tp_ssrf_field.dart` was withdrawn.** Its comment described a tainted URL in
+  `req.url` fetched by `client.send(req)`; its code used a constant URL and put
+  the tainted value in a header, so the annotated CWE did not hold. The premise
+  is not realizable in Dart — `HttpClientRequest` has no settable URL field, and
+  across 1213 real Dart files there is not one `request.url = ...` assignment.
+  Replaced by two gaps that are real. (#425)
+
 ## [1.24.0] - 2026-07-27
 
 ### Added
@@ -2288,7 +2396,7 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.13.6...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.0...HEAD
 [1.13.6]: https://github.com/nox-hq/nox/compare/v1.13.5...v1.13.6
 [1.13.5]: https://github.com/nox-hq/nox/compare/v1.13.4...v1.13.5
 [1.13.4]: https://github.com/nox-hq/nox/compare/v1.13.3...v1.13.4
