@@ -261,3 +261,52 @@ F1 0.933** (14 TP, 0 FP, 2 FN). The two recall gaps are honest and documented
 `render plain:` by call name; cross-method flow through an `@ivar` — outside the
 local-summary interprocedural model). Ruby inherits every intraprocedural limit
 above and is module/`def`-scoped like Python.
+
+## Semantics: a partially tainted URL is still reported (SSRF, TAINT-006)
+
+A recurring shape, found in three languages while validating the engine against
+real repositories:
+
+```elixir
+[tag] = System.argv()
+Req.get!("https://api.github.com/repos/elixir-lang/elixir/releases/tags/#{tag}")
+```
+
+```bash
+local path="$1"
+curl "${NEXUS_URL}/service/local/${path}"     # NEXUS_URL is a literal
+```
+
+```bash
+curl -fSL -o "$tarball" "https://go.dev/dl/go${version}.src.tar.gz"
+```
+
+In each, an untrusted value reaches a network fetch, but the URL's **scheme and
+host are literal** — only a path segment is attacker-controlled. Whether that is
+CWE-918 is genuinely arguable: SSRF classically means the attacker chooses the
+DESTINATION, and here they cannot redirect the request to another host.
+
+**nox reports it.** The reasoning:
+
+- The dataflow is real. An untrusted value does reach a URL passed to an HTTP
+  client, and that is the flow the rule describes.
+- Attacker control of a path segment is not nothing: `../` escapes, an injected
+  `?`/`#`, or a `@` that some URL parsers read as an authority separator can all
+  change what is fetched. Proving the host is fixed needs a URL-structure model
+  the engine does not have.
+- Silently dropping the class would trade a debatable finding for a silent miss,
+  which is the wrong direction for a scanner whose whole premise is that
+  degradation must be visible.
+
+**Why this is documented rather than narrowed.** Suppressing it requires
+modelling URL structure — parsing the literal prefix, deciding which
+interpolation positions are authority-changing, and getting that right in every
+language. That is a real feature. Measured against it: across ~14,000 real files
+(Clojure, Dart, Groovy, Elixir corpora) the engine emits **8 TAINT-006 findings
+in total, of which 2 are this class**. Building URL-structure analysis for two
+findings is not a good trade.
+
+What would change the decision: if a corpus sweep shows this class dominating
+TAINT-006 volume, or a downstream user reports it as their top noise source,
+narrow it then — and pin the corpus number here so the trade is re-checked
+against evidence rather than intuition.

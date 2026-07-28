@@ -71,20 +71,41 @@ string.
 | `clean_rawstring_blob.dart` | a base64 `data:` URI and a regex token in `r'...'` raw strings — data blobs, not code |
 | `clean_generated.dart` | `Process.run` / `db.rawQuery` appear only in comments (incl. a nested block comment) — lexctx classifies them as comment, never code |
 
-## The recall gap (honest false negative)
+## The recall gap — and a question about this sample's ground truth
 
-`tp_ssrf_field.dart` is a **genuine SSRF bug nox does not catch**, kept in the
-corpus and labeled rather than deleted. The tainted value is laundered through a
-member **field** (`req`'s headers/redirect state) and the fetch is issued by a
-later bare `req.close()` that carries no tainted argument at its call site. nox's
-Dart extractor is a line/statement **recognizer** (only Go gets a real AST): it
-tracks taint through assignments whose LHS is a bare identifier, so an assignment
-into a member field is not modeled as a distinct binding and the tainted value
-never associates with the receiver. Closing this needs **field / receiver taint
-tracking** — future work, not a curation trick. This is the same documented class
-of limit as the Swift property-assignment and Kotlin scope-function false
-negatives. Removing this hard true positive to inflate recall would defeat the
-purpose of an honest measurement suite.
+`tp_ssrf_field.dart` is the corpus's one unmet expectation. Its stated premise is
+field/receiver taint: a tainted URL stored into a member field, fetched later by
+a bare call. That class of limit is real, and it was closed for Swift and
+Objective-C by receiver taint (a field assignment now binds the receiver).
+
+**It did not close here, and inspection suggests the sample itself is the
+problem — not the engine.** Recorded rather than quietly fixed, because
+repairing it is a corpus-design decision:
+
+- The header comment says the tainted URL is stored into `req.url` and fetched
+  by `client.send(req)`. **The code does neither.** The URL is the constant
+  `Uri.parse('http://internal/')`; the tainted value reaches a request HEADER via
+  `req.headers.add('X-Forwarded', raw)`; and `req.followRedirects = true` assigns
+  a literal, so its `// tainted redirect target laundered via a field` comment
+  does not describe the line it sits on.
+- Attacker data therefore never influences WHERE the request goes, so the
+  annotated **CWE-918 does not hold for the code as written**. Making nox fire
+  here would mean treating any taint reaching an HTTP request object as SSRF,
+  which generalises into false positives on every request carrying a
+  user-supplied header value.
+- The comment also mixes two libraries: `client.send(req)` is a `package:http`
+  idiom, while the code uses `dart:io`'s `HttpClient.openUrl`.
+- The field-assignment premise does not appear in real code. Across **1213 real
+  Dart files** (dart-lang http/shelf/args/collection, flutter/samples,
+  json_serializable) there is **not one** `request.url = ...` assignment; a URL
+  is set through the constructor. `client.send(request)` is common (122 uses),
+  but the request is built with its URL, not mutated into one.
+
+Three repairs are defensible and they are not equivalent — rewrite the code to
+match the comment, reclassify away from CWE-918, or drop the sample. Each is a
+different claim about what nox should detect, so the choice belongs to whoever
+owns the corpus. Until then the expectation stands unmet and recall stays below
+1.0, which is the honest state.
 
 ## Why precision is the gate
 
