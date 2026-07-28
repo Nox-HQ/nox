@@ -222,3 +222,38 @@ func TestExtractClojureThreadingRebinds(t *testing.T) {
 		t.Errorf("expected the threaded variable to be bound then rebound per stage, got %d: %+v", rebinds, u.stmts)
 	}
 }
+
+// TestClojureLiteralMapKeysAreNotSources: a keyword is a source only in
+// FUNCTION position — `(:headers req)` READS a request. As a KEY in a map
+// literal it CONSTRUCTS one, which every test fixture, mock and benchmark does.
+// Treating literal keys as source reads marked those fixtures untrusted; 8 false
+// positives were measured on real Clojure projects before this was fixed.
+func TestClojureLiteralMapKeysAreNotSources(t *testing.T) {
+	// A hand-built request map must not taint the binding.
+	built := []byte("(defn f []\n  (let [request {:headers {\"a\" \"b\"} :body \"x\" :uri \"/p\"}]\n    (slurp request)))\n")
+	units := extractUnits(lexctx.LangClojure, built)
+	u := findUnit(t, units, "f")
+	for _, st := range u.stmts {
+		for _, c := range st.chains {
+			if c == "headers" || c == "body" || c == "uri" {
+				t.Errorf("literal map key %q recorded as a source chain: %+v", c, st)
+			}
+		}
+	}
+
+	// A keyword ACCESS on a request must still resolve as a source.
+	access := []byte("(defn g [req]\n  (let [h (:headers req)]\n    (slurp h)))\n")
+	units2 := extractUnits(lexctx.LangClojure, access)
+	u2 := findUnit(t, units2, "g")
+	sawSource := false
+	for _, st := range u2.stmts {
+		for _, c := range st.chains {
+			if c == "headers" {
+				sawSource = true
+			}
+		}
+	}
+	if !sawSource {
+		t.Errorf("a keyword ACCESS must still resolve as a source: %+v", u2.stmts)
+	}
+}

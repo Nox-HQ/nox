@@ -475,6 +475,21 @@ func clojureCollectExpr(code []byte, f clojureForm, st *stmtDraft) {
 	// A vector/map RHS: collect each element's reads/calls (a data literal may hold
 	// a tainted value, e.g. a jdbc param vector).
 	for _, ch := range f.children {
+		if ch.delim == 0 {
+			// A bare atom INSIDE a data literal is a key or a literal value, not a
+			// keyword ACCESS. `{:headers {...} :body "..."}` CONSTRUCTS a request
+			// map; it does not read an untrusted one. Treating its keys as source
+			// chains marked every hand-built map — every test fixture and mock
+			// request — as untrusted input. A keyword is a source only in FUNCTION
+			// position, `(:headers req)`, which the call branch above handles.
+			if v := clojureSymbolRead(code, ch); v != "" {
+				st.reads = appendUnique(st.reads, v)
+			}
+			if t := clojureAtomText(code, ch); strings.Contains(t, "/") && !strings.HasPrefix(t, ":") {
+				st.chains = appendUnique(st.chains, t)
+			}
+			continue
+		}
 		clojureCollectExpr(code, ch, st)
 	}
 }
