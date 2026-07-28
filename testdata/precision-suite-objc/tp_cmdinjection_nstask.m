@@ -19,6 +19,6 @@ void runTask(void) {
     NSString *arg = [[[NSProcessInfo processInfo] environment] objectForKey:@"ARG"];
     NSTask *task = [[NSTask alloc] init];
     task.launchPath = @"/bin/sh";
-    task.arguments = @[@"-c", arg]; // nox-expect: TAINT-002
-    [task launch];
+    task.arguments = @[@"-c", arg];
+    [task launch]; // nox-expect: TAINT-002
 }

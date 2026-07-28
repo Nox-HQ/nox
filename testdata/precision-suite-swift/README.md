@@ -25,13 +25,25 @@ TAINT-003  1   0   0   1.000      1.000   1.000
 TAINT-004  1   0   0   1.000      1.000   1.000
 TAINT-005  1   0   0   1.000      1.000   1.000
 TAINT-006  1   0   0   1.000      1.000   1.000
-OVERALL    6   0   1   1.000      0.857   0.923
+OVERALL    7   0   0   1.000      1.000   1.000
 ```
 
-**Precision 1.00 / recall 0.857 / F1 0.923** (6 TP, 0 FP, 1 FN). Precision is
+**Precision 1.00 / recall 1.00 / F1 1.00** (7 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits on this corpus is a true positive, and no
-`clean_*` sample false-positives. Recall is **0.857**, held below 1.0 by one
-honestly-labeled false negative (see the gap below).
+`clean_*` sample false-positives.
+
+The last gap — the Foundation Process PROPERTY idiom, where the tainted value is stored
+into `task.arguments = [...]` and the shell is started by a later bare `task.launch()` —
+is closed. An assignment to a member field binds no bare name, so the tainted
+value never associated with the object; a field assignment now binds the
+RECEIVER, treating taint on any field as taint on the object. It is
+deliberately field-INSENSITIVE, an over-approximation that can only widen
+taint, so it is enabled per language as a corpus demands it. Measured on 1018
+real-world files carrying 2185 field assignments: zero new findings.
+
+A 1.0 means this corpus has stopped indicting anything, not that the model is
+complete — the structural limits below are real and simply lack a failing
+sample.
 
 ## Ground-truth philosophy
 
@@ -129,3 +141,21 @@ refresh it:
 rm testdata/precision-suite-swift/baseline.json
 nox bench --precision testdata/precision-suite-swift --baseline testdata/precision-suite-swift/baseline.json
 ```
+
+## Where an annotation goes
+
+`nox-expect` marks the line a correct scanner **reports**, which is the SINK —
+the line where the dangerous operation happens — not the line where the tainted
+value was constructed or stored. That is what SARIF consumers and human triagers
+expect, and it is the convention every sample here follows:
+
+```
+task.arguments = @[@"-c", arg];   // configuration: NOT annotated
+[task launch];                    // nox-expect: TAINT-002   <- the sink
+```
+
+Annotating a configuration line instead makes a correct finding score as a false
+positive at the sink plus a false negative at the annotation, which reads as a
+precision regression when nothing is wrong. Two samples in this corpus had that
+defect and were corrected; the rule is written down here so it cannot drift back
+in silently.

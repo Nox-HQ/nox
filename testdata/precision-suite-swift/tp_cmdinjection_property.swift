@@ -18,6 +18,6 @@ func runReport() {
     let name = ProcessInfo.processInfo.environment["REPORT"] ?? ""
     let task = Process()
     task.launchPath = "/bin/sh"
-    task.arguments = ["-c", "generate-report \(name)"] // nox-expect: TAINT-002
-    task.launch()
+    task.arguments = ["-c", "generate-report \(name)"]
+    task.launch() // nox-expect: TAINT-002
 }
