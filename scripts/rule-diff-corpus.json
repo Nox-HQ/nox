@@ -3,8 +3,13 @@
     "Real repositories scanned by scripts/rule-diff.sh to detect rule-behaviour",
     "changes between two nox builds. Chosen for VARIETY of the surfaces nox",
     "actually gets pointed at -- Go services, Terraform/Kubernetes manifests,",
-    "Dockerfiles, GitHub Actions workflows, JS/TS dependency trees -- not for",
-    "being clean. A repo with real findings is more useful here than one without.",
+    "Dockerfiles, GitHub Actions workflows, JS/TS dependency trees, and the",
+    "LANGUAGES the taint engine models -- not for being clean. A repo with real",
+    "findings is more useful here than one without.",
+    "",
+    "Language coverage matters as much as artifact variety: the taint engine",
+    "models 15+ languages, and a corpus of only Go/IaC repos cannot show a taint",
+    "regression in any of them. Two entries here exist for that reason alone.",
     "",
     "Pinned by commit sha so the diff reflects a change in NOX, never a change in",
     "the repo. Bumping a sha is a deliberate act: re-read the delta it produces",
@@ -25,6 +30,24 @@
       "url": "https://github.com/klarlabs-studio/warden",
       "sha": "f3af9e3a2f9bc85c2513845368f06049586525d6",
       "why": "Go CLI with signing/provenance code -- dense in crypto and credential-shaped strings, which is where secret rules over-fire"
+    },
+    {
+      "name": "ring",
+      "url": "https://github.com/ring-clojure/ring",
+      "sha": "75914ca942330ae6f8499b0ab9adda4664ad5f1b",
+      "why": "Clojure request/response middleware. Carries 2 standing TAINT-004 findings, so it controls the RECALL direction: if the clojure taint model stops following a flow, those drop to 0 and the diff fires"
+    },
+    {
+      "name": "reitit",
+      "url": "https://github.com/metosin/reitit",
+      "sha": "5d5c965deb3c7c8d64b8dd636432eaa14f0324ec",
+      "why": "Clojure routing, dense in hand-built request maps and threading macros. Baseline is ZERO taint findings, so it controls the PRECISION direction -- it fired 7 false TAINT-004 before the literal-map source fix, and any rise from 0 is that class returning"
+    },
+    {
+      "name": "plug",
+      "url": "https://github.com/elixir-plug/plug",
+      "sha": "2463704245eccacb2c528d7651cf86120b9f0543",
+      "why": "Elixir conn pipeline, dense in the pipe operator and pattern-match destructuring the elixir taint model binds. Baseline is zero taint findings; it exists because no Go/IaC repo exercises elixir at all, and elixir taint changes shipped this session with no real-world control"
     }
   ]
 }
