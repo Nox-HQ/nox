@@ -20,10 +20,10 @@ As committed, `nox bench --precision testdata/precision-suite-shell` scores:
 | Metric | Value |
 | --- | --- |
 | **Precision** | **1.00** (0 false positives) |
-| **Recall** | **0.85** |
-| **F1** | **0.92** |
-| TP / FP / FN | 11 / 0 / 2 |
-| findings-per-issue | 0.85 |
+| **Recall** | **0.87** |
+| **F1** | **0.93** |
+| TP / FP / FN | 13 / 0 / 2 |
+| findings-per-issue | 0.87 |
 
 Per rule: TAINT-002 (cmd injection) 4/4, TAINT-004 (traversal) 2/2, TAINT-005
 (code injection) 3/3, TAINT-006 (SSRF) 2/2. **Precision is 1.00** — every finding
@@ -39,7 +39,9 @@ worse: precision is still 1.000 with zero false positives.
 
 Two entries that used to appear in the limits list — ARRAYS and `${var//a/b}`
 transforms — were checked and are NOT limits; both propagate today. The stale
-claims are corrected rather than left standing.
+claims are corrected, and `tp_array_and_transform.sh` now PINS both so they
+cannot drift back into being described as gaps. A documented gap that does not
+exist is the same defect as an unguarded one, in the other direction.
 
 ## Why shell recall is the hardest of any supported language
 

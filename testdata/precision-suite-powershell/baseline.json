@@ -3,7 +3,7 @@
   "recall": 1,
   "f1": 1,
   "fp": 0,
-  "tp": 7,
+  "tp": 8,
   "fn": 0,
   "findings_per_issue": 1,
   "rules": [
