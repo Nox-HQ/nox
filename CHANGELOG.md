@@ -1409,8 +1409,10 @@ stays at 1.000/1.000 throughout.
 
 ## [1.11.1] - 2026-07-19
 
-> No `v1.11.1` tag was ever pushed, so this version has no compare link and
-> no release artifacts. Its changes shipped to users as part of 1.12.0.
+> Retro-tagged on 2026-07-28. No `v1.11.1` tag was pushed at the time, so the
+> changelog documented a version that could not be fetched; the tag now points
+> at the commit that added this section. No release ARTIFACTS were published
+> for 1.11.1 then and none exist now — its changes reached users inside 1.12.0.
 
 A post-release review found that three of 1.11.0's own promises did not hold.
 Each had full unit-test coverage of the function involved while the defect sat
@@ -2427,7 +2429,8 @@ secrets-pattern noise inside npm bundles.
 [1.13.0]: https://github.com/nox-hq/nox/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/nox-hq/nox/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/nox-hq/nox/compare/v1.12.0...v1.12.1
-[1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.12.0
+[1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
+[1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/nox-hq/nox/compare/v1.9.2...v1.10.0
 [1.9.2]: https://github.com/nox-hq/nox/compare/v1.9.1...v1.9.2
