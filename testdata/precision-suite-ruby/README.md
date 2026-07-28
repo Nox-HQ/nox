@@ -31,7 +31,7 @@ nox bench --precision testdata/precision-suite-ruby --baseline testdata/precisio
 ## What this corpus reveals
 
 As committed, `nox bench --precision testdata/precision-suite-ruby` scores
-**precision 1.00 / recall 0.941 / F1 0.970** (16 TP, 0 FP, 1 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (16 TP, 0 FP, 1 FN). Precision is
 perfect — every finding nox emits on Ruby is a true positive, and every clean
 stressor stays clean. Recall is honestly below 1.0: one genuine flow is missed
 because the Ruby extractor is a **line/statement recognizer**, not a full parser
@@ -84,6 +84,29 @@ arguments are the variables interpolated into that keyword's value. The safe
 forms carry no such keyword, so they synthesize no sink and stay clean (see
 `clean_render.rb`). A constant inline body (`render inline: "<h1>static</h1>"`)
 registers the sink but has no tainted read, so it correctly does not flow.
+
+## Closed gap: cross-method instance variables
+
+`@cmd = params[:cmd]` in one action, `system @cmd` in another, was a documented
+false negative — the model is intraprocedural plus same-file summaries for local
+helper CALLS, and did not join state two methods merely SHARE.
+
+Two things were needed. An `@ivar` assignment now BINDS (the sigil is part of the
+name, not the expression, so it is stripped to the bare name the read side
+already produces). And a binding of a shared name is copied into every other unit
+that reads it, letting the ordinary intra-unit propagation finish the job.
+
+Only syntactically shared names (`@ivar`, `@@cvar`, `$global`) participate — a
+plain local never joins, which is what stops same-named locals in one file
+collapsing into a single variable. The join is flow-insensitive across methods
+(nothing in the file orders them), and the copy is prepended so a method that
+assigns the name locally still overrides it.
+
+Measured on 780 real-world Ruby/Perl files carrying 1558 instance-variable
+assignments: zero new findings.
+
+A 1.0 means this corpus has stopped indicting anything, not that Ruby is solved.
+The limits below are real and simply lack a failing sample.
 
 ## Known gaps (honest false negatives)
 

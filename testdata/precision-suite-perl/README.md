@@ -43,7 +43,7 @@ fake the score**.
 ## What this corpus reveals
 
 As committed, `nox bench --precision testdata/precision-suite-perl` scores
-**precision 1.00 / recall 0.833 / F1 0.909** (10 TP, 0 FP, 2 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (10 TP, 0 FP, 2 FN). Precision is
 perfect — every finding nox emits on Perl is a true positive, and every clean
 stressor stays clean. Recall is honestly below 1.0: two genuine flows are missed
 because the Perl extractor is a line/statement recognizer, not a full parser.
@@ -77,6 +77,31 @@ Every `clean_*.pl` sample stays clean, including the SAFE counterpart of each
 - a constant command (never tainted)
 - placeholder creds in POD + constants, a base64 data-URI nowdoc heredoc, a long
   base64 literal, a public checksum, a generated-code banner
+
+## Closed gaps
+
+Both documented Perl false negatives are closed.
+
+**Hash-element laundering** (`$args{cmd} = $ENV{CMD}` then `system("run $args{cmd}")`).
+An assignment to a container ELEMENT bound no bare name, so the taint was lost at
+the store. The CONTAINER is now bound: a taint on any element taints every read
+of it. Field-insensitive by design — it can only widen taint — and enabled per
+language as a corpus demands it.
+
+**Cross-sub package globals** (`our $PAYLOAD` set in one sub, read by a sink in
+another). The model is intraprocedural plus same-file summaries for local helper
+CALLS; it did not join state two subs merely SHARE. A binding of a shared name is
+now copied into every other unit that reads it. Only names declared with `our`
+participate — a `my` lexical never joins, which is what stops same-named locals
+in one file collapsing into a single variable. The join is flow-insensitive
+across subs (nothing in the file orders them), and the copy is prepended so a sub
+that assigns the name locally still overrides it.
+
+Measured on 780 real-world Ruby/Perl files carrying 1558 instance-variable
+assignments and 545 `our` globals: zero new findings.
+
+A 1.0 means this corpus has stopped indicting anything, not that Perl is solved.
+The limits below are real and simply lack a failing sample.
 
 ## Known gaps (honest false negatives)
 

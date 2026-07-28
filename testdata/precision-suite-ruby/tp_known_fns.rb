@@ -13,13 +13,10 @@ class KnownGapsController
     target.send(action, params[:arg]) # nox-expect: TAINT-005
   end
 
-  # FN — cross-method flow through an instance variable. The source lands in
-  # @cmd in one action and the sink reads @cmd in another. nox's same-file
-  # interprocedural pass tracks LOCAL HELPER CALLS via summaries, not shared
-  # object/instance state, so a taint laundered through an @ivar across two
-  # methods is not joined. This is the documented boundary of the
-  # intraprocedural + local-summary model (identical to the Python/JS limit),
-  # not a Ruby-specific defect.
+  # CAUGHT — cross-method flow through an instance variable. An @ivar assignment
+  # binds, and the binding is joined into every other unit that reads the name.
+  # Only shared-state sigils join; a plain local never does. Kept as the
+  # regression test for the shape.
   def capture
     @cmd = params[:cmd]
   end

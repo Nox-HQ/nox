@@ -21,12 +21,18 @@ func extractRuby(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	// Names assigned through a shared-state sigil (`@ivar`, `@@cvar`, `$global`).
+	// Only these join across units; a plain local never does.
+	shared := map[string]bool{}
 
 	for _, ll := range lines {
 		code := ll.code
 		trimmed := strings.TrimSpace(code)
 		if trimmed == "" {
 			continue
+		}
+		if n := rubyStateSigilName(trimmed); n != "" {
+			shared[n] = true
 		}
 		if name, params, ok := rubyDefHeader(trimmed); ok {
 			u := &unitDraft{funcName: name, params: params}
@@ -62,7 +68,7 @@ func extractRuby(lines []logicalLine) []unitDraft {
 	for _, u := range units {
 		out = append(out, *u)
 	}
-	return out
+	return joinSharedState(out, shared)
 }
 
 // rubyDefHeader returns the method name and its positional parameter names when
