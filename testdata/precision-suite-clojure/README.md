@@ -44,12 +44,20 @@ where the honest false negatives live (see below).
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-clojure` scores
-**precision 1.00 / recall 0.92 / F1 0.96** (12 TP, 0 FP, 1 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (13 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits is a true positive, and every clean stressor
 (parameterized jdbc vector, `Integer/parseInt` coercion, placeholder creds,
 data-URI blob, generated banner) fires nothing — while recall is the lowest of any
-language, held down by ONE honest false negative: the threading-macro form. The
-two higher-order-dispatch gaps (`apply`, `map`) are closed — see below.
+language. The last gap — the threading-macro form — is now closed, alongside the
+two higher-order-dispatch gaps (`apply`, `map`).
+
+A 1.0 means this corpus has stopped indicting anything, not that a Lisp is
+solved without a reader. `clean_threading.clj` was added as the guard: threading
+is THE idiomatic Clojure shape, so modeling it is exactly where an engine risks
+inventing noise, and that sample asserts silence across `->`, `->>`, `some->`
+and `cond->` chains over constants, coerced numbers and pure data transforms.
+It matters more than usual here because no large real-world Clojure corpus was
+available to validate against — the guard is a corpus one.
 
 That gap is **honest, not curated**: the FN samples are annotated as the true
 positives a correct scanner should fire, so the number tells the truth. The way to
@@ -73,7 +81,7 @@ expected to MISS — the Lisp recall gap):
 
 | File (line) | What flows | Rule | nox today | Why it is missed |
 | --- | --- | --- | --- | --- |
-| `tp_threading.clj` — `run-threaded` | `(:params req)` threaded via `->`/`->>` into `shell/sh` | TAINT-002 | **FN** | threading macros reorder the value's argument position; the positional recognizer sees `sh` called with only literal args |
+| `tp_threading.clj` — `run-threaded` | `(:params req)` threaded via `->`/`->>` into `shell/sh` | TAINT-002 | **caught** | the threaded value is modeled as a synthetic binding each stage reads and rebinds |
 | `tp_threading.clj` — `run-apply` | tainted seq spread into `sh` via `apply` | TAINT-002 | **caught** | the statement is re-attributed to the dispatched symbol |
 | `tp_threading.clj` — `fetch-all` | `map client/get` over tainted URLs | TAINT-006 | **caught** | same re-attribution |
 
@@ -89,9 +97,21 @@ Clean stressors (zero annotations — any finding is a false positive):
 
 ## Honest limits — the next indictment when a sample lands
 
-- **Threading macros** (`->`, `->>`, `as->`, `some->`, `cond->`) rewrite argument
-  position at read time; the recognizer does not desugar them, so a value threaded
-  into a sink is missed. This is the dominant recall gap.
+- **Threading macros — CLOSED.** `->`, `->>`, `some->`, `some->>`, `cond->` and
+  `cond->>` rewrite argument position at read time, so a threaded value never
+  appears as a literal argument of the sink. The value is now modeled as a
+  synthetic BINDING that each stage reads and rebinds: the engine taints a
+  variable at its binding and reports a sink that reads one, so carrying the
+  evidence alone was not enough — the value had to have a name. Rebinding per
+  stage means the value keeps flowing AND a sanitizing stage correctly clears it.
+  A nested threading form used as a stage (`(-> x (->> (sh …)))`, how `->` and
+  `->>` are mixed) re-threads the same value.
+
+  Deliberate simplification: this tracks WHAT flows, not into WHICH argument
+  slot. `->` prepends and `->>` appends, but for taint the question is whether
+  the value reaches the sink at all, and both do. A position-sensitive argument
+  note (the parameterized-jdbc vector check) therefore does not apply to a
+  threaded stage. `as->` is not handled: it names its own binding.
 - **Higher-order dispatch — CLOSED for the dispatcher family.** `apply`, `map`,
   `mapv`, `pmap`, `mapcat`, `keep`, `filter`, `remove`, `some`, `every?` and
   `run!` take the function to invoke as their FIRST argument, so a sink reached

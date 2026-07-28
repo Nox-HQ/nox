@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -186,6 +187,8 @@ func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitD
 		walkClojureChildren(code, f, 1, cur, units)
 	case "let", "let*", "binding", "loop", "when-let", "if-let", "when-some", "if-some", "with-open", "with-local-vars", "for", "doseq":
 		clojureLetForm(code, f, cur, units)
+	case "->", "->>", "some->", "some->>", "cond->", "cond->>":
+		clojureThreadingForm(code, f, cur, units)
 	default:
 		// An ordinary call `(callee args…)`.
 		if st, ok := clojureCallStatement(code, f); ok {
@@ -734,4 +737,104 @@ var clojureHOFDispatchers = map[string]bool{
 	"keep": true, "filter": true, "remove": true,
 	"run!": true, "doseq": false, // doseq binds, it does not dispatch
 	"some": true, "every?": true,
+}
+
+// clojureThreadHeads are the threading macros whose stages each receive the
+// value threaded from the previous stage.
+var clojureThreadHeads = map[string]bool{
+	"->": true, "->>": true,
+	"some->": true, "some->>": true,
+	"cond->": true, "cond->>": true,
+}
+
+// clojureThreadingForm models `(-> x (f a) (g b))` — and its `->>` / `some->` /
+// `cond->` variants — by flowing the threaded value's evidence through every
+// stage. A threading macro REWRITES argument position at read time, so a value
+// threaded into a sink never appears as a literal argument of that sink and the
+// flow was invisible to the positional form recognizer.
+//
+// Each stage is emitted as its own call statement carrying the accumulated
+// evidence (reads, source chains) of everything threaded into it, and the
+// carried set then grows by that stage's own reads so the value keeps flowing.
+//
+// A nested threading form appearing AS a stage — `(-> x (->> (sh "sh" "-c")))`,
+// which is how `->` and `->>` are mixed — re-threads the SAME carried value, so
+// its children are all stages with no initial expression of their own.
+//
+// Deliberate simplification: this tracks WHAT flows, not into WHICH argument
+// slot. `->` prepends and `->>` appends, but for taint the question is whether
+// the tainted value reaches the sink at all, and both do. A position-sensitive
+// argument note (the parameterized-jdbc vector check) therefore does not apply
+// to a threaded stage; that costs precision nowhere in the corpus but is the
+// honest limit of the approximation.
+func clojureThreadingForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitDraft) {
+	// The threaded value is modeled as a synthetic BINDING that each stage reads
+	// and rebinds. The engine taints a variable at its binding and reports a sink
+	// that READS a tainted variable, so carrying evidence alone was not enough —
+	// the value has to have a name. The name is per-form so two threading
+	// expressions in one unit cannot alias each other.
+	tmp := "__nox_threaded_" + strconv.Itoa(clojureLine(code, f.start))
+	bind := stmtDraft{line: clojureLine(code, f.start), assigns: tmp, sinkArgs: map[string]sinkArgDraft{}}
+	if len(f.children) > 1 {
+		clojureCollectExpr(code, f.children[1], &bind)
+	}
+	cur.stmts = append(cur.stmts, bind)
+	clojureThreadStages(code, f, 2, tmp, cur, units)
+	// The initial expression may itself contain calls worth reporting on their
+	// own (`(-> (sh cmd) ...)`), so walk it normally too.
+	if len(f.children) > 1 {
+		walkClojureForm(code, f.children[1], cur, units)
+	}
+}
+
+// clojureThreadStages emits a statement per stage in f.children[from:]. Each
+// stage READS the synthetic threaded variable and REBINDS it to its own result,
+// so the value keeps flowing and a sanitizing stage correctly clears the taint.
+func clojureThreadStages(code []byte, f clojureForm, from int, tmp string, cur *unitDraft, units *[]*unitDraft) {
+	for i := from; i < len(f.children); i++ {
+		stage := f.children[i]
+		if stage.delim == '(' && len(stage.children) > 0 &&
+			clojureThreadHeads[clojureAtomText(code, stage.children[0])] {
+			// A nested threading macro re-threads the same value; all of its
+			// children after the head are stages.
+			clojureThreadStages(code, stage, 1, tmp, cur, units)
+			continue
+		}
+		st, ok := clojureStageStatement(code, stage)
+		if !ok {
+			continue
+		}
+		st.reads = appendUnique(st.reads, tmp)
+		// The threaded value arrives as an argument of this stage's callee, so it
+		// counts as a tainted argument for the per-sink danger check.
+		for _, callee := range st.calls {
+			info := st.sinkArgs[callee]
+			info.taintedArgVars = appendUnique(info.taintedArgVars, tmp)
+			info.argCount++
+			st.sinkArgs[callee] = info
+		}
+		// The stage's result becomes the new threaded value.
+		st.assigns = tmp
+		cur.stmts = append(cur.stmts, st)
+	}
+}
+
+// clojureStageStatement builds the statement for one threading stage: a call
+// form `(f a b)`, or a bare symbol `f` which threads as `(f value)`.
+func clojureStageStatement(code []byte, stage clojureForm) (stmtDraft, bool) {
+	if stage.delim == '(' {
+		return clojureCallStatement(code, stage)
+	}
+	if stage.delim != 0 {
+		return stmtDraft{}, false
+	}
+	callee := clojureNormalizeCallee(clojureAtomText(code, stage))
+	if callee == "" || !isClojureCalleeStart(callee[0]) {
+		return stmtDraft{}, false
+	}
+	return stmtDraft{
+		line:     clojureLine(code, stage.start),
+		calls:    []string{callee},
+		sinkArgs: map[string]sinkArgDraft{callee: {}},
+	}, true
 }
