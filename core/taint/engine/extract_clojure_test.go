@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -163,5 +164,61 @@ func TestExtractClojureHOFDispatchKeepsInlineFn(t *testing.T) {
 				t.Errorf("inline fn literal re-attributed as callee %q: %+v", c, st)
 			}
 		}
+	}
+}
+
+// TestExtractClojureThreading: a threading macro rewrites argument position at
+// read time, so a value threaded into a sink never appears as a literal argument
+// of it. The threaded value is modeled as a synthetic binding each stage reads
+// and rebinds — carrying evidence alone was not enough, because the engine
+// taints a variable at its BINDING and reports a sink that READS one.
+func TestExtractClojureThreading(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"thread-first", "(defn f [req]\n  (-> (:params req)\n      (shell/sh)))\n"},
+		{"mixed-first-last", "(defn f [req]\n  (-> (:params req)\n      (->> (shell/sh \"sh\" \"-c\"))))\n"},
+		{"some-arrow", "(defn f [req]\n  (some-> (:params req)\n          (shell/sh)))\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			units := extractUnits(lexctx.LangClojure, []byte(tc.src))
+			u := findUnit(t, units, "f")
+			var sink *stmtDraft
+			for i := range u.stmts {
+				if containsStr(u.stmts[i].calls, "shell/sh") {
+					sink = &u.stmts[i]
+				}
+			}
+			if sink == nil {
+				t.Fatalf("threaded sink not recognized: %+v", u.stmts)
+			}
+			// The stage must READ the synthetic threaded variable, which is what
+			// carries the taint from the initial expression.
+			threaded := false
+			for _, r := range sink.reads {
+				if strings.HasPrefix(r, "__nox_threaded_") {
+					threaded = true
+				}
+			}
+			if !threaded {
+				t.Errorf("sink does not read the threaded value; reads=%v", sink.reads)
+			}
+		})
+	}
+}
+
+// TestExtractClojureThreadingRebinds: each stage rebinds the threaded variable,
+// so the value keeps flowing down the chain AND a sanitizing stage can clear it.
+func TestExtractClojureThreadingRebinds(t *testing.T) {
+	src := "(defn f [req]\n  (-> (:params req)\n      (clojure.string/trim)\n      (shell/sh)))\n"
+	units := extractUnits(lexctx.LangClojure, []byte(src))
+	u := findUnit(t, units, "f")
+	rebinds := 0
+	for _, st := range u.stmts {
+		if strings.HasPrefix(st.assigns, "__nox_threaded_") {
+			rebinds++
+		}
+	}
+	// One initial binding plus one per stage.
+	if rebinds < 3 {
+		t.Errorf("expected the threaded variable to be bound then rebound per stage, got %d: %+v", rebinds, u.stmts)
 	}
 }

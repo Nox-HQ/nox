@@ -1,18 +1,17 @@
 (ns app.threading
-  "Honest false-negative corner: Clojure's threading macros and higher-order
-   functions reorder or indirect the argument position in ways a positional,
-   straight-line FORM recognizer cannot follow. These are REAL vulnerabilities a
-   correct scanner should fire, and they are annotated as such — nox is expected
-   to MISS them (recall gap), which is the honest cost of recognizing a Lisp
-   without a full reader/evaluator. See README.md."
+  "Threading macros and higher-order dispatch reorder or indirect the argument
+   position, so the sink never appears with the tainted value as a literal
+   argument. All three flows here were honest false negatives until the
+   threading and HOF-dispatch models landed; they are kept as the regression
+   tests for those shapes. See README.md, and clean_threading.clj for the
+   companion no-false-positive guard."
   (:require [clojure.java.shell :as shell]
             [clj-http.client :as client]))
 
-;; Thread-first `->` — still an honest FALSE NEGATIVE. The tainted value is
-;; threaded as the FIRST argument of each stage, and the nested `->>` reverses
-;; that position again, so it arrives at `sh` somewhere the positional FORM
-;; recognizer does not track. Closing it needs a real threading-macro desugarer
-;; over the s-expression tree; the HOF re-attribution below does not reach it.
+;; Thread-first `->` with a nested `->>` — CAUGHT. The threaded value is modeled
+;; as a synthetic binding that each stage reads and rebinds, and a nested
+;; threading form used as a stage re-threads that same value. Kept as the
+;; regression test for the mixed `->` / `->>` shape.
 (defn run-threaded [req]
   (-> (:params req)
       (clojure.string/trim)
