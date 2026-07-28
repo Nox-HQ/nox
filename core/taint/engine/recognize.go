@@ -190,6 +190,15 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if isSimpleIdent(left) {
 				return left, right
 			}
+			// An assignment to a member FIELD (`task.arguments = [...]`) binds no
+			// bare name, so the tainted value never associated with the object and
+			// a later bare `task.launch()` carried nothing to match. Bind the
+			// RECEIVER: taint on any field is treated as taint on the object.
+			if receiverTaintLangs[lang] {
+				if root, ok := dottedAssignRoot(left); ok {
+					return root, right
+				}
+			}
 			return "", ""
 		}
 	}
@@ -427,4 +436,27 @@ func suffixKeys(chain string) []string {
 		out = append(out, strings.Join(parts[i:], "."))
 	}
 	return out
+}
+
+var receiverTaintLangs = map[langKind]bool{
+	langSwift: true,
+	langCPP:   true,
+	langDart:  true,
+}
+
+func dottedAssignRoot(left string) (string, bool) {
+	if left == "" || !strings.Contains(left, ".") {
+		return "", false
+	}
+	segs := strings.Split(left, ".")
+	for _, seg := range segs {
+		if !isBareIdent(strings.TrimSpace(seg)) {
+			return "", false
+		}
+	}
+	root := strings.TrimSpace(segs[0])
+	if isKeyword(root) {
+		return "", false
+	}
+	return root, true
 }

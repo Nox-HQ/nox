@@ -3950,6 +3950,13 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "receiver-varies webView.loadHTMLString(tainted, baseURL:)"
+        },
+        {
+          "call": "launch",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "receiver-varies task.launch() over a Process whose arguments/launchPath are tainted (mirrors the objc `launch` entry)"
         }
       ],
       "sanitizers": [
