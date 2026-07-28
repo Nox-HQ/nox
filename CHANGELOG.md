@@ -1409,6 +1409,9 @@ stays at 1.000/1.000 throughout.
 
 ## [1.11.1] - 2026-07-19
 
+> No `v1.11.1` tag was ever pushed, so this version has no compare link and
+> no release artifacts. Its changes shipped to users as part of 1.12.0.
+
 A post-release review found that three of 1.11.0's own promises did not hold.
 Each had full unit-test coverage of the function involved while the defect sat
 at the call site — the same shape as the bug 1.11.0 was written to fix.
@@ -2397,6 +2400,24 @@ secrets-pattern noise inside npm bundles.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
 [Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/nox-hq/nox/compare/v1.24.0...v1.25.0
+[1.24.0]: https://github.com/nox-hq/nox/compare/v1.23.0...v1.24.0
+[1.23.0]: https://github.com/nox-hq/nox/compare/v1.22.1...v1.23.0
+[1.22.1]: https://github.com/nox-hq/nox/compare/v1.22.0...v1.22.1
+[1.22.0]: https://github.com/nox-hq/nox/compare/v1.21.0...v1.22.0
+[1.21.0]: https://github.com/nox-hq/nox/compare/v1.20.0...v1.21.0
+[1.20.0]: https://github.com/nox-hq/nox/compare/v1.19.1...v1.20.0
+[1.19.1]: https://github.com/nox-hq/nox/compare/v1.19.0...v1.19.1
+[1.19.0]: https://github.com/nox-hq/nox/compare/v1.18.0...v1.19.0
+[1.18.0]: https://github.com/nox-hq/nox/compare/v1.17.1...v1.18.0
+[1.17.1]: https://github.com/nox-hq/nox/compare/v1.17.0...v1.17.1
+[1.17.0]: https://github.com/nox-hq/nox/compare/v1.16.3...v1.17.0
+[1.16.3]: https://github.com/nox-hq/nox/compare/v1.16.2...v1.16.3
+[1.16.2]: https://github.com/nox-hq/nox/compare/v1.16.1...v1.16.2
+[1.16.1]: https://github.com/nox-hq/nox/compare/v1.16.0...v1.16.1
+[1.16.0]: https://github.com/nox-hq/nox/compare/v1.15.0...v1.16.0
+[1.15.0]: https://github.com/nox-hq/nox/compare/v1.14.0...v1.15.0
+[1.14.0]: https://github.com/nox-hq/nox/compare/v1.13.6...v1.14.0
 [1.13.6]: https://github.com/nox-hq/nox/compare/v1.13.5...v1.13.6
 [1.13.5]: https://github.com/nox-hq/nox/compare/v1.13.4...v1.13.5
 [1.13.4]: https://github.com/nox-hq/nox/compare/v1.13.3...v1.13.4
@@ -2406,10 +2427,22 @@ secrets-pattern noise inside npm bundles.
 [1.13.0]: https://github.com/nox-hq/nox/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/nox-hq/nox/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/nox-hq/nox/compare/v1.12.0...v1.12.1
-[1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.1...v1.12.0
-[1.11.1]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.11.1
+[1.12.0]: https://github.com/nox-hq/nox/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/nox-hq/nox/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/nox-hq/nox/compare/v1.9.2...v1.10.0
+[1.9.2]: https://github.com/nox-hq/nox/compare/v1.9.1...v1.9.2
+[1.9.1]: https://github.com/nox-hq/nox/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/nox-hq/nox/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/nox-hq/nox/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/nox-hq/nox/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/nox-hq/nox/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/nox-hq/nox/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/nox-hq/nox/compare/v1.4.2...v1.5.0
+[1.4.2]: https://github.com/nox-hq/nox/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/nox-hq/nox/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/nox-hq/nox/compare/v0.11.0...v1.4.0
+[0.11.0]: https://github.com/nox-hq/nox/compare/v0.10.1...v0.11.0
+[0.10.1]: https://github.com/nox-hq/nox/compare/v0.6.0...v0.10.1
 [0.6.0]: https://github.com/nox-hq/nox/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nox-hq/nox/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/nox-hq/nox/compare/v0.4.2...v0.4.3
