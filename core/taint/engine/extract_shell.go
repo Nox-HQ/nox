@@ -21,10 +21,14 @@ import "strings"
 // A declaration builtin that INITIALIZES (`local x="$1"`, `export u="$2"`) is an
 // assignment and is recognized as one; a bare declaration (`local a b`) is not.
 //
-// HONEST LIMITS (by design): word-splitting, globbing, arrays, `${var//a/b}`
-// transforms, arithmetic re-entry, and `xargs`/pipeline-fed commands are
-// constructs a flat, per-line recognizer cannot follow. A miss only weakens recall (a false negative), never
-// correctness — an unrecognized line simply yields no statement. Precision is
+// HONEST LIMITS (by design): word-splitting, globbing, arithmetic re-entry and
+// `xargs`/pipeline-fed commands are constructs a flat, per-line recognizer
+// cannot follow. Arrays and `${var//a/b}` transforms were once listed here and
+// are NOT limits — both propagate today (see tp_known_fns.sh); the claim was
+// stale, and tp_pipeline_fed.sh now pins the one that is real.
+//
+// A miss only weakens recall (a false negative), never correctness — an
+// unrecognized line simply yields no statement. Precision is
 // defended: a properly QUOTED expansion `"$var"` passed to a NON-sink command is
 // naturally clean because that command is not in the catalog, and the actual
 // sinks (`eval`, `sh -c`/`bash -c`, `source`/`.`, `curl`/`wget`) are exactly the

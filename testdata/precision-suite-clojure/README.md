@@ -44,15 +44,21 @@ where the honest false negatives live (see below).
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-clojure` scores
-**precision 1.00 / recall 1.00 / F1 1.00** (13 TP, 0 FP, 0 FN). Precision is
+**precision 1.00 / recall 0.81 / F1 0.90** (13 TP, 0 FP, 3 FN). Precision is
 perfect — every finding nox emits is a true positive, and every clean stressor
 (parameterized jdbc vector, `Integer/parseInt` coercion, placeholder creds,
 data-URI blob, generated banner) fires nothing — while recall is the lowest of any
 language. The last gap — the threading-macro form — is now closed, alongside the
 two higher-order-dispatch gaps (`apply`, `map`).
 
-A 1.0 means this corpus has stopped indicting anything, not that a Lisp is
-solved without a reader. `clean_threading.clj` was added as the guard: threading
+Recall is deliberately BELOW 1.0 again. It reached 1.0 when the threading model
+landed, at which point the corpus could only catch regressions — so
+`tp_hof_construction.clj` was added, pinning three real misses. `apply` and `map`
+DISPATCH a function and are modeled; `partial` and `comp` instead BUILD one, and
+`as->` renames the threaded value, so in all three the sink is a value rather
+than a call head the recognizer tracks. The drop from 1.00 to 0.81 is the corpus
+getting harder, not the engine getting worse: precision is still 1.000 with zero
+false positives. `clean_threading.clj` was added as the guard: threading
 is THE idiomatic Clojure shape, so modeling it is exactly where an engine risks
 inventing noise, and that sample asserts silence across `->`, `->>`, `some->`
 and `cond->` chains over constants, coerced numbers and pure data transforms.

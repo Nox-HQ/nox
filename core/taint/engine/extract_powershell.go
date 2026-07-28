@@ -44,9 +44,10 @@ import "strings"
 //     binding to a cmdlet's pipeline input is a real argument position.
 //
 // Its honest limits (documented in testdata/precision-suite-powershell/README.md):
-// splatting (`@params`) hides arguments inside an untracked hashtable, and
 // method-suffix sinks are matched by name rather than by proving the receiver's
-// .NET type.
+// .NET type. Splatting (`@params`) was once listed here and is NOT a limit: a
+// hashtable assigned from a source is tainted and carries into the splatted
+// call, so `$p = @{Uri = $args[0]}; Invoke-WebRequest @p` is reported.
 func extractPowerShell(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
