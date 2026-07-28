@@ -187,6 +187,12 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langGroovy {
 				left = stripGroovyDeclType(left)
 			}
+			// Ruby's shared-state sigils (`@ivar`, `@@cvar`, `$global`) are part
+			// of the NAME, not the expression. Strip them so the binding target is
+			// the bare name the read side already produces.
+			if lang == langRuby {
+				left = stripRubyStateSigil(left)
+			}
 			if isSimpleIdent(left) {
 				return left, right
 			}
@@ -196,6 +202,14 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			// RECEIVER: taint on any field is treated as taint on the object.
 			if receiverTaintLangs[lang] {
 				if root, ok := dottedAssignRoot(left); ok {
+					return root, right
+				}
+			}
+			// An assignment to a container ELEMENT (`$args{cmd} = $ENV{CMD}`)
+			// binds no bare name, so the taint was lost at the store and the
+			// later read of the element looked clean. Bind the CONTAINER.
+			if containerTaintLangs[lang] {
+				if root, ok := containerAssignRoot(left); ok {
 					return root, right
 				}
 			}
@@ -459,4 +473,83 @@ func dottedAssignRoot(left string) (string, bool) {
 		return "", false
 	}
 	return root, true
+}
+
+// containerTaintLangs are the languages where an assignment to a container
+// ELEMENT is modeled as tainting the whole container. Like receiver taint this
+// is field-INSENSITIVE — a taint on any element taints every read of the
+// container — so it can only widen taint and is enabled per language as a
+// corpus demands it.
+var containerTaintLangs = map[langKind]bool{
+	langPerl: true,
+}
+
+// containerAssignRoot returns the container name of an element-assignment target
+// (`args{cmd}` -> `args`, `list[0]` -> `list`). The subscript must be a single
+// balanced `{...}`/`[...]` that ends the target, so a nested or dotted target
+// yields ok=false rather than a misattributed binding.
+func containerAssignRoot(left string) (string, bool) {
+	i := 0
+	for i < len(left) && isIdentPart(left[i]) {
+		i++
+	}
+	if i == 0 || i >= len(left) {
+		return "", false
+	}
+	open := left[i]
+	if open != '{' && open != '[' {
+		return "", false
+	}
+	closing := byte('}')
+	if open == '[' {
+		closing = ']'
+	}
+	depth := 0
+	for j := i; j < len(left); j++ {
+		switch left[j] {
+		case open:
+			depth++
+		case closing:
+			depth--
+			if depth == 0 {
+				// The subscript must end the target.
+				if j != len(left)-1 {
+					return "", false
+				}
+				root := left[:i]
+				if isKeyword(root) || !isBareIdent(root) {
+					return "", false
+				}
+				return root, true
+			}
+		}
+	}
+	return "", false
+}
+
+// stripRubyStateSigil removes a leading `@@`, `@` or `$` from a Ruby assignment
+// target so `@cmd` binds the name `cmd` — which is what freeIdentifiers already
+// produces on the read side, so the two agree.
+func stripRubyStateSigil(left string) string {
+	switch {
+	case strings.HasPrefix(left, "@@"):
+		return left[2:]
+	case strings.HasPrefix(left, "@"), strings.HasPrefix(left, "$"):
+		return left[1:]
+	}
+	return left
+}
+
+// rubyStateSigilName returns the bare name of a Ruby shared-state assignment
+// target (`@cmd = ...` -> `cmd`), or "" when the line does not assign one.
+func rubyStateSigilName(code string) string {
+	t := strings.TrimLeft(code, " \t")
+	if t == "" || (t[0] != '@' && t[0] != '$') {
+		return ""
+	}
+	lhs, _ := splitAssignment(langRuby, t)
+	if lhs == "" || !isSimpleIdent(lhs) {
+		return ""
+	}
+	return lhs
 }

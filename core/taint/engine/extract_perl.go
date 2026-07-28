@@ -26,10 +26,16 @@ func extractPerl(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	// Package globals declared with `our`. Only these join across subs; a `my`
+	// lexical never does.
+	shared := map[string]bool{}
 
 	for _, raw := range lines {
 		ll := normalizePerlLine(raw)
 		code := strings.TrimSpace(ll.code)
+		for _, n := range perlOurNames(code) {
+			shared[n] = true
+		}
 		if code == "" || isPerlStructuralLine(code) {
 			continue
 		}
@@ -61,7 +67,7 @@ func extractPerl(lines []logicalLine) []unitDraft {
 	for _, u := range units {
 		out = append(out, *u)
 	}
-	return out
+	return joinSharedState(out, shared)
 }
 
 // perlSources is the set of Perl source names that appear as BARE READS after
@@ -307,4 +313,32 @@ func perlSpecialStatement(orig, shaped logicalLine) (stmtDraft, bool) {
 		return stmtDraft{}, false
 	}
 	return st, true
+}
+
+// perlOurNames returns the package-global names declared by an `our` statement:
+// `our $PAYLOAD;` -> [PAYLOAD], `our ($A, $B);` -> [A B]. The `$`/`@`/`%` sigil
+// is already normalized away on the code view, so names are matched bare.
+func perlOurNames(code string) []string {
+	t := strings.TrimLeft(code, " \t")
+	if !strings.HasPrefix(t, "our ") && !strings.HasPrefix(t, "our\t") {
+		return nil
+	}
+	rest := t[3:]
+	var out []string
+	i := 0
+	for i < len(rest) {
+		if !isIdentStart(rest[i]) {
+			i++
+			continue
+		}
+		start := i
+		for i < len(rest) && isIdentPart(rest[i]) {
+			i++
+		}
+		name := rest[start:i]
+		if !isKeyword(name) {
+			out = appendUnique(out, name)
+		}
+	}
+	return out
 }
