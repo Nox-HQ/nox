@@ -246,6 +246,20 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 		}
 
 		token := line[rhsStart:rhsEnd]
+		// A token immediately followed by '(' is a function or method call, not
+		// a value. This matters because ':' is treated as an assignment operator
+		// above, which is correct for YAML/JSON (`api_key: abc…`) but also fires
+		// on a struct-literal field in Go, Rust or Swift:
+		//
+		//	Hook: domain.PrePush.ConfigKey(),
+		//
+		// There the "RHS" is the selector expression `domain.PrePush.ConfigKey`,
+		// which has no value at scan time. A literal secret is never followed by
+		// an open paren, so skipping calls costs no recall.
+		if rhsEnd < len(line) && line[rhsEnd] == '(' {
+			i = rhsEnd
+			continue
+		}
 		if len(token) >= 16 {
 			addFn(rhsStart+1, token) // 1-based column
 		}

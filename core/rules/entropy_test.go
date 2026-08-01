@@ -184,6 +184,47 @@ func TestEntropyMatcher_ColonAssignment(t *testing.T) {
 	}
 }
 
+// A struct-literal field in Go/Rust/Swift uses the same `name: value` shape as
+// YAML, so the colon tokenizer picks up the field's expression as if it were a
+// value. `domain.PrePush.ConfigKey` is a selector expression with no value at
+// scan time — but it is 24 chars of mixed case with dots (so the camelCase
+// guard, which rejects non-alphanumerics, does not catch it) and its entropy is
+// 4.085, over SEC-163's context-boosted 4.0. It was reported as a "high-entropy
+// hex string" despite containing no hex, and because such findings surface as
+// code-scanning review comments it blocked a PR from merging.
+func TestEntropyMatcher_SkipsMethodCallInStructLiteral(t *testing.T) {
+	m := &EntropyMatcher{}
+	rule := Rule{MatcherType: "entropy", Metadata: map[string]string{
+		"entropy_threshold": "4.5", "require_context": "true",
+	}}
+
+	for _, line := range []string{
+		"\t\tHook:          domain.PrePush.ConfigKey(),",
+		"\t\tToken: config.Provider.SecretToken(),",
+		"\t\tkey: obj.Nested.CredentialLookup(),",
+	} {
+		if results := m.Match([]byte(line+"\n"), &rule); len(results) != 0 {
+			t.Errorf("flagged a method call as a secret in %q: %+v", strings.TrimSpace(line), results)
+		}
+	}
+}
+
+// The paren guard must not cost recall: a real secret is never followed by '('.
+func TestEntropyMatcher_CallGuardKeepsRealSecrets(t *testing.T) {
+	m := &EntropyMatcher{}
+	rule := Rule{MatcherType: "entropy"}
+
+	for _, line := range []string{
+		"api_key: aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c",          // colon, unquoted
+		"api_key = aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c",         // equals, unquoted
+		"secret: aK3jR8mZ2pL5nW9xQ4vB7yD1sF6hT0c(notacall)", // paren later, not adjacent
+	} {
+		if results := m.Match([]byte(line+"\n"), &rule); len(results) == 0 {
+			t.Errorf("lost a real secret in %q", line)
+		}
+	}
+}
+
 func TestEntropyMatcher_FatArrowAssignment(t *testing.T) {
 	m := &EntropyMatcher{}
 
