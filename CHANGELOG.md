@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.2] - 2026-08-01
+
+Two false-positive reductions, and a scanner that now admits when it ran less
+than you asked for.
+
+### Fixed
+
+- **An installed plugin no longer goes silently unused** (#403, #434). A plugin
+  contributed findings only if it was also named in `plugins.required`, and
+  nothing recorded the difference — so `nox plugin install nox/taint-analysis`
+  followed by `nox scan .` got part of the plugin's coverage with no indication
+  anything was missing.
+
+  It looks like it worked, which is the dangerous part: the built-in Go taint
+  model still reports TAINT-002 and TAINT-004, so only the plugin's additional
+  TAINT-003 is absent. Reduced coverage was indistinguishable from full
+  coverage.
+
+  Declaration still activates a plugin. What changed is that skipping one is
+  visible — one degradation names the installed plugins that did not run and
+  says how to enable them.
+
+  Running every installed plugin regardless was implemented and measured first.
+  It collapses the precision corpus, 1.0000 to 0.3394 with 72 new false
+  positives from rules belonging to plugins installed for other purposes, so
+  declaration was kept and the silence fixed instead.
+
+- **Entropy rules stop flagging identifier shapes** (#430). SCREAMING_SNAKE_CASE
+  constants in template strings, lowercase dot-chains and template braces are
+  excluded from entropy candidates. Measured on `openai-agents-python`: 77
+  findings removed, none added, of which 64 were Python test function names such
+  as `test_cloudflare_create_uses_client_timeouts` reported as possible secrets.
+  The predicates sit in `isLikelyNotSecret`, so SEC-161, SEC-162 and SEC-446
+  benefit alongside SEC-163.
+
 ## [1.25.1] - 2026-08-01
 
 One false positive, in the rule most likely to be pointed at a Go codebase.
@@ -2442,7 +2477,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.1...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.2...HEAD
+[1.25.2]: https://github.com/nox-hq/nox/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/nox-hq/nox/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/nox-hq/nox/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/nox-hq/nox/compare/v1.23.0...v1.24.0
