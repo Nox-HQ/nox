@@ -246,6 +246,7 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 		}
 
 		token := line[rhsStart:rhsEnd]
+<<<<<<< HEAD
 		// A token immediately followed by '(' is a function or method call, not
 		// a value. This matters because ':' is treated as an assignment operator
 		// above, which is correct for YAML/JSON (`api_key: abc…`) but also fires
@@ -260,6 +261,16 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 			i = rhsEnd
 			continue
 		}
+||||||| parent of 57b788b (fix(rules/entropy): reduce SEC-163 FPs on snake_case identifiers and f-string templates)
+=======
+		// If the token ends immediately before a '(', it is a function call
+		// expression — the return value is not visible in the source. Skip it
+		// to avoid flagging identifiers like ClassName.method_name as secrets.
+		if rhsEnd < len(line) && line[rhsEnd] == '(' {
+			i = rhsEnd + 1
+			continue
+		}
+>>>>>>> 57b788b (fix(rules/entropy): reduce SEC-163 FPs on snake_case identifiers and f-string templates)
 		if len(token) >= 16 {
 			addFn(rhsStart+1, token) // 1-based column
 		}
@@ -366,6 +377,24 @@ func isLikelyNotSecret(s string) bool {
 
 	// All uppercase letters only (likely a constant name like PRODUCTION).
 	if isAllUpperAlpha(s) {
+		return true
+	}
+
+	// SCREAMING_SNAKE_CASE constant names (e.g. DEFAULT_THREAD_ID_KEY).
+	if isScreamingSnakeCase(s) {
+		return true
+	}
+
+	// All-lowercase snake_case or dot-separated attribute access chains
+	// (e.g. resolved_options.run_context_thread_id_key). Real secret tokens
+	// never follow this pattern.
+	if isLowercaseDotChain(s) {
+		return true
+	}
+
+	// Template expressions — contain '{' and '}' (Python f-strings, shell
+	// variable substitutions). Template placeholders are never raw credentials.
+	if containsTemplateBraces(s) {
 		return true
 	}
 
@@ -505,4 +534,63 @@ func isAllUpperAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+// isScreamingSnakeCase returns true if s consists only of uppercase ASCII
+// letters, digits, and underscores with at least one underscore. These are
+// constant names (e.g. DEFAULT_RUN_CONTEXT_THREAD_ID_KEY) and are never
+// credentials.
+func isScreamingSnakeCase(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	hasUnderscore := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_':
+			hasUnderscore = true
+		case c >= 'A' && c <= 'Z':
+			// ok
+		case c >= '0' && c <= '9':
+			// ok
+		default:
+			return false
+		}
+	}
+	return hasUnderscore
+}
+
+// isLowercaseDotChain returns true if s consists only of lowercase ASCII
+// letters, digits, underscores, and dots with at least one underscore. These
+// are snake_case variable names or attribute access chains
+// (e.g. resolved_options.run_context_thread_id_key) and are never credentials.
+func isLowercaseDotChain(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	hasUnderscore := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_':
+			hasUnderscore = true
+		case c == '.':
+			// ok — dot-separated attribute access
+		case c >= 'a' && c <= 'z':
+			// ok
+		case c >= '0' && c <= '9':
+			// ok
+		default:
+			return false
+		}
+	}
+	return hasUnderscore
+}
+
+// containsTemplateBraces returns true if s contains both '{' and '}',
+// indicating a template expression (Python f-strings, shell variable
+// substitution, etc.). Template placeholders are never raw credentials.
+func containsTemplateBraces(s string) bool {
+	return strings.ContainsRune(s, '{') && strings.ContainsRune(s, '}')
 }

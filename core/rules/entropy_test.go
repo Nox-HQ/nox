@@ -643,6 +643,18 @@ func TestIsLikelyNotSecret(t *testing.T) {
 		{"PascalCase identifier", "CalculateTotalAmount", true},
 		{"mostly digits", "12345678901234567890", true},
 		{"all uppercase", "PRODUCTION", true},
+		// SCREAMING_SNAKE_CASE constant names — never credentials.
+		{"screaming snake case", "DEFAULT_RUN_CONTEXT_THREAD_ID_KEY", true},
+		{"screaming snake with digits", "MAX_RETRY_COUNT_3", true},
+		// snake_case attribute access chains — never credentials.
+		{"snake case attr chain", "resolved_options.run_context_thread_id_key", true},
+		{"simple snake case var", "run_context_thread_id", true},
+		// Template expressions (f-strings, shell substitution) — never raw credentials.
+		{"fstring template braces", "{DEFAULT_RUN_CONTEXT_THREAD_ID_KEY}_{suffix}", true},
+		{"shell var substitution", "${MY_SECRET_TOKEN}_value", true},
+		// Real secret tokens must still be detected.
+		{"random token no underscore", "aK3jR8mZ2pL5nW9xQ7vB", false},
+		{"hex-like mixed", "a1B2c3D4e5F6g7H8i9J0", false},
 	}
 
 	for _, tt := range tests {
@@ -848,6 +860,78 @@ func TestIsMostlyDigits(t *testing.T) {
 	}
 }
 
+func TestIsScreamingSnakeCase(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"DEFAULT_RUN_CONTEXT_THREAD_ID_KEY", true},
+		{"MAX_RETRY_COUNT", true},
+		{"MAX_RETRY_COUNT_3", true},
+		{"PRODUCTION", false},   // no underscore
+		{"my_const", false},     // lowercase
+		{"MixedCase", false},    // has lowercase
+		{"A_B", false},    // too short (< 4 chars)
+		{"AB_CD", true},
+		{"", false},
+		{"AB", false}, // too short, no underscore
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := isScreamingSnakeCase(tt.s); got != tt.want {
+				t.Fatalf("isScreamingSnakeCase(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsLowercaseDotChain(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"resolved_options.run_context_thread_id_key", true},
+		{"run_context_thread_id", true},
+		{"some.module.method_name", true},
+		{"MixedCase_something", false},   // has uppercase
+		{"no_dot_and_under", true},       // underscore present, no dot — still matches
+		{"plainword", false},             // no underscore
+		{"SCREAMING_SNAKE", false},       // uppercase
+		{"has+special", false},           // has +
+		{"", false},
+		{"a_b", false}, // too short (< 4 chars; never a candidate anyway)
+		{"some_var", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := isLowercaseDotChain(tt.s); got != tt.want {
+				t.Fatalf("isLowercaseDotChain(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContainsTemplateBraces(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"{DEFAULT_RUN_CONTEXT_THREAD_ID_KEY}_{suffix}", true},
+		{"${MY_SECRET_TOKEN}", true},
+		{"no braces here", false},
+		{"{only open", false},
+		{"only close}", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.s, func(t *testing.T) {
+			if got := containsTemplateBraces(tt.s); got != tt.want {
+				t.Fatalf("containsTemplateBraces(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // EntropyMatcher: false positive regression tests for common patterns
 // ---------------------------------------------------------------------------
@@ -883,6 +967,23 @@ func TestEntropyMatcher_FalsePositiveRegression(t *testing.T) {
 		{
 			name:    "SHA-256 checksum",
 			content: `sha256: abc123def456abc123def456abc123def456abc123def456abc123def456abc1`,
+		},
+		// Regression: openai-agents-python SEC-163 false positives (scan-of-week 2026-08-01)
+		{
+			name:    "SCREAMING_SNAKE constant in fstring template",
+			content: `        return f"{DEFAULT_RUN_CONTEXT_THREAD_ID_KEY}_{suffix}"`,
+		},
+		{
+			name:    "snake_case attribute access as kwarg value",
+			content: `        configured_key=resolved_options.run_context_thread_id_key,`,
+		},
+		{
+			name:    "PascalCase method call as assignment RHS",
+			content: `        approval_key = RunContextWrapper._resolve_approval_key(interruption)`,
+		},
+		{
+			name:    "PascalCase.from_state call as assignment RHS",
+			content: `        inner = BlaxelSandboxSession.from_state(state, sandbox=blaxel_sandbox, token=self._token)`,
 		},
 	}
 
