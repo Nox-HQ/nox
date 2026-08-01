@@ -369,6 +369,24 @@ func isLikelyNotSecret(s string) bool {
 		return true
 	}
 
+	// SCREAMING_SNAKE_CASE constant names (e.g. DEFAULT_THREAD_ID_KEY).
+	if isScreamingSnakeCase(s) {
+		return true
+	}
+
+	// All-lowercase snake_case or dot-separated attribute access chains
+	// (e.g. resolved_options.run_context_thread_id_key). Real secret tokens
+	// never follow this pattern.
+	if isLowercaseDotChain(s) {
+		return true
+	}
+
+	// Template expressions — contain '{' and '}' (Python f-strings, shell
+	// variable substitutions). Template placeholders are never raw credentials.
+	if containsTemplateBraces(s) {
+		return true
+	}
+
 	return false
 }
 
@@ -505,4 +523,63 @@ func isAllUpperAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+// isScreamingSnakeCase returns true if s consists only of uppercase ASCII
+// letters, digits, and underscores with at least one underscore. These are
+// constant names (e.g. DEFAULT_RUN_CONTEXT_THREAD_ID_KEY) and are never
+// credentials.
+func isScreamingSnakeCase(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	hasUnderscore := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_':
+			hasUnderscore = true
+		case c >= 'A' && c <= 'Z':
+			// ok
+		case c >= '0' && c <= '9':
+			// ok
+		default:
+			return false
+		}
+	}
+	return hasUnderscore
+}
+
+// isLowercaseDotChain returns true if s consists only of lowercase ASCII
+// letters, digits, underscores, and dots with at least one underscore. These
+// are snake_case variable names or attribute access chains
+// (e.g. resolved_options.run_context_thread_id_key) and are never credentials.
+func isLowercaseDotChain(s string) bool {
+	if len(s) < 4 {
+		return false
+	}
+	hasUnderscore := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_':
+			hasUnderscore = true
+		case c == '.':
+			// ok — dot-separated attribute access
+		case c >= 'a' && c <= 'z':
+			// ok
+		case c >= '0' && c <= '9':
+			// ok
+		default:
+			return false
+		}
+	}
+	return hasUnderscore
+}
+
+// containsTemplateBraces returns true if s contains both '{' and '}',
+// indicating a template expression (Python f-strings, shell variable
+// substitution, etc.). Template placeholders are never raw credentials.
+func containsTemplateBraces(s string) bool {
+	return strings.ContainsRune(s, '{') && strings.ContainsRune(s, '}')
 }
