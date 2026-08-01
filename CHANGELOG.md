@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-08-01
+
+A shared CI workflow can finally declare the plugin it installs.
+
+### Added
+
+- **`NOX_REQUIRE_PLUGINS`** (#436) adds to `plugins.required`, comma-separated.
+
+  A plugin only contributes findings when it is declared, and declaration lived
+  only in a per-repository `.nox.yaml` — the wrong place for a fleet. A shared
+  workflow installs the same analysis plugin everywhere and pins its version
+  centrally, but could not say the one thing that makes it take effect, so every
+  repository without its own `.nox.yaml` got reduced coverage. 1.25.2 made that
+  visible; this makes it fixable in one place rather than thirty.
+
+  It adds to what the repository declared and collapses duplicates, so setting
+  it fleet-wide can only widen coverage — it can never silently drop a plugin a
+  repository asked for.
+
+  An environment variable rather than a flag because the callers are reusable
+  workflows: a job-level `env:` reaches every `nox` invocation in the job
+  without threading an argument through each call site.
+
 ## [1.25.2] - 2026-08-01
 
 Two false-positive reductions, and a scanner that now admits when it ran less
@@ -2477,7 +2500,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.2...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/nox-hq/nox/compare/v1.25.2...v1.26.0
 [1.25.2]: https://github.com/nox-hq/nox/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/nox-hq/nox/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/nox-hq/nox/compare/v1.24.0...v1.25.0
