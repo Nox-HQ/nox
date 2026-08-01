@@ -441,7 +441,9 @@ func LoadScanConfig(root string) (*ScanConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &ScanConfig{}, nil
+			cfg := &ScanConfig{}
+			applyRequiredPluginsEnv(cfg)
+			return cfg, nil
 		}
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
@@ -451,5 +453,42 @@ func LoadScanConfig(root string) (*ScanConfig, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
+	applyRequiredPluginsEnv(&cfg)
 	return &cfg, nil
+}
+
+// RequirePluginsEnv names the environment variable that adds to
+// plugins.required, comma-separated.
+const RequirePluginsEnv = "NOX_REQUIRE_PLUGINS"
+
+// applyRequiredPluginsEnv merges NOX_REQUIRE_PLUGINS into plugins.required.
+//
+// A plugin only contributes findings when it is declared, and declaration lives
+// in a per-repository .nox.yaml. That is the wrong place for a fleet: a shared
+// CI workflow installs the same analysis plugin for every repository it runs
+// on, pins its version centrally, and then cannot say the one thing that makes
+// it take effect — so every repository without its own .nox.yaml silently gets
+// reduced coverage (#403).
+//
+// This lets the workflow declare it once, in the same file the version is
+// pinned in. It ADDS to whatever the repository declared rather than replacing
+// it: a repo that lists its own plugins keeps them, and duplicates collapse, so
+// setting the variable can only widen coverage.
+func applyRequiredPluginsEnv(cfg *ScanConfig) {
+	raw := strings.TrimSpace(os.Getenv(RequirePluginsEnv))
+	if raw == "" || cfg == nil {
+		return
+	}
+	seen := make(map[string]bool, len(cfg.Plugins.Required))
+	for _, p := range cfg.Plugins.Required {
+		seen[p] = true
+	}
+	for _, name := range strings.Split(raw, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		cfg.Plugins.Required = append(cfg.Plugins.Required, name)
+	}
 }
