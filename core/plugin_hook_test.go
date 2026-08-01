@@ -246,7 +246,7 @@ func TestRunScan_NoHook_NoOp(t *testing.T) {
 	}
 }
 
-func TestRunScan_HookSkippedWhenNoRequired(t *testing.T) {
+func TestRunScan_HookRunsEvenWhenNoRequired(t *testing.T) {
 	dir := t.TempDir() // no .nox.yaml => no plugins.required
 
 	called := false
@@ -258,8 +258,11 @@ func TestRunScan_HookSkippedWhenNoRequired(t *testing.T) {
 	if _, err := RunScan(dir); err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
-	if called {
-		t.Error("hook called despite empty plugins.required")
+	// The hook now runs even with nothing declared: it is what reports that
+	// installed plugins were skipped. It still contributes no findings — the
+	// declaration remains the activation switch (#403).
+	if !called {
+		t.Error("hook not called; installed-but-undeclared plugins would go unreported")
 	}
 }
 

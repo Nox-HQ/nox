@@ -542,14 +542,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
-	// Phase 2c: Run configured analysis plugins (taint, SAST, …) declared in
-	// .nox.yaml plugins.required and merge their findings in BEFORE refinement,
+	// Phase 2c: Run installed analysis plugins (taint, SAST, …) and merge their
+	// findings in BEFORE refinement,
 	// so plugin findings are fingerprinted and baseline-matched like any other.
 	// The hook is nil unless the CLI registered it (avoids a core→plugin import
 	// cycle). Plugin failures are non-fatal — the built-in scan still completes.
 	var pluginEnrichments []findings.Enrichment
 	var pluginGraphs []graph.Graph
-	if ScanPluginHook != nil && len(cfg.Plugins.Required) > 0 {
+	if ScanPluginHook != nil {
 		out, hookErr := ScanPluginHook(ctx, target, cfg.Plugins.Required)
 		if hookErr != nil {
 			slog.WarnContext(ctx, "analysis plugins failed; continuing with built-in findings only", "error", hookErr)
@@ -581,7 +581,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// scan just produced, so they run here, after the built-in analyzers and
 	// the scan-tool plugins but before refinement, so their findings and
 	// enrichments are deduped, suppressed, and policy-gated like any other.
-	if PostScanPluginHook != nil && len(cfg.Plugins.Required) > 0 {
+	if PostScanPluginHook != nil {
 		postResult := &ScanResult{Findings: allFindings, Inventory: inventory, AIInventory: aiInventory}
 		if hookErr := PostScanPluginHook(ctx, postResult, target, cfg.Plugins.Required); hookErr != nil {
 			slog.WarnContext(ctx, "post-scan plugins failed; continuing with findings so far", "error", hookErr)

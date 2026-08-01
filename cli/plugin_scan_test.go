@@ -13,14 +13,27 @@ import (
 // conversion) is covered by plugin/host_test.go and plugin/convert_test.go.
 // These tests cover this package's orchestration branches.
 
-func TestRunScanPlugins_NoRequired_NoOp(t *testing.T) {
+// With nothing declared, no plugin runs — but the scan must SAY so. Returning a
+// silent nil is what let a CI job install a security plugin, get part of its
+// coverage, and report a clean scan with nothing to indicate the difference
+// (#403). No findings are contributed either way; only the silence changes.
+func TestRunScanPlugins_NoRequired_ReportsUndeclaredInstalled(t *testing.T) {
 	out, err := runScanPlugins(context.Background(), t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out != nil {
-		t.Fatalf("expected nil output for empty required, got %+v", out)
+	if out == nil {
+		return // nothing installed on this machine: nothing to report, correctly
 	}
+	if len(out.Findings) != 0 {
+		t.Errorf("no plugin was declared, so none may contribute findings: %+v", out.Findings)
+	}
+	for _, d := range out.Degradations {
+		if strings.Contains(d.Detail, "not listed in plugins.required") {
+			return
+		}
+	}
+	t.Errorf("installed-but-undeclared plugins were not reported: %+v", out.Degradations)
 }
 
 func TestRunPluginBinaries_NoBinaries_NoOp(t *testing.T) {
