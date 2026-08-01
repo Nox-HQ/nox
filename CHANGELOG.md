@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-08-01
+
+One false positive, in the rule most likely to be pointed at a Go codebase.
+
+### Fixed
+
+- **A method call is no longer read as a value by the entropy matcher** (#432).
+  `extractAssignmentRHS` treats `:` as an assignment operator, which is right
+  for YAML and JSON (`api_key: abc…`) but also fires on a struct-literal field
+  in Go, Rust or Swift:
+
+  ```go
+  Hook: domain.PrePush.ConfigKey(),
+  ```
+
+  The "RHS" extracted there is the selector expression
+  `domain.PrePush.ConfigKey`, which has no value at scan time. Three guards each
+  just missed it: `isTokenChar` accepts `.`, so the whole chain is captured;
+  `isCamelOrPascalCase` bails on the first non-alphanumeric, so a *dotted*
+  identifier is never recognized as one; and at 24 characters its Shannon
+  entropy is 4.085, over SEC-163's context-boosted 4.0. The result was reported
+  as a "high-entropy hex string" while containing no hex.
+
+  A token immediately followed by `(` is a call, and a literal secret is never
+  followed by an open paren, so skipping those costs no recall. Measured on two
+  corpora with both binaries built from the same tree: 5 findings removed on
+  one repo and 1 on nox's own, **0 added** on either. Four of the six were
+  `base64.StdEncoding.EncodeToString`.
+
+  Two related problems are deliberately left open rather than folded in. A
+  selector chain with no call parens (`Hook: domain.Config.SomeKey,`) still
+  reaches the entropy check — filtering dotted identifiers generally is riskier
+  than it looks, since a JWT is also dot-separated and its header segment is
+  short enough to pass a naive identifier test. And `hasSecretContext` matches
+  keywords by substring, so `ConfigKeyword` matches on `key`, as `monkey` and
+  `tokenize` would; changing that shifts which lines are eligible at all and
+  wants its own measurement.
+
+- **`git` auto-gc no longer races `t.TempDir` cleanup** (#427), which had been
+  failing releases intermittently rather than failing anything real.
+
 ## [1.25.0] - 2026-07-28
 
 Taint recall across nine languages, and the reason it took this long to notice
@@ -2401,7 +2442,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.25.1...HEAD
+[1.25.1]: https://github.com/nox-hq/nox/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/nox-hq/nox/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/nox-hq/nox/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/nox-hq/nox/compare/v1.22.1...v1.23.0
