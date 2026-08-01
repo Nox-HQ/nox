@@ -868,10 +868,10 @@ func TestIsScreamingSnakeCase(t *testing.T) {
 		{"DEFAULT_RUN_CONTEXT_THREAD_ID_KEY", true},
 		{"MAX_RETRY_COUNT", true},
 		{"MAX_RETRY_COUNT_3", true},
-		{"PRODUCTION", false},   // no underscore
-		{"my_const", false},     // lowercase
-		{"MixedCase", false},    // has lowercase
-		{"A_B", false},    // too short (< 4 chars)
+		{"PRODUCTION", false}, // no underscore
+		{"my_const", false},   // lowercase
+		{"MixedCase", false},  // has lowercase
+		{"A_B", false},        // too short (< 4 chars)
 		{"AB_CD", true},
 		{"", false},
 		{"AB", false}, // too short, no underscore
@@ -893,11 +893,11 @@ func TestIsLowercaseDotChain(t *testing.T) {
 		{"resolved_options.run_context_thread_id_key", true},
 		{"run_context_thread_id", true},
 		{"some.module.method_name", true},
-		{"MixedCase_something", false},   // has uppercase
-		{"no_dot_and_under", true},       // underscore present, no dot — still matches
-		{"plainword", false},             // no underscore
-		{"SCREAMING_SNAKE", false},       // uppercase
-		{"has+special", false},           // has +
+		{"MixedCase_something", false}, // has uppercase
+		{"no_dot_and_under", true},     // underscore present, no dot — still matches
+		{"plainword", false},           // no underscore
+		{"SCREAMING_SNAKE", false},     // uppercase
+		{"has+special", false},         // has +
 		{"", false},
 		{"a_b", false}, // too short (< 4 chars; never a candidate anyway)
 		{"some_var", true},

@@ -246,7 +246,6 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 		}
 
 		token := line[rhsStart:rhsEnd]
-<<<<<<< HEAD
 		// A token immediately followed by '(' is a function or method call, not
 		// a value. This matters because ':' is treated as an assignment operator
 		// above, which is correct for YAML/JSON (`api_key: abc…`) but also fires
@@ -261,16 +260,6 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 			i = rhsEnd
 			continue
 		}
-||||||| parent of 57b788b (fix(rules/entropy): reduce SEC-163 FPs on snake_case identifiers and f-string templates)
-=======
-		// If the token ends immediately before a '(', it is a function call
-		// expression — the return value is not visible in the source. Skip it
-		// to avoid flagging identifiers like ClassName.method_name as secrets.
-		if rhsEnd < len(line) && line[rhsEnd] == '(' {
-			i = rhsEnd + 1
-			continue
-		}
->>>>>>> 57b788b (fix(rules/entropy): reduce SEC-163 FPs on snake_case identifiers and f-string templates)
 		if len(token) >= 16 {
 			addFn(rhsStart+1, token) // 1-based column
 		}
