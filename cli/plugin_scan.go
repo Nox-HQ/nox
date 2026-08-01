@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/degrade"
@@ -33,10 +35,18 @@ type installedPlugin struct {
 	track registry.Track
 }
 
-// installedPluginBinaries resolves each required plugin name to its installed
-// binary path and recorded track. Missing or not-yet-installed plugins are
-// skipped (scan-time auto-install may have been disabled or failed) rather than
-// aborting the scan.
+// installedPluginBinaries resolves the plugins to run: every INSTALLED plugin,
+// plus a degradation for any name in `required` that is not installed or not
+// usable.
+//
+// Installing a plugin is the opt-in. It used to be necessary but not
+// sufficient — a plugin only ran if it was ALSO named in plugins.required — so
+// the natural CI shape (`nox plugin install …` then `nox scan .`) got part of
+// the plugin's coverage and no indication anything was missing. Worse, it
+// looked like it worked: the built-in Go taint model still produced
+// TAINT-002/004, so only the plugin's extra detections (TAINT-003) were absent.
+// `required` now means what its name says — fail if absent — rather than
+// doubling as an activation switch (#403).
 //
 // An empty track — a sideloaded plugin, or one installed before tracks were
 // recorded — is passed through as-is, which the host resolves to the strict
@@ -50,7 +60,46 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 	var binaries []installedPlugin
 	var missing []core.Degradation
 
+	isRequired := make(map[string]bool, len(required))
 	for _, name := range required {
+		isRequired[name] = true
+	}
+
+	// An installed plugin that nothing declared does not run — but it must not
+	// do so silently. Installing a security plugin and getting part of its
+	// coverage is more dangerous than getting none, because the output looks
+	// like it worked: the built-in Go taint model still reports TAINT-002/004,
+	// so only the plugin's extra detections are absent and nothing says so
+	// (#403).
+	//
+	// Running it regardless was tried and measured first. It collapses the
+	// precision corpus — 1.0000 to 0.3394, 72 new false positives — because a
+	// plugin installed for one purpose (risk scoring, remediation) then
+	// contributes its rules to every scan. Declaration stays the activation
+	// switch; what changes is that skipping one is now visible.
+	//
+	// Reported as ONE entry, not one per plugin: a developer machine can carry
+	// twenty installed plugins, and twenty degradations on every scan is noise
+	// that trains people to skip the section the important entries live in.
+	var undeclared []string
+	for i := range st.Plugins {
+		if !isRequired[st.Plugins[i].Name] {
+			undeclared = append(undeclared, st.Plugins[i].Name)
+		}
+	}
+	if len(undeclared) > 0 {
+		sort.Strings(undeclared)
+		missing = append(missing, core.Degradation{
+			Kind: degrade.Plugin,
+			Detail: fmt.Sprintf("%d installed plugin(s) are not listed in plugins.required and did not run: %s",
+				len(undeclared), strings.Join(undeclared, ", ")),
+			Impact: "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
+		})
+	}
+
+	names := required
+
+	for _, name := range names {
 		// A plugin the project REQUIRED and did not get is reported, not
 		// skipped. Silently continuing here meant a CI job listing a security
 		// plugin, failing to install it, and exiting 0 with a clean report —
@@ -110,7 +159,7 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 // Missing plugins are skipped; failures surface as diagnostics and never abort
 // the scan.
 func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target string, required []string) error {
-	if len(required) == 0 || result == nil {
+	if result == nil {
 		return nil
 	}
 
@@ -175,9 +224,6 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 // ran earlier in the scan command); individual plugin failures surface as
 // host diagnostics and never abort the scan.
 func runScanPlugins(ctx context.Context, target string, required []string) (*core.PluginScanOutput, error) {
-	if len(required) == 0 {
-		return nil, nil
-	}
 
 	binaries, missing, err := installedPluginBinaries(required)
 	if err != nil {
