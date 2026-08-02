@@ -211,11 +211,17 @@ features:
         - triage-agent #38 — TRIAGE-002 claimed "missing input validation" while matching only the READ, with no notion of validation being present; TRIAGE-001 matched prose. Added same-line sanitizer recognition and an html/template auto-escape context.
         - api-abuse #28 — API-ABUSE-001 reported the mere existence of an HTTP handler at high/high, firing on 17 of 17 handlers in the corpus. Now requires a sensitive operation in the handler body, confidence lowered to Medium. Its corpus FPs went 17 -> 0.
 
-        CONVERTED (2026-08-02): triage-agent PR #41, shipping as 0.3.0.
+        CONVERTED (2026-08-02) — both enrichment plugins are done and released as 0.3.0.
+
+        threat-enrich PR #37, released v0.3.0. This was the sharpest case: a plugin whose entire purpose is to ENRICH findings was running a regex sweep to re-detect vulnerabilities, purely so it had something of its own to attach metadata to — duplicating core at worse precision AND leaving core's real findings un-enriched, the one job it existed to do. It is now a post-scan tool (`scan` -> `enrich`) keyed on `metadata["cwe"]`, which core already records. The taxonomy table was rewritten around what core actually emits: 60+ CWE entries against the 10 the regex rules could produce, with unmapped CWEs passed over in silence rather than guessed (a wrong OWASP category routes a finding to the wrong owner and looks authoritative doing it). Fixed a mis-categorisation carried over from the old table: XSS (CWE-79) was filed under A07, not A03.
 
         triage-agent is now a post-scan tool — `requires_scan_context: true`, single tool renamed `scan` -> `triage`. It emits enrichments keyed by finding fingerprint and NO findings of its own, so installing it no longer changes a scan's finding count. Priority derives from severity, scanner confidence and whether the code runs in production, replacing the four regex rule families entirely; `guards.go` went with them, since the comment/sanitizer/auto-escape guards existed only to stop the regex sweep firing on prose. Its 12 remaining TRIAGE-002 false positives are structurally gone: the rule that produced them no longer exists.
 
-        STILL TO CONVERT: threat-enrich (the ~10 surviving ENRICH-001/003/004 findings, same shape). api-abuse is a genuine detector rather than an enrichment plugin and should stay a `scan` tool; its FPs were fixed in place (#28) rather than designed away.
+        Both plugins' surviving false positives are structurally gone rather than suppressed: the 12 TRIAGE-002 and ~10 ENRICH-001/003/004 findings came from rule families that no longer exist. Neither plugin emits findings at all now — only enrichments keyed by finding fingerprint — so a scan's finding count no longer depends on whether they are installed.
+
+        NOT CONVERTED, deliberately: api-abuse is a genuine detector rather than an enrichment plugin and should stay a `scan` tool. Its FPs were fixed in place (#28) rather than designed away.
+
+        Re-measure `nox bench --precision` with the 0.3.0 plugins installed before closing this out. The old numbers (0.407, then 0.597 after the guard fixes) measured plugins that emitted findings into the corpus; two of the three no longer do, so the comparison needs redoing rather than assuming.
 
         REMAINING, and why it is architectural rather than another guard:
 
