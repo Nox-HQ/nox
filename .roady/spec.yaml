@@ -211,6 +211,12 @@ features:
         - triage-agent #38 — TRIAGE-002 claimed "missing input validation" while matching only the READ, with no notion of validation being present; TRIAGE-001 matched prose. Added same-line sanitizer recognition and an html/template auto-escape context.
         - api-abuse #28 — API-ABUSE-001 reported the mere existence of an HTTP handler at high/high, firing on 17 of 17 handlers in the corpus. Now requires a sensitive operation in the handler body, confidence lowered to Medium. Its corpus FPs went 17 -> 0.
 
+        CONVERTED (2026-08-02): triage-agent PR #41, shipping as 0.3.0.
+
+        triage-agent is now a post-scan tool — `requires_scan_context: true`, single tool renamed `scan` -> `triage`. It emits enrichments keyed by finding fingerprint and NO findings of its own, so installing it no longer changes a scan's finding count. Priority derives from severity, scanner confidence and whether the code runs in production, replacing the four regex rule families entirely; `guards.go` went with them, since the comment/sanitizer/auto-escape guards existed only to stop the regex sweep firing on prose. Its 12 remaining TRIAGE-002 false positives are structurally gone: the rule that produced them no longer exists.
+
+        STILL TO CONVERT: threat-enrich (the ~10 surviving ENRICH-001/003/004 findings, same shape). api-abuse is a genuine detector rather than an enrichment plugin and should stay a `scan` tool; its FPs were fixed in place (#28) rather than designed away.
+
         REMAINING, and why it is architectural rather than another guard:
 
         All 12 surviving TRIAGE-002 findings are the SOURCE line of a taint flow whose SINK is annotated one line below. 12 of 12 have another rule reporting within three lines; zero are isolated. The rule has 0 TP and 12 FP — precision 0.000. It is not detecting anything; it is re-reporting, one line up, what the taint engine already found. The remaining 10 ENRICH-001/003/004 findings look like the same shape.
