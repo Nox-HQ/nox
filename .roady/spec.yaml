@@ -193,5 +193,33 @@ features:
       title: MCP Rule Precision Hardening
       description: 'Reduce false positives in the new MCP prose rules (MCP-009..014 tool poisoning, MCP-018/019 SSRF), surfaced by dogfooding nox against 17 of the owner''s own MCP repos. The rules currently match defensive code, code comments, capability/permission descriptions, and test boilerplate rather than real tool metadata. Confirmed examples: MCP-018 fires on a repo''s own SSRF blocklist (169.254.169.254 in a deny-list); MCP-014 fires on a test doc-comment ''after the first invocation''; MCP-009/011 fire on anti-injection system prompts and comments describing attacks. Needed: exclude test files (ignoreFilePatterns), avoid matching inside comments, suppress SSRF metadata hits in block/deny contexts, and anchor tool-poisoning prose to actual tool-description/string-literal context instead of free source text. Mirror the existing AI-028 fuzz-corpus FP-reduction approach. This is a gate before publishing any dogfood findings as launch content.'
       requirements: []
+    - id: enrichment-plugins-prioritise-findings-instead-of-re-deriving-them
+      title: Enrichment Plugins Prioritise Findings Instead of Re-Deriving Them
+      description: |-
+        The agent-assistance plugins (triage-agent, threat-enrich) describe themselves as triage and enrichment for findings, but are implemented as `scan` tools with no `requires_scan_context`. Never receiving the findings they exist to prioritise, they re-derive "risky-looking code" from source with line regexes — duplicating the detectors they should be ranking, at far worse precision.
+
+        MEASURED against testdata/precision-suite (nox bench --precision), plugins built from main:
+
+          no plugins                     37 TP,  0 FP, precision 1.000
+          + 3 enrichment plugins         37 TP, 54 FP, precision 0.407
+          + after the FP fixes below     37 TP, 25 FP, precision 0.597
+
+        Recall stayed 1.000 throughout: no true positive was ever lost, only noise added.
+
+        DONE (2026-08-01/02), 29 false positives removed:
+        - threat-enrich #34 — ENRICH-001 matched prose about a dangerous call inside a comment; ENRICH-004 matched the NAME of an assignment (`api_key = "`) without ever inspecting the value, so every documentation placeholder was a hardcoded secret.
+        - triage-agent #38 — TRIAGE-002 claimed "missing input validation" while matching only the READ, with no notion of validation being present; TRIAGE-001 matched prose. Added same-line sanitizer recognition and an html/template auto-escape context.
+        - api-abuse #28 — API-ABUSE-001 reported the mere existence of an HTTP handler at high/high, firing on 17 of 17 handlers in the corpus. Now requires a sensitive operation in the handler body, confidence lowered to Medium. Its corpus FPs went 17 -> 0.
+
+        REMAINING, and why it is architectural rather than another guard:
+
+        All 12 surviving TRIAGE-002 findings are the SOURCE line of a taint flow whose SINK is annotated one line below. 12 of 12 have another rule reporting within three lines; zero are isolated. The rule has 0 TP and 12 FP — precision 0.000. It is not detecting anything; it is re-reporting, one line up, what the taint engine already found. The remaining 10 ENRICH-001/003/004 findings look like the same shape.
+
+        No local signal can distinguish "unvalidated read that matters" from "unvalidated read whose sink is already reported" — that information is not available to a line-based scan plugin. The fix is to give these plugins scan context (`requires_scan_context: true`, the mechanism reachability already uses) so they rank and annotate the findings the core scan produced, instead of emitting their own.
+
+        CONSTRAINT discovered while attempting a scoring change instead — do not repeat it:
+
+        Changing the bench scorer to treat findings from unannotated rules as "unmeasured" rather than false positives was implemented and then abandoned. The corpus asserts COMPLETE ground truth: annotated lines carry the declared issue and every other line is implicitly clean. core/bench/density_test.go pins this directly ("FP on a clean line of an annotated file is noise but not inflation"), and two further tests measure over-firing where several rules pile onto one annotated line. The change would have silenced exactly those. The precision collapse is real, not a measurement artifact, and the corpus is the judge — plugin precision is what has to improve.
+      requirements: []
 constraints: []
 version: 0.1.0
