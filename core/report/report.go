@@ -79,6 +79,9 @@ type Degradation struct {
 type JSONReport struct {
 	Meta     Meta               `json:"meta"`
 	Findings []findings.Finding `json:"findings"`
+	// Enrichments are plugin annotations keyed to a finding's fingerprint.
+	// Omitted when empty so scans without post-scan plugins are unchanged.
+	Enrichments []findings.Enrichment `json:"enrichments,omitempty"`
 }
 
 // JSONReporter produces deterministic JSON output from a FindingSet.
@@ -99,6 +102,11 @@ type JSONReporter struct {
 	// ScanResult.Degradations before Generate so a consumer reading only the
 	// artifact can tell a clean scan from one that could not run.
 	Degradations []Degradation
+	// Enrichments are plugin annotations attached to findings by fingerprint.
+	// Set from ScanResult.Enrichments before Generate. Without this a post-scan
+	// plugin's output never reaches the artifact, which makes a plugin that
+	// annotates rather than detects indistinguishable from one that did not run.
+	Enrichments []findings.Enrichment
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -135,7 +143,8 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			SASTLanguages: r.SASTLanguages,
 			Degradations:  r.Degradations,
 		},
-		Findings: f,
+		Findings:    f,
+		Enrichments: r.Enrichments,
 	}
 
 	return json.MarshalIndent(report, "", "  ")
