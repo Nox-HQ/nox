@@ -630,6 +630,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r.Prioritize = sortFlag == "priority"
 			r.SASTLanguages = result.SASTProfile
 			r.Degradations = degradationsForReport(result.Degradations)
+			r.Enrichments = result.Enrichments
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
