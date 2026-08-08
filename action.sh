@@ -211,6 +211,35 @@ install_nox() {
   echo "Installed nox v${version} to ${install_dir}"
 }
 
+# --- Install required plugins ---
+
+# nox runs only the plugins listed under plugins.required in .nox.yaml.
+# Anything not listed is reported as [degraded] with its findings simply
+# absent, so a scan whose plugins were never installed looks exactly like a
+# scan that found nothing.
+#
+# `nox install` reads that block and installs what it names — idempotent, and
+# a no-op when the project declares no plugins. Without this the action could
+# never satisfy a plugins.required entry, which meant any repository scanning
+# through this action silently lost its plugin coverage: nox-plugin-freshness
+# had to delete its requirement outright, and klarlabs-studio/roady kept
+# hand-rolled install steps rather than adopt the action.
+install_plugins() {
+  local scan_path="$1"
+  local install_dir="${GITHUB_ACTION_PATH:-.}"
+  local root="${scan_path}"
+  [[ -d "${root}" ]] || root="."
+
+  if [[ ! -f "${root}/.nox.yaml" ]]; then
+    return 0
+  fi
+
+  if ! "${install_dir}/nox" install --root "${root}" --quiet; then
+    echo "::error::nox install failed for a plugin named in ${root}/.nox.yaml plugins.required. The scan would run without it and report findings that are absent rather than missing."
+    return 1
+  fi
+}
+
 # --- Run scan ---
 
 run_scan() {
@@ -353,6 +382,7 @@ main() {
   version="$(resolve_version "${INPUT_VERSION}")"
 
   install_nox "${version}" "${platform}"
+  install_plugins "${INPUT_PATH}"
 
   local scan_exit=0
   run_scan "${INPUT_PATH}" "${INPUT_FORMAT}" "${INPUT_OUTPUT}" "${INPUT_FAIL_ON_FINDINGS}" || scan_exit=$?
