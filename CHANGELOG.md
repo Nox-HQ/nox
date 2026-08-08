@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-08-08
+
+The action can install the plugins a project requires.
+
+### Added
+
+- **The GitHub Action installs `plugins.required`** (#447)
+
+  nox runs only the plugins named in `plugins.required`, reporting anything
+  unlisted as `[degraded]` with its findings absent. The action installed nox
+  and scanned, but never installed plugins — so a repository scanning through
+  it could not satisfy a requirement at all. Declaring one made every run
+  degraded; declaring none silently gave up the coverage.
+
+  Both outcomes were reached in practice: `nox-plugin-freshness` deleted its
+  requirement and ran without SAST, and `klarlabs-studio/roady` kept
+  hand-rolled install steps rather than adopt the action.
+
+  `nox install` already did this, so the action now calls it. A repository with
+  no `.nox.yaml` is unaffected, an install failure is fatal rather than a
+  silently reduced scan, and cosign is installed only when the project declares
+  plugins.
+
+### Fixed
+
+- **Plugin enrichments are serialized to `findings.json`** (#441)
+
+### Changed
+
+- Dependency and action-pin remediation (#442, #443, #446)
+
+
 ## [1.26.0] - 2026-08-01
 
 A shared CI workflow can finally declare the plugin it installs.
