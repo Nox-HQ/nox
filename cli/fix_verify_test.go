@@ -51,8 +51,8 @@ func TestVerifyNoRegression(t *testing.T) {
 			action: upgradeAction{pkg: "golang.org/x/crypto", fromVer: "0.54.0", toVersion: "0.56.0", ecosystem: "go"},
 		},
 		{
-			name:  "require block form is parsed",
-			goMod: "module m\n\nrequire (\n\tgolang.org/x/crypto v0.54.0\n\tgolang.org/x/text v0.40.0\n)\n",
+			name:   "require block form is parsed",
+			goMod:  "module m\n\nrequire (\n\tgolang.org/x/crypto v0.54.0\n\tgolang.org/x/text v0.40.0\n)\n",
 			action: upgradeAction{pkg: "golang.org/x/text", fromVer: "0.39.0", toVersion: "0.40.0", ecosystem: "go"},
 		},
 		{
