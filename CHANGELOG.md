@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`nox fix` could downgrade a dependency, reintroducing the vulnerabilities
+  it was meant to remove.** `planUpgrades` used each advisory's `fixed_in`
+  directly as the target and never compared it with the installed version.
+
+  An advisory's `fixed_in` is the version that closed *that* advisory, not the
+  newest safe version, so a package with several advisories yields several
+  fix versions — routinely including ones below what is already installed. The
+  planner emitted one action per advisory and applied them in sequence, so the
+  **last one won by accident**. That is order, not safety.
+
+  felixgeelhaar/specular#51 was this: `golang.org/x/crypto` 0.54.0 → 0.51.0,
+  putting nine critical advisories into a repo that scanned clean — in a PR
+  titled `chore(security): nox remediation`.
+
+  Candidates are now aggregated per package and the **highest** fix chosen,
+  which clears every advisory below it in one move, and three refusals apply:
+
+  - never a version at or below the installed one;
+  - never a prerelease when the install is a stable release
+    (felixgeelhaar/orbita#49 pinned `google.golang.org/grpc` to `v1.81.0-dev`,
+    a real upstream tag but a development marker);
+  - never a non-empty installed version nox cannot order — no ordering means
+    no way to know the move is forward.
+
+  An *absent* installed version is deliberately treated differently from an
+  unparseable one: some scanners do not report it, and refusing there would
+  silently stop remediating whole ecosystems. Absence is not evidence of a
+  downgrade, so only the prerelease guard applies.
+
+  Both incidents are covered by regression tests built from their real
+  advisory sets.
+
 ## [1.27.0] - 2026-08-08
 
 The action can install the plugins a project requires.

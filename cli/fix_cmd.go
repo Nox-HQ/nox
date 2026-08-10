@@ -180,7 +180,25 @@ var supportedFixEcosystems = map[string]string{
 // and major-version-boundary upgrades unless includeMajor is set.
 func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 	var plan upgradePlan
-	seen := map[string]bool{}
+
+	// Collect every candidate fix per package BEFORE deciding anything.
+	//
+	// Advisories are independent and each names the version that closed it, so
+	// one package routinely carries several different fixed_in values. The old
+	// code emitted an action per advisory and applied them in sequence, which
+	// let the last one win by accident — order, not safety. Aggregating first
+	// means one move per package, to the highest fix, which clears every
+	// advisory below it.
+	type candidate struct {
+		ruleID    string
+		from      string
+		ecosystem string
+		action    string
+		fixes     []string
+	}
+	order := []string{}
+	byPkg := map[string]*candidate{}
+
 	for i := range items {
 		f := &items[i]
 		if f.RuleID != "VULN-001" {
@@ -199,24 +217,49 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			plan.skipped++
 			continue
 		}
-		if !includeMajor && isMajorBump(from, fixed) {
+		key := eco + ":" + pkg
+		c, seen := byPkg[key]
+		if !seen {
+			c = &candidate{ruleID: f.RuleID, from: from, ecosystem: eco, action: action}
+			byPkg[key] = c
+			order = append(order, key)
+		}
+		c.fixes = append(c.fixes, fixed)
+	}
+
+	for _, key := range order {
+		c := byPkg[key]
+		pkg := strings.SplitN(key, ":", 2)[1]
+
+		target := bestFix(c.fixes)
+		if target == "" {
+			plan.skipped++
+			continue
+		}
+
+		// Never move a package backwards, sideways, or onto a prerelease from
+		// a stable release. See isUpgrade for the two production incidents
+		// each of those refusals comes from.
+		if !isUpgrade(c.from, target) {
+			plan.skipped++
+			continue
+		}
+
+		if !includeMajor && isMajorBump(c.from, target) {
 			plan.majorSkipped++
 			continue
 		}
-		key := eco + ":" + pkg + "@" + fixed
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+
 		plan.actions = append(plan.actions, upgradeAction{
-			ruleID:    f.RuleID,
+			ruleID:    c.ruleID,
 			pkg:       pkg,
-			fromVer:   from,
-			toVersion: fixed,
-			ecosystem: eco,
-			action:    action,
+			fromVer:   c.from,
+			toVersion: target,
+			ecosystem: c.ecosystem,
+			action:    c.action,
 		})
 	}
+
 	return plan
 }
 
