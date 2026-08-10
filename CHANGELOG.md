@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Unrecognised `.nox.yaml` keys are now reported as a degradation.** A key
+  nox does not understand was silently ignored, so a config could describe a
+  policy that was not in force while the scan reported success.
+
+  Two cases seen in the wild, both accepted without comment:
+
+  - `suppressions:` is not a key nox has. Writing it suppressed nothing and
+    passed — indistinguishable from a scan whose suppressions all applied.
+  - a misspelled `plugins.required` (`reqiured:`) left every plugin
+    undeclared, so none ran and their findings were absent rather than clean.
+
+  Both now print on the same `[degraded]` channel as an undeclared plugin,
+  naming the offending keys and the impact, on stderr and not suppressed by
+  `--quiet`.
+
+  Reported rather than fatal, deliberately: erroring would break every existing
+  config carrying a stray key the moment a fleet upgrades, and a scanner that
+  refuses to run is its own coverage loss. Verified against the real configs in
+  this repo, fortify and statekit — none produce a warning.
+
 ## [1.28.0] - 2026-08-10
 
 Minor rather than patch: `nox fix` now **fails a run it would previously have
