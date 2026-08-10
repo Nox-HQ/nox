@@ -41,6 +41,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Both incidents are covered by regression tests built from their real
   advisory sets.
 
+- **`nox fix` now verifies what actually landed, not just what it planned.**
+  After applying, it re-reads the manifests and fails if any package ended up
+  below where it started.
+
+  Planning correctly is not landing correctly: `go get` resolves against the
+  whole module graph, so a constraint elsewhere can pull a package under the
+  requested version, and a package manager can simply do something other than
+  what was asked. The planner cannot see either.
+
+  Ecosystems whose resolved version nox cannot yet read are reported as
+  **unverified** rather than counted clean — unchecked is not the same as
+  verified, and a guarantee that quietly covers less than it claims is the
+  failure mode this whole change exists to prevent.
+
 ## [1.27.0] - 2026-08-08
 
 The action can install the plugins a project requires.

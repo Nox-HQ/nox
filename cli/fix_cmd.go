@@ -144,6 +144,29 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	if failed > 0 {
 		return 1
 	}
+
+	// Postcondition: re-read the manifests and confirm nothing moved backwards.
+	//
+	// planUpgrades refuses to ASK for a downgrade; this refuses to SHIP one.
+	// Both are needed, because the planner cannot see what the package manager
+	// actually did — `go get` resolves against the whole module graph, and a
+	// constraint elsewhere can land a package below the requested version.
+	//
+	// Failing here is the point. A remediation that lowered a dependency is
+	// worse than no remediation: it arrives titled "chore(security)", which is
+	// exactly what stops a reviewer looking closely.
+	bad, unchecked := verifyNoRegression(manifestRoot, plan.actions)
+	for _, u := range unchecked {
+		fmt.Printf("unverified: %s — nox cannot yet read this ecosystem's resolved version\n", u)
+	}
+	if len(bad) > 0 {
+		for _, r := range bad {
+			fmt.Fprintf(os.Stderr, "error: %s went backwards: %s -> %s\n", r.pkg, r.from, r.actual)
+		}
+		fmt.Fprintln(os.Stderr, "error: refusing to report success — these changes reintroduce whatever was fixed between those versions. Inspect the manifest before committing.")
+		return 1
+	}
+
 	return 0
 }
 
