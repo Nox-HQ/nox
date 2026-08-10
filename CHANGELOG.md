@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-08-10
+
+Minor rather than patch: `nox fix` now **fails a run it would previously have
+reported as successful**, when a remediation lands a package below where it
+started. That is the intended behaviour and the point of the release, but it
+is a behavioural change for anyone scripting `nox fix`.
+
 ### Fixed
 
 - **`nox fix` could downgrade a dependency, reintroducing the vulnerabilities
@@ -54,6 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **unverified** rather than counted clean — unchecked is not the same as
   verified, and a guarantee that quietly covers less than it claims is the
   failure mode this whole change exists to prevent.
+
+### Security
+
+- `brace-expansion` 5.0.8 → 5.0.9, closing a high-severity DoS advisory (#449).
+
+### Changed
+
+- `github.com/openai/openai-go/v3` 3.49.0 → 3.50.0 (#450).
 
 ## [1.27.0] - 2026-08-08
 
