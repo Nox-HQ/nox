@@ -420,8 +420,9 @@ func treeDigest(dir, eco string) (string, bool) {
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(h, "%s:%d:", name, len(body))
-		h.Write(body)
+		// Length-prefixed so two files cannot be confused for one.
+		_, _ = fmt.Fprintf(h, "%s:%d:", name, len(body))
+		_, _ = h.Write(body)
 	}
 	return hex.EncodeToString(h.Sum(nil)), true
 }
@@ -517,7 +518,7 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 //
 // pnpm gets --depth Infinity because most advisories land on transitive
 // dependencies, which a default-depth update does not reach.
-func npmCommand(dir, pkg, version string) (string, []string) {
+func npmCommand(dir, pkg, version string) (tool string, args []string) {
 	target := pkg + "@" + version
 	has := func(name string) bool {
 		_, err := os.Stat(filepath.Join(dir, name))
