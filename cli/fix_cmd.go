@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -142,8 +144,18 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		if dir == "" {
 			continue
 		}
+		before, verifiable := treeDigest(dir, a.ecosystem)
 		if err := applyUpgrade(dir, a); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s (%s) in %s: %v\n", a.pkg, a.ecosystem, describeDir(manifestRoot, dir), err)
+			failed++
+			continue
+		}
+		if after, _ := treeDigest(dir, a.ecosystem); verifiable && after == before {
+			// The finding exists because the installed version is vulnerable,
+			// so an upgrade that rewrote nothing did not fix it, whatever the
+			// tool's exit code said.
+			fmt.Fprintf(os.Stderr, "no change: %s [%s] -> %s in %s — the tool reported success but rewrote nothing; the version is likely held by an override or a parent constraint\n",
+				a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
 			failed++
 			continue
 		}
@@ -162,6 +174,45 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ecoTrees names the files an upgrade in that ecosystem must touch. An
+// ecosystem absent from the map cannot be verified this way (nuget's project
+// files are named after the project), and is taken at the tool's word.
+var ecoTrees = map[string][]string{
+	"go":       {"go.mod", "go.sum"},
+	"npm":      {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"},
+	"pypi":     {"requirements.txt", "pyproject.toml", "poetry.lock", "setup.py", "setup.cfg"},
+	"cargo":    {"Cargo.toml", "Cargo.lock"},
+	"rubygems": {"Gemfile", "Gemfile.lock"},
+	"composer": {"composer.json", "composer.lock"},
+}
+
+// treeDigest fingerprints the manifests an upgrade is supposed to rewrite.
+//
+// Package managers exit 0 without doing anything. pnpm answers "Already up to
+// date" for a transitive dependency held down by a pnpm.overrides entry; npm
+// and bundler have their own versions of the same shrug. nox then printed
+// "applied" for an upgrade that never happened, which is the worst possible
+// report: the operator stops looking and the advisory is still live.
+//
+// The second return value is false when the ecosystem has no fixed file names
+// to watch, in which case the tool's exit code is all there is.
+func treeDigest(dir, eco string) (string, bool) {
+	names, ok := ecoTrees[eco]
+	if !ok {
+		return "", false
+	}
+	h := sha256.New()
+	for _, name := range names {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(h, "%s:%d:", name, len(body))
+		h.Write(body)
+	}
+	return hex.EncodeToString(h.Sum(nil)), true
 }
 
 // commandFor is the command the plan line should claim, which for npm depends

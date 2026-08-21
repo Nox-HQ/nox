@@ -311,3 +311,35 @@ func touchFile(t *testing.T, root, rel string) {
 		t.Fatal(err)
 	}
 }
+
+// A package manager that exits 0 without rewriting anything — pnpm says
+// "Already up to date" for a transitive dependency pinned by pnpm.overrides —
+// used to be reported as "applied". The digest is what tells the difference.
+func TestTreeDigest_MovesWithTheLockfile(t *testing.T) {
+	dir := t.TempDir()
+	touchFile(t, dir, "package.json")
+	touchFile(t, dir, "pnpm-lock.yaml")
+
+	before, ok := treeDigest(dir, "npm")
+	if !ok {
+		t.Fatal("npm reported unverifiable")
+	}
+	if after, _ := treeDigest(dir, "npm"); after != before {
+		t.Error("digest changed without the tree changing")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), []byte("js-yaml@4.3.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := treeDigest(dir, "npm"); after == before {
+		t.Error("digest did not move when the lockfile did")
+	}
+}
+
+// An ecosystem with no fixed file names cannot be checked this way, and must
+// say so rather than silently reporting every upgrade as a no-op.
+func TestTreeDigest_UnknownEcosystemIsUnverifiable(t *testing.T) {
+	if _, ok := treeDigest(t.TempDir(), "nuget"); ok {
+		t.Error("claimed to verify an ecosystem with no known manifests")
+	}
+}
