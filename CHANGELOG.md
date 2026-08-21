@@ -7,6 +7,125 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-08-10
+
+### Added
+
+- **Unrecognised `.nox.yaml` keys are now reported as a degradation.** A key
+  nox does not understand was silently ignored, so a config could describe a
+  policy that was not in force while the scan reported success.
+
+  Two cases seen in the wild, both accepted without comment:
+
+  - `suppressions:` is not a key nox has. Writing it suppressed nothing and
+    passed — indistinguishable from a scan whose suppressions all applied.
+  - a misspelled `plugins.required` (`reqiured:`) left every plugin
+    undeclared, so none ran and their findings were absent rather than clean.
+
+  Both now print on the same `[degraded]` channel as an undeclared plugin,
+  naming the offending keys and the impact, on stderr and not suppressed by
+  `--quiet`.
+
+  Reported rather than fatal, deliberately: erroring would break every existing
+  config carrying a stray key the moment a fleet upgrades, and a scanner that
+  refuses to run is its own coverage loss. Verified against the real configs in
+  this repo, fortify and statekit — none produce a warning.
+
+## [1.28.0] - 2026-08-10
+
+Minor rather than patch: `nox fix` now **fails a run it would previously have
+reported as successful**, when a remediation lands a package below where it
+started. That is the intended behaviour and the point of the release, but it
+is a behavioural change for anyone scripting `nox fix`.
+
+### Fixed
+
+- **`nox fix` could downgrade a dependency, reintroducing the vulnerabilities
+  it was meant to remove.** `planUpgrades` used each advisory's `fixed_in`
+  directly as the target and never compared it with the installed version.
+
+  An advisory's `fixed_in` is the version that closed *that* advisory, not the
+  newest safe version, so a package with several advisories yields several
+  fix versions — routinely including ones below what is already installed. The
+  planner emitted one action per advisory and applied them in sequence, so the
+  **last one won by accident**. That is order, not safety.
+
+  felixgeelhaar/specular#51 was this: `golang.org/x/crypto` 0.54.0 → 0.51.0,
+  putting nine critical advisories into a repo that scanned clean — in a PR
+  titled `chore(security): nox remediation`.
+
+  Candidates are now aggregated per package and the **highest** fix chosen,
+  which clears every advisory below it in one move, and three refusals apply:
+
+  - never a version at or below the installed one;
+  - never a prerelease when the install is a stable release
+    (felixgeelhaar/orbita#49 pinned `google.golang.org/grpc` to `v1.81.0-dev`,
+    a real upstream tag but a development marker);
+  - never a non-empty installed version nox cannot order — no ordering means
+    no way to know the move is forward.
+
+  An *absent* installed version is deliberately treated differently from an
+  unparseable one: some scanners do not report it, and refusing there would
+  silently stop remediating whole ecosystems. Absence is not evidence of a
+  downgrade, so only the prerelease guard applies.
+
+  Both incidents are covered by regression tests built from their real
+  advisory sets.
+
+- **`nox fix` now verifies what actually landed, not just what it planned.**
+  After applying, it re-reads the manifests and fails if any package ended up
+  below where it started.
+
+  Planning correctly is not landing correctly: `go get` resolves against the
+  whole module graph, so a constraint elsewhere can pull a package under the
+  requested version, and a package manager can simply do something other than
+  what was asked. The planner cannot see either.
+
+  Ecosystems whose resolved version nox cannot yet read are reported as
+  **unverified** rather than counted clean — unchecked is not the same as
+  verified, and a guarantee that quietly covers less than it claims is the
+  failure mode this whole change exists to prevent.
+
+### Security
+
+- `brace-expansion` 5.0.8 → 5.0.9, closing a high-severity DoS advisory (#449).
+
+### Changed
+
+- `github.com/openai/openai-go/v3` 3.49.0 → 3.50.0 (#450).
+
+## [1.27.0] - 2026-08-08
+
+The action can install the plugins a project requires.
+
+### Added
+
+- **The GitHub Action installs `plugins.required`** (#447)
+
+  nox runs only the plugins named in `plugins.required`, reporting anything
+  unlisted as `[degraded]` with its findings absent. The action installed nox
+  and scanned, but never installed plugins — so a repository scanning through
+  it could not satisfy a requirement at all. Declaring one made every run
+  degraded; declaring none silently gave up the coverage.
+
+  Both outcomes were reached in practice: `nox-plugin-freshness` deleted its
+  requirement and ran without SAST, and `klarlabs-studio/roady` kept
+  hand-rolled install steps rather than adopt the action.
+
+  `nox install` already did this, so the action now calls it. A repository with
+  no `.nox.yaml` is unaffected, an install failure is fatal rather than a
+  silently reduced scan, and cosign is installed only when the project declares
+  plugins.
+
+### Fixed
+
+- **Plugin enrichments are serialized to `findings.json`** (#441)
+
+### Changed
+
+- Dependency and action-pin remediation (#442, #443, #446)
+
+
 ## [1.26.0] - 2026-08-01
 
 A shared CI workflow can finally declare the plugin it installs.

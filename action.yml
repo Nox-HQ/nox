@@ -84,6 +84,15 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # nox verifies plugin signatures by shelling out to cosign; without it a
+    # signed plugin cannot be promoted past "unverified" and install is refused
+    # under the default community-trust policy. Only needed when the project
+    # declares plugins, so it is skipped for the common case of a repo with no
+    # .nox.yaml — keeping a plain scan as fast as it was.
+    - name: Install cosign (only when the project declares plugins)
+      if: hashFiles(format('{0}/.nox.yaml', inputs.path)) != ''
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
     - name: Run Nox Security Scanner
       id: scan
       shell: bash

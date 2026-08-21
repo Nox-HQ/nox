@@ -173,73 +173,30 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	if failed > 0 {
 		return 1
 	}
-	return 0
-}
 
-// ecoTrees names the files an upgrade in that ecosystem must touch. An
-// ecosystem absent from the map cannot be verified this way (nuget's project
-// files are named after the project), and is taken at the tool's word.
-var ecoTrees = map[string][]string{
-	"go":       {"go.mod", "go.sum"},
-	"npm":      {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"},
-	"pypi":     {"requirements.txt", "pyproject.toml", "poetry.lock", "setup.py", "setup.cfg"},
-	"cargo":    {"Cargo.toml", "Cargo.lock"},
-	"rubygems": {"Gemfile", "Gemfile.lock"},
-	"composer": {"composer.json", "composer.lock"},
-}
-
-// treeDigest fingerprints the manifests an upgrade is supposed to rewrite.
-//
-// Package managers exit 0 without doing anything. pnpm answers "Already up to
-// date" for a transitive dependency held down by a pnpm.overrides entry; npm
-// and bundler have their own versions of the same shrug. nox then printed
-// "applied" for an upgrade that never happened, which is the worst possible
-// report: the operator stops looking and the advisory is still live.
-//
-// The second return value is false when the ecosystem has no fixed file names
-// to watch, in which case the tool's exit code is all there is.
-func treeDigest(dir, eco string) (string, bool) {
-	names, ok := ecoTrees[eco]
-	if !ok {
-		return "", false
+	// Postcondition: re-read the manifests and confirm nothing moved backwards.
+	//
+	// planUpgrades refuses to ASK for a downgrade; this refuses to SHIP one.
+	// Both are needed, because the planner cannot see what the package manager
+	// actually did — `go get` resolves against the whole module graph, and a
+	// constraint elsewhere can land a package below the requested version.
+	//
+	// Failing here is the point. A remediation that lowered a dependency is
+	// worse than no remediation: it arrives titled "chore(security)", which is
+	// exactly what stops a reviewer looking closely.
+	bad, unchecked := verifyNoRegression(manifestRoot, plan.actions)
+	for _, u := range unchecked {
+		fmt.Printf("unverified: %s — nox cannot yet read this ecosystem's resolved version\n", u)
 	}
-	h := sha256.New()
-	for _, name := range names {
-		body, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			continue
+	if len(bad) > 0 {
+		for _, r := range bad {
+			fmt.Fprintf(os.Stderr, "error: %s went backwards: %s -> %s\n", r.pkg, r.from, r.actual)
 		}
-		fmt.Fprintf(h, "%s:%d:", name, len(body))
-		h.Write(body)
+		fmt.Fprintln(os.Stderr, "error: refusing to report success — these changes reintroduce whatever was fixed between those versions. Inspect the manifest before committing.")
+		return 1
 	}
-	return hex.EncodeToString(h.Sum(nil)), true
-}
 
-// commandFor is the command the plan line should claim, which for npm depends
-// on the lockfile rather than on the ecosystem name.
-func commandFor(dir string, a upgradeAction) string {
-	if a.ecosystem == "npm" {
-		name, args := npmCommand(dir, a.pkg, a.toVersion)
-		return name + " " + args[0]
-	}
-	return a.action
-}
-
-// describeDir renders a working directory relative to the root, so the plan
-// reads "in apps/web" rather than repeating an absolute path on every line.
-func describeDir(root, dir string) string {
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return dir
-	}
-	rel, err := filepath.Rel(rootAbs, dir)
-	if err != nil {
-		return dir
-	}
-	if rel == "." {
-		return "."
-	}
-	return rel
+	return 0
 }
 
 type upgradeAction struct {
@@ -280,7 +237,27 @@ var supportedFixEcosystems = map[string]string{
 // and major-version-boundary upgrades unless includeMajor is set.
 func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 	var plan upgradePlan
-	seen := map[string]bool{}
+
+	// Collect every candidate fix per package BEFORE deciding anything.
+	//
+	// Advisories are independent and each names the version that closed it, so
+	// one package routinely carries several different fixed_in values. The old
+	// code emitted an action per advisory and applied them in sequence, which
+	// let the last one win by accident — order, not safety. Aggregating first
+	// means one move per package, to the highest fix, which clears every
+	// advisory below it.
+	type candidate struct {
+		ruleID    string
+		from      string
+		ecosystem string
+		action    string
+		manifest  string
+		pkg       string
+		fixes     []string
+	}
+	order := []string{}
+	byPkg := map[string]*candidate{}
+
 	for i := range items {
 		f := &items[i]
 		if f.RuleID != "VULN-001" {
@@ -299,28 +276,53 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			plan.skipped++
 			continue
 		}
-		if !includeMajor && isMajorBump(from, fixed) {
+		// Keyed by directory as well as package: two workspaces on the same
+		// vulnerable version are two upgrades, and aggregating them into one
+		// leaves the other vulnerable.
+		key := filepath.Dir(f.Location.FilePath) + "|" + eco + ":" + pkg
+		c, seen := byPkg[key]
+		if !seen {
+			c = &candidate{ruleID: f.RuleID, from: from, ecosystem: eco, action: action, manifest: f.Location.FilePath, pkg: pkg}
+			byPkg[key] = c
+			order = append(order, key)
+		}
+		c.fixes = append(c.fixes, fixed)
+	}
+
+	for _, key := range order {
+		c := byPkg[key]
+		pkg := c.pkg
+
+		target := bestFix(c.fixes)
+		if target == "" {
+			plan.skipped++
+			continue
+		}
+
+		// Never move a package backwards, sideways, or onto a prerelease from
+		// a stable release. See isUpgrade for the two production incidents
+		// each of those refusals comes from.
+		if !isUpgrade(c.from, target) {
+			plan.skipped++
+			continue
+		}
+
+		if !includeMajor && isMajorBump(c.from, target) {
 			plan.majorSkipped++
 			continue
 		}
-		// Per directory, not per repository: two workspaces on the same
-		// vulnerable version are two upgrades, and collapsing them leaves
-		// one of them vulnerable.
-		key := filepath.Dir(f.Location.FilePath) + "|" + eco + ":" + pkg + "@" + fixed
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+
 		plan.actions = append(plan.actions, upgradeAction{
-			ruleID:    f.RuleID,
+			ruleID:    c.ruleID,
 			pkg:       pkg,
-			fromVer:   from,
-			toVersion: fixed,
-			ecosystem: eco,
-			action:    action,
-			manifest:  f.Location.FilePath,
+			fromVer:   c.from,
+			toVersion: target,
+			ecosystem: c.ecosystem,
+			action:    c.action,
+			manifest:  c.manifest,
 		})
 	}
+
 	return plan
 }
 
@@ -379,6 +381,76 @@ func workdirFor(root string, a upgradeAction) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no %s in %s — nothing to upgrade there", strings.Join(names, " or "), rel)
+}
+
+// ecoTrees names the files an upgrade in that ecosystem must touch. An
+// ecosystem absent from the map cannot be verified this way (nuget's project
+// files are named after the project), and is taken at the tool's word.
+var ecoTrees = map[string][]string{
+	"go":       {"go.mod", "go.sum"},
+	"npm":      {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"},
+	"pypi":     {"requirements.txt", "pyproject.toml", "poetry.lock", "setup.py", "setup.cfg"},
+	"cargo":    {"Cargo.toml", "Cargo.lock"},
+	"rubygems": {"Gemfile", "Gemfile.lock"},
+	"composer": {"composer.json", "composer.lock"},
+}
+
+// treeDigest fingerprints the manifests an upgrade is supposed to rewrite.
+//
+// Package managers exit 0 without doing anything. pnpm answers "Already up to
+// date" for a transitive dependency held down by a pnpm.overrides entry; npm
+// and bundler have their own versions of the same shrug. nox then printed
+// "applied" for an upgrade that never happened, which is the worst possible
+// report: the operator stops looking and the advisory is still live.
+//
+// verifyNoRegression is the other half of this and not a substitute — it
+// catches a version that moved the wrong way, and only for Go. This catches
+// one that did not move at all, in every ecosystem with fixed file names.
+//
+// The second return value is false when the ecosystem has no such names, in
+// which case the tool's exit code is all there is.
+func treeDigest(dir, eco string) (string, bool) {
+	names, ok := ecoTrees[eco]
+	if !ok {
+		return "", false
+	}
+	h := sha256.New()
+	for _, name := range names {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(h, "%s:%d:", name, len(body))
+		h.Write(body)
+	}
+	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+// commandFor is the command the plan line should claim, which for npm depends
+// on the lockfile rather than on the ecosystem name.
+func commandFor(dir string, a upgradeAction) string {
+	if a.ecosystem == "npm" {
+		name, args := npmCommand(dir, a.pkg, a.toVersion)
+		return name + " " + args[0]
+	}
+	return a.action
+}
+
+// describeDir renders a working directory relative to the root, so the plan
+// reads "in apps/web" rather than repeating an absolute path on every line.
+func describeDir(root, dir string) string {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return dir
+	}
+	rel, err := filepath.Rel(rootAbs, dir)
+	if err != nil {
+		return dir
+	}
+	if rel == "." {
+		return "."
+	}
+	return rel
 }
 
 // isMajorBump returns true when the fix version's leading numeric

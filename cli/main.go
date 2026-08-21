@@ -615,6 +615,21 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
 	}
 
+	// A key nox does not understand is ignored, so .nox.yaml can describe a
+	// policy that is not in force while the scan reports success. `suppressions:`
+	// is not a real key — write it and nox suppresses nothing and passes,
+	// indistinguishable from a scan whose suppressions all applied. Misspell
+	// `plugins.required` and every plugin silently stops being declared.
+	//
+	// Same channel and same reasoning as the degradations above: stderr, and
+	// not suppressed by --quiet, because this says the results describe
+	// something other than what was asked for.
+	if unknown := nox.UnknownConfigKeys(target); len(unknown) > 0 {
+		fmt.Fprintf(os.Stderr, "[degraded] .nox.yaml has %d key(s) nox does not recognise: %s\n",
+			len(unknown), strings.Join(unknown, ", "))
+		fmt.Fprintf(os.Stderr, "  impact: they are ignored, so whatever they were meant to configure is not in effect. Check for a typo against the documented keys.\n")
+	}
+
 	// Generate reports.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
@@ -630,6 +645,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r.Prioritize = sortFlag == "priority"
 			r.SASTLanguages = result.SASTProfile
 			r.Degradations = degradationsForReport(result.Degradations)
+			r.Enrichments = result.Enrichments
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2

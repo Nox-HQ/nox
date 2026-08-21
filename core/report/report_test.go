@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -303,5 +304,67 @@ func TestWriteToFile_ErrorOnInvalidPath(t *testing.T) {
 	err := r.WriteToFile(fs, "/nonexistent/dir/report.json")
 	if err == nil {
 		t.Fatal("expected error writing to invalid path, got nil")
+	}
+}
+
+// Enrichments were populated on ScanResult and then dropped: no reporter
+// serialized them, so a post-scan plugin's entire output was computed and
+// discarded. That made a plugin which annotates rather than detects — the
+// correct shape for triage and threat-intel — indistinguishable from one that
+// never ran, for any consumer reading findings.json.
+func TestJSONReporter_SerializesEnrichments(t *testing.T) {
+	fs := findings.NewFindingSet()
+	r := NewJSONReporter("test")
+	r.Enrichments = []findings.Enrichment{{
+		FindingFingerprint: "abc123",
+		Kind:               "triage",
+		Title:              "Triage: immediate",
+		Body:               "**Priority: immediate**",
+		Metadata:           map[string]string{"priority": "immediate", "rank": "0"},
+		Source:             "nox/triage-agent",
+	}}
+
+	data, err := r.Generate(fs)
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	var got struct {
+		Enrichments []struct {
+			FindingFingerprint string            `json:"finding_fingerprint"`
+			Kind               string            `json:"kind"`
+			Metadata           map[string]string `json:"metadata"`
+			Source             string            `json:"source"`
+		} `json:"enrichments"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Enrichments) != 1 {
+		t.Fatalf("expected the enrichment to reach the artifact, got %d", len(got.Enrichments))
+	}
+	e := got.Enrichments[0]
+	// The fingerprint is the whole link. Without it the annotation cannot be
+	// attached to anything, whatever else survives serialization.
+	if e.FindingFingerprint != "abc123" {
+		t.Errorf("finding_fingerprint = %q, want abc123", e.FindingFingerprint)
+	}
+	if e.Kind != "triage" || e.Source != "nox/triage-agent" {
+		t.Errorf("kind/source lost: %q / %q", e.Kind, e.Source)
+	}
+	if e.Metadata["priority"] != "immediate" {
+		t.Errorf("metadata lost: %v", e.Metadata)
+	}
+}
+
+// A scan with no post-scan plugins must be byte-identical to before, so the
+// key is omitted rather than emitted as null or [].
+func TestJSONReporter_OmitsEnrichmentsWhenEmpty(t *testing.T) {
+	data, err := NewJSONReporter("test").Generate(findings.NewFindingSet())
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if strings.Contains(string(data), "enrichments") {
+		t.Errorf("empty enrichments must be omitted entirely, got:\n%s", data)
 	}
 }
