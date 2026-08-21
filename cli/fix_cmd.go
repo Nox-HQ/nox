@@ -17,9 +17,8 @@ import (
 // upgrade does not cross a major version boundary. Operators bypass the
 // major-bump guard with --include-major.
 //
-// Today this targets the Go ecosystem only (go.mod / go get); npm,
-// PyPI, and Cargo land in follow-up work because each requires
-// ecosystem-specific manifest rewriting.
+// Each upgrade is applied in the directory of the manifest its finding named,
+// which in a monorepo is not the project root.
 func runFix(args []string) int {
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
 	var (
@@ -111,8 +110,20 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		return 0
 	}
 
-	for _, a := range plan.actions {
-		fmt.Printf("plan: %s %s -> %s  (%s)\n", a.action, a.pkg, a.toVersion, a.ruleID)
+	// Resolved before anything is printed, so --dry-run shows the directory
+	// each upgrade would run in — and names the ones that cannot run at all.
+	dirs := make([]string, len(plan.actions))
+	unresolved := 0
+	for i, a := range plan.actions {
+		dir, err := workdirFor(manifestRoot, a)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "skip: %s [%s]: %v\n", a.pkg, a.ecosystem, err)
+			unresolved++
+			continue
+		}
+		dirs[i] = dir
+		fmt.Printf("plan: %s %s -> %s  (%s) in %s\n",
+			commandFor(dir, a), a.pkg, a.toVersion, a.ruleID, describeDir(manifestRoot, dir))
 	}
 	if plan.majorSkipped > 0 {
 		fmt.Printf("note: %d major-bump upgrades skipped (use --include-major to apply)\n", plan.majorSkipped)
@@ -122,22 +133,28 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		return 0
 	}
 
-	failed := 0
-	usedEcos := map[string]bool{}
-	for _, a := range plan.actions {
-		if err := applyUpgrade(manifestRoot, a); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s (%s): %v\n", a.pkg, a.ecosystem, err)
+	failed := unresolved
+	// Keyed by directory as well as ecosystem: a monorepo has one go.mod per
+	// module, and each needs its own tidy.
+	tidied := map[[2]string]bool{}
+	for i, a := range plan.actions {
+		dir := dirs[i]
+		if dir == "" {
+			continue
+		}
+		if err := applyUpgrade(dir, a); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %s (%s) in %s: %v\n", a.pkg, a.ecosystem, describeDir(manifestRoot, dir), err)
 			failed++
 			continue
 		}
-		usedEcos[a.ecosystem] = true
-		fmt.Printf("applied: %s [%s] -> %s\n", a.pkg, a.ecosystem, a.toVersion)
+		tidied[[2]string{dir, a.ecosystem}] = true
+		fmt.Printf("applied: %s [%s] -> %s in %s\n", a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
 	}
 
 	if failed == 0 {
-		for eco := range usedEcos {
-			if err := tidyEco(manifestRoot, eco); err != nil {
-				fmt.Fprintf(os.Stderr, "warn: %s tidy failed: %v\n", eco, err)
+		for key := range tidied {
+			if err := tidyEco(key[0], key[1]); err != nil {
+				fmt.Fprintf(os.Stderr, "warn: %s tidy failed: %v\n", key[1], err)
 			}
 		}
 	}
@@ -147,6 +164,33 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	return 0
 }
 
+// commandFor is the command the plan line should claim, which for npm depends
+// on the lockfile rather than on the ecosystem name.
+func commandFor(dir string, a upgradeAction) string {
+	if a.ecosystem == "npm" {
+		name, args := npmCommand(dir, a.pkg, a.toVersion)
+		return name + " " + args[0]
+	}
+	return a.action
+}
+
+// describeDir renders a working directory relative to the root, so the plan
+// reads "in apps/web" rather than repeating an absolute path on every line.
+func describeDir(root, dir string) string {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return dir
+	}
+	rel, err := filepath.Rel(rootAbs, dir)
+	if err != nil {
+		return dir
+	}
+	if rel == "." {
+		return "."
+	}
+	return rel
+}
+
 type upgradeAction struct {
 	ruleID    string
 	pkg       string
@@ -154,6 +198,11 @@ type upgradeAction struct {
 	toVersion string
 	ecosystem string
 	action    string
+	// manifest is the repo-relative file the finding was reported against
+	// (go.mod, apps/web/pnpm-lock.yaml). It decides where the package
+	// manager runs; without it a monorepo gets upgraded at its root, which
+	// is a directory no dependency lives in.
+	manifest string
 }
 
 type upgradePlan struct {
@@ -203,7 +252,10 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			plan.majorSkipped++
 			continue
 		}
-		key := eco + ":" + pkg + "@" + fixed
+		// Per directory, not per repository: two workspaces on the same
+		// vulnerable version are two upgrades, and collapsing them leaves
+		// one of them vulnerable.
+		key := filepath.Dir(f.Location.FilePath) + "|" + eco + ":" + pkg + "@" + fixed
 		if seen[key] {
 			continue
 		}
@@ -215,9 +267,67 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 			toVersion: fixed,
 			ecosystem: eco,
 			action:    action,
+			manifest:  f.Location.FilePath,
 		})
 	}
 	return plan
+}
+
+// ecoManifests names the file that has to be present for an ecosystem's
+// package manager to be run in a directory. An ecosystem absent from the map
+// is satisfied by the directory existing (nuget's project files are named
+// after the project, so there is nothing fixed to look for).
+var ecoManifests = map[string][]string{
+	"go":       {"go.mod"},
+	"npm":      {"package.json"},
+	"pypi":     {"requirements.txt", "pyproject.toml", "setup.py", "setup.cfg"},
+	"cargo":    {"Cargo.toml"},
+	"rubygems": {"Gemfile"},
+	"composer": {"composer.json"},
+}
+
+// workdirFor says where an upgrade should be applied.
+//
+// The answer is the directory of the manifest the finding named, not the
+// project root. In a monorepo those differ, and the difference is not
+// cosmetic: `npm install` in a directory with no package.json does not fail,
+// it creates one — a phantom root manifest and lockfile that upgrade nothing,
+// while the real dependency in apps/web stays vulnerable and the finding
+// survives the fix that claimed to have applied.
+//
+// So this refuses rather than falling back. A skipped upgrade you can read is
+// worth more than an applied one that landed in the wrong directory.
+func workdirFor(root string, a upgradeAction) (string, error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+
+	dir := rootAbs
+	if a.manifest != "" {
+		dir = filepath.Join(rootAbs, filepath.Dir(a.manifest))
+	}
+
+	// findings.json is an input file. A manifest path that climbs out of the
+	// project would run a package manager somewhere nobody pointed nox at.
+	rel, err := filepath.Rel(rootAbs, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("manifest %q lies outside %s", a.manifest, root)
+	}
+
+	names := ecoManifests[a.ecosystem]
+	if len(names) == 0 {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			return "", fmt.Errorf("no directory %s", rel)
+		}
+		return dir, nil
+	}
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return dir, nil
+		}
+	}
+	return "", fmt.Errorf("no %s in %s — nothing to upgrade there", strings.Join(names, " or "), rel)
 }
 
 // isMajorBump returns true when the fix version's leading numeric
@@ -268,12 +378,41 @@ func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
 	return runIn(manifestRoot, "go", "get", target)
 }
 
-// applyNpmUpgrade runs `npm install pkg@version`. Works against
-// package.json + package-lock.json. Yarn / pnpm projects need to be
-// driven via their own CLI; this targets the npm baseline.
+// applyNpmUpgrade drives whichever package manager the workspace actually
+// uses.
 func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
-	target := a.pkg + "@" + strings.TrimPrefix(a.toVersion, "v")
-	return runIn(manifestRoot, "npm", "install", target)
+	name, args := npmCommand(manifestRoot, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
+	return runIn(manifestRoot, name, args...)
+}
+
+// npmCommand picks the package manager from the lockfile in dir.
+//
+// "npm" is an OSV ecosystem, not a tool: the same ecosystem is served by npm,
+// pnpm, yarn and bun, and they do not share a lockfile. Running `npm install`
+// in a pnpm workspace writes a package-lock.json next to the pnpm-lock.yaml
+// and resolves a tree the workspace will never install from.
+//
+// pnpm gets --depth Infinity because most advisories land on transitive
+// dependencies, which a default-depth update does not reach.
+func npmCommand(dir, pkg, version string) (string, []string) {
+	target := pkg + "@" + version
+	has := func(name string) bool {
+		_, err := os.Stat(filepath.Join(dir, name))
+		return err == nil
+	}
+	switch {
+	case has("pnpm-lock.yaml"):
+		return "pnpm", []string{"update", "--depth", "Infinity", target}
+	case has("yarn.lock"):
+		// Berry renamed the verb and is told apart by its own config file.
+		if has(".yarnrc.yml") {
+			return "yarn", []string{"up", target}
+		}
+		return "yarn", []string{"upgrade", target}
+	case has("bun.lock"), has("bun.lockb"):
+		return "bun", []string{"update", target}
+	}
+	return "npm", []string{"install", target}
 }
 
 // applyPyPIUpgrade runs `pip install --upgrade pkg==version`. Operators
