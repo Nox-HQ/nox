@@ -202,6 +202,28 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Reject an unrecognized severity in a severity override, for the same
+	// reason an unrecognized fail_on is rejected above — and one sharper.
+	//
+	// An override is cast straight to a findings.Severity. A capitalized
+	// "Critical" therefore does not RAISE the rule; it stamps the finding with a
+	// severity nothing can rank, and a finding nox cannot rank used to satisfy
+	// no gate at all. Evaluate now fails closed on that, but the override still
+	// silently fails to do what the operator asked, so reject it at load where
+	// the typo is visible.
+	for ruleID, sev := range cfg.Scan.Rules.SeverityOverride {
+		if !findings.Severity(sev).IsValid() {
+			return nil, fmt.Errorf("loading config: scan.rules.severity_override[%s]: %q is not a severity "+
+				"(want critical, high, medium, low, or info)", ruleID, sev)
+		}
+	}
+	for i, cs := range cfg.Scan.ConditionalSeverity {
+		if !findings.Severity(cs.Severity).IsValid() {
+			return nil, fmt.Errorf("loading config: scan.conditional_severity[%d]: %q is not a severity "+
+				"(want critical, high, medium, low, or info)", i, cs.Severity)
+		}
+	}
+
 	// Stage 1: Discover artifacts.
 	artifacts, err := discoverArtifacts(target, cfg, opts)
 	if err != nil {

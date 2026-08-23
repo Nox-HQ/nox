@@ -107,7 +107,19 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 	// empty budget this is identical to the previous "any new finding at/above
 	// fail_on fails" gate.
 	for sev, n := range findings.CountBySeverity(r.New) {
-		gated := cfg.FailOn == "" || meetsThreshold(sev, cfg.FailOn)
+		// An unrecognised severity is gated unconditionally.
+		//
+		// meetsThreshold refuses to rank a severity it does not know, so
+		// without this branch a finding carrying an undefined severity
+		// satisfied no threshold and slipped EVERY gate — the run exited 0 on
+		// the one finding it could not classify. That is reachable from
+		// configuration, not just the API: a `severity_override` of "Critical"
+		// (capitalised) is cast straight to a Severity, and rather than raising
+		// the rule it made the finding invisible to the gate.
+		//
+		// Fail closed: if nox cannot tell how severe something is, it does not
+		// get to decide the finding is unimportant.
+		gated := cfg.FailOn == "" || !sev.IsValid() || meetsThreshold(sev, cfg.FailOn)
 		if gated && n > cfg.Budget[sev] {
 			r.Pass = false
 			r.ExitCode = 1
