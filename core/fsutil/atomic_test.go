@@ -3,6 +3,7 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -22,8 +23,16 @@ func TestAtomicWriteFile(t *testing.T) {
 		t.Fatalf("content = %q", got)
 	}
 	// Permissions honoured, and no temp file left behind.
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
-		t.Errorf("perm = %v, want 0600", info.Mode().Perm())
+	//
+	// Skipped on Windows, which has no Unix mode bits: Chmod there toggles only
+	// the read-only attribute, so a 0600 request lands as 0666. That is a real
+	// limitation and worth stating rather than asserting around — a store nox
+	// writes with 0600 is NOT owner-only on Windows, and anything that depends
+	// on file permissions for confidentiality must not assume otherwise.
+	if runtime.GOOS != "windows" {
+		if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+			t.Errorf("perm = %v, want 0600", info.Mode().Perm())
+		}
 	}
 	entries, _ := os.ReadDir(filepath.Dir(path))
 	if len(entries) != 1 {

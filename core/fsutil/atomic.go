@@ -3,10 +3,13 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
+	"time"
 )
 
 // AtomicWriteFile writes data to path atomically, creating the parent directory
@@ -57,9 +60,58 @@ func AtomicWriteFile(path string, data []byte, perm fs.FileMode) error {
 		cleanup()
 		return fmt.Errorf("closing temp file: %w", err)
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := renameOverwrite(tmpName, path); err != nil {
 		cleanup()
 		return fmt.Errorf("renaming into place: %w", err)
 	}
 	return nil
+}
+
+// renameRetries and renameRetryDelay bound the wait for a transient Windows
+// sharing violation. Ten attempts over ~50ms is far longer than a concurrent
+// writer holds the target, and short enough that a genuine permission error
+// still surfaces promptly.
+const (
+	renameRetries    = 10
+	renameRetryDelay = 5 * time.Millisecond
+)
+
+// renameOverwrite renames tmp over path, retrying briefly on Windows.
+//
+// On POSIX, rename over an existing file is atomic and cannot fail because a
+// reader has it open, so the first attempt always succeeds and the loop costs
+// nothing. Windows maps rename to MoveFileEx, which fails with a sharing
+// violation while any other handle to the destination is open — so two
+// goroutines writing the same store raced and one returned "Access is denied".
+//
+// That made AtomicWriteFile, which backs the baseline, cache, MCP pin and drift
+// stores, unreliable under concurrency on Windows only: the very property the
+// unique temp names were introduced to guarantee. The contention is transient,
+// so a bounded retry is the fix; a failure that persists past it is real and is
+// returned.
+func renameOverwrite(tmp, path string) error {
+	var err error
+	for attempt := 0; attempt < renameRetries; attempt++ {
+		if err = os.Rename(tmp, path); err == nil {
+			return nil
+		}
+		if !errors.Is(err, fs.ErrPermission) && !isSharingViolation(err) {
+			return err
+		}
+		time.Sleep(renameRetryDelay)
+	}
+	return err
+}
+
+// isSharingViolation reports whether err is Windows' "the process cannot access
+// the file because it is being used by another process", which surfaces as a
+// plain syscall errno rather than one of the fs sentinel errors.
+func isSharingViolation(err error) bool {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	// 5 = ERROR_ACCESS_DENIED, 32 = ERROR_SHARING_VIOLATION. Named numerically
+	// because the constants live in the windows-only syscall package.
+	return errno == 5 || errno == 32
 }
