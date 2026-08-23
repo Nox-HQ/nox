@@ -58,7 +58,13 @@ func installedVersion(manifestRoot string, a upgradeAction) (string, bool) {
 		// until each is parsed, they are reported as unchecked.
 		return "", false
 	}
-	return goModVersion(filepath.Join(manifestRoot, "go.mod"), a.pkg)
+	// The finding's own module, not the project root: a monorepo has a go.mod
+	// per module, and reading the wrong one reports every package unchecked.
+	dir, err := workdirFor(manifestRoot, a)
+	if err != nil {
+		return "", false
+	}
+	return goModVersion(filepath.Join(dir, "go.mod"), a.pkg)
 }
 
 // goModVersion finds a module's version in a go.mod require line.

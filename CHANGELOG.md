@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-08-22
+
+Two fixes about the same failure mode: a remediation that reports success
+without having remediated anything.
+
+### Fixed
+
+- **`nox fix` applies each upgrade in the directory of the manifest its finding
+  named.** It ran every package manager in `--root`, which in a monorepo is a
+  directory no dependency lives in — and npm does not fail there, it *creates* a
+  `package.json` and a lockfile. The run printed `applied`, a phantom root
+  manifest got committed, and the real dependency stayed vulnerable on the next
+  scan. Findings already carry their manifest path, so it is now used: no
+  manifest for that ecosystem in that directory means the upgrade is refused and
+  counted, rather than silently retargeted at the root. A manifest path that
+  climbs out of the project is refused outright. Dedup is per directory, because
+  two workspaces on the same vulnerable version are two upgrades.
+
+  The npm *ecosystem* is four package managers, so the tool now comes from the
+  lockfile — npm, pnpm, yarn (classic and berry), bun. `npm install` in a pnpm
+  workspace wrote a second lockfile and resolved a tree nothing installs from.
+  pnpm gets `--depth Infinity`, because most advisories land on transitive
+  dependencies.
+
+- **An upgrade that rewrote nothing is no longer reported as `applied`.**
+  Package managers exit 0 without doing anything: pnpm answers "Already up to
+  date" for a transitive dependency held down by a `pnpm.overrides` entry. nox
+  printed `applied` over an unchanged lockfile, which is the worst possible
+  report — the operator stops looking while the advisory stays live. The
+  manifests are fingerprinted around each apply; an upgrade that moved nothing
+  is reported as `no change`, with the likely cause, and counted as a failure.
+
+- **A failing gate names the finding that failed it** (#463).
+
+Found by running `nox fix` across a fleet of monorepos: 12 of 16 repositories
+carried critical or high advisories, 8 of them in manifests a root-level run
+could never have reached.
+
 ## [1.29.0] - 2026-08-10
 
 ### Added

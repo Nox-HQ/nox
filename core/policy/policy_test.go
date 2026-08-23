@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -239,4 +240,82 @@ func TestMeetsThreshold(t *testing.T) {
 			t.Errorf("meetsThreshold(%s, %s) = %v, want %v", tt.severity, tt.threshold, got, tt.want)
 		}
 	}
+}
+
+// at builds a finding with a location, so the summary has something to name.
+func at(sev findings.Severity, rule, file string, line int) findings.Finding {
+	return findings.Finding{
+		RuleID:   rule,
+		Severity: sev,
+		Status:   findings.StatusNew,
+		Location: findings.Location{FilePath: file, StartLine: line},
+	}
+}
+
+func TestSummaryNamesWhatFailedTheGate(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	// The shape that caused the confusion: one critical hidden among a crowd
+	// of findings that gate nothing.
+	all := append(newN(findings.SeverityLow, 70),
+		at(findings.SeverityCritical, "SEC-073", "scripts/test-integration.sh", 88))
+
+	r := Evaluate(cfg, all)
+
+	if r.Pass {
+		t.Fatalf("a new critical did not fail the gate: %s", r.Summary)
+	}
+	for _, want := range []string{"SEC-073", "scripts/test-integration.sh:88", "critical"} {
+		if !contains(r.Summary, want) {
+			t.Errorf("Summary = %q, want it to mention %q", r.Summary, want)
+		}
+	}
+}
+
+func TestSummaryDoesNotNameFindingsThatGateNothing(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	all := append(newN(findings.SeverityLow, 5),
+		at(findings.SeverityHigh, "SEC-100", "internal/a.go", 3))
+
+	r := Evaluate(cfg, all)
+
+	// The low findings are the noise that made the old message misleading;
+	// naming them would reproduce the problem in a longer form.
+	if contains(r.Summary, "SEC-001") {
+		t.Errorf("Summary = %q, want only the gating finding named", r.Summary)
+	}
+}
+
+func TestManyGatingFindingsAreTruncated(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+	var all []findings.Finding
+	for i := range 10 {
+		all = append(all, at(findings.SeverityHigh, "SEC-200", "internal/a.go", i+1))
+	}
+
+	r := Evaluate(cfg, all)
+
+	// A wall of findings pushes the summary off the top of a CI log as surely
+	// as saying nothing does.
+	if !contains(r.Summary, "and 7 more") {
+		t.Errorf("Summary = %q, want the tail summarised", r.Summary)
+	}
+}
+
+func TestAPassingSummaryIsUnchanged(t *testing.T) {
+	cfg := Config{FailOn: findings.SeverityHigh}
+
+	r := Evaluate(cfg, newN(findings.SeverityLow, 77))
+
+	if !r.Pass {
+		t.Fatalf("low findings failed a high gate: %s", r.Summary)
+	}
+	// Nothing failed, so there is nothing to name — and a pass should not grow
+	// a dash and a list.
+	if contains(r.Summary, "—") {
+		t.Errorf("Summary = %q, want the passing form untouched", r.Summary)
+	}
+}
+
+func contains(haystack, needle string) bool {
+	return len(haystack) >= len(needle) && strings.Contains(haystack, needle)
 }
