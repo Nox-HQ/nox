@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"github.com/nox-hq/nox/core/attack"
@@ -45,49 +44,15 @@ type attackPlanInput struct {
 	Path string `json:"path,omitempty"`
 }
 
-// attackHypothesisOutput is one exploit hypothesis, flattened for an agent.
-type attackHypothesisOutput struct {
-	ID string `json:"id"`
-	// ScenarioID names the attack scenario, e.g. PI-DIRECT.
-	ScenarioID string `json:"scenario_id"`
-	// Objective is the security invariant the attack would violate.
-	Objective string `json:"objective"`
-	// Rationale is why nox believes this attack is worth attempting. It is the
-	// field that makes a plan reviewable rather than a list of assertions.
-	Rationale string `json:"rationale"`
-	// EntryPoint is where attacker-controlled data enters.
-	EntryPoint string `json:"entry_point,omitempty"`
-	// Path is the attack path, node by node.
-	Path []string `json:"path,omitempty"`
-	// FindingFingerprints links the hypothesis back to the static findings that
-	// grounded it, so an agent can cross-reference with list_findings.
-	FindingFingerprints []string `json:"finding_fingerprints,omitempty"`
-	// Exploitability is always PLAUSIBLE here: a plan constructs attack paths
-	// and executes nothing, so nothing has been demonstrated.
-	Exploitability string `json:"exploitability"`
-}
-
-// attackSkipOutput reports a rule no V1 scenario covers, aggregated by rule.
-type attackSkipOutput struct {
-	RuleID string `json:"rule_id"`
-	Count  int    `json:"count"`
-	Reason string `json:"reason"`
-}
-
-// attackPlanOutput is the response of the attack_plan tool.
+// attackPlanOutput is the response of the attack_plan tool. It embeds the shared
+// attack.PlanView so the MCP tool and the CLI project a plan through identical
+// logic — the hypotheses, their PLAUSIBLE status, the path rendering, and the
+// skip aggregation all come from the domain, not from a second copy here.
 type attackPlanOutput struct {
 	// Note states plainly that nothing was executed.
 	Note string `json:"note"`
-	// Root is the workspace the plan was built for.
-	Root string `json:"root"`
-	// Hypotheses are the exploit hypotheses, sorted deterministically.
-	Hypotheses []attackHypothesisOutput `json:"hypotheses"`
-	// Assets and Boundaries count what the plan modelled.
-	Assets     int `json:"assets"`
-	Boundaries int `json:"trust_boundaries"`
-	// NotEligible lists rules no scenario maps, so the coverage gap is visible
-	// rather than implied by absence.
-	NotEligible []attackSkipOutput `json:"not_eligible,omitempty"`
+	// PlanView is the shared, presentation-neutral projection of the plan.
+	attack.PlanView
 	// HowToExecute is the CLI invocation an operator runs to actually attempt
 	// these hypotheses. It is guidance for a human, not something the agent can
 	// or should run on their behalf.
@@ -126,70 +91,9 @@ func (s *Server) handleAttackPlan(_ context.Context, input attackPlanInput) (mcp
 	}
 
 	out := attackPlanOutput{
-		Note: "Plan only. Nothing was executed and no traffic was sent. " +
-			"Every hypothesis is PLAUSIBLE — a credible attack path that has NOT been demonstrated.",
-		Root:         plan.Root,
-		Assets:       len(plan.Assets),
-		Boundaries:   len(plan.Boundaries),
-		Hypotheses:   []attackHypothesisOutput{},
-		HowToExecute: "nox attack run --target <url> --route <path> --fields <list> --profile sandbox --authorize",
+		Note:         attack.PlanOnlyNote,
+		PlanView:     attack.NewPlanView(plan),
+		HowToExecute: attack.PlanExecuteHint,
 	}
-
-	for i := range plan.Hypotheses {
-		h := plan.Hypotheses[i]
-		steps := make([]string, 0, len(h.Path))
-		for _, st := range h.Path {
-			label := st.Label
-			if label == "" {
-				label = st.ID
-			}
-			steps = append(steps, label)
-		}
-		out.Hypotheses = append(out.Hypotheses, attackHypothesisOutput{
-			ID:                  h.ID,
-			ScenarioID:          h.ScenarioID,
-			Objective:           h.Objective,
-			Rationale:           h.Rationale,
-			EntryPoint:          h.EntryPoint,
-			Path:                steps,
-			FindingFingerprints: h.FindingFingerprints,
-			Exploitability:      "PLAUSIBLE",
-		})
-	}
-
-	out.NotEligible = aggregateSkips(plan.Skipped)
 	return structured(out)
-}
-
-// aggregateSkips groups skip notes by rule id. A scan of a real repository
-// skips hundreds of findings; one row per finding would bury the hypotheses
-// that matter, while the per-rule count still shows how much of the scan
-// dynamic validation does not reach.
-func aggregateSkips(skipped []attack.SkipNote) []attackSkipOutput {
-	if len(skipped) == 0 {
-		return nil
-	}
-	counts := map[string]int{}
-	reasons := map[string]string{}
-	for _, sk := range skipped {
-		counts[sk.RuleID]++
-		reasons[sk.RuleID] = sk.Reason
-	}
-	out := make([]attackSkipOutput, 0, len(counts))
-	for id, n := range counts {
-		out = append(out, attackSkipOutput{RuleID: id, Count: n, Reason: reasons[id]})
-	}
-	sortSkips(out)
-	return out
-}
-
-// sortSkips orders skip rows most-skipped first, then by rule id, so repeated
-// calls return the same document.
-func sortSkips(rows []attackSkipOutput) {
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Count != rows[j].Count {
-			return rows[i].Count > rows[j].Count
-		}
-		return rows[i].RuleID < rows[j].RuleID
-	})
 }

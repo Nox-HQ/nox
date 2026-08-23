@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -159,76 +158,57 @@ func runAttackPlan(args []string) int {
 	return 0
 }
 
-// printPlanSummary renders the plan for a human. It leads with the rationale
-// for each hypothesis, because a plan the operator cannot justify is a plan
-// they should not run.
+// printPlanSummary renders the plan for a human from the shared PlanView, so the
+// CLI and the MCP tool project a plan through exactly the same logic. It leads
+// with the rationale for each hypothesis, because a plan the operator cannot
+// justify is a plan they should not run.
 func printPlanSummary(p *attack.Plan, output string) {
+	v := attack.NewPlanView(p)
 	fmt.Printf("nox attack plan — %d hypothes%s from %d scenario(s)\n",
-		len(p.Hypotheses), plural(len(p.Hypotheses), "is", "es"), len(p.Scenarios))
-	fmt.Printf("  assets: %d   trust boundaries: %d\n", len(p.Assets), len(p.Boundaries))
+		len(v.Hypotheses), plural(len(v.Hypotheses), "is", "es"), v.ScenarioCount)
+	fmt.Printf("  assets: %d   trust boundaries: %d\n", v.Assets, v.Boundaries)
 
-	for i := range p.Hypotheses {
-		h := p.Hypotheses[i]
+	for i := range v.Hypotheses {
+		h := v.Hypotheses[i]
 		fmt.Printf("\n  %s  [%s]\n", h.ID, h.ScenarioID)
 		fmt.Printf("    objective : %s\n", h.Objective)
 		fmt.Printf("    why       : %s\n", h.Rationale)
 		if h.EntryPoint != "" {
 			fmt.Printf("    entry     : %s\n", h.EntryPoint)
 		}
-		if path := renderPath(h.Path); path != "" {
-			fmt.Printf("    path      : %s\n", path)
+		if h.PathArrow != "" {
+			fmt.Printf("    path      : %s\n", h.PathArrow)
 		}
 		if len(h.FindingFingerprints) > 0 {
 			fmt.Printf("    findings  : %s\n", strings.Join(h.FindingFingerprints, ", "))
 		}
 	}
 
-	printSkipped(p.Skipped)
+	printSkipped(v.Skipped, v.SkippedTotal)
 	fmt.Printf("\n[attack] wrote %s\n", output)
 	fmt.Println("[attack] nothing was sent — `nox attack plan` is offline. Use `nox attack run` to execute.")
 }
 
-// printSkipped summarises the findings no scenario covers.
-//
-// It groups by rule id rather than listing every finding: a scan of any real
-// repository skips hundreds of IaC and secret findings, and printing one line
-// each buries the four hypotheses that matter under a wall of duplicates. The
-// per-rule count is the useful signal — it says how much of the scan dynamic
-// validation does not reach, which is a coverage fact worth seeing.
-func printSkipped(skipped []attack.SkipNote) {
+// printSkipped renders the aggregated skip summary. Grouping and ordering are the
+// domain's job (attack.AggregateSkips); the only thing that lives here is the
+// terminal display cap, which is presentation, not data. The full list is always
+// in the plan JSON, so the cap loses nothing.
+func printSkipped(skipped []attack.SkipSummary, total int) {
 	if len(skipped) == 0 {
 		return
 	}
-	counts := map[string]int{}
-	reasons := map[string]string{}
-	for _, s := range skipped {
-		counts[s.RuleID]++
-		reasons[s.RuleID] = s.Reason
-	}
-	ids := make([]string, 0, len(counts))
-	for id := range counts {
-		ids = append(ids, id)
-	}
-	// Most-skipped first, then by rule id, so the output is stable run to run.
-	sort.Slice(ids, func(i, j int) bool {
-		if counts[ids[i]] != counts[ids[j]] {
-			return counts[ids[i]] > counts[ids[j]]
-		}
-		return ids[i] < ids[j]
-	})
-
 	fmt.Printf("\n  not eligible for dynamic validation: %d finding(s) across %d rule(s)\n",
-		len(skipped), len(ids))
-	shown := ids
+		total, len(skipped))
+	shown := skipped
 	if len(shown) > skipRulesShown {
 		shown = shown[:skipRulesShown]
 	}
-	for _, id := range shown {
-		fmt.Printf("    %-16s x%-5d %s\n", id, counts[id], reasons[id])
+	for _, s := range shown {
+		fmt.Printf("    %-16s x%-5d %s\n", s.RuleID, s.Count, s.Reason)
 	}
-	if len(ids) > len(shown) {
+	if len(skipped) > len(shown) {
 		fmt.Printf("    ... and %d more rule(s) — see the `skipped` array in the plan\n",
-			len(ids)-len(shown))
+			len(skipped)-len(shown))
 	}
 }
 
@@ -236,22 +216,9 @@ func printSkipped(skipped []attack.SkipNote) {
 // JSON, so nothing is lost — this only bounds the terminal output.
 const skipRulesShown = 10
 
-// renderPath joins an attack path into the arrow form used throughout nox's
-// output, so a hypothesis and a confirmed trace read the same way.
-func renderPath(steps []attack.PathStep) string {
-	if len(steps) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(steps))
-	for _, s := range steps {
-		label := s.Label
-		if label == "" {
-			label = s.ID
-		}
-		parts = append(parts, label)
-	}
-	return strings.Join(parts, " -> ")
-}
+// renderPath delegates to the domain so the CLI run-summary renders a path
+// exactly as the shared plan view does.
+func renderPath(steps []attack.PathStep) string { return attack.RenderPath(steps) }
 
 const attackRunUsage = `Usage: nox attack run [flags]
 
