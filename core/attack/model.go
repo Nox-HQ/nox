@@ -125,6 +125,21 @@ type Scenario struct {
 	// MinProfile is the least-permissive profile under which the scenario may
 	// run; a run below it is skipped, not silently downgraded.
 	MinProfile Profile `json:"min_profile"`
+	// OWASPASI is the OWASP Agentic Security Initiative category this scenario
+	// tests, e.g. "ASI01". Empty when no category applies. The numbering is the
+	// one core/analyzers/ai already tags static rules with (applyASIMapping), so
+	// a dynamic trace and the static finding it corroborates land in the same
+	// bucket rather than in two parallel vocabularies.
+	OWASPASI string `json:"owasp_asi,omitempty"`
+	// OWASPLLM is the OWASP LLM Top 10 category, e.g. "LLM01". The numbering
+	// matches the owasp-llmNN tags already used across core/analyzers.
+	OWASPLLM string `json:"owasp_llm,omitempty"`
+	// CWE is the primary CWE identifier, e.g. "CWE-77".
+	CWE string `json:"cwe,omitempty"`
+	// CVSSVector is the CVSS v4.0 base vector for a CONFIRMED exploit of this
+	// scenario under default assumptions. It describes the exploit at full
+	// demonstration; Classify is what discounts it for anything less.
+	CVSSVector string `json:"cvss_vector,omitempty"`
 }
 
 // Scenario IDs in the V1 library.
@@ -153,6 +168,18 @@ var scenarioLibrary = []Scenario{
 		Preconditions:     []string{"untrusted input reaches an LLM prompt call"},
 		SafetyConstraints: []string{"payloads carry no real credentials", "signals are reflection-immune canaries"},
 		MinProfile:        ProfileSandbox,
+		// Goal hijack: attacker text steers the agent. CWE-1427 is the precise
+		// weakness (improper neutralization of input used for LLM prompting) and
+		// is what core/analyzers/agentflow already stamps on the static form of
+		// this same flaw. A demonstrated override is a full compromise of the
+		// model's instruction hierarchy — it discloses confidential context
+		// (VC:H), executes attacker intent (VI:H), and displaces the work the
+		// agent was asked to do (VA:H) — with no reach into downstream systems
+		// on its own (SC/SI/SA:N).
+		OWASPASI:   "ASI01",
+		OWASPLLM:   "LLM01",
+		CWE:        "CWE-1427",
+		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
 	{
 		ID:        ScenarioPIIndirect,
@@ -168,6 +195,14 @@ var scenarioLibrary = []Scenario{
 		Preconditions:     []string{"a retrieval or tool-output field is incorporated into the prompt"},
 		SafetyConstraints: []string{"payloads carry no real credentials", "signals are reflection-immune canaries"},
 		MinProfile:        ProfileSandbox,
+		// Same weakness and same impact as PI-DIRECT, but the attacker must
+		// first land content in a corpus the target later retrieves — a
+		// precondition outside their control, which is exactly what AT:P
+		// (attack requirements: present) encodes.
+		OWASPASI:   "ASI01",
+		OWASPLLM:   "LLM01",
+		CWE:        "CWE-1427",
+		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
 	{
 		ID:        ScenarioToolUnauth,
@@ -183,6 +218,16 @@ var scenarioLibrary = []Scenario{
 		Preconditions:     []string{"the agent exposes tools with side effects"},
 		SafetyConstraints: []string{"forbidden-tool invocation is detected via the trace, never via echoed text"},
 		MinProfile:        ProfileStaging,
+		// Tool misuse: untrusted input reaches a privileged tool. CWE-284
+		// (improper access control) is the weakness core/analyzers/ai already
+		// assigns to over-broad tool permissions. LLM07 follows the owasp-llm07
+		// tag this codebase uses for insecure plugin design / excessive agency.
+		// Invoking a privileged tool is a full compromise of the agent's action
+		// authority: it can read (VC:H), write (VI:H), and destroy (VA:H).
+		OWASPASI:   "ASI02",
+		OWASPLLM:   "LLM07",
+		CWE:        "CWE-284",
+		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
 	{
 		ID:        ScenarioExfilFSNet,
@@ -198,6 +243,16 @@ var scenarioLibrary = []Scenario{
 		Preconditions:     []string{"the agent can both read files and reach the network"},
 		SafetyConstraints: []string{"the exfiltrated value is a planted canary, never real data"},
 		MinProfile:        ProfileStaging,
+		// Exfiltration is achieved by chaining the agent's own read and network
+		// tools, which is why it maps to ASI02 (tool misuse) rather than to a
+		// disclosure-only category; LLM06 records the disclosure that results,
+		// matching the owasp-llm06 tag this codebase uses for sensitive
+		// information disclosure. The impact is confidentiality alone: data
+		// leaves the boundary, nothing is written or destroyed.
+		OWASPASI:   "ASI02",
+		OWASPLLM:   "LLM06",
+		CWE:        "CWE-200",
+		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
 	},
 }
 

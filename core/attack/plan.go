@@ -76,6 +76,9 @@ type Plan struct {
 	Hypotheses []Hypothesis `json:"hypotheses"`
 	// Skipped lists findings that mapped to no scenario.
 	Skipped []SkipNote `json:"skipped"`
+	// Graph is the attack-oriented model of the target derived from the same
+	// findings and inventory (PRD §12). Hypothesis paths are walks over it.
+	Graph *AttackGraph `json:"graph,omitempty"`
 }
 
 // shortID returns a stable 8-char hash fragment for constructing deterministic
@@ -164,6 +167,14 @@ func BuildPlan(in PlanInput) (*Plan, error) {
 			Reason:      fmt.Sprintf("no V1 attack scenario maps rule %q", f.RuleID),
 		})
 	}
+
+	// The plan carries a real attack graph derived from the same evidence, and
+	// each hypothesis path becomes a walk over it where one exists. Where the
+	// graph has no route, attachGraphPaths leaves the synthesized path in place
+	// and says so in the rationale rather than passing a label list off as an
+	// observed route.
+	plan.Graph = BuildGraph(in.Findings, in.Inventory)
+	attachGraphPaths(plan.Graph, hyps)
 
 	plan.Assets = sortedAssets(assets)
 	plan.Boundaries = sortedBoundaries(boundaries)

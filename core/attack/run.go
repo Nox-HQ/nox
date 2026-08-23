@@ -131,6 +131,9 @@ type Trace struct {
 	Exploitability evidence.Exploitability `json:"exploitability"`
 	// Confidence is the derived aggregate confidence.
 	Confidence evidence.Confidence `json:"confidence"`
+	// Classification maps this trace to security standards and scores it by what
+	// was actually demonstrated, not by what the rule asserts.
+	Classification Classification `json:"classification"`
 	// Ledger is the evidence backing the verdict.
 	Ledger evidence.Ledger `json:"ledger"`
 	// Evidence is the concrete proof, present only for a reproduced violation.
@@ -304,7 +307,7 @@ func Run(ctx context.Context, p *Plan, t Target, cfg RunConfig) (*Result, error)
 func notRunTrace(h Hypothesis, cfg RunConfig, note string) Trace {
 	outcome := evidence.RunOutcome{HypothesisConstructed: true, ControlSound: true, BudgetExhausted: true}
 	ledger := groundingLedger(h, cfg.Now)
-	return Trace{
+	return classified(Trace{
 		ID:                  "trace-" + h.ID,
 		HypothesisID:        h.ID,
 		ScenarioID:          h.ScenarioID,
@@ -318,7 +321,7 @@ func notRunTrace(h Hypothesis, cfg RunConfig, note string) Trace {
 		Note:                note,
 		ReplayCommand:       "nox attack replay trace-" + h.ID,
 		FindingFingerprints: h.FindingFingerprints,
-	}
+	})
 }
 
 // groundingLedger returns a ledger seeded with the hypothesis's grounding as a
@@ -363,7 +366,7 @@ func (r *runner) attackHypothesis(h Hypothesis) Trace {
 		trace.Ledger = *ledger
 		trace.Exploitability = evidence.DeriveExploitability(outcome, ledger)
 		trace.Confidence = ledger.Confidence()
-		return trace
+		return classified(trace)
 	}
 
 	// A simulated target sends nothing, so the run is never "executed".
@@ -503,7 +506,7 @@ func (r *runner) finalize(trace Trace, outcome evidence.RunOutcome, h Hypothesis
 	trace.Ledger = *ledger
 	trace.Exploitability = evidence.DeriveExploitability(outcome, ledger)
 	trace.Confidence = ledger.Confidence()
-	return trace
+	return classified(trace)
 }
 
 // determinism re-fires the winning probe until Samples total samples are taken,
