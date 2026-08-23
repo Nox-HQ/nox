@@ -109,9 +109,9 @@ func builtinAIRules() []*rules.Rule {
 			// the key name inside the message string, but these are absence notifications,
 			// not credential leaks.
 			excludeContextKeywords: []string{"not set", "not found", "is not set", "isn't set", "not configured", "not provided"},
-			tags:        []string{"ai", "logging", "secrets"},
-			remediation: "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
+			tags:                   []string{"ai", "logging", "secrets"},
+			remediation:            "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
+			references:             []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 
 		// -----------------------------------------------------------------
