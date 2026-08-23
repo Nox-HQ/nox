@@ -1864,63 +1864,10 @@ func (s *Server) handleAgentGraph(_ context.Context, input agentGraphInput) (str
 	}
 	switch format {
 	case "mermaid":
-		return renderMermaidGraph(pc.result.AIInventory), nil
+		return ai.RenderMermaid(pc.result.AIInventory), nil
 	case "dot":
-		return renderDotGraph(pc.result.AIInventory), nil
+		return ai.RenderDot(pc.result.AIInventory), nil
 	default:
 		return "Error: unknown format " + format + " (use mermaid or dot)", nil
 	}
-}
-
-func renderMermaidGraph(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("graph LR\n")
-	for i, set := range inv.ToolMatrix {
-		fmt.Fprintf(&b, "    subgraph agent%d [%s]\n", i, sanitiseGraph(set.Agent))
-		for j, tool := range set.Tools {
-			caps := graphCaps(set.Capabilities[tool])
-			label := tool
-			if caps != "" {
-				label = label + "<br/><small>" + caps + "</small>"
-			}
-			fmt.Fprintf(&b, "        a%d_t%d[\"%s\"]\n", i, j, label)
-		}
-		b.WriteString("    end\n")
-	}
-	return b.String()
-}
-
-func renderDotGraph(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("digraph nox_agent_lattice {\n")
-	b.WriteString("    rankdir=LR;\n    node [shape=box, style=rounded];\n")
-	for i, set := range inv.ToolMatrix {
-		fmt.Fprintf(&b, "    subgraph cluster_%d {\n        label=%q;\n", i, set.Agent)
-		for j, tool := range set.Tools {
-			caps := graphCaps(set.Capabilities[tool])
-			label := tool
-			if caps != "" {
-				label = tool + "\\n[" + caps + "]"
-			}
-			fmt.Fprintf(&b, "        a%d_t%d [label=%q];\n", i, j, label)
-		}
-		b.WriteString("    }\n")
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
-func sanitiseGraph(s string) string {
-	r := strings.NewReplacer("\"", "'", "\n", " ", "[", "(", "]", ")")
-	return r.Replace(s)
-}
-
-func graphCaps(caps []string) string {
-	if len(caps) == 0 {
-		return ""
-	}
-	cp := make([]string, len(caps))
-	copy(cp, caps)
-	sort.Strings(cp)
-	return strings.Join(cp, ",")
 }

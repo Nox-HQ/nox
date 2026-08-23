@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
-	"strings"
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
 )
@@ -47,9 +45,9 @@ func runAgentGraph(args []string) int {
 	var rendered string
 	switch format {
 	case "mermaid":
-		rendered = renderMermaid(&inv)
+		rendered = ai.RenderMermaid(&inv)
 	case "dot":
-		rendered = renderDot(&inv)
+		rendered = ai.RenderDot(&inv)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown format %q (use mermaid or dot)\n", format)
 		return 2
@@ -65,98 +63,4 @@ func runAgentGraph(args []string) int {
 	}
 	fmt.Printf("nox agent-graph: wrote %s (%d agents)\n", output, len(inv.ToolMatrix))
 	return 0
-}
-
-func renderMermaid(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("graph LR\n")
-	if len(inv.ToolMatrix) == 0 {
-		b.WriteString("    empty[\"No agent tool registrations detected\"]\n")
-		return b.String()
-	}
-
-	for i, set := range inv.ToolMatrix {
-		agentID := mermaidNodeID("agent", i)
-		fmt.Fprintf(&b, "    subgraph %s [%s]\n", agentID, sanitize(set.Agent))
-		for j, tool := range set.Tools {
-			toolID := mermaidNodeID(fmt.Sprintf("a%d_t", i), j)
-			label := sanitize(tool)
-			caps := capabilityLabels(set.Capabilities[tool])
-			if caps != "" {
-				label = label + "<br/><small>" + caps + "</small>"
-			}
-			fmt.Fprintf(&b, "        %s[\"%s\"]\n", toolID, label)
-		}
-		b.WriteString("    end\n")
-	}
-	return b.String()
-}
-
-func renderDot(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("digraph nox_agent_lattice {\n")
-	b.WriteString("    rankdir=LR;\n")
-	b.WriteString("    node [shape=box, style=rounded];\n")
-
-	for i, set := range inv.ToolMatrix {
-		clusterID := fmt.Sprintf("cluster_%d", i)
-		fmt.Fprintf(&b, "    subgraph %s {\n", clusterID)
-		fmt.Fprintf(&b, "        label=%q;\n", set.Agent)
-		for j, tool := range set.Tools {
-			nodeID := fmt.Sprintf("a%d_t%d", i, j)
-			caps := capabilityLabels(set.Capabilities[tool])
-			label := tool
-			if caps != "" {
-				label = tool + "\\n[" + caps + "]"
-			}
-			color := capabilityColor(set.Capabilities[tool])
-			fmt.Fprintf(&b, "        %s [label=%q, fillcolor=%q, style=\"rounded,filled\"];\n", nodeID, label, color)
-		}
-		b.WriteString("    }\n")
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
-func mermaidNodeID(prefix string, n int) string {
-	return fmt.Sprintf("%s%d", prefix, n)
-}
-
-func sanitize(s string) string {
-	r := strings.NewReplacer("\"", "'", "\n", " ", "[", "(", "]", ")")
-	return r.Replace(s)
-}
-
-func capabilityLabels(caps []string) string {
-	if len(caps) == 0 {
-		return ""
-	}
-	cp := make([]string, len(caps))
-	copy(cp, caps)
-	sort.Strings(cp)
-	return strings.Join(cp, ",")
-}
-
-// capabilityColor returns a graphviz fill colour reflecting the
-// risk level of the strongest capability the tool carries.
-func capabilityColor(caps []string) string {
-	for _, c := range caps {
-		switch c {
-		case "shell_exec", "cloud_iam_modify", "payment_initiate":
-			return "#ffcccc"
-		}
-	}
-	for _, c := range caps {
-		switch c {
-		case "file_write", "database_write", "git_push", "read_secret":
-			return "#ffe0b3"
-		}
-	}
-	for _, c := range caps {
-		switch c {
-		case "file_read", "http_request", "email_send", "webhook_post":
-			return "#fff5cc"
-		}
-	}
-	return "#e8f4ff"
 }
