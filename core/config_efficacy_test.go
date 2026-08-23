@@ -78,20 +78,18 @@ func TestEveryConfigFieldIsReadOrDeclaredInert(t *testing.T) {
 	}
 }
 
-// TestInertConfigKeysAreActuallyInert is the reverse direction. A key listed as
-// inert that something has since started reading is a stale apology: nox would
-// warn the operator that a setting they rely on does nothing.
-func TestInertConfigKeysAreActuallyInert(t *testing.T) {
-	selected := selectorsInModule(t)
+// TestInertConfigKeysAreWellFormed checks what a name-based pass can check
+// soundly: every entry names the fields it covers and says why.
+//
+// The reverse direction — "is this entry still true?" — deliberately lives in
+// TestConfigFieldLivenessAgainstTheCompiler instead. Asking it here would mean
+// matching field names, and CacheSettings.Dir and .TTL share their names with
+// live fields on other config types, so a name-based check reports them read
+// and fails a correct entry. Compiler over heuristic where the two disagree.
+func TestInertConfigKeysAreWellFormed(t *testing.T) {
 	for _, k := range inertConfigKeys {
 		if len(k.GoFields) == 0 {
 			t.Errorf("inert key %s names no Go fields, so nothing checks it is still inert", k.Key)
-		}
-		for _, f := range k.GoFields {
-			if selected[f] {
-				t.Errorf("inertConfigKeys lists %s (%s), but something now reads it; remove the entry or "+
-					"nox will tell operators a working setting is ignored", f, k.Key)
-			}
 		}
 		if strings.TrimSpace(k.Reason) == "" {
 			t.Errorf("inert key %s has no reason; the operator is told it does nothing but not why", k.Key)
@@ -183,10 +181,11 @@ func TestIneffectiveConfigKeysReportsOnlyWhatWasWritten(t *testing.T) {
 	})
 
 	t.Run("only the inert keys actually written are reported", func(t *testing.T) {
-		dir := write(t, "scan:\n  exclude:\n    - vendor/**\n  include:\n    - src/**\n")
+		dir := write(t, "scan:\n  exclude:\n    - vendor/**\n"+
+			"cache:\n  disabled: true\n")
 		got := keys(IneffectiveConfigKeys(dir))
-		if len(got) != 1 || got[0] != "scan.include" {
-			t.Errorf("reported %v, want exactly [scan.include]", got)
+		if len(got) != 1 || got[0] != "cache" {
+			t.Errorf("reported %v, want exactly [cache]", got)
 		}
 	})
 
@@ -199,8 +198,9 @@ func TestIneffectiveConfigKeysReportsOnlyWhatWasWritten(t *testing.T) {
 	})
 
 	t.Run("presence is what counts, not the value", func(t *testing.T) {
-		// `include: []` still says the operator believes include does something.
-		dir := write(t, "scan:\n  include: []\n")
+		// An empty block still says the operator believes the key does
+		// something, so it is still worth telling them it does not.
+		dir := write(t, "compliance: {}\n")
 		if got := keys(IneffectiveConfigKeys(dir)); len(got) != 1 {
 			t.Errorf("reported %v for an explicitly empty inert key; the operator still wrote it", got)
 		}

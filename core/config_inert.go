@@ -34,20 +34,18 @@ type InertConfigKey struct {
 // cause, so wiring a key up and forgetting to delete its apology fails too.
 var inertConfigKeys = []InertConfigKey{
 	{
-		Key:      "scan.include",
-		GoFields: []string{"Include"},
-		Reason: "nox does not narrow a scan by include patterns — only scan.exclude is applied, " +
-			"so the scan covers MORE than this appears to limit it to, not less",
-	},
-	{
 		Key:      "compliance",
 		GoFields: []string{"Compliance", "Framework"},
 		Reason: "no compliance-framework filtering is applied; every finding is reported regardless " +
 			"of the framework named under it",
 	},
 	{
-		Key:      "cache",
-		GoFields: []string{"Cache"},
+		Key: "cache",
+		// Dir and TTL are named here too. The name-based guard could not see
+		// them: other config types also have a .Dir and a .TTL, so a selector
+		// search reported them read. The compiler-backed probe in
+		// config_liveness_test.go is what caught them.
+		GoFields: []string{"Cache", "Dir", "TTL"},
 		Reason: "nox never caches a scan, so there is nothing here to configure; the --no-cache flag " +
 			"is likewise accepted and does nothing",
 	},

@@ -259,10 +259,18 @@ Create a `.nox.yaml` in your project root to customize scan behavior:
 > nox reports configuration it cannot act on. A key it does not recognise, and a
 > key it parses but ignores, both mean the policy you wrote is not the policy in
 > force — so `nox scan` names them under `[degraded]` rather than passing in
-> silence. Three keys are currently accepted and ignored: `scan.include` (only
-> `scan.exclude` narrows a scan), `compliance.framework` (no framework filtering
-> is applied), and `cache` (nox never caches a scan, so the block configures
-> nothing; the `--no-cache` flag is accepted as a no-op for the same reason).
+> silence. Two keys are currently accepted and ignored: `compliance.framework`
+> (no framework filtering is applied) and `cache` (nox never caches a scan, so
+> the block configures nothing; the `--no-cache` flag is accepted as a no-op for
+> the same reason).
+
+`scan.include` is an allow-list of glob patterns: when set, only matching files
+are scanned. `scan.exclude` still wins over it, so writing both means the
+intersection. Directories are still descended — a glob cannot tell you in
+advance whether a subtree contains a match, and pruning on that guess loses
+files silently; use `scan.exclude` to keep a subtree out of the walk entirely.
+Plugins receive the exclude patterns too, so a plugin that walks the tree itself
+honours them rather than crashing on a path you asked it to skip.
 
 ```yaml
 scan:

@@ -778,6 +778,7 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 	// tracked file the user excluded (e.g. a rule-definition file) stays
 	// excluded, including under --changed-since.
 	walker.ExcludePatterns = cfg.Scan.Exclude
+	walker.IncludePatterns = cfg.Scan.Include
 	if opts.NoRespectGitignore {
 		walker.RespectGitignore = false
 	} else if tracked, err := git.TrackedFiles(target); err == nil {

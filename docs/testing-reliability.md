@@ -256,7 +256,39 @@ Guards, in `core/config_efficacy_test.go`:
   children, and counts presence rather than value (`include: []` still says the
   operator believes `include` does something).
 
-One limitation stated rather than papered over: the guard matches field names,
-not types, so a dead field sharing a name with a live one elsewhere (`.TTL`,
-`.Dir`) can still hide. It catches uniquely-named dead fields, which is what all
-three of these were.
+That guard matches field names, not types, so a dead field sharing a name with a
+live one elsewhere could still hide. `core/config_liveness_test.go` closes it by
+using the compiler as the oracle instead of a heuristic, and found exactly the
+two fields the name-based pass could not see: `CacheSettings.Dir` and `.TTL`,
+both masked by a `.Dir` and a `.TTL` on other config types.
+
+It works in two passes, which is what makes it affordable:
+
+1. Rename every leaf config field at once in an in-memory `go build -overlay` of
+   `config.go`, and collect the fields the compiler names as undefined. Cheap,
+   and sound in one direction only — an error proves a field is read, but its
+   absence proves nothing, because a package that fails to compile stops its
+   dependents being type-checked at all, so a field read only by `cli/` is
+   invisible.
+2. For each field pass 1 could not vouch for, rename that ONE field and build.
+   A dead field's rename breaks nothing, so the build succeeds; a live field's
+   rename breaks whatever reads it, wherever that is. No cascade either way.
+   Sound in both directions, one build per suspect — which is why pass 1 runs
+   first. About 15 seconds in total, skipped under `-short`.
+
+Container fields (`Scan`, `Policy`) are excluded: renaming one breaks every
+access chain at the first hop, so `cfg.Scan.Exclude` fails on `.Scan` and every
+leaf beneath it looks dead. Containers stay with the AST guard.
+
+The residual limitation, again stated rather than hidden: the rename is by field
+NAME, so a name shared by several *config* structs is probed as a group and
+reported live if any of them is read. That is the conservative direction — the
+probe never calls a live field dead — but a dead field sharing its name with a
+live sibling still hides.
+
+The two guards disagreed once the compiler probe existed, and the disagreement
+was informative: the AST guard's reverse check ("is this inert entry still
+true?") condemned the correct `Dir`/`TTL` entries because it could only match
+names. That check moved to the compiler-backed test, and the AST test kept only
+what a name-based pass can settle soundly. Where a heuristic and the compiler
+disagree, the compiler wins.

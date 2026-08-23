@@ -414,6 +414,42 @@ type Walker struct {
 	// matches an exclude is still skipped, because the user asked for it
 	// (e.g. a rule-definition file full of expected-false-positive patterns).
 	ExcludePatterns []string
+	// IncludePatterns, when non-empty, restricts the scan to files matching at
+	// least one pattern (from `scan.include` in config). It is the glob-based
+	// counterpart to IncludePaths, which holds exact paths for --changed-since;
+	// when both are set a file must satisfy both.
+	//
+	// ExcludePatterns still wins: an operator who writes both means the
+	// intersection, and exclude is the explicit "never scan this".
+	//
+	// Directories are still descended. A glob says nothing reliable about
+	// whether a subtree can contain a match — "src/**/*.go" cannot tell you in
+	// advance about src/a/b/ — and pruning on that guess silently loses files,
+	// which is the failure this setting was reported for. Pruning a subtree out
+	// of the walk is what ExcludePatterns is for.
+	IncludePatterns []string
+}
+
+// matchesInclude reports whether a file is allowed by an include pattern.
+//
+// The path itself is tested, and so is each of its ancestor directories. That
+// is what makes "src" , "src/" and "src/**" all mean "everything under src",
+// which is what an operator writing an allow-list means by any of them. Testing
+// only the full path makes the three behave differently for no reason a reader
+// could predict, and the difference shows up as quietly missing coverage.
+func matchesInclude(relSlash string, patterns []string) bool {
+	if IsIgnored(relSlash, patterns) {
+		return true
+	}
+	for i := 0; i < len(relSlash); i++ {
+		if relSlash[i] != '/' {
+			continue
+		}
+		if IsIgnored(relSlash[:i], patterns) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
@@ -479,6 +515,14 @@ func (w *Walker) Walk() ([]Artifact, error) {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+
+		// Config include allow-list (scan.include). Applied to files only, after
+		// the hard excludes so exclude keeps winning.
+		if len(w.IncludePatterns) > 0 && !info.IsDir() {
+			if !matchesInclude(filepath.ToSlash(rel), w.IncludePatterns) {
+				return nil
+			}
 		}
 
 		if w.RespectGitignore {
