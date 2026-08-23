@@ -1343,3 +1343,32 @@ func TestSeverityOrderDrivesPriorityRank(t *testing.T) {
 		t.Errorf("SeverityOrder must run critical..info, got %v", SeverityOrder)
 	}
 }
+
+func TestSeverityRank(t *testing.T) {
+	if SeverityRank(SeverityCritical) != 0 || SeverityRank(SeverityInfo) != 4 {
+		t.Errorf("ranks: critical=%d info=%d, want 0 and 4", SeverityRank(SeverityCritical), SeverityRank(SeverityInfo))
+	}
+	// An unrecognised severity ranks past info so it sorts last, never tying.
+	if SeverityRank(Severity("bogus")) != len(SeverityOrder) {
+		t.Errorf("unknown severity rank = %d, want %d", SeverityRank(Severity("bogus")), len(SeverityOrder))
+	}
+	// Rank must agree with SeverityOrder for every level.
+	for i, s := range SeverityOrder {
+		if SeverityRank(s) != i {
+			t.Errorf("SeverityRank(%s) = %d, want %d", s, SeverityRank(s), i)
+		}
+	}
+}
+
+func TestCountBySeverity(t *testing.T) {
+	ff := []Finding{
+		{Severity: SeverityHigh}, {Severity: SeverityHigh}, {Severity: SeverityCritical},
+	}
+	c := CountBySeverity(ff)
+	if c[SeverityHigh] != 2 || c[SeverityCritical] != 1 {
+		t.Errorf("CountBySeverity = %v", c)
+	}
+	if len(CountBySeverity(nil)) != 0 {
+		t.Error("CountBySeverity(nil) should be empty")
+	}
+}

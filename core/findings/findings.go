@@ -477,6 +477,29 @@ var severityPriorityRank = func() map[Severity]int {
 	return m
 }()
 
+// SeverityRank returns a severity's position in SeverityOrder (0 = critical,
+// most severe; 4 = info). An unrecognised severity ranks just past info, so it
+// sorts last rather than tying with a real level. This is the one ranking the
+// policy gate, the HTML report, and any severity sort must use, rather than
+// each restating critical=0..info=4.
+func SeverityRank(s Severity) int {
+	if r, ok := severityPriorityRank[s]; ok {
+		return r
+	}
+	return len(SeverityOrder)
+}
+
+// CountBySeverity tallies findings by severity. It is the companion to
+// FormatSeverityCounts — every caller that wants a breakdown map used to roll
+// its own identical loop.
+func CountBySeverity(ff []Finding) map[Severity]int {
+	counts := make(map[Severity]int, len(SeverityOrder))
+	for i := range ff {
+		counts[ff[i].Severity]++
+	}
+	return counts
+}
+
 // FormatSeverityCounts renders a severity->count map as "2 critical, 11 high,
 // ..." in SeverityOrder, omitting zero counts. It returns "" for an all-zero or
 // empty map; a caller that wants a word like "none" for the empty case supplies

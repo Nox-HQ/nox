@@ -81,21 +81,24 @@ var SeverityBadgeColors = map[findings.Severity]string{
 	findings.SeverityLow:      "#a3c51c",
 }
 
-// SeverityOrder defines the order in which severity badges are generated.
-var SeverityOrder = []findings.Severity{
-	findings.SeverityCritical,
-	findings.SeverityHigh,
-	findings.SeverityMedium,
-	findings.SeverityLow,
-}
-
-// CountBySeverity tallies findings by severity level.
-func CountBySeverity(ff []findings.Finding) map[findings.Severity]int {
-	counts := make(map[findings.Severity]int)
-	for i := range ff {
-		counts[ff[i].Severity]++
+// SeverityOrder is the order severity badges are generated in, derived from the
+// canonical findings.SeverityOrder and filtered to the severities that have a
+// badge colour. Deriving it rather than re-declaring means adding a severity
+// upstream cannot leave this list stale — it just needs a colour to appear.
+var SeverityOrder = func() []findings.Severity {
+	var out []findings.Severity
+	for _, s := range findings.SeverityOrder {
+		if _, ok := SeverityBadgeColors[s]; ok {
+			out = append(out, s)
+		}
 	}
-	return counts
+	return out
+}()
+
+// CountBySeverity tallies findings by severity level. It delegates to the
+// domain so badge, policy, and any other caller share one tally.
+func CountBySeverity(ff []findings.Finding) map[findings.Severity]int {
+	return findings.CountBySeverity(ff)
 }
 
 // SecurityScore computes a severity-weighted score from finding counts.
