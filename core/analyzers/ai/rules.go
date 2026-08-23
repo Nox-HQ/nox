@@ -8,18 +8,19 @@ import (
 // aiRule is a compact representation used to define built-in AI security rules
 // in a table. Each entry is converted to a rules.Rule by builtinAIRules().
 type aiRule struct {
-	id                 string
-	severity           findings.Severity
-	confidence         findings.Confidence
-	pattern            string
-	description        string
-	cwe                string
-	keywords           []string
-	filePatterns       []string
-	ignoreFilePatterns []string
-	tags               []string
-	remediation        string
-	references         []string
+	id                     string
+	severity               findings.Severity
+	confidence             findings.Confidence
+	pattern                string
+	description            string
+	cwe                    string
+	keywords               []string
+	filePatterns           []string
+	ignoreFilePatterns     []string
+	excludeContextKeywords []string
+	tags                   []string
+	remediation            string
+	references             []string
 }
 
 // builtinAIRules returns all built-in AI security rules.
@@ -103,6 +104,11 @@ func builtinAIRules() []*rules.Rule {
 			pattern:     `(?i)(log|logger|print|console\.log|fmt\.Print)\S*\(.*?(openai_api_key|anthropic_api_key|api_key|bearer_token)`,
 			description: "LLM API key or token logged or printed",
 			cwe:         "CWE-532", keywords: []string{"openai_api_key", "anthropic_api_key"},
+			// Suppress matches where the key is not being logged but rather described as
+			// missing — e.g. log_error("OPENAI_API_KEY not set"). The pattern fires on
+			// the key name inside the message string, but these are absence notifications,
+			// not credential leaks.
+			excludeContextKeywords: []string{"not set", "not found", "is not set", "isn't set", "not configured", "not provided"},
 			tags:        []string{"ai", "logging", "secrets"},
 			remediation: "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
@@ -1100,20 +1106,21 @@ func builtinAIRules() []*rules.Rule {
 	out := make([]*rules.Rule, len(defs))
 	for i := range defs {
 		out[i] = &rules.Rule{
-			ID:                 defs[i].id,
-			Version:            "1.0",
-			Description:        defs[i].description,
-			Severity:           defs[i].severity,
-			Confidence:         defs[i].confidence,
-			MatcherType:        "regex",
-			Pattern:            defs[i].pattern,
-			FilePatterns:       defs[i].filePatterns,
-			IgnoreFilePatterns: defs[i].ignoreFilePatterns,
-			Keywords:           defs[i].keywords,
-			Tags:               defs[i].tags,
-			Metadata:           map[string]string{"cwe": defs[i].cwe},
-			Remediation:        defs[i].remediation,
-			References:         defs[i].references,
+			ID:                     defs[i].id,
+			Version:                "1.0",
+			Description:            defs[i].description,
+			Severity:               defs[i].severity,
+			Confidence:             defs[i].confidence,
+			MatcherType:            "regex",
+			Pattern:                defs[i].pattern,
+			FilePatterns:           defs[i].filePatterns,
+			IgnoreFilePatterns:     defs[i].ignoreFilePatterns,
+			ExcludeContextKeywords: defs[i].excludeContextKeywords,
+			Keywords:               defs[i].keywords,
+			Tags:                   defs[i].tags,
+			Metadata:               map[string]string{"cwe": defs[i].cwe},
+			Remediation:            defs[i].remediation,
+			References:             defs[i].references,
 		}
 	}
 
