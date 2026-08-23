@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
@@ -18,7 +20,14 @@ import (
 // pluginName identifies the plugin that produced the finding; it namespaces the
 // fingerprint so a plugin cannot reach outside its own findings. See
 // pluginFingerprint.
-func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding {
+//
+// workspaceRoot is the directory the plugin was pointed at. Plugins commonly
+// report absolute paths, so the location is made relative to it BEFORE the
+// fingerprint is computed. Without that, a plugin finding's fingerprint moved
+// with the checkout directory and could not be baselined anywhere the path was
+// not byte-identical — every CI runner, every git-worktree gate, any two
+// developers (#454). Pass "" to skip normalisation.
+func ProtoFindingToGo(pf *pluginv1.Finding, pluginName, workspaceRoot string) findings.Finding {
 	if pf == nil {
 		return findings.Finding{}
 	}
@@ -30,6 +39,7 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 		Location:   ProtoLocationToGo(pf.GetLocation()),
 		Message:    pf.GetMessage(),
 	}
+	f.Location.FilePath = repoRelativePath(f.Location.FilePath, workspaceRoot)
 	f.Fingerprint = pluginFingerprint(pluginName, pf.GetRuleId(), pf.GetFingerprint(), f)
 	if m := pf.GetMetadata(); len(m) > 0 {
 		f.Metadata = make(map[string]string, len(m))
@@ -38,6 +48,32 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 		}
 	}
 	return f
+}
+
+// repoRelativePath rewrites an absolute plugin-reported path to one relative to
+// root, so a finding identifies a file in the repository rather than a location
+// on the machine that happened to scan it.
+//
+// A path already relative is returned unchanged: a plugin that does the right
+// thing must not have its paths mangled, and the two reporting styles have to
+// fingerprint identically or one finding becomes two baseline entries.
+//
+// Anything that cannot be related to root — a different volume, a path outside
+// the workspace — is left as-is. Guessing would be worse than an unstable
+// fingerprint: it would silently attribute the finding to the wrong file.
+func repoRelativePath(path, root string) string {
+	if path == "" || root == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(absRoot, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 // pluginFingerprint derives the fingerprint stored for a plugin finding.

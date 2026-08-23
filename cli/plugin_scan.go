@@ -329,7 +329,7 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 			continue
 		}
 		for _, pf := range r.Response.GetFindings() {
-			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf, r.PluginName))
+			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf, r.PluginName, absTarget))
 		}
 		for _, pe := range r.Response.GetEnrichments() {
 			out.Enrichments = append(out.Enrichments, plugin.ProtoEnrichmentToGo(pe))

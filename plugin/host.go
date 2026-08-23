@@ -554,13 +554,16 @@ func (h *Host) InvokeAll(ctx context.Context, toolName string, input map[string]
 // MergeResults converts a single plugin response into domain types and
 // adds them to the ScanResult. This method is not thread-safe with respect
 // to FindingSet and AIInventory — call sequentially.
-func (h *Host) MergeResults(pluginName string, resp *pluginv1.InvokeToolResponse, result *core.ScanResult) {
+//
+// workspaceRoot is the directory the plugin was pointed at; finding paths are
+// made relative to it so a fingerprint does not move with the checkout (#454).
+func (h *Host) MergeResults(pluginName string, resp *pluginv1.InvokeToolResponse, result *core.ScanResult, workspaceRoot string) {
 	if resp == nil || result == nil {
 		return
 	}
 
 	for _, pf := range resp.GetFindings() {
-		result.Findings.Add(ProtoFindingToGo(pf, pluginName))
+		result.Findings.Add(ProtoFindingToGo(pf, pluginName, workspaceRoot))
 	}
 
 	for _, pp := range resp.GetPackages() {
@@ -579,10 +582,11 @@ func (h *Host) MergeResults(pluginName string, resp *pluginv1.InvokeToolResponse
 	}
 }
 
-// MergeAllResults merges multiple plugin responses sequentially.
-func (h *Host) MergeAllResults(responses []AttributedResponse, result *core.ScanResult) {
+// MergeAllResults merges multiple plugin responses sequentially. workspaceRoot
+// is the directory the plugins were pointed at; see MergeResults.
+func (h *Host) MergeAllResults(responses []AttributedResponse, result *core.ScanResult, workspaceRoot string) {
 	for _, r := range responses {
-		h.MergeResults(r.PluginName, r.Response, result)
+		h.MergeResults(r.PluginName, r.Response, result, workspaceRoot)
 	}
 }
 
@@ -657,7 +661,7 @@ func (h *Host) InvokePostScan(ctx context.Context, result *core.ScanResult, work
 			continue
 		}
 
-		h.MergeResults(pt.plugin.Info().Name, resp, result)
+		h.MergeResults(pt.plugin.Info().Name, resp, result, workspaceRoot)
 	}
 
 	return nil
