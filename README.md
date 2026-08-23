@@ -565,7 +565,7 @@ Scan Flags:
   --staged                 Scan only git-staged files
   --severity-threshold     Minimum severity to report (critical, high, medium, low)
   --no-osv                 Disable OSV.dev vulnerability lookups (offline mode)
-  --no-cache               Disable incremental scan cache
+  --no-cache               No-op; accepted for compatibility (scans are never cached)
   --changed-since string   Only scan files changed since git ref
 
 Show Flags:
