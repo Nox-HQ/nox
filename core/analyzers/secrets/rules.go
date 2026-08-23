@@ -3895,9 +3895,10 @@ func builtinEntropyRules() []*rules.Rule {
 			FilePatterns:       entropySourceFilePatterns,
 			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
-			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0"},
-			Remediation:        "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
-			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0",
+				"candidate_kinds": "assignment,quoted"},
+			Remediation: "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
 			ID:                 "SEC-162",
@@ -3910,9 +3911,10 @@ func builtinEntropyRules() []*rules.Rule {
 			FilePatterns:       entropySourceFilePatterns,
 			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
-			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2", "require_context": "true"},
-			Remediation:        "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
-			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.2",
+				"require_context": "true", "candidate_kinds": "base64"},
+			Remediation: "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
 			ID:                 "SEC-163",
@@ -3925,9 +3927,15 @@ func builtinEntropyRules() []*rules.Rule {
 			FilePatterns:       entropySourceFilePatterns,
 			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
-			Metadata:           map[string]string{"cwe": "CWE-798", "entropy_threshold": "4.5", "require_context": "true"},
-			Remediation:        "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
-			References:         []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			// entropy_threshold must stay below 4.0: Shannon entropy over a
+			// 16-symbol alphabet cannot exceed log2(16) = 4.0 bits per
+			// character, so the previous 4.5 made this rule unable to match the
+			// thing it is named for while candidate_kinds was absent and it
+			// happily matched non-hex candidates instead (#467).
+			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "3.5",
+				"require_context": "true", "candidate_kinds": "hex"},
+			Remediation: "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
+			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 	}
 }
