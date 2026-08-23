@@ -85,7 +85,8 @@ Flags:
   --findings <path>   findings.json from a prior scan (default findings.json)
   --inventory <path>  ai.inventory.json from a prior scan (default ai.inventory.json)
   --output <path>     write the plan here (default attack.plan.json)
-  --json              print the plan to stdout instead of a summary
+  --json              print the plan as JSON instead of a summary
+                      (the plan is written to --output either way)
 
 Exit: 0 = plan written, 2 = error.
 `
@@ -146,13 +147,18 @@ func runAttackPlan(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: marshalling plan: %v\n", err)
 		return 2
 	}
-	if asJSON {
-		fmt.Println(string(raw))
-		return 0
-	}
+	// --output decides where the plan is written; --json decides what is
+	// printed. They are orthogonal, and the write happens either way: a plan
+	// that only ever reached stdout cannot be handed to `nox attack run
+	// --plan`, and a --json that silently suppressed the artifact made
+	// `attack plan --json --output p.json` produce no p.json at all.
 	if err := os.WriteFile(output, append(raw, '\n'), 0o644); err != nil { //nolint:gosec // plan artifact, not a secret
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", output, err)
 		return 2
+	}
+	if asJSON {
+		fmt.Println(string(raw))
+		return 0
 	}
 	printPlanSummary(plan, output)
 	return 0
@@ -234,6 +240,7 @@ Flags:
   --route <path>      HTTP route to probe, e.g. /chat
   --fields <list>     comma-separated request fields to inject, e.g. persona,message
   --reply-field <k>   JSON key in the response holding the model reply (default reply)
+                      name it wrong and nox sees no reply at all, never a defense
   --profile <name>    safe | sandbox | staging | authorized-live (default safe)
   --samples <n>       determinism samples per candidate exploit (default 3)
   --min-hits <k>      min reproductions of n to CONFIRM; k<n for non-deterministic models
@@ -460,6 +467,7 @@ Flags:
   --route <path>      HTTP route to probe; defaults to the route recorded in the trace
   --fields <list>     comma-separated request fields; defaults to those recorded
   --reply-field <k>   JSON key in the response holding the model reply (default reply)
+                      name it wrong and nox sees no reply at all, never a defense
   --profile <name>    sandbox | staging | authorized-live (default sandbox)
   --samples <n>       determinism samples (default 3)
   --min-hits <k>      min reproductions of samples to CONFIRM (default = samples)
@@ -595,6 +603,7 @@ Flags:
   --route <path>      HTTP route to probe; defaults to the route recorded per case
   --fields <list>     comma-separated request fields; defaults to those recorded
   --reply-field <k>   JSON key in the response holding the model reply (default reply)
+                      name it wrong and nox sees no reply at all, never a defense
   --profile <name>    sandbox | staging | authorized-live (default sandbox)
   --timeout <d>       per-request HTTP timeout (default 15s)
   --seed <s>          canary seed; must match the original run (default "nox")

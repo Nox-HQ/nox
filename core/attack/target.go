@@ -144,9 +144,18 @@ func isSimTarget(t Target) bool {
 	return ok
 }
 
-// extractField pulls a string field out of a JSON body, falling back to the raw
-// body if it is not JSON or lacks the field, so an oracle still sees whatever the
-// target emitted.
+// extractField pulls a string field out of a JSON body.
+//
+// A body that is not a JSON object falls back to the raw text: a plain-text
+// target has no field to name, and whatever it emitted IS the reply.
+//
+// A body that IS a JSON object but lacks the named field returns "" rather than
+// the raw body. The difference matters because Observation.Reply is what the
+// refusal oracle reads, and returning the serialized JSON there let a misnamed
+// --reply-field pattern-match refusal phrasing anywhere in the response and
+// report PREVENTED — nox reading its own blindness as a defense. Canary
+// detection is unaffected: the canary oracle scans Body as well as Reply, so a
+// leak still trips regardless of which key carried it.
 func extractField(body, field string) string {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(body), &m); err != nil {
@@ -154,7 +163,7 @@ func extractField(body, field string) string {
 	}
 	raw, ok := m[field]
 	if !ok {
-		return body
+		return ""
 	}
 	var s string
 	if err := json.Unmarshal(raw, &s); err != nil {

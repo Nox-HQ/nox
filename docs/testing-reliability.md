@@ -123,3 +123,47 @@ never scanned; `TestSourceExtensionsCoverTheLexer` now fails if that reopens.
       in `conformance/adapters_test.go`.
 - [ ] If it writes an artifact, a test reads that artifact back.
 - [ ] Output is deterministic: no map iteration reaches a rendered line.
+
+## Flag efficacy, continued: the top-level and `attack` surfaces
+
+The first flag-efficacy pass proved that flags are *registered* and
+*documented*. Neither property implies a flag *does* anything, and the gap
+between them is where a false all-clear lives — a control that parses, prints,
+and reports success while changing nothing.
+
+Two more guard files close it:
+
+- `cli/toplevel_flag_efficacy_test.go` covers the flags that apply before a
+  subcommand is chosen. Beyond the usual inert-flag check it adds an **alias
+  drift** guard: `-q`/`--quiet` and `-v`/`--verbose` are two registrations
+  bound to one variable, and if an edit ever gives a shorthand its own
+  variable, that shorthand silently stops working while both still parse.
+  `--format` and `--output` are proved behaviourally — which artifacts get
+  written, and where.
+- `cli/attack_flag_behaviour_test.go` drives the real `attack` entry points
+  against a local target that genuinely performs the attacker-ordered
+  transform, so the benign control stays clean and a CONFIRMED verdict is
+  honest. `--reply-field`, `--seed`, `--min-hits`, `--route`, `--findings`,
+  `--output`, `--json` and `--record` each have to change an outcome.
+
+Two defects fell out of writing them, both in the direction nox exists to
+prevent:
+
+- `extractField` returned the **whole response body** when the body was valid
+  JSON but the named reply key was absent. `Observation.Reply` is what the
+  refusal oracle reads, so a misnamed `--reply-field` made nox pattern-match
+  refusal phrasing against raw JSON and report **PREVENTED** — its own
+  blindness dressed as a guardrail. The plain-text fallback is kept (a
+  non-JSON target has no field to name); the absent-key case now returns "".
+  Canary detection is unaffected: that oracle scans `Body` too.
+- `attack plan --json` printed the plan and returned **without writing
+  `--output`**, so `attack plan --json --output p.json` produced no `p.json`.
+  `--output` decides where the plan is written and `--json` decides what is
+  printed; they are orthogonal and the write now happens either way.
+
+One guard in this batch passed **vacuously** on its first run and had to be
+rebuilt: `--record` was asserted to send no requests, but the trace it recorded
+confirmed nothing, so the derived suite was empty and no run would have sent
+requests either. The test now records a genuinely CONFIRMED exploit first and
+asserts the suite is non-empty before asserting the request count. Checking
+that a guard *can* fail is not optional — see the mutation discipline above.
