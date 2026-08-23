@@ -206,3 +206,32 @@ func TestExtractCSharpMethodHeaderNotACall(t *testing.T) {
 		t.Errorf("params = %v, want to include input", u.params)
 	}
 }
+
+// topLevelAssignIndex must find only a genuine top-level assignment, skipping
+// comparison and COMPOUND-assignment operators. The compound set was missing,
+// so `x += y` used to return the `=` inside `+=` and split into a bogus LHS.
+func TestTopLevelAssignIndex(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"plain assignment", "x = getInput()", 2},
+		{"no assignment", "doThing(a, b)", -1},
+		{"equality is not assignment", "if a == b", -1},
+		{"compound += is not a plain assignment", "total += getInput()", -1},
+		{"compound -= ", "n -= 1", -1},
+		{"compound *= ", "n *= 2", -1},
+		{"compound |= ", "flags |= X", -1},
+		{"assignment inside brackets is not top-level", "call(a = b)", -1},
+		{"generic type args do not confuse the scan", "Map<K, V> m = make()", 12},
+		{"greater-equal is not assignment", "x >= y", -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := topLevelAssignIndex(tt.in); got != tt.want {
+				t.Errorf("topLevelAssignIndex(%q) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
+}

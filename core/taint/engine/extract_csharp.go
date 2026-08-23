@@ -216,8 +216,12 @@ func topLevelAssignIndex(p string) int {
 				continue
 			}
 			if i > 0 {
+				// Skip comparison AND compound-assignment operators, matching
+				// the canonical splitAssignment. Without the compound set
+				// (+ - * / %% & | ^), `x += y` returned the `=` inside `+=` and
+				// produced a bogus LHS `x +`.
 				switch p[i-1] {
-				case '=', '!', '<', '>':
+				case '=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^':
 					continue
 				}
 			}
