@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -191,12 +192,25 @@ func isSecretShape(text string, minEntropy float64) bool {
 // findLine returns the 0-based line index for the given byte offset using a
 // linear scan over the precomputed line start offsets.
 func findLine(lineStarts []int, offset int) int {
-	for i := len(lineStarts) - 1; i >= 0; i-- {
-		if lineStarts[i] <= offset {
-			return i
-		}
+	// Binary search, not a scan. lineStarts is built in ascending order by
+	// computeLineStarts, and this is called once per match.
+	//
+	// The linear version walked the table BACKWARDS from the end, so a match
+	// near the top of a file examined almost every entry — worst case for the
+	// commonest case. Total cost grew as matches x lines, which made scanning a
+	// large, match-dense file (a vendored bundle, a generated client) quadratic.
+	// It surfaced as the fuzzer stalling with "context deadline exceeded", a
+	// message that reads like flaky infrastructure and was really the engine.
+	//
+	// Want: the largest i with lineStarts[i] <= offset. SearchInts returns the
+	// first index whose value is > offset, so that index minus one is it;
+	// clamped at 0 so a negative offset still reports the first line, matching
+	// the behaviour this replaced.
+	i := sort.SearchInts(lineStarts, offset+1) - 1
+	if i < 0 {
+		return 0
 	}
-	return 0
+	return i
 }
 
 // AbsenceMatcher implements block-scoped "hardening property absent" detection
