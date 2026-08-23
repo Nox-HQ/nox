@@ -99,14 +99,9 @@ func runConfirm(args []string) int {
 	}
 
 	// Read findings.json produced by a prior `nox scan`.
-	data, err := os.ReadFile(findingsIn)
+	findingsList, err := report.LoadFindingsFile(findingsIn)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", findingsIn, err)
-		return 2
-	}
-	var jsonReport report.JSONReport
-	if err := json.Unmarshal(data, &jsonReport); err != nil {
-		fmt.Fprintf(os.Stderr, "error: parsing %s: %v\n", findingsIn, err)
 		return 2
 	}
 
@@ -137,7 +132,7 @@ func runConfirm(args []string) int {
 	fmt.Println("  (nox is not sandboxing this target; you are responsible for isolating it)")
 
 	ctx := context.Background()
-	rep, err := d.Run(ctx, jsonReport.Findings, cfg)
+	rep, err := d.Run(ctx, findingsList, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: confirmation run failed: %v\n", err)
 		return 2

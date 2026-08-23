@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -54,25 +53,14 @@ func runBadge(args []string) int {
 	var findingsList []findings.Finding
 
 	if input != "" {
-		data, err := os.ReadFile(input)
+		// Include only active findings, via the shared loader + projection —
+		// VEX-waived and baselined findings must not inflate the badge grade.
+		rep, err := report.LoadFindingsFileReport(input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", input, err)
 			return 2
 		}
-		var rep report.JSONReport
-		if err := json.Unmarshal(data, &rep); err != nil {
-			fmt.Fprintf(os.Stderr, "error: parsing findings JSON: %v\n", err)
-			return 2
-		}
-		// Match RunScan path's ActiveFindings() semantics: include only
-		// findings whose status counts as active. Without this, VEX-waived
-		// (vex_not_affected) and baselined findings inflate the badge
-		// grade even when the operator has explicitly accepted them.
-		for i := range rep.Findings {
-			if rep.Findings[i].Status.IsActive() {
-				findingsList = append(findingsList, rep.Findings[i])
-			}
-		}
+		findingsList = rep.ActiveFindings()
 	} else {
 		target := "."
 		if len(positionalArgs) > 0 {

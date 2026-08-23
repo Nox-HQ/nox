@@ -53,20 +53,12 @@ func runAnnotate(args []string) int {
 		return 2
 	}
 
-	// Read findings.
-	data, err := os.ReadFile(inputPath)
+	// Read findings via the one shared loader.
+	ff, err := report.LoadFindingsFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", inputPath, err)
 		return 2
 	}
-
-	var jsonReport report.JSONReport
-	if err := json.Unmarshal(data, &jsonReport); err != nil {
-		fmt.Fprintf(os.Stderr, "error: parsing %s: %v\n", inputPath, err)
-		return 2
-	}
-
-	ff := jsonReport.Findings
 	if len(ff) == 0 {
 		fmt.Println("annotate: no findings to annotate")
 		return 0

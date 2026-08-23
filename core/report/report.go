@@ -84,6 +84,52 @@ type JSONReport struct {
 	Enrichments []findings.Enrichment `json:"enrichments,omitempty"`
 }
 
+// ActiveFindings returns the report's findings that are still active — not
+// baselined, suppressed, or VEX-cleared. A file-driven consumer (the vex, badge,
+// annotate, and attack commands, plus MCP/LSP) needs the same "which findings
+// surface" rule the scan path gets from FindingSet.ActiveFindings, so it lives
+// on the loaded report too rather than being re-filtered by hand per caller.
+func (r JSONReport) ActiveFindings() []findings.Finding {
+	out := make([]findings.Finding, 0, len(r.Findings))
+	for i := range r.Findings {
+		if r.Findings[i].Status.IsActive() {
+			out = append(out, r.Findings[i])
+		}
+	}
+	return out
+}
+
+// LoadFindingsFile reads a findings.json written by `nox scan` and returns its
+// findings.
+//
+// It is the ONE loader for that artifact. Every command that consumed a prior
+// scan used to unmarshal it inline, and one of them (vex init) had drifted to
+// unmarshalling into a []findings.Finding — but `nox scan` writes a JSON OBJECT
+// ({meta, findings, enrichments}), so that parse failed against every real
+// artifact. A single loader against the real shape ends that whole class of
+// drift.
+func LoadFindingsFile(path string) ([]findings.Finding, error) {
+	rep, err := LoadFindingsFileReport(path)
+	if err != nil {
+		return nil, err
+	}
+	return rep.Findings, nil
+}
+
+// LoadFindingsFileReport reads a findings.json and returns the whole report, for
+// a caller that needs more than the raw findings — e.g. ActiveFindings().
+func LoadFindingsFileReport(path string) (JSONReport, error) {
+	raw, err := os.ReadFile(path) //nolint:gosec // caller-supplied scan artifact
+	if err != nil {
+		return JSONReport{}, err
+	}
+	var rep JSONReport
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		return JSONReport{}, err
+	}
+	return rep, nil
+}
+
 // JSONReporter produces deterministic JSON output from a FindingSet.
 type JSONReporter struct {
 	ToolVersion string
