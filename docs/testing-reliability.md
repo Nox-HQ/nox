@@ -222,3 +222,41 @@ and both still nearly missed:
   selector expressions in the AST.
 
 A guard that passes on mutated source is not a guard. Both of these did.
+
+## Config keys: the third surface
+
+`UnknownConfigKeys` already reports keys nox cannot parse, on an explicit
+principle — a security tool that silently ignores configuration reports on a
+policy the operator did not ask for. But that check answers "does this key
+parse?", and a field sitting in `ScanConfig` that nothing reads parses fine. It
+passed in silence.
+
+Three did:
+
+| key | what the operator expects | what nox does |
+|---|---|---|
+| `scan.include` | narrow the scan to these paths | ignores it; only `scan.exclude` applies, so the scan covers **more**, not less |
+| `compliance.framework` | filter to one framework | ignores it; every finding is reported |
+| `cache` | configure the incremental cache | ignores it; there is no scan cache |
+
+`IneffectiveConfigKeys` is the sibling of `UnknownConfigKeys` and reports them
+the same way, naming only the inert keys the operator actually wrote and saying
+what nox does instead. `--no-cache` was already handled honestly (registered as
+an explicit no-op, allowlisted in `inertScanFlags` with a reason); the `cache:`
+config block had no such honesty.
+
+Guards, in `core/config_efficacy_test.go`:
+
+- every yaml-tagged config field is read somewhere in the module, or listed in
+  `inertConfigKeys` **with a reason** — there is no third option;
+- the reverse: a key listed as inert that something has started reading fails,
+  so wiring one up and forgetting to delete its apology cannot leave nox
+  telling operators a working setting is ignored;
+- the reporter names only what was written, treats a parent key as covering its
+  children, and counts presence rather than value (`include: []` still says the
+  operator believes `include` does something).
+
+One limitation stated rather than papered over: the guard matches field names,
+not types, so a dead field sharing a name with a live one elsewhere (`.TTL`,
+`.Dir`) can still hide. It catches uniquely-named dead fields, which is what all
+three of these were.

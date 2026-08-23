@@ -256,6 +256,14 @@ function are not reported — nox parses Go with `go/ast`, not `go/types`. See
 
 Create a `.nox.yaml` in your project root to customize scan behavior:
 
+> nox reports configuration it cannot act on. A key it does not recognise, and a
+> key it parses but ignores, both mean the policy you wrote is not the policy in
+> force — so `nox scan` names them under `[degraded]` rather than passing in
+> silence. Three keys are currently accepted and ignored: `scan.include` (only
+> `scan.exclude` narrows a scan), `compliance.framework` (no framework filtering
+> is applied), and `cache` (nox never caches a scan, so the block configures
+> nothing; the `--no-cache` flag is accepted as a no-op for the same reason).
+
 ```yaml
 scan:
   exclude:

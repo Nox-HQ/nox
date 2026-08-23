@@ -633,6 +633,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Fprintf(os.Stderr, "  impact: they are ignored, so whatever they were meant to configure is not in effect. Check for a typo against the documented keys.\n")
 	}
 
+	// A key nox parses and then ignores fails the operator exactly as a key it
+	// cannot parse does: the policy they wrote is not the policy in force. Only
+	// the unrecognised half used to be reported.
+	if inert := nox.IneffectiveConfigKeys(target); len(inert) > 0 {
+		fmt.Fprintf(os.Stderr, "[degraded] .nox.yaml sets %d key(s) nox accepts but does not act on:\n", len(inert))
+		for _, k := range inert {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", k.Key, k.Reason)
+		}
+	}
+
 	// Generate reports.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
