@@ -1,7 +1,6 @@
 package deps
 
 import (
-	"bufio"
 	"bytes"
 	"path/filepath"
 	"regexp"
@@ -28,7 +27,7 @@ var reFromInstruction = regexp.MustCompile(
 func ParseDockerfile(content []byte) ([]Package, error) {
 	var pkgs []Package
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -150,7 +149,7 @@ func dockerfileFromLines(content []byte) []int {
 	var lines []int
 	lineNum := 0
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()

@@ -292,3 +292,31 @@ true?") condemned the correct `Dir`/`TTL` entries because it could only match
 names. That check moved to the compiler-backed test, and the AST test kept only
 what a name-based pass can settle soundly. Where a heuristic and the compiler
 disagree, the compiler wins.
+
+## Truncation that reports success
+
+`bufio.Scanner` stops at a 64 KiB line and reports `ErrTooLong` through `Err()`.
+A parser that neither raises the limit nor checks `Err()` therefore stops
+reading at that line and returns what it had — and a truncated dependency list
+is indistinguishable from a complete one. Everything after the long line is
+missing from the SBOM and from vulnerability matching, with nothing to say so.
+
+The package already knew. `maxLockfileLine` sits in
+`core/analyzers/deps/parsers_ecosystem.go` under a comment saying the scanner
+"stops silently at that limit, which would truncate the dependency list without
+any error". It was applied to three scanners out of seventeen.
+
+That is the lesson worth keeping: **a comment explaining a hazard does not
+enforce it**. The other fourteen sites were written by people who could have
+read that comment and didn't need to. Every line-oriented parse in the package
+now goes through `newLineScanner`, and `TestEveryLineScannerRaisesTheLimit`
+fails if a raw `bufio.NewScanner` reappears.
+
+The raised limit is still finite, and the guard pins both halves: a 70 KiB line
+must parse, and a line past `maxLockfileLine` must fail with `bufio.ErrTooLong`
+rather than truncate — so a pathological file cannot exhaust memory, and a
+caller can still tell truncation from a clean end of file.
+
+This was found while working nox issue #455, where a plugin aborted its whole
+scan on a minified bundle. The plugin's own fix belongs in its repository; the
+same defect class in this one did not.

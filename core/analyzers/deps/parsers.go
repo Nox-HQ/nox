@@ -1,7 +1,6 @@
 package deps
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
@@ -41,7 +40,7 @@ func parseGoMod(content []byte) ([]Package, error) {
 	inRequireBlock := false
 	inReplaceBlock := false
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -214,7 +213,7 @@ func goSumSourceModules(content []byte) ([]Package, error) {
 	seen := make(map[key]struct{})
 	var pkgs []Package
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "//") {
@@ -245,7 +244,7 @@ func goSumSourceModules(content []byte) ([]Package, error) {
 // require or replace directive, whether or not it survives resolution.
 func goModDeclaredModules(content []byte) []string {
 	var out []string
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if i := strings.Index(line, "//"); i >= 0 {
@@ -341,7 +340,7 @@ func parseGoSum(content []byte) ([]Package, error) {
 	seen := make(map[key]struct{})
 	var pkgs []Package
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "//") {
@@ -452,7 +451,7 @@ func parseRequirementsTxt(content []byte) ([]Package, error) {
 	// both start at the same position) the longer operator is preferred.
 	operators := []string{"==", ">=", "<=", "~=", "!=", "<", ">"}
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -549,7 +548,7 @@ func parseGemfileLock(content []byte) ([]Package, error) {
 	inGEM := false
 	inSpecs := false
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -627,7 +626,7 @@ func parseCargoLock(content []byte) ([]Package, error) {
 	var pkgs []Package
 	var name, version string
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -761,7 +760,7 @@ func parseBuildGradle(content []byte) ([]Package, error) {
 	type key struct{ name, ver string }
 	seen := make(map[key]struct{})
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 		matches := reGradleDep.FindAllStringSubmatch(line, -1)
