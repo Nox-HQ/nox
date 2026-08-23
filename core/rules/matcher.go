@@ -27,33 +27,47 @@ type Matcher interface {
 
 // RegexMatcher implements Matcher using compiled regular expressions. It
 // caches compiled patterns to avoid redundant compilation across calls.
-type RegexMatcher struct {
+// regexCache is a mutex-guarded compiled-pattern cache. Both matcher types
+// embed it rather than each carrying its own identical mu+map and compile loop.
+type regexCache struct {
 	mu    sync.Mutex
 	cache map[string]*regexp.Regexp
 }
 
+// newRegexCache returns an initialised cache.
+func newRegexCache() regexCache { return regexCache{cache: map[string]*regexp.Regexp{}} }
+
+// compile returns the compiled form of pattern, caching it. label names the
+// pattern kind for the error message.
+func (c *regexCache) compile(pattern, label string) (*regexp.Regexp, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if re, ok := c.cache[pattern]; ok {
+		return re, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("compiling %s %q: %w", label, pattern, err)
+	}
+	c.cache[pattern] = re
+	return re, nil
+}
+
+// RegexMatcher matches a rule's regex pattern against file content, caching
+// compiled patterns.
+type RegexMatcher struct {
+	regexCache
+}
+
 // NewRegexMatcher returns a RegexMatcher with an initialised pattern cache.
 func NewRegexMatcher() *RegexMatcher {
-	return &RegexMatcher{
-		cache: make(map[string]*regexp.Regexp),
-	}
+	return &RegexMatcher{regexCache: newRegexCache()}
 }
 
 // compile returns a compiled regexp for the given pattern, using the cache
 // when possible.
 func (m *RegexMatcher) compile(pattern string) (*regexp.Regexp, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if re, ok := m.cache[pattern]; ok {
-		return re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("compiling pattern %q: %w", pattern, err)
-	}
-	m.cache[pattern] = re
-	return re, nil
+	return m.regexCache.compile(pattern, "pattern")
 }
 
 // Match finds all occurrences of the rule pattern in content and returns
@@ -195,13 +209,12 @@ func findLine(lineStarts []int, offset int) int {
 // It is deterministic: for identical content it always yields the same match
 // set, computed purely from byte offsets and the rule's patterns.
 type AbsenceMatcher struct {
-	mu    sync.Mutex
-	cache map[string]*regexp.Regexp
+	regexCache
 }
 
 // NewAbsenceMatcher returns an AbsenceMatcher with an initialised pattern cache.
 func NewAbsenceMatcher() *AbsenceMatcher {
-	return &AbsenceMatcher{cache: make(map[string]*regexp.Regexp)}
+	return &AbsenceMatcher{regexCache: newRegexCache()}
 }
 
 // compile returns a compiled regexp for pattern, cached. An empty pattern
@@ -210,17 +223,7 @@ func (m *AbsenceMatcher) compile(pattern string) (*regexp.Regexp, error) {
 	if pattern == "" {
 		return nil, nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if re, ok := m.cache[pattern]; ok {
-		return re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("compiling absence pattern %q: %w", pattern, err)
-	}
-	m.cache[pattern] = re
-	return re, nil
+	return m.regexCache.compile(pattern, "absence pattern")
 }
 
 // stripLineComments removes `#` line comments so a keyword that appears only in
