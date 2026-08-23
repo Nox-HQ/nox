@@ -121,3 +121,36 @@ func newTestWalker(root string, include, exclude []string) *Walker {
 	w.ExcludePatterns = exclude
 	return w
 }
+
+// TestIncludePatternsComposeWithIncludePaths pins the claim the doc comment
+// makes: IncludePatterns (config scan.include, glob-based) and IncludePaths
+// (--changed-since, exact paths) are separate allow-lists, and a file must
+// satisfy both.
+//
+// Getting this wrong in either direction is a coverage bug that reports
+// success. If they were OR-ed, --changed-since would silently re-widen a
+// narrowed scan; if one silently disabled the other, a narrowed scan would miss
+// changed files it was asked to check.
+func TestIncludePatternsComposeWithIncludePaths(t *testing.T) {
+	root := seedTree(t)
+
+	w := newTestWalker(root, []string{"src/**"}, nil)
+	// --changed-since reports one file inside the include and one outside it.
+	w.IncludePaths = map[string]bool{
+		"src/app.go":    true,
+		"vendor/lib.go": true,
+	}
+	got := walkedPaths(t, w)
+
+	if !got["src/app.go"] {
+		t.Error("a file satisfying both allow-lists was not scanned")
+	}
+	if got["vendor/lib.go"] {
+		t.Error("a changed file outside scan.include was scanned; the two allow-lists were OR-ed, " +
+			"so --changed-since silently re-widens a narrowed scan")
+	}
+	if got["src/deep/util.go"] {
+		t.Error("a file inside scan.include but not among the changed paths was scanned; " +
+			"--changed-since stopped narrowing")
+	}
+}
