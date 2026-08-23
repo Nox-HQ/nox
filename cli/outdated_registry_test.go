@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/fix"
 )
 
 // Currency needs two things per ecosystem that vulnerability scanning does not:
@@ -413,14 +415,14 @@ func TestDirectDeps_Composer(t *testing.T) {
 // and nothing connecting them. Fail the build instead.
 func TestEveryCurrencyEcosystemCanAlsoApply(t *testing.T) {
 	for eco := range registryBase {
-		if supportedFixEcosystems[eco] == "" {
+		if _, ok := fix.SupportedEcosystem(eco); !ok {
 			t.Errorf("ecosystem %q has a currency resolver but no entry in "+
 				"supportedFixEcosystems, so --outdated would plan an upgrade it cannot apply", eco)
 		}
 	}
 	// Go resolves through the toolchain rather than a registry, so it is absent
 	// from registryBase but must still be appliable.
-	if supportedFixEcosystems["go"] == "" {
+	if _, ok := fix.SupportedEcosystem("go"); !ok {
 		t.Error("go lost its applier")
 	}
 }

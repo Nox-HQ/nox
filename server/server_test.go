@@ -1952,21 +1952,6 @@ func TestHandleAgentGraph_NoAgents(t *testing.T) {
 	}
 }
 
-func TestMajorOfVersion(t *testing.T) {
-	cases := map[string]string{
-		"v1.2.3": "1",
-		"1.2.3":  "1",
-		"v2.0.0": "2",
-		"":       "",
-		"1":      "1",
-	}
-	for in, want := range cases {
-		if got := majorOfVersion(in); got != want {
-			t.Errorf("majorOfVersion(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // --- handlePluginInstall tests ---
 
 func TestHandlePluginInstall_MissingName(t *testing.T) {
@@ -2206,5 +2191,67 @@ func TestHandleFindingByFingerprint(t *testing.T) {
 	out3, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: "deadbeefdeadbeef"})
 	if !strings.Contains(textOf(out3), `"found": false`) {
 		t.Errorf("expected found:false for unknown fp: %s", textOf(out3))
+	}
+}
+
+// depScanResult seeds a scan result with one VULN-001 finding carrying the
+// given upgrade metadata, so a fix_plan handler test can exercise the planner
+// without a real scan.
+func depScanResult(pkg, from, fixed string) *nox.ScanResult {
+	fs := findingspkg.NewFindingSet()
+	f := findingspkg.NewFinding("VULN-001", findingspkg.SeverityHigh, findingspkg.ConfidenceHigh,
+		findingspkg.Location{FilePath: "go.mod", StartLine: 1, EndLine: 1},
+		pkg+" is vulnerable")
+	f.Metadata = map[string]string{"ecosystem": "go", "package": pkg, "version": from, "fixed_in": fixed}
+	fs.Add(f)
+	return &nox.ScanResult{Findings: fs, Inventory: &deps.PackageInventory{}, AIInventory: ai.NewInventory()}
+}
+
+// The MCP fix_plan tool must refuse a downgrade, because it now shares the
+// core/fix planner with `nox fix`. Before consolidation this handler had no
+// such guard and would have presented an agent a fixed_in BELOW the installed
+// version as an actionable upgrade — a plan the CLI would never apply.
+func TestHandleFixPlan_RefusesDowngrade(t *testing.T) {
+	s := New("0.1.0", nil)
+	s.setCache("", depScanResult("golang.org/x/crypto", "0.54.0", "0.51.0"))
+
+	out, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("fix_plan failed: %v", err)
+	}
+	var resp fixPlanResponse
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Actions) != 0 {
+		t.Fatalf("MCP fix_plan planned a DOWNGRADE (0.54.0 -> 0.51.0): %+v", resp.Actions)
+	}
+	if resp.VulnCount != 1 {
+		t.Errorf("VulnCount = %d, want 1", resp.VulnCount)
+	}
+}
+
+// A genuine forward upgrade is still planned, with the operator-runnable command
+// the CLI would produce.
+func TestHandleFixPlan_PlansForwardUpgrade(t *testing.T) {
+	s := New("0.1.0", nil)
+	s.setCache("", depScanResult("golang.org/x/crypto", "0.51.0", "0.54.0"))
+
+	out, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("fix_plan failed: %v", err)
+	}
+	var resp fixPlanResponse
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(resp.Actions))
+	}
+	if resp.Actions[0].To != "0.54.0" {
+		t.Errorf("To = %s, want 0.54.0", resp.Actions[0].To)
+	}
+	if resp.Actions[0].Command == "" {
+		t.Error("forward upgrade must carry a runnable command")
 	}
 }

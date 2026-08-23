@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/fix"
 )
 
 // runFix applies safe upgrade actions derived from VULN-001 findings.
@@ -219,110 +220,26 @@ type upgradePlan struct {
 	majorSkipped int
 }
 
-// supportedFixEcosystems lists the package managers nox fix can drive
-// directly. Other ecosystems get counted as skipped — operators can
-// still see the fixed_in metadata in findings.json, just not auto-apply.
-var supportedFixEcosystems = map[string]string{
-	"go":       "go get",
-	"npm":      "npm install",
-	"pypi":     "pip install",
-	"cargo":    "cargo update",
-	"rubygems": "bundle update",
-	"composer": "composer update",
-	"nuget":    "dotnet add package",
-}
-
-// planUpgrades extracts upgrade actions from VULN findings. Skips
-// findings without fixed_in metadata, ecosystems we can't drive yet,
-// and major-version-boundary upgrades unless includeMajor is set.
+// planUpgrades projects the shared core/fix planner into the CLI's internal
+// action shape. The planning — which packages, to what version, and every
+// safety guard — lives in core/fix so `nox fix` and the MCP fix_plan tool
+// decide identically. This wrapper only adapts the result to what the CLI
+// applier consumes (the ecosystem base command and the manifest path).
 func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
-	var plan upgradePlan
-
-	// Collect every candidate fix per package BEFORE deciding anything.
-	//
-	// Advisories are independent and each names the version that closed it, so
-	// one package routinely carries several different fixed_in values. The old
-	// code emitted an action per advisory and applied them in sequence, which
-	// let the last one win by accident — order, not safety. Aggregating first
-	// means one move per package, to the highest fix, which clears every
-	// advisory below it.
-	type candidate struct {
-		ruleID    string
-		from      string
-		ecosystem string
-		action    string
-		manifest  string
-		pkg       string
-		fixes     []string
-	}
-	order := []string{}
-	byPkg := map[string]*candidate{}
-
-	for i := range items {
-		f := &items[i]
-		if f.RuleID != "VULN-001" {
-			continue
-		}
-		fixed := f.Metadata["fixed_in"]
-		eco := f.Metadata["ecosystem"]
-		pkg := f.Metadata["package"]
-		from := f.Metadata["version"]
-		if fixed == "" || pkg == "" {
-			plan.skipped++
-			continue
-		}
-		action, ok := supportedFixEcosystems[eco]
-		if !ok {
-			plan.skipped++
-			continue
-		}
-		// Keyed by directory as well as package: two workspaces on the same
-		// vulnerable version are two upgrades, and aggregating them into one
-		// leaves the other vulnerable.
-		key := filepath.Dir(f.Location.FilePath) + "|" + eco + ":" + pkg
-		c, seen := byPkg[key]
-		if !seen {
-			c = &candidate{ruleID: f.RuleID, from: from, ecosystem: eco, action: action, manifest: f.Location.FilePath, pkg: pkg}
-			byPkg[key] = c
-			order = append(order, key)
-		}
-		c.fixes = append(c.fixes, fixed)
-	}
-
-	for _, key := range order {
-		c := byPkg[key]
-		pkg := c.pkg
-
-		target := bestFix(c.fixes)
-		if target == "" {
-			plan.skipped++
-			continue
-		}
-
-		// Never move a package backwards, sideways, or onto a prerelease from
-		// a stable release. See isUpgrade for the two production incidents
-		// each of those refusals comes from.
-		if !isUpgrade(c.from, target) {
-			plan.skipped++
-			continue
-		}
-
-		if !includeMajor && isMajorBump(c.from, target) {
-			plan.majorSkipped++
-			continue
-		}
-
+	p := fix.PlanUpgrades(items, fix.Options{IncludeMajor: includeMajor})
+	plan := upgradePlan{skipped: p.Skipped, majorSkipped: p.MajorSkipped}
+	for _, a := range p.Actions {
+		base, _ := fix.SupportedEcosystem(a.Ecosystem)
 		plan.actions = append(plan.actions, upgradeAction{
-			ruleID:    c.ruleID,
-			pkg:       pkg,
-			fromVer:   c.from,
-			toVersion: target,
-			ecosystem: c.ecosystem,
-			action:    c.action,
-			manifest:  c.manifest,
+			ruleID:    a.RuleID,
+			pkg:       a.Package,
+			fromVer:   a.From,
+			toVersion: a.To,
+			ecosystem: a.Ecosystem,
+			action:    base,
+			manifest:  a.Manifest,
 		})
 	}
-
 	return plan
 }
 
@@ -452,24 +369,6 @@ func describeDir(root, dir string) string {
 		return "."
 	}
 	return rel
-}
-
-// isMajorBump returns true when the fix version's leading numeric
-// component differs from the current version's leading component.
-// Treats a non-numeric leading segment as same-major to be conservative.
-func isMajorBump(from, to string) bool {
-	if from == "" || to == "" {
-		return false
-	}
-	return majorOf(from) != majorOf(to)
-}
-
-func majorOf(version string) string {
-	v := strings.TrimPrefix(version, "v")
-	if i := strings.IndexByte(v, '.'); i >= 0 {
-		v = v[:i]
-	}
-	return v
 }
 
 // applyUpgrade dispatches to the appropriate ecosystem-specific

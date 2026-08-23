@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nox-hq/nox/core/fix"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -160,7 +162,7 @@ func TestIsMajorBump(t *testing.T) {
 		{"", "1.0.0", false},
 	}
 	for _, c := range cases {
-		if got := isMajorBump(c.from, c.to); got != c.want {
+		if got := fix.IsMajorBump(c.from, c.to); got != c.want {
 			t.Errorf("isMajorBump(%q, %q) = %v, want %v", c.from, c.to, got, c.want)
 		}
 	}

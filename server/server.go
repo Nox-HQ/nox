@@ -23,6 +23,7 @@ import (
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -1761,43 +1762,27 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
-	resp := fixPlanResponse{
-		Note:    "Plan only. Apply with: nox fix --input findings.json",
-		Actions: []fixAction{},
-	}
+	// The plan comes from the SAME core/fix planner the `nox fix` CLI applies,
+	// so the actions an agent is shown here are exactly the ones the CLI would
+	// run — including the guards against downgrades, prereleases, and
+	// unsupported ecosystems that this handler used to lack.
+	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor})
 
-	seen := map[string]bool{}
-	items := pc.result.Findings.ActiveFindings()
-	for i := range items {
-		f := &items[i]
-		if f.RuleID != "VULN-001" {
-			continue
-		}
-		resp.VulnCount++
-		fixed := f.Metadata["fixed_in"]
-		eco := f.Metadata["ecosystem"]
-		pkg := f.Metadata["package"]
-		from := f.Metadata["version"]
-		if fixed == "" || pkg == "" || eco == "" {
-			resp.Skipped++
-			continue
-		}
-		if !input.IncludeMajor && majorOfVersion(from) != majorOfVersion(fixed) && from != "" {
-			resp.MajorSkipped++
-			continue
-		}
-		key := pkg + "@" + fixed
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+	resp := fixPlanResponse{
+		Note:         "Plan only. Apply with: nox fix --input findings.json",
+		Actions:      []fixAction{},
+		Skipped:      plan.Skipped,
+		MajorSkipped: plan.MajorSkipped,
+		VulnCount:    plan.VulnCount,
+	}
+	for _, a := range plan.Actions {
 		resp.Actions = append(resp.Actions, fixAction{
-			RuleID:    f.RuleID,
-			Package:   pkg,
-			From:      from,
-			To:        fixed,
-			Ecosystem: eco,
-			Command:   commandFor(eco, pkg, fixed),
+			RuleID:    a.RuleID,
+			Package:   a.Package,
+			From:      a.From,
+			To:        a.To,
+			Ecosystem: a.Ecosystem,
+			Command:   a.Command(),
 		})
 	}
 
@@ -1807,46 +1792,11 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	case resp.VulnCount == 0:
 		resp.Status = fixPlanStatusNoVulns
 	default:
-		// VULN-001 findings exist but none had the metadata required to
-		// build an upgrade command (fixed_in / package / ecosystem).
+		// VULN-001 findings exist but none produced an applicable upgrade
+		// (missing metadata, unsupported ecosystem, or held back by a guard).
 		resp.Status = fixPlanStatusNoDepMetadata
 	}
-
 	return structured(resp)
-}
-
-// majorOfVersion returns the leading numeric segment of a semver-ish
-// version string ("v1.2.3" -> "1", "" -> "").
-func majorOfVersion(v string) string {
-	v = strings.TrimPrefix(v, "v")
-	if i := strings.IndexByte(v, '.'); i >= 0 {
-		v = v[:i]
-	}
-	return v
-}
-
-// commandFor returns the canonical operator-runnable upgrade command
-// for a (ecosystem, package, version) tuple. Mirrors cli's
-// upgradeCommand but lives here to avoid pulling cli/ into server/.
-func commandFor(eco, pkg, fixedVer string) string {
-	v := strings.TrimPrefix(fixedVer, "v")
-	switch eco {
-	case "go":
-		return "go get " + pkg + "@v" + v
-	case "npm":
-		return "npm install " + pkg + "@" + v
-	case "pypi":
-		return "pip install '" + pkg + ">=" + v + "'"
-	case "rubygems":
-		return "bundle update " + pkg + " --conservative"
-	case "cargo":
-		return "cargo update -p " + pkg + " --precise " + v
-	case "maven", "gradle":
-		return "upgrade " + pkg + " to " + v + " in your build file"
-	case "nuget":
-		return "dotnet add package " + pkg + " --version " + v
-	}
-	return ""
 }
 
 func (s *Server) handleAgentGraph(_ context.Context, input agentGraphInput) (string, error) {
