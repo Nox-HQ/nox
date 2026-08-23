@@ -54,7 +54,6 @@ import (
 	"context"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -197,13 +196,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 // scanSource parses one Go file and returns its findings.
 func scanSource(path string, content []byte) []findings.Finding {
-	fset := token.NewFileSet()
-	// A parse error still leaves a partial AST, which is walked as-is: a file
-	// that does not compile degrades to fewer findings rather than crashing the
-	// scan. Comments are not parsed, and string literals are never call
-	// expressions, so `// 0777` and `"0777"` cannot match structurally — the
-	// whole reason this analyzer uses the AST instead of a regex.
-	file, _ := parser.ParseFile(fset, filepath.Base(path), content, parser.SkipObjectResolution)
+	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
 		return nil
 	}

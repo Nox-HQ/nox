@@ -46,7 +46,6 @@ package memsafe
 import (
 	"context"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -139,10 +138,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // parse yields whatever the recovered partial AST supports rather than an
 // error: a non-compiling snippet must degrade, never crash the scan.
 func scanFile(path string, content []byte) []findings.Finding {
-	fset := token.NewFileSet()
-	// SkipObjectResolution: this analyzer does its own function-scoped name
-	// tracking, and skipping resolution is faster and more error-tolerant.
-	file, _ := parser.ParseFile(fset, path, content, parser.SkipObjectResolution)
+	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
 		return nil
 	}

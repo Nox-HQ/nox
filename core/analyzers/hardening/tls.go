@@ -33,7 +33,6 @@ import (
 	"bytes"
 	"context"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -215,14 +214,7 @@ func hasTrigger(content []byte) bool {
 
 // scanGoSource parses one Go file and returns its findings.
 func scanGoSource(path string, content []byte) []findings.Finding {
-	fset := token.NewFileSet()
-	// SkipObjectResolution: identifier-object linking is not needed and
-	// skipping it is faster and more tolerant. Comments are deliberately NOT
-	// parsed — a comment cannot contain a composite literal, so mentioning
-	// InsecureSkipVerify in prose can never reach the checks below. On a parse
-	// error the partial AST the parser recovers is still walked, so a
-	// non-compiling file degrades gracefully instead of being silently skipped.
-	file, _ := parser.ParseFile(fset, path, content, parser.SkipObjectResolution)
+	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
 		return nil
 	}
@@ -230,7 +222,7 @@ func scanGoSource(path string, content []byte) []findings.Finding {
 	s := &scanner{
 		path:    path,
 		fset:    fset,
-		tlsPkgs: tlsImportNames(file),
+		tlsPkgs: source.ImportAliases(file, "crypto/tls"),
 		elided:  map[ast.Node]bool{},
 	}
 	ast.Inspect(file, s.visit)
@@ -455,27 +447,6 @@ func (s *scanner) add(ruleID string, node ast.Node, confirmedType bool) {
 		},
 		Metadata: map[string]string{"cwe": cwe, "gosec": "G402"},
 	})
-}
-
-// tlsImportNames returns the local names bound to crypto/tls in a file.
-func tlsImportNames(file *ast.File) map[string]bool {
-	names := map[string]bool{}
-	for _, imp := range file.Imports {
-		if imp.Path == nil || strings.Trim(imp.Path.Value, `"`) != "crypto/tls" {
-			continue
-		}
-		switch {
-		case imp.Name == nil:
-			names["tls"] = true
-		case imp.Name.Name == "_" || imp.Name.Name == ".":
-			// A blank import binds nothing; a dot-import puts Config in file
-			// scope with no package qualifier, which this analyzer does not
-			// model (and which no real code does for crypto/tls).
-		default:
-			names[imp.Name.Name] = true
-		}
-	}
-	return names
 }
 
 // isTestPath reports whether a path is Go test code or a test fixture tree.

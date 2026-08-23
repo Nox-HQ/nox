@@ -64,10 +64,11 @@ package weakcrypto
 
 import (
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"strings"
 	"unicode"
+
+	"github.com/nox-hq/nox/core/source"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -83,10 +84,7 @@ const randRuleID = "CRYPTO-002"
 // and because it is also imported as the identifier `rand`, resolving the
 // import path (rather than matching the text `rand.Read`) is what keeps this
 // rule from flagging the fix it recommends.
-var mathRandPaths = map[string]bool{
-	"math/rand":    true,
-	"math/rand/v2": true,
-}
+var mathRandPaths = []string{"math/rand", "math/rand/v2"}
 
 // securityWords mark a value whose predictability is exploitable. Matching is
 // on WORDS extracted from an identifier, never substrings: `monkey` and
@@ -200,16 +198,14 @@ func randRule() *rules.Rule {
 // flagging the recommended fix would discredit the rule immediately. Parsing
 // also removes comments and string literals from consideration for free.
 func scanInsecureRandom(fs *findings.FindingSet, art discovery.Artifact, content []byte) {
-	fset := token.NewFileSet()
-	// A partial AST from a non-compiling file is still walked, matching the Go
-	// taint extractor's behaviour: degraded input yields fewer findings, never a
-	// crash. SkipObjectResolution — identifier linking is not needed here.
-	file, _ := parser.ParseFile(fset, "src.go", content, parser.SkipObjectResolution)
+	// The path gives the taint/position metadata a real filename; a non-compiling
+	// file still yields the recovered partial AST.
+	file, fset := source.ParseGoFile(art.Path, content)
 	if file == nil {
 		return
 	}
 
-	pkgNames := mathRandImportNames(file)
+	pkgNames := source.ImportAliases(file, mathRandPaths...)
 	if len(pkgNames) == 0 {
 		return
 	}
@@ -279,28 +275,6 @@ func scanInsecureRandom(fs *findings.FindingSet, art discovery.Artifact, content
 // this file — the default `rand`, or whatever alias the import gives it. A dot
 // import is not handled: it makes the call indistinguishable from a local
 // function without type information, and it is vanishingly rare.
-func mathRandImportNames(file *ast.File) map[string]bool {
-	names := map[string]bool{}
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		path := strings.Trim(imp.Path.Value, `"`)
-		if !mathRandPaths[path] {
-			continue
-		}
-		switch {
-		case imp.Name == nil:
-			names["rand"] = true
-		case imp.Name.Name == "_" || imp.Name.Name == ".":
-			// Blank import produces no call sites; dot import is out of scope.
-		default:
-			names[imp.Name.Name] = true
-		}
-	}
-	return names
-}
-
 // seededRandVars collects the names assigned a `*rand.Rand` from `rand.New(…)`,
 // so calls on that receiver are recognised. Both `r := rand.New(…)` and
 // `s.rng = rand.New(…)` are handled; only the final identifier is kept.
