@@ -361,6 +361,19 @@ func runPluginInstall(args []string) int {
 	nameVer := rest[0]
 	name, constraint := parseNameVersion(nameVer)
 
+	// Validate before the name reaches registry resolution or the on-disk
+	// store. The URI and MCP install paths already gate on these; the direct
+	// CLI path did not, so a traversal/injection payload in a plugin ref went
+	// straight through. Same allowlist, now enforced on every install path.
+	if !plugin.IsSafeName(name) {
+		fmt.Fprintf(os.Stderr, "error: unsafe plugin name %q\n", name)
+		return 2
+	}
+	if constraint != "*" && !plugin.IsSafeVersionConstraint(constraint) {
+		fmt.Fprintf(os.Stderr, "error: unsafe version constraint %q\n", constraint)
+		return 2
+	}
+
 	statePath := DefaultStatePath()
 	st, err := LoadState(statePath)
 	if err != nil {

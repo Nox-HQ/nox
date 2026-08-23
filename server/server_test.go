@@ -1985,36 +1985,6 @@ func TestHandlePluginInstall_RequiresConfirmation(t *testing.T) {
 	}
 }
 
-func TestIsSafePluginName(t *testing.T) {
-	good := []string{"nox/ai-eval", "nox/reachability", "acme/secret-scanner-v2", "nox-plugin-foo"}
-	bad := []string{"", "foo;bar", "foo bar", "foo$(x)", "foo|bar", "../foo", strings.Repeat("a", 201)}
-	for _, n := range good {
-		if !isSafePluginName(n) {
-			t.Errorf("safe name rejected: %q", n)
-		}
-	}
-	for _, n := range bad {
-		if isSafePluginName(n) {
-			t.Errorf("unsafe name accepted: %q", n)
-		}
-	}
-}
-
-func TestIsSafeVersionConstraint(t *testing.T) {
-	good := []string{"1.2.3", "v1.2.3", ">=0.5", "^1.0.0", "~1.2", "1.0.0-beta+build"}
-	bad := []string{"1.2; rm -rf", "1.0.0`whoami`", "$(x)", "../1.0"}
-	for _, v := range good {
-		if !isSafeVersionConstraint(v) {
-			t.Errorf("safe version rejected: %q", v)
-		}
-	}
-	for _, v := range bad {
-		if isSafeVersionConstraint(v) {
-			t.Errorf("unsafe version accepted: %q", v)
-		}
-	}
-}
-
 func TestProjectResourceDashboard_AfterScan(t *testing.T) {
 	s, absPath := scanDirWithPath(t)
 	encoded := url.PathEscape(absPath)

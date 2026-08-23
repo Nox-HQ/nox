@@ -1626,10 +1626,10 @@ func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput
 	// Reject obviously suspicious names so a hostile prompt can't tunnel
 	// arbitrary args into the subprocess. Plugin names are restricted to
 	// the registry's character set.
-	if !isSafePluginName(input.Name) {
+	if !plugin.IsSafeName(input.Name) {
 		return "Error: invalid plugin name (allowed chars: a-z, 0-9, /, -, _, .)", nil
 	}
-	if input.Version != "" && !isSafeVersionConstraint(input.Version) {
+	if input.Version != "" && !plugin.IsSafeVersionConstraint(input.Version) {
 		return "Error: invalid version constraint", nil
 	}
 
@@ -1649,53 +1649,6 @@ func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput
 		return fmt.Sprintf("Plugin install failed: %v\n\nOutput:\n%s", err, string(out)), nil
 	}
 	return "Plugin install:\n" + string(out), nil
-}
-
-// isSafePluginName accepts only registry-shaped names so a hostile
-// prompt can't smuggle shell metacharacters into an exec.Command call.
-// Path-traversal sequences (..) and leading dots are rejected even
-// though the underlying chars are otherwise allowed.
-func isSafePluginName(s string) bool {
-	if s == "" || len(s) > 200 {
-		return false
-	}
-	if strings.Contains(s, "..") {
-		return false
-	}
-	if s[0] == '.' || s[0] == '-' || s[0] == '/' {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '/' || r == '-' || r == '_' || r == '.':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// isSafeVersionConstraint accepts a constrained subset of semver-shaped
-// strings: digits, dots, hyphens, plus, ASCII letters (for prerelease
-// identifiers like 1.0.0-beta), and the range operators >= ^ ~.
-func isSafeVersionConstraint(s string) bool {
-	if s == "" || len(s) > 50 {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r == '.' || r == '-' || r == '+' || r == '>' || r == '=' || r == '^' || r == '~':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.

@@ -230,6 +230,13 @@ if [ $exit_code -eq 1 ]; then
     echo "nox: use 'git commit --no-verify' to skip this check (not recommended)"
     exit 1
 fi
+# Propagate any other non-zero exit (2 = scan error). Falling through to exit 0
+# here would let a commit through when the scan CRASHED — a failed gate that
+# reports success, the worst outcome for a security hook.
+if [ $exit_code -ne 0 ]; then
+    echo "nox: pre-commit scan errored (exit $exit_code) — not blocking, not passing" >&2
+    exit $exit_code
+fi
 exit 0
 `, hookMarker, threshold)
 }
