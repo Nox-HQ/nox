@@ -662,28 +662,7 @@ func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredR
 
 // ruleFamily maps a rule ID (e.g. "SEC-001", "VULN-002") to its human family
 // name, used for grouping in the summary.
-func ruleFamily(ruleID string) string {
-	prefix := ruleID
-	if i := strings.IndexByte(ruleID, '-'); i >= 0 {
-		prefix = ruleID[:i]
-	}
-	switch prefix {
-	case "SEC":
-		return "secrets"
-	case "VULN":
-		return "dependencies"
-	case "IAC":
-		return "infrastructure"
-	case "CONT":
-		return "containers"
-	case "DATA":
-		return "privacy"
-	case "AI", "MCP":
-		return "ai"
-	default:
-		return "other"
-	}
-}
+func ruleFamily(ruleID string) string { return catalog.Family(ruleID).Key }
 
 // handleFindingByFingerprint looks up a single finding by its fingerprint and
 // reports its current status (new / baselined / suppressed / vex_*). This is
