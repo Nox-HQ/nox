@@ -61,6 +61,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nox-hq/nox/core/source"
+
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -177,7 +179,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Test files and fixtures are skipped, as in weakcrypto. Test trees are
 		// where deliberate 0o777 lives — a scanner's own permission fixtures
 		// included — and flagging them trains people to ignore the rule.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 
@@ -376,10 +378,3 @@ func formatMode(bits uint64) string {
 }
 
 // isTestPath reports whether a path is Go test code or a fixture tree.
-func isTestPath(p string) bool {
-	if strings.HasSuffix(strings.ToLower(filepath.Base(p)), "_test.go") {
-		return true
-	}
-	lower := filepath.ToSlash(strings.ToLower(p))
-	return strings.Contains(lower, "/testdata/") || strings.HasPrefix(lower, "testdata/")
-}

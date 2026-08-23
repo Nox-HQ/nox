@@ -46,6 +46,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nox-hq/nox/core/source"
+
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -405,7 +407,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// primitives (including this analyzer's own tests), and flagging them
 		// is noise that trains people to ignore the rule. The same holds for
 		// predictable randomness, where determinism in a test is a feature.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 
@@ -471,48 +473,6 @@ func inLineComment(line string, markers []string, at int) bool {
 			continue
 		}
 		if c := strings.Index(line, m); c >= 0 && c < at {
-			return true
-		}
-	}
-	return false
-}
-
-// testSuffixes are filename endings that identify test code across the
-// languages this analyzer handles.
-var testSuffixes = []string{
-	"_test.go",
-	".test.js", ".test.jsx", ".test.mjs", ".test.cjs",
-	".test.ts", ".test.tsx",
-	".spec.js", ".spec.jsx", ".spec.ts", ".spec.tsx",
-	"_test.py",
-	"_test.rb", "_spec.rb",
-	"_test.rs",
-	"test.java", "tests.java",
-	"test.kt", "tests.kt",
-	"test.cs", "tests.cs",
-	"test.php", "tests.php",
-	"test.swift", "tests.swift",
-}
-
-// testDirs are path fragments that identify a test tree. Only unambiguous ones:
-// a bare `test/` is a real source directory in plenty of projects, and skipping
-// it would silently drop findings rather than merely quieten fixtures.
-var testDirs = []string{"testdata/", "__tests__/", "src/test/", "src/tests/"}
-
-// isTestPath reports whether a path is test code, across the languages above.
-func isTestPath(p string) bool {
-	base := strings.ToLower(filepath.Base(p))
-	for _, s := range testSuffixes {
-		if strings.HasSuffix(base, s) {
-			return true
-		}
-	}
-	if strings.HasPrefix(base, "test_") {
-		return true
-	}
-	lower := strings.ToLower(filepath.ToSlash(p))
-	for _, d := range testDirs {
-		if strings.HasPrefix(lower, d) || strings.Contains(lower, "/"+d) {
 			return true
 		}
 	}

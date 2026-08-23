@@ -39,6 +39,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nox-hq/nox/core/source"
+
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -182,7 +184,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 		// See KNOWN LIMITS (2) on Analyzer for why test code is out of scope.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 		content, err := os.ReadFile(art.AbsPath)
@@ -477,10 +479,3 @@ func tlsImportNames(file *ast.File) map[string]bool {
 }
 
 // isTestPath reports whether a path is Go test code or a test fixture tree.
-func isTestPath(p string) bool {
-	if strings.HasSuffix(strings.ToLower(filepath.Base(p)), "_test.go") {
-		return true
-	}
-	lower := filepath.ToSlash(strings.ToLower(p))
-	return strings.Contains(lower, "/testdata/") || strings.HasPrefix(lower, "testdata/")
-}

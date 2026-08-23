@@ -52,6 +52,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nox-hq/nox/core/source"
+
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -109,7 +111,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Test files are skipped: fixtures deliberately construct overflowing
 		// conversions (including this analyzer's own tests), and flagging them
 		// trains people to ignore the rule.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 
@@ -977,10 +979,3 @@ func isGenerated(content []byte) bool {
 }
 
 // isTestPath reports whether a path is Go test code or a test fixture tree.
-func isTestPath(p string) bool {
-	if strings.HasSuffix(strings.ToLower(filepath.Base(p)), "_test.go") {
-		return true
-	}
-	lower := strings.ToLower(p)
-	return strings.Contains(lower, "/testdata/") || strings.HasPrefix(lower, "testdata/")
-}
