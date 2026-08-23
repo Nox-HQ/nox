@@ -14,8 +14,6 @@
 package mcppin
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,6 +21,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/nox-hq/nox/core/mcpconfig"
 
 	"github.com/nox-hq/nox/core/fsutil"
 
@@ -242,38 +242,15 @@ func newStore() *Store {
 // will not parse is a signal, not a no-op. Valid JSON with no mcpServers object
 // yields an empty map and a nil error (genuinely nothing to pin).
 func extractServerDefs(content []byte) (map[string]string, error) {
-	var config struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	servers, err := mcpconfig.ParseServers(content)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(content, &config); err != nil {
-		return nil, fmt.Errorf("parsing mcp config: %w", err)
-	}
-
-	out := make(map[string]string, len(config.MCPServers))
-	for name, raw := range config.MCPServers {
-		out[name] = canonicalHash(raw)
+	out := make(map[string]string, len(servers))
+	for name, raw := range servers {
+		out[name] = mcpconfig.CanonicalHash(raw)
 	}
 	return out, nil
-}
-
-// canonicalHash produces a key-order-independent SHA-256 of a JSON value. It
-// re-decodes into generic Go values and re-marshals; encoding/json sorts map
-// keys, so two semantically identical definitions hash identically regardless
-// of formatting or key order.
-func canonicalHash(raw json.RawMessage) string {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		// Unparseable fragment — hash the raw bytes so drift is still detected.
-		sum := sha256.Sum256(raw)
-		return hex.EncodeToString(sum[:])
-	}
-	canonical, err := json.Marshal(v)
-	if err != nil {
-		sum := sha256.Sum256(raw)
-		return hex.EncodeToString(sum[:])
-	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:])
 }
 
 func driftFinding(path, server, oldHash, newHash string) findings.Finding {
