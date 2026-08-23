@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/lexctx"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -216,7 +218,7 @@ func extractTools(path string, content []byte) []extractedTool {
 			desc := descriptionAfterMatch(content, m[1])
 			tools = append(tools, extractedTool{
 				name:        name,
-				line:        lineForOffset(content, m[0]),
+				line:        lexctx.LineForOffset(content, m[0]),
 				description: desc,
 				tags:        classifyToolName(name),
 			})
@@ -248,19 +250,6 @@ func descriptionAfterMatch(content []byte, start int) string {
 		return string(m[1])
 	}
 	return ""
-}
-
-func lineForOffset(content []byte, offset int) int {
-	line := 1
-	if offset > len(content) {
-		offset = len(content)
-	}
-	for i := 0; i < offset; i++ {
-		if content[i] == '\n' {
-			line++
-		}
-	}
-	return line
 }
 
 // dangerousCombo describes a forbidden-combination policy. A finding is

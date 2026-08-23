@@ -70,33 +70,14 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		return nil
 	}
 
-	// Pre-compute line start offsets for O(1) line/column lookup.
-	lines := bytes.SplitAfter(content, []byte("\n"))
-	lineStarts := make([]int, len(lines))
-	offset := 0
-	for i, line := range lines {
-		lineStarts[i] = offset
-		offset += len(line)
-	}
-
+	// Reuse the shared offset helpers (computeLineStarts / makeMatchResult) that
+	// AbsenceMatcher already uses, rather than inlining a second copy of the
+	// line/column arithmetic.
+	lineStarts := computeLineStarts(content)
 	matches := re.FindAllIndex(content, -1)
 	results := make([]MatchResult, 0, len(matches))
-
 	for _, loc := range matches {
-		startOffset := loc[0]
-		endOffset := loc[1]
-
-		// Binary search is unnecessary for typical file sizes; a linear scan
-		// from the last known position would be faster for sequential matches,
-		// but correctness is the priority here.
-		line := findLine(lineStarts, startOffset)
-		col := startOffset - lineStarts[line] + 1 // 1-based column
-
-		results = append(results, MatchResult{
-			Line:      line + 1, // 1-based line number
-			Column:    col,
-			MatchText: string(content[startOffset:endOffset]),
-		})
+		results = append(results, makeMatchResult(content, lineStarts, loc))
 	}
 
 	if rule.Metadata["secret_shape"] == "true" {

@@ -221,20 +221,10 @@ func subscriptToCall(s string) string {
 // their original alignment to the byte offsets of the source file is not used
 // after shaping.
 func replaceScopeResolution(s string) string {
-	if !strings.Contains(s, "::") {
-		return s
-	}
-	b := []byte(s)
-	out := make([]byte, 0, len(b))
-	for i := 0; i < len(b); i++ {
-		if i+1 < len(b) && b[i] == ':' && b[i+1] == ':' {
-			out = append(out, '.')
-			i++ // consume the second ':'
-			continue
-		}
-		out = append(out, b[i])
-	}
-	return string(out)
+	// `Net::HTTP.get` -> `Net.HTTP.get` so scope-resolved calls match the
+	// catalog's dotted keys. This is exactly strings.ReplaceAll; the previous
+	// hand-rolled byte loop reimplemented it for no gain.
+	return strings.ReplaceAll(s, "::", ".")
 }
 
 // addParenlessCallParens detects a leading `ident args...` (or

@@ -13,6 +13,8 @@ package ai
 import (
 	"regexp"
 	"strings"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // isSourceFile reports whether path is a code file we should consider for
@@ -173,7 +175,7 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 				Name:       name,
 				Registry:   p.provider,
 				Path:       path,
-				Line:       lineForOffset(content, m[0]),
+				Line:       lexctx.LineForOffset(content, m[0]),
 				AuthEnvVar: authGuess,
 				Endpoint:   endpointGuess,
 			})

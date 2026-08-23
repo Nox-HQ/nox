@@ -2,6 +2,8 @@ package ai
 
 import (
 	"regexp"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // PromptTemplate represents a prompt template discovered in the codebase.
@@ -68,7 +70,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 			Name:      name,
 			Type:      "system",
 			Path:      path,
-			Line:      lineForOffset(content, m[0]),
+			Line:      lexctx.LineForOffset(content, m[0]),
 			Content:   truncatePromptContent(body),
 			Variables: extractTemplateVariables(body),
 		})
@@ -84,7 +86,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 			Name: string(content[m[2]:m[3]]),
 			Type: "template",
 			Path: path,
-			Line: lineForOffset(content, m[0]),
+			Line: lexctx.LineForOffset(content, m[0]),
 		})
 	}
 
@@ -102,7 +104,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 			Name:      role + "_message",
 			Type:      role,
 			Path:      path,
-			Line:      lineForOffset(content, m[0]),
+			Line:      lexctx.LineForOffset(content, m[0]),
 			Content:   truncatePromptContent(body),
 			Variables: extractTemplateVariables(body),
 		})
@@ -119,7 +121,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 			Name: string(content[m[2]:m[3]]) + "_message",
 			Type: string(content[m[2]:m[3]]),
 			Path: path,
-			Line: lineForOffset(content, m[0]),
+			Line: lexctx.LineForOffset(content, m[0]),
 		})
 	}
 
