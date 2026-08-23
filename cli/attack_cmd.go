@@ -272,6 +272,10 @@ Flags:
   --max-duration <d>  wall-clock budget (default 5m)
   --timeout <d>       per-request HTTP timeout (default 15s)
   --seed <s>          canary seed; the same seed replays identically (default "nox")
+  --plant-dir <path>  plant the filesystem canary in this EXISTING directory so
+                      exfiltration scenarios can be demonstrated. nox writes one
+                      file and removes it when the run ends; it never creates the
+                      directory and never overwrites an existing file.
   --output <path>     write the traces here (default attack.trace.json)
   --authorize         REQUIRED for any profile other than safe
 
@@ -294,6 +298,7 @@ func runAttackRun(args []string) int {
 		maxDuration time.Duration
 		timeout     time.Duration
 		seed        string
+		plantDir    string
 		output      string
 		authorize   bool
 	)
@@ -310,6 +315,7 @@ func runAttackRun(args []string) int {
 	fs.DurationVar(&maxDuration, "max-duration", 0, "wall-clock budget")
 	fs.DurationVar(&timeout, "timeout", 15*time.Second, "per-request HTTP timeout")
 	fs.StringVar(&seed, "seed", "nox", "canary seed; the same seed replays identically")
+	fs.StringVar(&plantDir, "plant-dir", "", "existing directory to plant the filesystem canary in")
 	fs.StringVar(&output, "output", defaultTracePath, "write the traces here")
 	fs.BoolVar(&authorize, "authorize", false, "acknowledge you are authorized to attack --target")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, attackRunUsage) }
@@ -359,6 +365,25 @@ func runAttackRun(args []string) int {
 		// The engine is pure by design; the CLI is where a real clock belongs,
 		// and without one --max-duration would be a flag that does nothing.
 		Clock: time.Now,
+	}
+
+	// Planting writes into the environment under test, so it happens here at the
+	// edge rather than inside the engine, and only when the operator names a
+	// directory. Cleanup is deferred before the error is checked: Plant always
+	// returns a usable cleanup, and a canary left behind is a fake secret
+	// sitting in someone's filesystem.
+	planted, cleanup, plantErr := plantCanaries(plan, seed, plantDir, profile, authorize)
+	defer func() {
+		if err := cleanup(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v — remove it by hand\n", err)
+		}
+	}()
+	if plantErr != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", plantErr)
+		return 2
+	}
+	for _, pc := range planted {
+		fmt.Printf("[attack] planted canary %s at %s (removed when this run ends)\n", pc.Canary.ID, pc.Path)
 	}
 
 	tgt := targetFor(profile, target, replyField, timeout)
@@ -749,6 +774,49 @@ func recordAttackSuite(tracePath, suitePath string) int {
 		fmt.Println("[attack] no CONFIRMED exploits in the trace — an unconfirmed attempt is not a regression test")
 	}
 	return 0
+}
+
+// plantCanaries plants the filesystem canary when the operator asked for it,
+// and otherwise says plainly why an exfiltration scenario cannot be
+// demonstrated.
+//
+// That second half matters as much as the first. Without a planted canary the
+// EXFIL scenario has nothing to exfiltrate, so it can only ever come back
+// INCONCLUSIVE — and an INCONCLUSIVE with no stated cause reads like the target
+// was tested and found clean. Naming the reason is the difference between "we
+// could not test this" and a silent false all-clear.
+func plantCanaries(plan *attack.Plan, seed, dir string, profile attack.Profile, authorized bool) ([]attack.PlantedCanary, attack.CleanupFunc, error) {
+	noop := func() error { return nil }
+	needs := planNeedsFilesystemCanary(plan)
+
+	if dir == "" {
+		if needs && profile.AllowsNetwork() {
+			fmt.Println("[attack] note: this plan contains an exfiltration scenario, but no --plant-dir was given.")
+			fmt.Println("         nox has planted no canary, so there is nothing for the target to exfiltrate and")
+			fmt.Println("         the scenario CANNOT be confirmed. Its verdict will be INCONCLUSIVE because the")
+			fmt.Println("         test could not be performed — not because the target resisted it.")
+		}
+		return nil, noop, nil
+	}
+	if !needs {
+		fmt.Println("[attack] note: --plant-dir was given but no scenario in this plan uses a filesystem canary; nothing planted.")
+		return nil, noop, nil
+	}
+	return attack.Plant(attack.MintCanaries(seed), dir, profile, authorized)
+}
+
+// planNeedsFilesystemCanary reports whether any hypothesis relies on a planted
+// file to be demonstrable.
+func planNeedsFilesystemCanary(plan *attack.Plan) bool {
+	if plan == nil {
+		return false
+	}
+	for i := range plan.Hypotheses {
+		if plan.Hypotheses[i].ScenarioID == attack.ScenarioExfilFSNet {
+			return true
+		}
+	}
+	return false
 }
 
 // targetFor picks the adapter for a profile. The safe profile gets a target

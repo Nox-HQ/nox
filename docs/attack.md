@@ -117,6 +117,34 @@ asserted before a single probe leaves the process; if it fails, nox fails closed
 This is the same property `nox confirm` established, generalised to the whole
 scenario library.
 
+## Canaries and planting
+
+Detection depends on a canary the attacker never supplied. For prompt-injection
+scenarios nox mints those from the seed and the target's own trusted context, so
+nothing needs planting.
+
+Exfiltration is different: `EXFIL-FS-NET` asks the target to read a secret file
+and send it somewhere, and there is nothing to steal unless a secret exists.
+That file is the one thing nox writes into the environment under test, so it is
+opt-in:
+
+```bash
+nox attack run --plant-dir ./sandbox-data --profile staging --authorize ...
+```
+
+nox writes one obviously-fake secrets file into that directory and removes it
+when the run ends. It **will not** create the directory, **will not** overwrite
+an existing file, and **will not** plant under `--profile safe` (which sends
+nothing, so the write would be pointless). The planted file identifies itself as
+a nox canary in its own contents, so an operator who finds a stray copy can tell
+it from a real leaked credential.
+
+Without `--plant-dir`, the exfiltration scenario has nothing to exfiltrate and
+**cannot** be confirmed. nox says so explicitly before the run rather than
+returning a bare `INCONCLUSIVE` — an inconclusive verdict with no stated cause
+reads like a target that was tested and found clean, which is precisely the
+false all-clear this tool exists to avoid.
+
 ## Safety profiles
 
 | profile | network | authorization | intended for |
