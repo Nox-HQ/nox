@@ -34,7 +34,11 @@ func defaultScan(path string) ([]findings.Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	return result.Findings.Findings(), nil
+	// Only active findings become diagnostics: a finding the operator baselined
+	// or suppressed was explicitly accepted, and re-surfacing it in the editor
+	// contradicts that decision — every other nox surface projects through
+	// ActiveFindings, and the editor should not be the one exception.
+	return result.Findings.ActiveFindings(), nil
 }
 
 // Server is a stdio LSP server instance.

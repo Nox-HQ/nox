@@ -26,6 +26,10 @@ const (
 	StatusUnderInvestigation Status = "under_investigation"
 )
 
+// statusOrder is the canonical order for rendering a status breakdown, so the
+// summary line is deterministic.
+var statusOrder = []Status{StatusAffected, StatusNotAffected, StatusUnderInvestigation, StatusFixed}
+
 // Statement is a single VEX statement declaring the status of a vulnerability
 // for a specific product.
 type Statement struct {
@@ -248,18 +252,33 @@ func ApplyVEX(fs *findings.FindingSet, doc *Document) int {
 	return applied
 }
 
-// Summary returns a human-readable summary of the VEX document.
+// StatusCounts tallies a VEX document's statements by status. It is the one
+// histogram both Summary and the MCP vex_status tool project from, rather than
+// each looping the statements separately.
+func StatusCounts(doc *Document) map[Status]int {
+	counts := make(map[Status]int)
+	if doc == nil {
+		return counts
+	}
+	for i := range doc.Statements {
+		counts[doc.Statements[i].Status]++
+	}
+	return counts
+}
+
+// Summary returns a human-readable, deterministic summary of the VEX document.
 func Summary(doc *Document) string {
 	if doc == nil {
 		return "no VEX document"
 	}
-	counts := make(map[Status]int)
-	for i := range doc.Statements {
-		counts[doc.Statements[i].Status]++
-	}
+	counts := StatusCounts(doc)
+	// Emit in a stable status order — the old map iteration made this line
+	// non-deterministic, which for a security artifact's summary is a defect.
 	parts := make([]string, 0, len(counts))
-	for status, count := range counts {
-		parts = append(parts, fmt.Sprintf("%d %s", count, status))
+	for _, status := range statusOrder {
+		if n := counts[status]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, status))
+		}
 	}
 	return fmt.Sprintf("VEX: %d statements (%s)", len(doc.Statements), strings.Join(parts, ", "))
 }

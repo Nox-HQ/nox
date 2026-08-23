@@ -1121,8 +1121,8 @@ func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (mcp.S
 	}
 
 	byStatus := make(map[string]int)
-	for _, stmt := range doc.Statements {
-		byStatus[string(stmt.Status)]++
+	for status, n := range vex.StatusCounts(doc) {
+		byStatus[string(status)] = n
 	}
 
 	return structured(vexStatusOutput{
