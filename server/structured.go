@@ -82,22 +82,6 @@ type baselineStatusOutput struct {
 	Path       string         `json:"path"`
 }
 
-// dataRuleStats counts one DATA-* rule's findings and the files it touched.
-type dataRuleStats struct {
-	RuleID      string   `json:"rule_id"`
-	Description string   `json:"description"`
-	Count       int      `json:"count"`
-	Files       []string `json:"files"`
-}
-
-// dataSensitivityOutput is the PII / sensitive-data report returned by
-// "data_sensitivity_report".
-type dataSensitivityOutput struct {
-	TotalFindings int             `json:"total_findings"`
-	Rules         []dataRuleStats `json:"rules"`
-	AffectedFiles []string        `json:"affected_files"`
-}
-
 // fingerprintLookupOutput is the single-finding status lookup returned by
 // "get_finding_by_fingerprint". Found is always emitted (so a caller can
 // distinguish a miss from a hit); the remaining fields are populated only on a

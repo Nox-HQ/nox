@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/report"
+
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	mcp "go.klarlabs.de/mcp"
@@ -37,7 +39,7 @@ func TestStructuredOutputSchemasGenerate(t *testing.T) {
 		{"summary", summaryOutput{}},
 		{"list_findings", listFindingsOutput{}},
 		{"baseline_status", baselineStatusOutput{}},
-		{"data_sensitivity_report", dataSensitivityOutput{}},
+		{"data_sensitivity_report", report.DataSensitivityReport{}},
 		{"get_finding_detail", detail.FindingDetail{}},
 		{"get_finding_by_fingerprint", fingerprintLookupOutput{}},
 		{"diff", diff.Result{}},

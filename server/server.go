@@ -339,7 +339,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
 		ReadOnly().
-		OutputSchema(dataSensitivityOutput{}).
+		OutputSchema(report.DataSensitivityReport{}).
 		Handler(s.handleDataSensitivityReport)
 
 	srv.Tool("dashboard").
@@ -1141,72 +1141,16 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ emptyInput) (m
 		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
-	// Filter DATA-* findings from active findings.
-	ruleMap := make(map[string]*dataRuleStats)
-	allFiles := make(map[string]struct{})
+	// The projection lives in core/report; the handler only injects the catalog
+	// as the rule-description source and marshals the result.
 	cat := catalog.Catalog()
-
-	activeFindings := pc.result.Findings.ActiveFindings()
-	for i := range activeFindings {
-		f := &activeFindings[i]
-		if !strings.HasPrefix(f.RuleID, "DATA-") {
-			continue
+	rep := report.BuildDataSensitivityReport(pc.result.Findings.ActiveFindings(), func(ruleID string) string {
+		if meta, ok := cat[ruleID]; ok {
+			return meta.Description
 		}
-
-		rs, ok := ruleMap[f.RuleID]
-		if !ok {
-			desc := f.RuleID
-			if meta, exists := cat[f.RuleID]; exists {
-				desc = meta.Description
-			}
-			rs = &dataRuleStats{
-				RuleID:      f.RuleID,
-				Description: desc,
-			}
-			ruleMap[f.RuleID] = rs
-		}
-		rs.Count++
-
-		fp := f.Location.FilePath
-		allFiles[fp] = struct{}{}
-
-		// Track unique files per rule.
-		found := false
-		for _, existing := range rs.Files {
-			if existing == fp {
-				found = true
-				break
-			}
-		}
-		if !found {
-			rs.Files = append(rs.Files, fp)
-		}
-	}
-
-	// Build sorted slices for deterministic output.
-	rules := make([]dataRuleStats, 0, len(ruleMap))
-	for _, rs := range ruleMap {
-		sort.Strings(rs.Files)
-		rules = append(rules, *rs)
-	}
-	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
-
-	affectedFiles := make([]string, 0, len(allFiles))
-	for fp := range allFiles {
-		affectedFiles = append(affectedFiles, fp)
-	}
-	sort.Strings(affectedFiles)
-
-	total := 0
-	for _, rs := range rules {
-		total += rs.Count
-	}
-
-	return structured(dataSensitivityOutput{
-		TotalFindings: total,
-		Rules:         rules,
-		AffectedFiles: affectedFiles,
+		return ""
 	})
+	return structured(rep)
 }
 
 // Dashboard tool handler.
