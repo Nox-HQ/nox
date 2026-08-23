@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/nox-hq/nox/core/fsutil"
 )
 
 const baselineSchemaVersion = "1.0.0"
@@ -87,28 +89,8 @@ func (b *Baseline) Save(path string) error {
 	}
 	data = append(data, '\n')
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating baseline directory: %w", err)
-	}
-
-	tmp, err := os.CreateTemp(dir, ".mcp-baseline-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("renaming baseline file: %w", err)
+	if err := fsutil.AtomicWriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing mcp baseline: %w", err)
 	}
 	return nil
 }

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nox-hq/nox/core/fsutil"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -67,44 +69,9 @@ func (b *Baseline) Save(path string) error {
 	}
 	data = append(data, '\n')
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating baseline directory: %w", err)
+	if err := fsutil.AtomicWriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing baseline: %w", err)
 	}
-
-	tmp, err := os.CreateTemp(dir, ".baseline-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		closeErr := tmp.Close()
-		removeErr := os.Remove(tmpName)
-		if closeErr != nil {
-			return fmt.Errorf("writing temp file: %w (close error: %v)", err, closeErr)
-		}
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("writing temp file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		removeErr := os.Remove(tmpName)
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("closing temp file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		removeErr := os.Remove(tmpName)
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("renaming baseline file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("renaming baseline file: %w", err)
-	}
-
 	return nil
 }
 

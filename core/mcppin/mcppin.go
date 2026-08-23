@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/fsutil"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -197,22 +199,12 @@ func (p *Pinner) Save() error {
 		return nil
 	}
 
-	if err := os.MkdirAll(p.dir, 0o755); err != nil {
-		return fmt.Errorf("creating mcp pin dir: %w", err)
-	}
-
 	data, err := json.Marshal(p.store)
 	if err != nil {
 		return fmt.Errorf("marshaling mcp pins: %w", err)
 	}
-
-	tmp := p.storePath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("writing mcp pin temp: %w", err)
-	}
-	if err := os.Rename(tmp, p.storePath()); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("renaming mcp pins: %w", err)
+	if err := fsutil.AtomicWriteFile(p.storePath(), data, 0o644); err != nil {
+		return fmt.Errorf("writing mcp pins: %w", err)
 	}
 
 	p.dirty = false
