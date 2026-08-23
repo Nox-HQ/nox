@@ -1,4 +1,5 @@
-// Agent tool-use lattice analysis (OWASP LLM07: Insecure Plugin Design).
+// Agent tool-use lattice analysis (OWASP LLM06: Excessive Agency, 2025 edition;
+// the 2023 "Insecure Plugin Design" category folds into Excessive Agency).
 //
 // The lattice analyzer scans source files for tool-registration call sites
 // across multiple agent frameworks, normalises tool names to capability
@@ -17,6 +18,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/lexctx"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -48,7 +51,7 @@ const (
 // description is the operator-/LLM-facing string passed at registration
 // time; capturing it lets AIBOM downstream consumers audit whether the
 // description matches what the tool actually does. Mis-described tools
-// are a real LLM07 pattern (`name="read_only"` granting write).
+// are a real LLM06 pattern (`name="read_only"` granting write).
 type extractedTool struct {
 	name        string
 	line        int
@@ -215,7 +218,7 @@ func extractTools(path string, content []byte) []extractedTool {
 			desc := descriptionAfterMatch(content, m[1])
 			tools = append(tools, extractedTool{
 				name:        name,
-				line:        lineForOffset(content, m[0]),
+				line:        lexctx.LineForOffset(content, m[0]),
 				description: desc,
 				tags:        classifyToolName(name),
 			})
@@ -247,19 +250,6 @@ func descriptionAfterMatch(content []byte, start int) string {
 		return string(m[1])
 	}
 	return ""
-}
-
-func lineForOffset(content []byte, offset int) int {
-	line := 1
-	if offset > len(content) {
-		offset = len(content)
-	}
-	for i := 0; i < offset; i++ {
-		if content[i] == '\n' {
-			line++
-		}
-	}
-	return line
 }
 
 // dangerousCombo describes a forbidden-combination policy. A finding is
@@ -408,7 +398,7 @@ func latticeMetadata(tools []extractedTool, combo *dangerousCombo) map[string]st
 		"cwe":                  combo.cwe,
 		"agent_tools":          strings.Join(names, ","),
 		"violated_combination": strings.Join(required, "+"),
-		"owasp":                "LLM07",
+		"owasp":                "LLM06",
 	}
 	if len(described) > 0 {
 		md["agent_tool_descriptions"] = strings.Join(described, " | ")

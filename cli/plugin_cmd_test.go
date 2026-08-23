@@ -629,3 +629,15 @@ func TestNewOCIStore(t *testing.T) {
 		t.Fatal("expected non-nil store")
 	}
 }
+
+// The direct `nox plugin install` path must reject an unsafe plugin name — it
+// used to validate nothing, while the URI and MCP paths did, leaving a
+// traversal/injection gap on the most common install path.
+func TestRunPluginInstallRejectsUnsafeName(t *testing.T) {
+	if code := runPluginInstall([]string{"../../etc/passwd"}); code != 2 {
+		t.Errorf("install of an unsafe name exited %d, want 2 (rejected)", code)
+	}
+	if code := runPluginInstall([]string{"pkg$(whoami)"}); code != 2 {
+		t.Errorf("install of an injection name exited %d, want 2 (rejected)", code)
+	}
+}

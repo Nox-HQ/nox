@@ -10,7 +10,6 @@
 package deps
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
@@ -277,7 +276,7 @@ func detectCargoLicenses(basePath string) map[string]string {
 func parseCargoTOMLLicense(data []byte) (name, license string) {
 	inPackage := false
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner := newLineScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -378,7 +377,7 @@ func parsePyprojectTOML(path string) (name, license string) {
 
 	inProject := false
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner := newLineScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -416,7 +415,7 @@ func parseSetupCfg(path string) (name, license string) {
 
 	inMetadata := false
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner := newLineScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
@@ -555,7 +554,7 @@ func parseGemspec(path string) (name, license string) {
 		return "", ""
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner := newLineScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 

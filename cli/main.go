@@ -109,26 +109,6 @@ func isTopLevelStringFlag(name string) bool {
 	return false
 }
 
-// degradationsForReport converts scan degradations into their report form so
-// they can be recorded in findings.json. Consumers that only read the artifact
-// — CI jobs, dashboards, MCP clients — never see the stderr warnings, and for
-// them an empty findings list would otherwise be indistinguishable from a scan
-// that could not run.
-func degradationsForReport(ds []nox.Degradation) []report.Degradation {
-	if len(ds) == 0 {
-		return nil
-	}
-	out := make([]report.Degradation, 0, len(ds))
-	for _, d := range ds {
-		out = append(out, report.Degradation{
-			Kind:   string(d.Kind),
-			Detail: d.Detail,
-			Impact: d.Impact,
-		})
-	}
-	return out
-}
-
 // run executes the CLI and returns the exit code.
 // 0 = clean (no findings), 1 = findings detected, 2 = error.
 func run(args []string) int {
@@ -169,6 +149,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n") // nox:ignore AI-006 -- CLI help text
+		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
@@ -224,6 +205,8 @@ func run(args []string) int {
 		return runExplain(remaining[1:])
 	case "confirm":
 		return runConfirm(remaining[1:])
+	case "attack":
+		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
 	case "serve":
@@ -615,20 +598,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
 	}
 
-	// A key nox does not understand is ignored, so .nox.yaml can describe a
-	// policy that is not in force while the scan reports success. `suppressions:`
-	// is not a real key — write it and nox suppresses nothing and passes,
-	// indistinguishable from a scan whose suppressions all applied. Misspell
-	// `plugins.required` and every plugin silently stops being declared.
-	//
-	// Same channel and same reasoning as the degradations above: stderr, and
-	// not suppressed by --quiet, because this says the results describe
-	// something other than what was asked for.
-	if unknown := nox.UnknownConfigKeys(target); len(unknown) > 0 {
-		fmt.Fprintf(os.Stderr, "[degraded] .nox.yaml has %d key(s) nox does not recognise: %s\n",
-			len(unknown), strings.Join(unknown, ", "))
-		fmt.Fprintf(os.Stderr, "  impact: they are ignored, so whatever they were meant to configure is not in effect. Check for a typo against the documented keys.\n")
-	}
+	// Config nox does not act on used to be printed here, by this adapter only.
+	// It is now recorded in core as a degrade.Config degradation and rendered by
+	// the loop above, so the MCP server, the LSP and findings.json all report it
+	// too — an agent scanning over MCP had no other way to learn that the policy
+	// it configured was not in force.
 
 	// Generate reports.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -644,7 +618,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r.Offline = offlineFlag
 			r.Prioritize = sortFlag == "priority"
 			r.SASTLanguages = result.SASTProfile
-			r.Degradations = degradationsForReport(result.Degradations)
+			r.Degradations = report.DegradationsFrom(result.Degradations)
 			r.Enrichments = result.Enrichments
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)

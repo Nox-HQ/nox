@@ -257,17 +257,7 @@ existing debt does not. Burn it down with ` + "`nox baseline update`" + ` as you
 // severityBreakdown formats per-severity counts in severity order, e.g.
 // "2 critical, 11 high, 40 medium".
 func severityBreakdown(counts map[findings.Severity]int) string {
-	order := []findings.Severity{
-		findings.SeverityCritical, findings.SeverityHigh,
-		findings.SeverityMedium, findings.SeverityLow, findings.SeverityInfo,
-	}
-	var parts []string
-	for _, s := range order {
-		if n := counts[s]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, s))
-		}
-	}
-	return strings.Join(parts, ", ")
+	return findings.FormatSeverityCounts(counts)
 }
 
 func baselineWrite(args []string) int {
@@ -580,40 +570,13 @@ func shortFP(fp string) string {
 }
 
 func splitCSV(s string) []string {
-	if s == "" {
-		return nil
-	}
 	var out []string
-	for _, p := range splitCommaTrim(s) {
-		if p != "" {
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
 			out = append(out, p)
 		}
 	}
 	return out
-}
-
-func splitCommaTrim(s string) []string {
-	parts := make([]string, 0, 4)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			parts = append(parts, trimSpace(s[start:i]))
-			start = i + 1
-		}
-	}
-	parts = append(parts, trimSpace(s[start:]))
-	return parts
-}
-
-func trimSpace(s string) string {
-	a, b := 0, len(s)
-	for a < b && (s[a] == ' ' || s[a] == '\t') {
-		a++
-	}
-	for b > a && (s[b-1] == ' ' || s[b-1] == '\t') {
-		b--
-	}
-	return s[a:b]
 }
 
 func buildSet(values []string) map[string]struct{} {
@@ -650,15 +613,15 @@ func baselineShow(args []string) int {
 		return 0
 	}
 
-	fmt.Printf("baseline: %d entries (%d expired) — %s\n", bl.Len(), bl.ExpiredCount(), baselinePath)
+	st := bl.Status()
+	fmt.Printf("baseline: %d entries (%d expired) — %s\n", st.Total, st.Expired, baselinePath)
 
-	// Show per-severity counts.
-	counts := make(map[string]int)
-	for i := range bl.Entries {
-		counts[string(bl.Entries[i].Severity)]++
-	}
-	for sev, count := range counts {
-		fmt.Printf("  %s: %d\n", sev, count)
+	// Per-severity counts, in canonical severity order (the old loop iterated a
+	// map non-deterministically).
+	for _, sev := range findings.SeverityOrder {
+		if n := st.BySeverity[sev]; n > 0 {
+			fmt.Printf("  %s: %d\n", sev, n)
+		}
 	}
 
 	return 0

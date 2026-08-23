@@ -234,6 +234,9 @@ func mcpDrift(args []string) int {
 		return 2
 	}
 	jsonPath := filepath.Join(outputDir, "findings.json")
+	// no degradations: every failure above — an unreadable baseline, a manifest
+	// that could not be captured — exits 2 rather than continuing, so this
+	// command has no partial-result state to report.
 	if err := report.NewJSONReporter(version).WriteToFile(fsSet, jsonPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", jsonPath, err)
 		return 2
@@ -285,24 +288,10 @@ func printDriftReport(diff mcpdrift.Diff, drift []findings.Finding, server, base
 }
 
 func severityLine(sev map[findings.Severity]int) string {
-	order := []findings.Severity{
-		findings.SeverityCritical, findings.SeverityHigh,
-		findings.SeverityMedium, findings.SeverityLow, findings.SeverityInfo,
+	if out := findings.FormatSeverityCounts(sev); out != "" {
+		return out
 	}
-	var parts []string
-	for _, s := range order {
-		if n := sev[s]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, s))
-		}
-	}
-	if len(parts) == 0 {
-		return "none"
-	}
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += ", " + p
-	}
-	return out
+	return "none"
 }
 
 // printSandboxWarning reminds the operator, on stderr, that the server runs as a

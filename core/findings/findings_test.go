@@ -1301,3 +1301,100 @@ func TestDeduplicate_RemovesTrueDuplicates(t *testing.T) {
 		t.Errorf("expected a true duplicate to be removed, got %d findings", got)
 	}
 }
+
+func TestFormatSeverityCounts(t *testing.T) {
+	tests := []struct {
+		name   string
+		counts map[Severity]int
+		want   string
+	}{
+		{"empty is blank", map[Severity]int{}, ""},
+		{"all zero is blank", map[Severity]int{SeverityHigh: 0}, ""},
+		{"single", map[Severity]int{SeverityHigh: 3}, "3 high"},
+		{"canonical order regardless of map order", map[Severity]int{
+			SeverityLow: 1, SeverityCritical: 2, SeverityHigh: 5,
+		}, "2 critical, 5 high, 1 low"},
+		{"omits zeros between", map[Severity]int{
+			SeverityCritical: 1, SeverityMedium: 4,
+		}, "1 critical, 4 medium"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatSeverityCounts(tt.counts); got != tt.want {
+				t.Errorf("FormatSeverityCounts = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// SeverityOrder must be the source the priority rank derives from — a drift
+// between the two would reorder findings differently from how they are
+// summarised.
+func TestSeverityOrderDrivesPriorityRank(t *testing.T) {
+	if len(SeverityOrder) != 5 {
+		t.Fatalf("SeverityOrder has %d entries, want 5", len(SeverityOrder))
+	}
+	for i, s := range SeverityOrder {
+		if severityPriorityRank[s] != i {
+			t.Errorf("rank of %s = %d, want %d (must derive from SeverityOrder)", s, severityPriorityRank[s], i)
+		}
+	}
+	if SeverityOrder[0] != SeverityCritical || SeverityOrder[4] != SeverityInfo {
+		t.Errorf("SeverityOrder must run critical..info, got %v", SeverityOrder)
+	}
+}
+
+func TestSeverityRank(t *testing.T) {
+	if SeverityRank(SeverityCritical) != 0 || SeverityRank(SeverityInfo) != 4 {
+		t.Errorf("ranks: critical=%d info=%d, want 0 and 4", SeverityRank(SeverityCritical), SeverityRank(SeverityInfo))
+	}
+	// An unrecognised severity ranks past info so it sorts last, never tying.
+	if SeverityRank(Severity("bogus")) != len(SeverityOrder) {
+		t.Errorf("unknown severity rank = %d, want %d", SeverityRank(Severity("bogus")), len(SeverityOrder))
+	}
+	// Rank must agree with SeverityOrder for every level.
+	for i, s := range SeverityOrder {
+		if SeverityRank(s) != i {
+			t.Errorf("SeverityRank(%s) = %d, want %d", s, SeverityRank(s), i)
+		}
+	}
+}
+
+func TestCountBySeverity(t *testing.T) {
+	ff := []Finding{
+		{Severity: SeverityHigh}, {Severity: SeverityHigh}, {Severity: SeverityCritical},
+	}
+	c := CountBySeverity(ff)
+	if c[SeverityHigh] != 2 || c[SeverityCritical] != 1 {
+		t.Errorf("CountBySeverity = %v", c)
+	}
+	if len(CountBySeverity(nil)) != 0 {
+		t.Error("CountBySeverity(nil) should be empty")
+	}
+}
+
+func TestSeverityLadder(t *testing.T) {
+	// Downgraded and Upgraded are inverses, with the ends idempotent.
+	down := map[Severity]Severity{
+		SeverityCritical: SeverityHigh, SeverityHigh: SeverityMedium,
+		SeverityMedium: SeverityLow, SeverityLow: SeverityInfo, SeverityInfo: SeverityInfo,
+	}
+	for s, want := range down {
+		if got := s.Downgraded(); got != want {
+			t.Errorf("%s.Downgraded() = %s, want %s", s, got, want)
+		}
+	}
+	up := map[Severity]Severity{
+		SeverityInfo: SeverityLow, SeverityLow: SeverityMedium,
+		SeverityMedium: SeverityHigh, SeverityHigh: SeverityCritical, SeverityCritical: SeverityCritical,
+	}
+	for s, want := range up {
+		if got := s.Upgraded(); got != want {
+			t.Errorf("%s.Upgraded() = %s, want %s", s, got, want)
+		}
+	}
+	// An unrecognized severity is unchanged either way.
+	if Severity("weird").Upgraded() != "weird" || Severity("weird").Downgraded() != "weird" {
+		t.Error("unknown severity must pass through the ladder unchanged")
+	}
+}

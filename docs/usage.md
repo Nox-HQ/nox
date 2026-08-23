@@ -1493,7 +1493,6 @@ nox serve --allowed-paths /path/to/project
 | `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
-| `plugin.read_resource` | Read a plugin resource | `plugin`, `uri` |
 
 All tools are **read-only**. Output is truncated at **1 MB**.
 

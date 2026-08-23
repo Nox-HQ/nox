@@ -1,4 +1,18 @@
-package main
+// Package fix is the single source of truth for planning dependency-upgrade
+// remediations from VULN-001 findings.
+//
+// It exists because two entry points — the `nox fix` CLI and the MCP `fix_plan`
+// tool — both need to decide "which packages should move, to what version" from
+// the same findings, and for a supply-chain remediation surface those two
+// answers must be identical. They were not: the MCP copy had drifted, missing
+// the CLI's guard against downgrades and prereleases, aggregating advisories
+// differently, and disagreeing on which ecosystems nox can actually drive. A
+// planner that shows an agent a downgrade the CLI would refuse to apply is
+// actively dangerous, so the plan and the applier now share this one function.
+//
+// This package is pure: no I/O, no execution. It decides the plan; the CLI's
+// applier runs it.
+package fix
 
 import (
 	"strconv"
@@ -27,7 +41,6 @@ func parseVersion(s string) parsedVersion {
 		return parsedVersion{}
 	}
 
-	// Split off prerelease ("-dev", "-rc.1") and build ("+meta") metadata.
 	core := s
 	pre := false
 	if i := strings.IndexAny(core, "-+"); i >= 0 {
@@ -82,64 +95,52 @@ func compareVersions(a, b parsedVersion) int {
 	return 0
 }
 
-// isUpgrade reports whether moving from -> to is a genuine forward move that
+// IsUpgrade reports whether moving from -> to is a genuine forward move that
 // nox should apply.
 //
 // Three refusals, each one a bug seen in production:
 //
 //   - to <= from. An advisory's fixed_in is the version that closed THAT
-//     advisory, not the newest safe version. A package with several advisories
-//     yields several fixed_in values, and the lowest is routinely below what is
-//     already installed — felixgeelhaar/specular#51 downgraded
-//     golang.org/x/crypto 0.54.0 -> 0.51.0 that way and reintroduced nine
-//     critical advisories into a repo that scanned clean.
-//   - a prerelease target when the install is stable.
-//     felixgeelhaar/orbita#49 pinned google.golang.org/grpc to v1.81.0-dev, a
-//     real upstream tag but a development marker. Production code should not
-//     start tracking one because a scanner suggested it.
-//   - a non-empty installed version nox cannot order. Without an ordering
-//     there is no way to know the move is forward, and a security-titled PR is
-//     the worst place to guess.
+//     advisory, not the newest safe version; the lowest is routinely below what
+//     is already installed, and adopting it downgrades the package and can
+//     reintroduce advisories the repo had already cleared.
+//   - a prerelease target when the install is stable. A development tag is a
+//     real upstream version but not one production code should start tracking
+//     because a scanner suggested it.
+//   - a non-empty installed version nox cannot order. Without an ordering there
+//     is no way to know the move is forward, and a security-titled change is the
+//     worst place to guess.
 //
-// An ABSENT installed version is treated differently from an unparseable one.
-// Some scanners do not populate it at all; refusing there would silently stop
-// remediating whole ecosystems, which is its own quiet failure. Absence is not
-// evidence of a downgrade, so the direction check is skipped — but the
-// prerelease guard still applies, because that one needs no ordering.
-func isUpgrade(from, to string) bool {
+// An ABSENT installed version is treated differently from an unparseable one:
+// some scanners do not populate it, and refusing there would silently stop
+// remediating whole ecosystems. Absence is not evidence of a downgrade, so the
+// direction check is skipped — but the prerelease guard still applies, because
+// it needs no ordering.
+func IsUpgrade(from, to string) bool {
 	t := parseVersion(to)
 	if !t.ok {
 		return false
 	}
-
 	f := parseVersion(from)
 
-	// Never adopt a prerelease from a stable release. Decidable without
-	// knowing the installed version, so it is checked first and always.
 	if t.prerelease && !f.prerelease {
 		return false
 	}
-
-	// No installed version reported: apply, and count on the prerelease guard
-	// above. Refusing here would drop coverage for scanners that omit it.
 	if strings.TrimSpace(from) == "" {
 		return true
 	}
-
-	// A value we cannot order is not a licence to guess.
 	if !f.ok {
 		return false
 	}
-
 	return compareVersions(t, f) > 0
 }
 
-// bestFix picks the highest of several candidate fix versions.
+// BestFix picks the highest of several candidate fix versions.
 //
 // Advisories are independent: each names the version that closed it. Applying
 // them one at a time lets the last one win by accident, which is order, not
 // safety. The highest fix clears every advisory below it in one move.
-func bestFix(candidates []string) string {
+func BestFix(candidates []string) string {
 	best := ""
 	var bestParsed parsedVersion
 	for _, c := range candidates {
@@ -152,4 +153,24 @@ func bestFix(candidates []string) string {
 		}
 	}
 	return best
+}
+
+// IsMajorBump reports whether the fix version's leading numeric component
+// differs from the current version's. A non-numeric or empty leading segment is
+// treated as same-major, to be conservative: nox does not skip an upgrade over
+// a boundary it cannot actually see.
+func IsMajorBump(from, to string) bool {
+	if from == "" || to == "" {
+		return false
+	}
+	return majorOf(from) != majorOf(to)
+}
+
+// majorOf returns the leading numeric segment of a version ("v1.2.3" -> "1").
+func majorOf(version string) string {
+	v := strings.TrimPrefix(version, "v")
+	if i := strings.IndexByte(v, '.'); i >= 0 {
+		v = v[:i]
+	}
+	return v
 }

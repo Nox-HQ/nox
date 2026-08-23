@@ -1,7 +1,6 @@
 package deps
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"log/slog"
@@ -65,8 +64,7 @@ func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, b
 	}
 
 	pkgs := make(map[string]struct{})
-	scanner := bufio.NewScanner(&stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner := newLineScanner(&stdout)
 	for scanner.Scan() {
 		p := strings.TrimSpace(scanner.Text())
 		// With -e, `go list` outside a module echoes the unresolved pattern

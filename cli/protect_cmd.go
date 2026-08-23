@@ -10,10 +10,6 @@ import (
 	"github.com/nox-hq/nox/core/git"
 )
 
-// hookMarker is written into the hook script so that uninstall can identify
-// hooks managed by nox.
-const hookMarker = "Installed by nox protect"
-
 // runProtect implements the "nox protect" command with install, uninstall, and
 // status subcommands for managing git pre-commit hooks.
 func runProtect(args []string) int {
@@ -86,7 +82,7 @@ func protectInstall(args []string) int {
 		if !force {
 			// Read existing hook to check if it was installed by nox.
 			existing, readErr := os.ReadFile(hookPath)
-			if readErr == nil && strings.Contains(string(existing), hookMarker) {
+			if readErr == nil && strings.Contains(string(existing), git.HookMarker) {
 				fmt.Fprintln(os.Stderr, "error: nox pre-commit hook is already installed")
 				fmt.Fprintln(os.Stderr, "  use --force to overwrite")
 				return 2
@@ -155,7 +151,7 @@ func protectUninstall(args []string) int {
 	}
 
 	// Verify it was installed by nox.
-	if !strings.Contains(string(content), hookMarker) {
+	if !strings.Contains(string(content), git.HookMarker) {
 		fmt.Fprintln(os.Stderr, "error: pre-commit hook was not installed by nox — refusing to remove")
 		return 2
 	}
@@ -207,7 +203,7 @@ func protectStatus(args []string) int {
 		return 2
 	}
 
-	if strings.Contains(string(content), hookMarker) {
+	if strings.Contains(string(content), git.HookMarker) {
 		fmt.Println("protect: installed")
 	} else {
 		fmt.Println("protect: not installed (pre-commit hook exists but was not installed by nox)")
@@ -230,8 +226,15 @@ if [ $exit_code -eq 1 ]; then
     echo "nox: use 'git commit --no-verify' to skip this check (not recommended)"
     exit 1
 fi
+# Propagate any other non-zero exit (2 = scan error). Falling through to exit 0
+# here would let a commit through when the scan CRASHED — a failed gate that
+# reports success, the worst outcome for a security hook.
+if [ $exit_code -ne 0 ]; then
+    echo "nox: pre-commit scan errored (exit $exit_code) — not blocking, not passing" >&2
+    exit $exit_code
+fi
 exit 0
-`, hookMarker, threshold)
+`, git.HookMarker, threshold)
 }
 
 // isValidThreshold returns true if the given string is a recognized severity

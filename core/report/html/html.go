@@ -168,16 +168,7 @@ func sevClass(s findings.Severity) string {
 }
 
 func sevRank(s string) int {
-	switch s {
-	case "critical":
-		return 0
-	case "high":
-		return 1
-	case "medium":
-		return 2
-	case "low":
-		return 3
-	default:
-		return 4
-	}
+	// Delegates to the one canonical ranking so the report sorts severities the
+	// same way the policy gate compares them.
+	return findings.SeverityRank(findings.Severity(s))
 }

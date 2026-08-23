@@ -243,10 +243,6 @@ func scanRustCharOrLifetime(content []byte, start int) (end int, isChar bool) {
 // subset that matters for lifetime detection: leading letter/underscore, then
 // alnum/underscore). Non-ASCII identifiers are rare in lifetimes and degrade
 // safely to "not a lifetime start".
-func isRustIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isRustIdentStart(b byte) bool { return asciiIdentStart(b) }
 
-func isRustIdentPart(b byte) bool {
-	return isRustIdentStart(b) || (b >= '0' && b <= '9')
-}
+func isRustIdentPart(b byte) bool { return asciiIdentPart(b) }

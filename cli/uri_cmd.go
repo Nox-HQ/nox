@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/nox-hq/nox/plugin"
 )
 
 // runURI dispatches `nox uri` subcommands. Two surfaces today:
@@ -68,14 +70,14 @@ func uriDispatchInstall(u *url.URL) int {
 		fmt.Fprintln(os.Stderr, "error: nox://install requires ?plugin=NAME")
 		return 2
 	}
-	if !uriIsSafePluginName(name) {
+	if !plugin.IsSafeName(name) {
 		fmt.Fprintln(os.Stderr, "error: invalid plugin name in URI")
 		return 2
 	}
 	version := q.Get("version")
 	spec := name
 	if version != "" {
-		if !uriIsSafeVersion(version) {
+		if !plugin.IsSafeVersionConstraint(version) {
 			fmt.Fprintln(os.Stderr, "error: invalid version in URI")
 			return 2
 		}
@@ -84,50 +86,6 @@ func uriDispatchInstall(u *url.URL) int {
 
 	fmt.Printf("nox uri: installing %s\n", spec)
 	return runPluginInstall([]string{spec})
-}
-
-// uriIsSafePluginName mirrors server.isSafePluginName so URI dispatch
-// uses the same allowlist as the MCP tool surface. Imported logic
-// would be cleaner but the duplication is acceptable for two
-// 20-line functions and avoids dragging server/ types into cli/.
-func uriIsSafePluginName(s string) bool {
-	if s == "" || len(s) > 200 {
-		return false
-	}
-	if strings.Contains(s, "..") {
-		return false
-	}
-	if s[0] == '.' || s[0] == '-' || s[0] == '/' {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '/' || r == '-' || r == '_' || r == '.':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func uriIsSafeVersion(s string) bool {
-	if s == "" || len(s) > 50 {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r == '.' || r == '-' || r == '+' || r == '>' || r == '=' || r == '^' || r == '~':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // runURIRegister installs the OS-level URL scheme handler that

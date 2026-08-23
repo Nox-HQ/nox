@@ -1,7 +1,6 @@
 package deps
 
 import (
-	"bufio"
 	"bytes"
 	"strings"
 )
@@ -38,8 +37,7 @@ func parseYarnLock(content []byte) ([]Package, error) {
 	var pkgs []Package
 
 	var pendingNames []string
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLockfileLine)
+	scanner := newLineScanner(bytes.NewReader(content))
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -141,8 +139,7 @@ func parsePnpmLock(content []byte) ([]Package, error) {
 	var pkgs []Package
 
 	inPackages := false
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLockfileLine)
+	scanner := newLineScanner(bytes.NewReader(content))
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -248,8 +245,7 @@ func parsePoetryLock(content []byte) ([]Package, error) {
 		name, version = "", ""
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLockfileLine)
+	scanner := newLineScanner(bytes.NewReader(content))
 
 	for scanner.Scan() {
 		trimmed := strings.TrimSpace(scanner.Text())

@@ -368,3 +368,39 @@ func TestJSONReporter_OmitsEnrichmentsWhenEmpty(t *testing.T) {
 		t.Errorf("empty enrichments must be omitted entirely, got:\n%s", data)
 	}
 }
+
+func TestLoadFindingsFileParsesTheRealArtifact(t *testing.T) {
+	// A real `nox scan` writes a JSON OBJECT ({meta, findings, ...}), not an
+	// array. The vex init loader had drifted to parsing an array, which failed
+	// against every real scan. This asserts the shared loader reads the object.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "findings.json")
+
+	fs := findings.NewFindingSet()
+	fs.Add(findings.NewFinding("SEC-001", findings.SeverityHigh, findings.ConfidenceHigh,
+		findings.Location{FilePath: "config.env", StartLine: 1, EndLine: 1}, "secret"))
+	data, err := NewJSONReporter("test").Generate(fs)
+	if err != nil {
+		t.Fatalf("building report: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+
+	got, err := LoadFindingsFile(path)
+	if err != nil {
+		t.Fatalf("LoadFindingsFile on a real scan artifact failed: %v", err)
+	}
+	if len(got) != 1 || got[0].RuleID != "SEC-001" {
+		t.Fatalf("loaded %d findings, want 1 SEC-001: %+v", len(got), got)
+	}
+
+	// And the report projects active findings.
+	full, err := LoadFindingsFileReport(path)
+	if err != nil {
+		t.Fatalf("LoadFindingsFileReport: %v", err)
+	}
+	if len(full.ActiveFindings()) != 1 {
+		t.Fatalf("ActiveFindings = %d, want 1", len(full.ActiveFindings()))
+	}
+}

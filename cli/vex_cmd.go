@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/vex"
 )
 
@@ -51,15 +51,9 @@ func runVexInit(args []string) int {
 		}
 	}
 
-	raw, err := os.ReadFile(inputPath)
+	items, err := report.LoadFindingsFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", inputPath, err)
-		return 2
-	}
-
-	var items []findings.Finding
-	if err := json.Unmarshal(raw, &items); err != nil {
-		fmt.Fprintf(os.Stderr, "error: parsing %s: %v\n", inputPath, err)
 		return 2
 	}
 

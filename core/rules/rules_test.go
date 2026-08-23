@@ -415,9 +415,18 @@ func TestRegexMatcher_ColumnPosition(t *testing.T) {
 func TestDefaultMatcherRegistry(t *testing.T) {
 	reg := NewDefaultMatcherRegistry()
 
-	for _, mt := range []string{"regex", "jsonpath", "yamlpath", "heuristic"} {
+	// Only the implemented types. jsonpath/yamlpath/heuristic are deliberately
+	// absent: they used to resolve to a stub that matched nothing, which made
+	// every rule declaring one silently report a clean scan. See
+	// stub_matcher_test.go.
+	for _, mt := range []string{"regex", "entropy", "absence"} {
 		if reg.Get(mt) == nil {
 			t.Fatalf("expected matcher for type %q", mt)
+		}
+	}
+	for _, mt := range []string{"jsonpath", "yamlpath", "heuristic"} {
+		if reg.Get(mt) != nil {
+			t.Fatalf("matcher type %q is registered but nothing implements it", mt)
 		}
 	}
 	if reg.Get("unknown") != nil {
@@ -924,19 +933,6 @@ func TestEngine_Rules(t *testing.T) {
 	}
 	if len(got.Rules()) != 2 {
 		t.Fatalf("expected 2 rules, got %d", len(got.Rules()))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// stubMatcher tests (0% → covered)
-// ---------------------------------------------------------------------------
-
-func TestStubMatcher_Match(t *testing.T) {
-	stub := &stubMatcher{}
-	rule := &Rule{ID: "STUB-001", MatcherType: "jsonpath", Pattern: "$.password"}
-	results := stub.Match([]byte(`{"password": "secret"}`), rule)
-	if results != nil {
-		t.Fatalf("stubMatcher should return nil, got %v", results)
 	}
 }
 

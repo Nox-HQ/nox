@@ -46,12 +46,12 @@ type Config struct {
 // case-sensitive and lowercase-only, so the value must match exactly.
 func (c Config) Validate() error {
 	if c.FailOn != "" {
-		if _, ok := severityRank[c.FailOn]; !ok {
+		if !c.FailOn.IsValid() {
 			return fmt.Errorf("policy.fail_on: %q is not a valid severity (want one of critical, high, medium, low, info)", c.FailOn)
 		}
 	}
 	if c.WarnOn != "" {
-		if _, ok := severityRank[c.WarnOn]; !ok {
+		if !c.WarnOn.IsValid() {
 			return fmt.Errorf("policy.warn_on: %q is not a valid severity (want one of critical, high, medium, low, info)", c.WarnOn)
 		}
 	}
@@ -61,7 +61,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("policy.baseline_mode: %q is not valid (want one of strict, warn, off)", c.BaselineMode)
 	}
 	for sev := range c.Budget {
-		if _, ok := severityRank[sev]; !ok {
+		if !sev.IsValid() {
 			return fmt.Errorf("policy.budget: %q is not a valid severity key (want one of critical, high, medium, low, info)", sev)
 		}
 	}
@@ -79,16 +79,6 @@ type Result struct {
 	Suppressed []findings.Finding
 	Warnings   []string
 	Summary    string
-}
-
-// severityRank maps severity levels to numeric ranks for comparison.
-// Lower rank = more severe.
-var severityRank = map[findings.Severity]int{
-	findings.SeverityCritical: 0,
-	findings.SeverityHigh:     1,
-	findings.SeverityMedium:   2,
-	findings.SeverityLow:      3,
-	findings.SeverityInfo:     4,
 }
 
 // Evaluate applies policy rules to the given findings and returns the result.
@@ -116,8 +106,20 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 	// only once its new-finding count exceeds its budget (default 0). With an
 	// empty budget this is identical to the previous "any new finding at/above
 	// fail_on fails" gate.
-	for sev, n := range severityCounts(r.New) {
-		gated := cfg.FailOn == "" || meetsThreshold(sev, cfg.FailOn)
+	for sev, n := range findings.CountBySeverity(r.New) {
+		// An unrecognised severity is gated unconditionally.
+		//
+		// meetsThreshold refuses to rank a severity it does not know, so
+		// without this branch a finding carrying an undefined severity
+		// satisfied no threshold and slipped EVERY gate — the run exited 0 on
+		// the one finding it could not classify. That is reachable from
+		// configuration, not just the API: a `severity_override` of "Critical"
+		// (capitalised) is cast straight to a Severity, and rather than raising
+		// the rule it made the finding invisible to the gate.
+		//
+		// Fail closed: if nox cannot tell how severe something is, it does not
+		// get to decide the finding is unimportant.
+		gated := cfg.FailOn == "" || !sev.IsValid() || meetsThreshold(sev, cfg.FailOn)
 		if gated && n > cfg.Budget[sev] {
 			r.Pass = false
 			r.ExitCode = 1
@@ -228,15 +230,21 @@ func gatingFindings(r *Result, cfg Config) []findings.Finding {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		return severityRank[out[i].Severity] < severityRank[out[j].Severity]
+		return findings.SeverityRank(out[i].Severity) < findings.SeverityRank(out[j].Severity)
 	})
 	return out
 }
 
+// severityRankOK returns a severity's rank and whether it is a defined level,
+// keeping the gate's comparisons on the one canonical ranking in core/findings.
+func severityRankOK(s findings.Severity) (int, bool) {
+	return findings.SeverityRank(s), s.IsValid()
+}
+
 // meetsThreshold returns true if severity is at or above the threshold.
 func meetsThreshold(severity, threshold findings.Severity) bool {
-	sr, ok1 := severityRank[severity]
-	tr, ok2 := severityRank[threshold]
+	sr, ok1 := severityRankOK(severity)
+	tr, ok2 := severityRankOK(threshold)
 	if !ok1 || !ok2 {
 		return false
 	}
@@ -244,22 +252,12 @@ func meetsThreshold(severity, threshold findings.Severity) bool {
 }
 
 // maxSeverity returns the most severe severity in the given findings.
-// severityCounts tallies findings by severity, so the gate can compare each
-// severity's count against its budget.
-func severityCounts(ff []findings.Finding) map[findings.Severity]int {
-	counts := make(map[findings.Severity]int)
-	for i := range ff {
-		counts[ff[i].Severity]++
-	}
-	return counts
-}
-
 func maxSeverity(ff []findings.Finding) findings.Severity {
 	best := findings.Severity("")
 	bestRank := 999
 	for i := range ff {
 		finding := ff[i]
-		r, ok := severityRank[finding.Severity]
+		r, ok := severityRankOK(finding.Severity)
 		if ok && r < bestRank {
 			bestRank = r
 			best = finding.Severity

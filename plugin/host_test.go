@@ -263,7 +263,7 @@ func TestHost_MergeResults_Findings(t *testing.T) {
 		},
 	}
 
-	h.MergeResults("test-plugin", resp, result)
+	h.MergeResults("test-plugin", resp, result, "")
 
 	ff := result.Findings.Findings()
 	if len(ff) != 1 {
@@ -295,7 +295,7 @@ func TestHost_MergeResults_Packages(t *testing.T) {
 		},
 	}
 
-	h.MergeResults("test-plugin", resp, result)
+	h.MergeResults("test-plugin", resp, result, "")
 
 	pkgs := result.Inventory.Packages()
 	if len(pkgs) != 2 {
@@ -320,7 +320,7 @@ func TestHost_MergeResults_AIComponents(t *testing.T) {
 		},
 	}
 
-	h.MergeResults("test-plugin", resp, result)
+	h.MergeResults("test-plugin", resp, result, "")
 
 	if len(result.AIInventory.Components) != 1 {
 		t.Fatalf("len(Components) = %d, want 1", len(result.AIInventory.Components))
@@ -338,7 +338,7 @@ func TestHost_MergeResults_EmptyResponse(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, result)
+	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, result, "")
 
 	if len(result.Findings.Findings()) != 0 {
 		t.Error("empty response should not add findings")
@@ -360,8 +360,8 @@ func TestHost_MergeResults_Nil(t *testing.T) {
 	}
 
 	// Should not panic.
-	h.MergeResults("test-plugin", nil, result)
-	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, nil)
+	h.MergeResults("test-plugin", nil, result, "")
+	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, nil, "")
 }
 
 func TestHost_MergeAllResults(t *testing.T) {
@@ -388,7 +388,7 @@ func TestHost_MergeAllResults(t *testing.T) {
 		},
 	}
 
-	h.MergeAllResults(attributed(responses), result)
+	h.MergeAllResults(attributed(responses), result, "")
 
 	if len(result.Findings.Findings()) != 2 {
 		t.Errorf("len(Findings) = %d, want 2", len(result.Findings.Findings()))
@@ -918,7 +918,7 @@ func TestHost_MergeResults_Graphs(t *testing.T) {
 		},
 	}
 
-	h.MergeResults("test-plugin", resp, result)
+	h.MergeResults("test-plugin", resp, result, "")
 
 	if len(result.Graphs) != 1 {
 		t.Fatalf("expected 1 graph, got %d", len(result.Graphs))
@@ -955,7 +955,7 @@ func TestHost_MergeResults_Enrichments(t *testing.T) {
 		},
 	}
 
-	h.MergeResults("test-plugin", resp, result)
+	h.MergeResults("test-plugin", resp, result, "")
 
 	if len(result.Enrichments) != 1 {
 		t.Fatalf("expected 1 enrichment, got %d", len(result.Enrichments))
@@ -980,7 +980,7 @@ func TestHost_MergeResults_GraphsAndEnrichments_Empty(t *testing.T) {
 		AIInventory: ai.NewInventory(),
 	}
 
-	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, result)
+	h.MergeResults("test-plugin", &pluginv1.InvokeToolResponse{}, result, "")
 
 	if len(result.Graphs) != 0 {
 		t.Error("empty response should not add graphs")
@@ -1227,7 +1227,7 @@ func TestHost_MergeAllResults_WithGraphsAndEnrichments(t *testing.T) {
 		},
 	}
 
-	h.MergeAllResults(attributed(responses), result)
+	h.MergeAllResults(attributed(responses), result, "")
 
 	if len(result.Graphs) != 2 {
 		t.Errorf("expected 2 graphs, got %d", len(result.Graphs))
@@ -1282,7 +1282,7 @@ func TestHost_MergeResults_PluginCannotSuppressCoreFinding(t *testing.T) {
 			Fingerprint: stored,
 			Location:    &pluginv1.Location{FilePath: "app/config.go", StartLine: 12},
 		}},
-	}, result)
+	}, result, "")
 
 	result.Findings.Deduplicate()
 

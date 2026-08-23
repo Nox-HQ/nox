@@ -44,6 +44,15 @@ const (
 	// not be read as "no high-risk slopsquat targets present".
 	SlopFeed Kind = "slop_feed"
 
+	// Config means .nox.yaml carries a key nox does not act on — either one it
+	// does not recognise, or one it parses and ignores. Both mean the policy
+	// the operator wrote is not the policy in force, which is a coverage
+	// question, not a tidiness one: a mistyped `plugins.required` silently
+	// disables every plugin, and an ignored `scan.include` silently widens the
+	// scan. Recorded here rather than printed by one adapter so every surface —
+	// CLI, MCP, LSP, the findings JSON — reports it.
+	Config Kind = "config"
+
 	// MCP means a file that structurally looks like an MCP client config
 	// (named mcp.json or containing an mcpServers object) could not be parsed,
 	// or an MCP pin store existed but could not be read. Either way an MCP

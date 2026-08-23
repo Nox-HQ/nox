@@ -256,6 +256,22 @@ function are not reported — nox parses Go with `go/ast`, not `go/types`. See
 
 Create a `.nox.yaml` in your project root to customize scan behavior:
 
+> nox reports configuration it cannot act on. A key it does not recognise, and a
+> key it parses but ignores, both mean the policy you wrote is not the policy in
+> force — so `nox scan` names them under `[degraded]` rather than passing in
+> silence. Two keys are currently accepted and ignored: `compliance.framework`
+> (no framework filtering is applied) and `cache` (nox never caches a scan, so
+> the block configures nothing; the `--no-cache` flag is accepted as a no-op for
+> the same reason).
+
+`scan.include` is an allow-list of glob patterns: when set, only matching files
+are scanned. `scan.exclude` still wins over it, so writing both means the
+intersection. Directories are still descended — a glob cannot tell you in
+advance whether a subtree contains a match, and pruning on that guess loses
+files silently; use `scan.exclude` to keep a subtree out of the walk entirely.
+Plugins receive the exclude patterns too, so a plugin that walks the tree itself
+honours them rather than crashing on a path you asked it to skip.
+
 ```yaml
 scan:
   exclude:
@@ -486,6 +502,40 @@ nox protect uninstall
 make hooks
 ```
 
+### Dynamic Exploit Validation
+
+Static analysis tells you what is dangerous. `nox attack` tells you whether an
+attacker can actually do it.
+
+```bash
+nox scan ./my-app --output .          # static, offline
+nox attack plan .                     # exploit hypotheses — offline, sends nothing
+nox attack run --profile safe         # simulate: what would be attempted
+nox attack run --target http://127.0.0.1:8000 \
+  --route /chat --fields persona,message \
+  --profile sandbox --authorize       # ACTIVE
+nox attack regress --record           # confirmed exploits become regression tests
+```
+
+Findings carry an exploitability state independent of severity — `POTENTIAL`,
+`PLAUSIBLE`, `PREVENTED`, `INCONCLUSIVE`, `CONFIRMED`. Reaching `CONFIRMED`
+requires an observed invariant violation, a sound benign control, reproduction
+under a k-of-n gate, **and** deterministic evidence: a model's opinion that an
+attack "probably worked" is recorded, labelled, and cannot confirm anything.
+
+Success is never scored on a string the payload carried, so an app that merely
+echoes input can never be mistaken for one that obeyed it.
+
+`nox attack plan` is offline and read-only. `run`, `replay`, and `regress` are
+ACTIVE — they send attack payloads, are never part of `nox scan`, refuse to run
+without `--authorize`, and do not sandbox your target.
+
+Over MCP, only `attack_plan` is exposed. The ACTIVE subcommands are deliberately
+absent: `--authorize` exists so a *human* affirms they own the target, and nox
+analyses untrusted repositories — an MCP-exposed attack runner would let text in
+a README steer requests at a host of its choosing. Plan and read over MCP; act
+from the CLI. See [docs/attack.md](docs/attack.md).
+
 ## CLI Reference
 
 ```
@@ -513,6 +563,9 @@ Commands:
   fix                      Apply OSV fixed_in remediation upgrades (go/npm/pypi/cargo)
   doctor                   Report environment, plugin state, config sanity
   agent-graph              Render agent capability lattice (mermaid/dot)
+  confirm                  ACTIVE: dynamically confirm AI prompt-injection findings
+  attack <cmd>             Dynamic exploit validation (plan, run, replay, regress)
+                              `plan` is offline; the rest are ACTIVE and need --authorize
   bench                    Scan a corpus directory; report rule fire-rates
   calibrate                Suggest severity overrides from a bench report
   version                  Print version and exit
@@ -528,7 +581,7 @@ Scan Flags:
   --staged                 Scan only git-staged files
   --severity-threshold     Minimum severity to report (critical, high, medium, low)
   --no-osv                 Disable OSV.dev vulnerability lookups (offline mode)
-  --no-cache               Disable incremental scan cache
+  --no-cache               No-op; accepted for compatibility (scans are never cached)
   --changed-since string   Only scan files changed since git ref
 
 Show Flags:
@@ -775,9 +828,9 @@ nox serve --allowed-paths /path/to/project
 | `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
 | `baseline_status` | `path` | Get baseline statistics |
 | `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
 | `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
-| `plugin.read_resource` | `plugin`, `uri` | Read a plugin resource |
 
 ### Resources
 
@@ -789,7 +842,21 @@ nox serve --allowed-paths /path/to/project
 | `nox://sbom/spdx` | application/json | SPDX SBOM |
 | `nox://ai-inventory` | application/json | AI component inventory |
 
-All tools are read-only. Output is truncated at 1 MB. Workspace paths are allowlisted.
+Output is truncated at 1 MB. Workspace paths are allowlisted.
+
+Most tools are read-only. The exceptions are explicit: `baseline_add` /
+`baseline_add_many` write the baseline file, and `plugin_install` runs new code
+on the operator's machine and requires `confirmed: true`, which the MCP host must
+collect from a human.
+
+**No ACTIVE capability is exposed over MCP.** `nox attack run` / `replay` /
+`regress` and `nox confirm` send attack payloads at a network target, and they
+are CLI-only by design. `--authorize` exists so a *human* affirms they own and
+have isolated the target; a model-initiated tool call cannot make that
+affirmation. And because nox analyses untrusted repositories, an MCP-exposed
+attack runner would let attacker-controlled text steer requests at a host of its
+choosing — the confused-deputy pattern nox itself scans for. `attack_plan` is
+exposed because it only reasons over artifacts already on disk.
 
 ## Contributing
 

@@ -46,11 +46,12 @@ package memsafe
 import (
 	"context"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nox-hq/nox/core/source"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -109,7 +110,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Test files are skipped: fixtures deliberately construct overflowing
 		// conversions (including this analyzer's own tests), and flagging them
 		// trains people to ignore the rule.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 
@@ -122,7 +123,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// findings measured across this fleet sat in protoc-gen-go output, and
 		// a rule that reports code nobody writes is pure noise. The marker is
 		// the convention from https://go.dev/s/generatedcode.
-		if isGenerated(content) {
+		if source.IsGenerated(content) {
 			continue
 		}
 
@@ -137,10 +138,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // parse yields whatever the recovered partial AST supports rather than an
 // error: a non-compiling snippet must degrade, never crash the scan.
 func scanFile(path string, content []byte) []findings.Finding {
-	fset := token.NewFileSet()
-	// SkipObjectResolution: this analyzer does its own function-scoped name
-	// tracking, and skipping resolution is faster and more error-tolerant.
-	file, _ := parser.ParseFile(fset, path, content, parser.SkipObjectResolution)
+	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
 		return nil
 	}
@@ -959,28 +957,4 @@ func unparen(e ast.Expr) ast.Expr {
 // File filters
 // ---------------------------------------------------------------------------
 
-// generatedMarker is the convention from https://go.dev/s/generatedcode. Only
-// the first few lines of a file are inspected, per that convention.
-const generatedMarker = "// Code generated"
-
-func isGenerated(content []byte) bool {
-	head := content
-	if len(head) > 4096 {
-		head = head[:4096]
-	}
-	for _, line := range strings.Split(string(head), "\n") {
-		if strings.HasPrefix(line, generatedMarker) && strings.Contains(line, "DO NOT EDIT") {
-			return true
-		}
-	}
-	return false
-}
-
 // isTestPath reports whether a path is Go test code or a test fixture tree.
-func isTestPath(p string) bool {
-	if strings.HasSuffix(strings.ToLower(filepath.Base(p)), "_test.go") {
-		return true
-	}
-	lower := strings.ToLower(p)
-	return strings.Contains(lower, "/testdata/") || strings.HasPrefix(lower, "testdata/")
-}

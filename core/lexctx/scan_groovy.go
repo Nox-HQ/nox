@@ -387,13 +387,9 @@ func skipGroovyNestedString(content []byte, i int) int {
 // isGroovyIdentStart / isGroovyIdentPart mirror the taint engine's identifier
 // rules (letters and underscore) so a $var interpolation path is delimited the
 // same way the extractor reads identifiers.
-func isGroovyIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isGroovyIdentStart(b byte) bool { return asciiIdentStart(b) }
 
-func isGroovyIdentPart(b byte) bool {
-	return isGroovyIdentStart(b) || (b >= '0' && b <= '9')
-}
+func isGroovyIdentPart(b byte) bool { return asciiIdentPart(b) }
 
 // groovySlashyCanStart reports whether a `/` following prev may begin a slashy
 // string rather than the division operator. A slashy string can start only where

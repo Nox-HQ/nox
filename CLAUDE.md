@@ -35,7 +35,10 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 ### Rule Engine
 
 - YAML-based declarative rules with versioned IDs
-- Matchers: regex, jsonpath/yamlpath, heuristics
+- Matchers: regex, entropy, absence (block-scoped). A matcher type is listed in
+  `ValidMatcherTypes` only once something implements it — jsonpath/yamlpath/heuristic
+  were removed because they validated at load time and were served by a stub that
+  matched nothing, so a rule using one loaded, listed, and silently found nothing.
 - Rules must be testable and deterministic
 
 ### Output Formats
@@ -47,6 +50,39 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 | `sbom.spdx.json` | SPDX JSON |
 | `findings.json` | Canonical findings schema |
 | `ai.inventory.json` | AI component inventory |
+
+### Evidence Spine
+
+`core/evidence` is the foundation under dynamic exploit validation, and the
+model a future intelligence service will share with the CLI. It owns the
+exploitability lifecycle (POTENTIAL, PLAUSIBLE, PREVENTED, INCONCLUSIVE,
+CONFIRMED), evidence kinds with explicit strengths, provenance, and confidence
+aggregation.
+
+Two rules are enforced here and must not be re-implemented elsewhere:
+
+- CONFIRMED requires deterministic evidence at reproduction strength or above. No
+  quantity of heuristics, repeated observations, or LLM judgments reaches it.
+- Independence counts distinct reporters, not observations. One project scanning
+  itself a thousand times is one source.
+
+The package is pure: no clock reads, no I/O, no randomness. Callers pass
+timestamps so every derived verdict is reproducible.
+
+### Dynamic Exploit Validation
+
+`core/attack` (+ `nox attack`) builds exploit hypotheses from static findings and
+the AI inventory, exercises a running target, and reports evidence-backed traces.
+`nox attack plan` is offline; `run` / `replay` / `regress` are ACTIVE, require
+`--authorize`, and never run as part of `nox scan`. Safety profiles are enforced
+by target wiring, not by policy: the `safe` profile selects an adapter with no
+network capability.
+
+`core/confirm` is the earlier, narrower version of this loop and stays as-is.
+
+Vulnerability intelligence is deliberately NOT in the CLI. See
+`docs/design/intelligence-service.md` for the boundary and why redaction and the
+private evidence graph stay client-side while aggregation and research do not.
 
 ### MCP Server
 

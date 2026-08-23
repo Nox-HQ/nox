@@ -370,11 +370,7 @@ func scanScalaCharOrSymbol(content []byte, start int) (end int, isChar bool) {
 
 // isScalaIdentStart reports whether b can begin a Scala identifier (letter or
 // underscore). Non-ASCII identifiers degrade safely to "not an identifier start".
-func isScalaIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isScalaIdentStart(b byte) bool { return asciiIdentStart(b) }
 
 // isScalaIdentPart reports whether b can continue a Scala identifier.
-func isScalaIdentPart(b byte) bool {
-	return isScalaIdentStart(b) || (b >= '0' && b <= '9')
-}
+func isScalaIdentPart(b byte) bool { return asciiIdentPart(b) }

@@ -41,6 +41,66 @@ var base64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{30,}`)
 // hexRe matches hexadecimal sequences of at least 32 characters.
 var hexRe = regexp.MustCompile(`[0-9a-fA-F]{32,}`)
 
+// candidateKind records which tokenizer produced a candidate. It is the
+// tokenizer, not the text, that decides: hex is a subset of the base64
+// alphabet, so re-testing a matched string cannot tell the two apart.
+//
+// A candidate carries the SET of kinds that found it, not one kind, because the
+// tokenizers genuinely overlap — `secret_key = xK9mR3pZ...` is both an
+// assignment RHS and a base64-shaped blob, and both descriptions are true. A
+// single kind would mean whichever tokenizer ran first stole the candidate from
+// the others, silently disabling the rules scoped to them.
+type candidateKind string
+
+// The kinds, one per tokenizer.
+const (
+	candidateQuoted     candidateKind = "quoted"
+	candidateAssignment candidateKind = "assignment"
+	candidateBase64     candidateKind = "base64"
+	candidateHex        candidateKind = "hex"
+)
+
+// candidateMatchesKinds reports whether a candidate found by the kinds in got is
+// one that a rule scoped to want should report. A rule that declares no kinds
+// (want == nil) takes everything, as every entropy rule did before kinds
+// existed.
+func candidateMatchesKinds(got, want map[candidateKind]bool) bool {
+	if want == nil {
+		return true
+	}
+	for k := range want {
+		if got[k] {
+			return true
+		}
+	}
+	return false
+}
+
+// parseCandidateKinds reads a rule's "candidate_kinds" metadata: a
+// comma-separated list of the kinds that rule reports on. An empty or absent
+// value means every kind, which is what every rule did before kinds existed and
+// what rules that have not opted in still do.
+//
+// Scoping exists because SEC-161/162/163 share one matcher. Without it the rule
+// ID on a finding names the rule rather than the candidate, so the rule called
+// "High-entropy hex string" reported an identifier with no hex in it (#467).
+func parseCandidateKinds(rule *Rule) map[candidateKind]bool {
+	raw := strings.TrimSpace(rule.Metadata["candidate_kinds"])
+	if raw == "" {
+		return nil
+	}
+	kinds := map[candidateKind]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		if k := candidateKind(strings.TrimSpace(part)); k != "" {
+			kinds[k] = true
+		}
+	}
+	if len(kinds) == 0 {
+		return nil
+	}
+	return kinds
+}
+
 // EntropyMatcher implements the Matcher interface using Shannon entropy
 // analysis. It extracts candidate strings from file content using multiple
 // tokenizers (quoted strings, assignment RHS values, base64 blobs, hex
@@ -63,6 +123,7 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	}
 
 	requireContext := rule.Metadata["require_context"] == "true"
+	wantKinds := parseCandidateKinds(rule)
 
 	lines := bytes.Split(content, []byte("\n"))
 	var results []MatchResult
@@ -90,34 +151,46 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		// column positions. Use a map keyed by "col:text" to deduplicate
 		// overlapping extractions.
 		type candidate struct {
-			col  int
-			text string
+			col   int
+			text  string
+			kinds map[candidateKind]bool
 		}
-		seen := make(map[string]struct{})
+		index := make(map[string]int)
 		var candidates []candidate
 
-		addCandidate := func(col int, text string) {
-			key := strconv.Itoa(col) + ":" + text
-			if _, dup := seen[key]; dup {
-				return
+		// collectAs returns an add function that records kind against the
+		// (column, text) pair, unioning with any kind already recorded there.
+		// Tokenizer order is therefore irrelevant.
+		collectAs := func(kind candidateKind) func(int, string) {
+			return func(col int, text string) {
+				key := strconv.Itoa(col) + ":" + text
+				if i, dup := index[key]; dup {
+					candidates[i].kinds[kind] = true
+					return
+				}
+				index[key] = len(candidates)
+				candidates = append(candidates, candidate{
+					col: col, text: text, kinds: map[candidateKind]bool{kind: true},
+				})
 			}
-			seen[key] = struct{}{}
-			candidates = append(candidates, candidate{col: col, text: text})
 		}
 
 		// Tokenizer 1: quoted strings (single and double quoted, >= minCandidateLen chars).
-		extractQuoted(lineStr, addCandidate)
+		extractQuoted(lineStr, collectAs(candidateQuoted))
 
 		// Tokenizer 2: assignment RHS values.
-		extractAssignmentRHS(lineStr, addCandidate)
+		extractAssignmentRHS(lineStr, collectAs(candidateAssignment))
 
 		// Tokenizer 3: base64 blobs (30+ chars).
-		extractRegexCandidates(lineStr, base64Re, 30, addCandidate)
+		extractRegexCandidates(lineStr, base64Re, 30, collectAs(candidateBase64))
 
 		// Tokenizer 4: hex strings (32+ chars).
-		extractRegexCandidates(lineStr, hexRe, 32, addCandidate)
+		extractRegexCandidates(lineStr, hexRe, 32, collectAs(candidateHex))
 
 		for _, c := range candidates {
+			if !candidateMatchesKinds(c.kinds, wantKinds) {
+				continue
+			}
 			if len(c.text) < minCandidateLen {
 				continue
 			}

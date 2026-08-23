@@ -10,13 +10,18 @@ import (
 
 // ValidMatcherTypes enumerates the matcher type strings that a Rule may
 // reference. Any value not in this set causes a validation error at load time.
+//
+// A type belongs here only once something implements it. jsonpath, yamlpath and
+// heuristic used to validate here and be served by a stub matcher that returned
+// nil for every input, so a rule declaring one loaded cleanly, appeared in
+// `nox rules`, and silently matched nothing — the author had no way to learn
+// their rule never ran. Rejecting the type at load time is the loud failure that
+// situation deserves; see TestEveryValidMatcherTypeHasARealMatcher, which keeps
+// this set and the default matcher registry in lockstep.
 var ValidMatcherTypes = map[string]bool{
-	"regex":     true,
-	"jsonpath":  true,
-	"yamlpath":  true,
-	"heuristic": true,
-	"entropy":   true,
-	"absence":   true,
+	"regex":   true,
+	"entropy": true,
+	"absence": true,
 }
 
 // Rule is a single declarative security rule loaded from YAML. It describes

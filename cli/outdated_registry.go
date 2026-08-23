@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nox-hq/nox/core/fix"
 )
 
 // Multi-ecosystem support for `nox fix --outdated`.
@@ -484,7 +486,7 @@ func planRegistryCurrency(root string, includeMajor bool, base map[string]string
 		if latest == "" || !versionLess(d.version, latest) {
 			continue
 		}
-		if !includeMajor && isMajorBump(d.version, latest) {
+		if !includeMajor && fix.IsMajorBump(d.version, latest) {
 			plan.majorSkipped++
 			continue
 		}
@@ -494,7 +496,7 @@ func planRegistryCurrency(root string, includeMajor bool, base map[string]string
 			fromVer:   d.version,
 			toVersion: latest,
 			ecosystem: d.eco,
-			action:    supportedFixEcosystems[d.eco],
+			action:    ecoBase(d.eco),
 		})
 	}
 	return plan, degraded
@@ -630,3 +632,8 @@ func nugetDirectDeps(root string) []directDep {
 	}
 	return out
 }
+
+// ecoBase returns the base upgrade command for an ecosystem, or "" if nox fix
+// cannot drive it — from the shared core/fix registry so the CLI and the
+// planner agree on what is supported.
+func ecoBase(eco string) string { c, _ := fix.SupportedEcosystem(eco); return c }

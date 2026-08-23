@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // ---------------------------------------------------------------------------
@@ -1171,5 +1173,18 @@ func TestMatchPattern_SlashContainingDirOnly(t *testing.T) {
 				t.Errorf("matchPattern(%q, %q) = %v, want %v", tt.path, tt.pattern, got, tt.want)
 			}
 		})
+	}
+}
+
+// Every extension the lexer can analyse must also be classified as Source here,
+// or files nox fully understands get skipped by source-gated rules. This guard
+// fails if sourceExtensions falls behind lexctx again — the exact drift that
+// left .kts/.pyi/.gemspec/etc unscanned.
+func TestSourceExtensionsCoverTheLexer(t *testing.T) {
+	for _, ext := range lexctx.SourceExtensions() {
+		if !sourceExtensions[ext] {
+			t.Errorf("lexer supports %q but discovery does not classify it as Source — "+
+				"add it to sourceExtensions or source-gated rules will skip it", ext)
+		}
 	}
 }

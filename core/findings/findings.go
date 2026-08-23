@@ -54,6 +54,25 @@ func (s Severity) Downgraded() Severity {
 	}
 }
 
+// Upgraded returns the severity one level more severe (info->low->medium->high->
+// critical). Critical is the ceiling and returns itself, so repeated application
+// is idempotent at the top. An unrecognized severity is returned unchanged. It
+// is the inverse of Downgraded, used by severity recalibration.
+func (s Severity) Upgraded() Severity {
+	switch s {
+	case SeverityInfo:
+		return SeverityLow
+	case SeverityLow:
+		return SeverityMedium
+	case SeverityMedium:
+		return SeverityHigh
+	case SeverityHigh, SeverityCritical:
+		return SeverityCritical
+	default:
+		return s
+	}
+}
+
 // Status indicates the disposition of a finding relative to baselines and
 // inline suppressions.
 type Status string
@@ -459,9 +478,59 @@ func (fs *FindingSet) SortDeterministic() {
 	})
 }
 
-// severityPriorityRank orders severities from most to least urgent.
-var severityPriorityRank = map[Severity]int{
-	SeverityCritical: 0, SeverityHigh: 1, SeverityMedium: 2, SeverityLow: 3, SeverityInfo: 4,
+// SeverityOrder lists the severities from most to least urgent. It is the one
+// canonical ordering: severity breakdown lines, the priority rank below, and the
+// SARIF/badge/policy orderings should all derive from this rather than
+// re-declaring the sequence — a re-declared order is one that drifts.
+var SeverityOrder = []Severity{
+	SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo,
+}
+
+// severityPriorityRank orders severities from most to least urgent, derived
+// from SeverityOrder so the two cannot disagree.
+var severityPriorityRank = func() map[Severity]int {
+	m := make(map[Severity]int, len(SeverityOrder))
+	for i, s := range SeverityOrder {
+		m[s] = i
+	}
+	return m
+}()
+
+// SeverityRank returns a severity's position in SeverityOrder (0 = critical,
+// most severe; 4 = info). An unrecognised severity ranks just past info, so it
+// sorts last rather than tying with a real level. This is the one ranking the
+// policy gate, the HTML report, and any severity sort must use, rather than
+// each restating critical=0..info=4.
+func SeverityRank(s Severity) int {
+	if r, ok := severityPriorityRank[s]; ok {
+		return r
+	}
+	return len(SeverityOrder)
+}
+
+// CountBySeverity tallies findings by severity. It is the companion to
+// FormatSeverityCounts — every caller that wants a breakdown map used to roll
+// its own identical loop.
+func CountBySeverity(ff []Finding) map[Severity]int {
+	counts := make(map[Severity]int, len(SeverityOrder))
+	for i := range ff {
+		counts[ff[i].Severity]++
+	}
+	return counts
+}
+
+// FormatSeverityCounts renders a severity->count map as "2 critical, 11 high,
+// ..." in SeverityOrder, omitting zero counts. It returns "" for an all-zero or
+// empty map; a caller that wants a word like "none" for the empty case supplies
+// it. This is the one formatter behind every adapter's severity line.
+func FormatSeverityCounts(counts map[Severity]int) string {
+	var parts []string
+	for _, s := range SeverityOrder {
+		if n := counts[s]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, s))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // confidencePriorityRank orders confidence from most to least certain.

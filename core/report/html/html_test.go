@@ -208,7 +208,9 @@ func TestSevRank(t *testing.T) {
 		{"medium", 2},
 		{"low", 3},
 		{"info", 4},
-		{"unknown", 4},
+		// An unrecognised severity now ranks past info (via findings.SeverityRank),
+		// so it sorts last instead of tying with info.
+		{"unknown", 5},
 	}
 	for _, tt := range tests {
 		got := sevRank(tt.input)

@@ -9,6 +9,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/graph"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/sdk"
 )
 
 // --- Proto → Go conversion ---
@@ -18,7 +19,14 @@ import (
 // pluginName identifies the plugin that produced the finding; it namespaces the
 // fingerprint so a plugin cannot reach outside its own findings. See
 // pluginFingerprint.
-func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding {
+//
+// workspaceRoot is the directory the plugin was pointed at. Plugins commonly
+// report absolute paths, so the location is made relative to it BEFORE the
+// fingerprint is computed. Without that, a plugin finding's fingerprint moved
+// with the checkout directory and could not be baselined anywhere the path was
+// not byte-identical — every CI runner, every git-worktree gate, any two
+// developers (#454). Pass "" to skip normalisation.
+func ProtoFindingToGo(pf *pluginv1.Finding, pluginName, workspaceRoot string) findings.Finding {
 	if pf == nil {
 		return findings.Finding{}
 	}
@@ -30,6 +38,7 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 		Location:   ProtoLocationToGo(pf.GetLocation()),
 		Message:    pf.GetMessage(),
 	}
+	f.Location.FilePath = repoRelativePath(f.Location.FilePath, workspaceRoot)
 	f.Fingerprint = pluginFingerprint(pluginName, pf.GetRuleId(), pf.GetFingerprint(), f)
 	if m := pf.GetMetadata(); len(m) > 0 {
 		f.Metadata = make(map[string]string, len(m))
@@ -38,6 +47,23 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName string) findings.Finding 
 		}
 	}
 	return f
+}
+
+// repoRelativePath rewrites an absolute plugin-reported path to one relative to
+// root, so a finding identifies a file in the repository rather than a location
+// on the machine that scanned it.
+//
+// It delegates to sdk.RelativePath, the helper plugin authors are told to use,
+// so the host and the plugins agree on what a repo-relative path is. Two
+// implementations of this drifted once already: this one returned native
+// separators while the SDK's returned slashes, which on Windows gave a plugin
+// finding `internal\svc\handler.go` where every other nox path is
+// `internal/svc/handler.go`. That made the fingerprint differ between Windows
+// and Linux for the same file in the same repository — the #454 bug again,
+// across operating systems instead of across directories — and left
+// forward-slash exclude patterns unable to match plugin paths.
+func repoRelativePath(path, root string) string {
+	return sdk.RelativePath(root, path)
 }
 
 // pluginFingerprint derives the fingerprint stored for a plugin finding.

@@ -6,14 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	nox "github.com/nox-hq/nox/core"
-	"github.com/nox-hq/nox/core/badge"
+	"github.com/nox-hq/nox/core/findings"
 )
 
 func runWatch(args []string) int {
@@ -108,18 +107,16 @@ func printScanResults(target string, jsonOutput bool) {
 
 	ff := result.Findings.ActiveFindings()
 	suppressed := len(result.Findings.Findings()) - len(ff)
-	counts := badge.CountBySeverity(ff)
 
 	fmt.Printf("[results] %d finding(s)", len(ff))
 	if suppressed > 0 {
 		fmt.Printf(" (%d suppressed)", suppressed)
 	}
-	if len(counts) > 0 {
-		parts := make([]string, 0, len(counts))
-		for sev, count := range counts {
-			parts = append(parts, fmt.Sprintf("%d %s", count, string(sev)))
-		}
-		fmt.Printf(" — %s", strings.Join(parts, ", "))
+	// Ordered severity breakdown via the shared formatter. The old inline loop
+	// iterated the counts map directly, so the ordering was non-deterministic —
+	// a violation of nox's "same inputs, same outputs" guarantee.
+	if line := findings.FormatSeverityCounts(findings.CountBySeverity(ff)); line != "" {
+		fmt.Printf(" — %s", line)
 	}
 	fmt.Println()
 

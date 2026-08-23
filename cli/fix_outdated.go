@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/nox-hq/nox/core/fix"
 )
 
 // `nox fix` upgrades a dependency only when a VULN-001 finding names a
@@ -89,7 +91,7 @@ func planCurrencyUpgrades(mods []goModuleStatus, includeMajor bool) upgradePlan 
 		if !versionLess(m.Version, to) {
 			continue
 		}
-		if !includeMajor && isMajorBump(m.Version, to) {
+		if !includeMajor && fix.IsMajorBump(m.Version, to) {
 			plan.majorSkipped++
 			continue
 		}
@@ -99,7 +101,7 @@ func planCurrencyUpgrades(mods []goModuleStatus, includeMajor bool) upgradePlan 
 			fromVer:   m.Version,
 			toVersion: to,
 			ecosystem: "go",
-			action:    supportedFixEcosystems["go"],
+			action:    goGetBase,
 		})
 	}
 	return plan
@@ -215,3 +217,6 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	}
 	return 1
 }
+
+// goGetBase is the base command for a go upgrade, from the shared registry.
+var goGetBase = func() string { c, _ := fix.SupportedEcosystem("go"); return c }()

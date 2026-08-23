@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/dashboard"
+
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/annotate"
@@ -23,6 +25,7 @@ import (
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -114,10 +117,6 @@ type pluginInstallInput struct {
 	// fails closed. Boolean rather than a free-form string so prompt
 	// engineering can't talk the LLM into auto-supplying consent text.
 	Confirmed bool `json:"confirmed"`
-}
-type pluginReadResourceInput struct {
-	Plugin string `json:"plugin"`
-	URI    string `json:"uri"`
 }
 
 // --- Multi-project cache ---
@@ -320,6 +319,10 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
 
+	// Offline attack planning. The ACTIVE half of `nox attack` is deliberately
+	// not registered — see the rationale at the top of server/attack.go.
+	s.registerAttackTools(srv)
+
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
@@ -332,7 +335,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
 		ReadOnly().
-		OutputSchema(dataSensitivityOutput{}).
+		OutputSchema(report.DataSensitivityReport{}).
 		Handler(s.handleDataSensitivityReport)
 
 	srv.Tool("dashboard").
@@ -358,10 +361,14 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 		ReadOnly().
 		Handler(s.handlePluginCallTool)
 
-	srv.Tool("plugin.read_resource").
-		Description("Read a resource from a plugin").
-		ReadOnly().
-		Handler(s.handlePluginReadResource)
+	// plugin.read_resource is deliberately NOT registered. Plugins declare their
+	// resources in their manifest, but PluginService has no resource-read RPC
+	// (GetManifest / InvokeTool / StreamArtifacts only), so nothing can serve
+	// one. It used to be registered with the description "Read a resource from a
+	// plugin" and a handler that returned "not yet implemented" as a SUCCESSFUL
+	// result — an agent reading isError saw success. A capability nox cannot
+	// deliver must not appear in tools/list at all; see
+	// TestNoRegisteredToolIsAStub.
 }
 
 func (s *Server) registerResources(srv *mcp.Server) {
@@ -539,6 +546,10 @@ func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (s
 		data, err = r.Generate(pc.result.Findings)
 	default:
 		r := report.NewJSONReporter(s.version)
+		// Degradations must ride the artifact here above all: an agent has no
+		// stderr to read, so without this it cannot tell a clean scan from one
+		// whose checks did not run.
+		r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 		data, err = r.Generate(pc.result.Findings)
 	}
 
@@ -657,28 +668,7 @@ func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredR
 
 // ruleFamily maps a rule ID (e.g. "SEC-001", "VULN-002") to its human family
 // name, used for grouping in the summary.
-func ruleFamily(ruleID string) string {
-	prefix := ruleID
-	if i := strings.IndexByte(ruleID, '-'); i >= 0 {
-		prefix = ruleID[:i]
-	}
-	switch prefix {
-	case "SEC":
-		return "secrets"
-	case "VULN":
-		return "dependencies"
-	case "IAC":
-		return "infrastructure"
-	case "CONT":
-		return "containers"
-	case "DATA":
-		return "privacy"
-	case "AI", "MCP":
-		return "ai"
-	default:
-		return "other"
-	}
-}
+func ruleFamily(ruleID string) string { return catalog.Family(ruleID).Key }
 
 // handleFindingByFingerprint looks up a single finding by its fingerprint and
 // reports its current status (new / baselined / suppressed / vex_*). This is
@@ -818,14 +808,15 @@ func (s *Server) handleBaselineStatus(_ context.Context, input baselineStatusInp
 		return toolError("loading baseline: " + err.Error()), nil
 	}
 
-	bySev := make(map[string]int)
-	for i := range bl.Entries {
-		bySev[string(bl.Entries[i].Severity)]++
+	st := bl.Status()
+	bySev := make(map[string]int, len(st.BySeverity))
+	for sev, n := range st.BySeverity {
+		bySev[string(sev)] = n
 	}
 
 	return structured(baselineStatusOutput{
-		Total:      bl.Len(),
-		Expired:    bl.ExpiredCount(),
+		Total:      st.Total,
+		Expired:    st.Expired,
 		BySeverity: bySev,
 		Path:       baseline.DefaultPath(input.Path),
 	})
@@ -1051,8 +1042,6 @@ func (s *Server) handleRules(_ context.Context, _ emptyInput) (mcp.StructuredRes
 
 // Protect status handler.
 
-const noxHookMarker = "Installed by nox protect"
-
 func (s *Server) handleProtectStatus(_ context.Context, input protectStatusInput) (string, error) {
 	if input.Path == "" {
 		return "Error: missing required argument: path", nil
@@ -1071,29 +1060,20 @@ func (s *Server) handleProtectStatus(_ context.Context, input protectStatusInput
 		return "Error: resolving repo root: " + err.Error(), nil
 	}
 
-	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
-
 	type protectStatusResponse struct {
 		Installed bool   `json:"installed"`
 		HookPath  string `json:"hook_path"`
 		Message   string `json:"message"`
 	}
 
-	content, err := os.ReadFile(hookPath)
-	if err != nil {
-		resp := protectStatusResponse{
-			Installed: false,
-			HookPath:  hookPath,
-			Message:   "not installed",
-		}
-		data, _ := json.MarshalIndent(resp, "", "  ")
-		return string(data), nil
-	}
-
-	installed := strings.Contains(string(content), noxHookMarker)
-	msg := "not installed (pre-commit hook exists but was not installed by nox)"
-	if installed {
+	state, hookPath := git.HookStatus(repoRoot)
+	installed := state == git.HookNox
+	msg := "not installed"
+	switch state {
+	case git.HookNox:
 		msg = "installed"
+	case git.HookForeign:
+		msg = "not installed (pre-commit hook exists but was not installed by nox)"
 	}
 
 	resp := protectStatusResponse{
@@ -1145,8 +1125,8 @@ func (s *Server) handleVEXStatus(_ context.Context, input vexStatusInput) (mcp.S
 	}
 
 	byStatus := make(map[string]int)
-	for _, stmt := range doc.Statements {
-		byStatus[string(stmt.Status)]++
+	for status, n := range vex.StatusCounts(doc) {
+		byStatus[string(status)] = n
 	}
 
 	return structured(vexStatusOutput{
@@ -1165,72 +1145,16 @@ func (s *Server) handleDataSensitivityReport(_ context.Context, _ emptyInput) (m
 		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
-	// Filter DATA-* findings from active findings.
-	ruleMap := make(map[string]*dataRuleStats)
-	allFiles := make(map[string]struct{})
+	// The projection lives in core/report; the handler only injects the catalog
+	// as the rule-description source and marshals the result.
 	cat := catalog.Catalog()
-
-	activeFindings := pc.result.Findings.ActiveFindings()
-	for i := range activeFindings {
-		f := &activeFindings[i]
-		if !strings.HasPrefix(f.RuleID, "DATA-") {
-			continue
+	rep := report.BuildDataSensitivityReport(pc.result.Findings.ActiveFindings(), func(ruleID string) string {
+		if meta, ok := cat[ruleID]; ok {
+			return meta.Description
 		}
-
-		rs, ok := ruleMap[f.RuleID]
-		if !ok {
-			desc := f.RuleID
-			if meta, exists := cat[f.RuleID]; exists {
-				desc = meta.Description
-			}
-			rs = &dataRuleStats{
-				RuleID:      f.RuleID,
-				Description: desc,
-			}
-			ruleMap[f.RuleID] = rs
-		}
-		rs.Count++
-
-		fp := f.Location.FilePath
-		allFiles[fp] = struct{}{}
-
-		// Track unique files per rule.
-		found := false
-		for _, existing := range rs.Files {
-			if existing == fp {
-				found = true
-				break
-			}
-		}
-		if !found {
-			rs.Files = append(rs.Files, fp)
-		}
-	}
-
-	// Build sorted slices for deterministic output.
-	rules := make([]dataRuleStats, 0, len(ruleMap))
-	for _, rs := range ruleMap {
-		sort.Strings(rs.Files)
-		rules = append(rules, *rs)
-	}
-	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
-
-	affectedFiles := make([]string, 0, len(allFiles))
-	for fp := range allFiles {
-		affectedFiles = append(affectedFiles, fp)
-	}
-	sort.Strings(affectedFiles)
-
-	total := 0
-	for _, rs := range rules {
-		total += rs.Count
-	}
-
-	return structured(dataSensitivityOutput{
-		TotalFindings: total,
-		Rules:         rules,
-		AffectedFiles: affectedFiles,
+		return ""
 	})
+	return structured(rep)
 }
 
 // Dashboard tool handler.
@@ -1257,7 +1181,7 @@ func (s *Server) handleDashboard(_ context.Context, input dashboardInput) (strin
 		return "Error: no scan results available", nil
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return "", fmt.Errorf("generating dashboard: %w", err)
 	}
@@ -1317,10 +1241,6 @@ func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolI
 	return truncate(string(data)), nil
 }
 
-func (s *Server) handlePluginReadResource(_ context.Context, _ pluginReadResourceInput) (string, error) {
-	return "Error: plugin.read_resource is not yet implemented", nil
-}
-
 // resolveToolName resolves tool name aliases.
 func (s *Server) resolveToolName(name string) string {
 	if s.aliases == nil {
@@ -1341,6 +1261,7 @@ func (s *Server) handleResourceFindings(_ context.Context, uri string, _ map[str
 	}
 
 	r := report.NewJSONReporter(s.version)
+	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
@@ -1449,7 +1370,7 @@ func (s *Server) handleResourceDashboard(_ context.Context, uri string, _ map[st
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return nil, fmt.Errorf("generating dashboard: %w", err)
 	}
@@ -1494,6 +1415,7 @@ func (s *Server) handleProjectResourceFindings(_ context.Context, uri string, pa
 	}
 
 	r := report.NewJSONReporter(s.version)
+	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
@@ -1607,7 +1529,7 @@ func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, p
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return nil, fmt.Errorf("generating dashboard: %w", err)
 	}
@@ -1639,10 +1561,10 @@ func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput
 	// Reject obviously suspicious names so a hostile prompt can't tunnel
 	// arbitrary args into the subprocess. Plugin names are restricted to
 	// the registry's character set.
-	if !isSafePluginName(input.Name) {
+	if !plugin.IsSafeName(input.Name) {
 		return "Error: invalid plugin name (allowed chars: a-z, 0-9, /, -, _, .)", nil
 	}
-	if input.Version != "" && !isSafeVersionConstraint(input.Version) {
+	if input.Version != "" && !plugin.IsSafeVersionConstraint(input.Version) {
 		return "Error: invalid version constraint", nil
 	}
 
@@ -1662,53 +1584,6 @@ func (s *Server) handlePluginInstall(_ context.Context, input pluginInstallInput
 		return fmt.Sprintf("Plugin install failed: %v\n\nOutput:\n%s", err, string(out)), nil
 	}
 	return "Plugin install:\n" + string(out), nil
-}
-
-// isSafePluginName accepts only registry-shaped names so a hostile
-// prompt can't smuggle shell metacharacters into an exec.Command call.
-// Path-traversal sequences (..) and leading dots are rejected even
-// though the underlying chars are otherwise allowed.
-func isSafePluginName(s string) bool {
-	if s == "" || len(s) > 200 {
-		return false
-	}
-	if strings.Contains(s, "..") {
-		return false
-	}
-	if s[0] == '.' || s[0] == '-' || s[0] == '/' {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '/' || r == '-' || r == '_' || r == '.':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// isSafeVersionConstraint accepts a constrained subset of semver-shaped
-// strings: digits, dots, hyphens, plus, ASCII letters (for prerelease
-// identifiers like 1.0.0-beta), and the range operators >= ^ ~.
-func isSafeVersionConstraint(s string) bool {
-	if s == "" || len(s) > 50 {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r == '.' || r == '-' || r == '+' || r == '>' || r == '=' || r == '^' || r == '~':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // truncate limits output to maxOutputBytes, appending a truncation notice if needed.
@@ -1757,43 +1632,27 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 		return toolError("no scan results available — run the scan tool first"), nil
 	}
 
-	resp := fixPlanResponse{
-		Note:    "Plan only. Apply with: nox fix --input findings.json",
-		Actions: []fixAction{},
-	}
+	// The plan comes from the SAME core/fix planner the `nox fix` CLI applies,
+	// so the actions an agent is shown here are exactly the ones the CLI would
+	// run — including the guards against downgrades, prereleases, and
+	// unsupported ecosystems that this handler used to lack.
+	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor})
 
-	seen := map[string]bool{}
-	items := pc.result.Findings.ActiveFindings()
-	for i := range items {
-		f := &items[i]
-		if f.RuleID != "VULN-001" {
-			continue
-		}
-		resp.VulnCount++
-		fixed := f.Metadata["fixed_in"]
-		eco := f.Metadata["ecosystem"]
-		pkg := f.Metadata["package"]
-		from := f.Metadata["version"]
-		if fixed == "" || pkg == "" || eco == "" {
-			resp.Skipped++
-			continue
-		}
-		if !input.IncludeMajor && majorOfVersion(from) != majorOfVersion(fixed) && from != "" {
-			resp.MajorSkipped++
-			continue
-		}
-		key := pkg + "@" + fixed
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+	resp := fixPlanResponse{
+		Note:         "Plan only. Apply with: nox fix --input findings.json",
+		Actions:      []fixAction{},
+		Skipped:      plan.Skipped,
+		MajorSkipped: plan.MajorSkipped,
+		VulnCount:    plan.VulnCount,
+	}
+	for _, a := range plan.Actions {
 		resp.Actions = append(resp.Actions, fixAction{
-			RuleID:    f.RuleID,
-			Package:   pkg,
-			From:      from,
-			To:        fixed,
-			Ecosystem: eco,
-			Command:   commandFor(eco, pkg, fixed),
+			RuleID:    a.RuleID,
+			Package:   a.Package,
+			From:      a.From,
+			To:        a.To,
+			Ecosystem: a.Ecosystem,
+			Command:   a.Command(),
 		})
 	}
 
@@ -1803,46 +1662,11 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	case resp.VulnCount == 0:
 		resp.Status = fixPlanStatusNoVulns
 	default:
-		// VULN-001 findings exist but none had the metadata required to
-		// build an upgrade command (fixed_in / package / ecosystem).
+		// VULN-001 findings exist but none produced an applicable upgrade
+		// (missing metadata, unsupported ecosystem, or held back by a guard).
 		resp.Status = fixPlanStatusNoDepMetadata
 	}
-
 	return structured(resp)
-}
-
-// majorOfVersion returns the leading numeric segment of a semver-ish
-// version string ("v1.2.3" -> "1", "" -> "").
-func majorOfVersion(v string) string {
-	v = strings.TrimPrefix(v, "v")
-	if i := strings.IndexByte(v, '.'); i >= 0 {
-		v = v[:i]
-	}
-	return v
-}
-
-// commandFor returns the canonical operator-runnable upgrade command
-// for a (ecosystem, package, version) tuple. Mirrors cli's
-// upgradeCommand but lives here to avoid pulling cli/ into server/.
-func commandFor(eco, pkg, fixedVer string) string {
-	v := strings.TrimPrefix(fixedVer, "v")
-	switch eco {
-	case "go":
-		return "go get " + pkg + "@v" + v
-	case "npm":
-		return "npm install " + pkg + "@" + v
-	case "pypi":
-		return "pip install '" + pkg + ">=" + v + "'"
-	case "rubygems":
-		return "bundle update " + pkg + " --conservative"
-	case "cargo":
-		return "cargo update -p " + pkg + " --precise " + v
-	case "maven", "gradle":
-		return "upgrade " + pkg + " to " + v + " in your build file"
-	case "nuget":
-		return "dotnet add package " + pkg + " --version " + v
-	}
-	return ""
 }
 
 func (s *Server) handleAgentGraph(_ context.Context, input agentGraphInput) (string, error) {
@@ -1860,63 +1684,10 @@ func (s *Server) handleAgentGraph(_ context.Context, input agentGraphInput) (str
 	}
 	switch format {
 	case "mermaid":
-		return renderMermaidGraph(pc.result.AIInventory), nil
+		return ai.RenderMermaid(pc.result.AIInventory), nil
 	case "dot":
-		return renderDotGraph(pc.result.AIInventory), nil
+		return ai.RenderDot(pc.result.AIInventory), nil
 	default:
 		return "Error: unknown format " + format + " (use mermaid or dot)", nil
 	}
-}
-
-func renderMermaidGraph(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("graph LR\n")
-	for i, set := range inv.ToolMatrix {
-		fmt.Fprintf(&b, "    subgraph agent%d [%s]\n", i, sanitiseGraph(set.Agent))
-		for j, tool := range set.Tools {
-			caps := graphCaps(set.Capabilities[tool])
-			label := tool
-			if caps != "" {
-				label = label + "<br/><small>" + caps + "</small>"
-			}
-			fmt.Fprintf(&b, "        a%d_t%d[\"%s\"]\n", i, j, label)
-		}
-		b.WriteString("    end\n")
-	}
-	return b.String()
-}
-
-func renderDotGraph(inv *ai.Inventory) string {
-	var b strings.Builder
-	b.WriteString("digraph nox_agent_lattice {\n")
-	b.WriteString("    rankdir=LR;\n    node [shape=box, style=rounded];\n")
-	for i, set := range inv.ToolMatrix {
-		fmt.Fprintf(&b, "    subgraph cluster_%d {\n        label=%q;\n", i, set.Agent)
-		for j, tool := range set.Tools {
-			caps := graphCaps(set.Capabilities[tool])
-			label := tool
-			if caps != "" {
-				label = tool + "\\n[" + caps + "]"
-			}
-			fmt.Fprintf(&b, "        a%d_t%d [label=%q];\n", i, j, label)
-		}
-		b.WriteString("    }\n")
-	}
-	b.WriteString("}\n")
-	return b.String()
-}
-
-func sanitiseGraph(s string) string {
-	r := strings.NewReplacer("\"", "'", "\n", " ", "[", "(", "]", ")")
-	return r.Replace(s)
-}
-
-func graphCaps(caps []string) string {
-	if len(caps) == 0 {
-		return ""
-	}
-	cp := make([]string, len(caps))
-	copy(cp, caps)
-	sort.Strings(cp)
-	return strings.Join(cp, ",")
 }

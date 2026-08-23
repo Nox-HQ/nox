@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/findings"
+
 	"github.com/nox-hq/nox/core/catalog"
 )
 
@@ -74,7 +76,7 @@ func runCalibrate(args []string) int {
 
 		switch {
 		case rate >= highT:
-			next := demote(current)
+			next := string(findings.Severity(current).Downgraded())
 			if next == current || current == "" {
 				continue
 			}
@@ -86,7 +88,7 @@ func runCalibrate(args []string) int {
 				reason:      fmt.Sprintf("fires on %.0f%% of corpus — likely noise at current severity", rate*100),
 			})
 		case rate <= lowT && current != "" && current != "critical":
-			next := promote(current)
+			next := string(findings.Severity(current).Upgraded())
 			if next == current {
 				continue
 			}
@@ -122,35 +124,7 @@ func runCalibrate(args []string) int {
 
 // demote returns the severity one level below current. critical->high
 // ->medium->low->info->info.
-func demote(current string) string {
-	switch current {
-	case "critical":
-		return "high"
-	case "high":
-		return "medium"
-	case "medium":
-		return "low"
-	case "low":
-		return "info"
-	}
-	return current
-}
-
 // promote returns the severity one level above current.
-func promote(current string) string {
-	switch current {
-	case "info":
-		return "low"
-	case "low":
-		return "medium"
-	case "medium":
-		return "high"
-	case "high":
-		return "critical"
-	}
-	return current
-}
-
 // recommendation is the per-rule calibration outcome.
 type recommendation struct {
 	ruleID      string

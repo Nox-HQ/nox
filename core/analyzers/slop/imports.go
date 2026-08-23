@@ -3,6 +3,8 @@ package slop
 import (
 	"regexp"
 	"strings"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // ecosystem identifies the package ecosystem an import belongs to.
@@ -60,18 +62,12 @@ func extractImports(eco ecosystem, content []byte) []importRef {
 }
 
 // lineOf returns the 1-based line number of byte offset off within content.
-func lineOf(content []byte, off int) int {
-	if off > len(content) {
-		off = len(content)
-	}
-	return 1 + strings.Count(string(content[:off]), "\n")
-}
 
 func extractPythonImports(content []byte) []importRef {
 	var refs []importRef
 	// `import x.y as z, a.b` — split the tail on commas, take each module.
 	for _, m := range pyImportRe.FindAllSubmatchIndex(content, -1) {
-		line := lineOf(content, m[0])
+		line := lexctx.LineForOffset(content, m[0])
 		tail := strings.TrimSpace(string(content[m[2]:m[3]]))
 		// Strip trailing comments.
 		if i := strings.IndexByte(tail, '#'); i >= 0 {
@@ -96,7 +92,7 @@ func extractPythonImports(content []byte) []importRef {
 	}
 	// `from x import y` / `from . import y`.
 	for _, m := range pyFromRe.FindAllSubmatchIndex(content, -1) {
-		line := lineOf(content, m[0])
+		line := lexctx.LineForOffset(content, m[0])
 		spec := string(content[m[2]:m[3]])
 		refs = append(refs, importRef{spec: spec, line: line})
 	}
@@ -132,7 +128,7 @@ func extractJSImports(content []byte) []importRef {
 		if res == nil {
 			return
 		}
-		refs = append(refs, importRef{spec: string(content[res[2]:res[3]]), line: lineOf(content, res[0])})
+		refs = append(refs, importRef{spec: string(content[res[2]:res[3]]), line: lexctx.LineForOffset(content, res[0])})
 	}
 	for _, re := range []*regexp.Regexp{jsFromRe, jsBareRe, jsDynamicRe, jsRequireRe} {
 		for _, m := range re.FindAllSubmatchIndex(content, -1) {

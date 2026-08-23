@@ -51,8 +51,9 @@ Core design is layered:
 - YAML-based rules
 - Matchers:
   - regex
-  - jsonpath / yamlpath
-  - heuristics
+  - jsonpath / yamlpath (NOT IMPLEMENTED — rejected at rule-load time rather than
+    accepted and silently ignored)
+  - heuristics (NOT IMPLEMENTED — same)
 - No embedded code execution
 
 ## Reporting

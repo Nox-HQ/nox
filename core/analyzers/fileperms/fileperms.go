@@ -54,12 +54,13 @@ import (
 	"context"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/nox-hq/nox/core/source"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -177,7 +178,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Test files and fixtures are skipped, as in weakcrypto. Test trees are
 		// where deliberate 0o777 lives — a scanner's own permission fixtures
 		// included — and flagging them trains people to ignore the rule.
-		if isTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
 			continue
 		}
 
@@ -195,13 +196,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 // scanSource parses one Go file and returns its findings.
 func scanSource(path string, content []byte) []findings.Finding {
-	fset := token.NewFileSet()
-	// A parse error still leaves a partial AST, which is walked as-is: a file
-	// that does not compile degrades to fewer findings rather than crashing the
-	// scan. Comments are not parsed, and string literals are never call
-	// expressions, so `// 0777` and `"0777"` cannot match structurally — the
-	// whole reason this analyzer uses the AST instead of a regex.
-	file, _ := parser.ParseFile(fset, filepath.Base(path), content, parser.SkipObjectResolution)
+	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
 		return nil
 	}
@@ -376,10 +371,3 @@ func formatMode(bits uint64) string {
 }
 
 // isTestPath reports whether a path is Go test code or a fixture tree.
-func isTestPath(p string) bool {
-	if strings.HasSuffix(strings.ToLower(filepath.Base(p)), "_test.go") {
-		return true
-	}
-	lower := filepath.ToSlash(strings.ToLower(p))
-	return strings.Contains(lower, "/testdata/") || strings.HasPrefix(lower, "testdata/")
-}

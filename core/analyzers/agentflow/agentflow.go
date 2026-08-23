@@ -16,7 +16,8 @@
 //	  as .choices[0].message.content or .text) flows into a shell/exec, SQL, eval,
 //	  filesystem, or HTTP sink. The model is trusted to drive a dangerous action;
 //	  a hijacked model then drives it with attacker intent. Maps to OWASP ASI02 /
-//	  LLM07. (CWE-77: the model's output is an untrusted command.)
+//	  LLM06 (Excessive Agency, 2025 edition). (CWE-77: the model's output is an
+//	  untrusted command.)
 //
 // WHY a dedicated analyzer rather than a taint rule: both flows treat the LLM
 // boundary as a first-class node. AGENTFLOW-001 uses the existing untrusted
@@ -99,14 +100,14 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	rs.Add(&rules.Rule{
 		ID:          ruleOutputToSink,
 		Version:     "1.0",
-		Description: "LLM output reaches a dangerous sink without validation (excessive agency, OWASP ASI02 / LLM07)",
+		Description: "LLM output reaches a dangerous sink without validation (excessive agency, OWASP ASI02 / LLM06)",
 		Severity:    findings.SeverityHigh,
 		Confidence:  findings.ConfidenceMedium,
-		Tags:        []string{"ai", "agentic", "excessive-agency", "owasp-asi02", "owasp-llm07"},
+		Tags:        []string{"ai", "agentic", "excessive-agency", "owasp-asi02", "owasp-llm06"},
 		Remediation: "The response from an LLM call flows into a dangerous operation (shell/exec, SQL, eval, filesystem, or outbound HTTP) in the same function. Treating model output as a trusted command is excessive agency: a prompt-injected model then drives that action with attacker intent. Do not pass model output to an interpreter, query, or command directly. Constrain the model to a fixed, validated action set (structured tool calls with schema validation and an allowlist), and add human confirmation for state-changing actions. Note: this is intraprocedural analysis — it reasons within one function body only.",
 		References: []string{
 			"https://cwe.mitre.org/data/definitions/77.html",
-			"https://genai.owasp.org/llmrisk/llm07-system-prompt-leakage/",
+			"https://genai.owasp.org/llmrisk/llm06-excessive-agency/",
 			"https://owasp.org/www-project-top-10-for-large-language-model-applications/",
 		},
 		Metadata: map[string]string{"cwe": "CWE-77", "owasp_asi": "ASI02"},

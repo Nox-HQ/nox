@@ -105,7 +105,6 @@ Nox exposes plugin functionality to MCP clients.
 Nox provides generic MCP tools:
 - `plugin.list`
 - `plugin.call_tool`
-- `plugin.read_resource`
 
 Additionally, Nox may expose **convenience aliases**:
 - `nox.dast.scan`
@@ -166,6 +165,48 @@ Nox provides a minimal SDK to simplify plugin development.
 The SDK is intentionally small and stable.
 
 ---
+
+### Findings must identify a place in the repository, not on the machine
+
+Report **repo-relative paths** and derive fingerprints from them. A fingerprint
+that folds in the absolute path moves with the checkout directory, and because
+a baseline matches on fingerprint, every finding the plugin produces reappears
+as net-new anywhere the path differs — every CI runner, every `git worktree`
+pre-push gate, any two developers.
+
+The failure is invisible where people look. Locally the baseline matches and the
+scan is green; the gate elsewhere reports hundreds of net-new findings for the
+same commit, with nothing in the output attributing the difference to the path.
+It reads as a stale baseline and invites a blanket `nox baseline update`, which
+accepts those findings unreviewed into a baseline that will not match on the
+next run either. This was nox issue #454.
+
+The SDK provides both halves:
+
+```go
+fp := sdk.Fingerprint(workspaceRoot, absPath, "SAST-001", matchedSymbol)
+loc := &pluginv1.Location{FilePath: sdk.RelativePath(workspaceRoot, absPath)}
+```
+
+`sdk.Fingerprint` deliberately omits the line number: a finding that shifts when
+an import is added is still the same finding, and including the line expires the
+baseline entry on the next unrelated edit. Pass one explicitly if your plugin
+genuinely needs line-level identity.
+
+Prove it in your conformance test, which seeds identical content into two
+differently-named directories and compares:
+
+```go
+func TestConformance(t *testing.T) {
+    sdk.RunConformance(t, srv)
+    sdk.RunFingerprintStability(t, srv, writeFixture)
+}
+```
+
+The host also normalises plugin-reported paths against the workspace root before
+computing the fingerprint it stores, so a plugin that gets this wrong is not
+catastrophic — but the host cannot repair a *claimed* fingerprint, which is
+opaque to it. Only the plugin can make that stable.
 
 ## Plugin Distribution & Marketplace
 

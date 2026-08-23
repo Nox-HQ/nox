@@ -40,3 +40,19 @@ func LineColToOffset(content []byte, line, col int) int {
 	}
 	return target
 }
+
+// LineForOffset returns the 1-based line number containing byte offset off. An
+// offset past the end clamps to the end. It is the inverse direction of
+// LineColToOffset and the one implementation two analyzers had each rolled.
+func LineForOffset(content []byte, off int) int {
+	if off > len(content) {
+		off = len(content)
+	}
+	line := 1
+	for i := 0; i < off; i++ {
+		if content[i] == '\n' {
+			line++
+		}
+	}
+	return line
+}

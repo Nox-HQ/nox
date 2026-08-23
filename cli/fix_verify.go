@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nox-hq/nox/core/fix"
 )
 
 // regression is a package that ended up lower than where nox found it.
@@ -42,7 +44,7 @@ func verifyNoRegression(manifestRoot string, actions []upgradeAction) (bad []reg
 		}
 		// Only flag a genuine backwards move. Landing above the requested
 		// target is fine — a newer version already satisfies the advisory.
-		if a.fromVer != "" && !isUpgrade(a.fromVer, actual) && actual != a.fromVer {
+		if a.fromVer != "" && !fix.IsUpgrade(a.fromVer, actual) && actual != a.fromVer {
 			bad = append(bad, regression{pkg: a.pkg, from: a.fromVer, actual: actual})
 		}
 	}

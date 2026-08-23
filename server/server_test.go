@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/dashboard"
+
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -637,23 +639,6 @@ func TestHandlePluginCallTool_Alias(t *testing.T) {
 	}
 	if !strings.Contains(result, "f-1") {
 		t.Fatalf("expected finding from aliased tool, got: %s", result)
-	}
-}
-
-func TestHandlePluginReadResource_Stub(t *testing.T) {
-	s := New("0.1.0", nil)
-	result, err := s.handlePluginReadResource(context.Background(), pluginReadResourceInput{
-		Plugin: "test",
-		URI:    "nox://test/results",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(result, "Error:") {
-		t.Fatal("expected error for stub")
-	}
-	if !strings.Contains(result, "not yet implemented") {
-		t.Fatalf("expected 'not yet implemented' message, got: %s", result)
 	}
 }
 
@@ -1717,7 +1702,7 @@ func oversizedScanResult(t *testing.T) *nox.ScanResult {
 }
 
 func TestGenerateDashboardHTML_OversizedExceedsBudget(t *testing.T) {
-	html, err := GenerateDashboardHTML(oversizedScanResult(t), "0.1.0", t.TempDir())
+	html, err := dashboard.GenerateHTML(oversizedScanResult(t), "0.1.0", t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1952,21 +1937,6 @@ func TestHandleAgentGraph_NoAgents(t *testing.T) {
 	}
 }
 
-func TestMajorOfVersion(t *testing.T) {
-	cases := map[string]string{
-		"v1.2.3": "1",
-		"1.2.3":  "1",
-		"v2.0.0": "2",
-		"":       "",
-		"1":      "1",
-	}
-	for in, want := range cases {
-		if got := majorOfVersion(in); got != want {
-			t.Errorf("majorOfVersion(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // --- handlePluginInstall tests ---
 
 func TestHandlePluginInstall_MissingName(t *testing.T) {
@@ -1995,36 +1965,6 @@ func TestHandlePluginInstall_RequiresConfirmation(t *testing.T) {
 	result, _ := s.handlePluginInstall(context.Background(), pluginInstallInput{Name: "nox/ai-eval"})
 	if !strings.Contains(result, "confirmed: true") {
 		t.Errorf("expected consent gate, got: %s", result)
-	}
-}
-
-func TestIsSafePluginName(t *testing.T) {
-	good := []string{"nox/ai-eval", "nox/reachability", "acme/secret-scanner-v2", "nox-plugin-foo"}
-	bad := []string{"", "foo;bar", "foo bar", "foo$(x)", "foo|bar", "../foo", strings.Repeat("a", 201)}
-	for _, n := range good {
-		if !isSafePluginName(n) {
-			t.Errorf("safe name rejected: %q", n)
-		}
-	}
-	for _, n := range bad {
-		if isSafePluginName(n) {
-			t.Errorf("unsafe name accepted: %q", n)
-		}
-	}
-}
-
-func TestIsSafeVersionConstraint(t *testing.T) {
-	good := []string{"1.2.3", "v1.2.3", ">=0.5", "^1.0.0", "~1.2", "1.0.0-beta+build"}
-	bad := []string{"1.2; rm -rf", "1.0.0`whoami`", "$(x)", "../1.0"}
-	for _, v := range good {
-		if !isSafeVersionConstraint(v) {
-			t.Errorf("safe version rejected: %q", v)
-		}
-	}
-	for _, v := range bad {
-		if isSafeVersionConstraint(v) {
-			t.Errorf("unsafe version accepted: %q", v)
-		}
 	}
 }
 
@@ -2206,5 +2146,67 @@ func TestHandleFindingByFingerprint(t *testing.T) {
 	out3, _ := s.handleFindingByFingerprint(context.Background(), findingByFingerprintInput{Fingerprint: "deadbeefdeadbeef"})
 	if !strings.Contains(textOf(out3), `"found": false`) {
 		t.Errorf("expected found:false for unknown fp: %s", textOf(out3))
+	}
+}
+
+// depScanResult seeds a scan result with one VULN-001 finding carrying the
+// given upgrade metadata, so a fix_plan handler test can exercise the planner
+// without a real scan.
+func depScanResult(pkg, from, fixed string) *nox.ScanResult {
+	fs := findingspkg.NewFindingSet()
+	f := findingspkg.NewFinding("VULN-001", findingspkg.SeverityHigh, findingspkg.ConfidenceHigh,
+		findingspkg.Location{FilePath: "go.mod", StartLine: 1, EndLine: 1},
+		pkg+" is vulnerable")
+	f.Metadata = map[string]string{"ecosystem": "go", "package": pkg, "version": from, "fixed_in": fixed}
+	fs.Add(f)
+	return &nox.ScanResult{Findings: fs, Inventory: &deps.PackageInventory{}, AIInventory: ai.NewInventory()}
+}
+
+// The MCP fix_plan tool must refuse a downgrade, because it now shares the
+// core/fix planner with `nox fix`. Before consolidation this handler had no
+// such guard and would have presented an agent a fixed_in BELOW the installed
+// version as an actionable upgrade — a plan the CLI would never apply.
+func TestHandleFixPlan_RefusesDowngrade(t *testing.T) {
+	s := New("0.1.0", nil)
+	s.setCache("", depScanResult("golang.org/x/crypto", "0.54.0", "0.51.0"))
+
+	out, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("fix_plan failed: %v", err)
+	}
+	var resp fixPlanResponse
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Actions) != 0 {
+		t.Fatalf("MCP fix_plan planned a DOWNGRADE (0.54.0 -> 0.51.0): %+v", resp.Actions)
+	}
+	if resp.VulnCount != 1 {
+		t.Errorf("VulnCount = %d, want 1", resp.VulnCount)
+	}
+}
+
+// A genuine forward upgrade is still planned, with the operator-runnable command
+// the CLI would produce.
+func TestHandleFixPlan_PlansForwardUpgrade(t *testing.T) {
+	s := New("0.1.0", nil)
+	s.setCache("", depScanResult("golang.org/x/crypto", "0.51.0", "0.54.0"))
+
+	out, err := s.handleFixPlan(context.Background(), fixPlanInput{})
+	if err != nil {
+		t.Fatalf("fix_plan failed: %v", err)
+	}
+	var resp fixPlanResponse
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(resp.Actions))
+	}
+	if resp.Actions[0].To != "0.54.0" {
+		t.Errorf("To = %s, want 0.54.0", resp.Actions[0].To)
+	}
+	if resp.Actions[0].Command == "" {
+		t.Error("forward upgrade must carry a runnable command")
 	}
 }

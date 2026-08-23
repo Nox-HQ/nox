@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+
+	"github.com/nox-hq/nox/core/mcpconfig"
 )
 
 // Tool is one MCP tool as recorded in a baseline: its name, the description the
@@ -59,23 +61,11 @@ func buildManifest(init initializeResult, raw []rawTool) Manifest {
 // sorted order, so a round-trip through map[string]any / any yields a stable
 // canonical form. Invalid or empty input returns nil (no schema recorded).
 func canonicalizeJSON(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
-		return nil
-	}
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil
-	}
+	out := mcpconfig.Canonicalize(raw)
 	// A schema of `null` or `{}` carries no information; drop it so an absent
-	// schema and an empty one compare equal.
-	if v == nil {
-		return nil
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	if string(out) == "{}" {
+	// schema and an empty one compare equal. (Canonicalize already returns nil
+	// for empty/invalid input.)
+	if len(out) == 0 || string(out) == "{}" || string(out) == "null" {
 		return nil
 	}
 	return out

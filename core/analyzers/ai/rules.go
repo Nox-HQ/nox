@@ -109,9 +109,9 @@ func builtinAIRules() []*rules.Rule {
 			// the key name inside the message string, but these are absence notifications,
 			// not credential leaks.
 			excludeContextKeywords: []string{"not set", "not found", "is not set", "isn't set", "not configured", "not provided"},
-			tags:        []string{"ai", "logging", "secrets"},
-			remediation: "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/532.html"},
+			tags:                   []string{"ai", "logging", "secrets"},
+			remediation:            "Never log API keys or tokens. Use secret masking in your logging framework. Store credentials in environment variables and reference them by name only.",
+			references:             []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -668,27 +668,34 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-200",
 			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
 			filePatterns: []string{"*.py", "*.js", "*.ts", "*.jsx", "*.tsx"},
-			tags:         []string{"ai", "ai-embed", "embedding-leak", "owasp-llm06", "owasp-llm01"},
+			tags:         []string{"ai", "ai-embed", "embedding-leak", "owasp-llm08", "owasp-llm01"},
 			remediation:  "Filter and redact untrusted input before embedding. Vector DB writes are durable; PII or secrets land in retrieval results forever. Add a redaction layer on the data path, or restrict embeddings to sanitised text.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
 		{
+			// Tool-call (plugin) abuse: 2023 LLM07 "Insecure Plugin Design"
+			// folds into 2025 LLM06 "Excessive Agency".
 			id: "AI-PI-006", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:      `(?s)["']\s*tool_calls?\s*["']\s*:\s*\[[^\]]{0,400}["']\s*arguments\s*["']\s*:\s*[^,}]*(?:f["']|\.format\(|\$\{[^}]*req\.|\+\s*request\.)`,
 			description:  "Tool-call arguments contain untrusted input verbatim",
 			cwe:          "CWE-77",
 			keywords:     []string{"tool_calls", "arguments"},
 			filePatterns: []string{"*.py", "*.js", "*.ts", "*.go"},
-			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm07"},
+			tags:         []string{"ai", "ai-pi", "prompt-injection", "owasp-llm06"},
 			remediation:  "Validate tool-call arguments against the schema before dispatching. Never relay untrusted input into a function-call payload without parsing.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
 
 		// -----------------------------------------------------------------
-		// OWASP LLM06: Sensitive Information Disclosure (embedding leakage).
+		// OWASP LLM08 (2025): Vector and Embedding Weaknesses.
 		// AI-EMBED-* covers vector-DB writes that consume secrets, PII, or
 		// raw HTTP bodies — once embedded, the data persists in retrieval
-		// results forever and travels with downstream RAG queries.
+		// results forever and travels with downstream RAG queries. In the
+		// 2023 edition these were tagged LLM06 (Sensitive Information
+		// Disclosure); the 2025 edition adds LLM08 specifically for
+		// vector/embedding weaknesses, which is the more precise home for
+		// an embedding-time leak. General (non-embedding) sensitive-info
+		// disclosure would instead be LLM02.
 		// -----------------------------------------------------------------
 		{
 			id: "AI-EMBED-001", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
@@ -697,7 +704,7 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-200",
 			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
 			filePatterns: []string{"*.py"},
-			tags:         []string{"ai", "ai-embed", "owasp-llm06", "language:python"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm08", "language:python"},
 			remediation:  "Stop embedding raw secret values into the vector store. Once embedded, the secret travels with retrieval results and is permanently exposed. Move the secret to a dedicated secret manager and embed only the data the model needs to retrieve.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/", "https://cwe.mitre.org/data/definitions/200.html"},
 		},
@@ -708,7 +715,7 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-359",
 			keywords:     []string{"embeddings.create", "cohere.embed", "embed_content"},
 			filePatterns: []string{"*.py", "*.js", "*.ts"},
-			tags:         []string{"ai", "ai-embed", "owasp-llm06", "pii"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm08", "pii"},
 			remediation:  "Redact PII before embedding. Vector DBs index on cosine similarity; PII embedded once cannot be selectively forgotten without re-indexing the entire collection.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/", "https://cwe.mitre.org/data/definitions/359.html"},
 		},
@@ -719,7 +726,7 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-200",
 			keywords:     []string{"pinecone", "qdrant", "weaviate", "chromadb", "lancedb"},
 			filePatterns: []string{"*.py", "*.js", "*.ts"},
-			tags:         []string{"ai", "ai-embed", "owasp-llm06", "high-bandwidth-leak"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm08", "high-bandwidth-leak"},
 			remediation:  "Never embed an entire HTTP body. Extract just the fields the retrieval pipeline needs and apply a redaction layer for known-sensitive fields.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
@@ -730,7 +737,7 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-200",
 			keywords:     []string{"CreateEmbeddings", "client.Embed"},
 			filePatterns: []string{"*.go"},
-			tags:         []string{"ai", "ai-embed", "owasp-llm06", "language:go"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm08", "language:go"},
 			remediation:  "Move secret retrieval out of the embedding code path. Embed the data the retrieval pipeline needs, never the credential that protects it.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
@@ -741,7 +748,7 @@ func builtinAIRules() []*rules.Rule {
 			cwe:          "CWE-200",
 			keywords:     []string{"public", "demo", "marketing"},
 			filePatterns: []string{"*.py", "*.js", "*.ts", "*.go"},
-			tags:         []string{"ai", "ai-embed", "owasp-llm06", "audit"},
+			tags:         []string{"ai", "ai-embed", "owasp-llm08", "audit"},
 			remediation:  "Verify the destination collection's read scope. Embedding into a public/demo namespace surfaces records to anyone with retrieval access.",
 			references:   []string{"https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},
@@ -1047,7 +1054,7 @@ func builtinAIRules() []*rules.Rule {
 			description: "Agent permission grants a tool with an unrestricted wildcard argument",
 			cwe:         "CWE-284", keywords: []string{"bash(", "shell(", "execute(", "exec(", "run(", "write(", "webfetch(", "fetch("},
 			filePatterns: []string{"settings.json", "settings.local.json", "*.json", "*.mcp.json", "mcp.json"},
-			tags:         []string{"ai", "agent-config", "excessive-agency", "owasp-llm07"},
+			tags:         []string{"ai", "agent-config", "excessive-agency", "owasp-llm06"},
 			remediation:  "A permission entry like \"Bash(*)\" grants the agent an unrestricted tool (any shell command, any URL, any path). Replace the wildcard with an explicit allowlist of exact commands/paths the agent needs (e.g. \"Bash(go test:*)\"), following least privilege.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"},
 		},

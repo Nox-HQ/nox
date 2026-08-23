@@ -629,9 +629,7 @@ func trimTrailingSpace(s []byte) []byte {
 }
 
 // isRubyIdentStart reports whether b can begin a Ruby identifier.
-func isRubyIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isRubyIdentStart(b byte) bool { return asciiIdentStart(b) }
 
 // isRubyIdentByte reports whether b can appear inside a Ruby identifier.
 func isRubyIdentByte(b byte) bool {

@@ -17,12 +17,12 @@
 package mcpshadow
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/mcpconfig"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -48,29 +48,27 @@ type Server struct {
 //     identical to a benign non-MCP file and its shadowing risk was invisible.
 //     The caller surfaces this as a visible degradation.
 func ParseConfig(path string, content []byte) ([]Server, error) {
-	var cfg struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	if err := json.Unmarshal(content, &cfg); err != nil {
+	servers, err := mcpconfig.ParseServers(content)
+	if err != nil {
 		return nil, fmt.Errorf("parsing MCP config %s: %w", path, err)
 	}
-	if len(cfg.MCPServers) == 0 {
+	if len(servers) == 0 {
 		return nil, nil
 	}
 
-	names := make([]string, 0, len(cfg.MCPServers))
-	for name := range cfg.MCPServers {
+	names := make([]string, 0, len(servers))
+	for name := range servers {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	out := make([]Server, 0, len(names))
 	for _, name := range names {
-		raw := cfg.MCPServers[name]
+		raw := servers[name]
 		out = append(out, Server{
 			Config:  path,
 			Name:    name,
-			DefHash: canonicalHash(raw),
+			DefHash: mcpconfig.CanonicalHash(raw),
 			Tools:   extractToolNames(raw),
 		})
 	}
@@ -212,21 +210,6 @@ func extractToolNames(raw json.RawMessage) []string {
 		return out
 	}
 	return nil
-}
-
-func canonicalHash(raw json.RawMessage) string {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		sum := sha256.Sum256(raw)
-		return hex.EncodeToString(sum[:])
-	}
-	canonical, err := json.Marshal(v)
-	if err != nil {
-		sum := sha256.Sum256(raw)
-		return hex.EncodeToString(sum[:])
-	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:])
 }
 
 func sortedKeys(m map[string]bool) []string {

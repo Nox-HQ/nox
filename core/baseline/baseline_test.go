@@ -316,3 +316,25 @@ func TestMatch_ExpiredAliasEntryDoesNotMatch(t *testing.T) {
 		t.Error("an expired entry matched through the alias path")
 	}
 }
+
+func TestBaselineStatus(t *testing.T) {
+	b := &Baseline{}
+	b.Entries = []Entry{
+		{Fingerprint: "a", Severity: findings.SeverityHigh},
+		{Fingerprint: "b", Severity: findings.SeverityHigh},
+		{Fingerprint: "c", Severity: findings.SeverityCritical},
+	}
+	st := b.Status()
+	if st.Total != 3 {
+		t.Errorf("Total = %d, want 3", st.Total)
+	}
+	if st.BySeverity[findings.SeverityHigh] != 2 || st.BySeverity[findings.SeverityCritical] != 1 {
+		t.Errorf("BySeverity wrong: %+v", st.BySeverity)
+	}
+	// Rendering in canonical order must be deterministic — the CLI's old loop
+	// iterated a map non-deterministically.
+	got := findings.FormatSeverityCounts(st.BySeverity)
+	if got != "1 critical, 2 high" {
+		t.Errorf("formatted = %q, want %q", got, "1 critical, 2 high")
+	}
+}

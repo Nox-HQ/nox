@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/dashboard"
 )
 
 func TestGenerateDashboardHTML_CleanScan(t *testing.T) {
@@ -11,7 +13,7 @@ func TestGenerateDashboardHTML_CleanScan(t *testing.T) {
 
 	pc := s.getCache("")
 
-	html, err := GenerateDashboardHTML(pc.result, "0.1.0", pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, "0.1.0", pc.basePath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -43,7 +45,7 @@ func TestGenerateDashboardHTML_WithFindings(t *testing.T) {
 
 	pc := s.getCache("")
 
-	html, err := GenerateDashboardHTML(pc.result, "0.1.0", pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, "0.1.0", pc.basePath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

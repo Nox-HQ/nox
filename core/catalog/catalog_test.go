@@ -12,7 +12,7 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// We expect 1553 built-in rules across all analyzers (SEC + DATA + AI
 	// + IAC + VULN + SLOP-001/002 slopsquatting + VARIANT-001..006 CVE variants
 	// + PROV-001/002 provenance). AI includes AI-PI-* (LLM01),
-	// AI-EMBED-* (LLM06), MCP-* families: MCP-001..008 (server
+	// AI-EMBED-* (LLM08), MCP-* families: MCP-001..008 (server
 	// hardening), MCP-009..014 (tool poisoning, OWASP MCP03),
 	// MCP-016..021 (authorization & token safety, OWASP MCP07), and
 	// MCP-022 (shadow/remote server, OWASP MCP09); and AGENT-001..006
@@ -33,8 +33,13 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// IAC-283, IAC-287, IAC-291, IAC-292, IAC-310, IAC-312, IAC-321, IAC-333,
 	// IAC-337): each reported a condition an older rule already reported, and
 	// each lives on as an alias on that rule so existing waivers keep matching.
-	if got := len(cat); got != 1519 {
-		t.Errorf("Catalog() returned %d rules, want 1519", got)
+	// 1537 = 1519 plus the 18 rules from the six analyzers that publish rules
+	// but were never registered in allRuleSets: AGENTFLOW-001/002, TAINT-001..007
+	// and TAINT-AI-001, CRYPTO-001/002, HARDEN-001/002, PERM-001/002 and
+	// MEMSAFE-001. Their findings appeared in scans while `nox rules` and the
+	// MCP rules tool denied the rules existed.
+	if got := len(cat); got != 1537 {
+		t.Errorf("Catalog() returned %d rules, want 1537", got)
 	}
 }
 

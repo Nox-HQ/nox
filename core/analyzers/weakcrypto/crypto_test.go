@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/source"
+
 	"github.com/nox-hq/nox/core/discovery"
 )
 
@@ -542,15 +544,15 @@ func TestSkipsTestFiles(t *testing.T) {
 		"pkg/testdata/sample.go",
 		"web/__tests__/hash.js",
 	} {
-		if !isTestPath(p) {
-			t.Errorf("isTestPath(%q) = false, want true", p)
+		if !source.IsTestPath(p) {
+			t.Errorf("source.IsTestPath(%q) = false, want true", p)
 		}
 	}
 	// A bare `test/` directory is a real source tree in plenty of projects and
 	// must NOT be treated as fixtures — skipping it would drop findings.
 	for _, p := range []string{"internal/test/helper.go", "lib/tests.go"} {
-		if isTestPath(p) {
-			t.Errorf("isTestPath(%q) = true, want false — that silently drops findings", p)
+		if source.IsTestPath(p) {
+			t.Errorf("source.IsTestPath(%q) = true, want false — that silently drops findings", p)
 		}
 	}
 }

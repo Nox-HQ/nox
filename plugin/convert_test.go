@@ -139,7 +139,7 @@ func TestFindingRoundTrip(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto, "test-plugin")
+	roundTrip := ProtoFindingToGo(proto, "test-plugin", "")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)
@@ -175,7 +175,7 @@ func TestFindingRoundTrip(t *testing.T) {
 }
 
 func TestProtoFindingToGo_Nil(t *testing.T) {
-	got := ProtoFindingToGo(nil, "test-plugin")
+	got := ProtoFindingToGo(nil, "test-plugin", "")
 	if got.ID != "" || got.RuleID != "" {
 		t.Errorf("ProtoFindingToGo(nil) should return zero value, got %+v", got)
 	}
@@ -189,7 +189,7 @@ func TestFindingRoundTrip_EmptyMetadata(t *testing.T) {
 	}
 
 	proto := GoFindingToProto(&original)
-	roundTrip := ProtoFindingToGo(proto, "test-plugin")
+	roundTrip := ProtoFindingToGo(proto, "test-plugin", "")
 
 	if roundTrip.ID != original.ID {
 		t.Errorf("ID mismatch: %q vs %q", roundTrip.ID, original.ID)
@@ -543,7 +543,7 @@ func TestProtoFindingToGo_DoesNotTrustClaimedFingerprint(t *testing.T) {
 		RuleId:      "PLG-001",
 		Message:     "something",
 		Fingerprint: claimed,
-	}, "some-plugin")
+	}, "some-plugin", "")
 
 	if f.Fingerprint == claimed {
 		t.Fatal("the plugin's claimed fingerprint was stored verbatim")
@@ -561,8 +561,8 @@ func TestProtoFindingToGo_FingerprintIsolatedPerPlugin(t *testing.T) {
 
 	proto := &pluginv1.Finding{RuleId: "PLG-001", Message: "same", Fingerprint: "identical"}
 
-	a := ProtoFindingToGo(proto, "plugin-a")
-	b := ProtoFindingToGo(proto, "plugin-b")
+	a := ProtoFindingToGo(proto, "plugin-a", "")
+	b := ProtoFindingToGo(proto, "plugin-b", "")
 
 	if a.Fingerprint == b.Fingerprint {
 		t.Error("two plugins claiming the same fingerprint collided; namespacing is not applied")
@@ -581,8 +581,8 @@ func TestProtoFindingToGo_FingerprintDeterministic(t *testing.T) {
 		Location:    &pluginv1.Location{FilePath: "a/b.go", StartLine: 4},
 	}
 
-	first := ProtoFindingToGo(proto, "plugin-a")
-	second := ProtoFindingToGo(proto, "plugin-a")
+	first := ProtoFindingToGo(proto, "plugin-a", "")
+	second := ProtoFindingToGo(proto, "plugin-a", "")
 
 	if first.Fingerprint != second.Fingerprint {
 		t.Errorf("fingerprint is not deterministic: %q vs %q", first.Fingerprint, second.Fingerprint)
@@ -597,10 +597,10 @@ func TestProtoFindingToGo_DistinctFindingsStayDistinct(t *testing.T) {
 
 	one := ProtoFindingToGo(&pluginv1.Finding{
 		RuleId: "PLG-001", Message: "first", Fingerprint: "fp-1",
-	}, "plugin-a")
+	}, "plugin-a", "")
 	two := ProtoFindingToGo(&pluginv1.Finding{
 		RuleId: "PLG-001", Message: "second", Fingerprint: "fp-2",
-	}, "plugin-a")
+	}, "plugin-a", "")
 
 	if one.Fingerprint == two.Fingerprint {
 		t.Error("two distinct findings from one plugin share a fingerprint")
@@ -613,14 +613,14 @@ func TestProtoFindingToGo_DistinctFindingsStayDistinct(t *testing.T) {
 func TestProtoFindingToGo_ComputesFingerprintWhenAbsent(t *testing.T) {
 	t.Parallel()
 
-	absent := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-001", Message: "text"}, "plugin-a")
+	absent := ProtoFindingToGo(&pluginv1.Finding{RuleId: "PLG-001", Message: "text"}, "plugin-a", "")
 	if absent.Fingerprint == "" {
 		t.Fatal("expected a computed fingerprint when the plugin supplied none")
 	}
 
 	claimedAsMessage := ProtoFindingToGo(&pluginv1.Finding{
 		RuleId: "PLG-001", Message: "text", Fingerprint: "text",
-	}, "plugin-a")
+	}, "plugin-a", "")
 	if absent.Fingerprint == claimedAsMessage.Fingerprint {
 		t.Error("a claimed fingerprint aliased with an absent one; the hash inputs are not tagged")
 	}
@@ -641,10 +641,10 @@ func TestProtoFindingToGo_NamespaceDelimiterIsNotInjectable(t *testing.T) {
 
 	victim := ProtoFindingToGo(&pluginv1.Finding{
 		RuleId: "sql:injection", Message: "m", Fingerprint: "fp", Location: loc,
-	}, "acme")
+	}, "acme", "")
 	attacker := ProtoFindingToGo(&pluginv1.Finding{
 		RuleId: "injection", Message: "m", Fingerprint: "fp", Location: loc,
-	}, "acme:sql")
+	}, "acme:sql", "")
 
 	if victim.Fingerprint == attacker.Fingerprint {
 		t.Error("delimiter injection produced a fingerprint collision across plugins")
@@ -673,7 +673,7 @@ func TestProtoFindingToGo_NamespaceSurvivesSeparatorsInNames(t *testing.T) {
 	} {
 		f := ProtoFindingToGo(&pluginv1.Finding{
 			RuleId: tc.rule, Message: "m", Fingerprint: "fp", Location: loc,
-		}, tc.plugin)
+		}, tc.plugin, "")
 
 		key := tc.plugin + " / " + tc.rule
 		if prev, dup := seen[f.Fingerprint]; dup {
@@ -709,7 +709,7 @@ func TestProtoFindingToGo_NamespaceIsUnambiguousForAnyInput(t *testing.T) {
 	for _, tc := range pairs {
 		f := ProtoFindingToGo(&pluginv1.Finding{
 			RuleId: tc.rule, Message: "m", Fingerprint: "fp", Location: loc,
-		}, tc.plugin)
+		}, tc.plugin, "")
 
 		key := tc.plugin + " / " + tc.rule
 		if prev, dup := seen[f.Fingerprint]; dup {

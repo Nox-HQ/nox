@@ -322,6 +322,71 @@ Post-Phase 9: 28 → 30 plugins (2 new, 1 updated).
 New rules: VALID-001–004, LOGIC-001–003, TAINT-006–007 (9 new plugin rules).
 Total plugin rules: 128 + 9 = 137. Total project rules: 568 + 137 = 705.
 
+## Phase 10 — Dynamic Exploit Validation
+
+Moves nox from "this looks dangerous" to "here is the attack path, here is proof
+it works, and here is the test that keeps it fixed."
+
+### 10a. Evidence spine — `core/evidence` ✓
+
+The rules that make every downstream verdict trustworthy, implemented once.
+
+- Exploitability lifecycle: POTENTIAL → PLAUSIBLE → PREVENTED / INCONCLUSIVE → CONFIRMED,
+  independent of severity
+- Evidence `Kind` with explicit strengths, from `heuristic` (10) to `public_advisory` (100)
+- `Provenance` with an opaque reporter id, so corroboration can be counted without
+  learning who reported
+- `Ledger` aggregation with two hard rules: CONFIRMED requires deterministic evidence
+  at reproduction strength; a semantic-only ledger is capped at MEDIUM
+- `IndependentSources()` counts distinct reporters, not observations — 100 self-scans
+  are one source
+- `DeriveExploitability` — the single state machine both capabilities use. A run cut
+  short by a budget is INCONCLUSIVE, never PREVENTED; silence is never prevention
+- `Describe()` fixes the user-facing wording so no surface of nox ever says "safe"
+
+### 10b. Dynamic Exploit Validation — `core/attack`, `nox attack` ✓
+
+Target-aware, evidence-backed exploitation of agentic systems. Generalises the
+`nox confirm` loop into a scenario model with assets, trust boundaries,
+invariants, budgets, safety profiles, replay, and regression.
+
+- Domain model: Asset, TrustBoundary, Invariant, Hypothesis, Scenario, PathStep
+- Scenario library: `PI-DIRECT`, `PI-INDIRECT`, `TOOL-UNAUTH`, `EXFIL-FS-NET`,
+  each with a benign control that must never trip
+- Deterministic canary minting; reflection immunity asserted before any probe leaves
+  the process — an echoing target can never be scored a hijack
+- Oracles: deterministic (canary at sink), trace (unauthorized tool invoked),
+  refusal (observed defense). Semantic verdicts are labelled and cannot confirm
+- Safety profiles `safe` / `sandbox` / `staging` / `authorized-live`, with `safe`
+  enforced by target wiring rather than by policy
+- Budgets on attempts, requests, model calls, tool invocations, and wall clock
+- k-of-n determinism gate; attack traces with replay commands
+- Commands: `nox attack plan` (offline), `run`, `replay`, `regress` (ACTIVE, `--authorize`)
+- MCP: `attack_plan` only (read-only, offline). The ACTIVE subcommands are
+  deliberately not MCP tools — a model-initiated call cannot make the human
+  authorization `--authorize` represents, and nox analyses untrusted repos, so an
+  exposed runner would be a confused-deputy request-forgery primitive. Pinned by
+  a test that fails if one is ever registered.
+- Regression cases report `outcome` (HELD / REGRESSED / UNEXERCISED) separately
+  from `exploitability`, mirroring VEX's `not_affected`-needs-a-justification rule
+- Artifacts: `attack.plan.json`, `attack.trace.json`, `attack.cases.json`, `attack.regress.json`
+- Docs: `docs/attack.md`
+
+### Deliberately not in Phase 10
+
+Multi-agent and MCP trust-chain exploitation, delegation attacks, and adaptive
+adversarial attack agents. These depend on the foundations above being trusted
+first.
+
+**Vulnerability intelligence is not a CLI feature.** The observation network,
+cross-tenant aggregation, autonomous research agents, advisory publication,
+coordinated disclosure, and early warning require multi-tenant state, auth, and an
+operational footprint that has no business in a CLI release cycle. The client-side
+half — privacy redaction, the private evidence graph, and organisation-specific
+blast radius — stays local and auditable, but it is designed against a service
+rather than shipped as a stand-in for one. See
+`docs/design/intelligence-service.md`.
+
 ## Explicitly Out of Scope
 
 - SaaS dashboards

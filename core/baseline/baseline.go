@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nox-hq/nox/core/fsutil"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -67,44 +69,9 @@ func (b *Baseline) Save(path string) error {
 	}
 	data = append(data, '\n')
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating baseline directory: %w", err)
+	if err := fsutil.AtomicWriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing baseline: %w", err)
 	}
-
-	tmp, err := os.CreateTemp(dir, ".baseline-*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-
-	if _, err := tmp.Write(data); err != nil {
-		closeErr := tmp.Close()
-		removeErr := os.Remove(tmpName)
-		if closeErr != nil {
-			return fmt.Errorf("writing temp file: %w (close error: %v)", err, closeErr)
-		}
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("writing temp file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("writing temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		removeErr := os.Remove(tmpName)
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("closing temp file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("closing temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		removeErr := os.Remove(tmpName)
-		if removeErr != nil && !os.IsNotExist(removeErr) {
-			return fmt.Errorf("renaming baseline file: %w (remove error: %v)", err, removeErr)
-		}
-		return fmt.Errorf("renaming baseline file: %w", err)
-	}
-
 	return nil
 }
 
@@ -199,6 +166,32 @@ func (b *Baseline) ExpiredCount() int {
 		}
 	}
 	return count
+}
+
+// StatusSummary is the aggregate view of a baseline: its size, how many entries
+// have expired, and the per-severity breakdown. Both the CLI `baseline show` and
+// the MCP baseline_status tool project from this, so the two cannot report a
+// baseline differently — and BySeverity is keyed by findings.Severity so a
+// consumer iterating findings.SeverityOrder gets a deterministic order.
+type StatusSummary struct {
+	Total      int
+	Expired    int
+	BySeverity map[findings.Severity]int
+}
+
+// Status returns the aggregate status of the baseline. It is the single source
+// both adapters use, replacing two ad-hoc per-severity loops (one of which
+// iterated a map in non-deterministic order).
+func (b *Baseline) Status() StatusSummary {
+	bySev := make(map[findings.Severity]int, len(b.Entries))
+	for i := range b.Entries {
+		bySev[b.Entries[i].Severity]++
+	}
+	return StatusSummary{
+		Total:      b.Len(),
+		Expired:    b.ExpiredCount(),
+		BySeverity: bySev,
+	}
 }
 
 // DefaultPath returns the conventional baseline file location within a project.

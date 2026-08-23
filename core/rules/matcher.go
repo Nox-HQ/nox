@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,33 +28,47 @@ type Matcher interface {
 
 // RegexMatcher implements Matcher using compiled regular expressions. It
 // caches compiled patterns to avoid redundant compilation across calls.
-type RegexMatcher struct {
+// regexCache is a mutex-guarded compiled-pattern cache. Both matcher types
+// embed it rather than each carrying its own identical mu+map and compile loop.
+type regexCache struct {
 	mu    sync.Mutex
 	cache map[string]*regexp.Regexp
 }
 
+// newRegexCache returns an initialised cache.
+func newRegexCache() regexCache { return regexCache{cache: map[string]*regexp.Regexp{}} }
+
+// compile returns the compiled form of pattern, caching it. label names the
+// pattern kind for the error message.
+func (c *regexCache) compile(pattern, label string) (*regexp.Regexp, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if re, ok := c.cache[pattern]; ok {
+		return re, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("compiling %s %q: %w", label, pattern, err)
+	}
+	c.cache[pattern] = re
+	return re, nil
+}
+
+// RegexMatcher matches a rule's regex pattern against file content, caching
+// compiled patterns.
+type RegexMatcher struct {
+	regexCache
+}
+
 // NewRegexMatcher returns a RegexMatcher with an initialised pattern cache.
 func NewRegexMatcher() *RegexMatcher {
-	return &RegexMatcher{
-		cache: make(map[string]*regexp.Regexp),
-	}
+	return &RegexMatcher{regexCache: newRegexCache()}
 }
 
 // compile returns a compiled regexp for the given pattern, using the cache
 // when possible.
 func (m *RegexMatcher) compile(pattern string) (*regexp.Regexp, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if re, ok := m.cache[pattern]; ok {
-		return re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("compiling pattern %q: %w", pattern, err)
-	}
-	m.cache[pattern] = re
-	return re, nil
+	return m.regexCache.compile(pattern, "pattern")
 }
 
 // Match finds all occurrences of the rule pattern in content and returns
@@ -70,33 +85,14 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		return nil
 	}
 
-	// Pre-compute line start offsets for O(1) line/column lookup.
-	lines := bytes.SplitAfter(content, []byte("\n"))
-	lineStarts := make([]int, len(lines))
-	offset := 0
-	for i, line := range lines {
-		lineStarts[i] = offset
-		offset += len(line)
-	}
-
+	// Reuse the shared offset helpers (computeLineStarts / makeMatchResult) that
+	// AbsenceMatcher already uses, rather than inlining a second copy of the
+	// line/column arithmetic.
+	lineStarts := computeLineStarts(content)
 	matches := re.FindAllIndex(content, -1)
 	results := make([]MatchResult, 0, len(matches))
-
 	for _, loc := range matches {
-		startOffset := loc[0]
-		endOffset := loc[1]
-
-		// Binary search is unnecessary for typical file sizes; a linear scan
-		// from the last known position would be faster for sequential matches,
-		// but correctness is the priority here.
-		line := findLine(lineStarts, startOffset)
-		col := startOffset - lineStarts[line] + 1 // 1-based column
-
-		results = append(results, MatchResult{
-			Line:      line + 1, // 1-based line number
-			Column:    col,
-			MatchText: string(content[startOffset:endOffset]),
-		})
+		results = append(results, makeMatchResult(content, lineStarts, loc))
 	}
 
 	if rule.Metadata["secret_shape"] == "true" {
@@ -196,12 +192,25 @@ func isSecretShape(text string, minEntropy float64) bool {
 // findLine returns the 0-based line index for the given byte offset using a
 // linear scan over the precomputed line start offsets.
 func findLine(lineStarts []int, offset int) int {
-	for i := len(lineStarts) - 1; i >= 0; i-- {
-		if lineStarts[i] <= offset {
-			return i
-		}
+	// Binary search, not a scan. lineStarts is built in ascending order by
+	// computeLineStarts, and this is called once per match.
+	//
+	// The linear version walked the table BACKWARDS from the end, so a match
+	// near the top of a file examined almost every entry — worst case for the
+	// commonest case. Total cost grew as matches x lines, which made scanning a
+	// large, match-dense file (a vendored bundle, a generated client) quadratic.
+	// It surfaced as the fuzzer stalling with "context deadline exceeded", a
+	// message that reads like flaky infrastructure and was really the engine.
+	//
+	// Want: the largest i with lineStarts[i] <= offset. SearchInts returns the
+	// first index whose value is > offset, so that index minus one is it;
+	// clamped at 0 so a negative offset still reports the first line, matching
+	// the behaviour this replaced.
+	i := sort.SearchInts(lineStarts, offset+1) - 1
+	if i < 0 {
+		return 0
 	}
-	return 0
+	return i
 }
 
 // AbsenceMatcher implements block-scoped "hardening property absent" detection
@@ -214,13 +223,12 @@ func findLine(lineStarts []int, offset int) int {
 // It is deterministic: for identical content it always yields the same match
 // set, computed purely from byte offsets and the rule's patterns.
 type AbsenceMatcher struct {
-	mu    sync.Mutex
-	cache map[string]*regexp.Regexp
+	regexCache
 }
 
 // NewAbsenceMatcher returns an AbsenceMatcher with an initialised pattern cache.
 func NewAbsenceMatcher() *AbsenceMatcher {
-	return &AbsenceMatcher{cache: make(map[string]*regexp.Regexp)}
+	return &AbsenceMatcher{regexCache: newRegexCache()}
 }
 
 // compile returns a compiled regexp for pattern, cached. An empty pattern
@@ -229,17 +237,7 @@ func (m *AbsenceMatcher) compile(pattern string) (*regexp.Regexp, error) {
 	if pattern == "" {
 		return nil, nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if re, ok := m.cache[pattern]; ok {
-		return re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("compiling absence pattern %q: %w", pattern, err)
-	}
-	m.cache[pattern] = re
-	return re, nil
+	return m.regexCache.compile(pattern, "absence pattern")
 }
 
 // stripLineComments removes `#` line comments so a keyword that appears only in
@@ -632,16 +630,6 @@ func yamlDocSpan(content []byte, pos int) []byte {
 	return content[docStart:docEnd]
 }
 
-// stubMatcher is a placeholder for matcher types that are not yet implemented
-// (jsonpath, yamlpath, heuristic). It always returns nil.
-type stubMatcher struct{}
-
-// Match is a no-op implementation that always returns nil for unimplemented
-// matcher types (jsonpath, yamlpath, heuristic).
-func (s *stubMatcher) Match(_ []byte, _ *Rule) []MatchResult {
-	return nil
-}
-
 // MatcherRegistry maps matcher type strings to their Matcher implementations.
 type MatcherRegistry struct {
 	matchers map[string]Matcher
@@ -665,16 +653,14 @@ func (r *MatcherRegistry) Get(matcherType string) Matcher {
 	return r.matchers[matcherType]
 }
 
-// NewDefaultMatcherRegistry returns a registry pre-populated with the
-// built-in matchers: RegexMatcher for "regex" and stubs for the remaining
-// types.
+// NewDefaultMatcherRegistry returns a registry pre-populated with every matcher
+// nox actually implements. It must stay in lockstep with ValidMatcherTypes: a
+// type that validates without a matcher fails the scan loudly, and a type served
+// by a do-nothing matcher fails it silently, which is worse.
 func NewDefaultMatcherRegistry() *MatcherRegistry {
 	r := NewMatcherRegistry()
 	r.Register("regex", NewRegexMatcher())
 	r.Register("absence", NewAbsenceMatcher())
 	r.Register("entropy", &EntropyMatcher{})
-	r.Register("jsonpath", &stubMatcher{})
-	r.Register("yamlpath", &stubMatcher{})
-	r.Register("heuristic", &stubMatcher{})
 	return r
 }

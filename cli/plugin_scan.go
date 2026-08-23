@@ -218,6 +218,33 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	return nil
 }
 
+// pluginScanInput builds the input map sent to every plugin's `scan` tool.
+//
+// It exists as its own function so the wiring is testable: a guard on
+// scanExcludePatterns alone proves the patterns can be read, not that they are
+// ever sent, and "read but never sent" is precisely the shape of #455.
+func pluginScanInput(target, absTarget string) map[string]any {
+	input := map[string]any{"workspace_root": absTarget}
+	if excl := scanExcludePatterns(target); len(excl) > 0 {
+		input["exclude"] = excl
+	}
+	return input
+}
+
+// scanExcludePatterns returns the scan.exclude patterns from the workspace's
+// .nox.yaml, so plugins that walk the tree themselves can honour them.
+//
+// A missing or unreadable config yields no patterns rather than an error: the
+// scan itself has already reported any config problem, and refusing to run the
+// plugins over it would turn a config warning into lost coverage.
+func scanExcludePatterns(target string) []string {
+	cfg, err := core.LoadScanConfig(core.ConfigRoot(target))
+	if err != nil || cfg == nil {
+		return nil
+	}
+	return cfg.Scan.Exclude
+}
+
 // runScanPlugins runs the `scan` tool of every installed plugin named in
 // .nox.yaml plugins.required against target and returns the merged findings,
 // enrichments and graphs. Missing plugins are skipped (auto-install already
@@ -317,7 +344,16 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 	// Run the analysis `scan` tool across every plugin that declares it.
 	// workspace_root is passed both as the host workspace argument and in the
 	// input map, since plugins read it from req.Input["workspace_root"].
-	input := map[string]any{"workspace_root": absTarget}
+	//
+	// exclude carries the operator's scan.exclude patterns. A plugin walks the
+	// workspace itself, so without them it cannot honour the exclusions the
+	// operator wrote — nox/sast aborted its entire scan on a minified bundle in
+	// node_modules and the path could not be excluded, so SAST coverage was
+	// silently absent on any machine where dependencies happened to be
+	// installed (#455). The host still drops findings under excluded paths
+	// afterwards, but post-filtering cannot stop a plugin walking into a
+	// directory it should never have entered.
+	input := pluginScanInput(target, absTarget)
 	responses, err := host.InvokeAll(ctx, "scan", input, absTarget)
 	if err != nil {
 		return nil, fmt.Errorf("invoking analysis plugins: %w", err)
@@ -329,7 +365,7 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 			continue
 		}
 		for _, pf := range r.Response.GetFindings() {
-			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf, r.PluginName))
+			out.Findings = append(out.Findings, plugin.ProtoFindingToGo(pf, r.PluginName, absTarget))
 		}
 		for _, pe := range r.Response.GetEnrichments() {
 			out.Enrichments = append(out.Enrichments, plugin.ProtoEnrichmentToGo(pe))

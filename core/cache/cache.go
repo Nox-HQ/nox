@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/fsutil"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -171,22 +173,12 @@ func (c *ScanCache) Save() error {
 		return nil
 	}
 
-	if err := os.MkdirAll(c.dir, 0o755); err != nil {
-		return fmt.Errorf("creating cache dir: %w", err)
-	}
-
 	data, err := json.Marshal(c.store)
 	if err != nil {
 		return fmt.Errorf("marshaling cache: %w", err)
 	}
-
-	tmpFile := c.storePath() + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0o644); err != nil {
-		return fmt.Errorf("writing cache temp: %w", err)
-	}
-	if err := os.Rename(tmpFile, c.storePath()); err != nil {
-		_ = os.Remove(tmpFile)
-		return fmt.Errorf("renaming cache: %w", err)
+	if err := fsutil.AtomicWriteFile(c.storePath(), data, 0o644); err != nil {
+		return fmt.Errorf("writing cache: %w", err)
 	}
 
 	c.dirty = false

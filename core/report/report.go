@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -82,6 +83,75 @@ type JSONReport struct {
 	// Enrichments are plugin annotations keyed to a finding's fingerprint.
 	// Omitted when empty so scans without post-scan plugins are unchanged.
 	Enrichments []findings.Enrichment `json:"enrichments,omitempty"`
+}
+
+// ActiveFindings returns the report's findings that are still active — not
+// baselined, suppressed, or VEX-cleared. A file-driven consumer (the vex, badge,
+// annotate, and attack commands, plus MCP/LSP) needs the same "which findings
+// surface" rule the scan path gets from FindingSet.ActiveFindings, so it lives
+// on the loaded report too rather than being re-filtered by hand per caller.
+func (r JSONReport) ActiveFindings() []findings.Finding {
+	out := make([]findings.Finding, 0, len(r.Findings))
+	for i := range r.Findings {
+		if r.Findings[i].Status.IsActive() {
+			out = append(out, r.Findings[i])
+		}
+	}
+	return out
+}
+
+// LoadFindingsFile reads a findings.json written by `nox scan` and returns its
+// findings.
+//
+// It is the ONE loader for that artifact. Every command that consumed a prior
+// scan used to unmarshal it inline, and one of them (vex init) had drifted to
+// unmarshalling into a []findings.Finding — but `nox scan` writes a JSON OBJECT
+// ({meta, findings, enrichments}), so that parse failed against every real
+// artifact. A single loader against the real shape ends that whole class of
+// drift.
+func LoadFindingsFile(path string) ([]findings.Finding, error) {
+	rep, err := LoadFindingsFileReport(path)
+	if err != nil {
+		return nil, err
+	}
+	return rep.Findings, nil
+}
+
+// LoadFindingsFileReport reads a findings.json and returns the whole report, for
+// a caller that needs more than the raw findings — e.g. ActiveFindings().
+func LoadFindingsFileReport(path string) (JSONReport, error) {
+	raw, err := os.ReadFile(path) //nolint:gosec // caller-supplied scan artifact
+	if err != nil {
+		return JSONReport{}, err
+	}
+	var rep JSONReport
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		return JSONReport{}, err
+	}
+	return rep, nil
+}
+
+// DegradationsFrom converts scan degradations into their report form.
+//
+// It lives here, and every reporter construction site uses it, because the
+// conversion being one function is what stops a surface from quietly omitting
+// degradations. The MCP server did exactly that: three of its reporter sites
+// never set the field, so an agent asking for the findings report got one that
+// said nothing about the checks that had not run — the single consumer least
+// able to notice, since it has no stderr to read.
+func DegradationsFrom(ds []degrade.Degradation) []Degradation {
+	if len(ds) == 0 {
+		return nil
+	}
+	out := make([]Degradation, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, Degradation{
+			Kind:   string(d.Kind),
+			Detail: d.Detail,
+			Impact: d.Impact,
+		})
+	}
+	return out
 }
 
 // JSONReporter produces deterministic JSON output from a FindingSet.
