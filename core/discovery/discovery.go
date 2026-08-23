@@ -185,6 +185,19 @@ var sourceExtensions = map[string]bool{
 	// classified by exact name via sourceNames below.
 	".groovy": true,
 	".gradle": true,
+	// Extensions the lexer supports that were missing here, so files it can
+	// fully analyse were not being classified as Source (and were skipped by
+	// source-gated rules): Kotlin script, Ruby gemspec/rake, PHP templates,
+	// Python stubs/interfaces, Clojure EDN, and .bash. A parity test against
+	// lexctx.SourceExtensions now fails if this set falls behind the lexer again.
+	".kts":     true,
+	".gemspec": true,
+	".rake":    true,
+	".phtml":   true,
+	".pyi":     true,
+	".pyw":     true,
+	".edn":     true,
+	".bash":    true,
 }
 
 // sourceNames contains exact, extension-less file names that carry source code.

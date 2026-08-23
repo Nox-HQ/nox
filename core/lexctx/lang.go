@@ -27,6 +27,7 @@ package lexctx
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -198,6 +199,20 @@ var filenameToLang = map[string]Lang{
 	"Gemfile":     LangRuby,
 	"Rakefile":    LangRuby,
 	"Jenkinsfile": LangGroovy,
+}
+
+// SourceExtensions returns every file extension the lexer recognises as source
+// code (each including the leading dot), sorted. It is the canonical set of
+// "code we can lex", so a consumer like the file discoverer can derive its own
+// source predicate from it instead of maintaining a second, drift-prone list.
+// YAML and Dockerfile are deliberately absent (see the note above extToLang).
+func SourceExtensions() []string {
+	out := make([]string, 0, len(extToLang))
+	for ext := range extToLang {
+		out = append(out, ext)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // LangFromPath infers the language from a file path's extension. Detection is
