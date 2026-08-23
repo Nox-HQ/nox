@@ -222,6 +222,30 @@ func TestDetect_APIKeyLogged(t *testing.T) {
 	}
 }
 
+// TestNoDetect_APIKeyNotSetMessage verifies that AI-007 does not fire when a log
+// statement reports that an API key is MISSING rather than logging its value.
+// Pattern: log_error("OPENAI_API_KEY not set") should not be flagged.
+func TestNoDetect_APIKeyNotSetMessage(t *testing.T) {
+	cases := []string{
+		`log_error("OPENAI_API_KEY not set. Please set the OPENAI_API_KEY environment variable.")`,
+		`log_error("AZURE_OPENAI_API_KEY not set")`,
+		`logger.warning("api_key not found, skipping LLM call")`,
+		`print("anthropic_api_key is not configured")`,
+	}
+	a := NewAnalyzer()
+	for _, code := range cases {
+		results, err := a.ScanFile("tools.py", []byte(code))
+		if err != nil {
+			t.Fatalf("unexpected error for %q: %v", code, err)
+		}
+		for _, f := range results {
+			if f.RuleID == "AI-007" {
+				t.Errorf("AI-007 fired on absence-notification log %q — should be suppressed by ExcludeContextKeywords", code)
+			}
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // AI-008: Unpinned model reference
 // ---------------------------------------------------------------------------

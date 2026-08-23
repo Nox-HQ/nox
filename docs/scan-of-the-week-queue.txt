@@ -26,7 +26,7 @@
 # DONE 2026-07-05: microsoft/autogen — 304,629 findings (99.5% SVG/lock/notebook FPs); 1 low-sev AI-019 model-hash gap; fixed 10 broad-pattern SEC rules missing \b+secretShape
 # DONE 2026-07-15: modelcontextprotocol/servers — 41 findings (2 critical FPs: IAC-351 on id-token permission; 3 real high: mutable GH Action tags); fixed IAC-351 line-anchor FP
 # DONE 2026-08-01: openai/openai-agents-python — 378 findings (0 true positives); SEC-163 snake_case/f-string FP fixed
-phidatahq/phidata
+# DONE 2026-08-15: phidatahq/phidata — 1,277 findings (53% cookbook examples); 0 true positives; AI-007 absence-notification FP fixed; MCP-009 guardrail-context FP tracked
 princeton-nlp/SWE-agent
 pydantic/pydantic-ai
 ragflow-io/ragflow
