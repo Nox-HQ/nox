@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	nox "github.com/nox-hq/nox/core"
@@ -569,40 +570,13 @@ func shortFP(fp string) string {
 }
 
 func splitCSV(s string) []string {
-	if s == "" {
-		return nil
-	}
 	var out []string
-	for _, p := range splitCommaTrim(s) {
-		if p != "" {
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
 			out = append(out, p)
 		}
 	}
 	return out
-}
-
-func splitCommaTrim(s string) []string {
-	parts := make([]string, 0, 4)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			parts = append(parts, trimSpace(s[start:i]))
-			start = i + 1
-		}
-	}
-	parts = append(parts, trimSpace(s[start:]))
-	return parts
-}
-
-func trimSpace(s string) string {
-	a, b := 0, len(s)
-	for a < b && (s[a] == ' ' || s[a] == '\t') {
-		a++
-	}
-	for b > a && (s[b-1] == ' ' || s[b-1] == '\t') {
-		b--
-	}
-	return s[a:b]
 }
 
 func buildSet(values []string) map[string]struct{} {

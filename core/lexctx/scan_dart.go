@@ -122,17 +122,12 @@ func dartRawStringPrefix(content []byte, start int) bool {
 // isDartIdentPart reports whether b can be part of a Dart identifier (letters,
 // digits, underscore, or `$`). Used to disambiguate a raw-string `r` prefix and
 // to bound a simple `$identifier` interpolation hole.
-func isDartIdentPart(b byte) bool {
-	return b == '_' || b == '$' ||
-		(b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
-}
+func isDartIdentPart(b byte) bool { return b == '$' || asciiIdentPart(b) }
 
 // isDartIdentStart reports whether b can begin a Dart identifier (letter or
 // underscore; `$` is not a valid identifier START in a simple `$x` hole — the
 // `$` is the interpolation marker itself).
-func isDartIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isDartIdentStart(b byte) bool { return asciiIdentStart(b) }
 
 // scanDartRawString classifies a raw string opening at content[start] (an `r`
 // prefix satisfying dartRawStringPrefix). Raw strings process NO escapes and NO

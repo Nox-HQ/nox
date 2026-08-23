@@ -312,11 +312,7 @@ func matchesHeredocClose(content []byte, k int, label string) bool {
 }
 
 // isPHPIdentStart reports whether c can begin a PHP heredoc label / identifier.
-func isPHPIdentStart(c byte) bool {
-	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
+func isPHPIdentStart(c byte) bool { return asciiIdentStart(c) }
 
 // isPHPIdentPart reports whether c can continue a PHP identifier.
-func isPHPIdentPart(c byte) bool {
-	return isPHPIdentStart(c) || (c >= '0' && c <= '9')
-}
+func isPHPIdentPart(c byte) bool { return asciiIdentPart(c) }

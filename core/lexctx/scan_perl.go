@@ -589,11 +589,7 @@ func scanPerlRegex(content []byte, start int) int {
 }
 
 // isPerlIdentStart reports whether b can begin a Perl identifier.
-func isPerlIdentStart(b byte) bool {
-	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
+func isPerlIdentStart(b byte) bool { return asciiIdentStart(b) }
 
 // isPerlIdentByte reports whether b can appear inside a Perl identifier.
-func isPerlIdentByte(b byte) bool {
-	return isPerlIdentStart(b) || (b >= '0' && b <= '9')
-}
+func isPerlIdentByte(b byte) bool { return asciiIdentPart(b) }
