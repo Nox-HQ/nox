@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/dashboard"
+
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -1717,7 +1719,7 @@ func oversizedScanResult(t *testing.T) *nox.ScanResult {
 }
 
 func TestGenerateDashboardHTML_OversizedExceedsBudget(t *testing.T) {
-	html, err := GenerateDashboardHTML(oversizedScanResult(t), "0.1.0", t.TempDir())
+	html, err := dashboard.GenerateHTML(oversizedScanResult(t), "0.1.0", t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

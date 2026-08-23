@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nox-hq/nox/core/dashboard"
+
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/annotate"
@@ -1242,7 +1244,7 @@ func (s *Server) handleDashboard(_ context.Context, input dashboardInput) (strin
 		return "Error: no scan results available", nil
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return "", fmt.Errorf("generating dashboard: %w", err)
 	}
@@ -1434,7 +1436,7 @@ func (s *Server) handleResourceDashboard(_ context.Context, uri string, _ map[st
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return nil, fmt.Errorf("generating dashboard: %w", err)
 	}
@@ -1592,7 +1594,7 @@ func (s *Server) handleProjectResourceDashboard(_ context.Context, uri string, p
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	html, err := GenerateDashboardHTML(pc.result, s.version, pc.basePath)
+	html, err := dashboard.GenerateHTML(pc.result, s.version, pc.basePath)
 	if err != nil {
 		return nil, fmt.Errorf("generating dashboard: %w", err)
 	}

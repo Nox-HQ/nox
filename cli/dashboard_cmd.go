@@ -9,7 +9,7 @@ import (
 	"runtime"
 
 	nox "github.com/nox-hq/nox/core"
-	"github.com/nox-hq/nox/server"
+	"github.com/nox-hq/nox/core/dashboard"
 )
 
 func runDashboard(args []string) int {
@@ -44,7 +44,7 @@ func runDashboard(args []string) int {
 		fmt.Printf("[results] %d findings\n", len(active))
 	}
 
-	html, err := server.GenerateDashboardHTML(result, version, target)
+	html, err := dashboard.GenerateHTML(result, version, target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: generating dashboard: %v\n", err)
 		return 2
