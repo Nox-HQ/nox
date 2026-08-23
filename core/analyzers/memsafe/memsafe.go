@@ -124,7 +124,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// findings measured across this fleet sat in protoc-gen-go output, and
 		// a rule that reports code nobody writes is pure noise. The marker is
 		// the convention from https://go.dev/s/generatedcode.
-		if isGenerated(content) {
+		if source.IsGenerated(content) {
 			continue
 		}
 
@@ -960,22 +960,5 @@ func unparen(e ast.Expr) ast.Expr {
 // ---------------------------------------------------------------------------
 // File filters
 // ---------------------------------------------------------------------------
-
-// generatedMarker is the convention from https://go.dev/s/generatedcode. Only
-// the first few lines of a file are inspected, per that convention.
-const generatedMarker = "// Code generated"
-
-func isGenerated(content []byte) bool {
-	head := content
-	if len(head) > 4096 {
-		head = head[:4096]
-	}
-	for _, line := range strings.Split(string(head), "\n") {
-		if strings.HasPrefix(line, generatedMarker) && strings.Contains(line, "DO NOT EDIT") {
-			return true
-		}
-	}
-	return false
-}
 
 // isTestPath reports whether a path is Go test code or a test fixture tree.
