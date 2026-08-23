@@ -118,10 +118,6 @@ type pluginInstallInput struct {
 	// engineering can't talk the LLM into auto-supplying consent text.
 	Confirmed bool `json:"confirmed"`
 }
-type pluginReadResourceInput struct {
-	Plugin string `json:"plugin"`
-	URI    string `json:"uri"`
-}
 
 // --- Multi-project cache ---
 
@@ -365,10 +361,14 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 		ReadOnly().
 		Handler(s.handlePluginCallTool)
 
-	srv.Tool("plugin.read_resource").
-		Description("Read a resource from a plugin").
-		ReadOnly().
-		Handler(s.handlePluginReadResource)
+	// plugin.read_resource is deliberately NOT registered. Plugins declare their
+	// resources in their manifest, but PluginService has no resource-read RPC
+	// (GetManifest / InvokeTool / StreamArtifacts only), so nothing can serve
+	// one. It used to be registered with the description "Read a resource from a
+	// plugin" and a handler that returned "not yet implemented" as a SUCCESSFUL
+	// result — an agent reading isError saw success. A capability nox cannot
+	// deliver must not appear in tools/list at all; see
+	// TestNoRegisteredToolIsAStub.
 }
 
 func (s *Server) registerResources(srv *mcp.Server) {
@@ -1235,10 +1235,6 @@ func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolI
 	}
 
 	return truncate(string(data)), nil
-}
-
-func (s *Server) handlePluginReadResource(_ context.Context, _ pluginReadResourceInput) (string, error) {
-	return "Error: plugin.read_resource is not yet implemented", nil
 }
 
 // resolveToolName resolves tool name aliases.

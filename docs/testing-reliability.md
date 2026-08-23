@@ -167,3 +167,58 @@ confirmed nothing, so the derived suite was empty and no run would have sent
 requests either. The test now records a genuinely CONFIRMED exploit first and
 asserts the suite is non-empty before asserting the request count. Checking
 that a guard *can* fail is not optional — see the mutation discipline above.
+
+## The same guard, one layer up: stub implementations
+
+Flag efficacy asks "does this control change anything?". Asking it of the
+non-CLI surfaces found three stubs, of which two were reporting success.
+
+**A rule matcher that matched nothing.** `jsonpath`, `yamlpath` and `heuristic`
+were listed in `ValidMatcherTypes` and registered to a `stubMatcher` that
+returned nil for every input. So a rule declaring one **validated at load time,
+appeared in `nox rules`, ran on every file, and matched nothing** — the author
+had no way to learn their rule never ran. Note the stub was strictly worse than
+nothing: with no matcher registered, `Engine.Scan` returns `no matcher
+registered for type %q (rule %s)` and fails loudly. The stub converted that
+loud failure into a silent clean scan, which is the one outcome nox must never
+produce. The three types are now rejected at load time and the stub is gone.
+
+**An MCP tool that could not work.** `plugin.read_resource` was registered with
+the description "Read a resource from a plugin", took `plugin` and `uri`, and
+returned `"Error: plugin.read_resource is not yet implemented"` as a
+**successful** result — an agent checking `isError` saw success. `PluginService`
+has no resource-read RPC (`GetManifest` / `InvokeTool` / `StreamArtifacts`
+only), so it could not have worked. Unregistered, and dropped from README,
+`docs/usage.md` and `docs/extension.md`.
+
+(`nox plugin test` is also a stub, but it exits 2. An honest failure needs no
+fix.)
+
+Both had a test pinning the stub behaviour as correct — `TestStubMatcher_Match`
+asserted the nil return, `TestHandlePluginReadResource_Stub` asserted the error
+string. Coverage of a stub is not evidence the feature works; it is evidence
+the stub is faithfully doing nothing.
+
+Three guards now hold the line, in `core/rules/stub_matcher_test.go` and
+`server/tool_efficacy_test.go`:
+
+- `ValidMatcherTypes` and the default matcher registry must be the same set.
+- **Every matcher type must prove it matches**, against a case chosen for it.
+  This is the one that matters: set membership and non-nil registration are both
+  satisfiable by a matcher returning nil for every input, which is exactly the
+  bug's shape. Only running the matcher catches it.
+- No registered MCP tool may bind a handler that reports it is unimplemented,
+  and every published tool parameter must be read.
+
+Two lessons from building them, both already in the mutation discipline above
+and both still nearly missed:
+
+- The first tool guard scanned only `registerTools` — but plugin tools register
+  in `registerPluginTools`, so it was blind to all three plugin tools including
+  the stub it was written to catch. It passed. The guard now scans the package
+  and **asserts a minimum tool count**, so silent under-coverage fails.
+- The first parameter guard used a substring search for `.Plugin`, which also
+  matches `.PluginScanOutput`. It reported an unread field as read. It now walks
+  selector expressions in the AST.
+
+A guard that passes on mutated source is not a guard. Both of these did.

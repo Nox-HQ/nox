@@ -35,7 +35,10 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 ### Rule Engine
 
 - YAML-based declarative rules with versioned IDs
-- Matchers: regex, jsonpath/yamlpath, heuristics
+- Matchers: regex, entropy, absence (block-scoped). A matcher type is listed in
+  `ValidMatcherTypes` only once something implements it — jsonpath/yamlpath/heuristic
+  were removed because they validated at load time and were served by a stub that
+  matched nothing, so a rule using one loaded, listed, and silently found nothing.
 - Rules must be testable and deterministic
 
 ### Output Formats

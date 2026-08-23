@@ -105,7 +105,6 @@ Nox exposes plugin functionality to MCP clients.
 Nox provides generic MCP tools:
 - `plugin.list`
 - `plugin.call_tool`
-- `plugin.read_resource`
 
 Additionally, Nox may expose **convenience aliases**:
 - `nox.dast.scan`

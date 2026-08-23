@@ -815,7 +815,6 @@ nox serve --allowed-paths /path/to/project
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
 | `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
-| `plugin.read_resource` | `plugin`, `uri` | Read a plugin resource |
 
 ### Resources
 

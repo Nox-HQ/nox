@@ -642,23 +642,6 @@ func TestHandlePluginCallTool_Alias(t *testing.T) {
 	}
 }
 
-func TestHandlePluginReadResource_Stub(t *testing.T) {
-	s := New("0.1.0", nil)
-	result, err := s.handlePluginReadResource(context.Background(), pluginReadResourceInput{
-		Plugin: "test",
-		URI:    "nox://test/results",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(result, "Error:") {
-		t.Fatal("expected error for stub")
-	}
-	if !strings.Contains(result, "not yet implemented") {
-		t.Fatalf("expected 'not yet implemented' message, got: %s", result)
-	}
-}
-
 // --- handleGetFindingDetail tests ---
 
 func TestHandleGetFindingDetail_BeforeScan(t *testing.T) {

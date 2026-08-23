@@ -616,16 +616,6 @@ func yamlDocSpan(content []byte, pos int) []byte {
 	return content[docStart:docEnd]
 }
 
-// stubMatcher is a placeholder for matcher types that are not yet implemented
-// (jsonpath, yamlpath, heuristic). It always returns nil.
-type stubMatcher struct{}
-
-// Match is a no-op implementation that always returns nil for unimplemented
-// matcher types (jsonpath, yamlpath, heuristic).
-func (s *stubMatcher) Match(_ []byte, _ *Rule) []MatchResult {
-	return nil
-}
-
 // MatcherRegistry maps matcher type strings to their Matcher implementations.
 type MatcherRegistry struct {
 	matchers map[string]Matcher
@@ -649,16 +639,14 @@ func (r *MatcherRegistry) Get(matcherType string) Matcher {
 	return r.matchers[matcherType]
 }
 
-// NewDefaultMatcherRegistry returns a registry pre-populated with the
-// built-in matchers: RegexMatcher for "regex" and stubs for the remaining
-// types.
+// NewDefaultMatcherRegistry returns a registry pre-populated with every matcher
+// nox actually implements. It must stay in lockstep with ValidMatcherTypes: a
+// type that validates without a matcher fails the scan loudly, and a type served
+// by a do-nothing matcher fails it silently, which is worse.
 func NewDefaultMatcherRegistry() *MatcherRegistry {
 	r := NewMatcherRegistry()
 	r.Register("regex", NewRegexMatcher())
 	r.Register("absence", NewAbsenceMatcher())
 	r.Register("entropy", &EntropyMatcher{})
-	r.Register("jsonpath", &stubMatcher{})
-	r.Register("yamlpath", &stubMatcher{})
-	r.Register("heuristic", &stubMatcher{})
 	return r
 }
