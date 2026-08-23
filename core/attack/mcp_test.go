@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/evidence"
 )
 
@@ -209,4 +210,20 @@ type erroringManifestSource struct{}
 func (erroringManifestSource) Name() string { return "erroring" }
 func (erroringManifestSource) Capture(_ context.Context) (MCPManifest, error) {
 	return MCPManifest{}, context.DeadlineExceeded
+}
+
+// Every scenario's OWASP LLM category must be a valid 2025 entry. This guards
+// the migration from the 2023 edition: a scenario left on a stale or invalid
+// number fails here rather than shipping a wrong standards label.
+func TestScenarioOWASPLLMIsValid2025(t *testing.T) {
+	all := append(Scenarios(), MCPScenarios()...)
+	for _, s := range all {
+		if s.OWASPLLM == "" {
+			t.Errorf("scenario %s has no OWASP LLM category", s.ID)
+			continue
+		}
+		if !catalog.OWASPLLM(s.OWASPLLM).Valid() {
+			t.Errorf("scenario %s OWASPLLM %q is not a valid 2025 category", s.ID, s.OWASPLLM)
+		}
+	}
 }

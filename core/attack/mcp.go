@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/evidence"
 )
 
@@ -128,7 +129,7 @@ func MCPScenarios() []Scenario {
 			// reachable via the served manifest; no privileges; integrity of the
 			// agent's instruction context is the impact.
 			OWASPASI:   "ASI04",
-			OWASPLLM:   "LLM07",
+			OWASPLLM:   string(catalog.LLM06ExcessiveAgency),
 			CWE:        "CWE-77",
 			CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:H/VA:N/SC:N/SI:N/SA:N",
 		},
@@ -139,7 +140,7 @@ func MCPScenarios() []Scenario {
 			Techniques: []string{"tool-poisoning", "data-exfiltration"},
 			MinProfile: ProfileSandbox,
 			OWASPASI:   "ASI04",
-			OWASPLLM:   "LLM06",
+			OWASPLLM:   string(catalog.LLM02SensitiveInfoDisclosure),
 			CWE:        "CWE-200",
 			CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
 		},
@@ -150,7 +151,7 @@ func MCPScenarios() []Scenario {
 			Techniques: []string{"cross-server-trust", "capability-laundering"},
 			MinProfile: ProfileSandbox,
 			OWASPASI:   "ASI07",
-			OWASPLLM:   "LLM07",
+			OWASPLLM:   string(catalog.LLM06ExcessiveAgency),
 			CWE:        "CWE-668",
 			CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:H/VA:N/SC:N/SI:N/SA:N",
 		},

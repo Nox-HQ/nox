@@ -12,7 +12,7 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// We expect 1553 built-in rules across all analyzers (SEC + DATA + AI
 	// + IAC + VULN + SLOP-001/002 slopsquatting + VARIANT-001..006 CVE variants
 	// + PROV-001/002 provenance). AI includes AI-PI-* (LLM01),
-	// AI-EMBED-* (LLM06), MCP-* families: MCP-001..008 (server
+	// AI-EMBED-* (LLM08), MCP-* families: MCP-001..008 (server
 	// hardening), MCP-009..014 (tool poisoning, OWASP MCP03),
 	// MCP-016..021 (authorization & token safety, OWASP MCP07), and
 	// MCP-022 (shadow/remote server, OWASP MCP09); and AGENT-001..006

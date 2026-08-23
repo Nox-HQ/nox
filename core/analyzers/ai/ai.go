@@ -199,7 +199,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			fs.Add(results[i])
 		}
 
-		// Agent tool-use lattice (OWASP LLM07): detect dangerous tool
+		// Agent tool-use lattice (OWASP LLM06 Excessive Agency): detect dangerous tool
 		// combinations registered in the same source file.
 		latticeFindings := scanAgentLattice(artifact.Path, content)
 		for i := range latticeFindings {

@@ -1,6 +1,10 @@
 package attack
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/nox-hq/nox/core/catalog"
+)
 
 // AssetKind classifies the thing an attack tries to reach or violate. It is the
 // vocabulary shared by assets, paths, and invariants so a hypothesis names what
@@ -131,8 +135,9 @@ type Scenario struct {
 	// a dynamic trace and the static finding it corroborates land in the same
 	// bucket rather than in two parallel vocabularies.
 	OWASPASI string `json:"owasp_asi,omitempty"`
-	// OWASPLLM is the OWASP LLM Top 10 category, e.g. "LLM01". The numbering
-	// matches the owasp-llmNN tags already used across core/analyzers.
+	// OWASPLLM is the OWASP LLM Top 10 (2025 edition) category, e.g. "LLM01".
+	// Set from the canonical catalog (core/catalog) so the numbering has one
+	// source of truth and cannot drift from the analyzer rule tags.
 	OWASPLLM string `json:"owasp_llm,omitempty"`
 	// CWE is the primary CWE identifier, e.g. "CWE-77".
 	CWE string `json:"cwe,omitempty"`
@@ -177,7 +182,7 @@ var scenarioLibrary = []Scenario{
 		// agent was asked to do (VA:H) — with no reach into downstream systems
 		// on its own (SC/SI/SA:N).
 		OWASPASI:   "ASI01",
-		OWASPLLM:   "LLM01",
+		OWASPLLM:   string(catalog.LLM01PromptInjection),
 		CWE:        "CWE-1427",
 		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
@@ -200,7 +205,7 @@ var scenarioLibrary = []Scenario{
 		// precondition outside their control, which is exactly what AT:P
 		// (attack requirements: present) encodes.
 		OWASPASI:   "ASI01",
-		OWASPLLM:   "LLM01",
+		OWASPLLM:   string(catalog.LLM01PromptInjection),
 		CWE:        "CWE-1427",
 		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
@@ -225,7 +230,7 @@ var scenarioLibrary = []Scenario{
 		// Invoking a privileged tool is a full compromise of the agent's action
 		// authority: it can read (VC:H), write (VI:H), and destroy (VA:H).
 		OWASPASI:   "ASI02",
-		OWASPLLM:   "LLM07",
+		OWASPLLM:   string(catalog.LLM06ExcessiveAgency),
 		CWE:        "CWE-284",
 		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
 	},
@@ -250,7 +255,7 @@ var scenarioLibrary = []Scenario{
 		// information disclosure. The impact is confidentiality alone: data
 		// leaves the boundary, nothing is written or destroyed.
 		OWASPASI:   "ASI02",
-		OWASPLLM:   "LLM06",
+		OWASPLLM:   string(catalog.LLM02SensitiveInfoDisclosure),
 		CWE:        "CWE-200",
 		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
 	},

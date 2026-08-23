@@ -928,7 +928,7 @@ func TestDetect_AIPI003_TypeScriptTemplateLiteral(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AI-EMBED-* OWASP LLM06 embedding-leak rules
+// AI-EMBED-* OWASP LLM08 (Vector and Embedding Weaknesses) rules
 // ---------------------------------------------------------------------------
 
 func TestDetect_AIEmbed001_PythonSecretIntoEmbedding(t *testing.T) {
