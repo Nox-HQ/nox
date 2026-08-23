@@ -814,6 +814,7 @@ func addInjectionFindings(b *graphBuilder, ff []findings.Finding, p *principalIn
 		}
 		for _, id := range p.byPath[f.Location.FilePath] {
 			b.addEdge(modelID, EdgeDataFlow, id,
+				// nox:ignore AI-006 -- graph edge label, not a log line: id is an inventory component ID and "prompt call" is prose; no prompt or response text is formatted here
 				fmt.Sprintf("the prompt call and %s are registered in the same file", id), ev)
 		}
 	}
