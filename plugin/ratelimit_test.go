@@ -19,13 +19,30 @@ func TestRateLimiter_UnlimitedAllowsAll(t *testing.T) {
 	}
 }
 
+// Deadlines in this file are asymmetric on purpose.
+//
+// A request inside the burst needs NO wait, so any deadline at all is only a
+// safety net against the call hanging — and a tight one is a flake waiting for a
+// loaded machine: the goroutine can be descheduled between WithTimeout and the
+// call, so rate.Wait sees a deadline that is already spent and fails a request
+// that never needed to wait. That is what turned this into an intermittent red
+// on the shared CI runner, on the first burst request of sixty.
+//
+// A request AFTER the burst must wait a full second at 1/sec, so a short
+// deadline there is the mechanism under test rather than a race: a slower
+// machine only makes that assertion more certain, never less.
+const (
+	burstDeadline   = 5 * time.Second
+	blockedDeadline = 10 * time.Millisecond
+)
+
 func TestRateLimiter_RequestRateLimit(t *testing.T) {
 	// 60 RPM = 1 per second, burst of 60.
 	rl := NewRateLimiter(60, 0)
 
 	// First 60 requests should be immediate (burst).
 	for i := 0; i < 60; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), burstDeadline)
 		err := rl.AllowRequest(ctx)
 		cancel()
 		if err != nil {
@@ -34,7 +51,7 @@ func TestRateLimiter_RequestRateLimit(t *testing.T) {
 	}
 
 	// 61st request should block (burst exhausted, rate is 1/sec).
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), blockedDeadline)
 	err := rl.AllowRequest(ctx)
 	cancel()
 	if err == nil {
@@ -47,7 +64,7 @@ func TestRateLimiter_BandwidthLimit(t *testing.T) {
 	rl := NewRateLimiter(0, 1024*1024)
 
 	// First call with full bandwidth should succeed (burst).
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), burstDeadline)
 	err := rl.AllowBandwidth(ctx, 1024*1024)
 	cancel()
 	if err != nil {
@@ -55,7 +72,7 @@ func TestRateLimiter_BandwidthLimit(t *testing.T) {
 	}
 
 	// Next call should block (burst exhausted).
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), blockedDeadline)
 	err = rl.AllowBandwidth(ctx2, 1024)
 	cancel2()
 	if err == nil {
