@@ -285,24 +285,10 @@ func printDriftReport(diff mcpdrift.Diff, drift []findings.Finding, server, base
 }
 
 func severityLine(sev map[findings.Severity]int) string {
-	order := []findings.Severity{
-		findings.SeverityCritical, findings.SeverityHigh,
-		findings.SeverityMedium, findings.SeverityLow, findings.SeverityInfo,
+	if out := findings.FormatSeverityCounts(sev); out != "" {
+		return out
 	}
-	var parts []string
-	for _, s := range order {
-		if n := sev[s]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, s))
-		}
-	}
-	if len(parts) == 0 {
-		return "none"
-	}
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += ", " + p
-	}
-	return out
+	return "none"
 }
 
 // printSandboxWarning reminds the operator, on stderr, that the server runs as a

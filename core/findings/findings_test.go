@@ -1301,3 +1301,45 @@ func TestDeduplicate_RemovesTrueDuplicates(t *testing.T) {
 		t.Errorf("expected a true duplicate to be removed, got %d findings", got)
 	}
 }
+
+func TestFormatSeverityCounts(t *testing.T) {
+	tests := []struct {
+		name   string
+		counts map[Severity]int
+		want   string
+	}{
+		{"empty is blank", map[Severity]int{}, ""},
+		{"all zero is blank", map[Severity]int{SeverityHigh: 0}, ""},
+		{"single", map[Severity]int{SeverityHigh: 3}, "3 high"},
+		{"canonical order regardless of map order", map[Severity]int{
+			SeverityLow: 1, SeverityCritical: 2, SeverityHigh: 5,
+		}, "2 critical, 5 high, 1 low"},
+		{"omits zeros between", map[Severity]int{
+			SeverityCritical: 1, SeverityMedium: 4,
+		}, "1 critical, 4 medium"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatSeverityCounts(tt.counts); got != tt.want {
+				t.Errorf("FormatSeverityCounts = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// SeverityOrder must be the source the priority rank derives from — a drift
+// between the two would reorder findings differently from how they are
+// summarised.
+func TestSeverityOrderDrivesPriorityRank(t *testing.T) {
+	if len(SeverityOrder) != 5 {
+		t.Fatalf("SeverityOrder has %d entries, want 5", len(SeverityOrder))
+	}
+	for i, s := range SeverityOrder {
+		if severityPriorityRank[s] != i {
+			t.Errorf("rank of %s = %d, want %d (must derive from SeverityOrder)", s, severityPriorityRank[s], i)
+		}
+	}
+	if SeverityOrder[0] != SeverityCritical || SeverityOrder[4] != SeverityInfo {
+		t.Errorf("SeverityOrder must run critical..info, got %v", SeverityOrder)
+	}
+}

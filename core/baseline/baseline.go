@@ -201,6 +201,32 @@ func (b *Baseline) ExpiredCount() int {
 	return count
 }
 
+// StatusSummary is the aggregate view of a baseline: its size, how many entries
+// have expired, and the per-severity breakdown. Both the CLI `baseline show` and
+// the MCP baseline_status tool project from this, so the two cannot report a
+// baseline differently — and BySeverity is keyed by findings.Severity so a
+// consumer iterating findings.SeverityOrder gets a deterministic order.
+type StatusSummary struct {
+	Total      int
+	Expired    int
+	BySeverity map[findings.Severity]int
+}
+
+// Status returns the aggregate status of the baseline. It is the single source
+// both adapters use, replacing two ad-hoc per-severity loops (one of which
+// iterated a map in non-deterministic order).
+func (b *Baseline) Status() StatusSummary {
+	bySev := make(map[findings.Severity]int, len(b.Entries))
+	for i := range b.Entries {
+		bySev[b.Entries[i].Severity]++
+	}
+	return StatusSummary{
+		Total:      b.Len(),
+		Expired:    b.ExpiredCount(),
+		BySeverity: bySev,
+	}
+}
+
 // DefaultPath returns the conventional baseline file location within a project.
 func DefaultPath(root string) string {
 	return filepath.Join(root, ".nox", "baseline.json")

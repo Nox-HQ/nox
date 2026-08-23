@@ -802,14 +802,15 @@ func (s *Server) handleBaselineStatus(_ context.Context, input baselineStatusInp
 		return toolError("loading baseline: " + err.Error()), nil
 	}
 
-	bySev := make(map[string]int)
-	for i := range bl.Entries {
-		bySev[string(bl.Entries[i].Severity)]++
+	st := bl.Status()
+	bySev := make(map[string]int, len(st.BySeverity))
+	for sev, n := range st.BySeverity {
+		bySev[string(sev)] = n
 	}
 
 	return structured(baselineStatusOutput{
-		Total:      bl.Len(),
-		Expired:    bl.ExpiredCount(),
+		Total:      st.Total,
+		Expired:    st.Expired,
 		BySeverity: bySev,
 		Path:       baseline.DefaultPath(input.Path),
 	})

@@ -459,9 +459,36 @@ func (fs *FindingSet) SortDeterministic() {
 	})
 }
 
-// severityPriorityRank orders severities from most to least urgent.
-var severityPriorityRank = map[Severity]int{
-	SeverityCritical: 0, SeverityHigh: 1, SeverityMedium: 2, SeverityLow: 3, SeverityInfo: 4,
+// SeverityOrder lists the severities from most to least urgent. It is the one
+// canonical ordering: severity breakdown lines, the priority rank below, and the
+// SARIF/badge/policy orderings should all derive from this rather than
+// re-declaring the sequence — a re-declared order is one that drifts.
+var SeverityOrder = []Severity{
+	SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo,
+}
+
+// severityPriorityRank orders severities from most to least urgent, derived
+// from SeverityOrder so the two cannot disagree.
+var severityPriorityRank = func() map[Severity]int {
+	m := make(map[Severity]int, len(SeverityOrder))
+	for i, s := range SeverityOrder {
+		m[s] = i
+	}
+	return m
+}()
+
+// FormatSeverityCounts renders a severity->count map as "2 critical, 11 high,
+// ..." in SeverityOrder, omitting zero counts. It returns "" for an all-zero or
+// empty map; a caller that wants a word like "none" for the empty case supplies
+// it. This is the one formatter behind every adapter's severity line.
+func FormatSeverityCounts(counts map[Severity]int) string {
+	var parts []string
+	for _, s := range SeverityOrder {
+		if n := counts[s]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, s))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // confidencePriorityRank orders confidence from most to least certain.
