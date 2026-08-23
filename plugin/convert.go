@@ -2,8 +2,6 @@ package plugin
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
@@ -11,6 +9,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/graph"
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
+	"github.com/nox-hq/nox/sdk"
 )
 
 // --- Proto → Go conversion ---
@@ -52,28 +51,19 @@ func ProtoFindingToGo(pf *pluginv1.Finding, pluginName, workspaceRoot string) fi
 
 // repoRelativePath rewrites an absolute plugin-reported path to one relative to
 // root, so a finding identifies a file in the repository rather than a location
-// on the machine that happened to scan it.
+// on the machine that scanned it.
 //
-// A path already relative is returned unchanged: a plugin that does the right
-// thing must not have its paths mangled, and the two reporting styles have to
-// fingerprint identically or one finding becomes two baseline entries.
-//
-// Anything that cannot be related to root — a different volume, a path outside
-// the workspace — is left as-is. Guessing would be worse than an unstable
-// fingerprint: it would silently attribute the finding to the wrong file.
+// It delegates to sdk.RelativePath, the helper plugin authors are told to use,
+// so the host and the plugins agree on what a repo-relative path is. Two
+// implementations of this drifted once already: this one returned native
+// separators while the SDK's returned slashes, which on Windows gave a plugin
+// finding `internal\svc\handler.go` where every other nox path is
+// `internal/svc/handler.go`. That made the fingerprint differ between Windows
+// and Linux for the same file in the same repository — the #454 bug again,
+// across operating systems instead of across directories — and left
+// forward-slash exclude patterns unable to match plugin paths.
 func repoRelativePath(path, root string) string {
-	if path == "" || root == "" || !filepath.IsAbs(path) {
-		return path
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return path
-	}
-	rel, err := filepath.Rel(absRoot, path)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return path
-	}
-	return rel
+	return sdk.RelativePath(root, path)
 }
 
 // pluginFingerprint derives the fingerprint stored for a plugin finding.

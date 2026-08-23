@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	pluginv1 "github.com/nox-hq/nox/gen/nox/plugin/v1"
@@ -92,23 +91,31 @@ func TestRunFingerprintStabilityCatchesAPathDependentPlugin(t *testing.T) {
 // TestSDKFingerprintIsPathIndependent pins the helper plugin authors are told to
 // use.
 func TestSDKFingerprintIsPathIndependent(t *testing.T) {
-	a := Fingerprint("/tmp/a", "/tmp/a/internal/svc/handler.go", "SAST-001", "creds")
-	b := Fingerprint("/private/var/folders/xy/warden-wt-9f3c2a/repo",
-		"/private/var/folders/xy/warden-wt-9f3c2a/repo/internal/svc/handler.go", "SAST-001", "creds")
+	// Roots built with the host's own conventions. Hardcoded "/tmp/a" made this
+	// vacuous on Windows, where filepath.IsAbs of a slash-rooted path is false:
+	// neither path was relativised, so both hashed their full spelling and
+	// matched for the wrong reason.
+	rootA := filepath.Join(t.TempDir(), "a")
+	rootB := filepath.Join(t.TempDir(), "nested", "warden-wt-9f3c2a", "repo")
+	fileIn := func(root string, parts ...string) string {
+		return filepath.Join(append([]string{root}, parts...)...)
+	}
+
+	a := Fingerprint(rootA, fileIn(rootA, "internal", "svc", "handler.go"), "SAST-001", "creds")
+	b := Fingerprint(rootB, fileIn(rootB, "internal", "svc", "handler.go"), "SAST-001", "creds")
 	if a != b {
 		t.Errorf("sdk.Fingerprint moved with the checkout path:\n  %s\n  %s", a, b)
 	}
 
 	// It must still distinguish different files, rules and details, or a stable
 	// fingerprint would just be a constant.
-	other := Fingerprint("/tmp/a", "/tmp/a/internal/svc/other.go", "SAST-001", "creds")
-	if a == other {
+	if a == Fingerprint(rootA, fileIn(rootA, "internal", "svc", "other.go"), "SAST-001", "creds") {
 		t.Error("two different files produced the same fingerprint")
 	}
-	if a == Fingerprint("/tmp/a", "/tmp/a/internal/svc/handler.go", "SAST-002", "creds") {
+	if a == Fingerprint(rootA, fileIn(rootA, "internal", "svc", "handler.go"), "SAST-002", "creds") {
 		t.Error("two different rules produced the same fingerprint")
 	}
-	if a == Fingerprint("/tmp/a", "/tmp/a/internal/svc/handler.go", "SAST-001", "other") {
+	if a == Fingerprint(rootA, fileIn(rootA, "internal", "svc", "handler.go"), "SAST-001", "other") {
 		t.Error("two different details produced the same fingerprint")
 	}
 }
@@ -117,14 +124,25 @@ func TestSDKFingerprintIsPathIndependent(t *testing.T) {
 // non-guessing: attributing a finding to the wrong file is worse than an
 // unstable fingerprint.
 func TestSDKRelativePathLeavesUnrelatableInputAlone(t *testing.T) {
-	outside := filepath.FromSlash("/elsewhere/lib/x.go")
-	if got := RelativePath(filepath.FromSlash("/repo"), outside); got != outside {
+	// Absolute paths built the host's way. Slash-rooted literals are not
+	// absolute on Windows, so the earlier version of this test exercised the
+	// already-relative branch on that platform and proved nothing about the
+	// case it names.
+	root := filepath.Join(t.TempDir(), "repo")
+	outside := filepath.Join(t.TempDir(), "elsewhere", "lib", "x.go")
+
+	if got := RelativePath(root, outside); got != outside {
 		t.Errorf("a path outside the workspace became %q; nox would blame the wrong file", got)
 	}
-	if got := RelativePath("/repo", "internal/x.go"); got != "internal/x.go" {
+	if got := RelativePath(root, "internal/x.go"); got != "internal/x.go" {
 		t.Errorf("an already-relative path became %q", got)
 	}
-	if got := RelativePath("", "/repo/internal/x.go"); !strings.HasPrefix(got, "/") {
+	inside := filepath.Join(root, "internal", "x.go")
+	if got := RelativePath("", inside); got != inside {
 		t.Errorf("with no root given the path should be untouched, got %q", got)
+	}
+	// The relatable case, so the three negatives above are not the whole test.
+	if got := RelativePath(root, inside); got != "internal/x.go" {
+		t.Errorf("a path inside the workspace relativised to %q, want internal/x.go", got)
 	}
 }
