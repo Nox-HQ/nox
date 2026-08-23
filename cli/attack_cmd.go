@@ -548,13 +548,16 @@ func runAttackReplay(args []string) int {
 	cfg := attack.RunConfig{
 		Profile:    profile,
 		Authorized: authorize,
-		Budget:     attack.DefaultBudget(),
 		Samples:    samples,
 		MinHits:    minHits,
 		Seed:       seed,
 		Now:        time.Now().UTC().Format(time.RFC3339),
 		Route:      route,
 		Fields:     fields,
+		// No Budget/Clock: Replay is bounded by --samples (it re-fires one
+		// recorded probe that many times) and by the per-request --timeout, and
+		// it exposes no --max-duration. Carrying a budget nothing reads would be
+		// an inert control implying enforcement that does not exist.
 	}
 
 	fmt.Printf("nox attack replay %s — ACTIVE against %s%s\n", traceID, target, route)
@@ -668,11 +671,12 @@ func runAttackRegress(args []string) int {
 	cfg := attack.RunConfig{
 		Profile:    profile,
 		Authorized: authorize,
-		Budget:     attack.DefaultBudget(),
 		Seed:       seed,
 		Now:        time.Now().UTC().Format(time.RFC3339),
 		Route:      route,
 		Fields:     splitCSV(fieldsCSV),
+		// No Budget/Clock — see runAttackReplay. A suite is bounded by each
+		// case's recorded sample count and the per-request --timeout.
 	}
 
 	fmt.Printf("nox attack regress — %d case(s), ACTIVE against %s\n", len(suite.Cases), target)
