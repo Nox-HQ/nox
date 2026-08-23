@@ -512,7 +512,13 @@ echoes input can never be mistaken for one that obeyed it.
 
 `nox attack plan` is offline and read-only. `run`, `replay`, and `regress` are
 ACTIVE — they send attack payloads, are never part of `nox scan`, refuse to run
-without `--authorize`, and do not sandbox your target. See [docs/attack.md](docs/attack.md).
+without `--authorize`, and do not sandbox your target.
+
+Over MCP, only `attack_plan` is exposed. The ACTIVE subcommands are deliberately
+absent: `--authorize` exists so a *human* affirms they own the target, and nox
+analyses untrusted repositories — an MCP-exposed attack runner would let text in
+a README steer requests at a host of its choosing. Plan and read over MCP; act
+from the CLI. See [docs/attack.md](docs/attack.md).
 
 ## CLI Reference
 
@@ -806,6 +812,7 @@ nox serve --allowed-paths /path/to/project
 | `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
 | `baseline_status` | `path` | Get baseline statistics |
 | `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
 | `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
 | `plugin.read_resource` | `plugin`, `uri` | Read a plugin resource |
@@ -820,7 +827,21 @@ nox serve --allowed-paths /path/to/project
 | `nox://sbom/spdx` | application/json | SPDX SBOM |
 | `nox://ai-inventory` | application/json | AI component inventory |
 
-All tools are read-only. Output is truncated at 1 MB. Workspace paths are allowlisted.
+Output is truncated at 1 MB. Workspace paths are allowlisted.
+
+Most tools are read-only. The exceptions are explicit: `baseline_add` /
+`baseline_add_many` write the baseline file, and `plugin_install` runs new code
+on the operator's machine and requires `confirmed: true`, which the MCP host must
+collect from a human.
+
+**No ACTIVE capability is exposed over MCP.** `nox attack run` / `replay` /
+`regress` and `nox confirm` send attack payloads at a network target, and they
+are CLI-only by design. `--authorize` exists so a *human* affirms they own and
+have isolated the target; a model-initiated tool call cannot make that
+affirmation. And because nox analyses untrusted repositories, an MCP-exposed
+attack runner would let attacker-controlled text steer requests at a host of its
+choosing — the confused-deputy pattern nox itself scans for. `attack_plan` is
+exposed because it only reasons over artifacts already on disk.
 
 ## Contributing
 

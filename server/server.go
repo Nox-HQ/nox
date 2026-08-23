@@ -320,6 +320,10 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
 
+	// Offline attack planning. The ACTIVE half of `nox attack` is deliberately
+	// not registered — see the rationale at the top of server/attack.go.
+	s.registerAttackTools(srv)
+
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().

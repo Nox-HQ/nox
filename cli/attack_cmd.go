@@ -695,21 +695,20 @@ func runAttackRegress(args []string) int {
 		return 2
 	}
 
+	// The suite reads as a test suite: the outcome column is the pass/fail CI
+	// gates on. The evidence claim is a separate, quieter annotation, because
+	// "the recorded payload no longer reproduces" and "the target is secure"
+	// are different statements and only the first one was demonstrated.
 	for i := range sr.Results {
 		c := sr.Results[i]
-		status := "ok"
-		switch {
-		case c.Regressed:
-			status = "REGRESSED"
-		case c.Samples > 0 && c.Errors == c.Samples:
-			status = "UNEXERCISED"
-		}
-		fmt.Printf("  %-11s %s  %s  (%d/%d)\n", status, c.Case.ID, c.Exploitability, c.Hits, c.Samples)
+		fmt.Printf("  %-11s %-34s %d/%d hits\n", c.Outcome, c.Case.ID, c.Hits, c.Samples)
+		fmt.Printf("              claim: %s — %s\n", c.Exploitability, evidence.Describe(c.Exploitability))
 		if c.Note != "" {
 			fmt.Printf("              %s\n", c.Note)
 		}
 	}
-	fmt.Printf("\n  %d regression(s)\n", sr.Regressions)
+	fmt.Printf("\n  %d held, %d regression(s), %d unexercised\n",
+		len(sr.Results)-sr.Regressions-sr.Unexercised, sr.Regressions, sr.Unexercised)
 	if sr.Unexercised > 0 {
 		fmt.Printf("  !! %d case(s) never reached the target. Zero regressions here means the\n", sr.Unexercised)
 		fmt.Printf("     suite proved nothing, not that the fixes held. Check --target and --route.\n")

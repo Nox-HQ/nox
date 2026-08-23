@@ -160,10 +160,21 @@ Each case records the route and field its exploit was found in, so a suite
 replays with no flags. Supplying `--route` overrides that, for when a fix moved
 the endpoint.
 
-A case that did not reproduce reads `INCONCLUSIVE`, not `PREVENTED`, unless the
-target was observed actively refusing it. "We fired the recorded payload and
-nothing happened" is a useful regression signal, but it is not a demonstration
-that the target is secure, and the output says so.
+Each case reports **two** things, because they answer different questions and
+conflating them makes one of them wrong:
+
+| field | question | values |
+|---|---|---|
+| `outcome` | did the recorded exploit reproduce? | `HELD` / `REGRESSED` / `UNEXERCISED` |
+| `exploitability` | what has been demonstrated about the target? | `CONFIRMED` / `PREVENTED` / `INCONCLUSIVE` |
+
+CI gates on `outcome`. A case that `HELD` is a passing test — and it is
+`PREVENTED` only when the target was observed actively refusing; otherwise the
+claim is `INCONCLUSIVE`, because nothing was demonstrated.
+
+This is the same distinction nox already makes in VEX, where `not_affected`
+requires a justification and `under_investigation` is the honest fallback. A
+passing test is not a security claim.
 
 ## Honest limits
 
@@ -180,6 +191,31 @@ that the target is secure, and the output says so.
 - **Non-determinism is real.** Set `temperature=0` or a seed where the target
   supports it, and use `--min-hits` below `--samples` so a transient refusal does
   not hide a real exploit.
+
+## MCP exposure
+
+Only the offline half is reachable over MCP:
+
+| tool | exposed | why |
+|---|---|---|
+| `attack_plan` | yes, read-only | reasons over scan artifacts, contacts nothing |
+| `attack run` / `replay` / `regress` | **no** | fires attack payloads at a network target |
+
+`--authorize` exists so a **human** affirms they own and have isolated the
+target. Accepting that as a boolean on a model-initiated tool call launders the
+affirmation through the very thing it constrains.
+
+There is a second reason, and it is the sharper one: nox scans untrusted code. A
+repository under analysis is attacker-controlled text, and an agent reading it
+can be steered into calling tools with attacker-chosen arguments. An
+MCP-exposed `attack_run` would turn nox into a request-forgery primitive aimed
+at any host named in a README — the confused-deputy attack that `TOOL-UNAUTH`
+exists to detect. Shipping it would make nox an instance of the vulnerability
+class it tests for.
+
+The rule is **plan and read over MCP; act from the CLI**, where the operator is
+the one typing. It matches `fix_plan`, which returns a plan and tells operators
+to apply it with `nox fix`, and `nox confirm`, which has never been an MCP tool.
 
 ## Relationship to `nox confirm`
 

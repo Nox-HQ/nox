@@ -362,6 +362,13 @@ invariants, budgets, safety profiles, replay, and regression.
 - Budgets on attempts, requests, model calls, tool invocations, and wall clock
 - k-of-n determinism gate; attack traces with replay commands
 - Commands: `nox attack plan` (offline), `run`, `replay`, `regress` (ACTIVE, `--authorize`)
+- MCP: `attack_plan` only (read-only, offline). The ACTIVE subcommands are
+  deliberately not MCP tools — a model-initiated call cannot make the human
+  authorization `--authorize` represents, and nox analyses untrusted repos, so an
+  exposed runner would be a confused-deputy request-forgery primitive. Pinned by
+  a test that fails if one is ever registered.
+- Regression cases report `outcome` (HELD / REGRESSED / UNEXERCISED) separately
+  from `exploitability`, mirroring VEX's `not_affected`-needs-a-justification rule
 - Artifacts: `attack.plan.json`, `attack.trace.json`, `attack.cases.json`, `attack.regress.json`
 - Docs: `docs/attack.md`
 

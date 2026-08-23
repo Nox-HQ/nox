@@ -103,11 +103,39 @@ func LoadSuite(raw []byte) (*Suite, error) {
 	return &s, nil
 }
 
+// CaseOutcome is the regression-test verdict for one case: did the recorded
+// exploit reproduce? It is deliberately separate from Exploitability.
+//
+// The two answer different questions, and conflating them makes one of them
+// wrong. "The recorded payload no longer reproduces" is a perfectly good test
+// result to gate CI on; it is NOT a claim that the target is secure. nox
+// already draws this line elsewhere: OpenVEX lets you assert `not_affected`
+// only with a justification, and falls back to `under_investigation` without
+// one. CaseOutcome is the pass/fail; Exploitability is the justified claim.
+type CaseOutcome string
+
+// Case outcomes.
+const (
+	// CaseHeld — the recorded exploit did not reproduce. The regression test
+	// passes. This is not a statement about the target's security.
+	CaseHeld CaseOutcome = "HELD"
+	// CaseRegressed — the recorded exploit reproduced. The fix has regressed.
+	CaseRegressed CaseOutcome = "REGRESSED"
+	// CaseUnexercised — no probe reached the code under test, so the case
+	// demonstrated nothing either way.
+	CaseUnexercised CaseOutcome = "UNEXERCISED"
+)
+
 // CaseResult is the outcome of re-checking one regression case.
 type CaseResult struct {
 	// Case is the case that was re-checked.
 	Case Case `json:"case"`
-	// Exploitability is the state observed now.
+	// Outcome is the regression-test verdict: HELD, REGRESSED, or UNEXERCISED.
+	// This is what CI gates on.
+	Outcome CaseOutcome `json:"outcome"`
+	// Exploitability is the evidence claim about the target right now. A case
+	// that HELD is PREVENTED only when a defense was actually observed;
+	// otherwise it is INCONCLUSIVE, because nothing was demonstrated.
 	Exploitability evidence.Exploitability `json:"exploitability"`
 	// Hits and Samples are the re-check determinism tally.
 	Hits    int `json:"hits"`
@@ -261,6 +289,14 @@ func runCase(ctx context.Context, c Case, t Target, cs *CanarySet, route string,
 	}
 	res.Exploitability = evidence.DeriveExploitability(outcome, ledger)
 	res.Regressed = res.Exploitability == evidence.Confirmed
+	switch {
+	case res.Regressed:
+		res.Outcome = CaseRegressed
+	case errs == samples:
+		res.Outcome = CaseUnexercised
+	default:
+		res.Outcome = CaseHeld
+	}
 
 	switch {
 	case res.Regressed:
