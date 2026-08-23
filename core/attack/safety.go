@@ -95,8 +95,8 @@ type Budget struct {
 	ModelCalls int `json:"model_calls"`
 	// ToolInvocations caps observed tool invocations across the run.
 	ToolInvocations int `json:"tool_invocations"`
-	// Duration caps wall-clock time. The pure engine reads no clock, so this is
-	// enforced only when a caller supplies Spend.Elapsed; it is otherwise a
+	// Duration caps wall-clock time. The engine itself reads no clock; a caller
+	// that wants this enforced supplies RunConfig.Clock. Without one it is a
 	// declared ceiling that a networked caller can wire to a real timer.
 	Duration time.Duration `json:"duration"`
 }

@@ -356,6 +356,9 @@ func runAttackRun(args []string) int {
 		Now:        time.Now().UTC().Format(time.RFC3339),
 		Route:      route,
 		Fields:     splitCSV(fieldsCSV),
+		// The engine is pure by design; the CLI is where a real clock belongs,
+		// and without one --max-duration would be a flag that does nothing.
+		Clock: time.Now,
 	}
 
 	tgt := targetFor(profile, target, replyField, timeout)

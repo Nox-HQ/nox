@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nox-hq/nox/core/evidence"
 )
@@ -36,6 +37,15 @@ type RunConfig struct {
 	Route string
 	// Fields are the request fields to probe; defaults to ["message"].
 	Fields []string
+	// Clock, when set, makes Budget.Duration real. The engine is otherwise
+	// pure — it reads no clock, so a run is reproducible from its inputs — and
+	// a wall-clock budget cannot be enforced without one.
+	//
+	// It is an injected dependency rather than a call to time.Now for exactly
+	// that reason: tests keep a deterministic engine, and the CLI supplies a
+	// real clock so --max-duration is not a flag that silently does nothing on
+	// an ACTIVE capability.
+	Clock func() time.Time
 }
 
 // withDefaults returns cfg with defaults applied.
@@ -177,6 +187,17 @@ type runner struct {
 	budget     Budget
 	budgetStop string
 	stopped    bool
+	// startedAt is the zero Time unless cfg.Clock was supplied.
+	startedAt time.Time
+}
+
+// elapsed returns the wall-clock time consumed so far, or zero when no clock
+// was injected (the pure engine).
+func (r *runner) elapsed() time.Duration {
+	if r.cfg.Clock == nil {
+		return 0
+	}
+	return r.cfg.Clock().Sub(r.startedAt)
 }
 
 // fire sends one probe, first checking the budget. It returns ok=false and marks
@@ -187,6 +208,9 @@ func (r *runner) fire(p Probe) (Observation, bool) {
 	if r.stopped {
 		return Observation{}, false
 	}
+	// Refresh elapsed before the check so a long-running target trips the
+	// wall-clock budget rather than sailing past it.
+	r.spend.Elapsed = r.elapsed()
 	if exhausted, which := r.budget.Exhausted(r.spend); exhausted {
 		r.stopped = true
 		r.budgetStop = which
@@ -202,6 +226,7 @@ func (r *runner) fire(p Probe) (Observation, bool) {
 		obs.Err = err.Error()
 	}
 	r.spend.ToolInvocations += len(obs.ToolCalls)
+	r.spend.Elapsed = r.elapsed()
 	return obs, true
 }
 
@@ -242,6 +267,9 @@ func Run(ctx context.Context, p *Plan, t Target, cfg RunConfig) (*Result, error)
 		cfg:       cfg,
 		simulated: isSimTarget(t),
 		budget:    cfg.Budget,
+	}
+	if cfg.Clock != nil {
+		r.startedAt = cfg.Clock()
 	}
 	res := &Result{
 		SchemaVersion: resultSchemaVersion,

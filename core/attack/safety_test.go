@@ -1,8 +1,12 @@
 package attack
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/nox-hq/nox/core/evidence"
 )
 
 func TestParseProfile(t *testing.T) {
@@ -83,5 +87,84 @@ func TestBudgetZeroLimitIsUnbounded(t *testing.T) {
 	b := Budget{Attempts: 0}
 	if trip, _ := b.Exhausted(Spend{Attempts: 1_000_000}); trip {
 		t.Error("a zero Attempts limit must be unbounded")
+	}
+}
+
+// The wall-clock budget must actually stop a run. Before the Clock hook
+// existed, --max-duration parsed fine, was stored, and did nothing — a silent
+// no-op limit on a capability that sends attack traffic.
+func TestDurationBudgetStopsARun(t *testing.T) {
+	tick := 0
+	// Each call advances 10s, so the third probe is past a 15s budget.
+	clock := func() time.Time {
+		tick++
+		return time.Unix(0, 0).Add(time.Duration(tick) * 10 * time.Second)
+	}
+
+	cs := MintCanaries("clock-seed")
+	tgt := newFakeTarget(modeFixed, cs)
+
+	plan := &Plan{
+		SchemaVersion: planSchemaVersion,
+		Root:          ".",
+		Hypotheses: []Hypothesis{
+			{ID: "h1", ScenarioID: ScenarioPIDirect, Objective: "obey an injected instruction"},
+			{ID: "h2", ScenarioID: ScenarioPIIndirect, Objective: "obey retrieved content"},
+		},
+	}
+
+	cfg := RunConfig{
+		Profile:    ProfileSandbox,
+		Authorized: true,
+		Budget:     Budget{Attempts: 1000, NetworkRequests: 1000, Duration: 15 * time.Second},
+		Seed:       "clock-seed",
+		Now:        "2026-08-23T00:00:00Z",
+		Route:      "/chat",
+		Fields:     []string{"persona", "message"},
+		Clock:      clock,
+	}
+
+	res, err := Run(context.Background(), plan, tgt, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.BudgetStop == "" {
+		t.Fatal("the run should have stopped on the wall-clock budget, but BudgetStop is empty")
+	}
+	if !strings.Contains(strings.ToLower(res.BudgetStop), "duration") {
+		t.Errorf("BudgetStop = %q, want it to name the duration limit", res.BudgetStop)
+	}
+	// A run cut short by a budget is INCONCLUSIVE, never PREVENTED.
+	for i := range res.Traces {
+		if res.Traces[i].Exploitability == evidence.Prevented {
+			t.Errorf("trace %s is PREVENTED after a budget stop; it must be INCONCLUSIVE", res.Traces[i].ID)
+		}
+	}
+}
+
+// With no clock injected the engine stays pure: a duration budget is inert and
+// the run completes, so tests remain deterministic.
+func TestWithoutAClockDurationIsInert(t *testing.T) {
+	cs := MintCanaries("clock-seed")
+	plan := &Plan{
+		SchemaVersion: planSchemaVersion,
+		Root:          ".",
+		Hypotheses:    []Hypothesis{{ID: "h1", ScenarioID: ScenarioPIDirect, Objective: "obey"}},
+	}
+	cfg := RunConfig{
+		Profile:    ProfileSandbox,
+		Authorized: true,
+		Budget:     Budget{Attempts: 1000, NetworkRequests: 1000, Duration: time.Nanosecond},
+		Seed:       "clock-seed",
+		Now:        "2026-08-23T00:00:00Z",
+		Route:      "/chat",
+		Fields:     []string{"persona"},
+	}
+	res, err := Run(context.Background(), plan, newFakeTarget(modeFixed, cs), cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.BudgetStop != "" {
+		t.Errorf("with no Clock the duration budget must be inert, got BudgetStop=%q", res.BudgetStop)
 	}
 }
