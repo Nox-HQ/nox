@@ -1038,8 +1038,6 @@ func (s *Server) handleRules(_ context.Context, _ emptyInput) (mcp.StructuredRes
 
 // Protect status handler.
 
-const noxHookMarker = "Installed by nox protect"
-
 func (s *Server) handleProtectStatus(_ context.Context, input protectStatusInput) (string, error) {
 	if input.Path == "" {
 		return "Error: missing required argument: path", nil
@@ -1058,29 +1056,20 @@ func (s *Server) handleProtectStatus(_ context.Context, input protectStatusInput
 		return "Error: resolving repo root: " + err.Error(), nil
 	}
 
-	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-commit")
-
 	type protectStatusResponse struct {
 		Installed bool   `json:"installed"`
 		HookPath  string `json:"hook_path"`
 		Message   string `json:"message"`
 	}
 
-	content, err := os.ReadFile(hookPath)
-	if err != nil {
-		resp := protectStatusResponse{
-			Installed: false,
-			HookPath:  hookPath,
-			Message:   "not installed",
-		}
-		data, _ := json.MarshalIndent(resp, "", "  ")
-		return string(data), nil
-	}
-
-	installed := strings.Contains(string(content), noxHookMarker)
-	msg := "not installed (pre-commit hook exists but was not installed by nox)"
-	if installed {
+	state, hookPath := git.HookStatus(repoRoot)
+	installed := state == git.HookNox
+	msg := "not installed"
+	switch state {
+	case git.HookNox:
 		msg = "installed"
+	case git.HookForeign:
+		msg = "not installed (pre-commit hook exists but was not installed by nox)"
 	}
 
 	resp := protectStatusResponse{

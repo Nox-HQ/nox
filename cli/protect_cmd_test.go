@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/git"
 )
 
 // setupProtectRepo creates a temp directory with an initialized git repo.
@@ -71,7 +73,7 @@ func TestProtect_Install(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading hook: %v", err)
 	}
-	if !strings.Contains(string(content), hookMarker) {
+	if !strings.Contains(string(content), git.HookMarker) {
 		t.Fatal("hook does not contain nox marker")
 	}
 
@@ -407,7 +409,7 @@ func TestGenerateHookScript(t *testing.T) {
 
 	script := generateHookScript("high")
 
-	if !strings.Contains(script, hookMarker) {
+	if !strings.Contains(script, git.HookMarker) {
 		t.Error("hook script should contain the hook marker")
 	}
 	if !strings.Contains(script, "--severity-threshold high") {
