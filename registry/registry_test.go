@@ -249,3 +249,17 @@ func TestValidTrack(t *testing.T) {
 		t.Error("empty string should be invalid")
 	}
 }
+
+// The ordinal must fail closed: an empty or unknown risk class ranks -1 so no
+// "declared <= max" admission check can ever pass for it. The SDK copy used to
+// map "" to passive(0), which would admit an unclassified plugin.
+func TestRiskClassLevelFailsClosed(t *testing.T) {
+	if RiskClassLevel(RiskClassPassive) != 0 || RiskClassLevel(RiskClassActive) != 1 || RiskClassLevel(RiskClassRuntime) != 2 {
+		t.Fatal("passive/active/runtime must be 0/1/2")
+	}
+	for _, bad := range []string{"", " passive", "PASSIVE", "unknown", "root"} {
+		if RiskClassLevel(bad) != -1 {
+			t.Errorf("RiskClassLevel(%q) = %d, want -1 (fail closed)", bad, RiskClassLevel(bad))
+		}
+	}
+}

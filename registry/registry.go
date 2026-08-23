@@ -45,6 +45,34 @@ func ValidTrack(t Track) bool {
 	return false
 }
 
+// Risk-class names, ordered from least to most privileged. They are the strings
+// stored in TrackCharacteristics.RiskClass and a plugin's declared class.
+const (
+	RiskClassPassive = "passive"
+	RiskClassActive  = "active"
+	RiskClassRuntime = "runtime"
+)
+
+// RiskClassLevel returns an ordinal for comparing risk classes: passive(0) <
+// active(1) < runtime(2). Anything else — including the EMPTY string and any
+// whitespace-padded or unknown value — returns -1, so it fails closed: an
+// admission check "declared <= max" can never pass for a class nox does not
+// recognise. This is the security posture both the plugin host and the SDK
+// conformance harness must share; a copy that mapped "" to passive(0) would let
+// an unclassified plugin be admitted under a passive ceiling.
+func RiskClassLevel(rc string) int {
+	switch rc {
+	case RiskClassPassive:
+		return 0
+	case RiskClassActive:
+		return 1
+	case RiskClassRuntime:
+		return 2
+	default:
+		return -1
+	}
+}
+
 // TrackCharacteristics describes the operational properties of a track.
 type TrackCharacteristics struct {
 	RiskClass string `json:"risk_class"` // "passive", "active", or "runtime"
