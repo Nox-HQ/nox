@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/degrade"
 )
 
 // UnknownConfigKeys already reports keys nox does not understand, on the
@@ -222,4 +224,74 @@ func TestIneffectiveConfigKeysReportsOnlyWhatWasWritten(t *testing.T) {
 			t.Error("the operator is told the key does nothing but not what nox does instead")
 		}
 	})
+}
+
+// TestScanReportsConfigItCannotActOn is the wiring guard. IneffectiveConfigKeys
+// and UnknownConfigKeys being correct says nothing about a scan ever calling
+// them, and "read but never reported" leaves the operator exactly as uninformed
+// as no check at all.
+//
+// It also pins WHERE the report happens. This used to be printed by the CLI, so
+// an agent scanning over MCP — the consumer with no stderr to read — never
+// learned that the policy it configured was not in force. Recording it on the
+// ScanResult is what makes every surface report it.
+func TestScanReportsConfigItCannotActOn(t *testing.T) {
+	dir := t.TempDir()
+	const config = "scan:\n  bogus_key: 1\ncompliance:\n  framework: soc2\n"
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app.env"),
+		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true, DisableOSV: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	var unknown, inert bool
+	for _, d := range result.Degradations {
+		if d.Kind != degrade.Config {
+			continue
+		}
+		if strings.Contains(d.Detail, "bogus_key") {
+			unknown = true
+		}
+		if strings.Contains(d.Detail, "compliance") {
+			inert = true
+		}
+		if strings.TrimSpace(d.Impact) == "" {
+			t.Errorf("config degradation %q states no impact; the operator is told something is "+
+				"wrong but not what it costs them", d.Detail)
+		}
+	}
+	if !unknown {
+		t.Error("a scan over a config with an unrecognised key reported no config degradation; " +
+			"every surface that reads the ScanResult stays unaware the key does nothing")
+	}
+	if !inert {
+		t.Error("a scan over a config setting an inert key reported no config degradation")
+	}
+}
+
+// TestScanIsQuietAboutAConfigItFullyHonours keeps the signal meaningful. A
+// degradation on every scan is one operators learn to scroll past.
+func TestScanIsQuietAboutAConfigItFullyHonours(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"),
+		[]byte("scan:\n  exclude:\n    - vendor/**\n"), 0o600); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true, DisableOSV: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, d := range result.Degradations {
+		if d.Kind == degrade.Config {
+			t.Errorf("a config nox fully honours still produced %q", d.Detail)
+		}
+	}
 }

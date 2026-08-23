@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -128,6 +129,29 @@ func LoadFindingsFileReport(path string) (JSONReport, error) {
 		return JSONReport{}, err
 	}
 	return rep, nil
+}
+
+// DegradationsFrom converts scan degradations into their report form.
+//
+// It lives here, and every reporter construction site uses it, because the
+// conversion being one function is what stops a surface from quietly omitting
+// degradations. The MCP server did exactly that: three of its reporter sites
+// never set the field, so an agent asking for the findings report got one that
+// said nothing about the checks that had not run — the single consumer least
+// able to notice, since it has no stderr to read.
+func DegradationsFrom(ds []degrade.Degradation) []Degradation {
+	if len(ds) == 0 {
+		return nil
+	}
+	out := make([]Degradation, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, Degradation{
+			Kind:   string(d.Kind),
+			Detail: d.Detail,
+			Impact: d.Impact,
+		})
+	}
+	return out
 }
 
 // JSONReporter produces deterministic JSON output from a FindingSet.

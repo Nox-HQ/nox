@@ -430,6 +430,13 @@ type Walker struct {
 	IncludePatterns []string
 }
 
+// MatchesInclude reports whether a file is allowed by an include pattern. It is
+// exported so plugin findings are scoped by the same matcher the walk uses —
+// "in scope" must mean one thing regardless of which analyzer found the issue.
+func MatchesInclude(relSlash string, patterns []string) bool {
+	return matchesInclude(relSlash, patterns)
+}
+
 // matchesInclude reports whether a file is allowed by an include pattern.
 //
 // The path itself is tested, and so is each of its ancestor directories. That

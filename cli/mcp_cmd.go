@@ -234,6 +234,9 @@ func mcpDrift(args []string) int {
 		return 2
 	}
 	jsonPath := filepath.Join(outputDir, "findings.json")
+	// no degradations: every failure above — an unreadable baseline, a manifest
+	// that could not be captured — exits 2 rather than continuing, so this
+	// command has no partial-result state to report.
 	if err := report.NewJSONReporter(version).WriteToFile(fsSet, jsonPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", jsonPath, err)
 		return 2

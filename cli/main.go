@@ -109,26 +109,6 @@ func isTopLevelStringFlag(name string) bool {
 	return false
 }
 
-// degradationsForReport converts scan degradations into their report form so
-// they can be recorded in findings.json. Consumers that only read the artifact
-// — CI jobs, dashboards, MCP clients — never see the stderr warnings, and for
-// them an empty findings list would otherwise be indistinguishable from a scan
-// that could not run.
-func degradationsForReport(ds []nox.Degradation) []report.Degradation {
-	if len(ds) == 0 {
-		return nil
-	}
-	out := make([]report.Degradation, 0, len(ds))
-	for _, d := range ds {
-		out = append(out, report.Degradation{
-			Kind:   string(d.Kind),
-			Detail: d.Detail,
-			Impact: d.Impact,
-		})
-	}
-	return out
-}
-
 // run executes the CLI and returns the exit code.
 // 0 = clean (no findings), 1 = findings detected, 2 = error.
 func run(args []string) int {
@@ -618,30 +598,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
 	}
 
-	// A key nox does not understand is ignored, so .nox.yaml can describe a
-	// policy that is not in force while the scan reports success. `suppressions:`
-	// is not a real key — write it and nox suppresses nothing and passes,
-	// indistinguishable from a scan whose suppressions all applied. Misspell
-	// `plugins.required` and every plugin silently stops being declared.
-	//
-	// Same channel and same reasoning as the degradations above: stderr, and
-	// not suppressed by --quiet, because this says the results describe
-	// something other than what was asked for.
-	if unknown := nox.UnknownConfigKeys(target); len(unknown) > 0 {
-		fmt.Fprintf(os.Stderr, "[degraded] .nox.yaml has %d key(s) nox does not recognise: %s\n",
-			len(unknown), strings.Join(unknown, ", "))
-		fmt.Fprintf(os.Stderr, "  impact: they are ignored, so whatever they were meant to configure is not in effect. Check for a typo against the documented keys.\n")
-	}
-
-	// A key nox parses and then ignores fails the operator exactly as a key it
-	// cannot parse does: the policy they wrote is not the policy in force. Only
-	// the unrecognised half used to be reported.
-	if inert := nox.IneffectiveConfigKeys(target); len(inert) > 0 {
-		fmt.Fprintf(os.Stderr, "[degraded] .nox.yaml sets %d key(s) nox accepts but does not act on:\n", len(inert))
-		for _, k := range inert {
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", k.Key, k.Reason)
-		}
-	}
+	// Config nox does not act on used to be printed here, by this adapter only.
+	// It is now recorded in core as a degrade.Config degradation and rendered by
+	// the loop above, so the MCP server, the LSP and findings.json all report it
+	// too — an agent scanning over MCP had no other way to learn that the policy
+	// it configured was not in force.
 
 	// Generate reports.
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -657,7 +618,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			r.Offline = offlineFlag
 			r.Prioritize = sortFlag == "priority"
 			r.SASTLanguages = result.SASTProfile
-			r.Degradations = degradationsForReport(result.Degradations)
+			r.Degradations = report.DegradationsFrom(result.Degradations)
 			r.Enrichments = result.Enrichments
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)

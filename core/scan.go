@@ -257,6 +257,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// it concurrently; it is surfaced on ScanResult so "no findings" can be
 	// distinguished from "did not look".
 	degradations := &degrade.Degradations{}
+	// Config nox parses but does not act on is a coverage question, so it rides
+	// the same channel as every other "did not look" signal. Reported here in
+	// core rather than printed by one adapter: an agent scanning over MCP has no
+	// other way to learn that the policy it configured is not in force.
+	recordConfigDegradations(degradations, target)
 	// The AI analyzer surfaces MCP/agent config parse failures hit while building
 	// the tool permission matrix, so a broken config is a visible degradation
 	// rather than a silently-empty (or all-tools-defaulted) matrix.
@@ -583,7 +588,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 				"findings these plugins would have produced are missing from this scan")
 		}
 		if out != nil {
-			kept, dropped := filterPluginFindingsByExclude(out.Findings, target, cfg.Scan.Exclude)
+			kept, dropped := filterPluginFindingsByScope(out.Findings, target, cfg.Scan.Exclude, cfg.Scan.Include)
 			for i := range kept {
 				allFindings.Add(kept[i])
 			}
@@ -750,6 +755,27 @@ func parseFeedRefresh(s string) (time.Duration, error) {
 		return time.Duration(days) * 24 * time.Hour, nil
 	}
 	return time.ParseDuration(s)
+}
+
+// recordConfigDegradations reports .nox.yaml keys nox does not act on.
+//
+// Two kinds, and from where the operator sits they are the same failure: a key
+// nox cannot parse, and a key nox parses and then ignores. Either way the
+// policy they wrote is not the policy in force. Only the first used to be
+// reported, and only by the CLI.
+func recordConfigDegradations(deg *degrade.Degradations, target string) {
+	if unknown := UnknownConfigKeys(target); len(unknown) > 0 {
+		deg.Add(degrade.Config,
+			fmt.Sprintf(".nox.yaml has %d key(s) nox does not recognise: %s",
+				len(unknown), strings.Join(unknown, ", ")),
+			"they are ignored, so whatever they were meant to configure is not in effect; "+
+				"check for a typo against the documented keys")
+	}
+	for _, k := range IneffectiveConfigKeys(target) {
+		deg.Add(degrade.Config,
+			fmt.Sprintf(".nox.yaml sets %s, which nox accepts but does not act on", k.Key),
+			k.Reason)
+	}
 }
 
 // scanRootDir returns the directory a relative config path is resolved against:
@@ -1324,8 +1350,13 @@ func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
 	return cr <= tr
 }
 
-// filterPluginFindingsByExclude drops plugin findings whose path matches the
-// scan's `scan.exclude` patterns, returning the survivors and the drop count.
+// filterPluginFindingsByScope drops plugin findings outside the scan's
+// configured scope, returning the survivors and the drop count.
+//
+// Scope is `scan.exclude` and `scan.include` together, with exclude winning —
+// the same precedence the walker applies to core findings. include was wired
+// into the walker alone at first, which made one setting mean two things: an
+// operator narrowing a scan to src/** still got plugin findings from vendor/.
 //
 // A plugin's `scan` tool walks the workspace root itself and is handed only
 // workspace_root, so it never sees `scan.exclude`. That made any required
@@ -1346,7 +1377,7 @@ func ConfidenceMeetsThreshold(confidence, threshold findings.Confidence) bool {
 // "testdata/" are written relative to the repository while plugins commonly
 // report absolute paths. A finding with no path is repository-scoped and is
 // never excluded — there is no path for a pattern to match.
-func filterPluginFindingsByExclude(in []findings.Finding, target string, patterns []string) (kept []findings.Finding, dropped int) {
+func filterPluginFindingsByScope(in []findings.Finding, target string, patterns, include []string) (kept []findings.Finding, dropped int) {
 	if len(in) == 0 {
 		return in, 0
 	}
@@ -1395,6 +1426,13 @@ func filterPluginFindingsByExclude(in []findings.Finding, target string, pattern
 			continue
 		}
 		if len(patterns) > 0 && discovery.IsIgnored(rel, patterns) {
+			dropped++
+			continue
+		}
+		// The include allow-list, applied through the same matcher the walker
+		// uses, so "in scope" means one thing regardless of which analyzer
+		// produced the finding.
+		if len(include) > 0 && !discovery.MatchesInclude(rel, include) {
 			dropped++
 			continue
 		}

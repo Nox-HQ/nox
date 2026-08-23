@@ -546,6 +546,10 @@ func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (s
 		data, err = r.Generate(pc.result.Findings)
 	default:
 		r := report.NewJSONReporter(s.version)
+		// Degradations must ride the artifact here above all: an agent has no
+		// stderr to read, so without this it cannot tell a clean scan from one
+		// whose checks did not run.
+		r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 		data, err = r.Generate(pc.result.Findings)
 	}
 
@@ -1257,6 +1261,7 @@ func (s *Server) handleResourceFindings(_ context.Context, uri string, _ map[str
 	}
 
 	r := report.NewJSONReporter(s.version)
+	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
@@ -1410,6 +1415,7 @@ func (s *Server) handleProjectResourceFindings(_ context.Context, uri string, pa
 	}
 
 	r := report.NewJSONReporter(s.version)
+	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
