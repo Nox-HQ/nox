@@ -142,13 +142,6 @@ func TestAnalyzerInventoryIsComplete(t *testing.T) {
 // every consumer that joins metadata (remediation, references, severity) by rule
 // ID — the finding still fires, but nothing downstream can say what it means.
 func TestEveryShippedRuleReachesTheCatalog(t *testing.T) {
-	t.Skip("PRODUCT BUG: Catalog() aggregates 8 of the 14 analyzers that publish rules. " +
-		"18 shipped rules (AGENTFLOW-001/002, PERM-001/002, HARDEN-001/002, MEMSAFE-001, " +
-		"TAINT-001..007 + TAINT-AI-001, CRYPTO-001/002) are absent from the catalog, so " +
-		"`nox rules` and the MCP rules tool cannot describe a finding those analyzers emit — " +
-		"even though each analyzer documents its Rules() as being \"for the rule catalogue\". " +
-		"TODO: add the six missing rule sets to catalog.allRuleSets() and un-skip.")
-
 	cat := Catalog()
 	var missing []string
 	for id, owner := range allShippedRules(t) {
@@ -193,13 +186,6 @@ func TestNoBuiltinRuleFallsToOther(t *testing.T) {
 // have no familyRules entry, so the moment the catalog is fixed they would
 // arrive in the "other" bucket rather than being reported as what they are.
 func TestEveryShippedRuleHasAFamily(t *testing.T) {
-	t.Skip("PRODUCT BUG: PERM-001, PERM-002 (fileperms) and MEMSAFE-001 (memsafe) have no " +
-		"prefix in familyRules, so Family() puts them in \"other\". It is currently masked " +
-		"because those analyzers are also missing from Catalog() (see " +
-		"TestEveryShippedRuleReachesTheCatalog) — fixing that one alone would surface these " +
-		"three rules in the opaque bucket the family table exists to eliminate. " +
-		"TODO: add PERM- and MEMSAFE- families to familyRules and un-skip.")
-
 	var orphans []string
 	for id, owner := range allShippedRules(t) {
 		if Family(id).Key == "other" {
@@ -244,6 +230,7 @@ func TestCatalogOWASPTagsBelongToAKnownTaxonomy(t *testing.T) {
 	// LLM and MCP taxonomies, it has no canonical Go table in this repo yet, so
 	// the range is the strongest check available — see the report note.
 	const asiCategories = 10
+	const webTop10Categories = 10
 
 	seen := map[string]int{}
 	for id, meta := range Catalog() {
@@ -263,6 +250,14 @@ func TestCatalogOWASPTagsBelongToAKnownTaxonomy(t *testing.T) {
 				n, err := strconv.Atoi(strings.TrimPrefix(tag, "owasp-asi"))
 				if err != nil || n < 1 || n > asiCategories {
 					t.Errorf("rule %s carries tag %q, which is not an ASI01..ASI%02d category", id, tag, asiCategories)
+				}
+			case strings.HasPrefix(tag, "owasp-a"):
+				// OWASP Web Top 10 (A01..A10) — a distinct taxonomy from the LLM,
+				// MCP and ASI lists above. Matched after them because "owasp-a"
+				// is a prefix of "owasp-asi".
+				n, err := strconv.Atoi(strings.TrimPrefix(tag, "owasp-a"))
+				if err != nil || n < 1 || n > webTop10Categories {
+					t.Errorf("rule %s carries tag %q, which is not an A01..A%02d category", id, tag, webTop10Categories)
 				}
 			default:
 				t.Errorf("rule %s carries owasp tag %q from a taxonomy this package does not know; add it to a canonical table before shipping the tag", id, tag)

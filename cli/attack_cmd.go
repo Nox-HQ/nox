@@ -238,7 +238,7 @@ Flags:
   --samples <n>       determinism samples per candidate exploit (default 3)
   --min-hits <k>      min reproductions of n to CONFIRM; k<n for non-deterministic models
   --max-attempts <n>  attempt budget (default 200)
-  --max-requests <n>  network request budget (default 200)
+  --max-requests <n>  network request budget (default 500)
   --max-duration <d>  wall-clock budget (default 5m)
   --timeout <d>       per-request HTTP timeout (default 15s)
   --seed <s>          canary seed; the same seed replays identically (default "nox")

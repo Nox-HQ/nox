@@ -476,11 +476,6 @@ func TestAttackDocumentedFlagsAreRegistered(t *testing.T) {
 // really 500 is a 2.5x understatement of how much traffic an ACTIVE run may
 // send at a system they own.
 func TestAttackRunHelpStatesTheRealBudgetDefaults(t *testing.T) {
-	t.Skip("PRODUCT BUG: `nox attack run --help` documents \"--max-requests <n>  network request " +
-		"budget (default 200)\", but attack.DefaultBudget().NetworkRequests is 500. The attempt " +
-		"and duration defaults in the same block are correct, so only this line drifted. " +
-		"TODO: correct attackRunUsage to 500 (or lower the default to 200) and un-skip.")
-
 	cases := []struct {
 		flag string
 		want string

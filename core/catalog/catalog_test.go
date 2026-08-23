@@ -33,8 +33,13 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// IAC-283, IAC-287, IAC-291, IAC-292, IAC-310, IAC-312, IAC-321, IAC-333,
 	// IAC-337): each reported a condition an older rule already reported, and
 	// each lives on as an alias on that rule so existing waivers keep matching.
-	if got := len(cat); got != 1519 {
-		t.Errorf("Catalog() returned %d rules, want 1519", got)
+	// 1537 = 1519 plus the 18 rules from the six analyzers that publish rules
+	// but were never registered in allRuleSets: AGENTFLOW-001/002, TAINT-001..007
+	// and TAINT-AI-001, CRYPTO-001/002, HARDEN-001/002, PERM-001/002 and
+	// MEMSAFE-001. Their findings appeared in scans while `nox rules` and the
+	// MCP rules tool denied the rules existed.
+	if got := len(cat); got != 1537 {
+		t.Errorf("Catalog() returned %d rules, want 1537", got)
 	}
 }
 
