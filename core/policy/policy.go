@@ -4,6 +4,7 @@ package policy
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -166,10 +167,70 @@ func Evaluate(cfg Config, all []findings.Finding) *Result {
 	if r.Pass {
 		r.Summary = fmt.Sprintf("policy: pass (%s)", strings.Join(parts, ", "))
 	} else {
-		r.Summary = fmt.Sprintf("policy: fail (%s)", strings.Join(parts, ", "))
+		// A failure names what failed it. "policy: fail (70 new, 753
+		// baselined)" states two counts and omits the only fact the reader
+		// needs, and the counts actively mislead: most of those new findings
+		// are below fail_on and gate nothing, so a large number next to the
+		// word "fail" reads as a systemic problem rather than as one finding
+		// somebody just introduced. Observed doing exactly that — the count
+		// sent a reader off to hunt for baseline drift that did not exist,
+		// while the single critical that failed the run went unmentioned.
+		r.Summary = fmt.Sprintf("policy: fail (%s)%s", strings.Join(parts, ", "), gatingSuffix(r, cfg))
 	}
 
 	return r
+}
+
+// gatingSuffix names the findings that failed the policy.
+//
+// Bounded at three, with a count for the rest: the point is to identify the
+// problem, and a wall of findings pushes the summary off the top of a CI log
+// as surely as saying nothing does.
+func gatingSuffix(r *Result, cfg Config) string {
+	gating := gatingFindings(r, cfg)
+	if len(gating) == 0 {
+		// The baseline modes fail without any new finding to point at. Saying
+		// nothing is right there — the existing warnings already explain it.
+		return ""
+	}
+
+	const show = 3
+	shown := gating
+	if len(shown) > show {
+		shown = shown[:show]
+	}
+
+	named := make([]string, 0, len(shown))
+	for i := range shown {
+		f := shown[i]
+		where := f.Location.FilePath
+		if f.Location.StartLine > 0 {
+			where = fmt.Sprintf("%s:%d", where, f.Location.StartLine)
+		}
+		named = append(named, fmt.Sprintf("%s %s at %s", f.Severity, f.RuleID, where))
+	}
+
+	suffix := " — " + strings.Join(named, "; ")
+	if rest := len(gating) - len(shown); rest > 0 {
+		suffix += fmt.Sprintf("; and %d more", rest)
+	}
+	return suffix
+}
+
+// gatingFindings are the new findings that actually failed the gate: the ones
+// at or above fail_on, in severity order so the worst is named first.
+func gatingFindings(r *Result, cfg Config) []findings.Finding {
+	var out []findings.Finding
+	for i := range r.New {
+		f := r.New[i]
+		if cfg.FailOn == "" || meetsThreshold(f.Severity, cfg.FailOn) {
+			out = append(out, f)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return severityRank[out[i].Severity] < severityRank[out[j].Severity]
+	})
+	return out
 }
 
 // meetsThreshold returns true if severity is at or above the threshold.
