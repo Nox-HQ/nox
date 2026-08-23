@@ -40,6 +40,7 @@ Subcommands:
   run       execute the plan against a target and collect evidence  (ACTIVE)
   replay    re-run one recorded trace and report reproduction        (ACTIVE)
   regress   run recorded attack cases as a security regression suite (ACTIVE)
+  mcp       validate an MCP server's tool manifest for poisoning       (ACTIVE)
 
   ` + "`nox attack plan`" + ` is read-only and offline. Everything else is ACTIVE: it
   sends attack payloads over the network. It is never part of ` + "`nox scan`" + `, never
@@ -64,6 +65,8 @@ func runAttack(args []string) int {
 		return runAttackReplay(args[1:])
 	case "regress":
 		return runAttackRegress(args[1:])
+	case "mcp":
+		return runAttackMCP(args[1:])
 	case "-h", "--help", "help":
 		fmt.Print(attackUsage)
 		return 0
