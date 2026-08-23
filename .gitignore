@@ -41,6 +41,13 @@ sbom.cdx.json
 sbom.spdx.json
 ai.inventory.json
 explanations.json
+confirmations.json
+
+# Dynamic exploit validation artifacts
+attack.plan.json
+attack.trace.json
+attack.cases.json
+attack.regress.json
 
 # Coverage
 .cover/

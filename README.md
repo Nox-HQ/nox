@@ -486,6 +486,34 @@ nox protect uninstall
 make hooks
 ```
 
+### Dynamic Exploit Validation
+
+Static analysis tells you what is dangerous. `nox attack` tells you whether an
+attacker can actually do it.
+
+```bash
+nox scan ./my-app --output .          # static, offline
+nox attack plan .                     # exploit hypotheses — offline, sends nothing
+nox attack run --profile safe         # simulate: what would be attempted
+nox attack run --target http://127.0.0.1:8000 \
+  --route /chat --fields persona,message \
+  --profile sandbox --authorize       # ACTIVE
+nox attack regress --record           # confirmed exploits become regression tests
+```
+
+Findings carry an exploitability state independent of severity — `POTENTIAL`,
+`PLAUSIBLE`, `PREVENTED`, `INCONCLUSIVE`, `CONFIRMED`. Reaching `CONFIRMED`
+requires an observed invariant violation, a sound benign control, reproduction
+under a k-of-n gate, **and** deterministic evidence: a model's opinion that an
+attack "probably worked" is recorded, labelled, and cannot confirm anything.
+
+Success is never scored on a string the payload carried, so an app that merely
+echoes input can never be mistaken for one that obeyed it.
+
+`nox attack plan` is offline and read-only. `run`, `replay`, and `regress` are
+ACTIVE — they send attack payloads, are never part of `nox scan`, refuse to run
+without `--authorize`, and do not sandbox your target. See [docs/attack.md](docs/attack.md).
+
 ## CLI Reference
 
 ```
@@ -513,6 +541,9 @@ Commands:
   fix                      Apply OSV fixed_in remediation upgrades (go/npm/pypi/cargo)
   doctor                   Report environment, plugin state, config sanity
   agent-graph              Render agent capability lattice (mermaid/dot)
+  confirm                  ACTIVE: dynamically confirm AI prompt-injection findings
+  attack <cmd>             Dynamic exploit validation (plan, run, replay, regress)
+                              `plan` is offline; the rest are ACTIVE and need --authorize
   bench                    Scan a corpus directory; report rule fire-rates
   calibrate                Suggest severity overrides from a bench report
   version                  Print version and exit

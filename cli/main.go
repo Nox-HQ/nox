@@ -169,6 +169,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n") // nox:ignore AI-006 -- CLI help text
+		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
@@ -224,6 +225,8 @@ func run(args []string) int {
 		return runExplain(remaining[1:])
 	case "confirm":
 		return runConfirm(remaining[1:])
+	case "attack":
+		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
 	case "serve":
