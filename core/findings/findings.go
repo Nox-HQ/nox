@@ -54,6 +54,25 @@ func (s Severity) Downgraded() Severity {
 	}
 }
 
+// Upgraded returns the severity one level more severe (info->low->medium->high->
+// critical). Critical is the ceiling and returns itself, so repeated application
+// is idempotent at the top. An unrecognized severity is returned unchanged. It
+// is the inverse of Downgraded, used by severity recalibration.
+func (s Severity) Upgraded() Severity {
+	switch s {
+	case SeverityInfo:
+		return SeverityLow
+	case SeverityLow:
+		return SeverityMedium
+	case SeverityMedium:
+		return SeverityHigh
+	case SeverityHigh, SeverityCritical:
+		return SeverityCritical
+	default:
+		return s
+	}
+}
+
 // Status indicates the disposition of a finding relative to baselines and
 // inline suppressions.
 type Status string

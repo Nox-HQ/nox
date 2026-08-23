@@ -5,37 +5,6 @@ import (
 	"testing"
 )
 
-func TestDemote(t *testing.T) {
-	cases := map[string]string{
-		"critical": "high",
-		"high":     "medium",
-		"medium":   "low",
-		"low":      "info",
-		"info":     "info",
-		"":         "",
-	}
-	for in, want := range cases {
-		if got := demote(in); got != want {
-			t.Errorf("demote(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestPromote(t *testing.T) {
-	cases := map[string]string{
-		"info":     "low",
-		"low":      "medium",
-		"medium":   "high",
-		"high":     "critical",
-		"critical": "critical",
-	}
-	for in, want := range cases {
-		if got := promote(in); got != want {
-			t.Errorf("promote(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestRenderCalibrateYAML_Empty(t *testing.T) {
 	got := renderCalibrateYAML(nil, 5)
 	if !strings.Contains(got, "No recommendations") {

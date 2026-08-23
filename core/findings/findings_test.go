@@ -1372,3 +1372,29 @@ func TestCountBySeverity(t *testing.T) {
 		t.Error("CountBySeverity(nil) should be empty")
 	}
 }
+
+func TestSeverityLadder(t *testing.T) {
+	// Downgraded and Upgraded are inverses, with the ends idempotent.
+	down := map[Severity]Severity{
+		SeverityCritical: SeverityHigh, SeverityHigh: SeverityMedium,
+		SeverityMedium: SeverityLow, SeverityLow: SeverityInfo, SeverityInfo: SeverityInfo,
+	}
+	for s, want := range down {
+		if got := s.Downgraded(); got != want {
+			t.Errorf("%s.Downgraded() = %s, want %s", s, got, want)
+		}
+	}
+	up := map[Severity]Severity{
+		SeverityInfo: SeverityLow, SeverityLow: SeverityMedium,
+		SeverityMedium: SeverityHigh, SeverityHigh: SeverityCritical, SeverityCritical: SeverityCritical,
+	}
+	for s, want := range up {
+		if got := s.Upgraded(); got != want {
+			t.Errorf("%s.Upgraded() = %s, want %s", s, got, want)
+		}
+	}
+	// An unrecognized severity is unchanged either way.
+	if Severity("weird").Upgraded() != "weird" || Severity("weird").Downgraded() != "weird" {
+		t.Error("unknown severity must pass through the ladder unchanged")
+	}
+}
