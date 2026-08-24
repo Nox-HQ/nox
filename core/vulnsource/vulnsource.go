@@ -54,7 +54,28 @@ type Record struct {
 	// publish a coarse severity label here, which is the only severity signal
 	// available for records that carry a CVSS v4 vector and nothing else.
 	DatabaseSpecific DatabaseSpecific `json:"database_specific"`
+
+	// Intelligence is what a source knows beyond the advisory: epistemic
+	// status, corroboration across distinct reporters, and the evidence ledger
+	// behind it. Nil for a plain advisory database, which is the honest
+	// representation — OSV makes no such claims.
+	//
+	// It is namespaced under nox_intelligence so a record round-trips through
+	// the OSV wire format without colliding with anything OSV may add.
+	Intelligence *Intelligence `json:"nox_intelligence,omitempty"`
 }
+
+// Status returns the record's epistemic standing, resolving a record with no
+// intelligence block to PUBLISHED — which is what an advisory database returns.
+func (r *Record) Status() Status {
+	if r.Intelligence == nil {
+		return StatusPublished
+	}
+	return r.Intelligence.Status.EffectiveStatus()
+}
+
+// Theoretical reports whether the record describes an undemonstrated path.
+func (r *Record) Theoretical() bool { return r.Intelligence.Theoretical() }
 
 // DatabaseSpecific holds the subset of source-specific annotations nox reads.
 type DatabaseSpecific struct {

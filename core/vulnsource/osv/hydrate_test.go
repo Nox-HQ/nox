@@ -119,6 +119,11 @@ func TestApplyVulnDetails_CopiesEveryField(t *testing.T) {
 		Details:          "long form",
 		Affected:         []vulnsource.Affected{{Package: vulnsource.Package{Name: "p", Ecosystem: "npm"}}},
 		DatabaseSpecific: vulnsource.DatabaseSpecific{Severity: "CRITICAL"},
+		Intelligence: &vulnsource.Intelligence{
+			Status:        vulnsource.StatusCandidate,
+			Corroboration: 3,
+			SourceName:    "nox-intel",
+		},
 	}
 
 	// Guard the guard: every field of vulnsource.Record must be set in the fixture, or

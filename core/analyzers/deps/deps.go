@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -652,6 +653,24 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						"ecosystem": pkg.Ecosystem,
 						"aliases":   aliases,
 					}
+					// Epistemic status travels with the finding. A published
+					// advisory and an undisclosed candidate are not the same
+					// claim, and rendering them identically is how a projection
+					// gets read as an observation.
+					status := ov.Status()
+					meta["vuln_status"] = string(status)
+					if intel := ov.Intelligence; intel != nil {
+						if intel.SourceName != "" {
+							meta["intel_source"] = intel.SourceName
+						}
+						if intel.Corroboration > 0 {
+							// Distinct reporters, never observation count.
+							meta["intel_corroboration"] = strconv.Itoa(intel.Corroboration)
+						}
+						if intel.Evidence != nil {
+							meta["intel_confidence"] = string(intel.Evidence.Confidence())
+						}
+					}
 					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
@@ -663,6 +682,24 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// silent disappearance is indistinguishable from a scanner
 					// that simply missed it.
 					message := fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary)
+
+					// A record with no published advisory is a projection, and
+					// says so wherever it is rendered. It is also demoted out of
+					// gating severity: an uncorroborated candidate that fails a
+					// build the way a CVE does burns the feature on its first
+					// false positive, and an operator who starts ignoring
+					// candidate findings is worse off than one who never saw
+					// them. Demoted, not dropped — a silent disappearance is
+					// indistinguishable from a scanner that missed it. This is
+					// the same treatment an unreachable Go advisory gets below.
+					if !status.Gating() {
+						sev = findings.SeverityInfo
+						message = fmt.Sprintf("THEORETICAL %s in %s@%s: %s",
+							strings.ToLower(string(status)), pkg.Name, pkg.Version, ov.Summary)
+						if ov.Theoretical() {
+							meta["theoretical"] = "true"
+						}
+					}
 					if pkg.Ecosystem == "go" {
 						affected := goAffectedImports(&ov, pkg.Name)
 						if reachable, determined := goVulnReachable(affected, linkedGoPkgs, linkedGoKnown); determined {

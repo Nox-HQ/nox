@@ -281,6 +281,14 @@ func applyVulnDetails(vulns []vulnsource.Record, details map[string]vulnsource.R
 		if detail.DatabaseSpecific.Severity != "" {
 			vulns[i].DatabaseSpecific = detail.DatabaseSpecific
 		}
+		// OSV.dev never sends this, but a service speaking the OSV wire
+		// protocol does — and the detail endpoint is the only place it can
+		// arrive, since querybatch returns nothing but {id, modified}. Dropping
+		// it here would silently strip status and corroboration from every
+		// record in production while hand-built unit tests kept passing.
+		if detail.Intelligence != nil {
+			vulns[i].Intelligence = detail.Intelligence
+		}
 	}
 }
 
