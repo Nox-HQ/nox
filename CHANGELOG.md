@@ -7,6 +7,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-08-24
+
+Dynamic exploit validation, and a run of fixes about controls that reported
+success without doing anything.
+
+### Added
+
+- **`nox attack` — dynamic exploit validation for AI and agentic systems.**
+  Builds exploit hypotheses from static findings and the AI inventory,
+  exercises a running target, and reports evidence-backed traces.
+  `plan` is offline; `run` / `replay` / `regress` / `mcp` are ACTIVE, require
+  `--authorize`, and never run as part of `nox scan`.
+
+  Verdicts come from `core/evidence`, which owns the exploitability ladder
+  (POTENTIAL / PLAUSIBLE / PREVENTED / INCONCLUSIVE / CONFIRMED) and enforces
+  two rules nothing else may re-implement: CONFIRMED requires deterministic
+  evidence at reproduction strength — no quantity of heuristics or LLM
+  judgments reaches it — and independence counts distinct reporters, not
+  repeated observations. Payloads are reflection-immune: a canary value never
+  appears in what is sent, so an echoing target cannot fake a hijack.
+
+  nox never reports "safe". A target that was not reached, or a run that was
+  cut short, is INCONCLUSIVE — never PREVENTED.
+
+- **`scan.include` is implemented.** An allow-list of glob patterns: when set,
+  only matching files are scanned. It previously parsed and did nothing, so a
+  scan narrowed to a subtree silently covered everything. See *Upgrading*.
+
+- **Config nox parses but does not act on is now reported.** Unrecognised keys
+  were already reported (1.29.0); a key nox accepts and then ignores fails the
+  operator identically — the policy written is not the policy in force. Both
+  now surface as degradations from `core`, so the CLI, the MCP server, the LSP
+  and `findings.json` all report them. Currently `compliance.framework` and
+  `cache` (nox never caches a scan; `--no-cache` is likewise a no-op).
+
+- **`sdk.Fingerprint` / `sdk.RelativePath` / `sdk.RunFingerprintStability`** for
+  plugin authors, so a plugin's fingerprints do not move with the checkout.
+
+### Fixed
+
+- **SEC-163 could never match a hex string** (#467). It required entropy ≥ 4.5,
+  but Shannon entropy over a 16-symbol alphabet cannot exceed log2(16) = 4.0.
+  So the rule named for hex matched only candidates from *richer* alphabets and
+  reported them under the hex description — one report showed it flagging a Go
+  identifier while the 40-character fingerprints two files away went unreported.
+  Entropy candidates now carry the set of tokenizer kinds that found them, rules
+  declare `candidate_kinds`, and SEC-163 sits at 3.5, below the ceiling.
+
+- **Plugin finding fingerprints no longer move with the checkout path** (#454).
+  They were derived from the absolute path, so no plugin finding could be
+  baselined anywhere the path differed — every CI runner, every worktree gate,
+  any two developers. Locally the baseline matched and the scan was green; the
+  gate elsewhere reported hundreds of net-new findings for the same commit.
+  Paths are made repo-relative, and slash-separated, before fingerprinting —
+  the second half caught by the Windows job, where native separators made one
+  file fingerprint differently on Windows than on Linux.
+
+- **Lockfile parsers truncated silently at 64 KiB.** 14 of 17 used
+  `bufio.Scanner` at its default limit without checking `Err()`, so a long line
+  ended the parse and returned what it had. A truncated dependency list is
+  indistinguishable from a complete one, and everything after that line was
+  missing from the SBOM and from vulnerability matching.
+
+- **`scan.exclude` now reaches plugins.** A plugin walks the workspace itself,
+  so without the patterns it cannot honour the exclusions the operator wrote.
+
+- **18 shipped rules were invisible to the rule catalogue.**
+  `Catalog()` aggregated 8 of the 14 analyzers that publish rules, so
+  AGENTFLOW/TAINT/CRYPTO/HARDEN/PERM/MEMSAFE rules produced findings while
+  the MCP `rules` tool — and anything else reading the catalogue — denied they
+  existed. Catalogue count 1519 -> 1537.
+
+- **A policy gate let an unrecognised severity through.** `policy.Evaluate`
+  gated a finding only when it could *rank* its severity, so a finding whose
+  severity it did not recognise slipped every gate and the scan exited 0.
+  Reachable from config: an unvalidated `scan.rules.severity_override` of
+  `Critical` (capitalised) made a finding invisible rather than raising it.
+
+- **MCP-009 no longer flags code that detects injection as performing it**
+  (#474). The phrase it matches is unavoidable in a guardrail's pattern list or
+  an attack corpus, where the string is what is being searched for.
+
+- **Matcher types that validated but matched nothing are rejected at load
+  time.** `jsonpath`, `yamlpath` and `heuristic` were accepted by rule
+  validation and served by a stub returning nil, so a rule declaring one
+  loaded, listed in the catalogue, ran against every file and found nothing.
+  Not registering them at all is *safer*: the scan now fails loudly.
+
+- **`plugin.read_resource` is no longer advertised.** It was registered as a
+  ReadOnly MCP tool and returned "not yet implemented" as a *successful*
+  result, so an agent checking `isError` saw success. The plugin protocol has
+  no resource-read RPC, so it could never have worked.
+
+### Changed
+
+- **`nox attack` and the intelligence layer are separate concerns.**
+  Vulnerability intelligence is deliberately not in the CLI; see
+  `docs/design/intelligence-service.md` for the boundary.
+
+## Upgrading
+
+Two changes alter existing behaviour rather than adding to it.
+
+- **`scan.include` now narrows a scan.** If you have it set and were relying on
+  the previous (broken) behaviour, you were getting a *full* scan. Enabling it
+  correctly means fewer files are scanned — check the patterns match what you
+  intend. `scan.exclude` still wins where both apply, and directories are still
+  descended, because a glob cannot say in advance whether a subtree contains a
+  match.
+
+- **Baselines containing plugin findings will not match once.** Plugin
+  fingerprints changed to become path-independent, so entries recorded under
+  the old scheme need re-recording. Review the re-surfaced findings before
+  running `nox baseline update` — they are the same findings, but a blanket
+  update is how unreviewed findings enter a baseline.
+
+
 ## [1.29.1] - 2026-08-22
 
 Two fixes about the same failure mode: a remediation that reports success
