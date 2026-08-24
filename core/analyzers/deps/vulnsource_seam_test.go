@@ -1,0 +1,188 @@
+package deps
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/vulnsource"
+)
+
+// stubSource is a vulnsource.Source that answers from a fixture, so a test can
+// assert what the analyzer does with records without standing up an OSV server.
+type stubSource struct {
+	name    string
+	records map[string][]vulnsource.Record
+	err     error
+	queries []vulnsource.Query
+}
+
+func (s *stubSource) Name() string { return s.name }
+
+func (s *stubSource) Lookup(_ context.Context, qs []vulnsource.Query) (map[int][]vulnsource.Record, error) {
+	s.queries = qs
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := make(map[int][]vulnsource.Record)
+	for i, q := range qs {
+		if recs, ok := s.records[q.Name]; ok {
+			out[i] = recs
+		}
+	}
+	return out, nil
+}
+
+// npmLockfile writes a minimal package-lock.json naming one dependency.
+func npmLockfile(t *testing.T, name, version string) (string, []discovery.Artifact) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package-lock.json")
+	body := `{"name":"app","lockfileVersion":3,"packages":{"node_modules/` + name +
+		`":{"version":"` + version + `"}}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("writing lockfile: %v", err)
+	}
+	return dir, []discovery.Artifact{{Path: path, AbsPath: path, Type: discovery.Lockfile}}
+}
+
+// A source supplied through WithSource is the one that gets asked, and the
+// endpoint configured for the default OSV source is not consulted. Without
+// this, "swappable" would rest on the absence of a compile error.
+func TestWithSource_ReplacesTheDefaultSource(t *testing.T) {
+	src := &stubSource{
+		name: "stub",
+		records: map[string][]vulnsource.Record{
+			"lodash": {{
+				ID:       "STUB-0001",
+				Summary:  "Prototype pollution",
+				Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
+				Aliases:  []string{"CVE-2020-28500"},
+			}},
+		},
+	}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	a := NewAnalyzer(
+		WithSource(src),
+		// An endpoint that would fail loudly if the default source were built.
+		WithOSVBaseURL("http://127.0.0.1:1"),
+	)
+
+	_, fs, err := a.ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+
+	if len(src.queries) != 1 {
+		t.Fatalf("expected the stub source to be queried once, got %d queries", len(src.queries))
+	}
+	if got := src.queries[0]; got.Name != "lodash" || got.Ecosystem != "npm" {
+		t.Errorf("query = %+v, want lodash/npm", got)
+	}
+
+	var found *findings.Finding
+	all := fs.Findings()
+	for i, f := range all {
+		if f.RuleID == "VULN-001" {
+			found = &all[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("no VULN-001 finding from the stub source's record")
+	}
+	if found.Metadata["vuln_id"] != "STUB-0001" {
+		t.Errorf("vuln_id = %q, want STUB-0001", found.Metadata["vuln_id"])
+	}
+}
+
+// Records from any source pass through the same severity mapping as an OSV
+// record. A source must not be able to acquire different treatment by being a
+// different source — the seam carries data, not policy.
+func TestWithSource_RecordsGetTheSameSeverityTreatment(t *testing.T) {
+	// A CVSS v4 vector with nothing else: scorable only via the coarse label,
+	// which is exactly the case database_specific.severity exists to cover.
+	src := &stubSource{
+		name: "stub",
+		records: map[string][]vulnsource.Record{
+			"lodash": {{
+				ID:      "STUB-V4",
+				Summary: "v4-only advisory",
+				Severity: []vulnsource.Severity{{
+					Type:  "CVSS_V4",
+					Score: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+				}},
+				DatabaseSpecific: vulnsource.DatabaseSpecific{Severity: "CRITICAL"},
+			}},
+		},
+	}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, fs, err := NewAnalyzer(WithSource(src)).ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+
+	for _, f := range fs.Findings() {
+		if f.RuleID != "VULN-001" {
+			continue
+		}
+		if f.Severity != findings.SeverityCritical {
+			t.Errorf("severity = %v, want critical from the database_specific label", f.Severity)
+		}
+		return
+	}
+	t.Fatal("no VULN-001 finding")
+}
+
+// A source that cannot answer at all fails the scan rather than returning a
+// clean result. Degradation covers "I reached it and it went wrong"; an error
+// means the lookup could not be attempted, and swallowing that would report an
+// unexercised check as an all-clear.
+func TestWithSource_LookupErrorFailsTheScan(t *testing.T) {
+	src := &stubSource{name: "stub", err: errors.New("boom")}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, _, err := NewAnalyzer(WithSource(src)).ScanArtifacts(context.Background(), artifacts)
+	if err == nil {
+		t.Fatal("expected an error when the source cannot be queried")
+	}
+	if !errors.Is(err, src.err) {
+		t.Errorf("error = %v, want it to wrap the source error", err)
+	}
+	// The source is named, so an operator can tell which one failed.
+	if got := err.Error(); !strings.Contains(got, "stub") {
+		t.Errorf("error %q does not name the failing source", got)
+	}
+}
+
+// Without WithSource the analyzer builds an OSV source, and it reads OSVBaseURL
+// at scan time rather than at construction — the field is exported and callers
+// set it directly.
+func TestDefaultSource_IsOSVAndReadsBaseURLLate(t *testing.T) {
+	a := NewAnalyzer()
+	if got := a.vulnSource().Name(); got != "osv.dev" {
+		t.Errorf("default source = %q, want osv.dev", got)
+	}
+
+	deg := &degrade.Degradations{}
+	a = NewAnalyzer(WithDegradations(deg))
+	a.OSVBaseURL = "http://127.0.0.1:1" // set after construction
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, _, err := a.ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts should degrade, not error: %v", err)
+	}
+	if deg.Len() == 0 {
+		t.Fatal("an unreachable endpoint must be recorded as a degradation, " +
+			"or an empty result reads as a clean scan")
+	}
+}

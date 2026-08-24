@@ -22,6 +22,8 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
+	"github.com/nox-hq/nox/core/vulnsource"
+	osvsource "github.com/nox-hq/nox/core/vulnsource/osv"
 )
 
 // redundantLockfiles names files that carry no dependency information nox
@@ -180,9 +182,22 @@ func WithHTTPClient(c *http.Client) AnalyzerOption {
 	return func(a *Analyzer) { a.httpClient = c }
 }
 
-// WithOSVBaseURL overrides the default OSV API base URL.
+// WithOSVBaseURL overrides the default OSV API base URL. It has no effect when
+// WithSource supplies an explicit source, which brings its own endpoint.
 func WithOSVBaseURL(url string) AnalyzerOption {
 	return func(a *Analyzer) { a.OSVBaseURL = url }
+}
+
+// WithSource replaces the vulnerability source the analyzer queries. Without
+// one the analyzer builds an OSV.dev source from OSVBaseURL and the configured
+// HTTP client, which is the behaviour every existing caller gets.
+//
+// This is the seam a richer source plugs into. Anything it returns still passes
+// through the same severity mapping, fix selection, and reachability scoping as
+// an OSV record, so a source cannot quietly acquire different treatment by
+// being a different source.
+func WithSource(s vulnsource.Source) AnalyzerOption {
+	return func(a *Analyzer) { a.source = s }
 }
 
 // WithLicensePolicy sets the license compliance policy for the analyzer.
@@ -195,11 +210,18 @@ func WithLicensePolicy(policy LicensePolicy) AnalyzerOption {
 // Analyzer scans lockfile artifacts, extracts dependency information, and
 // queries the OSV database for known vulnerabilities.
 type Analyzer struct {
-	// OSVBaseURL is the base URL for the OSV vulnerability database API.
+	// OSVBaseURL is the base URL for the OSV vulnerability database API. It is
+	// used to build the default source; an explicit source set by WithSource
+	// ignores it.
 	OSVBaseURL    string
 	httpClient    *http.Client
 	osvEnabled    bool
 	licensePolicy *LicensePolicy
+
+	// source resolves packages to known vulnerabilities. Nil means "build the
+	// default OSV source at scan time" — deferred rather than built in
+	// NewAnalyzer because OSVBaseURL is exported and callers set it directly.
+	source vulnsource.Source
 
 	// degradations collects the checks this analyzer could not complete. It is
 	// optional: a nil collector discards records, so library callers that do
@@ -225,6 +247,15 @@ func NewAnalyzer(opts ...AnalyzerOption) *Analyzer {
 		opt(a)
 	}
 	return a
+}
+
+// vulnSource returns the configured source, or an OSV.dev source built from the
+// analyzer's current endpoint and HTTP client.
+func (a *Analyzer) vulnSource() vulnsource.Source {
+	if a.source != nil {
+		return a.source
+	}
+	return osvsource.New(a.OSVBaseURL, a.httpClient, a.degradations)
 }
 
 // Rules returns the rule set for the dependency vulnerability analyzer.
@@ -571,9 +602,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
-			vulnMap, err := queryOSV(ctx, a.httpClient, a.OSVBaseURL, pkgs, a.degradations)
+			src := a.vulnSource()
+			queries := make([]vulnsource.Query, len(pkgs))
+			for i, p := range pkgs {
+				queries[i] = vulnsource.Query{Ecosystem: p.Ecosystem, Name: p.Name, Version: p.Version}
+			}
+
+			vulnMap, err := src.Lookup(ctx, queries)
 			if err != nil {
-				return nil, nil, fmt.Errorf("querying OSV: %w", err)
+				return nil, nil, fmt.Errorf("querying %s: %w", src.Name(), err)
 			}
 
 			// Enumerate the packages this build links, once, so Go advisories
