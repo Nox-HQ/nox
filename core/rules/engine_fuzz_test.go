@@ -2,6 +2,7 @@ package rules
 
 import (
 	"testing"
+	"time"
 )
 
 // FuzzScanFile fuzzes arbitrary content through the rule engine with a
@@ -51,9 +52,45 @@ func FuzzScanFile(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, content []byte, path string) {
 		// Must not panic regardless of input.
+		start := time.Now()
 		_, _ = engine.ScanFile(path, content)
+		elapsed := time.Since(start)
+
+		// ...and must not HANG on any input either.
+		//
+		// This bound exists because a stall here is otherwise undiagnosable.
+		// When ScanFile takes long enough, the fuzzing coordinator gives up on
+		// the worker and reports "context deadline exceeded" — which reads like
+		// flaky infrastructure, names no input, and writes NO corpus entry, so
+		// there is nothing to reproduce from. That is exactly what happened on
+		// main at 28e0ca79: repeated "0/sec" windows, then a timeout, and no
+		// reproducer. A quadratic in findLine was found and fixed afterwards by
+		// benchmarking, but whether it was the cause was never established.
+		//
+		// Failing INSIDE the fuzz function instead names the input in the test
+		// output, and — when the offender is one the fuzzer DISCOVERED rather
+		// than a seed — Go writes it to testdata/fuzz/FuzzScanFile/ as a
+		// checked-in regression case. (A seed that trips this is reported but
+		// not written, since it already lives in the source.) Either way the
+		// failure stops being a bare timeout with nothing attached.
+		//
+		// The bound is deliberately enormous — six orders of magnitude above the
+		// microseconds a real scan of a fuzz-sized input takes — so a loaded
+		// runner cannot trip it. A tight bound on a path that normally costs
+		// nothing is how you manufacture a flake; only a genuine stall reaches
+		// this.
+		if elapsed > maxScanFileDuration {
+			t.Fatalf("ScanFile took %v for %d bytes and path %q, over the %v bound; "+
+				"a scan this slow is a pathological input. If the fuzzer discovered it, "+
+				"Go has written it to testdata/fuzz/FuzzScanFile for reproduction",
+				elapsed, len(content), path, maxScanFileDuration)
+		}
 	})
 }
+
+// maxScanFileDuration bounds a single ScanFile call under fuzzing. See the
+// comment in FuzzScanFile for why it is this generous.
+const maxScanFileDuration = 10 * time.Second
 
 // FuzzContainsAnyKeyword fuzzes the keyword matching function with
 // arbitrary content and keyword combinations.
