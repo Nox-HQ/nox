@@ -859,6 +859,30 @@ func builtinAIRules() []*rules.Rule {
 			pattern:     `(?i)(?:ignore|disregard|forget|override)\s+(?:all\s+|any\s+)?(?:previous|prior|above|earlier|the\s+system)\s+(?:instructions?|prompts?|messages?|context|rules?)`,
 			description: "MCP tool metadata contains an instruction-override phrase (tool poisoning)",
 			cwe:         "CWE-77", keywords: []string{"ignore", "disregard", "forget", "override"},
+			// The phrase MCP-009 looks for appears legitimately in the code that
+			// DEFENDS against it: a guardrail's pattern list, a detector's test
+			// corpus, an attack tool's payload table. There the string is what is
+			// being searched for, not an instruction to a model.
+			//
+			// Two instances turned up in one session — a guardrail class storing
+			// its injection patterns as literals (#456), and nox's own
+			// core/attack/corpus.go, which took five hand-written inline waivers
+			// to stop the self-scan blocking a merge. Hand-waiving each site does
+			// not scale and leaves every downstream project doing the same.
+			//
+			// Scoped to naming words rather than anything an attacker controls:
+			// a poisoned tool description is written to read as a plausible tool
+			// description, so it does not call itself an injection pattern. The
+			// true-positive half is pinned by
+			// TestDetect_MCP009StillCatchesRealToolPoisoning — suppressing too
+			// eagerly reports a clean scan of a poisoned tool, which is worse
+			// than the false positive being fixed.
+			excludeContextKeywords: []string{
+				"injection_pattern", "injectionpattern", "injection pattern",
+				"detection_pattern", "detectionpattern",
+				"guardrail", "jailbreak_pattern", "known_attack",
+				"payload", "corpus", "attack_pattern",
+			},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "tool-poisoning", "prompt-injection", "owasp-mcp03"},
 			remediation:  "Remove the instruction-override phrasing from the tool description/schema. A tool's description is read by the host model as trusted context; text that tells the model to ignore prior instructions is a tool-poisoning payload. Pin the tool definition and review it before granting the server access.",
