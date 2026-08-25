@@ -279,6 +279,17 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
+
+	// The advisory cache holds hydrated advisory documents between scans, keyed
+	// on the publisher's own `modified` stamp. It is a pure speed win with no
+	// staleness window: the batch query stays live, so a newly published CVE is
+	// never hidden, and a revised advisory misses its cache entry the moment
+	// upstream changes it.
+	var advisoryCache osvsource.AdvisoryCache
+	if vulnLookupEnabled && !cfg.Scan.OSV.CacheDisabled {
+		advisoryCache = osvsource.NewFileCache(cfg.Scan.OSV.CacheDir)
+		depsOpts = append(depsOpts, deps.WithAdvisoryCache(advisoryCache))
+	}
 	// Wire the project's license policy through. Without this, license.deny /
 	// license.allow in .nox.yaml parsed cleanly and then produced no LIC-*
 	// findings at all — configured policy that silently did nothing.
@@ -299,12 +310,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// costs its operator trust, immediately and visibly, but never costs the
 	// scan a finding.
 	if endpoint := cfg.Scan.Intelligence.Endpoint; endpoint != "" && vulnLookupEnabled {
-		intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), degradations)
+		intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), degradations).
+			WithCache(advisoryCache)
 
 		var src vulnsource.Source = intel
 		if cfg.Scan.Intelligence.VerificationEnabled() {
 			src = vulnsource.NewVerifying(intel, func(refDeg *degrade.Degradations) vulnsource.Source {
-				return osvsource.New(osvsource.DefaultBaseURL, intelHTTPClient(), refDeg)
+				return osvsource.New(osvsource.DefaultBaseURL, intelHTTPClient(), refDeg).
+					WithCache(advisoryCache)
 			}, degradations)
 		}
 		depsOpts = append(depsOpts, deps.WithSource(src))

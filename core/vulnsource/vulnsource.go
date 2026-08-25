@@ -43,7 +43,20 @@ type Query struct {
 // never block a build. A Source returns records whose severity and affected
 // ranges are populated, or it degrades and says so.
 type Record struct {
-	ID       string     `json:"id"`
+	ID string `json:"id"`
+
+	// Modified is the source database's own last-changed stamp for this
+	// advisory, as an RFC3339 timestamp. OSV returns it from both the batch and
+	// the detail endpoint.
+	//
+	// It is the advisory's version, which makes it the only honest cache
+	// validator: an advisory document may be reused for exactly as long as this
+	// value is unchanged, and must be refetched the moment it moves. Caching a
+	// vulnerability database on a guessed TTL trades freshness for speed and
+	// hides the trade; keying on the publisher's own stamp does not trade
+	// anything.
+	Modified string `json:"modified,omitempty"`
+
 	Summary  string     `json:"summary"`
 	Details  string     `json:"details"`
 	Aliases  []string   `json:"aliases"`

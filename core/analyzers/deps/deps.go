@@ -189,6 +189,17 @@ func WithOSVBaseURL(url string) AnalyzerOption {
 	return func(a *Analyzer) { a.OSVBaseURL = url }
 }
 
+// WithAdvisoryCache gives the default OSV source a cache for advisory
+// documents. It has no effect when WithSource supplies an explicit source,
+// which brings its own caching arrangement.
+//
+// It lives here rather than being wired at the call site so the cache is
+// applied to whatever endpoint OSVBaseURL names at scan time, instead of a
+// second construction site having to remember to read that field.
+func WithAdvisoryCache(c osvsource.AdvisoryCache) AnalyzerOption {
+	return func(a *Analyzer) { a.advisoryCache = c }
+}
+
 // WithSource replaces the vulnerability source the analyzer queries. Without
 // one the analyzer builds an OSV.dev source from OSVBaseURL and the configured
 // HTTP client, which is the behaviour every existing caller gets.
@@ -224,6 +235,9 @@ type Analyzer struct {
 	// NewAnalyzer because OSVBaseURL is exported and callers set it directly.
 	source vulnsource.Source
 
+	// advisoryCache is applied to the default OSV source when one is built.
+	advisoryCache osvsource.AdvisoryCache
+
 	// degradations collects the checks this analyzer could not complete. It is
 	// optional: a nil collector discards records, so library callers that do
 	// not supply one behave exactly as before.
@@ -256,7 +270,8 @@ func (a *Analyzer) vulnSource() vulnsource.Source {
 	if a.source != nil {
 		return a.source
 	}
-	return osvsource.New(a.OSVBaseURL, a.httpClient, a.degradations)
+	return osvsource.New(a.OSVBaseURL, a.httpClient, a.degradations).
+		WithCache(a.advisoryCache)
 }
 
 // Rules returns the rule set for the dependency vulnerability analyzer.

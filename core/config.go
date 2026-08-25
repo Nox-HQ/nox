@@ -366,6 +366,20 @@ type EntropyConfig struct {
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
 type OSVConfig struct {
 	Disabled bool `yaml:"disabled"`
+
+	// CacheDisabled turns off the advisory cache. Default is enabled.
+	//
+	// Only advisory *documents* are ever cached, keyed on the publisher's own
+	// `modified` stamp. The batch query — which advisories match this package
+	// version — is always live, so disabling the cache cannot make a scan find
+	// anything it would otherwise miss. It only makes it slower: a scan of a
+	// modest corpus issues one batch query and a hundred-odd detail fetches,
+	// and repeats every one of them on the next run.
+	CacheDisabled bool `yaml:"cache_disabled"`
+
+	// CacheDir overrides where cached advisories are stored. Empty defaults to
+	// $HOME/.nox/cache/advisories.
+	CacheDir string `yaml:"cache_dir"`
 }
 
 // IntelligenceConfig points dependency scanning at a NOX Intelligence service

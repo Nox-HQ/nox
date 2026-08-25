@@ -63,6 +63,18 @@ type Source struct {
 	baseURL string
 	client  *http.Client
 	deg     *degrade.Degradations
+	cache   AdvisoryCache
+}
+
+// WithCache returns a copy of the source that serves advisory detail from c.
+//
+// Only detail is cached. The batch query stays live on every lookup, so which
+// advisories match a package version is always answered by upstream and a
+// newly published CVE is never hidden behind a cache.
+func (s *Source) WithCache(c AdvisoryCache) *Source {
+	out := *s
+	out.cache = c
+	return &out
 }
 
 // New returns a Source querying baseURL through client, named "osv.dev". deg
@@ -187,13 +199,8 @@ func (s *Source) Lookup(ctx context.Context, qs []vulnsource.Query) (map[int][]v
 	// hydrated in place — never reassigned — because map iteration order is
 	// randomised and rebuilding the map from a flattened slice would attribute
 	// vulnerabilities to the wrong packages.
-	var ids []string
-	for _, vs := range result {
-		for _, v := range vs {
-			ids = append(ids, v.ID)
-		}
-	}
-	details := fetchVulnDetails(ctx, s.client, s.baseURL, ids)
+	ids, validators := needed(s.cache, result)
+	details := fetchVulnDetails(ctx, s.client, s.baseURL, s.cache, validators, ids)
 	for _, vs := range result {
 		applyVulnDetails(vs, details)
 	}
@@ -219,13 +226,44 @@ func HydrateDetails(ctx context.Context, client *http.Client, baseURL string, vu
 	for _, v := range vulns {
 		ids = append(ids, v.ID)
 	}
-	applyVulnDetails(vulns, fetchVulnDetails(ctx, client, baseURL, ids))
+	applyVulnDetails(vulns, fetchVulnDetails(ctx, client, baseURL, nil, nil, ids))
+}
+
+// needed returns the advisory ids that must be fetched from upstream: those the
+// cache cannot serve at the exact version the batch query just reported.
+//
+// It also folds the cache hits straight into result, so a fully cached lookup
+// issues no detail requests at all.
+func needed(cache AdvisoryCache, result map[int][]vulnsource.Record) (ids []string, validators map[string]string) {
+	validators = make(map[string]string)
+	seen := make(map[string]struct{})
+	for _, vs := range result {
+		for i := range vs {
+			id := vs[i].ID
+			if id == "" {
+				continue
+			}
+			if cache != nil {
+				if rec, ok := cache.Get(id, vs[i].Modified); ok {
+					vs[i] = rec
+					continue
+				}
+			}
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			validators[id] = vs[i].Modified
+			ids = append(ids, id)
+		}
+	}
+	return ids, validators
 }
 
 // fetchVulnDetails retrieves advisory detail for each distinct ID, concurrently
 // and at most once per ID. IDs that cannot be fetched are simply absent from
 // the returned map, which callers treat as "leave the finding as it is".
-func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, ids []string) map[string]vulnsource.Record {
+func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, cache AdvisoryCache, validators map[string]string, ids []string) map[string]vulnsource.Record {
 	unique := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		if id != "" {
@@ -258,6 +296,12 @@ func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, 
 				failures++
 				return
 			}
+			if cache != nil {
+				// Store under the validator the batch reported, which is what
+				// the next lookup will ask with — not the detail's own, which
+				// carries more precision and would never be matched.
+				cache.Put(id, validators[id], detail)
+			}
 			out[id] = detail
 		}(id)
 	}
@@ -277,6 +321,9 @@ func applyVulnDetails(vulns []vulnsource.Record, details map[string]vulnsource.R
 		detail, ok := details[vulns[i].ID]
 		if !ok {
 			continue
+		}
+		if detail.Modified != "" {
+			vulns[i].Modified = detail.Modified
 		}
 		if detail.Summary != "" {
 			vulns[i].Summary = detail.Summary
