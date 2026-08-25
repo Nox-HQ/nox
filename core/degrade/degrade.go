@@ -81,6 +81,12 @@ const (
 	// nobody confirmed it: reporting an unverified run as verified is the same
 	// error as reporting an unexercised check as an all-clear.
 	IntelUnverified Kind = "intel_unverified"
+
+	// IntelContribution means this installation was configured to contribute
+	// observations and could not. The scan's own findings are unaffected — the
+	// network simply learned nothing from this run, which is worth saying so
+	// that a contribution quietly failing for months is visible.
+	IntelContribution Kind = "intel_contribution"
 )
 
 // Degradation records that some part of the scan did not run to completion.

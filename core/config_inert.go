@@ -40,14 +40,6 @@ var inertConfigKeys = []InertConfigKey{
 			"of the framework named under it",
 	},
 	{
-		Key:      "intelligence.contribute",
-		GoFields: []string{"Contribute"},
-		Reason: "nox does not yet send observations anywhere; the client half of contribution " +
-			"(redaction allowlist, opaque reporter identity, and the upload itself) is not " +
-			"implemented, so setting this shares nothing. It is named rather than omitted " +
-			"because an operator who sets it would otherwise believe they had opted in",
-	},
-	{
 		Key: "cache",
 		// Dir and TTL are named here too. The name-based guard could not see
 		// them: other config types also have a .Dir and a .TTL, so a selector

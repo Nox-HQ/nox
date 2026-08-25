@@ -37,6 +37,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/graph"
+	"github.com/nox-hq/nox/core/intel"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
@@ -93,6 +94,27 @@ type Degradation = degrade.Degradation
 // ScanOptions holds optional parameters for RunScanWithOptions. The zero
 // value means no additional options are applied.
 type ScanOptions struct {
+	// ContributeObservations permits this scan to send observations to a
+	// configured intelligence service.
+	//
+	// Deriving observations is pure computation; transmitting them is not, and
+	// a transmission that happens as a side effect of "run a scan" is one that
+	// happens in places nobody intended. It fired from `nox intel preview` —
+	// the command whose entire purpose is to show what WOULD be sent without
+	// sending it — and would have fired from `nox diff`, which scans a target
+	// twice.
+	//
+	// So the default for every caller is silence, and the one command a user
+	// invokes to scan-and-contribute opts in explicitly. The config gate is a
+	// second, independent condition: both must be set.
+	ContributeObservations bool
+
+	// ToolVersion identifies the build performing the scan. It is recorded on
+	// contributed observations so a claim can be traced back to the code that
+	// made it. Empty is acceptable — the field is optional on the wire — but an
+	// unattributable claim is worth less to whoever has to assess it.
+	ToolVersion string
+
 	// CustomRulesPath is a path to a YAML file or directory containing
 	// custom security rules. When set, rules are loaded and merged with
 	// the built-in analyzer rules. CLI flags take precedence over
@@ -689,6 +711,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings)
 
+	// Stage 5: Contribute observations, if this installation opted in. Runs
+	// last, over the refined findings, so what is shared is what the scan
+	// actually concluded rather than an intermediate state.
+	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
+
 	return &ScanResult{
 		Findings:     allFindings,
 		Enrichments:  pluginEnrichments,
@@ -806,6 +833,58 @@ func parseFeedRefresh(s string) (time.Duration, error) {
 // nox cannot parse, and a key nox parses and then ignores. Either way the
 // policy they wrote is not the policy in force. Only the first used to be
 // reported, and only by the CLI.
+// contributeObservations shares security facts about dependencies with a
+// configured intelligence service.
+//
+// Querying an endpoint and contributing to it are two decisions, and this is
+// the second one. A lookup already transmits (ecosystem, package, version) for
+// every dependency, so if querying implied contributing then "contribute:
+// false" would be a lie for anyone with an endpoint configured. Both are off by
+// default and both must be set explicitly.
+//
+// Failure is recorded, never propagated. A scan that failed because an upload
+// did would make opting in actively hostile, and would give operators a reason
+// to switch off the thing that makes corroboration possible at all.
+func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptions, fs []findings.Finding, deg *degrade.Degradations) {
+	ic := cfg.Scan.Intelligence
+	if !opts.ContributeObservations || !ic.Contribute || ic.Endpoint == "" {
+		return
+	}
+
+	reporterID, err := intel.ReporterID(ic.ReporterSaltPath)
+	if err != nil {
+		// Without a stable identifier the observations would be unattributed
+		// and could never corroborate, so sending them anyway would add volume
+		// without adding evidence.
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("reporter identity unavailable: %v", err),
+			"no observations were contributed; this scan added nothing to the "+
+				"intelligence network, and nothing left this environment")
+		return
+	}
+
+	obs := intel.Derive(fs, intel.DeriveOptions{
+		ReporterID:  reporterID,
+		ObservedAt:  time.Now().UTC().Format(time.RFC3339),
+		ToolVersion: opts.ToolVersion,
+	})
+	if len(obs) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	res := intel.NewClient(ic.Endpoint, intelHTTPClient()).Contribute(ctx, obs)
+	if res.FirstError != nil {
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("%d of %d observations were not accepted: %v",
+				res.Rejected, res.Submitted, res.FirstError),
+			"this scan contributed less than it intended; the scan's own findings "+
+				"are unaffected")
+	}
+}
+
 // intelHTTPClient returns the client used for vulnerability lookups. The
 // timeout matches the analyzer's own default; a lookup that hangs is a scan
 // that hangs.

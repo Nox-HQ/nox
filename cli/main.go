@@ -219,6 +219,8 @@ func run(args []string) int {
 		return runRegistry(remaining[1:])
 	case "plugin":
 		return runPlugin(remaining[1:])
+	case "intel":
+		return runIntel(remaining[1:])
 	case "cache":
 		return runCache(remaining[1:])
 	case "baseline":
@@ -514,6 +516,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 		result, err = nox.RunHistoryScan(target, &historyOpts)
 	default:
+		// The only place a scan is permitted to contribute. Every other caller
+		// of RunScanWithOptions — diff, preview, bench — derives nothing and
+		// sends nothing.
+		opts.ContributeObservations = true
+		opts.ToolVersion = version
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
 	if err != nil {

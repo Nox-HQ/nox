@@ -407,6 +407,11 @@ type IntelligenceConfig struct {
 	// "contribute: false" would be a lie for anyone with an endpoint set.
 	// Querying and contributing are two decisions, and both are off by default.
 	Contribute bool `yaml:"contribute"`
+
+	// ReporterSaltPath overrides where the private reporter salt is kept.
+	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the
+	// machine; only an HMAC derived from it does.
+	ReporterSaltPath string `yaml:"reporter_salt_path"`
 }
 
 // VerificationEnabled reports whether lookups are checked against OSV,
