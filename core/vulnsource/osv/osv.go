@@ -57,22 +57,37 @@ type BatchResult struct {
 	Vulns []vulnsource.Record `json:"vulns"`
 }
 
-// Source queries OSV.dev for known vulnerabilities.
+// Source queries an OSV-wire-protocol endpoint for known vulnerabilities.
 type Source struct {
+	name    string
 	baseURL string
 	client  *http.Client
 	deg     *degrade.Degradations
 }
 
-// New returns a Source querying baseURL through client. deg may be nil, in
-// which case degradation records are discarded — library callers that supply no
-// collector behave exactly as they did before.
+// New returns a Source querying baseURL through client, named "osv.dev". deg
+// may be nil, in which case degradation records are discarded — library callers
+// that supply no collector behave exactly as they did before.
 func New(baseURL string, client *http.Client, deg *degrade.Degradations) *Source {
-	return &Source{baseURL: baseURL, client: client, deg: deg}
+	return NewNamed("osv.dev", baseURL, client, deg)
+}
+
+// NewNamed returns a Source under a caller-chosen name.
+//
+// The OSV wire protocol is spoken by more than OSV.dev — a NOX Intelligence
+// endpoint serves it as its baseline surface — so the implementation is shared
+// while the identity is not. Without this, a degradation comparing two such
+// sources reads "osv.dev withheld a record published by osv.dev", which names
+// neither the source at fault nor the one that caught it.
+func NewNamed(name, baseURL string, client *http.Client, deg *degrade.Degradations) *Source {
+	if name == "" {
+		name = "osv.dev"
+	}
+	return &Source{name: name, baseURL: baseURL, client: client, deg: deg}
 }
 
 // Name identifies this source in degradation records and provenance.
-func (s *Source) Name() string { return "osv.dev" }
+func (s *Source) Name() string { return s.name }
 
 // Lookup queries the OSV.dev batch API for vulnerabilities affecting qs. It
 // batches requests in groups of batchLimit and returns a map from the caller's

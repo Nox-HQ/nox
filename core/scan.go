@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,6 +41,8 @@ import (
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	"github.com/nox-hq/nox/core/vex"
+	"github.com/nox-hq/nox/core/vulnsource"
+	osvsource "github.com/nox-hq/nox/core/vulnsource/osv"
 )
 
 func filterArtifactsByType(artifacts []discovery.Artifact, excludeTypes []string) []discovery.Artifact {
@@ -267,8 +270,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// rather than a silently-empty (or all-tools-defaulted) matrix.
 	aiAnalyzer := ai.NewAnalyzer(ai.WithDegradations(degradations))
 
+	// Whether dependency scanning may reach the network at all. Named once and
+	// used by both the disable switch and the intelligence wiring below, so the
+	// two cannot drift into disagreeing about what "offline" means.
+	vulnLookupEnabled := !opts.Offline && !opts.DisableOSV && !cfg.Scan.OSV.Disabled
+
 	depsOpts := []deps.AnalyzerOption{deps.WithDegradations(degradations)}
-	if opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled {
+	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
 	// Wire the project's license policy through. Without this, license.deny /
@@ -280,6 +288,28 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			Allow: cfg.License.Allow,
 		}))
 	}
+	// An intelligence endpoint replaces OSV.dev as the source dependency
+	// scanning asks. It is off unless configured, so the default path is
+	// unchanged.
+	//
+	// When verification is on (the default), the intelligence source is checked
+	// against OSV on every lookup and any record it withheld is restored from
+	// OSV and reported as a degradation. That is what keeps "superset" a
+	// property rather than a promise: a source that starts dropping advisories
+	// costs its operator trust, immediately and visibly, but never costs the
+	// scan a finding.
+	if endpoint := cfg.Scan.Intelligence.Endpoint; endpoint != "" && vulnLookupEnabled {
+		intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), degradations)
+
+		var src vulnsource.Source = intel
+		if cfg.Scan.Intelligence.VerificationEnabled() {
+			src = vulnsource.NewVerifying(intel, func(refDeg *degrade.Degradations) vulnsource.Source {
+				return osvsource.New(osvsource.DefaultBaseURL, intelHTTPClient(), refDeg)
+			}, degradations)
+		}
+		depsOpts = append(depsOpts, deps.WithSource(src))
+	}
+
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
 	// The SLOP analyzer gains a predictive dimension only when a feed is
 	// configured (default: off, exact reactive behavior preserved). Loading is
@@ -763,6 +793,13 @@ func parseFeedRefresh(s string) (time.Duration, error) {
 // nox cannot parse, and a key nox parses and then ignores. Either way the
 // policy they wrote is not the policy in force. Only the first used to be
 // reported, and only by the CLI.
+// intelHTTPClient returns the client used for vulnerability lookups. The
+// timeout matches the analyzer's own default; a lookup that hangs is a scan
+// that hangs.
+func intelHTTPClient() *http.Client {
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
 func recordConfigDegradations(deg *degrade.Degradations, target string) {
 	if unknown := UnknownConfigKeys(target); len(unknown) > 0 {
 		deg.Add(degrade.Config,
