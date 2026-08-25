@@ -168,6 +168,9 @@ func (r *Record) AffectedIntervals(pkgName, wireEcosystem string) []Interval {
 	return out
 }
 
+// Retracted reports whether the source database has withdrawn the advisory.
+func (r *Record) Retracted() bool { return r.Withdrawn != "" }
+
 // Affects reports whether the advisory covers pkgName at the given version.
 //
 // This is what a source holding a local corpus must answer, and what a source
@@ -175,6 +178,10 @@ func (r *Record) AffectedIntervals(pkgName, wireEcosystem string) []Interval {
 // package version is vulnerable according to one and clean according to the
 // other.
 func (r *Record) Affects(pkgName, wireEcosystem, version string) bool {
+	// A withdrawn advisory affects nothing, whatever its ranges still say.
+	if r.Retracted() {
+		return false
+	}
 	for _, iv := range r.AffectedIntervals(pkgName, wireEcosystem) {
 		if iv.Covers(version) {
 			return true

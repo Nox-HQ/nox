@@ -325,6 +325,9 @@ func applyVulnDetails(vulns []vulnsource.Record, details map[string]vulnsource.R
 		if detail.Modified != "" {
 			vulns[i].Modified = detail.Modified
 		}
+		if detail.Withdrawn != "" {
+			vulns[i].Withdrawn = detail.Withdrawn
+		}
 		if detail.Summary != "" {
 			vulns[i].Summary = detail.Summary
 		}

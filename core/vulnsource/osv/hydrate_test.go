@@ -114,6 +114,7 @@ func TestApplyVulnDetails_CopiesEveryField(t *testing.T) {
 	detail := vulnsource.Record{
 		ID:               "GHSA-x",
 		Modified:         "2026-08-01T00:00:00Z",
+		Withdrawn:        "2026-08-02T00:00:00Z",
 		Summary:          "a summary",
 		Severity:         []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
 		Aliases:          []string{"CVE-2024-0001"},

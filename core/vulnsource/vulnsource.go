@@ -57,6 +57,16 @@ type Record struct {
 	// anything.
 	Modified string `json:"modified,omitempty"`
 
+	// Withdrawn is set when the source database has retracted the advisory,
+	// as an RFC3339 timestamp. A withdrawn advisory is not a vulnerability.
+	//
+	// OSV's query API excludes these; its bulk export does not. A mirror built
+	// from the export therefore has to filter them itself, and a mirror that
+	// forgets adds false positives to every scan — which is how this field came
+	// to exist: two withdrawn npm advisories surfaced as mirror-only drift on
+	// the first production sync.
+	Withdrawn string `json:"withdrawn,omitempty"`
+
 	Summary  string     `json:"summary"`
 	Details  string     `json:"details"`
 	Aliases  []string   `json:"aliases"`
