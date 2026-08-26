@@ -201,6 +201,11 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 				label = bin.path
 			}
 			fmt.Fprintf(os.Stderr, "[plugin warn] %s: not registered for post-scan: %v\n", label, regErr)
+			result.Degradations = append(result.Degradations, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q was not registered for post-scan: %v", label, regErr),
+				Impact: "enrichments this plugin would have added are missing from these findings",
+			})
 			continue
 		}
 		registered++
@@ -212,10 +217,51 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	if invErr := host.InvokePostScan(ctx, result, absTarget); invErr != nil {
 		return fmt.Errorf("post-scan plugins: %w", invErr)
 	}
-	for _, d := range host.Diagnostics() {
+	// Same reasoning as the scan phase: an enrichment that never ran is absent
+	// from the findings, and absence has to be reported somewhere a gate can
+	// see it. A post-scan plugin is where reachability annotations come from,
+	// so its silent failure downgrades a finding's context without changing
+	// the finding — the hardest kind of gap to notice by reading output.
+	postDiags := host.Diagnostics()
+	for _, d := range postDiags {
 		fmt.Fprintf(os.Stderr, "[plugin %s] %s: %s\n", d.Severity, d.Source, d.Message)
 	}
+	result.Degradations = append(result.Degradations, errorDegradations(postDiags, "post-scan ",
+		"enrichments this plugin would have added are missing from these findings")...)
 	return nil
+}
+
+// errorDegradations converts the host's error-severity diagnostics into
+// degradations.
+//
+// A plugin that fails to INVOKE has the identical consequence to one that was
+// never installed or failed to register — its findings are absent — but only
+// the latter two produced a degradation. The invocation failure printed one
+// line to stderr above a green verdict: not in [degraded], not in the findings
+// JSON, not on the MCP or LSP surfaces, and invisible to --fail-on-degraded,
+// whose help text promises to "exit non-zero if any check could not complete".
+//
+// That gap let a repository run `nox scan . -severity-threshold high` as the
+// security step of its push gate, with the plugin named in plugins.required,
+// and be told pass for as long as the plugin had been broken (#479).
+//
+// The scan still succeeds and still exits 0 by default. Running the plugins
+// that worked is the right behaviour, and promoting a partial run to a hard
+// failure is the operator's call via --fail-on-degraded. What changes is that
+// the choice is theirs to make, because the fact now reaches every surface.
+func errorDegradations(diags []plugin.Diagnostic, phase, impact string) []core.Degradation {
+	var out []core.Degradation
+	for _, d := range diags {
+		if !strings.EqualFold(d.Severity, "error") {
+			continue
+		}
+		out = append(out, core.Degradation{
+			Kind:   degrade.Plugin,
+			Detail: fmt.Sprintf("required %splugin %q failed to run: %s", phase, d.Source, d.Message),
+			Impact: impact,
+		})
+	}
+	return out
 }
 
 // pluginScanInput builds the input map sent to every plugin's `scan` tool.
@@ -390,11 +436,34 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		}
 	}
 
-	// Surface plugin diagnostics (timeouts, partial failures) to stderr so a
-	// silently-empty plugin run is visible without failing the scan.
-	for _, d := range host.Diagnostics() {
+	// Surface plugin diagnostics to stderr, and record the error-severity ones
+	// as degradations.
+	//
+	// stderr alone was not enough. A required plugin that fails to INVOKE has
+	// the same consequence as one that fails to register or was never
+	// installed — its findings are absent — but only the latter two produced a
+	// degradation. The invocation failure printed one line above a green
+	// verdict, did not appear in [degraded], did not reach the findings JSON,
+	// the MCP surface or the LSP, and was invisible to --fail-on-degraded,
+	// whose help text promises to "exit non-zero if any check could not
+	// complete".
+	//
+	// That gap let kraftsport-coach run `nox scan . -severity-threshold high`
+	// as the security step of its push gate, with nox/taint-analysis named in
+	// plugins.required, and be told pass for as long as the plugin had been
+	// broken (#479).
+	//
+	// The scan still succeeds and still exits 0 by default: running the
+	// plugins that worked is the right behaviour, and turning a partial run
+	// into a hard failure is the operator's call via --fail-on-degraded. What
+	// changes is that the choice is now theirs to make, because the fact
+	// reaches every surface instead of scrolling past on stderr.
+	diags := host.Diagnostics()
+	for _, d := range diags {
 		fmt.Fprintf(os.Stderr, "[plugin %s] %s: %s\n", d.Severity, d.Source, d.Message)
 	}
+	out.Degradations = append(out.Degradations, errorDegradations(diags, "",
+		"findings this plugin would have produced are missing from this scan; other plugins still ran")...)
 
 	return out, nil
 }
