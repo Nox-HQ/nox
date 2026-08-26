@@ -336,3 +336,89 @@ func TestPlugin_InvokeTool_WithStructInput(t *testing.T) {
 		t.Errorf("count = %v, want 5", fields["count"].GetNumberValue())
 	}
 }
+
+// TestBuildInvokeRequest_NormalizesTypesStructpbRejects is the backstop for a
+// failure that was silent, total, and caused by one line in a caller.
+//
+// structpb.NewStruct converts the whole map or none of it. A []string in any
+// value therefore did not drop that value — it failed the request, so the
+// plugin never ran, the host recorded a diagnostic, and the scan reported
+// pass. Twelve of twenty installed plugins died that way on every workspace
+// with scan.exclude configured.
+func TestBuildInvokeRequest_NormalizesTypesStructpbRejects(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input map[string]any
+		check func(*testing.T, *structpb.Struct)
+	}{
+		{
+			name:  "string slice",
+			input: map[string]any{"exclude": []string{"**/go.sum", "dist/"}},
+			check: func(t *testing.T, s *structpb.Struct) {
+				got := s.Fields["exclude"].GetListValue().GetValues()
+				if len(got) != 2 || got[0].GetStringValue() != "**/go.sum" {
+					t.Errorf("exclude = %v, want the patterns intact and in order", got)
+				}
+			},
+		},
+		{
+			name:  "string map",
+			input: map[string]any{"env": map[string]string{"MODE": "strict"}},
+			check: func(t *testing.T, s *structpb.Struct) {
+				if got := s.Fields["env"].GetStructValue().Fields["MODE"].GetStringValue(); got != "strict" {
+					t.Errorf("env.MODE = %q, want strict", got)
+				}
+			},
+		},
+		{
+			name:  "nested slice inside slice",
+			input: map[string]any{"pairs": [][]string{{"a", "b"}}},
+			check: func(t *testing.T, s *structpb.Struct) {
+				outer := s.Fields["pairs"].GetListValue().GetValues()
+				if len(outer) != 1 || len(outer[0].GetListValue().GetValues()) != 2 {
+					t.Errorf("pairs = %v, want one inner list of two", outer)
+				}
+			},
+		},
+		{
+			name:  "int slice",
+			input: map[string]any{"ports": []int{8080, 9090}},
+			check: func(t *testing.T, s *structpb.Struct) {
+				if got := s.Fields["ports"].GetListValue().GetValues(); len(got) != 2 {
+					t.Errorf("ports = %v, want two", got)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := buildInvokeRequest("scan", tc.input, "/ws")
+			if err != nil {
+				t.Fatalf("buildInvokeRequest: %v — a request that cannot be built is a plugin "+
+					"that never runs, and the scan reports pass anyway", err)
+			}
+			tc.check(t, req.Input)
+		})
+	}
+}
+
+// []byte must NOT become a list: structpb encodes it as a base64 string, and
+// normalizing it would silently change the wire form a plugin receives.
+func TestBuildInvokeRequest_PreservesByteSlices(t *testing.T) {
+	req, err := buildInvokeRequest("scan", map[string]any{"blob": []byte("hi")}, "/ws")
+	if err != nil {
+		t.Fatalf("buildInvokeRequest: %v", err)
+	}
+	if got := req.Input.Fields["blob"].GetStringValue(); got == "" {
+		t.Errorf("blob = %v, want a base64 string as structpb encodes []byte",
+			req.Input.Fields["blob"].AsInterface())
+	}
+}
+
+// A value structpb genuinely cannot represent must still fail. Normalizing is
+// for types that mean the same thing in a different shape, not for smuggling
+// through mistakes.
+func TestBuildInvokeRequest_StillRejectsUnrepresentable(t *testing.T) {
+	if _, err := buildInvokeRequest("scan", map[string]any{"ch": make(chan int)}, "/ws"); err == nil {
+		t.Fatal("a channel converted successfully; unrepresentable values must stay loud")
+	}
+}
