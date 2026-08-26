@@ -104,11 +104,38 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		// skipped. Silently continuing here meant a CI job listing a security
 		// plugin, failing to install it, and exiting 0 with a clean report —
 		// even under --fail-on-degraded, whose help text promises otherwise.
+		// A required entry may carry a version constraint — `nox/foo@^0.2.0` —
+		// because that is the syntax `nox plugin install` documents and
+		// accepts (README: `nox plugin install nox/reachability@0.5.0`).
+		// This lookup matches the whole string as an exact name, so such an
+		// entry can never resolve, and nox reported
+		// `required plugin "nox/triage-agent@^0.2.0" is not installed` while
+		// nox/triage-agent 0.2.2 sat in the state file. Three repositories in
+		// this fleet had written a reasonable constraint and had that plugin
+		// silently never run.
+		//
+		// The message now says what is actually wrong. Matching on the bare
+		// name instead would be worse than the bug: a repository pinning
+		// @0.5.0 would silently get whatever is installed, which is the one
+		// outcome a version pin exists to prevent. Honouring the constraint
+		// needs semver comparison, and nox has no semver dependency — adding
+		// one to a security tool is a call for its maintainers, not something
+		// to slip into a bugfix.
+		lookupName, constraint := parseNameVersion(name)
 		ip := st.FindPlugin(name)
 		if ip == nil {
+			detail := fmt.Sprintf("required plugin %q is not installed", name)
+			if constraint != "*" {
+				if installed := st.FindPlugin(lookupName); installed != nil {
+					detail = fmt.Sprintf("required plugin %q did not resolve: version constraints are "+
+						"not supported in plugins.required, and %q (version %s) is installed — "+
+						"drop the %q suffix to use it",
+						name, lookupName, installed.Version, "@"+constraint)
+				}
+			}
 			missing = append(missing, core.Degradation{
 				Kind:   degrade.Plugin,
-				Detail: fmt.Sprintf("required plugin %q is not installed", name),
+				Detail: detail,
 				Impact: "findings this plugin would have produced are missing from this scan",
 			})
 			continue
