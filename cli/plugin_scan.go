@@ -226,7 +226,22 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 func pluginScanInput(target, absTarget string) map[string]any {
 	input := map[string]any{"workspace_root": absTarget}
 	if excl := scanExcludePatterns(target); len(excl) > 0 {
-		input["exclude"] = excl
+		// []any, not []string. structpb.NewStruct accepts []any and rejects
+		// []string outright, and it converts the WHOLE input map or none of
+		// it — so one wrongly-typed value does not degrade that value, it
+		// fails the request and the plugin never runs.
+		//
+		// The blast radius was every scan-tool plugin in any workspace whose
+		// .nox.yaml set scan.exclude, which is the ordinary case: excluding
+		// lockfiles is the first thing most repos do. The plugin error was
+		// recorded as a diagnostic and the scan still reported pass, so a
+		// repository could declare a plugin in plugins.required and have it
+		// silently contribute nothing for as long as the exclusions existed.
+		vals := make([]any, len(excl))
+		for i, p := range excl {
+			vals[i] = p
+		}
+		input["exclude"] = vals
 	}
 	return input
 }
