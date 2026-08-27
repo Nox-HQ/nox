@@ -45,6 +45,22 @@ func parseVersion(s string) (parsedVersion, error) {
 	return parsedVersion{out[0], out[1], out[2]}, nil
 }
 
+// padVersion fills a partial MAJOR or MAJOR.MINOR out to MAJOR.MINOR.PATCH.
+// Anything else is returned untouched, so parseVersion still rejects it.
+func padVersion(s string) string {
+	bare := strings.TrimSpace(s)
+	switch strings.Count(bare, ".") {
+	case 0:
+		if bare == "" {
+			return s
+		}
+		return bare + ".0.0"
+	case 1:
+		return bare + ".0"
+	}
+	return s
+}
+
 // compare returns -1, 0 or 1.
 func (v parsedVersion) compare(o parsedVersion) int {
 	for _, pair := range [][2]int{{v.major, o.major}, {v.minor, o.minor}, {v.patch, o.patch}} {
@@ -95,6 +111,16 @@ func constraintSatisfied(constraint, installed string) (bool, error) {
 			op, rest = prefix, strings.TrimPrefix(c, prefix)
 			break
 		}
+	}
+
+	// An operator may carry a partial version: the README documents
+	// `nox/reachability@>=0.5`, and ">=0.5", "^0.5" and "~0.5" each mean the
+	// same as their ".0" form under npm and cargo alike. Filling the missing
+	// component is therefore reading the operator's intent, not guessing at
+	// it. A *bare* partial ("0.5") stays rejected, because there it is
+	// genuinely ambiguous — exactly 0.5.0, or anything in 0.5.x?
+	if op != "" {
+		rest = padVersion(rest)
 	}
 
 	want, err := parseVersion(rest)

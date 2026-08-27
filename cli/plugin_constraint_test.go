@@ -39,11 +39,14 @@ func TestConstraintSatisfied(t *testing.T) {
 		{"^0.2.0", "0.2.99", true, false},
 		{"^0.2.0", "0.3.0", false, false},
 		{"^0.2.0", "0.9.9", false, false},
-		// 0.0.x has no non-zero component above the patch, so "^" is exact
-		// there. 0.0.4 is the case that tells that branch apart from the
-		// 0.x-minor one above.
+		// npm and cargo tighten ^0.0.z to an exact match; this deliberately
+		// does not, because no plugin in the registry is 0.0.x and the strict
+		// reading would leave "^" unwritable for one that was. Pinned here so
+		// the deviation is a decision with a test behind it rather than an
+		// oversight — if the registry ever ships an 0.0.x plugin, this is the
+		// case to revisit.
 		{"^0.0.3", "0.0.3", true, false},
-		{"^0.0.3", "0.0.4", false, false},
+		{"^0.0.3", "0.0.4", true, false},
 		{"^0.0.3", "0.1.0", false, false},
 
 		// Tilde: same major AND minor, not older.
@@ -65,9 +68,11 @@ func TestConstraintSatisfied(t *testing.T) {
 		// version is pinned and it is not.
 		{"<1.0.0", "0.2.2", false, true},
 		{">0.2.0", "0.2.2", false, true},
-		{"0.2", "0.2.2", false, true},
-		{"^0.2", "0.2.2", false, true},
 		{"latest", "0.2.2", false, true},
+		// A *bare* partial stays an error — "0.2" could mean exactly 0.2.0 or
+		// any 0.2.x. An operator form disambiguates it and is accepted; see
+		// TestConstraintSatisfied_PartialVersions.
+		{"0.2", "0.2.2", false, true},
 	} {
 		got, err := constraintSatisfied(tc.constraint, tc.installed)
 		if (err != nil) != tc.wantErr {
@@ -119,6 +124,37 @@ func TestParsedVersionCompare(t *testing.T) {
 	} {
 		if got := mk(tc.a).compare(mk(tc.b)); got != tc.want {
 			t.Errorf("compare(%s, %s) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// The README documents `nox/reachability@>=0.5`. An operator form may carry a
+// partial version; a bare one stays ambiguous and so stays rejected.
+func TestConstraintSatisfied_PartialVersions(t *testing.T) {
+	for _, tc := range []struct {
+		constraint, installed string
+		want, wantErr         bool
+	}{
+		{">=0.5", "0.5.2", true, false},
+		{">=0.5", "0.4.9", false, false},
+		{">=1", "1.0.0", true, false},
+		{"^0.5", "0.5.9", true, false},
+		{"^0.5", "0.6.0", false, false},
+		{"~0.5", "0.5.9", true, false},
+		{"~0.5", "0.6.0", false, false},
+
+		// Bare partials remain unsupported: 0.5 could mean 0.5.0 exactly or
+		// any 0.5.x, and picking one silently would be a guess.
+		{"0.5", "0.5.2", false, true},
+		{"1", "1.0.0", false, true},
+	} {
+		got, err := constraintSatisfied(tc.constraint, tc.installed)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("constraintSatisfied(%q, %q) err = %v, wantErr %v", tc.constraint, tc.installed, err, tc.wantErr)
+			continue
+		}
+		if err == nil && got != tc.want {
+			t.Errorf("constraintSatisfied(%q, %q) = %v, want %v", tc.constraint, tc.installed, got, tc.want)
 		}
 	}
 }
