@@ -462,9 +462,28 @@ func (fs *FindingSet) SuppressDuplicateVulnClass(suppressRulePrefix string) {
 	fs.items = kept
 }
 
-// SortDeterministic orders findings by RuleID, then FilePath, then StartLine.
-// This guarantees stable, reproducible output regardless of the order in which
-// analyzers emit their results.
+// SortDeterministic orders findings by RuleID, then FilePath, then StartLine,
+// then Fingerprint. This guarantees stable, reproducible output regardless of
+// the order in which analyzers emit their results.
+//
+// Fingerprint is the tiebreak and is not optional. RuleID/FilePath/StartLine is
+// not a total order: every dependency vulnerability in one lockfile shares a
+// rule, a path, and line 1, so a lockfile with 114 VULN-001 findings had 114
+// findings tied on all three. Their relative order then came from whatever
+// order the analyzer happened to emit them in — which, for dependency
+// scanning, is Go map iteration, deliberately randomised. Two scans of
+// identical inputs produced identically-sized but differently-ordered
+// findings.json.
+//
+// That breaks nox's first stated constraint, that same inputs produce same
+// outputs, and it breaks every consumer that compares two scans rather than
+// reading one: nox diff, baseline drift, and any before/after comparison see
+// pure reordering as change.
+//
+// Fingerprint is content-derived and assigned in Add, so it is populated for
+// every finding by the time any sort runs, and it is unique per finding — which
+// is what makes the ordering total rather than merely longer. preferFlowFinding
+// already breaks its ties this way, for the same reason.
 func (fs *FindingSet) SortDeterministic() {
 	sort.Slice(fs.items, func(i, j int) bool {
 		a, b := fs.items[i], fs.items[j]
@@ -474,7 +493,10 @@ func (fs *FindingSet) SortDeterministic() {
 		if a.Location.FilePath != b.Location.FilePath {
 			return a.Location.FilePath < b.Location.FilePath
 		}
-		return a.Location.StartLine < b.Location.StartLine
+		if a.Location.StartLine != b.Location.StartLine {
+			return a.Location.StartLine < b.Location.StartLine
+		}
+		return a.Fingerprint < b.Fingerprint
 	})
 }
 

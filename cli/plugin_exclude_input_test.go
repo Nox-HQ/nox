@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // A plugin walks the workspace itself, so the exclusions the operator wrote
@@ -72,13 +74,46 @@ func TestPluginScanInputCarriesTheExclusions(t *testing.T) {
 	if input["workspace_root"] != dir {
 		t.Errorf("workspace_root = %v, want %s", input["workspace_root"], dir)
 	}
-	excl, ok := input["exclude"].([]string)
+	// []any, not []string. This assertion used to read []string, which is the
+	// type the code produced and the one type that cannot survive the trip:
+	// the input crosses to the plugin as a structpb.Struct, and
+	// structpb.NewStruct rejects []string. Because it converts the whole map
+	// or none of it, the wrong type here did not drop the exclusions — it
+	// failed the InvokeTool request outright, so every scan-tool plugin in a
+	// workspace with scan.exclude never ran at all.
+	//
+	// The test still passed throughout. It proved the patterns were READ and
+	// PLACED IN THE MAP, which is what #455 was about, and stopped one step
+	// short of the thing that actually carries them.
+	excl, ok := input["exclude"].([]any)
 	if !ok {
 		t.Fatalf("the plugin input carries no exclude patterns (%T); a plugin walking the tree "+
 			"cannot honour exclusions it is never sent", input["exclude"])
 	}
 	if len(excl) != 1 || excl[0] != "web/node_modules/**" {
 		t.Errorf("plugin input exclude = %v, want the configured pattern", excl)
+	}
+}
+
+// TestPluginScanInputConvertsToStructpb is the assertion the wiring guard above
+// was missing. "Read but never sent" was #455; this is "sent but never
+// convertible", which looks identical from inside the process and identical in
+// the scan output — the invocation error is a diagnostic, and the scan still
+// reports pass and exits 0.
+//
+// Asserting on the conversion rather than the Go type is the point. []string
+// reads as entirely reasonable; only structpb disagrees, so only structpb can
+// be trusted to notice.
+func TestPluginScanInputConvertsToStructpb(t *testing.T) {
+	dir := t.TempDir()
+	const config = "scan:\n  exclude:\n    - \"**/go.sum\"\n    - \"web/pnpm-lock.yaml\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
+	if _, err := structpb.NewStruct(pluginScanInput(dir, dir)); err != nil {
+		t.Fatalf("the plugin input must convert to structpb, got %v — a plugin that cannot be "+
+			"sent its input never runs, and the scan reports pass regardless", err)
 	}
 }
 
