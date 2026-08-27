@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-08-27
+
+Plugins that were configured, required, and silently not running.
+
 ### Fixed
 
 - **Plugins did not run in any workspace that configured `scan.exclude`.**
@@ -2836,7 +2840,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.30.1...HEAD
+[1.30.1]: https://github.com/nox-hq/nox/compare/v1.30.0...v1.30.1
 [1.26.0]: https://github.com/nox-hq/nox/compare/v1.25.2...v1.26.0
 [1.25.2]: https://github.com/nox-hq/nox/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/nox-hq/nox/compare/v1.25.0...v1.25.1
