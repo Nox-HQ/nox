@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core"
-	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
 )

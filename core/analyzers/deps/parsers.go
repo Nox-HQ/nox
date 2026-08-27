@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nox-hq/nox/core/vulnsource"
+	"github.com/nox-hq/nox-core/vulnsource"
 )
 
 // parseGoMod extracts the module versions a Go build actually selects, from

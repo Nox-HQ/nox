@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // resultSchemaVersion identifies the attack-result document format.

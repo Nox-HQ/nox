@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/findings"
 )
 

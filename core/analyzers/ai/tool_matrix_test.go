@@ -3,7 +3,7 @@ package ai
 import (
 	"testing"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
 )
 
 // TestExtractMCPToolPermissions_MalformedDegrades proves a mcp.json that does

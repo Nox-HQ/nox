@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // suiteSchemaVersion identifies the regression-suite document format.

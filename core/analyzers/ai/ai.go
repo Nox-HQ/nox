@@ -14,7 +14,7 @@ import (
 
 	"github.com/nox-hq/nox/core/source"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"

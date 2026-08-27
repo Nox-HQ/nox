@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // End-to-end tests over a REAL http.Server, driven through the REAL HTTPTarget.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 func confirmedRun(t *testing.T) (*Result, RunConfig, *CanarySet) {

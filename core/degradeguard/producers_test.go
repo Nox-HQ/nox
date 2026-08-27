@@ -1,7 +1,8 @@
-package degrade_test
+package degradeguard_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,13 +25,24 @@ func TestEveryKindHasAProducer(t *testing.T) {
 	t.Parallel()
 
 	root := repoRoot(t)
-	kinds := declaredKinds(t, filepath.Join(root, "core", "degrade", "degrade.go"))
+	// The Kinds are declared in github.com/nox-hq/nox-core now, so the list is
+	// read from the module cache. The producers are still nox's own, so the
+	// scan below still walks this repository: the property being guarded is
+	// that every Kind nox can name is one nox actually emits, and moving the
+	// declaration out did not move that obligation.
+	kinds := declaredKinds(t, filepath.Join(kernelDir(t), "degrade", "degrade.go"))
 	if len(kinds) == 0 {
 		t.Fatal("no Kind constants found; this test's parsing is stale")
 	}
 
+	// Both trees are scanned. The Kinds are declared once and emitted from two
+	// codebases now: nox's analyzers produce most of them, while OSV,
+	// IntelUnverified and IntelSuppression are produced by the vulnerability
+	// source that moved into the kernel. Scanning only this repository would
+	// report those three as dead constants, which is a fact about where the
+	// code lives rather than about whether anything emits them.
 	emitted := make(map[string]bool)
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	walk := func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
@@ -49,7 +61,13 @@ func TestEveryKindHasAProducer(t *testing.T) {
 			}
 		}
 		return nil
-	})
+	}
+	var err error
+	for _, tree := range []string{root, kernelDir(t)} {
+		if walkErr := filepath.WalkDir(tree, walk); walkErr != nil {
+			err = walkErr
+		}
+	}
 	if err != nil {
 		t.Fatalf("walking repo: %v", err)
 	}
@@ -105,4 +123,21 @@ func repoRoot(t *testing.T) string {
 	}
 	t.Fatal("could not locate repo root")
 	return ""
+}
+
+// kernelDir locates the nox-core checkout the build is actually using, rather
+// than guessing at a path. Asking the toolchain means this keeps working across
+// version bumps and on any machine.
+func kernelDir(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}",
+		"github.com/nox-hq/nox-core").Output()
+	if err != nil {
+		t.Fatalf("locating nox-core: %v", err)
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		t.Fatal("nox-core module directory is empty")
+	}
+	return dir
 }

@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/mcppin"

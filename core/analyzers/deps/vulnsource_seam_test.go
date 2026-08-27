@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/vulnsource"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
-	"github.com/nox-hq/nox/core/vulnsource"
 )
 
 // stubSource is a vulnsource.Source that answers from a fixture, so a test can

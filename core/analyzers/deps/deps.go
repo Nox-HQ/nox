@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/vulnsource"
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
-	"github.com/nox-hq/nox/core/vulnsource"
-	osvsource "github.com/nox-hq/nox/core/vulnsource/osv"
 )
 
 // redundantLockfiles names files that carry no dependency information nox
