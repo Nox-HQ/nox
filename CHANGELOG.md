@@ -45,14 +45,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Only error-severity diagnostics are promoted — a plugin that skips a
   vendored file and says so is working as intended.
 
-- **A version constraint in `plugins.required` reported "is not installed"**
-  for a plugin that was installed. `nox plugin install nox/foo@0.5.0` is
-  accepted syntax; the same string in `.nox.yaml` is matched as a whole name,
-  so it can never resolve. The message now names the installed plugin, its
-  version, and what to do. The behaviour is unchanged on purpose — matching
-  the bare name would silently give a repository a version its pin excluded,
-  which is the outcome a pin exists to prevent. Whether constraints should be
-  honoured is tracked separately.
+### Added
+
+- **`plugins.required` honours version constraints.** `*`, `1.2.3`,
+  `>=1.2.3`, `^1.2.3` and `~1.2.3`. `nox plugin install nox/foo@0.5.0` was
+  already accepted syntax, so operators wrote the same thing in `.nox.yaml`;
+  the whole string was matched as a plugin name, so it could never resolve
+  and nox reported "is not installed" for a plugin that was installed — with
+  the effect that the plugin silently never ran.
+
+  The constraint is enforced, not merely parsed: matching the name and
+  ignoring the version would hand a repository whatever happens to be
+  installed, which is the outcome a pin exists to prevent. An unsatisfied
+  constraint degrades and names the version actually installed, unsupported
+  grammar is an error rather than a silent pass, and a version that cannot be
+  compared at all — a locally built plugin recording `dev` — says so instead
+  of guessing.
+
+  Below 1.0.0 the minor is the breaking axis, so `^0.2.0` admits 0.2.9 and
+  not 0.3.0. Every plugin in the registry is currently 0.x, so the looser
+  reading would have made the caret mean "any version" for all of them.
+
+  Implemented without a semver dependency: nox is a security scanner, and a
+  twelfth direct dependency to compare three integers is the worse trade.
 
 ## [1.30.0] - 2026-08-24
 
