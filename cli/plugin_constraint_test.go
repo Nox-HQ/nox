@@ -21,13 +21,30 @@ func TestConstraintSatisfied(t *testing.T) {
 		{"v0.2.2", "0.2.2", true, false},
 		{"0.2.2", "v0.2.2", true, false},
 
-		// Caret: same major, not older. The case that started this.
+		// Caret: compatible, not older. The case that started this.
 		{"^0.2.0", "0.2.2", true, false},
 		{"^0.2.0", "0.2.0", true, false},
 		{"^0.2.0", "0.1.9", false, false},
 		{"^0.2.0", "1.0.0", false, false},
 		{"^1.2.3", "1.9.9", true, false},
 		{"^1.2.3", "2.0.0", false, false},
+
+		// The 0.x tiers. "^" admits changes that do not alter the left-most
+		// NON-ZERO component, so below 1.0.0 the minor is the breaking axis.
+		// Every plugin in the registry is 0.x, so reading "^" as "same major"
+		// would make it mean "anything" for all of them — an operator writing
+		// ^0.2.0 would silently accept 0.9.9. These are the cases that keep
+		// the constraint worth writing.
+		{"^0.2.0", "0.2.9", true, false},
+		{"^0.2.0", "0.2.99", true, false},
+		{"^0.2.0", "0.3.0", false, false},
+		{"^0.2.0", "0.9.9", false, false},
+		// 0.0.x has no non-zero component above the patch, so "^" is exact
+		// there. 0.0.4 is the case that tells that branch apart from the
+		// 0.x-minor one above.
+		{"^0.0.3", "0.0.3", true, false},
+		{"^0.0.3", "0.0.4", false, false},
+		{"^0.0.3", "0.1.0", false, false},
 
 		// Tilde: same major AND minor, not older.
 		{"~0.2.0", "0.2.9", true, false},

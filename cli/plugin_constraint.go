@@ -61,8 +61,15 @@ func (v parsedVersion) compare(o parsedVersion) int {
 // constraintSatisfied reports whether an installed version satisfies a
 // constraint from `plugins.required`.
 //
-// Supported: "*" (any), "1.2.3" (exact), ">=1.2.3", "^1.2.3" (same major, not
+// Supported: "*" (any), "1.2.3" (exact), ">=1.2.3", "^1.2.3" (compatible, not
 // older), "~1.2.3" (same major and minor, not older).
+//
+// "^" follows the npm/cargo rule that below 1.0.0 the minor is the
+// breaking-change axis, so "^0.2.0" means >=0.2.0 <0.3.0 rather than any
+// 0.x. Every plugin in the registry is currently 0.x, so the looser reading
+// would apply to all of them: an operator writing "^0.2.0" would silently
+// accept 0.9.9, which is the belief-without-enforcement this function exists
+// to prevent.
 //
 // An unsupported constraint is an error, never a silent pass. A constraint
 // nobody enforces is worse than no constraint at all: the operator believes a
@@ -101,7 +108,24 @@ func constraintSatisfied(constraint, installed string) (bool, error) {
 	case ">=":
 		return iv.compare(want) >= 0, nil
 	case "^":
-		return iv.major == want.major && iv.compare(want) >= 0, nil
+		if iv.major != want.major || iv.compare(want) < 0 {
+			return false, nil
+		}
+		// Below 1.0.0 the minor is the breaking axis, so ^1.2.3 admits 1.9.9
+		// while ^0.2.0 admits 0.2.9 and not 0.3.0. (npm and cargo tighten
+		// ^0.0.z to an exact match as well; that tier is left looser here
+		// because no plugin in the registry is 0.0.x, and the strict reading
+		// would make the constraint unwritable for one if there were.)
+		//
+		// This matters more here than it would elsewhere: every plugin in the
+		// registry is currently 0.x, so reading "^" as "same major" would make
+		// it mean "any version at all" for all of them — an operator writing
+		// ^0.2.0 would silently accept 0.9.9, which is the
+		// belief-without-enforcement this function exists to prevent.
+		if want.major == 0 {
+			return iv.minor == want.minor, nil
+		}
+		return true, nil
 	case "~":
 		return iv.major == want.major && iv.minor == want.minor && iv.compare(want) >= 0, nil
 	}
