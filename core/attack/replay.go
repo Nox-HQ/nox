@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // Replay reconstructs the exact winning probe from a persisted trace and re-runs

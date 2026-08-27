@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/attack"
-	"github.com/nox-hq/nox/core/evidence"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 )

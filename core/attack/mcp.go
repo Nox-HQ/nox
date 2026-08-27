@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/catalog"
-	"github.com/nox-hq/nox/core/evidence"
 )
 
 // MCP exploit validation attacks a different surface from the HTTP scenarios,

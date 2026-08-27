@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/attack"
-	"github.com/nox-hq/nox/core/evidence"
 	mcpclient "go.klarlabs.de/mcp/client"
 )
 

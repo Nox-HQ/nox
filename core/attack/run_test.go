@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/findings"
 )
 

@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nox-hq/nox-core/vulnsource"
+	"github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/findings"
-	"github.com/nox-hq/nox/core/vulnsource"
-	"github.com/nox-hq/nox/core/vulnsource/osv"
 )
 
 // The OSV wire protocol — batching, ecosystem filtering, the query-then-hydrate

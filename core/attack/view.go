@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // This file is the single source of truth for how an attack plan is presented,

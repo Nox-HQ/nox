@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/findings"
 )
 

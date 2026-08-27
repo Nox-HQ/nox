@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/catalog"
-	"github.com/nox-hq/nox/core/evidence"
 )
 
 const mcpNow = "2026-08-23T00:00:00Z"

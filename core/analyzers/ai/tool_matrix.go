@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nox-hq/nox/core/degrade"
+	"github.com/nox-hq/nox-core/degrade"
 )
 
 // Connection represents a connection between AI components.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 func TestParseProfile(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 // mcpResultSchemaVersion identifies the MCP attack-result document format.

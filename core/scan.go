@@ -16,6 +16,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/vulnsource"
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
@@ -32,7 +35,6 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
-	"github.com/nox-hq/nox/core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
@@ -42,8 +44,6 @@ import (
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	"github.com/nox-hq/nox/core/vex"
-	"github.com/nox-hq/nox/core/vulnsource"
-	osvsource "github.com/nox-hq/nox/core/vulnsource/osv"
 )
 
 func filterArtifactsByType(artifacts []discovery.Artifact, excludeTypes []string) []discovery.Artifact {

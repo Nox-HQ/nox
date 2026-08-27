@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nox-hq/nox/core/evidence"
+	"github.com/nox-hq/nox-core/evidence"
 )
 
 func TestSuiteFromConfirmedResult(t *testing.T) {
