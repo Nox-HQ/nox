@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -207,9 +208,18 @@ func TestReporterID_StableAndOpaque(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("salt permissions are %v, want 0600 — anything else on the "+
-			"machine could impersonate this reporter", perm)
+	// Windows does not model Unix permission bits: Go's FileMode there drives
+	// only the read-only attribute, so a file written 0600 still reports 0666
+	// and no mode check can express the property. Confidentiality of the salt
+	// on Windows rests on the ACL of the user profile directory holding it,
+	// which is not something os.Stat reports. Asserting anyway would either
+	// fail honest builds or, if relaxed to a mask, quietly weaken the check on
+	// the platforms where it does mean something.
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("salt permissions are %v, want 0600 — anything else on the "+
+				"machine could impersonate this reporter", perm)
+		}
 	}
 }
 
