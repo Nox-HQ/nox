@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -433,12 +434,67 @@ func waitForAddr(ctx context.Context, stdout io.Reader) (string, error) {
 	}
 }
 
+// normalizeForStructpb rewrites values structpb rejects into ones it accepts,
+// without changing what they mean: []T becomes []any and map[string]T becomes
+// map[string]any, recursively.
+//
+// This exists because the failure it prevents is silent and total.
+// structpb.NewStruct converts the whole map or none of it, so one value of an
+// unaccepted type does not degrade that value — it fails the InvokeToolRequest,
+// and the plugin never runs. The scan then records a diagnostic and reports
+// pass. A single `input["exclude"] = []string{...}` in the caller took out 12
+// of 20 installed plugins on every workspace that configured scan.exclude,
+// including nox/sast and nox/taint-analysis, and the only outward sign was one
+// line above a green verdict.
+//
+// Fixing the caller fixes today. Normalizing here means the next caller that
+// writes the obvious Go type cannot reintroduce it. Values structpb genuinely
+// cannot represent — a struct, a channel, a non-string-keyed map — are passed
+// through untouched and still error, because those are real mistakes and
+// should be loud.
+func normalizeForStructpb(v any) any {
+	switch v.(type) {
+	case nil, bool, string, float64, float32,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		[]byte, []any, map[string]any:
+		// Already accepted. []byte is deliberate: structpb encodes it as a
+		// base64 string, and turning it into []any would change the wire form.
+		return v
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]any, rv.Len())
+		for i := range out {
+			out[i] = normalizeForStructpb(rv.Index(i).Interface())
+		}
+		return out
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return v // Not representable; let structpb say so.
+		}
+		out := make(map[string]any, rv.Len())
+		for _, k := range rv.MapKeys() {
+			out[k.String()] = normalizeForStructpb(rv.MapIndex(k).Interface())
+		}
+		return out
+	default:
+		return v
+	}
+}
+
 // buildInvokeRequest constructs an InvokeToolRequest from the given parameters.
 func buildInvokeRequest(toolName string, input map[string]any, workspaceRoot string) (*pluginv1.InvokeToolRequest, error) {
 	var inputStruct *structpb.Struct
 	if input != nil {
+		normalized := make(map[string]any, len(input))
+		for k, v := range input {
+			normalized[k] = normalizeForStructpb(v)
+		}
 		var err error
-		inputStruct, err = structpb.NewStruct(input)
+		inputStruct, err = structpb.NewStruct(normalized)
 		if err != nil {
 			return nil, fmt.Errorf("converting input to structpb: %w", err)
 		}
