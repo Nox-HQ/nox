@@ -127,6 +127,7 @@ type ScanSettings struct {
 	AnalyzerRules        []AnalyzerRuleConfig    `yaml:"analyzer_rules"`
 	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
 	OSV                  OSVConfig               `yaml:"osv"`
+	Intelligence         IntelligenceConfig      `yaml:"intelligence"`
 	Slop                 SlopConfig              `yaml:"slop"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
@@ -365,6 +366,58 @@ type EntropyConfig struct {
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
 type OSVConfig struct {
 	Disabled bool `yaml:"disabled"`
+
+	// CacheDisabled turns off the advisory cache. Default is enabled.
+	//
+	// Only advisory *documents* are ever cached, keyed on the publisher's own
+	// `modified` stamp. The batch query — which advisories match this package
+	// version — is always live, so disabling the cache cannot make a scan find
+	// anything it would otherwise miss. It only makes it slower: a scan of a
+	// modest corpus issues one batch query and a hundred-odd detail fetches,
+	// and repeats every one of them on the next run.
+	CacheDisabled bool `yaml:"cache_disabled"`
+
+	// CacheDir overrides where cached advisories are stored. Empty defaults to
+	// $HOME/.nox/cache/advisories.
+	CacheDir string `yaml:"cache_dir"`
+}
+
+// IntelligenceConfig points dependency scanning at a NOX Intelligence service
+// instead of OSV.dev directly.
+//
+// Off by default. Enabling it is an explicit act, and it changes who answers
+// "is this package vulnerable?" — which is a trust decision, not a tuning knob.
+type IntelligenceConfig struct {
+	// Endpoint is the intelligence service base URL. Empty (default) means
+	// dependency scanning queries OSV.dev exactly as before.
+	Endpoint string `yaml:"endpoint"`
+
+	// VerifyAgainstOSV checks every lookup against OSV.dev and reports any
+	// record the intelligence service withheld. Default true.
+	//
+	// It is a *bool rather than a bool because the zero value must mean "on".
+	// A verification that silently defaults to off would make the strongest
+	// safeguard the one an operator is least likely to have enabled, and the
+	// resulting scans would look identical to verified ones.
+	VerifyAgainstOSV *bool `yaml:"verify_against_osv"`
+
+	// Contribute controls whether this installation sends observations. It is
+	// deliberately separate from querying: a lookup already transmits
+	// (ecosystem, package, version), so if querying implied contributing then
+	// "contribute: false" would be a lie for anyone with an endpoint set.
+	// Querying and contributing are two decisions, and both are off by default.
+	Contribute bool `yaml:"contribute"`
+
+	// ReporterSaltPath overrides where the private reporter salt is kept.
+	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the
+	// machine; only an HMAC derived from it does.
+	ReporterSaltPath string `yaml:"reporter_salt_path"`
+}
+
+// VerificationEnabled reports whether lookups are checked against OSV,
+// defaulting to true when unset.
+func (c IntelligenceConfig) VerificationEnabled() bool {
+	return c.VerifyAgainstOSV == nil || *c.VerifyAgainstOSV
 }
 
 // SlopConfig enables the SLOP analyzer's predictive slopsquat dimension

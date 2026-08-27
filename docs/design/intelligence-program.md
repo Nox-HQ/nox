@@ -358,6 +358,41 @@ Auth via the existing `auth-go` / `keyward` stack.
 
 ---
 
+## Freshness: how often OSV data is updated
+
+Never on a schedule, because nothing is stored on a schedule.
+
+The batch query — *which advisories match this package version* — is live on
+every scan. It is one request, and it is the only question whose answer changes
+often, so caching it would open a window in which a freshly published CVE is
+invisible.
+
+Advisory *documents* are cached, keyed on the advisory id plus OSV's own
+`modified` stamp. That is a validator rather than a guess: an entry is reusable
+for exactly as long as upstream has not changed the advisory, and misses the
+moment it does. There is no staleness window and no TTL.
+
+Measured on a seven-package corpus producing 114 findings:
+
+| scan | batch | detail | bytes |
+|---|---|---|---|
+| 1 (cold) | 1 | 114 | 517,544 |
+| 2 | 1 | 0 | 7,878 |
+| 3 | 1 | 0 | 7,878 |
+
+Identical finding set across cold cache, warm cache, and no cache.
+
+One trap worth recording: OSV reports `modified` truncated to microseconds in a
+batch response and to nanoseconds in a detail response, for roughly half of all
+advisories. Storing an advisory under the detail's value and looking it up with
+the batch's meant those advisories missed every scan, refetched, and rewrote the
+same file — entry count flat, nothing logged, half the traffic never gone. Only
+counting requests exposed it. Entries carry the validator the caller queries by.
+
+The service does not mirror OSV either. It proxies the same live query and
+unions the answer with its own candidates, which is what makes the superset
+property structural rather than a sync job that can fall behind.
+
 ## Execution notes
 
 - Phases 1, 2, 4, 5 land in `nox`. Phase 3, 6, 7 land in `nox-intelligence`.

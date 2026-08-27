@@ -57,22 +57,49 @@ type BatchResult struct {
 	Vulns []vulnsource.Record `json:"vulns"`
 }
 
-// Source queries OSV.dev for known vulnerabilities.
+// Source queries an OSV-wire-protocol endpoint for known vulnerabilities.
 type Source struct {
+	name    string
 	baseURL string
 	client  *http.Client
 	deg     *degrade.Degradations
+	cache   AdvisoryCache
 }
 
-// New returns a Source querying baseURL through client. deg may be nil, in
-// which case degradation records are discarded — library callers that supply no
-// collector behave exactly as they did before.
+// WithCache returns a copy of the source that serves advisory detail from c.
+//
+// Only detail is cached. The batch query stays live on every lookup, so which
+// advisories match a package version is always answered by upstream and a
+// newly published CVE is never hidden behind a cache.
+func (s *Source) WithCache(c AdvisoryCache) *Source {
+	out := *s
+	out.cache = c
+	return &out
+}
+
+// New returns a Source querying baseURL through client, named "osv.dev". deg
+// may be nil, in which case degradation records are discarded — library callers
+// that supply no collector behave exactly as they did before.
 func New(baseURL string, client *http.Client, deg *degrade.Degradations) *Source {
-	return &Source{baseURL: baseURL, client: client, deg: deg}
+	return NewNamed("osv.dev", baseURL, client, deg)
+}
+
+// NewNamed returns a Source under a caller-chosen name.
+//
+// The OSV wire protocol is spoken by more than OSV.dev — a NOX Intelligence
+// endpoint serves it as its baseline surface — so the implementation is shared
+// while the identity is not. Without this, a degradation comparing two such
+// sources reads "osv.dev withheld a record published by osv.dev", which names
+// neither the source at fault nor the one that caught it.
+func NewNamed(name, baseURL string, client *http.Client, deg *degrade.Degradations) *Source {
+	if name == "" {
+		name = "osv.dev"
+	}
+	return &Source{name: name, baseURL: baseURL, client: client, deg: deg}
 }
 
 // Name identifies this source in degradation records and provenance.
-func (s *Source) Name() string { return "osv.dev" }
+func (s *Source) Name() string { return s.name }
 
 // Lookup queries the OSV.dev batch API for vulnerabilities affecting qs. It
 // batches requests in groups of batchLimit and returns a map from the caller's
@@ -172,13 +199,8 @@ func (s *Source) Lookup(ctx context.Context, qs []vulnsource.Query) (map[int][]v
 	// hydrated in place — never reassigned — because map iteration order is
 	// randomised and rebuilding the map from a flattened slice would attribute
 	// vulnerabilities to the wrong packages.
-	var ids []string
-	for _, vs := range result {
-		for _, v := range vs {
-			ids = append(ids, v.ID)
-		}
-	}
-	details := fetchVulnDetails(ctx, s.client, s.baseURL, ids)
+	ids, validators := needed(s.cache, result)
+	details := fetchVulnDetails(ctx, s.client, s.baseURL, s.cache, validators, ids)
 	for _, vs := range result {
 		applyVulnDetails(vs, details)
 	}
@@ -204,13 +226,44 @@ func HydrateDetails(ctx context.Context, client *http.Client, baseURL string, vu
 	for _, v := range vulns {
 		ids = append(ids, v.ID)
 	}
-	applyVulnDetails(vulns, fetchVulnDetails(ctx, client, baseURL, ids))
+	applyVulnDetails(vulns, fetchVulnDetails(ctx, client, baseURL, nil, nil, ids))
+}
+
+// needed returns the advisory ids that must be fetched from upstream: those the
+// cache cannot serve at the exact version the batch query just reported.
+//
+// It also folds the cache hits straight into result, so a fully cached lookup
+// issues no detail requests at all.
+func needed(cache AdvisoryCache, result map[int][]vulnsource.Record) (ids []string, validators map[string]string) {
+	validators = make(map[string]string)
+	seen := make(map[string]struct{})
+	for _, vs := range result {
+		for i := range vs {
+			id := vs[i].ID
+			if id == "" {
+				continue
+			}
+			if cache != nil {
+				if rec, ok := cache.Get(id, vs[i].Modified); ok {
+					vs[i] = rec
+					continue
+				}
+			}
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			validators[id] = vs[i].Modified
+			ids = append(ids, id)
+		}
+	}
+	return ids, validators
 }
 
 // fetchVulnDetails retrieves advisory detail for each distinct ID, concurrently
 // and at most once per ID. IDs that cannot be fetched are simply absent from
 // the returned map, which callers treat as "leave the finding as it is".
-func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, ids []string) map[string]vulnsource.Record {
+func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, cache AdvisoryCache, validators map[string]string, ids []string) map[string]vulnsource.Record {
 	unique := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		if id != "" {
@@ -243,6 +296,12 @@ func fetchVulnDetails(ctx context.Context, client *http.Client, baseURL string, 
 				failures++
 				return
 			}
+			if cache != nil {
+				// Store under the validator the batch reported, which is what
+				// the next lookup will ask with — not the detail's own, which
+				// carries more precision and would never be matched.
+				cache.Put(id, validators[id], detail)
+			}
 			out[id] = detail
 		}(id)
 	}
@@ -263,6 +322,12 @@ func applyVulnDetails(vulns []vulnsource.Record, details map[string]vulnsource.R
 		if !ok {
 			continue
 		}
+		if detail.Modified != "" {
+			vulns[i].Modified = detail.Modified
+		}
+		if detail.Withdrawn != "" {
+			vulns[i].Withdrawn = detail.Withdrawn
+		}
 		if detail.Summary != "" {
 			vulns[i].Summary = detail.Summary
 		}
@@ -280,6 +345,14 @@ func applyVulnDetails(vulns []vulnsource.Record, details map[string]vulnsource.R
 		}
 		if detail.DatabaseSpecific.Severity != "" {
 			vulns[i].DatabaseSpecific = detail.DatabaseSpecific
+		}
+		// OSV.dev never sends this, but a service speaking the OSV wire
+		// protocol does — and the detail endpoint is the only place it can
+		// arrive, since querybatch returns nothing but {id, modified}. Dropping
+		// it here would silently strip status and corroboration from every
+		// record in production while hand-built unit tests kept passing.
+		if detail.Intelligence != nil {
+			vulns[i].Intelligence = detail.Intelligence
 		}
 	}
 }

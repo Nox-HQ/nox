@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/vulnsource"
 )
 
 // parseGoMod extracts the module versions a Go build actually selects, from
@@ -271,56 +273,10 @@ func goModDeclaredModules(content []byte) []string {
 // outranks any prerelease of the same triple. Pseudo-versions
 // (v0.0.0-<timestamp>-<hash>) fall out correctly because their timestamp sorts
 // lexically within the prerelease segment.
-func compareGoVersions(a, b string) int {
-	an, apre := splitGoVersion(a)
-	bn, bpre := splitGoVersion(b)
-
-	for i := 0; i < 3; i++ {
-		if an[i] != bn[i] {
-			if an[i] < bn[i] {
-				return -1
-			}
-			return 1
-		}
-	}
-
-	switch {
-	case apre == bpre:
-		return 0
-	case apre == "": // release beats prerelease
-		return 1
-	case bpre == "":
-		return -1
-	case apre < bpre:
-		return -1
-	default:
-		return 1
-	}
-}
-
-// splitGoVersion breaks "v1.2.3-rc1" into its numeric triple and prerelease.
-func splitGoVersion(v string) (nums [3]int, prerelease string) {
-	v = strings.TrimPrefix(v, "v")
-	if i := strings.Index(v, "+"); i >= 0 { // build metadata is not ordered
-		v = v[:i]
-	}
-	core, pre, _ := strings.Cut(v, "-")
-	for i, part := range strings.SplitN(core, ".", 3) {
-		if i > 2 {
-			break
-		}
-		n := 0
-		for _, r := range part {
-			if r < '0' || r > '9' {
-				n = 0
-				break
-			}
-			n = n*10 + int(r-'0')
-		}
-		nums[i] = n
-	}
-	return nums, pre
-}
+// compareGoVersions orders two semver-shaped versions. Delegated to
+// core/vulnsource so the comparison a client performs and the one a mirror
+// performs are the same code.
+func compareGoVersions(a, b string) int { return vulnsource.CompareVersions(a, b) }
 
 // parseGoSum extracts unique module/version pairs from go.sum content.
 //

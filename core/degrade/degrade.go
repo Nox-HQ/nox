@@ -60,6 +60,33 @@ const (
 	// permission matrix) was skipped for that input, so its absence of findings
 	// must not be read as "safe".
 	MCP Kind = "mcp"
+
+	// IntelSuppression means a vulnerability source withheld a record that the
+	// reference source published — the superset property nox relies on did not
+	// hold.
+	//
+	// This is the failure mode a richer vulnerability source introduces and a
+	// public database does not. Poisoning by addition is noisy and eventually
+	// noticed; denial by omission is silent, and the client cannot tell "no
+	// vulnerability" from "not told about the vulnerability". A source that
+	// drops a real CVE is strictly worse than one that invents a fake, so the
+	// discrepancy is reported rather than resolved quietly — even though the
+	// withheld record is still returned, so no finding is lost.
+	IntelSuppression Kind = "intel_suppression"
+
+	// IntelUnverified means the reference source could not be reached, so the
+	// superset property was not checked on this scan.
+	//
+	// The intelligence source may have answered perfectly. The point is that
+	// nobody confirmed it: reporting an unverified run as verified is the same
+	// error as reporting an unexercised check as an all-clear.
+	IntelUnverified Kind = "intel_unverified"
+
+	// IntelContribution means this installation was configured to contribute
+	// observations and could not. The scan's own findings are unaffected — the
+	// network simply learned nothing from this run, which is worth saying so
+	// that a contribution quietly failing for months is visible.
+	IntelContribution Kind = "intel_contribution"
 )
 
 // Degradation records that some part of the scan did not run to completion.

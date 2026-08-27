@@ -113,12 +113,19 @@ func TestApplyVulnDetails_CopiesEveryField(t *testing.T) {
 
 	detail := vulnsource.Record{
 		ID:               "GHSA-x",
+		Modified:         "2026-08-01T00:00:00Z",
+		Withdrawn:        "2026-08-02T00:00:00Z",
 		Summary:          "a summary",
 		Severity:         []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
 		Aliases:          []string{"CVE-2024-0001"},
 		Details:          "long form",
 		Affected:         []vulnsource.Affected{{Package: vulnsource.Package{Name: "p", Ecosystem: "npm"}}},
 		DatabaseSpecific: vulnsource.DatabaseSpecific{Severity: "CRITICAL"},
+		Intelligence: &vulnsource.Intelligence{
+			Status:        vulnsource.StatusCandidate,
+			Corroboration: 3,
+			SourceName:    "nox-intel",
+		},
 	}
 
 	// Guard the guard: every field of vulnsource.Record must be set in the fixture, or

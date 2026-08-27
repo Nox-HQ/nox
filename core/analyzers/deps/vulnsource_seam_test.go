@@ -186,3 +186,112 @@ func TestDefaultSource_IsOSVAndReadsBaseURLLate(t *testing.T) {
 			"or an empty result reads as a clean scan")
 	}
 }
+
+// A published advisory keeps its severity and gates. Nothing about adding a
+// status axis may change how the existing, overwhelmingly common case behaves.
+func TestStatus_PublishedRecordGatesUnchanged(t *testing.T) {
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{
+		"lodash": {{
+			ID:       "GHSA-published",
+			Summary:  "Prototype pollution",
+			Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
+			// No Intelligence block at all: what a plain advisory database returns.
+		}},
+	}}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, fs, err := NewAnalyzer(WithSource(src)).ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+
+	f := vulnFinding(t, fs)
+	if f.Severity != findings.SeverityCritical {
+		t.Errorf("severity = %v, want critical", f.Severity)
+	}
+	if got := f.Metadata["vuln_status"]; got != string(vulnsource.StatusPublished) {
+		t.Errorf("vuln_status = %q, want PUBLISHED", got)
+	}
+	if !strings.HasPrefix(f.Message, "Known vulnerability") {
+		t.Errorf("message = %q, want the published wording", f.Message)
+	}
+}
+
+// A candidate is reported, labelled THEORETICAL, and demoted out of gating
+// severity — reported so it is not lost, demoted so one false positive cannot
+// train an operator to ignore the whole class.
+func TestStatus_CandidateIsReportedButDoesNotGate(t *testing.T) {
+	src := &stubSource{name: "nox-intel", records: map[string][]vulnsource.Record{
+		"lodash": {{
+			ID:       "NOX-CAND-abc123",
+			Summary:  "Suspected deserialization flaw",
+			Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
+			Intelligence: &vulnsource.Intelligence{
+				Status:        vulnsource.StatusCandidate,
+				Corroboration: 4,
+				SourceName:    "nox-intel",
+			},
+		}},
+	}}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, fs, err := NewAnalyzer(WithSource(src)).ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+
+	f := vulnFinding(t, fs)
+	if f.Severity != findings.SeverityInfo {
+		t.Errorf("severity = %v, want info — a 9.8 candidate must not gate", f.Severity)
+	}
+	if !strings.HasPrefix(f.Message, "THEORETICAL") {
+		t.Errorf("message = %q, want it to open with THEORETICAL", f.Message)
+	}
+	if got := f.Metadata["vuln_status"]; got != string(vulnsource.StatusCandidate) {
+		t.Errorf("vuln_status = %q, want CANDIDATE", got)
+	}
+	if got := f.Metadata["intel_corroboration"]; got != "4" {
+		t.Errorf("intel_corroboration = %q, want 4", got)
+	}
+	if got := f.Metadata["intel_source"]; got != "nox-intel" {
+		t.Errorf("intel_source = %q, want nox-intel", got)
+	}
+}
+
+// A status this build does not recognise must not obtain gating standing. A
+// source cannot promote its own claim by sending an unfamiliar word.
+func TestStatus_UnknownStatusFailsClosed(t *testing.T) {
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{
+		"lodash": {{
+			ID:           "WEIRD-1",
+			Summary:      "who knows",
+			Severity:     []vulnsource.Severity{{Type: "CVSS_V3", Score: "9.8"}},
+			Intelligence: &vulnsource.Intelligence{Status: vulnsource.Status("TOTALLY_REAL")},
+		}},
+	}}
+
+	_, artifacts := npmLockfile(t, "lodash", "4.17.20")
+	_, fs, err := NewAnalyzer(WithSource(src)).ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts: %v", err)
+	}
+	if f := vulnFinding(t, fs); f.Severity != findings.SeverityInfo {
+		t.Errorf("severity = %v, want info — an unrecognised status must not gate", f.Severity)
+	}
+}
+
+// vulnFinding returns the single VULN-001 finding, failing if there is not
+// exactly one.
+func vulnFinding(t *testing.T, fs *findings.FindingSet) findings.Finding {
+	t.Helper()
+	var out []findings.Finding
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-001" {
+			out = append(out, f)
+		}
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected exactly 1 VULN-001 finding, got %d", len(out))
+	}
+	return out[0]
+}

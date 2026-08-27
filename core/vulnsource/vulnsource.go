@@ -43,7 +43,30 @@ type Query struct {
 // never block a build. A Source returns records whose severity and affected
 // ranges are populated, or it degrades and says so.
 type Record struct {
-	ID       string     `json:"id"`
+	ID string `json:"id"`
+
+	// Modified is the source database's own last-changed stamp for this
+	// advisory, as an RFC3339 timestamp. OSV returns it from both the batch and
+	// the detail endpoint.
+	//
+	// It is the advisory's version, which makes it the only honest cache
+	// validator: an advisory document may be reused for exactly as long as this
+	// value is unchanged, and must be refetched the moment it moves. Caching a
+	// vulnerability database on a guessed TTL trades freshness for speed and
+	// hides the trade; keying on the publisher's own stamp does not trade
+	// anything.
+	Modified string `json:"modified,omitempty"`
+
+	// Withdrawn is set when the source database has retracted the advisory,
+	// as an RFC3339 timestamp. A withdrawn advisory is not a vulnerability.
+	//
+	// OSV's query API excludes these; its bulk export does not. A mirror built
+	// from the export therefore has to filter them itself, and a mirror that
+	// forgets adds false positives to every scan — which is how this field came
+	// to exist: two withdrawn npm advisories surfaced as mirror-only drift on
+	// the first production sync.
+	Withdrawn string `json:"withdrawn,omitempty"`
+
 	Summary  string     `json:"summary"`
 	Details  string     `json:"details"`
 	Aliases  []string   `json:"aliases"`
@@ -54,7 +77,28 @@ type Record struct {
 	// publish a coarse severity label here, which is the only severity signal
 	// available for records that carry a CVSS v4 vector and nothing else.
 	DatabaseSpecific DatabaseSpecific `json:"database_specific"`
+
+	// Intelligence is what a source knows beyond the advisory: epistemic
+	// status, corroboration across distinct reporters, and the evidence ledger
+	// behind it. Nil for a plain advisory database, which is the honest
+	// representation — OSV makes no such claims.
+	//
+	// It is namespaced under nox_intelligence so a record round-trips through
+	// the OSV wire format without colliding with anything OSV may add.
+	Intelligence *Intelligence `json:"nox_intelligence,omitempty"`
 }
+
+// Status returns the record's epistemic standing, resolving a record with no
+// intelligence block to PUBLISHED — which is what an advisory database returns.
+func (r *Record) Status() Status {
+	if r.Intelligence == nil {
+		return StatusPublished
+	}
+	return r.Intelligence.Status.EffectiveStatus()
+}
+
+// Theoretical reports whether the record describes an undemonstrated path.
+func (r *Record) Theoretical() bool { return r.Intelligence.Theoretical() }
 
 // DatabaseSpecific holds the subset of source-specific annotations nox reads.
 type DatabaseSpecific struct {
