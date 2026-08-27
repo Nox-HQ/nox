@@ -106,32 +106,31 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		// even under --fail-on-degraded, whose help text promises otherwise.
 		// A required entry may carry a version constraint — `nox/foo@^0.2.0` —
 		// because that is the syntax `nox plugin install` documents and
-		// accepts (README: `nox plugin install nox/reachability@0.5.0`).
-		// This lookup matches the whole string as an exact name, so such an
-		// entry can never resolve, and nox reported
+		// accepts. This lookup used to match the whole string as a name, so
+		// such an entry could never resolve: nox reported
 		// `required plugin "nox/triage-agent@^0.2.0" is not installed` while
-		// nox/triage-agent 0.2.2 sat in the state file. Three repositories in
-		// this fleet had written a reasonable constraint and had that plugin
-		// silently never run.
-		//
-		// The message now says what is actually wrong. Matching on the bare
-		// name instead would be worse than the bug: a repository pinning
-		// @0.5.0 would silently get whatever is installed, which is the one
-		// outcome a version pin exists to prevent. Honouring the constraint
-		// needs semver comparison, and nox has no semver dependency — adding
-		// one to a security tool is a call for its maintainers, not something
-		// to slip into a bugfix.
+		// nox/triage-agent 0.2.2 sat in the state file, and the plugin
+		// silently never ran.
 		lookupName, constraint := parseNameVersion(name)
-		ip := st.FindPlugin(name)
+		ip := st.FindPlugin(lookupName)
 		if ip == nil {
-			detail := fmt.Sprintf("required plugin %q is not installed", name)
-			if constraint != "*" {
-				if installed := st.FindPlugin(lookupName); installed != nil {
-					detail = fmt.Sprintf("required plugin %q did not resolve: version constraints are "+
-						"not supported in plugins.required, and %q (version %s) is installed — "+
-						"drop the %q suffix to use it",
-						name, lookupName, installed.Version, "@"+constraint)
-				}
+			missing = append(missing, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q is not installed", lookupName),
+				Impact: "findings this plugin would have produced are missing from this scan",
+			})
+			continue
+		}
+		// The constraint is enforced, not merely parsed. Matching the name and
+		// ignoring the version would hand a repository whatever happens to be
+		// installed, which is the one outcome a pin exists to prevent — and in
+		// a security scanner, quietly running a different version of a check
+		// than the one asked for is its own defect.
+		if ok, cErr := constraintSatisfied(constraint, ip.Version); cErr != nil || !ok {
+			detail := fmt.Sprintf("required plugin %q is not satisfied: version %s is installed",
+				name, ip.Version)
+			if cErr != nil {
+				detail = fmt.Sprintf("required plugin %q could not be resolved: %v", name, cErr)
 			}
 			missing = append(missing, core.Degradation{
 				Kind:   degrade.Plugin,
