@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugins did not run in any workspace that configured `scan.exclude`.**
+  The exclusions were sent to plugins as a `[]string`, which
+  `structpb.NewStruct` rejects — and it converts the whole input map or none
+  of it, so the wrong type did not drop the exclusions, it failed the
+  `InvokeTool` request. Twelve of twenty installed plugins never ran,
+  `nox/sast` and `nox/taint-analysis` among them. Excluding lockfiles is the
+  first thing most repositories configure, so the reach was close to "any
+  workspace that customised its scan at all".
+
+  Post-scan tools were unaffected: they carry a typed `ScanContext` and no
+  input map, so nothing converts. That is why `nox/reachability` worked and
+  `nox/taint-analysis` failed in the same scan, which made this look like one
+  broken plugin rather than a host bug.
+
+  `buildInvokeRequest` now normalizes at the boundary as well, so a caller
+  writing the obvious Go type cannot reintroduce it. `[]byte` is deliberately
+  left alone — structpb encodes it as base64, and listifying it would change
+  the wire form a plugin receives — and values structpb genuinely cannot
+  represent still error, because those are real mistakes.
+
+- **A required plugin that failed to run reported `policy: pass`.** One that
+  was never installed, whose binary was missing, or that failed to register
+  already produced a degradation. One that registered and then failed every
+  invocation produced only a diagnostic on stderr, so it reached neither
+  `[degraded]`, the findings JSON, the MCP surface, the LSP, nor
+  `--fail-on-degraded` — whose help text promises to "exit non-zero if any
+  check could not complete". A repository could name a plugin in
+  `plugins.required`, run `nox scan` as a push gate, and be told pass for as
+  long as the plugin had been broken.
+
+  The scan still succeeds and still exits 0 by default: running the plugins
+  that worked is right, and promoting a partial run to a hard failure remains
+  the operator's call via `--fail-on-degraded`, which now covers this case.
+  Only error-severity diagnostics are promoted — a plugin that skips a
+  vendored file and says so is working as intended.
+
+### Added
+
+- **`plugins.required` honours version constraints.** `*`, `1.2.3`,
+  `>=1.2.3`, `^1.2.3` and `~1.2.3`. `nox plugin install nox/foo@0.5.0` was
+  already accepted syntax, so operators wrote the same thing in `.nox.yaml`;
+  the whole string was matched as a plugin name, so it could never resolve
+  and nox reported "is not installed" for a plugin that was installed — with
+  the effect that the plugin silently never ran.
+
+  The constraint is enforced, not merely parsed: matching the name and
+  ignoring the version would hand a repository whatever happens to be
+  installed, which is the outcome a pin exists to prevent. An unsatisfied
+  constraint degrades and names the version actually installed, unsupported
+  grammar is an error rather than a silent pass, and a version that cannot be
+  compared at all — a locally built plugin recording `dev` — says so instead
+  of guessing.
+
+  Below 1.0.0 the minor is the breaking axis, so `^0.2.0` admits 0.2.9 and
+  not 0.3.0. Every plugin in the registry is currently 0.x, so the looser
+  reading would have made the caret mean "any version" for all of them.
+
+  Implemented without a semver dependency: nox is a security scanner, and a
+  twelfth direct dependency to compare three integers is the worse trade.
+
 ## [1.30.0] - 2026-08-24
 
 Dynamic exploit validation, and a run of fixes about controls that reported

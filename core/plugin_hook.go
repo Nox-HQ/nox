@@ -16,7 +16,13 @@ type PluginScanOutput struct {
 	Graphs      []graph.Graph
 
 	// Degradations reports plugins that were required but did not contribute —
-	// not installed, binary missing, failed to register.
+	// not installed, binary missing, failed to register, or failed to run.
+	//
+	// The last of those was missing for a long time and cost the most. An
+	// invocation failure has the identical consequence to the other three —
+	// the plugin's findings are absent — but it was recorded only as a
+	// diagnostic printed to stderr, so it never reached [degraded], the
+	// findings JSON, the MCP surface, or --fail-on-degraded (#479).
 	//
 	// These are not hook errors: the hook succeeds, having run whatever
 	// plugins it could. Without a channel for them, a required security plugin

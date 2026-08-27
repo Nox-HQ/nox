@@ -104,11 +104,37 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		// skipped. Silently continuing here meant a CI job listing a security
 		// plugin, failing to install it, and exiting 0 with a clean report —
 		// even under --fail-on-degraded, whose help text promises otherwise.
-		ip := st.FindPlugin(name)
+		// A required entry may carry a version constraint — `nox/foo@^0.2.0` —
+		// because that is the syntax `nox plugin install` documents and
+		// accepts. This lookup used to match the whole string as a name, so
+		// such an entry could never resolve: nox reported
+		// `required plugin "nox/triage-agent@^0.2.0" is not installed` while
+		// nox/triage-agent 0.2.2 sat in the state file, and the plugin
+		// silently never ran.
+		lookupName, constraint := parseNameVersion(name)
+		ip := st.FindPlugin(lookupName)
 		if ip == nil {
 			missing = append(missing, core.Degradation{
 				Kind:   degrade.Plugin,
-				Detail: fmt.Sprintf("required plugin %q is not installed", name),
+				Detail: fmt.Sprintf("required plugin %q is not installed", lookupName),
+				Impact: "findings this plugin would have produced are missing from this scan",
+			})
+			continue
+		}
+		// The constraint is enforced, not merely parsed. Matching the name and
+		// ignoring the version would hand a repository whatever happens to be
+		// installed, which is the one outcome a pin exists to prevent — and in
+		// a security scanner, quietly running a different version of a check
+		// than the one asked for is its own defect.
+		if ok, cErr := constraintSatisfied(constraint, ip.Version); cErr != nil || !ok {
+			detail := fmt.Sprintf("required plugin %q is not satisfied: version %s is installed",
+				name, ip.Version)
+			if cErr != nil {
+				detail = fmt.Sprintf("required plugin %q could not be resolved: %v", name, cErr)
+			}
+			missing = append(missing, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: detail,
 				Impact: "findings this plugin would have produced are missing from this scan",
 			})
 			continue
@@ -201,6 +227,11 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 				label = bin.path
 			}
 			fmt.Fprintf(os.Stderr, "[plugin warn] %s: not registered for post-scan: %v\n", label, regErr)
+			result.Degradations = append(result.Degradations, core.Degradation{
+				Kind:   degrade.Plugin,
+				Detail: fmt.Sprintf("required plugin %q was not registered for post-scan: %v", label, regErr),
+				Impact: "enrichments this plugin would have added are missing from these findings",
+			})
 			continue
 		}
 		registered++
@@ -212,10 +243,51 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	if invErr := host.InvokePostScan(ctx, result, absTarget); invErr != nil {
 		return fmt.Errorf("post-scan plugins: %w", invErr)
 	}
-	for _, d := range host.Diagnostics() {
+	// Same reasoning as the scan phase: an enrichment that never ran is absent
+	// from the findings, and absence has to be reported somewhere a gate can
+	// see it. A post-scan plugin is where reachability annotations come from,
+	// so its silent failure downgrades a finding's context without changing
+	// the finding — the hardest kind of gap to notice by reading output.
+	postDiags := host.Diagnostics()
+	for _, d := range postDiags {
 		fmt.Fprintf(os.Stderr, "[plugin %s] %s: %s\n", d.Severity, d.Source, d.Message)
 	}
+	result.Degradations = append(result.Degradations, errorDegradations(postDiags, "post-scan ",
+		"enrichments this plugin would have added are missing from these findings")...)
 	return nil
+}
+
+// errorDegradations converts the host's error-severity diagnostics into
+// degradations.
+//
+// A plugin that fails to INVOKE has the identical consequence to one that was
+// never installed or failed to register — its findings are absent — but only
+// the latter two produced a degradation. The invocation failure printed one
+// line to stderr above a green verdict: not in [degraded], not in the findings
+// JSON, not on the MCP or LSP surfaces, and invisible to --fail-on-degraded,
+// whose help text promises to "exit non-zero if any check could not complete".
+//
+// That gap let a repository run `nox scan . -severity-threshold high` as the
+// security step of its push gate, with the plugin named in plugins.required,
+// and be told pass for as long as the plugin had been broken (#479).
+//
+// The scan still succeeds and still exits 0 by default. Running the plugins
+// that worked is the right behaviour, and promoting a partial run to a hard
+// failure is the operator's call via --fail-on-degraded. What changes is that
+// the choice is theirs to make, because the fact now reaches every surface.
+func errorDegradations(diags []plugin.Diagnostic, phase, impact string) []core.Degradation {
+	var out []core.Degradation
+	for _, d := range diags {
+		if !strings.EqualFold(d.Severity, "error") {
+			continue
+		}
+		out = append(out, core.Degradation{
+			Kind:   degrade.Plugin,
+			Detail: fmt.Sprintf("required %splugin %q failed to run: %s", phase, d.Source, d.Message),
+			Impact: impact,
+		})
+	}
+	return out
 }
 
 // pluginScanInput builds the input map sent to every plugin's `scan` tool.
@@ -226,7 +298,22 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 func pluginScanInput(target, absTarget string) map[string]any {
 	input := map[string]any{"workspace_root": absTarget}
 	if excl := scanExcludePatterns(target); len(excl) > 0 {
-		input["exclude"] = excl
+		// []any, not []string. structpb.NewStruct accepts []any and rejects
+		// []string outright, and it converts the WHOLE input map or none of
+		// it — so one wrongly-typed value does not degrade that value, it
+		// fails the request and the plugin never runs.
+		//
+		// The blast radius was every scan-tool plugin in any workspace whose
+		// .nox.yaml set scan.exclude, which is the ordinary case: excluding
+		// lockfiles is the first thing most repos do. The plugin error was
+		// recorded as a diagnostic and the scan still reported pass, so a
+		// repository could declare a plugin in plugins.required and have it
+		// silently contribute nothing for as long as the exclusions existed.
+		vals := make([]any, len(excl))
+		for i, p := range excl {
+			vals[i] = p
+		}
+		input["exclude"] = vals
 	}
 	return input
 }
@@ -375,11 +462,34 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		}
 	}
 
-	// Surface plugin diagnostics (timeouts, partial failures) to stderr so a
-	// silently-empty plugin run is visible without failing the scan.
-	for _, d := range host.Diagnostics() {
+	// Surface plugin diagnostics to stderr, and record the error-severity ones
+	// as degradations.
+	//
+	// stderr alone was not enough. A required plugin that fails to INVOKE has
+	// the same consequence as one that fails to register or was never
+	// installed — its findings are absent — but only the latter two produced a
+	// degradation. The invocation failure printed one line above a green
+	// verdict, did not appear in [degraded], did not reach the findings JSON,
+	// the MCP surface or the LSP, and was invisible to --fail-on-degraded,
+	// whose help text promises to "exit non-zero if any check could not
+	// complete".
+	//
+	// That gap let kraftsport-coach run `nox scan . -severity-threshold high`
+	// as the security step of its push gate, with nox/taint-analysis named in
+	// plugins.required, and be told pass for as long as the plugin had been
+	// broken (#479).
+	//
+	// The scan still succeeds and still exits 0 by default: running the
+	// plugins that worked is the right behaviour, and turning a partial run
+	// into a hard failure is the operator's call via --fail-on-degraded. What
+	// changes is that the choice is now theirs to make, because the fact
+	// reaches every surface instead of scrolling past on stderr.
+	diags := host.Diagnostics()
+	for _, d := range diags {
 		fmt.Fprintf(os.Stderr, "[plugin %s] %s: %s\n", d.Severity, d.Source, d.Message)
 	}
+	out.Degradations = append(out.Degradations, errorDegradations(diags, "",
+		"findings this plugin would have produced are missing from this scan; other plugins still ran")...)
 
 	return out, nil
 }
