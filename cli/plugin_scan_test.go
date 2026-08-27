@@ -155,28 +155,22 @@ func TestErrorDegradations_SeverityIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// TestRunScanPlugins_VersionConstraint_ExplainsItself covers a required entry
+// TestRunScanPlugins_VersionConstraint_Resolves covers a required entry
 // written with the syntax `nox plugin install` documents and accepts:
 //
 //	plugins:
 //	  required:
 //	    - nox/triage-agent@^0.2.0
 //
-// The lookup matches the whole string as a name, so such an entry never
-// resolves. nox reported `is not installed` for a plugin that WAS installed,
-// and three repositories in this fleet had that plugin silently never run
-// because of it.
-//
-// The behaviour is deliberately unchanged — the plugin still does not run.
-// Matching on the bare name would be worse than the bug, because a repository
-// pinning @0.5.0 would silently get whatever happens to be installed, which is
-// the one outcome a pin exists to prevent. Only the message changes, from
-// wrong to actionable.
-func TestRunScanPlugins_VersionConstraint_ExplainsItself(t *testing.T) {
+// The lookup used to match the whole string as a name, so such an entry could
+// never resolve. nox reported "is not installed" for a plugin that WAS
+// installed, and three repositories in one fleet had that plugin silently
+// never run because of it.
+func TestRunScanPlugins_VersionConstraint_Resolves(t *testing.T) {
 	const bare = "nox/triage-agent"
 	st, err := LoadState(DefaultStatePath())
 	if err != nil || st == nil || st.FindPlugin(bare) == nil {
-		t.Skipf("%s is not installed on this machine; nothing to explain", bare)
+		t.Skipf("%s is not installed on this machine", bare)
 	}
 
 	out, err := runScanPlugins(context.Background(), t.TempDir(), []string{bare + "@^0.2.0"})
@@ -184,22 +178,38 @@ func TestRunScanPlugins_VersionConstraint_ExplainsItself(t *testing.T) {
 		t.Fatalf("a constrained required plugin must not abort the scan: %v", err)
 	}
 	if out == nil {
-		t.Fatal("a required plugin that did not resolve must be reported, not skipped silently")
-	}
-
-	for _, d := range out.Degradations {
-		if !strings.Contains(d.Detail, "@^0.2.0") {
-			continue
-		}
-		// The point of the message is that the reader can act on it: it must
-		// name the installed plugin and say what to do.
-		if !strings.Contains(d.Detail, "version constraints are not supported") {
-			t.Errorf("detail %q does not say why the entry failed to resolve", d.Detail)
-		}
-		if !strings.Contains(d.Detail, bare) {
-			t.Errorf("detail %q does not name the installed plugin", d.Detail)
-		}
 		return
 	}
-	t.Errorf("the constrained entry was not reported at all: %+v", out.Degradations)
+	for _, d := range out.Degradations {
+		if strings.Contains(d.Detail, bare) && strings.Contains(d.Detail, "not installed") {
+			t.Errorf("a satisfied constraint was reported as missing: %q", d.Detail)
+		}
+	}
+}
+
+// An UNSATISFIED constraint must still degrade, and must say what is actually
+// installed — otherwise the operator cannot tell a typo from a stale install.
+func TestRunScanPlugins_VersionConstraint_UnsatisfiedIsReported(t *testing.T) {
+	const bare = "nox/triage-agent"
+	st, err := LoadState(DefaultStatePath())
+	if err != nil || st == nil || st.FindPlugin(bare) == nil {
+		t.Skipf("%s is not installed on this machine", bare)
+	}
+
+	out, err := runScanPlugins(context.Background(), t.TempDir(), []string{bare + "@^99.0.0"})
+	if err != nil {
+		t.Fatalf("an unsatisfiable constraint must not abort the scan: %v", err)
+	}
+	if out == nil {
+		t.Fatal("an unsatisfied constraint must be reported, not skipped silently")
+	}
+	for _, d := range out.Degradations {
+		if strings.Contains(d.Detail, "@^99.0.0") {
+			if !strings.Contains(d.Detail, st.FindPlugin(bare).Version) {
+				t.Errorf("detail %q does not say which version is installed", d.Detail)
+			}
+			return
+		}
+	}
+	t.Errorf("the unsatisfied constraint was not reported: %+v", out.Degradations)
 }
