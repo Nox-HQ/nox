@@ -270,3 +270,33 @@ Win the embedding layer that makes a scanner 'default'. Dogfood Nox across the o
 Reduce false positives in the new MCP prose rules (MCP-009..014 tool poisoning, MCP-018/019 SSRF), surfaced by dogfooding nox against 17 of the owner's own MCP repos. The rules currently match defensive code, code comments, capability/permission descriptions, and test boilerplate rather than real tool metadata. Confirmed examples: MCP-018 fires on a repo's own SSRF blocklist (169.254.169.254 in a deny-list); MCP-014 fires on a test doc-comment 'after the first invocation'; MCP-009/011 fire on anti-injection system prompts and comments describing attacks. Needed: exclude test files (ignoreFilePatterns), avoid matching inside comments, suppress SSRF metadata hits in block/deny contexts, and anchor tool-poisoning prose to actual tool-description/string-literal context instead of free source text. Mirror the existing AI-028 fuzz-corpus FP-reduction approach. This is a gate before publishing any dogfood findings as launch content.
 
 ---
+
+## Intelligence Console: full UI/UX review pass
+
+A dedicated design pass over the NOX Intelligence operator console (nox-intelligence, internal/interfaces/httpapi/ui/index.html). The console has grown feature by feature — review queue, candidate detail, confirmations, sort/search, TOTP enrolment — and each addition was styled in isolation. The result works but has never been looked at as a whole.
+
+WHY THIS NEEDS A SESSION RATHER THAN INCREMENTAL FIXES
+
+Every UI defect found so far was found by looking at the rendered page, not by a test. None would have surfaced in CI. A list of the ones already fixed, because they show the pattern:
+
+- `.linkish` lost a specificity contest to `.login button`, so "Back to sign in" and "Set one up" rendered as filled blue buttons competing with the primary action.
+- The enrolment address field was read-only and empty for a signed-in operator, reading as a broken input.
+- After a successful enrolment the emptied QR container survived as a small white box and a blank field under "Cannot scan it?" — reading as a failed image at the moment the operator needs to believe it worked.
+- Opening a confirmation re-solved all six table columns under auto layout, so the whole table jumped sideways and moved other rows' buttons under the cursor — the exact misclick the confirmation exists to prevent.
+- The evidence line read "5 nothing machine-checkable", a contradiction, because the count and its qualifier were concatenated without saying what the number counted.
+- Search and sort shipped as markup with no listeners: the controls looked live and did nothing.
+
+KNOWN OUTSTANDING ISSUES
+
+- Margins and vertical rhythm are inconsistent between the review queue, the sign-in form and the enrolment panel. Spacing was set per-component with ad-hoc rem values rather than from a scale.
+- The enrolment panel is tall enough that the QR pushes the confirm input below the fold on a 795px viewport; the operator scans, then has to hunt for where to type the code.
+- Button hierarchy is flat. Generate, Confirm, sign out, "authenticator", escalate/reject and the linkish navigation all compete; only the destructive confirm has a distinct treatment.
+- The dark theme is hardcoded. There is no light mode and no `prefers-color-scheme` handling, and the QR has to force a white ground because of it.
+- The base config's dashboard provider points at a path that does not exist, logging a provisioning error on every start (cosmetic, but it is in the console's own logs).
+- No responsive review below ~760px beyond the table's own scroll container.
+
+SCOPE
+
+Treat it as one design pass: establish a spacing scale and a button hierarchy, apply them across all views, then verify in the browser at several widths rather than trusting the tests. The existing ui_test.go guards structure (every called function is defined, the script boots, every id setReviewVisible hides exists, every input/select with an id is wired) — those catch wiring, not layout, and should stay as they are.
+
+---
