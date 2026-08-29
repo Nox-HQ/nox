@@ -22,6 +22,16 @@ func runIntel(args []string) int {
 		return runIntelPreview(args[1:])
 	case "id":
 		return runIntelID()
+	case "login":
+		return runIntelLogin(args[1:])
+	case "logout":
+		return runIntelLogout(args[1:])
+	case "whoami":
+		return runIntelWhoami(args[1:])
+	case "register":
+		return runIntelRegister(args[1:])
+	case "invite":
+		return runIntelInvite(args[1:])
 	case "enroll":
 		return runIntelEnroll(args[1:])
 	default:
@@ -36,7 +46,13 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry\n")
 	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
 	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
-	fmt.Fprintf(os.Stderr, "  enroll           register a second factor for an operator account\n\n")
+	fmt.Fprintf(os.Stderr, "\nOperator accounts:\n")
+	fmt.Fprintf(os.Stderr, "  login            sign in with your authenticator and store the session\n")
+	fmt.Fprintf(os.Stderr, "  logout           revoke the session, on the server as well as here\n")
+	fmt.Fprintf(os.Stderr, "  whoami           show who this machine is signed in as\n")
+	fmt.Fprintf(os.Stderr, "  register         create an operator and print their enrolment link\n")
+	fmt.Fprintf(os.Stderr, "  invite           re-issue an enrolment link that expired\n")
+	fmt.Fprintf(os.Stderr, "  enroll           bind an authenticator using an enrolment link\n\n")
 	fmt.Fprintf(os.Stderr, "Contribution is off unless scan.intelligence.contribute is set,\n")
 	fmt.Fprintf(os.Stderr, "and is a separate decision from querying an intelligence endpoint.\n")
 }

@@ -34,19 +34,32 @@ func runIntelEnroll(args []string) int {
 	email := fs.String("email", "", "operator address to enrol")
 	yes := fs.Bool("no-confirm", false,
 		"print the URI and exit without confirming (the new factor stays inactive)")
+	invite := fs.String("code", "",
+		"single-use enrolment code from your invitation (no operator token needed)")
+	save := fs.String("save-recovery-codes", "",
+		"write the recovery codes to this file (created 0600) as well as printing them")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *endpoint == "" || *email == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nox intel enroll --endpoint URL --email you@example.com\n\n")
-		fmt.Fprintf(os.Stderr, "The operator token is read from NOX_INTEL_TOKEN. It is required:\n")
-		fmt.Fprintf(os.Stderr, "enrolment is the account-recovery path, so it cannot be anonymous.\n")
+	// An invitation names its own subject, so --email is neither needed nor
+	// honoured with one: the address comes from the code server-side.
+	if *endpoint == "" || (*email == "" && *invite == "") {
+		fmt.Fprintf(os.Stderr, "Usage:\n")
+		fmt.Fprintf(os.Stderr, "  nox intel enroll --endpoint URL --code CODE          # from an invitation\n")
+		fmt.Fprintf(os.Stderr, "  nox intel enroll --endpoint URL --email you@example.com   # break-glass\n\n")
+		fmt.Fprintf(os.Stderr, "An invitation is the ordinary path and needs no operator token.\n")
+		fmt.Fprintf(os.Stderr, "The token (NOX_INTEL_TOKEN) is for the case an invitation cannot cover:\n")
+		fmt.Fprintf(os.Stderr, "an operator who has lost their phone and holds no valid link.\n")
 		return 2
 	}
+	// The operator token is required only without an invitation. Demanding it
+	// in both cases is what trains people to keep it somewhere convenient,
+	// which is the habit this flow exists to remove.
 	token := os.Getenv("NOX_INTEL_TOKEN")
-	if token == "" {
-		fmt.Fprintf(os.Stderr, "nox intel enroll: NOX_INTEL_TOKEN is not set.\n")
-		fmt.Fprintf(os.Stderr, "Enrolment replaces a second factor, so it requires the operator token.\n")
+	if token == "" && *invite == "" {
+		fmt.Fprintf(os.Stderr, "nox intel enroll: no --code, and NOX_INTEL_TOKEN is not set.\n")
+		fmt.Fprintf(os.Stderr, "Use the enrolment code from your invitation, or set the operator\n")
+		fmt.Fprintf(os.Stderr, "token if you are recovering an account with no valid invitation.\n")
 		return 2
 	}
 	base := strings.TrimRight(*endpoint, "/")
@@ -61,8 +74,11 @@ func runIntelEnroll(args []string) int {
 		ExpiresIn       int    `json:"expires_in"`
 		Error           string `json:"error"`
 	}
-	if code := postJSON(base+"/v1/auth/enroll", token,
-		map[string]string{"email": *email}, &begin); code != 0 {
+	beginBody := map[string]string{"email": *email}
+	if *invite != "" {
+		beginBody = map[string]string{"enrollment_code": *invite}
+	}
+	if code := postJSON(base+"/v1/auth/enroll", token, beginBody, &begin); code != 0 {
 		return code
 	}
 	if begin.ProvisioningURI == "" {
@@ -96,6 +112,7 @@ func runIntelEnroll(args []string) int {
 	}
 	var done struct {
 		Enrolled           bool     `json:"enrolled"`
+		Email              string   `json:"email"`
 		RecoveryCodes      []string `json:"recovery_codes"`
 		RecoveryCodesError string   `json:"recovery_codes_error"`
 		Error              string   `json:"error"`
@@ -120,6 +137,26 @@ func runIntelEnroll(args []string) int {
 		}
 		fmt.Printf("\nWithout them, a lost phone means the operator token is the only\n")
 		fmt.Printf("way back in — which is how this service's own lockout had to be fixed.\n")
+		// Writing them out is offered because "save these now" is advice people
+		// postpone, and there is no second showing. 0600 and O_EXCL: this file
+		// holds every way back into the account, and silently overwriting an
+		// existing set of codes would destroy the ones already in use.
+		if *save != "" {
+			f, err := os.OpenFile(*save, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "\nwarning: could not write %s: %v\n", *save, err)
+				fmt.Fprintf(os.Stderr, "The codes above are still valid — copy them now, they are not shown again.\n")
+			} else {
+				_, werr := fmt.Fprintf(f, "NOX Intelligence recovery codes for %s\nEach works once, in place of a code from your authenticator.\n\n%s\n",
+					done.Email, strings.Join(done.RecoveryCodes, "\n"))
+				cerr := f.Close()
+				if werr != nil || cerr != nil {
+					fmt.Fprintf(os.Stderr, "\nwarning: %s may be incomplete; copy the codes above instead\n", *save)
+				} else {
+					fmt.Printf("\nAlso written to %s (mode 0600).\n", *save)
+				}
+			}
+		}
 	} else if done.RecoveryCodesError != "" {
 		fmt.Fprintf(os.Stderr, "\nwarning: %s\n", done.RecoveryCodesError)
 	}
