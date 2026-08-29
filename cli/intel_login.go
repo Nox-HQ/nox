@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -22,100 +19,34 @@ func runIntelLogin(args []string) int {
 	fs := flag.NewFlagSet("intel login", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
 		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
-	email := fs.String("email", "", "your operator address")
+	noBrowser := fs.Bool("no-browser", false,
+		"print the URL and code instead of opening a browser")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *endpoint == "" || *email == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nox intel login --endpoint URL --email you@example.com\n\n")
-		fmt.Fprintf(os.Stderr, "You will be asked for a code from your authenticator.\n")
-		fmt.Fprintf(os.Stderr, "A recovery code works here too, and is spent when you use it.\n")
+	if *endpoint == "" {
+		fmt.Fprintf(os.Stderr, "Usage: nox intel login --endpoint URL\n\n")
+		fmt.Fprintf(os.Stderr, "Opens your browser to approve this terminal. Your authenticator\n")
+		fmt.Fprintf(os.Stderr, "code is never typed here — it stays in the browser, where it\n")
+		fmt.Fprintf(os.Stderr, "cannot end up in scrollback or a captured log.\n")
 		return 2
 	}
 	base := strings.TrimRight(*endpoint, "/")
-
-	fmt.Printf("Code from your authenticator (or a recovery code): ")
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil && strings.TrimSpace(line) == "" {
-		fmt.Fprintf(os.Stderr, "\nnox intel login: no code entered.\n")
+	if _, err := url.Parse(base); err != nil {
+		fmt.Fprintf(os.Stderr, "nox intel login: bad endpoint: %v\n", err)
 		return 2
 	}
-	code := strings.TrimSpace(line)
 
-	// The session cookie is what the browser uses; the CLI asks for the same
-	// credential as a bearer token so it can be stored without a cookie jar.
-	buf, _ := json.Marshal(map[string]string{"email": *email, "code": code})
-	req, err := http.NewRequest(http.MethodPost, base+"/v1/auth/login", bytes.NewReader(buf))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "nox intel login: %v\n", err)
-		return 1
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "nox intel login: %v\n", err)
-		return 1
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	if resp.StatusCode >= 300 {
-		// The service does not say whether the address exists or the code was
-		// wrong, and neither does this: repeating a deliberately vague answer
-		// more precisely would undo the reason it is vague.
-		fmt.Fprintf(os.Stderr, "nox intel login: invalid credentials (HTTP %d)\n", resp.StatusCode)
-		fmt.Fprintf(os.Stderr, "If the code looked right, check the clock on your phone —\n")
-		fmt.Fprintf(os.Stderr, "TOTP allows only a small window of drift.\n")
-		return 1
+	// Browser sign-in cannot work where nobody is watching. Failing here with
+	// the fix beats hanging for five minutes in a pipeline.
+	if isCI() && !*noBrowser {
+		fmt.Fprintf(os.Stderr, "nox intel login: this looks like CI, where nobody can approve a browser prompt.\n")
+		fmt.Fprintf(os.Stderr, "Use a scoped token in NOX_INTEL_TOKEN instead, or pass --no-browser\n")
+		fmt.Fprintf(os.Stderr, "if a person really is watching this terminal.\n")
+		return 2
 	}
 
-	tok := sessionTokenFrom(resp, raw)
-	if tok == "" {
-		fmt.Fprintf(os.Stderr, "nox intel login: signed in, but the service returned no session token\n")
-		return 1
-	}
-	s := session{Endpoint: base, Email: *email, Token: tok}
-	var body struct {
-		ExpiresAt string `json:"expires_at"`
-	}
-	if json.Unmarshal(raw, &body) == nil {
-		s.ExpiresAt = body.ExpiresAt
-	}
-	if err := saveSession(s); err != nil {
-		fmt.Fprintf(os.Stderr, "nox intel login: signed in, but the session could not be stored: %v\n", err)
-		return 1
-	}
-	fmt.Printf("Signed in to %s as %s.\n", base, *email)
-	if s.ExpiresAt != "" {
-		fmt.Printf("The session expires at %s.\n", s.ExpiresAt)
-	}
-	return 0
-}
-
-// sessionTokenFrom finds the session credential in a login response.
-//
-// Preferring an explicit field and falling back to the cookie, because the
-// console is the primary client and is cookie-based; a CLI that only understood
-// one of the two would break the moment the other changed.
-func sessionTokenFrom(resp *http.Response, raw []byte) string {
-	var body struct {
-		Token   string `json:"token"`
-		Session string `json:"session"`
-	}
-	if json.Unmarshal(raw, &body) == nil {
-		if body.Token != "" {
-			return body.Token
-		}
-		if body.Session != "" {
-			return body.Session
-		}
-	}
-	for _, ck := range resp.Cookies() {
-		if strings.Contains(ck.Name, "nox_session") {
-			return ck.Value
-		}
-	}
-	return ""
+	return runIntelLoginDevice(base, !*noBrowser)
 }
 
 // runIntelLogout revokes the session server-side, then forgets it.
