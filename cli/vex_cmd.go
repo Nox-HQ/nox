@@ -38,7 +38,10 @@ func runVexInit(args []string) int {
 	)
 	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
 	fs.StringVar(&outputPath, "output", "vex.json", "destination path for the generated stub")
-	fs.StringVar(&product, "product", "", "product identifier to embed in each statement (typically the Go module path)")
+	fs.StringVar(&product, "product", "", "product identifier to embed in each statement: a package URL "+
+		"(pkg:npm/foo@1.2.3, pkg:golang/example.com/m@v1.2.3) or, for a container, its digest "+
+		"(pkg:oci/app@sha256:...). Use the most specific identifier you have — one without a version "+
+		"cannot tell two releases apart")
 	fs.BoolVar(&force, "force", false, "overwrite output if it already exists")
 	if err := fs.Parse(args); err != nil {
 		return 2
