@@ -14,6 +14,7 @@ import (
 // leaves a person who exists and cannot get in — and the thing reached for in
 // that gap is the shared operator token, which is what this replaces.
 func runIntelRegister(args []string) int {
+	cmdName = "nox intel add-operator"
 	fs := flag.NewFlagSet("intel register", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
 		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
@@ -93,10 +94,13 @@ func runIntelRegister(args []string) int {
 
 // runIntelInvite re-issues an enrolment link for someone who already exists.
 func runIntelInvite(args []string) int {
+	cmdName = "nox intel invite"
 	fs := flag.NewFlagSet("intel invite", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
 		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
 	email := fs.String("email", "", "address of the operator to re-invite")
+	org := fs.String("org", "",
+		"organisation they belong to (only needed if you administer more than one)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -125,7 +129,7 @@ func runIntelInvite(args []string) int {
 		ExpiresAt string `json:"enrollment_expires_at"`
 	}
 	if code := postJSON(base+"/v1/admin/enrollments", auth,
-		map[string]string{"email": *email}, &out); code != 0 {
+		map[string]string{"email": *email, "org_id": *org}, &out); code != 0 {
 		return code
 	}
 	fmt.Printf("New enrolment link for %s. It works once and expires%s:\n\n  %s\n",
