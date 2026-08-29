@@ -42,6 +42,24 @@ A source that stays silent about a CVE, and a kernel two repositories can share.
   `github.com/nox-hq/nox-core/...` instead. These packages were never documented
   as a public API, which is why this is a minor release rather than a major one.
 
+### Fixed
+
+- **`scan --help` did not mention `--format`,** the flag that makes nox emit
+  an SBOM. It and five others — `--output`, `--rules`, `--quiet`/`-q`,
+  `--verbose`/`-v`, `--version` — are registered on the root flag set, while
+  `scan --help` printed only the scan set. All six worked; none were listed
+  where somebody would look for them, so `nox scan . --format cdx` writing a
+  CycloneDX 1.5 document read as a capability nox did not have. Scan's usage
+  now renders them under a "Global flags" heading, from the same description
+  constants the real registrations use.
+
+- **`vex init --product` described itself as "typically the Go module path".**
+  nox is not Go-only, and a bare module path is not what OpenVEX products
+  look like: they are package URLs, or for a container its digest. A module
+  path carries no version, so two releases produce VEX statements that cannot
+  be told apart — the one thing a product identifier exists to prevent. The
+  help now says so, and names the forms. No behaviour change.
+
 ### Build
 
 - **warden gates this repository.** Lint runs at pre-commit; tests and the
