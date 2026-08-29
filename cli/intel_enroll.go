@@ -28,6 +28,7 @@ import (
 // until a code from the new app confirms it, so a mistyped code or an app that
 // was never installed leaves the existing authenticator working.
 func runIntelEnroll(args []string) int {
+	cmdName = "nox intel enroll"
 	fs := flag.NewFlagSet("intel enroll", flag.ContinueOnError)
 	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
 		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
@@ -178,18 +179,24 @@ func spaced(s string) string {
 	return b.String()
 }
 
+// cmdName labels errors from postJSON. It is shared by enroll, add-operator
+// and invite, and hardcoding one of them meant `nox intel invite` failed with
+// "nox intel enroll: unauthorized" — which sends the reader to the wrong
+// command's docs.
+var cmdName = "nox intel"
+
 func postJSON(endpoint, token string, body, out any) int {
 	buf, _ := json.Marshal(body)
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(buf))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "nox intel enroll: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", cmdName, err)
 		return 1
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "nox intel enroll: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", cmdName, err)
 		return 1
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -206,7 +213,7 @@ func postJSON(endpoint, token string, body, out any) int {
 		if msg == "" {
 			msg = strings.TrimSpace(string(raw))
 		}
-		fmt.Fprintf(os.Stderr, "nox intel enroll: %s (HTTP %d)\n", msg, resp.StatusCode)
+		fmt.Fprintf(os.Stderr, "%s: %s (HTTP %d)\n", cmdName, msg, resp.StatusCode)
 		return 1
 	}
 	return 0
