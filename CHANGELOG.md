@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-08-29
+
+A source that stays silent about a CVE, and a kernel two repositories can share.
+
+### Added
+
+- **`VerifyingSource`: "a superset of OSV" is now something the client checks,
+  not something it accepts.** The intelligence design threat-modelled poisoning
+  by *addition* — Sybil reporters, malicious metadata — and left the worse half
+  uncovered. A source that withholds a real CVE produces a clean scan, and
+  nothing downstream can tell "no vulnerability" from "not told about the
+  vulnerability". An invented finding is noisy and eventually noticed; a missing
+  one is silent forever.
+
+  Every answer from the intelligence source is now asked of the reference in
+  parallel and the difference classified. When the reference holds a record the
+  intelligence source withheld, that is a `SUPPRESSION`: it raises
+  `degrade.IntelSuppression` **and returns the record anyway**, so a source
+  cannot make a vulnerability disappear by declining to mention it.
+
+### Changed
+
+- **The shared kernel moved to `github.com/nox-hq/nox-core`.** `core/evidence`,
+  `core/vulnsource` and the degrade guards now live in their own module, pinned
+  here at `v0.1.1` — the tag that carries the Apache-2.0 licence. This exists so
+  the CLI and the intelligence service can share one implementation without
+  either depending on the other.
+
+  **This removes those import paths from this module.** Nothing in the CLI, the
+  MCP surface, the LSP or the output formats changes — a `nox scan` behaves
+  exactly as it did — but code importing `github.com/nox-hq/nox/core/evidence`
+  or `github.com/nox-hq/nox/core/vulnsource` must now import
+  `github.com/nox-hq/nox-core/...` instead. These packages were never documented
+  as a public API, which is why this is a minor release rather than a major one.
+
+### Build
+
+- **warden gates this repository.** Lint runs at pre-commit; tests and the
+  security scan run at pre-push, so a failing tree cannot reach the remote.
+
+
 ## [1.30.1] - 2026-08-27
 
 Plugins that were configured, required, and silently not running.
