@@ -285,5 +285,22 @@ features:
 
         Current state, for whoever picks this up: the operator has 9 unused and 1 spent. The storage, hashing and single-use consumption are all in place and tested — this is an endpoint, a button and a subcommand over machinery that already exists.
       requirements: []
+    - id: deliver-enrolment-invitations-by-email
+      title: Deliver enrolment invitations by email
+      description: |-
+        Enrolment invitations for the intelligence service are currently hand-carried: an operator registers someone, the console prints a single-use link, and a human copies it into a chat message. That works for a handful of operators and does not scale past it — and every hand-off is an opportunity to paste a credential somewhere it persists.
+
+        Deliver the invitation to the address it was issued for instead. The address is already known server-side (it is the subject of the binding code), so the invitation never needs to pass through the inviter's hands at all. That also closes the confused-deputy shape of the current flow, where the person who creates an account also holds the credential that activates it.
+
+        Scope: send on register, on re-invite, and on sign-up approval. Deliberately NOT in scope: general transactional email, notifications, or digests.
+
+        Constraints that fall out of what already exists:
+        - The link is single-use and expires in 24h (auth-go MagicLinkService, EnrolmentCodeTTL). Mail delivery must not lengthen that window to compensate for slow mailboxes.
+        - The service must not become undeliverable-silent: a send failure has to surface to the operator who triggered it, because an invitation nobody receives looks identical to one nobody has acted on yet. The console already handles the "registered but no link could be issued" case; this needs the same treatment.
+        - Resend is already the provider elsewhere in this fleet (alertmanager-resend-smtp in observability, vorhut-email), so the sender configuration is a solved problem to reuse rather than re-decide.
+        - nox-intelligence is a private service; the sender identity should be its own, not borrowed from another product.
+
+        Tracked upstream as nox-intelligence issue #4.
+      requirements: []
 constraints: []
 version: 0.1.0

@@ -7,7 +7,7 @@ import (
 
 func runCompletion(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox completion <bash|zsh|fish|powershell>") // nox:ignore AI-006 -- CLI usage text
+		fmt.Fprintln(os.Stderr, "Usage: nox completion <bash|zsh|fish|powershell>")
 		return 2
 	}
 

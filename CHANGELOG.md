@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **AI-006 no longer flags a constant sentence that contains the word
+  "prompt"** (#497). `print` in the rule's call alternation also matches inside
+  `Fprintf`, and the noun was then accepted anywhere in the call — including
+  inside a string literal. `fmt.Fprintf(os.Stderr, "…nobody can approve a
+  browser prompt.\n")` was a medium finding, and it cannot be a true one: a call
+  whose arguments are all constants logs no value, so there is no prompt to
+  leak. A match now survives only when the call actually logs something — the
+  noun is an identifier, or code follows it inside the call (a concatenation, an
+  f-string or template-literal hole, a printf argument). Five waivers in nox's
+  own CLI became unnecessary and were removed.
+
 ## [1.31.0] - 2026-08-29
 
 A source that stays silent about a CVE, and a kernel two repositories can share.

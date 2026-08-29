@@ -190,6 +190,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
 				continue
 			}
+			// AI-006 asserts that a prompt or LLM response reaches a log
+			// (CWE-532). A call whose arguments are all constant text logs no
+			// value at all, so the word "prompt" in its message is a sentence,
+			// not a leak — see logsOnlyConstantText.
+			if results[i].RuleID == "AI-006" && logsOnlyConstantText(lang, content, &results[i]) {
+				continue
+			}
 			// AI-049 asserts an eval/code-execution sink (CWE-95). A call
 			// executing a SQL statement is a database sink, and the AI token
 			// the rule gated on is a column name inside the query text — see
