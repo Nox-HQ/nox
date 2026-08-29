@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -133,14 +134,14 @@ func run(args []string) int {
 	// "flag explicitly set to the default". The built-in defaults are applied by
 	// resolveOutputFormat/resolveOutputDir after config is read. See the comment
 	// on those functions.
-	fs.StringVar(&formatFlag, "format", "", "output formats: json,sarif,cdx,spdx,all (comma-separated) (default \"json\")")
-	fs.StringVar(&outputDir, "output", "", "output directory for report files (default \".\")")
-	fs.StringVar(&rulesFlag, "rules", "", "path to custom rules YAML file or directory")
-	fs.BoolVar(&quietFlag, "quiet", false, "suppress all output except errors")
-	fs.BoolVar(&quietFlag, "q", false, "suppress all output except errors (shorthand)")
-	fs.BoolVar(&verboseFlag, "verbose", false, "enable verbose output")
-	fs.BoolVar(&verboseFlag, "v", false, "enable verbose output (shorthand)")
-	fs.BoolVar(&versionFlag, "version", false, "print version and exit")
+	fs.StringVar(&formatFlag, "format", "", usageFormat)
+	fs.StringVar(&outputDir, "output", "", usageOutput)
+	fs.StringVar(&rulesFlag, "rules", "", usageRules)
+	fs.BoolVar(&quietFlag, "quiet", false, usageQuiet)
+	fs.BoolVar(&quietFlag, "q", false, usageQuietSh)
+	fs.BoolVar(&verboseFlag, "verbose", false, usageVerbose)
+	fs.BoolVar(&verboseFlag, "v", false, usageVerbSh)
+	fs.BoolVar(&versionFlag, "version", false, usageVersion)
 
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
@@ -364,6 +365,52 @@ func absAgainst(root, p string) string {
 	return filepath.Join(root, p)
 }
 
+// Descriptions for the flags nox accepts before a subcommand.
+//
+// Constants rather than literals at the registration sites, because
+// `nox scan --help` renders the same set (see scanFS.Usage) and two copies of
+// a flag's description drift. The registrations themselves stay inline in
+// run(), where the alias-drift guard in toplevel_flag_efficacy_test.go can see
+// them: -q and --quiet must keep binding one variable, and that guard reads
+// the source.
+const (
+	usageFormat  = "output formats: json,sarif,cdx,spdx,all (comma-separated) (default \"json\")"
+	usageOutput  = "output directory for report files (default \".\")"
+	usageRules   = "path to custom rules YAML file or directory"
+	usageQuiet   = "suppress all output except errors"
+	usageQuietSh = "suppress all output except errors (shorthand)"
+	usageVerbose = "enable verbose output"
+	usageVerbSh  = "enable verbose output (shorthand)"
+	usageVersion = "print version and exit"
+)
+
+// printGlobalFlags renders the pre-subcommand flags for a subcommand's usage.
+//
+// They are real and they work — `nox scan . --format cdx` writes an SBOM — but
+// they live on the root flag set, so `nox scan --help` listed only the scan set
+// and never mentioned them. --format is how nox emits an SBOM at all, which
+// made the SBOM look like a capability nox does not have (#489).
+//
+// Rendered from a throwaway set so this stays a display concern: nothing here
+// parses anything, and the descriptions come from the same constants the real
+// registrations use.
+func printGlobalFlags(out io.Writer) {
+	var s1, s2, s3 string
+	var b1, b2, b3 bool
+	tmp := flag.NewFlagSet("global", flag.ContinueOnError)
+	tmp.SetOutput(out)
+	tmp.StringVar(&s1, "format", "", usageFormat)
+	tmp.StringVar(&s2, "output", "", usageOutput)
+	tmp.StringVar(&s3, "rules", "", usageRules)
+	tmp.BoolVar(&b1, "quiet", false, usageQuiet)
+	tmp.BoolVar(&b1, "q", false, usageQuietSh)
+	tmp.BoolVar(&b2, "verbose", false, usageVerbose)
+	tmp.BoolVar(&b2, "v", false, usageVerbSh)
+	tmp.BoolVar(&b3, "version", false, usageVersion)
+	_, _ = fmt.Fprintln(out, "\nGlobal flags (accepted before or after the subcommand):")
+	tmp.PrintDefaults()
+}
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -417,6 +464,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&sortFlag, "sort", "deterministic", "findings.json order: 'deterministic' (rule/path/line) or 'priority' (severity, then reachability, then confidence — most actionable first)")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
+	scanFS.Usage = func() {
+		out := scanFS.Output()
+		_, _ = fmt.Fprintln(out, "Usage of scan:")
+		scanFS.PrintDefaults()
+		printGlobalFlags(out)
+	}
 	positionals, err := parseInterspersed(scanFS, args)
 	if err != nil {
 		// flag.ErrHelp means the user asked for -h/--help; the flag package
