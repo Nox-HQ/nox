@@ -45,7 +45,6 @@ var contentFixes = map[string]contentFix{
 	"IAC-042": {regexp.MustCompile(`(?i)(enable_https_traffic_only\s*=\s*)false`), "${1}true", "enable_https_traffic_only = false → true"},
 	// Terraform: HTTPS listener, private ACL.
 	"IAC-041": {regexp.MustCompile(`(?i)(protocol\s*=\s*["'])HTTP(["'])`), "${1}HTTPS${2}", `protocol "HTTP" → "HTTPS"`},
-	// nox:ignore SEC-163 -- regex literal for a remediation pattern, not a secret
 	"IAC-040": {regexp.MustCompile(`(?i)(acl\s*=\s*["'])(?:public-read|public-read-write)(["'])`), "${1}private${2}", `acl "public-read" → "private"`},
 	// Dockerfile: COPY instead of ADD (ADD's implicit fetch/extract is a footgun).
 	"IAC-003": {regexp.MustCompile(`(?im)(^\s*)ADD(\s+)`), "${1}COPY${2}", "ADD → COPY"},
