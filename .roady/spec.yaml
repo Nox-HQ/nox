@@ -262,5 +262,28 @@ features:
 
         Treat it as one design pass: establish a spacing scale and a button hierarchy, apply them across all views, then verify in the browser at several widths rather than trusting the tests. The existing ui_test.go guards structure (every called function is defined, the script boots, every id setReviewVisible hides exists, every input/select with an id is wired) — those catch wiring, not layout, and should stay as they are.
       requirements: []
+    - id: intelligence-auth-regenerate-recovery-codes-without-re-enrolling
+      title: 'Intelligence auth: regenerate recovery codes without re-enrolling'
+      description: |-
+        nox-intelligence v0.6.0 issues ten recovery codes when TOTP enrolment is confirmed, and that is the only place they are ever issued. GenerateRecoveryCodes has exactly one caller: confirmEnroll.
+
+        THE GAP
+
+        An operator who has spent most of their codes has no way to get more except by enrolling a new authenticator — which rotates the TOTP secret and invalidates the app they are still happily using. So the recovery mechanism forces a change to the primary factor, which is backwards: recovery exists to avoid disrupting the primary factor.
+
+        Every service that issues these (GitHub, GitLab, AWS, Stripe) exposes regeneration as its own action, precisely because running low is normal and re-enrolling is not.
+
+        WHAT IS NEEDED
+
+        - POST /v1/auth/recovery-codes — authorised by an existing session (the operator has already proven a factor) or by the operator token. Discards the old set and returns a new one, which GenerateRecoveryCodes already does atomically.
+        - Show the remaining count where the operator will see it. The service already computes it and returns it on a recovery-code sign-in; nothing surfaces it otherwise, so the first sign that codes are running out is running out.
+        - A console control alongside the existing "authenticator" button, and a CLI subcommand.
+
+        WHY IT IS NOT IN v0.6.0
+
+        Recovery codes were built to close the lockout that started this work, and issuing them at enrolment is the part that closes it. Regeneration is the follow-on that makes them sustainable rather than a one-shot. Splitting it keeps the security fix small and reviewable.
+
+        Current state, for whoever picks this up: the operator has 9 unused and 1 spent. The storage, hashing and single-use consumption are all in place and tested — this is an endpoint, a button and a subcommand over machinery that already exists.
+      requirements: []
 constraints: []
 version: 0.1.0
