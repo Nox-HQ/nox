@@ -203,7 +203,7 @@ logical issue carries the same ID everywhere.
 ## Phase 3 — The intelligence service
 
 New module `github.com/nox-hq/nox-intelligence` at `oss/nox-intelligence`,
-importing `github.com/nox-hq/nox/core/evidence` so both sides agree on what
+importing `github.com/nox-hq/nox-core/evidence` so both sides agree on what
 CONFIRMED means. Separate deployable, per ADR 0002.
 
 ### Stack
