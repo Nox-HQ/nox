@@ -95,8 +95,10 @@ func runIntelEnroll(args []string) int {
 		return 1
 	}
 	var done struct {
-		Enrolled bool   `json:"enrolled"`
-		Error    string `json:"error"`
+		Enrolled           bool     `json:"enrolled"`
+		RecoveryCodes      []string `json:"recovery_codes"`
+		RecoveryCodesError string   `json:"recovery_codes_error"`
+		Error              string   `json:"error"`
 	}
 	if code := postJSON(base+"/v1/auth/enroll/confirm", token, map[string]string{
 		"email": *email, "enrollment_token": begin.EnrollmentToken,
@@ -105,7 +107,23 @@ func runIntelEnroll(args []string) int {
 		fmt.Fprintf(os.Stderr, "The new factor was NOT activated; your existing one still works.\n")
 		return code
 	}
-	fmt.Printf("Enrolled. Sign in at %s with a code from the app.\n", base+"/")
+	fmt.Printf("Enrolled.\n")
+
+	// Recovery codes are printed here because this is the one moment they
+	// exist. They are shown once; a run that scrolls them past the operator
+	// has failed at the thing it was for.
+	if len(done.RecoveryCodes) > 0 {
+		fmt.Printf("\nRecovery codes — save these now. Each works once, in place of a\n")
+		fmt.Printf("code from your app, and they are shown only here.\n\n")
+		for _, c := range done.RecoveryCodes {
+			fmt.Printf("  %s\n", c)
+		}
+		fmt.Printf("\nWithout them, a lost phone means the operator token is the only\n")
+		fmt.Printf("way back in — which is how this service's own lockout had to be fixed.\n")
+	} else if done.RecoveryCodesError != "" {
+		fmt.Fprintf(os.Stderr, "\nwarning: %s\n", done.RecoveryCodesError)
+	}
+	fmt.Printf("\nSign in at %s with a code from the app, or one of the codes above.\n", base+"/")
 	return 0
 }
 
