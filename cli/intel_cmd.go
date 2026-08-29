@@ -22,6 +22,8 @@ func runIntel(args []string) int {
 		return runIntelPreview(args[1:])
 	case "id":
 		return runIntelID()
+	case "enroll":
+		return runIntelEnroll(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "nox intel: unknown subcommand %q\n\n", args[0])
 		printIntelUsage()
@@ -33,7 +35,8 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: nox intel <command>\n\n")
 	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry\n")
 	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
-	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n\n")
+	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
+	fmt.Fprintf(os.Stderr, "  enroll           register a second factor for an operator account\n\n")
 	fmt.Fprintf(os.Stderr, "Contribution is off unless scan.intelligence.contribute is set,\n")
 	fmt.Fprintf(os.Stderr, "and is a separate decision from querying an intelligence endpoint.\n")
 }
