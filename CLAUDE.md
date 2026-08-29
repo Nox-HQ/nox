@@ -53,13 +53,15 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 
 ### Evidence Spine
 
-`core/evidence` is the foundation under dynamic exploit validation, and the
-model a future intelligence service will share with the CLI. It owns the
-exploitability lifecycle (POTENTIAL, PLAUSIBLE, PREVENTED, INCONCLUSIVE,
-CONFIRMED), evidence kinds with explicit strengths, provenance, and confidence
-aggregation.
+The evidence model lives in `github.com/nox-hq/nox-core/evidence`, a separate
+module pinned here at `v0.1.1` — not in this repository. It is the foundation
+under dynamic exploit validation, and the model the intelligence service shares
+with the CLI; it sits in its own module precisely so neither side depends on the
+other. It owns the exploitability lifecycle (POTENTIAL, PLAUSIBLE, PREVENTED,
+INCONCLUSIVE, CONFIRMED), evidence kinds with explicit strengths, provenance, and
+confidence aggregation.
 
-Two rules are enforced here and must not be re-implemented elsewhere:
+Two rules are enforced there and must not be re-implemented here:
 
 - CONFIRMED requires deterministic evidence at reproduction strength or above. No
   quantity of heuristics, repeated observations, or LLM judgments reaches it.
