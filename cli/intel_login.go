@@ -134,7 +134,7 @@ func runIntelLogout(args []string) int {
 		fmt.Println("Not signed in.")
 		return 0
 	}
-	req, err := http.NewRequest(http.MethodPost, s.Endpoint+"/v1/auth/logout", nil)
+	req, err := http.NewRequest(http.MethodPost, s.Endpoint+"/v1/auth/logout", http.NoBody)
 	if err == nil {
 		req.Header.Set("Authorization", "Bearer "+s.Token)
 		if resp, derr := (&http.Client{Timeout: 30 * time.Second}).Do(req); derr == nil {
@@ -178,7 +178,7 @@ func runIntelWhoami(args []string) int {
 	if !*check {
 		return 0
 	}
-	req, err := http.NewRequest(http.MethodGet, s.Endpoint+"/v1/auth/session", nil)
+	req, err := http.NewRequest(http.MethodGet, s.Endpoint+"/v1/auth/session", http.NoBody)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "nox intel whoami: %v\n", err)
 		return 1
