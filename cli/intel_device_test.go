@@ -116,3 +116,41 @@ func readSource(rel string) (string, error) {
 	b, err := os.ReadFile(filepath.Join("..", rel))
 	return string(b), err
 }
+
+// `register` must not create anything. Creating a tenant is where terms,
+// billing and address verification live, and no comparable tool lets a CLI do
+// it — GitHub, Vercel and Cloudflare all create the org on the web.
+//
+// The command exists as a signpost because the alternative is someone typing it,
+// getting "unknown subcommand", and guessing.
+func TestRegisterOnlyPointsAtTheWeb(t *testing.T) {
+	src, err := readSource("cli/intel_signup.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// It must not call the admin API to create anything.
+	for _, bad := range []string{"/v1/admin/orgs", "/v1/admin/subjects", "postJSON("} {
+		if strings.Contains(src, bad) {
+			t.Errorf("intel register calls %q; creating a tenant from a CLI is the thing "+
+				"this command exists to avoid", bad)
+		}
+	}
+	if !strings.Contains(src, "/signup") {
+		t.Error("intel register does not point at the sign-up page")
+	}
+}
+
+// Adding an operator is a different act from creating a tenant, and conflating
+// them under one verb is how somebody ends up creating a tenant by accident.
+func TestOperatorCreationHasItsOwnVerb(t *testing.T) {
+	src, err := readSource("cli/intel_cmd.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(src, `case "add-operator":`) {
+		t.Error("no distinct verb for adding an operator")
+	}
+	if !strings.Contains(src, "runIntelSignup") {
+		t.Error("`register` is not wired to the web sign-up")
+	}
+}

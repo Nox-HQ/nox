@@ -29,6 +29,8 @@ func runIntel(args []string) int {
 	case "whoami":
 		return runIntelWhoami(args[1:])
 	case "register":
+		return runIntelSignup(args[1:])
+	case "add-operator":
 		return runIntelRegister(args[1:])
 	case "invite":
 		return runIntelInvite(args[1:])
@@ -47,10 +49,11 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
 	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
 	fmt.Fprintf(os.Stderr, "\nOperator accounts:\n")
-	fmt.Fprintf(os.Stderr, "  login            sign in with your authenticator and store the session\n")
+	fmt.Fprintf(os.Stderr, "  login            approve this terminal from your browser and store the session\n")
 	fmt.Fprintf(os.Stderr, "  logout           revoke the session, on the server as well as here\n")
 	fmt.Fprintf(os.Stderr, "  whoami           show who this machine is signed in as\n")
-	fmt.Fprintf(os.Stderr, "  register         create an operator and print their enrolment link\n")
+	fmt.Fprintf(os.Stderr, "  register         open the web page where an organisation is created\n")
+	fmt.Fprintf(os.Stderr, "  add-operator     add someone to your organisation and print their link\n")
 	fmt.Fprintf(os.Stderr, "  invite           re-issue an enrolment link that expired\n")
 	fmt.Fprintf(os.Stderr, "  enroll           bind an authenticator using an enrolment link\n\n")
 	fmt.Fprintf(os.Stderr, "Contribution is off unless scan.intelligence.contribute is set,\n")

@@ -89,8 +89,7 @@ func runIntelLoginDevice(base string, openBrowser bool) int {
 	return pollForDeviceSession(base, auth)
 }
 
-func requestDeviceAuthorization(base string) (deviceAuth, int) {
-	var auth deviceAuth
+func requestDeviceAuthorization(base string) (auth deviceAuth, exitCode int) {
 	body, status, err := postJSONRaw(base+"/v1/auth/device", "", map[string]string{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "nox login: %v\n", err)
@@ -246,7 +245,7 @@ func deviceErrorOf(raw []byte) string {
 
 // postJSONRaw is postJSON without the error printing, for callers that branch
 // on the status themselves.
-func postJSONRaw(endpoint, token string, body any) ([]byte, int, error) {
+func postJSONRaw(endpoint, token string, body any) (raw []byte, status int, err error) {
 	buf, _ := json.Marshal(body)
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(buf))
 	if err != nil {
@@ -261,7 +260,7 @@ func postJSONRaw(endpoint, token string, body any) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	return raw, resp.StatusCode, nil
 }
 
