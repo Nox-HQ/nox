@@ -40,11 +40,6 @@ func runIntelLogin(args []string) int {
 	// Browser sign-in cannot work where nobody is watching. Failing here with
 	// the fix beats hanging for five minutes in a pipeline.
 	if isCI() && !*noBrowser {
-		// AI-006 matches "print" inside Fprintf and then the word "prompt"
-		// anywhere in the call, including inside a literal with nothing dynamic
-		// in it. Filed against the rule; the sentence below is the clearest way
-		// to say what went wrong, so it stays.
-		// nox:ignore AI-006 -- static message about a browser prompt, not a logged LLM prompt
 		fmt.Fprintf(os.Stderr, "nox intel login: this looks like CI, where nobody can approve a browser prompt.\n")
 		fmt.Fprintf(os.Stderr, "Use a scoped token in NOX_INTEL_TOKEN instead, or pass --no-browser\n")
 		fmt.Fprintf(os.Stderr, "if a person really is watching this terminal.\n")

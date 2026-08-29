@@ -158,7 +158,7 @@ func runConfirm(args []string) int {
 
 func printConfirmSummary(rep *confirm.Report, output string) {
 	if len(rep.AIFindingsConsidered) == 0 {
-		fmt.Println("[confirm] no AI prompt-injection findings in findings.json — nothing to confirm") // nox:ignore AI-006 -- CLI status text, not prompt logging
+		fmt.Println("[confirm] no AI prompt-injection findings in findings.json — nothing to confirm")
 		fmt.Printf("[confirm] wrote %s\n", output)
 		return
 	}

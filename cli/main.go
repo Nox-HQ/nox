@@ -149,7 +149,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  scan <path>      Scan a directory for security issues\n")
 		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
-		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n") // nox:ignore AI-006 -- CLI help text
+		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
@@ -168,7 +168,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
-		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n") // nox:ignore AI-006 -- CLI help text
+		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n")
 		fmt.Fprintf(os.Stderr, "  serve            Start MCP server on stdio\n")
 		fmt.Fprintf(os.Stderr, "  mcp <cmd>        Baseline an MCP server's tool manifest and detect drift (rug-pull)\n")
 		fmt.Fprintf(os.Stderr, "  lsp              Start LSP server on stdio (publishes findings as editor diagnostics)\n")
