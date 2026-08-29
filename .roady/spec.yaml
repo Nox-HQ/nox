@@ -233,5 +233,57 @@ features:
 
         Changing the bench scorer to treat findings from unannotated rules as "unmeasured" rather than false positives was implemented and then abandoned. The corpus asserts COMPLETE ground truth: annotated lines carry the declared issue and every other line is implicitly clean. core/bench/density_test.go pins this directly ("FP on a clean line of an annotated file is noise but not inflation"), and two further tests measure over-firing where several rules pile onto one annotated line. The change would have silenced exactly those. The precision collapse is real, not a measurement artifact, and the corpus is the judge — plugin precision is what has to improve.
       requirements: []
+    - id: intelligence-console-full-ui-ux-review-pass
+      title: 'Intelligence Console: full UI/UX review pass'
+      description: |-
+        A dedicated design pass over the NOX Intelligence operator console (nox-intelligence, internal/interfaces/httpapi/ui/index.html). The console has grown feature by feature — review queue, candidate detail, confirmations, sort/search, TOTP enrolment — and each addition was styled in isolation. The result works but has never been looked at as a whole.
+
+        WHY THIS NEEDS A SESSION RATHER THAN INCREMENTAL FIXES
+
+        Every UI defect found so far was found by looking at the rendered page, not by a test. None would have surfaced in CI. A list of the ones already fixed, because they show the pattern:
+
+        - `.linkish` lost a specificity contest to `.login button`, so "Back to sign in" and "Set one up" rendered as filled blue buttons competing with the primary action.
+        - The enrolment address field was read-only and empty for a signed-in operator, reading as a broken input.
+        - After a successful enrolment the emptied QR container survived as a small white box and a blank field under "Cannot scan it?" — reading as a failed image at the moment the operator needs to believe it worked.
+        - Opening a confirmation re-solved all six table columns under auto layout, so the whole table jumped sideways and moved other rows' buttons under the cursor — the exact misclick the confirmation exists to prevent.
+        - The evidence line read "5 nothing machine-checkable", a contradiction, because the count and its qualifier were concatenated without saying what the number counted.
+        - Search and sort shipped as markup with no listeners: the controls looked live and did nothing.
+
+        KNOWN OUTSTANDING ISSUES
+
+        - Margins and vertical rhythm are inconsistent between the review queue, the sign-in form and the enrolment panel. Spacing was set per-component with ad-hoc rem values rather than from a scale.
+        - The enrolment panel is tall enough that the QR pushes the confirm input below the fold on a 795px viewport; the operator scans, then has to hunt for where to type the code.
+        - Button hierarchy is flat. Generate, Confirm, sign out, "authenticator", escalate/reject and the linkish navigation all compete; only the destructive confirm has a distinct treatment.
+        - The dark theme is hardcoded. There is no light mode and no `prefers-color-scheme` handling, and the QR has to force a white ground because of it.
+        - The base config's dashboard provider points at a path that does not exist, logging a provisioning error on every start (cosmetic, but it is in the console's own logs).
+        - No responsive review below ~760px beyond the table's own scroll container.
+
+        SCOPE
+
+        Treat it as one design pass: establish a spacing scale and a button hierarchy, apply them across all views, then verify in the browser at several widths rather than trusting the tests. The existing ui_test.go guards structure (every called function is defined, the script boots, every id setReviewVisible hides exists, every input/select with an id is wired) — those catch wiring, not layout, and should stay as they are.
+      requirements: []
+    - id: intelligence-auth-regenerate-recovery-codes-without-re-enrolling
+      title: 'Intelligence auth: regenerate recovery codes without re-enrolling'
+      description: |-
+        nox-intelligence v0.6.0 issues ten recovery codes when TOTP enrolment is confirmed, and that is the only place they are ever issued. GenerateRecoveryCodes has exactly one caller: confirmEnroll.
+
+        THE GAP
+
+        An operator who has spent most of their codes has no way to get more except by enrolling a new authenticator — which rotates the TOTP secret and invalidates the app they are still happily using. So the recovery mechanism forces a change to the primary factor, which is backwards: recovery exists to avoid disrupting the primary factor.
+
+        Every service that issues these (GitHub, GitLab, AWS, Stripe) exposes regeneration as its own action, precisely because running low is normal and re-enrolling is not.
+
+        WHAT IS NEEDED
+
+        - POST /v1/auth/recovery-codes — authorised by an existing session (the operator has already proven a factor) or by the operator token. Discards the old set and returns a new one, which GenerateRecoveryCodes already does atomically.
+        - Show the remaining count where the operator will see it. The service already computes it and returns it on a recovery-code sign-in; nothing surfaces it otherwise, so the first sign that codes are running out is running out.
+        - A console control alongside the existing "authenticator" button, and a CLI subcommand.
+
+        WHY IT IS NOT IN v0.6.0
+
+        Recovery codes were built to close the lockout that started this work, and issuing them at enrolment is the part that closes it. Regeneration is the follow-on that makes them sustainable rather than a one-shot. Splitting it keeps the security fix small and reviewable.
+
+        Current state, for whoever picks this up: the operator has 9 unused and 1 spent. The storage, hashing and single-use consumption are all in place and tested — this is an endpoint, a button and a subcommand over machinery that already exists.
+      requirements: []
 constraints: []
 version: 0.1.0
