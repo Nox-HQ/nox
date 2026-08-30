@@ -45,6 +45,13 @@ scan:
     - "testdata/precision-suite-elixir/"
     - "testdata/precision-suite-dart/"
     - "testdata/precision-suite-groovy/"
+    # The refutation suite (Gate A, docs/design/evidence-native-nox.md). Same
+    # rationale as the precision corpora, with one difference worth stating: its
+    # samples are chosen to LOOK suppressible, and two carry live-format
+    # credentials bound to identifiers that say EXAMPLE — precisely so that a
+    # future value-semantics refiner cannot dismiss them on the name. The
+    # refutation harness scans this dir explicitly; the self-scan must not.
+    - "testdata/refutation-suite/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
