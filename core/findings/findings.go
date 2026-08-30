@@ -339,6 +339,32 @@ func flowIdentity(f *Finding) (flowKey, bool) {
 	}, true
 }
 
+// FlowID returns a stable identity for the dataflow a finding describes, and
+// whether it describes one at all.
+//
+// It is the same identity DeduplicateFlows merges on, exported so a caller can
+// name the flow as a SUBJECT rather than only use it to collapse duplicates.
+// That distinction is the whole of Track F: two findings that dedup collapses
+// are not two vulnerabilities, they are one condition observed twice — and
+// until the condition itself could be named, there was nowhere to say so.
+//
+// Deliberately NOT keyed on the rule ID, unlike flowKey. Two different rules
+// reporting the same source reaching the same sink are reporting one flow;
+// including the rule would give them different identities and reintroduce, at
+// the subject level, exactly the double-counting this is meant to expose.
+func FlowID(f *Finding) (string, bool) {
+	sourceLine, sourceVar := f.Metadata["source_line"], f.Metadata["source_var"]
+	if sourceLine == "" || sourceVar == "" {
+		return "", false
+	}
+	sinkLine := f.Metadata["sink_line"]
+	if sinkLine == "" {
+		sinkLine = strconv.Itoa(f.Location.StartLine)
+	}
+	return fmt.Sprintf("%s:%s->%s:%s", normaliseFilePath(f.Location.FilePath),
+		sourceLine, sinkLine, sourceVar), true
+}
+
 // anchoredAtSink reports whether a flow finding sits on its sink line.
 func anchoredAtSink(f *Finding) bool {
 	sinkLine := f.Metadata["sink_line"]

@@ -46,6 +46,7 @@ import (
 type Store struct {
 	mu       sync.Mutex
 	ledgers  map[evidence.Subject]*evidence.Ledger
+	graph    evidence.Graph
 	dropped  int
 	recorded int
 }
@@ -213,4 +214,69 @@ func (s *Store) Withheld(subject evidence.Subject, source, tool, statement strin
 		Subject:    subject,
 		Provenance: evidence.Provenance{Source: source, Tool: tool},
 	})
+}
+
+// Relate records a relationship between two subjects.
+//
+// The store holds relations alongside claims because they answer the question
+// claims alone cannot: not "what do we believe about this candidate?" but
+// "which candidates are about the same thing?". A source-line match and a
+// sink-line match are two candidates and one dataflow, and until the dataflow
+// could be named there was nowhere to say so — the only available move was to
+// delete one of them, which is what dedup does and why the relationship it
+// knows about is lost the moment it acts.
+//
+// A nil Store discards, like everything else here.
+func (s *Store) Relate(r evidence.Relation) {
+	if s == nil || !r.Valid() {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.graph.Add(r)
+}
+
+// Relations returns the relation graph, copied so a caller cannot mutate the
+// store's own.
+func (s *Store) Relations() evidence.Graph {
+	if s == nil {
+		return evidence.Graph{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := evidence.Graph{Relations: make([]evidence.Relation, len(s.graph.Relations))}
+	copy(out.Relations, s.graph.Relations)
+	return out
+}
+
+// Concerning returns the subjects related to target by kind, sorted for
+// determinism.
+//
+// The question it answers on a flow subject is the one Track F exists for:
+// how many candidates does this single security condition account for? Three
+// answers means one vulnerability was reported three times, not that there are
+// three.
+func (s *Store) Concerning(target evidence.Subject, kind evidence.RelationKind) []evidence.Subject {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := make(map[evidence.Subject]bool)
+	for _, r := range s.graph.Relations {
+		if r.To == target && r.Kind == kind {
+			seen[r.From] = true
+		}
+	}
+	out := make([]evidence.Subject, 0, len(seen))
+	for sub := range seen {
+		out = append(out, sub)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
+}
+
+// Flow names the dataflow subject a taint finding concerns.
+func Flow(id string) evidence.Subject {
+	return evidence.Subject{Kind: evidence.SubjectFlow, ID: id}
 }
