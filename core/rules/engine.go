@@ -84,7 +84,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 					continue
 				}
 				if len(rule.ExcludeContextKeywords) > 0 &&
-					contextHasKeyword(lines, mr.Line, contextWindow, rule.ExcludeContextKeywords) {
+					codeContextHasKeyword(lines, mr.Line, contextWindow, rule.ExcludeContextKeywords) {
 					continue
 				}
 				// Positive context requirement: the vendor name must be near
@@ -195,6 +195,40 @@ func copyMetadata(src map[string]string) map[string]string {
 
 // contextHasKeyword reports whether any keyword appears within ±window lines of
 // the 1-based match line. Keywords are matched case-insensitively.
+// codeContextHasKeyword is contextHasKeyword restricted to lines that are not
+// wholly comments.
+//
+// Exclusion keywords are evidence that the surrounding CODE is defensive — a
+// detector, a corpus, a guardrail. Prose is not that evidence, and honouring it
+// gives the scanner a second suppression channel that leaves no trace: no
+// nox:ignore, no audit trail, and no "waives X but matched no finding" when it
+// goes stale.
+//
+// Measured on nox's own tree: a comment reading "attack payload, not tool
+// metadata" silenced MCP-009 entirely, because its keyword list contains
+// "payload". Anyone can disable that rule by writing an ordinary sentence near
+// the code, and nothing in the output says so.
+//
+// Suppression by prose already exists and is audited. It is spelled
+// nox:ignore.
+func codeContextHasKeyword(lines []string, line1, window int, keywords []string) bool {
+	idx := line1 - 1
+	start := max(idx-window, 0)
+	end := min(idx+window, len(lines)-1)
+	for i := start; i <= end; i++ {
+		if lineIsComment(lines, i+1) {
+			continue
+		}
+		lower := strings.ToLower(lines[i])
+		for _, kw := range keywords {
+			if strings.Contains(lower, strings.ToLower(kw)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func contextHasKeyword(lines []string, line1, window int, keywords []string) bool {
 	idx := line1 - 1
 	start := max(idx-window, 0)
