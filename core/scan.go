@@ -125,6 +125,17 @@ type ScanResult struct {
 	// retiring it having counted where the two disagree, and in which
 	// direction, is a decision.
 	Divergences []adjudicate.Divergence
+
+	// Conflicts lists the findings whose evidence contradicts itself at equal
+	// strength. Empty unless the scan recorded reasoning.
+	//
+	// Reported, never resolved. Picking a winner silently is the behaviour the
+	// evidence spine exists to replace, so a disagreement between two producers
+	// about one subject is surfaced for a person to look at.
+	//
+	// Empty on every committed corpus today, and structurally so rather than by
+	// luck — see adjudicate.Conflict for why, and for what makes it reachable.
+	Conflicts []adjudicate.Conflict
 }
 
 // SubjectForFinding returns the evidence subject a finding's claims are filed
@@ -801,7 +812,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
-	divergences := adjudicateFindings(reasons, allFindings)
+	divergences, conflicts := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings, capabilities)
@@ -816,6 +827,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Coverage:     coverage,
 		Reasoning:    reasons,
 		Divergences:  divergences,
+		Conflicts:    conflicts,
 		Findings:     allFindings,
 		Enrichments:  pluginEnrichments,
 		Graphs:       pluginGraphs,
@@ -2027,16 +2039,29 @@ func recordObservations(store *reasoning.Store, fs *findings.FindingSet) {
 // changes colour because of this. What it produces is the count C5 needs —
 // where, how often, and in which direction the two disagree — measured on real
 // scans instead of argued from first principles.
-func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) []adjudicate.Divergence {
+func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adjudicate.Divergence, []adjudicate.Conflict) {
 	if store == nil || fs == nil {
-		return nil
+		return nil, nil
 	}
 	all := fs.Findings()
 	var out []adjudicate.Divergence
+	var conflicts []adjudicate.Conflict
 	for i := range all {
 		subject := SubjectForFinding(all[i])
-		verdict := adjudicate.Adjudicate(store.About(subject), subject)
+		ledger := store.About(subject)
+		verdict := adjudicate.Adjudicate(ledger, subject)
 		fs.SetExploitability(i, string(verdict.Exploitability))
+
+		// Verdict.Conflicted used to be computed here and dropped on the floor.
+		// It costs nothing today because nothing conflicts, which is exactly
+		// the condition under which a discarded value is impossible to notice.
+		if verdict.Conflicted {
+			if c, ok := adjudicate.ConflictFor(ledger, subject); ok {
+				c.Fingerprint = all[i].Fingerprint
+				c.RuleID = all[i].RuleID
+				conflicts = append(conflicts, c)
+			}
+		}
 
 		diverged, overclaimed := adjudicate.Diverged(string(all[i].Confidence), verdict.Confidence)
 		if !diverged {
@@ -2050,7 +2075,7 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) []adjud
 			Overclaimed: overclaimed,
 		})
 	}
-	return out
+	return out, conflicts
 }
 
 // recordCapabilityCoverage records, per reported finding, what the analyses

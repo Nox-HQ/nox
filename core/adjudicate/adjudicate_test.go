@@ -153,3 +153,117 @@ func TestDivergenceDirection(t *testing.T) {
 		}
 	}
 }
+
+// TestConflictIsNotAnExploitabilityState is the C3 decision, held as an
+// assertion.
+//
+// The roadmap asked for equal contradictory strength to surface as
+// INCONCLUSIVE. It must not: INCONCLUSIVE means execution occurred and could
+// not decide, a static scan executes nothing, and one state cannot carry both
+// meanings without a reader losing the ability to tell them apart. The
+// intelligence service derives exploitability from the same kernel function, so
+// the ambiguity would not stay in this repository.
+func TestConflictIsNotAnExploitabilityState(t *testing.T) {
+	l := evidence.Ledger{Claims: []evidence.Claim{
+		supporting(evidence.KindStatic, "taint reaches the sink"),
+		refuting(evidence.KindStatic, "a sanitizer dominates the path"),
+	}}
+	v := adjudicate.Adjudicate(l, candidate)
+	if !v.Conflicted {
+		t.Fatal("the fixture does not conflict; the rest of this test is vacuous")
+	}
+	if v.Exploitability != evidence.Potential {
+		t.Errorf("a conflicted static verdict reported exploitability %q, want POTENTIAL. "+
+			"Conflict is a property of the evidence, not a point on the validation "+
+			"ladder; routing it into the lifecycle makes INCONCLUSIVE mean both "+
+			"\"we attacked it and could not tell\" and \"we attacked nothing\"",
+			v.Exploitability)
+	}
+}
+
+// TestConflictForReportsThePairThatTied. A report saying only "these disagree"
+// sends a person looking through the whole ledger for the disagreement. Naming
+// the two statements is the difference between a signal and a chore.
+func TestConflictForReportsThePairThatTied(t *testing.T) {
+	l := evidence.Ledger{Claims: []evidence.Claim{
+		supporting(evidence.KindHeuristic, "a weak corroboration nobody should act on"),
+		supporting(evidence.KindStatic, "taint reaches the sink"),
+		refuting(evidence.KindStatic, "a sanitizer dominates the path"),
+	}}
+	c, ok := adjudicate.ConflictFor(l, candidate)
+	if !ok {
+		t.Fatal("ConflictFor declined a ledger the kernel calls conflicted")
+	}
+	if c.Strength != evidence.KindStatic {
+		t.Errorf("Strength = %q, want static: the tie is between the STRONGEST claim of "+
+			"each polarity, and reporting the weaker one describes a disagreement that "+
+			"did not decide anything", c.Strength)
+	}
+	if c.Supporting != "taint reaches the sink" {
+		t.Errorf("Supporting = %q; the heuristic was reported instead of the claim that tied",
+			c.Supporting)
+	}
+	if c.Refuting != "a sanitizer dominates the path" {
+		t.Errorf("Refuting = %q", c.Refuting)
+	}
+	if c.Subject != candidate {
+		t.Errorf("Subject = %v, want %v", c.Subject, candidate)
+	}
+}
+
+// TestConflictForCannotManufactureAConflict. A caller that asks for a conflict
+// report about an agreeing ledger must be told no, not handed a half-filled
+// struct: a Conflict in a scan result is a claim that two producers disagreed,
+// and one nobody disagreed about is a fabricated disagreement.
+func TestConflictForCannotManufactureAConflict(t *testing.T) {
+	for name, l := range map[string]evidence.Ledger{
+		"empty":        {},
+		"support only": {Claims: []evidence.Claim{supporting(evidence.KindStatic, "reaches the sink")}},
+		"refute only":  {Claims: []evidence.Claim{refuting(evidence.KindStatic, "sanitized")}},
+		"unequal": {Claims: []evidence.Claim{
+			supporting(evidence.KindControlledReproduction, "the exploit reproduced under the determinism gate"),
+			refuting(evidence.KindHeuristic, "the name looks like a placeholder"),
+		}},
+	} {
+		if c, ok := adjudicate.ConflictFor(l, candidate); ok {
+			t.Errorf("%s: reported a conflict (%+v) where the evidence does not tie", name, c)
+		}
+	}
+}
+
+// TestStrongerEvidenceWinsAndDeterminismIsNotOverturnable pins the two
+// composition rules C3 states, in the direction each can fail, with the exact
+// confidence rather than a bound.
+//
+// The first case is the one with teeth. A heuristic that could demote a
+// deterministic claim would let a guess retire a proof, which is the failure
+// the strength ladder exists to make impossible — and an assertion phrased as
+// "not high" would pass even if it had.
+func TestStrongerEvidenceWinsAndDeterminismIsNotOverturnable(t *testing.T) {
+	proofVersusGuess := evidence.Ledger{Claims: []evidence.Claim{
+		supporting(evidence.KindControlledReproduction, "the exploit reproduced under the determinism gate"),
+		refuting(evidence.KindHeuristic, "the identifier name contains 'example'"),
+	}}
+	v := adjudicate.Adjudicate(proofVersusGuess, candidate)
+	if v.Conflicted {
+		t.Error("a heuristic refutation tied with a reproduction; a guess must not draw with a proof")
+	}
+	if v.Confidence != evidence.ConfidenceConfirmed {
+		t.Errorf("confidence = %q, want CONFIRMED: a heuristic refutation demoted a "+
+			"deterministic support, which is a guess retiring a proof", v.Confidence)
+	}
+
+	guessVersusProof := evidence.Ledger{Claims: []evidence.Claim{
+		supporting(evidence.KindHeuristic, "a pattern matched"),
+		refuting(evidence.KindControlledReproduction, "a controlled reproduction showed the sink is unreachable"),
+	}}
+	v = adjudicate.Adjudicate(guessVersusProof, candidate)
+	if v.Conflicted {
+		t.Error("a heuristic support tied with a reproduction refuting it")
+	}
+	if v.Confidence != evidence.ConfidenceLow {
+		t.Errorf("confidence = %q, want LOW: a pattern match is a heuristic however "+
+			"strongly it is contradicted, and inflating it either way misreports "+
+			"what was established", v.Confidence)
+	}
+}

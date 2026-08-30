@@ -2,6 +2,15 @@
 // resolves each token to its canonical provider rule (the secrets analyzer is
 // language-agnostic and already fires on Go). Values are the canonical example
 // shapes, not live credentials.
+//
+// The GitHub token carries a VALID embedded CRC32 checksum, for the same reason
+// tp_secrets.py's does: a sample a correct scanner can deterministically refute
+// is a poor true positive for "a hardcoded GitHub token". This one was missed
+// when checksum verification landed and kept a random body until Track C3 went
+// looking for subjects whose evidence contradicts itself. Until then nox
+// reported it while its own strongest claim said it was not a credential.
+//
+// Synthetic and matching no issued credential; the body says so in plain text.
 package config
 
 // Config carries the (deliberately hardcoded) service credentials.
@@ -15,7 +24,7 @@ type Config struct {
 func Load() Config {
 	return Config{
 		AWSAccessKeyID: "AKIAIOSFODNN7EXAMPLE",                                   // nox-expect: SEC-001 SEC-508
-		GitHubToken:    "ghp_016C7f8e9d0A1b2C3d4E5f6G7h8I9j0K1l2M",               // nox-expect: SEC-003
+		GitHubToken:    "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",               // nox-expect: SEC-003
 		SlackBotToken:  "xoxb-1234567890-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx", // nox-expect: SEC-023
 	}
 }
