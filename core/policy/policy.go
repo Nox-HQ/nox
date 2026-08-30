@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -32,6 +33,21 @@ type Config struct {
 	// entries default to 0 (fail on the first), so an empty Budget reproduces
 	// the pre-budget max-severity gate exactly.
 	Budget map[findings.Severity]int `yaml:"budget"`
+
+	// Uncertainty says what to do about what nox did not establish. It gates
+	// the second axis the policy has never read: not how bad a finding would be
+	// if true, but how much nox actually determined. Defaults to warn.
+	Uncertainty Uncertainty `yaml:"uncertainty"`
+
+	// RequireCapabilities lists the analysis capabilities this project's triage
+	// depends on. Empty by default, which is every existing repository and
+	// changes nothing for them. A project that lists one is asserting it relies
+	// on that question being answered, and will be told when it stops being.
+	//
+	// Deliberately a declaration rather than an inference: see
+	// EvaluateCapabilities for why "fail on anything unevaluated" cannot be the
+	// design.
+	RequireCapabilities []string `yaml:"require_capabilities"`
 }
 
 // Validate rejects a policy configuration whose gate keywords are not
@@ -53,6 +69,18 @@ func (c Config) Validate() error {
 	if c.WarnOn != "" {
 		if !c.WarnOn.IsValid() {
 			return fmt.Errorf("policy.warn_on: %q is not a valid severity (want one of critical, high, medium, low, info)", c.WarnOn)
+		}
+	}
+	// An unrecognised uncertainty mode must not silently pick a behaviour. The
+	// same reasoning as fail_on above: a mistyped value that quietly resolves
+	// to the permissive default looks configured and is not.
+	if !c.Uncertainty.Valid() {
+		return fmt.Errorf("policy.uncertainty: %q is not valid (want one of warn, fail, ignore)", c.Uncertainty)
+	}
+	for _, name := range c.RequireCapabilities {
+		if !capability.AnalysisCapability(name).Valid() {
+			return fmt.Errorf("policy.require_capabilities: %q is not a known analysis capability "+
+				"(run `nox analysis-capabilities` for the list)", name)
 		}
 	}
 	switch c.BaselineMode {
