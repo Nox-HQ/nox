@@ -1220,6 +1220,16 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		)
 	}
 
+	// Name the dataflows BEFORE collapsing them, because collapsing is what
+	// destroys the evidence that there was ever more than one candidate.
+	//
+	// Dedup already knows that two findings describe one flow — that knowledge
+	// is the whole basis on which it deletes one of them — and then throws it
+	// away. Recording the relation first turns "two findings became one" into
+	// something a reader can see and check, rather than a count that silently
+	// went down.
+	recordFlowIdentity(reasons, allFindings)
+
 	// Collapse one dataflow reported from both ends. The built-in taint model
 	// anchors a flow at its sink; the taint-analysis plugin anchors the same
 	// flow at its source. Neither the fingerprint nor the location matches, so
@@ -2145,5 +2155,45 @@ func policyConfigFrom(cfg *ScanConfig) policy.Config {
 		Budget:              policyBudget(cfg.Policy.Budget),
 		Uncertainty:         policy.Uncertainty(cfg.Policy.Uncertainty),
 		RequireCapabilities: cfg.Policy.RequireCapabilities,
+	}
+}
+
+// recordFlowIdentity relates every candidate that describes a dataflow to the
+// flow itself.
+//
+// It runs before dedup, and that ordering is the point. Afterwards the
+// duplicates are gone and nothing is left to relate — the merge would be
+// invisible in exactly the way this whole programme exists to prevent, and
+// invisible in the direction that looks like progress, because the finding
+// count went down.
+//
+// A relation is an assertion and carries its own evidence, so the edge is not
+// asserted on nox's authority alone: the claim names the source variable, the
+// line its value came from, and the sink it reached, which is what a reader
+// needs to check the merge rather than take it.
+func recordFlowIdentity(store *reasoning.Store, fs *findings.FindingSet) {
+	if store == nil || fs == nil {
+		return
+	}
+	for _, f := range fs.Findings() {
+		id, ok := findings.FlowID(&f)
+		if !ok {
+			continue
+		}
+		candidate := SubjectForFinding(f)
+		flow := reasoning.Flow(id)
+
+		var ledger evidence.Ledger
+		ledger.Add(evidence.Claim{
+			Kind: evidence.KindStatic,
+			Statement: fmt.Sprintf("%s reports %s reaching a sink from line %s",
+				f.RuleID, f.Metadata["source_var"], f.Metadata["source_line"]),
+			Subject:    flow,
+			Provenance: evidence.Provenance{Source: "nox-scan", Tool: "taint"},
+		})
+
+		store.Relate(evidence.Relation{
+			From: candidate, Kind: evidence.RelConcerns, To: flow, Ledger: ledger,
+		})
 	}
 }
