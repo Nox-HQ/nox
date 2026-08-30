@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
@@ -240,6 +241,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
 				continue
 			}
+			a.corroborate(candidate, content, &results[i])
 			fs.Add(results[i])
 		}
 
@@ -320,4 +322,56 @@ func inEmbeddedBlob(lang lexctx.Lang, content []byte, f *findings.Finding) bool 
 // Authority can check.
 func (a *Analyzer) refute(subject evidence.Subject, kind evidence.Kind, statement string) {
 	a.reasoning.Refute(subject, kind, "nox-scan", "secrets", statement)
+}
+
+// corroborate records what the analyzer actually VERIFIED about a value it is
+// about to report.
+//
+// This is the positive counterpart of the refiners above, and it exists
+// because of the same historical bug they do. ENRICH-004 matched the NAME of
+// an assignment and never looked at the value; the refiners fixed that by
+// dropping placeholders. But a finding that survives has ALSO been inspected —
+// its value was read, it carried a recognised provider format, it was not a
+// placeholder — and none of that was written down. The ledger could say why nox
+// stopped believing something and never what it had actually checked before
+// believing it.
+//
+// # What this deliberately does not do
+//
+// It does not raise confidence, and it was worth discovering that before
+// claiming otherwise. Aggregation takes the STRONGEST supporting claim, and
+// every claim recorded here is a heuristic: a regex matched a prefix, a value
+// did not look like a placeholder. Three heuristics are still a heuristic, and
+// the independence promotion cannot apply either, since all of these come from
+// one producer — counting them as independent corroboration would be the "one
+// project scanning itself a hundred times" fallacy with the numbers changed.
+//
+// So this improves EXPLANATION, not confidence. What would move confidence is
+// evidence of a different kind: several providers encode a checksum in the
+// token itself, and verifying one is deterministic rather than heuristic. That
+// is a real and worthwhile next step, and it needs a verifiable test vector
+// before it is written — shipping unverified checksum logic would put false
+// deterministic claims in the ledger, which is worse than the silence it
+// replaces.
+func (a *Analyzer) corroborate(subject evidence.Subject, content []byte, f *findings.Finding) {
+	if a.reasoning == nil {
+		return
+	}
+	value := matchedValue(content, f)
+	if value == "" {
+		return
+	}
+	if prefix, ok := recognisedProviderPrefix(strings.TrimLeft(value, `"'`)); ok {
+		a.support(subject, "the value carries the recognised provider prefix "+prefix+
+			" and a token body, so it is not a bare vocabulary reference")
+	}
+	// The value was READ, and it is not a placeholder. That is the precise
+	// check ENRICH-004 never performed, so recording that it ran and passed is
+	// what makes this finding's ledger different from that rule's.
+	a.support(subject, "the matched value was inspected and is not a documentation placeholder")
+}
+
+// support records a corroborating claim about a candidate that survived.
+func (a *Analyzer) support(subject evidence.Subject, statement string) {
+	a.reasoning.Support(subject, evidence.KindHeuristic, "nox-scan", "secrets", statement, nil)
 }
