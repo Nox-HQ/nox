@@ -283,12 +283,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Fail loudly on an invalid policy gate keyword. An unrecognized fail_on
 	// silently disables the gate — a capitalized "High" or a typo turns CI
 	// green on critical findings — so reject it at load rather than at exit.
-	if err := (policy.Config{
-		FailOn:       findings.Severity(cfg.Policy.FailOn),
-		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
-		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
-		Budget:       policyBudget(cfg.Policy.Budget),
-	}).Validate(); err != nil {
+	if err := policyConfigFrom(cfg).Validate(); err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
@@ -808,7 +803,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	divergences := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
-	policyResult := evaluatePolicy(cfg, allFindings)
+	policyResult := evaluatePolicy(cfg, allFindings, capabilities)
 
 	// Stage 5: Contribute observations, if this installation opted in. Runs
 	// last, over the refined findings, so what is shared is what the scan
@@ -1282,17 +1277,19 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 
 // evaluatePolicy runs the configured fail-on / baseline policy gate over the
 // refined findings. It returns nil when no policy is configured. Stage 4.
-func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet) *policy.Result {
-	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" && len(cfg.Policy.Budget) == 0 {
+func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet, caps *capability.Registry) *policy.Result {
+	// A project that declares a capability requirement has configured a policy,
+	// even with no severity threshold set. Leaving it out of this condition
+	// would accept the setting and never evaluate it — a gate that looks
+	// configured and is not, which is the exact defect Config.Validate exists
+	// to prevent for fail_on.
+	if cfg.Policy.FailOn == "" && cfg.Policy.BaselineMode == "" &&
+		len(cfg.Policy.Budget) == 0 && len(cfg.Policy.RequireCapabilities) == 0 {
 		return nil
 	}
-	policyCfg := policy.Config{
-		FailOn:       findings.Severity(cfg.Policy.FailOn),
-		WarnOn:       findings.Severity(cfg.Policy.WarnOn),
-		BaselineMode: policy.BaselineMode(cfg.Policy.BaselineMode),
-		Budget:       policyBudget(cfg.Policy.Budget),
-	}
-	return policy.Evaluate(policyCfg, allFindings.Findings())
+	policyCfg := policyConfigFrom(cfg)
+	result := policy.Evaluate(policyCfg, allFindings.Findings())
+	return policy.EvaluateCapabilities(policyCfg, caps, result)
 }
 
 // policyBudget converts the string-keyed budget from config into the
@@ -2071,5 +2068,27 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 		case "false":
 			cov.Record(subject, capability.Reachability, capability.Negative)
 		}
+	}
+}
+
+// policyConfigFrom builds the policy configuration from .nox.yaml.
+//
+// It exists because there are two callers — the loader, which validates, and
+// the gate, which evaluates — and they were separate literals. Adding a field
+// to one and not the other produced exactly the defect the validation is FOR:
+// `uncertainty: Fail` was accepted and silently resolved to the permissive
+// default, because the value never reached the function that would have
+// rejected it. A validator that cannot see a field validates nothing about it,
+// and nothing about the shape of two literals made that visible.
+//
+// One constructor, so the two cannot drift again.
+func policyConfigFrom(cfg *ScanConfig) policy.Config {
+	return policy.Config{
+		FailOn:              findings.Severity(cfg.Policy.FailOn),
+		WarnOn:              findings.Severity(cfg.Policy.WarnOn),
+		BaselineMode:        policy.BaselineMode(cfg.Policy.BaselineMode),
+		Budget:              policyBudget(cfg.Policy.Budget),
+		Uncertainty:         policy.Uncertainty(cfg.Policy.Uncertainty),
+		RequireCapabilities: cfg.Policy.RequireCapabilities,
 	}
 }
