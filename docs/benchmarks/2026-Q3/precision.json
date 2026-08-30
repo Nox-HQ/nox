@@ -1,0 +1,280 @@
+{
+  "measured_at": "2026-08-30",
+  "nox_ref": "5848369",
+  "note": "core-only run; offline; single-run wall clock includes process start",
+  "corpora": [
+    {
+      "corpus": "precision-corpus",
+      "tp": 5,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-clojure",
+      "tp": 13,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1,
+      "recall": 0.8125,
+      "f1": 0.8966,
+      "rules_with_misses": [
+        {
+          "rule_id": "TAINT-002",
+          "fp": 0,
+          "fn": 2
+        },
+        {
+          "rule_id": "TAINT-006",
+          "fp": 0,
+          "fn": 1
+        }
+      ]
+    },
+    {
+      "corpus": "precision-suite-cpp",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-csharp",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-dart",
+      "tp": 4,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1,
+      "recall": 0.6667,
+      "f1": 0.8,
+      "rules_with_misses": [
+        {
+          "rule_id": "TAINT-006",
+          "fp": 0,
+          "fn": 2
+        }
+      ]
+    },
+    {
+      "corpus": "precision-suite-elixir",
+      "tp": 14,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-groovy",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-java",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-kotlin",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-lua",
+      "tp": 11,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-objc",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-perl",
+      "tp": 12,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-php",
+      "tp": 9,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-powershell",
+      "tp": 8,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-ruby",
+      "tp": 17,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-rust",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-scala",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite-shell",
+      "tp": 13,
+      "fp": 0,
+      "fn": 2,
+      "precision": 1,
+      "recall": 0.8667,
+      "f1": 0.9286,
+      "rules_with_misses": [
+        {
+          "rule_id": "TAINT-002",
+          "fp": 0,
+          "fn": 1
+        },
+        {
+          "rule_id": "TAINT-006",
+          "fp": 0,
+          "fn": 1
+        }
+      ]
+    },
+    {
+      "corpus": "precision-suite-swift",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    },
+    {
+      "corpus": "precision-suite",
+      "tp": 37,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1,
+      "rules_with_misses": []
+    }
+  ],
+  "total": {
+    "tp": 203,
+    "fp": 0,
+    "fn": 7,
+    "precision": 1.0,
+    "recall": 0.9667,
+    "f1": 0.9831
+  },
+  "plugin_matrix": [
+    {
+      "configuration": "core only",
+      "tp": 37,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "configuration": "+ threat-enrich 0.3.0, triage-agent 0.3.0",
+      "tp": 37,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "configuration": "+ api-abuse 0.2.2",
+      "tp": 37,
+      "fp": 18,
+      "precision": 0.6727,
+      "recall": 1.0
+    },
+    {
+      "configuration": "+ api-abuse 0.2.3",
+      "tp": 37,
+      "fp": 11,
+      "precision": 0.7708,
+      "recall": 1.0
+    },
+    {
+      "configuration": "all three (0.3.0 / 0.3.0 / 0.2.3)",
+      "tp": 37,
+      "fp": 11,
+      "precision": 0.7708,
+      "recall": 1.0
+    }
+  ]
+}
