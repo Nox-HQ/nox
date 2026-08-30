@@ -1,0 +1,8 @@
+{
+  "advisory_imports": ["crypto/md5"],
+  "want_reachable": true,
+  "want_determined": false,
+  "want_state": "unknown",
+  "may_suppress": false,
+  "why": "The toolchain failed, so the linked set is unknown. An empty answer and an unavailable answer look identical downstream and must not be treated alike."
+}

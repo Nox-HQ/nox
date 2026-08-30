@@ -1,0 +1,8 @@
+{
+  "advisory_imports": ["crypto/md5"],
+  "want_reachable": true,
+  "want_determined": true,
+  "want_state": "positive",
+  "may_suppress": false,
+  "why": "The affected package is linked. The finding stands; a reachable vulnerability is not a candidate for suppression."
+}

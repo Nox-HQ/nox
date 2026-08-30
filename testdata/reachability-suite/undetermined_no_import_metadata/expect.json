@@ -1,0 +1,8 @@
+{
+  "advisory_imports": [],
+  "want_reachable": true,
+  "want_determined": false,
+  "want_state": "unknown",
+  "may_suppress": false,
+  "why": "An advisory with no import metadata scopes to the whole module. Nothing was established, and 'we could not tell' must not read as 'not reachable'."
+}

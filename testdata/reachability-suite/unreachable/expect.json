@@ -1,0 +1,8 @@
+{
+  "advisory_imports": ["crypto/md5"],
+  "want_reachable": false,
+  "want_determined": true,
+  "want_state": "negative",
+  "may_suppress": true,
+  "why": "The toolchain enumerated every linked package and the affected one is not among them. This is the ONLY case in this suite where suppression is honest."
+}
