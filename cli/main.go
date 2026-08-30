@@ -208,6 +208,8 @@ func run(args []string) int {
 		return runExplain(remaining[1:])
 	case "replay":
 		return runReplay(remaining[1:])
+	case "why":
+		return runWhy(remaining[1:])
 	case "confirm":
 		return runConfirm(remaining[1:])
 	case "attack":

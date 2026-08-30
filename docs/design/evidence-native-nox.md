@@ -496,8 +496,29 @@ cases already understood.
      a withdrawn attestation as attestation. Both found by running the service
      tests against a real database — without `NOXINTEL_TEST_DSN` every
      assertion in that file skips and the suite reports green.
-- **I — Replay and explanation.** *Milestones 9.1 and 9.2 landed; 9.3 is next
-  and 9.4 is deliberately out of scope.*
+- **I — Replay and explanation.** *Milestones 9.1, 9.2 and 9.3 landed; 9.4 is
+  deliberately out of scope.*
+
+  9.3 is `nox why`, and it is deterministic on purpose: it reads only what the
+  scan established, so every sentence traces to a claim, a capability state or
+  a rule's own metadata. `nox explain` already asks a model to write prose about
+  a finding; both are useful and only one can be put in front of an auditor.
+
+  Two of the eight questions are the ones a scanner normally omits, and they are
+  where the previous tracks pay off. "What was not evaluated?" is answered from
+  Track D's capability coverage, separating *nothing on this installation can
+  establish it* from *the analysis ran and could not tell* from *nothing asked
+  here* — three different next steps. "Does it affect this application?" is
+  answered from Track G's ladder, and an undetermined result says so in the
+  words "unknown, which is not the same as no".
+
+  Two things came out of building it. The first draft printed
+  `Metadata["match"]`, the raw matched value, which on a secrets finding is the
+  credential — into a terminal and a CI log, from a tool whose stated posture is
+  that it never uploads source code. The second is smaller and more common:
+  many catalogue descriptions restate the finding's message, so "why does this
+  matter?" was answered with "because it happened". It now says the catalogue is
+  thin instead, which is true and is actionable by whoever maintains the rule.
 
   `nox scan --evidence-out evidence.json` writes what the scan established —
   input identity, capability state, every claim with its provenance, the
@@ -575,7 +596,7 @@ from an output flip the measurement ruled out.
 | **H** (part) | a capability requirement reads the run, not the installation | intel down + `require_capabilities` was pass/exit 0; now fails |
 | **C5** | two scales kept apart: analyzer confidence and evidence confidence | the flip would have taken `--min-confidence high` from 11 to 0 |
 | **H** | retraction wired end to end; kernel lifecycle made uniform | 5 kernel accessors ignored `Status`; 2 service consumers read raw claims |
-| **I** (9.1, 9.2) | evidence artifact + deterministic replay | 37/37 verdicts reproduced; claim order moved 10 rationales |
+| **I** (9.1–9.3) | evidence artifact, deterministic replay, `nox why` | 37/37 verdicts reproduced; claim order moved 10 rationales |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -666,11 +687,10 @@ is now held by a contract rather than by intent.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **I 9.3, then J.** Tracks A–H are complete and I has its artifact and its
-   replay. What remains is the eight explainability questions (9.3), and the
-   rule migration (J). Full scan reproducibility (9.4) stays out of scope: it
-   needs the rule set, analyzer versions and advisory data snapshotted, and each
-   is its own problem.
+3. **J.** Tracks A–I are complete apart from full scan reproducibility (9.4),
+   which stays out of scope: it needs the rule set, analyzer versions and
+   advisory data snapshotted, and each is its own problem. What remains is the
+   rule migration.
 
 #### Open items no track owns
 
