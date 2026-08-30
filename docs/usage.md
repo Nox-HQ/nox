@@ -1053,6 +1053,33 @@ policy:
   baseline_mode: strict
 ```
 
+#### `nox why` — the eight questions
+
+```sh
+nox why .                 # every finding
+nox why . SEC-003         # one rule
+nox why . 65f66b3f2c17    # one finding, by fingerprint prefix
+```
+
+Answers, for each finding: what was observed, why it matters, what supports it,
+what argues against it, **what was not evaluated**, the potential impact,
+**whether it affects this application**, and what to do.
+
+The two in bold are the ones a scanner usually leaves out. An analysis that
+never ran is a gap, not a limit, and silence about it lets a reader assume
+everything was looked at — so `nox why` names each capability that reached no
+conclusion, and distinguishes "nothing on this installation can establish it"
+from "the analysis ran and could not tell" from "nothing asked here", because
+your next step differs in each case.
+
+It is deterministic: it reads only what the scan established, so the same
+finding always produces the same answers and every sentence traces to a claim, a
+capability state, or the rule's own metadata. `nox explain` is the other one —
+it asks a language model to write prose, which is useful for different reasons.
+Only one of them can be put in front of an auditor.
+
+`--json` emits the structured form.
+
 #### Keeping the evidence: `--evidence-out` and `nox replay`
 
 A scan gathers evidence for and against every candidate it considers, and throws
