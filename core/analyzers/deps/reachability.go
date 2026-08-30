@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/capability"
+	"github.com/nox-hq/nox/core/reach"
 )
 
 // goListTimeout bounds the toolchain call used to enumerate imported packages.
@@ -130,4 +134,52 @@ func goVulnReachable(affectedImports []string, linked map[string]struct{}, linke
 		}
 	}
 	return false, true
+}
+
+// goSymbolReferenced answers whether the advisory's affected import is in the
+// build's linked package set, and says so at the level it actually establishes.
+//
+// That level is reach.SymbolReferenced. `go list -deps` is a linker-level
+// answer: it knows what the build links, not what calls what, so it cannot
+// speak to CallPathExists or anything above it. The previous form of this
+// answer was a bare `reachable` boolean, which read as the stronger claim and
+// was counted as the reachability capability.
+//
+// The scope carries the asymmetry. When the linked set is unknown — no go.mod,
+// a toolchain failure — the scope is incomplete and reach.Refute refuses to
+// build a negative from it, returning Undetermined instead. When the set IS
+// known, the search over it is exhaustive by construction: `go list -deps`
+// enumerates the whole closure, so "no affected import is linked" is a
+// universal claim this analysis can actually make.
+func goSymbolReferenced(affectedImports []string, linked map[string]struct{}, linkedKnown bool) (reach.Result, bool) {
+	subject := evidence.Subject{Kind: evidence.SubjectPackage, ID: strings.Join(affectedImports, ",")}
+	scope := reach.Scope{
+		Analysis:   "go list -deps",
+		Capability: capability.SymbolResolution,
+		BuildID:    "go build closure",
+	}
+	if len(affectedImports) == 0 {
+		// The advisory named no import paths, so there is nothing to look for.
+		scope.Limitations = append(scope.Limitations, reach.UnsupportedFramework)
+		return reach.Undeterminable(subject, reach.SymbolReferenced, scope), false
+	}
+	if !linkedKnown {
+		scope.Limitations = append(scope.Limitations, reach.BudgetExhausted)
+		return reach.Undeterminable(subject, reach.SymbolReferenced, scope), false
+	}
+
+	for _, imp := range affectedImports {
+		if _, ok := linked[imp]; ok {
+			r, _ := reach.Establish(subject, reach.SymbolReferenced, scope, []string{imp})
+			return r, true
+		}
+		for pkg := range linked {
+			if strings.HasPrefix(pkg, imp+"/") {
+				r, _ := reach.Establish(subject, reach.SymbolReferenced, scope, []string{pkg})
+				return r, true
+			}
+		}
+	}
+	r, ok := reach.Refute(subject, reach.SymbolReferenced, scope)
+	return r, ok
 }
