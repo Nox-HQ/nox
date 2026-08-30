@@ -267,3 +267,103 @@ func TestStrongerEvidenceWinsAndDeterminismIsNotOverturnable(t *testing.T) {
 			"what was established", v.Confidence)
 	}
 }
+
+// TestVerdictsAreStableForThisVersion is the enforcement behind
+// adjudicate.Version, and therefore behind replay meaning anything.
+//
+// The replay contract is "same ledger + same adjudicator version = same
+// verdict". Nothing makes that true by itself: Version is a constant somebody
+// has to remember to bump, and the failure mode is silent — adjudication
+// improves, the constant stays, and every stored artifact now disagrees with
+// the code while claiming to be comparable. A reader cannot tell that from a
+// regression.
+//
+// So the pairs below are pinned. Change what Adjudicate returns for any of them
+// and this fails with the exact field that moved. If the change is intended,
+// bump Version and update the table in the same commit — which is the point,
+// because those two edits belong together and nothing else forces it.
+//
+// The kernel's derivation is covered too, not just the code in this file:
+// confidence aggregation and DeriveExploitability both feed these verdicts, so
+// a kernel bump that moves one shows up here as well.
+func TestVerdictsAreStableForThisVersion(t *testing.T) {
+	if adjudicate.Version != "1" {
+		t.Fatalf("adjudicate.Version is %q; this table was pinned against %q. "+
+			"Re-derive the expectations below deliberately rather than editing "+
+			"until it passes", adjudicate.Version, "1")
+	}
+
+	cases := []struct {
+		name           string
+		ledger         evidence.Ledger
+		exploitability evidence.Exploitability
+		confidence     evidence.Confidence
+		conflicted     bool
+		rationale      string
+	}{
+		{
+			name:           "no evidence",
+			ledger:         evidence.Ledger{},
+			exploitability: evidence.Potential,
+			confidence:     evidence.ConfidenceLow,
+			rationale:      "no evidence was recorded about this subject",
+		},
+		{
+			name:           "one heuristic",
+			ledger:         evidence.Ledger{Claims: []evidence.Claim{supporting(evidence.KindHeuristic, "a pattern matched")}},
+			exploitability: evidence.Potential,
+			confidence:     evidence.ConfidenceLow,
+			rationale:      "a pattern matched (heuristic); confidence LOW",
+		},
+		{
+			name:           "static support",
+			ledger:         evidence.Ledger{Claims: []evidence.Claim{supporting(evidence.KindStatic, "the checksum verifies")}},
+			exploitability: evidence.Potential,
+			confidence:     evidence.ConfidenceMedium,
+			rationale:      "the checksum verifies (static); confidence MEDIUM",
+		},
+		{
+			name: "static support, static refutation",
+			ledger: evidence.Ledger{Claims: []evidence.Claim{
+				supporting(evidence.KindStatic, "taint reaches the sink"),
+				refuting(evidence.KindStatic, "a sanitizer dominates the path"),
+			}},
+			exploitability: evidence.Potential,
+			confidence:     evidence.ConfidenceLow,
+			conflicted:     true,
+			rationale:      "evidence conflicts at equal strength; " + evidence.Describe(evidence.Potential),
+		},
+		{
+			name: "reproduction beats a heuristic refutation",
+			ledger: evidence.Ledger{Claims: []evidence.Claim{
+				supporting(evidence.KindControlledReproduction, "the exploit reproduced under the determinism gate"),
+				refuting(evidence.KindHeuristic, "the identifier name contains 'example'"),
+			}},
+			exploitability: evidence.Potential,
+			confidence:     evidence.ConfidenceConfirmed,
+			rationale: "the exploit reproduced under the determinism gate (controlled_reproduction); " +
+				"confidence CONFIRMED",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := adjudicate.Adjudicate(tc.ledger, candidate)
+			if got.Exploitability != tc.exploitability {
+				t.Errorf("exploitability = %q, want %q", got.Exploitability, tc.exploitability)
+			}
+			if got.Confidence != tc.confidence {
+				t.Errorf("confidence = %q, want %q", got.Confidence, tc.confidence)
+			}
+			if got.Conflicted != tc.conflicted {
+				t.Errorf("conflicted = %v, want %v", got.Conflicted, tc.conflicted)
+			}
+			if got.Rationale != tc.rationale {
+				t.Errorf("rationale =\n  %q\nwant\n  %q\nThe rationale is part of the "+
+					"verdict: it is the sentence a person read and acted on, and a replay "+
+					"that reproduced the labels but not the explanation has not reproduced "+
+					"what they saw", got.Rationale, tc.rationale)
+			}
+		})
+	}
+}

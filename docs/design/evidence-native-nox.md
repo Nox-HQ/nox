@@ -496,10 +496,36 @@ cases already understood.
      a withdrawn attestation as attestation. Both found by running the service
      tests against a real database — without `NOXINTEL_TEST_DSN` every
      assertion in that file skips and the suite reports green.
-- **I — Replay and explanation.** Persist an evidence-rich artifact; make
-  re-adjudication deterministic (same ledger + same adjudicator version = same
-  verdict) before attempting full scan reproducibility; every finding answers
-  the eight explainability questions.
+- **I — Replay and explanation.** *Milestones 9.1 and 9.2 landed; 9.3 is next
+  and 9.4 is deliberately out of scope.*
+
+  `nox scan --evidence-out evidence.json` writes what the scan established —
+  input identity, capability state, every claim with its provenance, the
+  relationships between subjects, and the adjudicated verdict per finding — and
+  `nox replay` re-derives those verdicts from that file alone. Not the
+  repository, not the rules, not the network: the question "does this evidence
+  support this verdict?" never depended on them, which is what keeps it
+  answerable once all three have moved on.
+
+  `adjudicate.Version` is the other half of the contract, and it is only worth
+  something if somebody remembers to bump it, so
+  `TestVerdictsAreStableForThisVersion` pins a table of ledger→verdict pairs.
+  Change what adjudication returns and it fails with the field that moved; the
+  fix is to bump the version and update the table in the same commit, which is
+  the pairing nothing else forces. A replayed difference under a *different*
+  version is reported as a change rather than a defect, and exits 0 — otherwise
+  every nox upgrade would look like a regression in whatever produced the
+  artifact.
+
+  **Claim order within a subject turned out to be load-bearing.** The kernel
+  breaks strength ties by taking the earliest claim, deliberately and by its own
+  test, so among equal-strength claims the one that carried the verdict — and
+  therefore the rationale a person read — is a function of the order they were
+  recorded in. The first draft of the artifact sorted claims by kind, source and
+  statement, which looked tidy and rewrote the explanation on 10 of 37 findings.
+  Every label still reproduced. Only the sentence moved, which is the half
+  anybody actually reads. Found by the replay disagreeing with the scan that had
+  just produced it.
 - **J — Migration and validation.** Rule families in value/risk order — noisy
   AI rules, secrets, endpoint/API misuse, taint overlaps, dependency
   applicability — each answering: what is the observation, what confirms it,
@@ -549,6 +575,7 @@ from an output flip the measurement ruled out.
 | **H** (part) | a capability requirement reads the run, not the installation | intel down + `require_capabilities` was pass/exit 0; now fails |
 | **C5** | two scales kept apart: analyzer confidence and evidence confidence | the flip would have taken `--min-confidence high` from 11 to 0 |
 | **H** | retraction wired end to end; kernel lifecycle made uniform | 5 kernel accessors ignored `Status`; 2 service consumers read raw claims |
+| **I** (9.1, 9.2) | evidence artifact + deterministic replay | 37/37 verdicts reproduced; claim order moved 10 rationales |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -639,8 +666,11 @@ is now held by a contract rather than by intent.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **I, then J.** Tracks A–H are complete. What remains is deterministic
-   re-adjudication and explanation (I), and the rule migration (J).
+3. **I 9.3, then J.** Tracks A–H are complete and I has its artifact and its
+   replay. What remains is the eight explainability questions (9.3), and the
+   rule migration (J). Full scan reproducibility (9.4) stays out of scope: it
+   needs the rule set, analyzer versions and advisory data snapshotted, and each
+   is its own problem.
 
 #### Open items no track owns
 
