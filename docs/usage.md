@@ -1053,6 +1053,25 @@ policy:
   baseline_mode: strict
 ```
 
+#### Via MCP
+
+The evidence surface is on the MCP server too, because an agent triaging a scan
+needs it more than a person does — a person can read the terminal and notice
+what is missing.
+
+| tool | what it answers |
+|---|---|
+| `analysis_capabilities` | what this installation can establish, and what **this scan** actually established |
+| `why` | the eight questions for a finding (fingerprint, prefix, or rule ID) |
+
+`analysis_capabilities` is the one worth calling before summarising a scan. The
+MCP surface already carried degradations, which say a check *broke*; nothing
+said a question was never *asked*. A capability that is provided but answered
+nothing was available and unused — not a clean result.
+
+MCP scans record reasoning so `why` has evidence to answer from. Both tools are
+read-only, like the rest of the MCP surface.
+
 #### `nox why` — the eight questions
 
 ```sh
