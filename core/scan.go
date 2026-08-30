@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
@@ -41,6 +42,7 @@ import (
 	"github.com/nox-hq/nox/core/graph"
 	"github.com/nox-hq/nox/core/intel"
 	"github.com/nox-hq/nox/core/policy"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	"github.com/nox-hq/nox/core/vex"
@@ -84,6 +86,34 @@ type ScanResult struct {
 	// slice means every configured check completed; a non-empty one means the
 	// findings are incomplete and "no findings" must not be read as "clean".
 	Degradations []Degradation
+
+	// Reasoning holds the claims for and against each candidate this scan
+	// considered: why a finding was reported, and why a dropped one was not.
+	//
+	// It is nil unless ScanOptions.RecordReasoning was set, and it is held
+	// beside the findings rather than on them. Both facts come from
+	// docs/benchmarks/2026-Q3/ledger-budget.md: a three-claim ledger carried
+	// inline on every Finding projects to 6.62 GiB against 3.48 GiB bare on the
+	// largest project nox has scanned, which is past what an ordinary CI runner
+	// has. A nil store is free, so a scan that did not ask for reasoning pays
+	// nothing for the option existing.
+	//
+	// A finding's subject is derived from the finding, not stored on it — see
+	// SubjectForFinding — so the reference costs zero bytes per finding.
+	Reasoning *reasoning.Store
+}
+
+// SubjectForFinding returns the evidence subject a finding's claims are filed
+// against.
+//
+// It is computed rather than stored, which is what keeps the out-of-band ledger
+// free at the Finding's expense: no field, no pointer, no allocation. It also
+// means a candidate that was REFUTED and one that survived resolve to the same
+// subject, so the claims for and against one match land in one ledger instead
+// of two that nothing relates.
+func SubjectForFinding(f findings.Finding) evidence.Subject {
+	return reasoning.Candidate(f.RuleID, f.Location.FilePath,
+		f.Location.StartLine, f.Location.StartColumn)
 }
 
 // Degradation re-exports degrade.Degradation so callers holding a ScanResult
@@ -125,6 +155,17 @@ type ScanOptions struct {
 	// scanning. When true, the scan runs fully offline with no network
 	// calls.
 	DisableOSV bool
+
+	// RecordReasoning collects the claims for and against every candidate the
+	// scan considers, into ScanResult.Reasoning.
+	//
+	// It is opt-in because it is not free at scale and because nothing in the
+	// default output depends on it: a scan with it off produces byte-identical
+	// results to one with it on. Track C consumes it; until then it is how the
+	// refinements that DROP findings become auditable at all, which they were
+	// not — every one of them used to discard the finding and the reason for
+	// dropping it in the same statement.
+	RecordReasoning bool
 
 	// Offline is the umbrella zero-network guarantee. When true, every
 	// feature that could make an outbound connection is disabled (currently
@@ -266,8 +307,19 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 
 	// Phase 2: Run analyzers.
+	//
+	// The reasoning store is created before them so refiners inside the
+	// analyzers can file refutations as they drop candidates. It stays nil
+	// unless asked for, and every recording call is nil-safe, so nothing below
+	// branches on whether it exists.
+	var reasons *reasoning.Store
+	if opts.RecordReasoning {
+		reasons = reasoning.New()
+	}
+
 	// Initialize analyzers.
 	secretsAnalyzer := secrets.NewAnalyzer()
+	secretsAnalyzer.RecordReasoningTo(reasons)
 	if ec := cfg.Scan.Entropy; ec.Threshold > 0 || ec.HexThreshold > 0 || ec.Base64Threshold > 0 || ec.RequireContext != nil {
 		secretsAnalyzer.ApplyEntropyOverrides(secrets.EntropyOverrides{
 			Threshold:       ec.Threshold,
@@ -708,6 +760,16 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, err
 	}
 
+	// Stage 3b: record the supporting claim behind every finding that survived.
+	//
+	// It runs after refinement, over the findings the scan will actually
+	// report, so the ledger describes the output rather than an intermediate
+	// state. That leaves a known gap: refinement's own drops — suppression,
+	// baseline matching, VEX, dedup — are still silent, and each is a
+	// refutation that ought to be recorded the way the analyzers' are. They are
+	// a larger change than this one and are left to the E track.
+	recordObservations(reasons, allFindings)
+
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings)
 
@@ -717,6 +779,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
 	return &ScanResult{
+		Reasoning:    reasons,
 		Findings:     allFindings,
 		Enrichments:  pluginEnrichments,
 		Graphs:       pluginGraphs,
@@ -1863,3 +1926,25 @@ func analyzerRulePatterns(analyzer string) []string {
 
 // timeNow returns the current time. It is a variable so tests can override it.
 var timeNow = time.Now
+
+// recordObservations files one supporting claim per reported finding, so every
+// finding the scan emits has a recorded reason for existing and not only the
+// refuted ones have a recorded reason for not.
+//
+// This is the shadow half of Track C: the claims are written and nothing reads
+// them. Analyzers keep authoring Confidence exactly as before and it keeps
+// driving everything it drove — the synthesised claim carries that label as an
+// attribute rather than acting on it, which is what lets a later stage compare
+// the two and find where an analyzer's own confidence and the evidence disagree.
+// Folding the label into the claim's kind now would destroy that comparison
+// before it could be made.
+func recordObservations(store *reasoning.Store, fs *findings.FindingSet) {
+	if store == nil || fs == nil {
+		return
+	}
+	all := fs.Findings()
+	for i := range all {
+		store.Observed(SubjectForFinding(all[i]), all[i].RuleID,
+			string(all[i].Confidence), "scan")
+	}
+}
