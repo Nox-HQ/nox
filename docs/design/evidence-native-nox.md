@@ -1,7 +1,7 @@
 # Evidence-Native Nox — roadmap evaluation and execution plan
 
-Status: in progress. Tracks A, B, C1, C2 and E1 have landed — see §2.9 for
-where the programme stands and what it found. `docs/roadmap.md` records shipped
+Status: in progress. Tracks A, B, C1, C2, D, E1–E3 and F have landed — see
+§2.9 for where the programme stands and what it found. `docs/roadmap.md` records shipped
 phases and stays as the release history.
 
 The proposed roadmap's North Star is right and its invariant —
@@ -359,8 +359,9 @@ Unchanged from the proposal, and non-negotiable:
 
 ### 2.9 Where the programme stands
 
-**Landed as of 2026-08-30.** Tracks A, B, C1, C2 and E1 are on `main`; the
-kernel is released at `nox-core` v0.2.1 and both consumers are bumped.
+**Landed as of 2026-08-30.** Tracks A, B, C1, C2, D, E1, E2, E3 and F are on
+`main`; the kernel is released at `nox-core` v0.2.1 and both consumers are
+bumped.
 
 | | what shipped | measured |
 |---|---|---|
@@ -369,8 +370,18 @@ kernel is released at `nox-core` v0.2.1 and both consumers are bumped.
 | **E1** | six secrets refiners record why they drop a candidate | 5 of 6 covered end to end; the sixth is unreachable and says so |
 | **C1** | out-of-band shadow ledger, subject derived not stored | 0 bytes per finding; output byte-identical |
 | **C2** | `core/adjudicate`, shadow only, divergence report | 15 of 37 findings diverge, all over-claimed |
+| **D1–D4** | nine analysis capabilities, six evaluation states, `nox analysis-capabilities` | 3 capabilities have no implementation and say so |
+| **D5** | `policy.uncertainty`, `policy.require_capabilities` | clean scan + missing required capability = exit 1 |
+| **E2/E3** | four AI refiners record; secrets records what it verified | 37 → 61 supporting claims; divergence unchanged |
+| **F** | `findings.FlowID`, relations in the store, TRIAGE-002 recreated | 18 flows on the corpus, every edge evidence-backed |
+| — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
-Three things the work found that the plan did not anticipate:
+The scan pipeline now runs end to end: analyzers observe, refiners refute and
+record why, config removals leave a trail, flows are named so two findings can
+be one condition, one adjudicator derives the verdict, capability coverage says
+what was never asked, and CI can gate on a capability going missing.
+
+#### What the work found that the plan did not anticipate
 
 - **`SubjectCandidate` was missing.** The original seven subject kinds came
   from the dependency-applicability chain — what nox reasons *about* — and
@@ -378,23 +389,36 @@ Three things the work found that the plan did not anticipate:
 - **An existing test was vacuous.** `TestScan_DataURIPayloadIsNotASecret`
   asserted "no findings" on input that produced no raw matches, so the filter
   it guarded was never called; it passed identically with that filter deleted.
-- **The divergence number needs reading carefully.** 15 of 37 is not "the
-  analyzers over-claim". It is that they *under-record*: a rule that checked a
-  provider format, a length and an entropy threshold gets to say only "a
-  pattern matched". The gap closes by recording more, not by weighing patterns
-  more heavily.
+- **A validation was unreachable.** D5's `policy.uncertainty` check was written
+  correctly and never ran: the loader built its `policy.Config` from a separate
+  literal that omitted the field, so a mistyped value silently resolved to the
+  permissive default — the exact defect the `fail_on` validation exists to
+  prevent, one field over. One constructor now, and a test asserting every
+  gate-affecting field is rejectable.
+- **Suppression, baselining and VEX were never silent.** Each sets a `Status`
+  the reporters carry. C1's stated gap was three-quarters wrong; the genuinely
+  silent removals were the config-driven ones.
+- **Recording more heuristics does not raise confidence.** This was predicted
+  to move the divergence number and measured not to. Aggregation takes the
+  strongest supporting claim; three heuristics are still a heuristic; the
+  independence promotion cannot apply because they share a producer. The number
+  moves on evidence of a different KIND — see below.
 
-**Next**, in order of value:
+#### Next, in order of value
 
-1. **D — analysis capability and honest unknown.** It must land before any
-   output flip, because the moment refutation can change output, *not
-   evaluated* and *refuted* have to be distinguishable in the domain.
-2. **Close C1's gap.** Refinement's own drops — suppression, baseline, VEX,
-   dedup — are still silent, and each is a refutation.
-3. **E2/E3.** The refiners that turn checks the analyzers already perform into
-   claims, which is what moves C2's divergence number honestly.
+1. **Checksum verification.** Several providers encode a checksum in the token
+   itself, and verifying one is deterministic rather than heuristic. This is
+   the thing that moves C2's divergence number honestly, and it is the reason
+   E3 did not. It needs a verifiable test vector first: unverified checksum
+   logic would put false DETERMINISTIC claims in the ledger, which is worse
+   than the silence it replaces.
+2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
+   normal result, and the applicability ladder. It also needs a corpus (below).
+3. **C3–C5.** Conflict semantics, fingerprint compatibility, and the flip that
+   makes `Finding` an adjudicated output. C5 is gated on the divergence
+   measurement, which now exists.
 
-Four items surfaced by the work that no track owns yet:
+#### Open items no track owns
 
 - **`api-abuse` API-ABUSE-001 has precision 0.000** and has never scored a true
   positive on the corpus. Re-measure rather than re-describe; a first-order
@@ -410,6 +434,12 @@ Four items surfaced by the work that no track owns yet:
   guard uses every distinct reporter, so a second reporter arriving to *dispute*
   a candidate satisfies the requirement that permits publishing it.
   `Ledger.IndependentSupport` is the primitive that fixes it.
+- **Dedup's own drop is unrecorded.** Track F names the flow, so nothing is
+  lost about *what* was merged, but which specific finding was discarded is not
+  written down.
+- **Track D is inert until a project opts in.** `policy.require_capabilities`
+  is empty everywhere by design — that is what avoids the adoption cliff — and
+  it protects nothing until a repository declares what its triage depends on.
 
 ### 2.10 Explicit non-goals
 
