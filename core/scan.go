@@ -20,6 +20,7 @@ import (
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
+	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
@@ -101,6 +102,16 @@ type ScanResult struct {
 	// A finding's subject is derived from the finding, not stored on it — see
 	// SubjectForFinding — so the reference costs zero bytes per finding.
 	Reasoning *reasoning.Store
+
+	// Divergences lists the findings whose analyzer-authored confidence
+	// disagrees with what their evidence supports. Empty unless the scan
+	// recorded reasoning.
+	//
+	// This is the measurement C5 needs before analyzer-authored confidence can
+	// be retired. Retiring it because evidence "should" be better is a bet;
+	// retiring it having counted where the two disagree, and in which
+	// direction, is a decision.
+	Divergences []adjudicate.Divergence
 }
 
 // SubjectForFinding returns the evidence subject a finding's claims are filed
@@ -760,6 +771,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, err
 	}
 
+	// Stage 3c: adjudicate. Shadow mode — the verdict is written onto the
+	// finding and into ScanResult, and nothing reads it. SARIF, the policy
+	// gate and the exit code are untouched, so a build cannot pass or fail
+	// differently because of anything here.
+	//
 	// Stage 3b: record the supporting claim behind every finding that survived.
 	//
 	// It runs after refinement, over the findings the scan will actually
@@ -769,6 +785,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// refutation that ought to be recorded the way the analyzers' are. They are
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
+	divergences := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings)
@@ -780,6 +797,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 
 	return &ScanResult{
 		Reasoning:    reasons,
+		Divergences:  divergences,
 		Findings:     allFindings,
 		Enrichments:  pluginEnrichments,
 		Graphs:       pluginGraphs,
@@ -1947,4 +1965,39 @@ func recordObservations(store *reasoning.Store, fs *findings.FindingSet) {
 		store.Observed(SubjectForFinding(all[i]), all[i].RuleID,
 			string(all[i].Confidence), "scan")
 	}
+}
+
+// adjudicateFindings derives a verdict for every reported finding from its
+// evidence, writes the state onto the finding, and returns the cases where the
+// analyzer's own confidence disagreed with what the evidence supports.
+//
+// Shadow mode: the verdict is recorded and nothing acts on it. The policy gate
+// still reads Severity and analyzer Confidence exactly as before, so no build
+// changes colour because of this. What it produces is the count C5 needs —
+// where, how often, and in which direction the two disagree — measured on real
+// scans instead of argued from first principles.
+func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) []adjudicate.Divergence {
+	if store == nil || fs == nil {
+		return nil
+	}
+	all := fs.Findings()
+	var out []adjudicate.Divergence
+	for i := range all {
+		subject := SubjectForFinding(all[i])
+		verdict := adjudicate.Adjudicate(store.About(subject), subject)
+		fs.SetExploitability(i, string(verdict.Exploitability))
+
+		diverged, overclaimed := adjudicate.Diverged(string(all[i].Confidence), verdict.Confidence)
+		if !diverged {
+			continue
+		}
+		out = append(out, adjudicate.Divergence{
+			Fingerprint: all[i].Fingerprint,
+			RuleID:      all[i].RuleID,
+			Analyzer:    adjudicate.ConfidenceFrom(string(all[i].Confidence)),
+			Adjudicated: verdict.Confidence,
+			Overclaimed: overclaimed,
+		})
+	}
+	return out
 }
