@@ -28,6 +28,11 @@ type secretRule struct {
 	// minEntropy overrides the default 3.0 minimum Shannon entropy when
 	// secretShape is enabled. Higher values reject more candidates.
 	minEntropy float64
+	// retires lists rule IDs this rule absorbed, with the pattern each used.
+	// See rules.RetiredRule: deleting a duplicate ID outright would un-waive
+	// every finding an operator accepted under it, because baselines hash the
+	// rule ID and VEX statements and nox:ignore comments name it directly.
+	retires []rules.RetiredRule
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
@@ -777,6 +782,15 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     `(?i)cloudflare[_-]?api[_-]?token\s*[=:]\s*['"]?[A-Za-z0-9_-]{40}`,
 			description: "Cloudflare API Token detected",
 			cwe:         "CWE-798", keywords: []string{"cloudflare_api_token", "cloudflare-api-token"},
+			// SEC-542 claimed the same credential with the pattern
+			// `[a-zA-Z0-9]{32,}` and the file-level keyword "cloudflare",
+			// which means "this file mentions cloudflare somewhere and
+			// contains 32 alphanumeric characters somewhere". On a fixture
+			// with a SHA-256 digest five lines below a comment about
+			// Cloudflare, it fired; on a real token it fired a second time
+			// alongside this rule. Absorbed rather than deleted so waivers
+			// written against SEC-542 keep working.
+			retires:     []rules.RetiredRule{{ID: "SEC-542", Pattern: `[a-zA-Z0-9]{32,}`}},
 			remediation: "Rotate the exposed token immediately. Use environment variables or a secrets manager.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -3270,7 +3284,19 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-521", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `https://container.googleapis.com/v1/projects/`, description: "Detected GKE Cluster URL", cwe: "CWE-798", keywords: []string{"gcp_gke"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-522", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `https://storage.googleapis.com/`, description: "Detected GCS Bucket URL", cwe: "CWE-798", keywords: []string{"gcp_storage"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-523", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `/subscriptions/[a-z0-9-]+/resourceGroups/`, description: "Detected Azure Resource ID", cwe: "CWE-798", keywords: []string{"azure"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-524", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32,}`, description: "Detected Azure Subscription ID", cwe: "CWE-798", keywords: []string{"azure_sub"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-524 ("Azure Subscription ID") was removed rather than retired.
+		// A subscription ID is not a credential: it appears in ARM templates,
+		// az CLI output, portal URLs and Microsoft's own samples, and no
+		// survivor should inherit it, so there is nothing to retire it INTO.
+		// The rule was also incapable of detecting what it named — a
+		// subscription ID is a UUID, and `[a-zA-Z0-9]{32,}` does not match one
+		// because the hyphens break the class. Wrong target and wrong pattern,
+		// advising "rotate the exposed credential immediately" for an
+		// identifier that cannot be rotated.
+		//
+		// Deleting is safe here in the way retiring exists to protect against:
+		// the finding does not come back under another ID, so a waiver naming
+		// SEC-524 simply has nothing left to match.
 		{id: "SEC-525", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Detected DigitalOcean API Key (alternate)", cwe: "CWE-798", keywords: []string{"digitalocean"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-526", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `do_[a-z0-9]{32}`, description: "Detected DigitalOcean OAuth Token", cwe: "CWE-798", keywords: []string{"digitalocean_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-527", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[A-Za-z0-9_-]{64}`, description: "Detected Scaleway API Token", cwe: "CWE-798", keywords: []string{"scaleway"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3288,7 +3314,6 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-539", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Detected DNSimple API Token", cwe: "CWE-798", keywords: []string{"dnsimple"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-540", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Namecheap API Key", cwe: "CWE-798", keywords: []string{"namecheap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-541", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9@#$%^&*]{16,}`, description: "Detected GoDaddy API Key", cwe: "CWE-798", keywords: []string{"godaddy"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-542", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32,}`, description: "Detected Cloudflare API Token (alternate)", cwe: "CWE-798", keywords: []string{"cloudflare"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-543", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Datadog API Key (alternate)", cwe: "CWE-798", keywords: []string{"datadog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-544", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{32}`, description: "Detected New Relic License Key (alternate)", cwe: "CWE-798", keywords: []string{"newrelic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-545", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{20}\b`, description: "Detected PagerDuty API Key (alternate)", cwe: "CWE-798", keywords: []string{"pagerduty"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
@@ -3767,6 +3792,7 @@ func builtinSecretRules() []*rules.Rule {
 			MatcherType:            "regex",
 			Pattern:                d.pattern,
 			Keywords:               d.keywords,
+			Retires:                d.retires,
 			RequireContextKeywords: requireContext,
 			Tags:                   []string{"secrets"},
 			Metadata:               md,
@@ -3783,7 +3809,20 @@ func builtinSecretRules() []*rules.Rule {
 // `\b[a-f0-9]{40}\b`. Such a pattern contains no literal text tying it to the
 // credential format it claims to detect, so it needs the vendor name nearby to
 // mean anything.
-var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d+)?\}(\\b)?$`)
+//
+// The upper bound is optional — `(,\d*)?`, not `(,\d+)?` — and that single
+// character is the whole point. `{32,}` is the MOST anchorless form a pattern
+// can take: unbounded above, so it matches any run of characters at least that
+// long. Requiring a digit after the comma excluded exactly those, so the
+// protection applied to `{32}` and `{32,64}` and skipped `{32,}`, `{50,}` and
+// `{20,}` — the ones that needed it most.
+//
+// Measured when this was found: 36 vendor rules used an unbounded quantifier,
+// all at high severity, none of them receiving either the proximity
+// requirement or the secret-shape filter. SEC-542 ("Cloudflare API Token")
+// meant, in practice, "this file mentions cloudflare somewhere and contains 32
+// alphanumeric characters somewhere".
+var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d*)?\}(\\b)?$`)
 
 // isAnchorlessPattern reports whether a rule pattern relies entirely on shape
 // and length, with no literal anchor of its own.

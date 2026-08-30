@@ -38,8 +38,13 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// and TAINT-AI-001, CRYPTO-001/002, HARDEN-001/002, PERM-001/002 and
 	// MEMSAFE-001. Their findings appeared in scans while `nox rules` and the
 	// MCP rules tool denied the rules existed.
-	if got := len(cat); got != 1537 {
-		t.Errorf("Catalog() returned %d rules, want 1537", got)
+	//
+	// 1537 -> 1535 removed two secrets rules whose pattern was a bare
+	// character class plus a file-level keyword: SEC-542 (retired into
+	// SEC-087, which detects the same credential by requiring the assignment)
+	// and SEC-524 (an Azure subscription ID is not a credential).
+	if got := len(cat); got != 1535 {
+		t.Errorf("Catalog() returned %d rules, want 1535", got)
 	}
 }
 
