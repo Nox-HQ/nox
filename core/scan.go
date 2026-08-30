@@ -46,6 +46,7 @@ import (
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/reasoning"
+	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	"github.com/nox-hq/nox/core/vex"
@@ -136,6 +137,28 @@ type ScanResult struct {
 	// Empty on every committed corpus today, and structurally so rather than by
 	// luck — see adjudicate.Conflict for why, and for what makes it reachable.
 	Conflicts []adjudicate.Conflict
+}
+
+// EvidenceArtifact assembles the replayable record of what this scan
+// established: input identity, capability state, claims and their provenance,
+// relationships, and the adjudicated verdicts.
+//
+// It is built on request rather than always. A scan that did not ask pays
+// nothing, which is the same reasoning that put the ledger out-of-band in the
+// first place — see ScanResult.Reasoning.
+//
+// A scan that did not record reasoning still produces a valid artifact: it has
+// capability state and findings, and no evidence. Replay then reports that
+// nothing was checked, rather than that everything reproduced.
+func (r *ScanResult) EvidenceArtifact(in replay.Inputs) *replay.Artifact {
+	if in.FingerprintVersion == 0 {
+		in.FingerprintVersion = int(findings.GetFingerprintVersion())
+	}
+	var fs []findings.Finding
+	if r.Findings != nil {
+		fs = r.Findings.Findings()
+	}
+	return replay.Build(in, r.Reasoning, r.Coverage, r.Capabilities, fs, SubjectForFinding)
 }
 
 // SubjectForFinding returns the evidence subject a finding's claims are filed

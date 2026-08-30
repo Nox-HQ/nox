@@ -12,6 +12,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
 	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -205,6 +206,8 @@ func run(args []string) int {
 		return runShow(remaining[1:])
 	case "explain":
 		return runExplain(remaining[1:])
+	case "replay":
+		return runReplay(remaining[1:])
 	case "confirm":
 		return runConfirm(remaining[1:])
 	case "attack":
@@ -445,6 +448,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		offlineFlag           bool
 		failOnDegraded        bool
 		sortFlag              string
+		evidenceOutFlag       string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -465,6 +469,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.BoolVar(&failOnDegraded, "fail-on-degraded", false, "exit non-zero if any check could not complete (OSV lookup, plugin, lockfile parse)")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
 	scanFS.StringVar(&sortFlag, "sort", "deterministic", "findings.json order: 'deterministic' (rule/path/line) or 'priority' (severity, then reachability, then confidence — most actionable first)")
+	// Off by default. The evidence a scan gathers lives out-of-band and is
+	// discarded when the scan ends, for the memory reason measured in
+	// docs/benchmarks/2026-Q3/ledger-budget.md. This is how you keep it: an
+	// operator who wants to ask, later, why nox said what it said asks for the
+	// artifact now. A scan that does not ask is byte-identical to before.
+	scanFS.StringVar(&evidenceOutFlag, "evidence-out", "", "write the replayable evidence behind this scan to a JSON file (see `nox replay`)")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
 	scanFS.Usage = func() {
@@ -577,11 +587,37 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		// sends nothing.
 		opts.ContributeObservations = true
 		opts.ToolVersion = version
+		// The artifact IS the reasoning. Asking for one without turning
+		// recording on would write a file full of verdicts with no evidence
+		// behind them, which replays as "nothing was checked" — a confusing
+		// way to discover a flag did not do what it said.
+		if evidenceOutFlag != "" {
+			opts.RecordReasoning = true
+		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: scan failed: %v\n", err)
 		return 2
+	}
+
+	if evidenceOutFlag != "" {
+		art := result.EvidenceArtifact(replay.Inputs{
+			GeneratedAt: report.GeneratedAt(),
+			ToolName:    "nox",
+			ToolVersion: version,
+			Target:      target,
+			Offline:     offlineFlag,
+		})
+		if werr := art.WriteFile(evidenceOutFlag); werr != nil {
+			// Not fatal. The scan's own results are complete and already
+			// computed; failing the run because an extra artifact could not be
+			// written would turn an optional record into a way to break CI.
+			fmt.Fprintf(os.Stderr, "warning: could not write evidence artifact: %v\n", werr)
+		} else if !quiet {
+			fmt.Fprintf(os.Stderr, "evidence: wrote %s (%d subject(s), %d verdict(s)) — replay with `nox replay %s`\n",
+				evidenceOutFlag, len(art.Subjects), len(art.Findings), evidenceOutFlag)
+		}
 	}
 
 	activeFindings := result.Findings.ActiveFindings()

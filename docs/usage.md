@@ -1053,6 +1053,48 @@ policy:
   baseline_mode: strict
 ```
 
+#### Keeping the evidence: `--evidence-out` and `nox replay`
+
+A scan gathers evidence for and against every candidate it considers, and throws
+it away when the scan ends — it lives out-of-band because carrying it inline
+costs about 2.4x the size of the findings themselves on a large repository.
+
+`--evidence-out` keeps it:
+
+```sh
+nox scan . --evidence-out evidence.json
+nox replay evidence.json
+```
+
+`nox replay` re-derives every verdict in the artifact from the evidence the
+artifact contains, and reports any that come out differently. It reads nothing
+else — not your repository, not the rules, not the network — which is what makes
+it still answerable months later, when all three have moved on.
+
+```
+37 verdict(s) reproduced exactly under adjudicator 1
+```
+
+Exit code is `0` when every verdict reproduced, `1` when one did not. A verdict
+that differs because nox's adjudicator itself changed is reported as a change
+rather than a failure, and still exits `0`:
+
+```
+12 verdict(s) replayed under adjudicator 2 against an artifact from 1;
+3 differ, which is a change in adjudication rather than a defect
+```
+
+The artifact holds the scan's input identity, what each analysis capability
+established, every claim with its provenance, the relationships between
+subjects, and the adjudicated verdict for each finding. `--json` emits the
+replay result for a CI step to read.
+
+Two things it deliberately does not do. It does not re-run the scan, so it
+cannot tell you whether your code still has the finding — that is `nox scan`. And
+it is not a full historical reconstruction: the rule set, analyzer versions and
+advisory data are not snapshotted, so it answers "does this evidence support
+this verdict?" rather than "would this scan happen again identically?".
+
 #### Two confidences, and which one filters
 
 A finding carries two confidence values, and they answer different questions:

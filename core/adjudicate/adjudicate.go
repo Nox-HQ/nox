@@ -306,3 +306,25 @@ func strongestWhere(l evidence.Ledger, pol func(evidence.Claim) bool) (evidence.
 	}
 	return best, found
 }
+
+// Version identifies the adjudication logic that produced a verdict.
+//
+// It is the second half of the replay contract: the same ledger and the same
+// adjudicator version must yield the same verdict. Without it, a replay that
+// disagrees with the stored result is ambiguous — the evidence could have been
+// mis-serialised, or adjudication could simply have improved since — and a
+// reader has no way to tell a regression from an upgrade.
+//
+// # When to bump it
+//
+// Whenever Adjudicate can return a different Verdict for an input it has seen
+// before. That includes changes inside evidence.DeriveExploitability and the
+// kernel's confidence aggregation, because this version covers the whole
+// derivation, not just the code in this file. A rationale reworded is a change:
+// the rationale is part of the verdict a person read and acted on.
+//
+// TestVerdictsAreStableForThisVersion is the enforcement. It pins a set of
+// ledgers to their verdicts, so changing the logic without bumping this fails
+// with the exact pair that moved, and bumping it without changing the logic
+// fails too.
+const Version = "1"
