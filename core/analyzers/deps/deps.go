@@ -26,6 +26,7 @@ import (
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -733,12 +734,24 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 					if pkg.Ecosystem == "go" {
 						affected := goAffectedImports(&ov, pkg.Name)
-						if reachable, determined := goVulnReachable(affected, linkedGoPkgs, linkedGoKnown); determined {
+						if r, ok := goSymbolReferenced(affected, linkedGoPkgs, linkedGoKnown); ok {
 							meta["affected_imports"] = strings.Join(affected, ",")
-							if reachable {
-								meta["reachable"] = "true"
-							} else {
-								meta["reachable"] = "false"
+							// The LEVEL, named. `go list -deps` establishes that
+							// the affected import is in the linked set, which is
+							// symbol_referenced and nothing above it. This used to
+							// be written as meta["reachable"], a name that reads as
+							// call_reachable, and the capability matrix then counted
+							// it as the reachability capability — evidence for one
+							// proposition establishing a later one, which is the
+							// invariant this vocabulary exists to hold.
+							meta["reach_level"] = string(r.Level)
+							meta["reach_outcome"] = string(r.Outcome)
+							meta["reach_scope"] = r.Scope.Describe()
+							if r.Outcome == reach.Refuted {
+								// Refuted at symbol_referenced only: the build links
+								// no affected package. Severity drops because there
+								// is nothing here to call, not because the
+								// application was shown to be unaffected.
 								sev = findings.SeverityInfo
 							}
 						}

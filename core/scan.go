@@ -45,6 +45,7 @@ import (
 	"github.com/nox-hq/nox/core/intel"
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/policy"
+	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/rules"
@@ -2141,14 +2142,28 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 			cov.Record(subject, capability.SymbolResolution, capability.Positive)
 		}
 
-		// Dependency reachability answers only where it was determined, and the
-		// deps analyzer already refuses to answer otherwise: goVulnReachable
-		// returns false only on positive evidence.
-		switch f.Metadata["reachable"] {
-		case "true":
-			cov.Record(subject, capability.Reachability, capability.Positive)
-		case "false":
-			cov.Record(subject, capability.Reachability, capability.Negative)
+		// The dependency analyzer answers at the level it can, and coverage is
+		// recorded against THAT level's capability rather than a stronger one.
+		//
+		// This used to read meta["reachable"] and record capability.Reachability.
+		// What `go list -deps` establishes is that an affected import is in the
+		// linked set — reach.SymbolReferenced — so a project asking whether
+		// REACHABILITY had been answered was told yes on the strength of a
+		// weaker question. Evidence for an earlier proposition establishing a
+		// later one is the invariant core/reach exists to hold, and this was
+		// the place it was broken.
+		//
+		// Reachability stays unrecorded here on purpose. Nothing in nox builds
+		// a call graph, so call_path_exists is unevaluated for every finding,
+		// and saying nothing is what makes `nox why` and the capability gate
+		// report it as unevaluated rather than as answered.
+		switch reach.Outcome(f.Metadata["reach_outcome"]) {
+		case reach.Established:
+			cov.Record(subject, capability.SymbolResolution, capability.Positive)
+		case reach.Refuted:
+			cov.Record(subject, capability.SymbolResolution, capability.Negative)
+		case reach.Undetermined:
+			cov.Record(subject, capability.SymbolResolution, capability.Unknown)
 		}
 	}
 }

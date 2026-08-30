@@ -274,6 +274,27 @@ func affectsThisApplication(f findings.Finding) string {
 	stopped := f.Metadata["applicability_stopped_at"]
 	because := f.Metadata["applicability_because"]
 
+	// The reachability chain, when the dependency analyzer answered at some
+	// level of it. Reported as the LEVEL it established, never as "reachable":
+	// linker evidence establishes that an affected import is linked, which is
+	// several propositions short of an attacker being able to reach it.
+	if lvl, out := f.Metadata["reach_level"], f.Metadata["reach_outcome"]; lvl != "" && out != "" {
+		scope := f.Metadata["reach_scope"]
+		switch out {
+		case "established":
+			return fmt.Sprintf("%s holds: %s. That is one step on the chain from an "+
+				"advisory to an exploit, not the whole of it — whether anything calls "+
+				"it, and whether an attacker can reach that, were not established.",
+				lvl, scope)
+		case "refuted":
+			return fmt.Sprintf("%s does not hold within the scope searched (%s). "+
+				"Nothing here rules out another build or another path.", lvl, scope)
+		default:
+			return fmt.Sprintf("%s could not be determined (%s). Unknown, which is not "+
+				"the same as no.", lvl, scope)
+		}
+	}
+
 	switch outcome {
 	case "":
 		// Most findings are in this repository's own code, where the question

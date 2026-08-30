@@ -677,6 +677,15 @@ var confidencePriorityRank = map[Confidence]int{
 // for reachability (no metadata) rank in the neutral middle, so enabling the
 // reachability plugin only ever demotes likely-FPs — it never buries a normal
 // finding beneath one.
+//
+// The plugin is now the ONLY producer of this key. The dependency analyzer used
+// to write it too, from `go list -deps`, which establishes that an affected
+// import is in the linked set — reach.SymbolReferenced, a strictly weaker
+// proposition than the call-graph reachability this ranking is about. Two
+// producers writing one key with different meanings put a linker answer and a
+// call-graph answer in the same sort bucket. Dependency findings now carry
+// `reach_level` and rank neutral here, which is the honest position for a
+// question nothing in core answers.
 func reachabilityRank(f *Finding) int {
 	switch f.Metadata["reachable"] {
 	case "true":

@@ -185,6 +185,43 @@ A's scope object. Building them first would mean four places inventing their own
 notion of scope, which is the cross-adapter duplication problem in a new
 costume.
 
+## Milestone A — landed
+
+`core/reach` is the vocabulary: six levels from `package_in_closure` to
+`runtime_path_observed`, a `Scope` carrying the analysis, capability,
+entry-point set, build identity and limitations, and three outcomes.
+
+**The asymmetry is enforced at construction, not checked after.** `Establish`
+requires a witness — a reachability claim with nothing to point at is an
+assertion. `Refute` requires a scope with no limitations and *refuses* otherwise,
+returning `Undetermined` carrying the same limitations. An analysis that hit
+unresolved dispatch, reflection, FFI or a budget has not shown that nothing
+reaches the sink; it has shown it did not find one. That is "UNSAT on path P ≠
+all paths impossible", held where the value is built, because a `Result` in the
+wrong state is a value something can read.
+
+**Milestone C is folded in**, as planned. `Limitation` names ten reasons an
+analysis stops being able to speak for a whole program, each with a sentence an
+operator can act on. A capability state of `unknown` collapsed all ten into one
+word.
+
+**The violation is closed.** `meta["reachable"]` is gone. The deps analyzer
+emits `reach_level` / `reach_outcome` / `reach_scope`, and coverage is recorded
+against `symbol_resolution` — the level `go list -deps` can speak for — rather
+than `reachability`. Nothing in nox builds a call graph, so `call_path_exists`
+is now unevaluated for every finding and reads that way in `nox why` and in the
+capability gate.
+
+Measured against the live intelligence service afterwards: of 54 dependency
+findings, 29 carry `symbol_referenced` (18 established, 11 refuted) with the
+scope travelling alongside, and none carries an unscoped boolean.
+
+**Two tests were vacuous and the falsifications found them.** The first version
+of the invariant test scanned a fixture module with no dependencies, so no
+VULN finding existed, the mapping never ran, and it passed with the defect
+restored. It now drives `recordCapabilityCoverage` directly. A third test
+asserted nothing at all and was deleted rather than shipped.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
