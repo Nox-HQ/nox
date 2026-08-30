@@ -368,6 +368,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// the tool permission matrix, so a broken config is a visible degradation
 	// rather than a silently-empty (or all-tools-defaulted) matrix.
 	aiAnalyzer := ai.NewAnalyzer(ai.WithDegradations(degradations))
+	aiAnalyzer.RecordReasoningTo(reasons)
 
 	// Whether dependency scanning may reach the network at all. Named once and
 	// used by both the disable switch and the intelligence wiring below, so the

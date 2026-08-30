@@ -111,7 +111,13 @@ func TestEveryReportedFindingHasASupportingClaim(t *testing.T) {
 			continue
 		}
 
-		var supported bool
+		// A finding's ledger now holds more than one shape of supporting claim:
+		// the shim's observation, and the corroborating checks E3 records. The
+		// analyzer's own confidence label belongs on the OBSERVATION — it is
+		// the claim C2 compares against — and requiring it on every supporting
+		// claim would be requiring the wrong thing of the others. What has to
+		// hold is that the label is preserved somewhere retrievable.
+		var supported, labelled bool
 		for _, c := range ledger.Claims {
 			if !c.Supports() {
 				continue
@@ -120,14 +126,21 @@ func TestEveryReportedFindingHasASupportingClaim(t *testing.T) {
 			if c.Provenance.Source != "nox-scan" {
 				t.Errorf("claim for %s has source %q, want nox-scan", f.RuleID, c.Provenance.Source)
 			}
-			if got, want := c.Attributes["analyzer_confidence"], string(f.Confidence); got != want {
-				t.Errorf("claim for %s carries analyzer_confidence %q, want %q — the "+
-					"analyzer's own label must be preserved as data for C2 to compare against",
-					f.RuleID, got, want)
+			if got := c.Attributes["analyzer_confidence"]; got != "" {
+				if got != string(f.Confidence) {
+					t.Errorf("claim for %s carries analyzer_confidence %q, want %q",
+						f.RuleID, got, f.Confidence)
+				}
+				labelled = true
 			}
 		}
 		if !supported {
 			t.Errorf("finding %s has a ledger with no supporting claim", f.RuleID)
+		}
+		if !labelled {
+			t.Errorf("finding %s records no analyzer_confidence anywhere; the "+
+				"analyzer's own label must be preserved as data for C2 to compare against",
+				f.RuleID)
 		}
 	}
 }
@@ -521,5 +534,63 @@ func TestRemovalTrailCostsNothingWhenUnasked(t *testing.T) {
 	if len(quiet.Findings.Findings()) != len(loud.Findings.Findings()) {
 		t.Errorf("recording changed the finding count: %d vs %d",
 			len(quiet.Findings.Findings()), len(loud.Findings.Findings()))
+	}
+}
+
+// TestCorroborationExplainsButDoesNotPromote pins E3's real effect, including
+// the half that is easy to assume and wrong.
+//
+// Recording what an analyzer verified makes a finding explicable: its ledger
+// now says what nox checked before believing it, not only what would have made
+// it stop. It does NOT raise confidence, and asserting that here stops a later
+// reader concluding it should. Aggregation takes the strongest supporting
+// claim; every corroborating check is a heuristic; three heuristics are still a
+// heuristic. The independence promotion cannot apply either, because they all
+// come from one producer — counting them as independent would be the "one
+// project scanning itself a hundred times" fallacy with the numbers changed.
+func TestCorroborationExplainsButDoesNotPromote(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "creds.py"),
+		[]byte("GITHUB_TOKEN = \"ghp_7Kd2mQ9xR4tB1nZ6wY3vC8hL5jF0gS2pA9eU\"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	res, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	all := res.Findings.Findings()
+	if len(all) == 0 {
+		t.Fatal("fixture produced no finding; this test asserts nothing")
+	}
+
+	for _, f := range all {
+		subject := SubjectForFinding(f)
+		ledger := res.Reasoning.About(subject)
+
+		var supporting int
+		var readTheValue bool
+		for _, c := range ledger.Claims {
+			if !c.Supports() {
+				continue
+			}
+			supporting++
+			if strings.Contains(c.Statement, "inspected and is not a documentation placeholder") {
+				readTheValue = true
+			}
+		}
+		if supporting < 2 {
+			t.Errorf("finding %s carries %d supporting claim(s); the checks the "+
+				"analyzer performed are not being recorded", f.RuleID, supporting)
+		}
+		if !readTheValue {
+			t.Errorf("finding %s does not record that its VALUE was inspected — the "+
+				"precise check ENRICH-004 never performed", f.RuleID)
+		}
+
+		// The part that is easy to assume and wrong.
+		if got := ledger.ConfidenceAbout(subject); got != evidence.ConfidenceLow {
+			t.Errorf("finding %s aggregated to %s from %d heuristic claims; more "+
+				"heuristics must not become a stronger claim", f.RuleID, got, supporting)
+		}
 	}
 }

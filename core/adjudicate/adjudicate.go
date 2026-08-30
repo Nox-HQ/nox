@@ -112,13 +112,30 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 //
 // The fix is therefore NOT to weigh pattern matches more heavily. A regex
 // match is a heuristic however specific it is, and inflating the kind would
-// put strength behind the one thing on the ladder that earns none. The fix is
-// for the checks the analyzers already perform to become claims — which is
-// what the E track builds, and what will move these findings up honestly.
+// put strength behind the one thing on the ladder that earns none.
 //
-// Until then this number measures the gap between what nox knows and what nox
-// records. That gap is worth having a number for; it is not evidence that the
-// analyzers are wrong.
+// This comment used to continue "the fix is for the checks the analyzers
+// already perform to become claims", and that was measured and found wrong.
+// Recording those checks — E3 — took the corpus from 37 supporting claims to
+// 61 and left the divergence at exactly 15. It could not have done anything
+// else: aggregation takes the STRONGEST supporting claim, every one of those
+// checks is a heuristic, and three heuristics are still a heuristic. The
+// independence promotion cannot apply either, since they all come from one
+// producer; counting them as independent would be the "one project scanning
+// itself a hundred times" fallacy with the numbers changed.
+//
+// So the number moves on evidence of a different KIND, not more of the same.
+// Several providers encode a checksum in the token itself, and verifying one
+// is deterministic — that is the path, and it needs a verifiable test vector
+// before it is written, because unverified checksum logic would put false
+// deterministic claims in the ledger and that is worse than the silence.
+//
+// What E3 did buy is explanation: a finding's ledger now says what nox checked
+// before believing it, not only what would have made it stop.
+//
+// So the number measures the gap between what nox knows and what nox can
+// currently record AS EVIDENCE. That gap is worth having a number for; it is
+// not evidence that the analyzers are wrong.
 type Divergence struct {
 	Fingerprint string              `json:"fingerprint"`
 	RuleID      string              `json:"rule_id"`

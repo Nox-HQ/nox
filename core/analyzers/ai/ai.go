@@ -15,9 +15,11 @@ import (
 	"github.com/nox-hq/nox/core/source"
 
 	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -86,6 +88,20 @@ type Analyzer struct {
 	// discards them (see degrade.Degradations), so tests and library callers
 	// that pass no option are unaffected.
 	deg *degrade.Degradations
+	// reasoning receives a refuting claim for every candidate this analyzer
+	// drops. Nil by default and nil for every existing caller; reasoning.Store
+	// is nil-safe, so the call sites are unconditional and there is no second
+	// code path to drift from the first.
+	reasoning *reasoning.Store
+}
+
+// RecordReasoningTo directs this analyzer's refutations at store.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
+
+// refute records why a candidate was dropped, writing the provenance once so
+// six call sites cannot spell the producer three different ways.
+func (a *Analyzer) refute(subject evidence.Subject, kind evidence.Kind, statement string) {
+	a.reasoning.Refute(subject, kind, "nox-scan", "ai", statement)
 }
 
 // Option configures an Analyzer.
@@ -179,7 +195,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// real code path.
 		lang := lexctx.LangFromPath(artifact.Path)
 		for i := range results {
+			// Each drop below records WHY before it drops, exactly as the
+			// secrets refiners do. The kinds differ and the difference is the
+			// point: a lexer region is deterministic, a proximity check is not,
+			// and a ledger that called them both the same thing would be
+			// asserting more than either established.
+			candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
+				results[i].Location.StartLine, results[i].Location.StartColumn)
+
 			if suppressNonCode(lang, content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match lies outside code — in a comment, a string literal or an embedded blob")
 				continue
 			}
 			// AI-002 (prompt string concatenation of user input) fires on any
@@ -188,6 +214,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// Require an actual prompt/LLM context near the match so a
 			// parameterised SQL execute call isn't reported as prompt injection.
 			if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
+				// Heuristic, not static: this is a proximity check over
+				// surrounding text, and calling it deterministic would claim
+				// the analysis established something it only estimated.
+				a.refute(candidate, evidence.KindHeuristic,
+					"no prompt or LLM context near the match, so the interpolation is not a prompt")
 				continue
 			}
 			// AI-006 asserts that a prompt or LLM response reaches a log
@@ -195,6 +226,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// value at all, so the word "prompt" in its message is a sentence,
 			// not a leak — see logsOnlyConstantText.
 			if results[i].RuleID == "AI-006" && logsOnlyConstantText(lang, content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"every argument to the logging call is constant text, so the call logs no value and there is no prompt to leak")
 				continue
 			}
 			// AI-049 asserts an eval/code-execution sink (CWE-95). A call
@@ -202,6 +235,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// the rule gated on is a column name inside the query text — see
 			// isSQLStatementExec.
 			if results[i].RuleID == "AI-049" && isSQLStatementExec(content, &results[i]) {
+				a.refute(candidate, evidence.KindHeuristic,
+					"the call executes a SQL statement, so the AI token the rule gated on is a column name inside the query text")
 				continue
 			}
 			fs.Add(results[i])
