@@ -361,6 +361,31 @@ func (a *Analyzer) corroborate(subject evidence.Subject, content []byte, f *find
 	if value == "" {
 		return
 	}
+	// A verified checksum is the one thing here that is not a heuristic. It is
+	// recorded at KindStatic and everything else at KindHeuristic, and that
+	// difference is the whole reason it is worth computing: it is the first
+	// claim in this pipeline that can lift a finding off the floor honestly,
+	// rather than by weighting a pattern match more heavily than a pattern
+	// match deserves.
+	//
+	// A FAILED checksum is evidence too, and in the other direction: a
+	// ghp_-prefixed string of exactly the right length whose CRC32 does not
+	// agree is deterministically not a GitHub token. It is recorded and NOT
+	// acted on — nothing is dropped here — because a refutation that changes
+	// output must pass Gate A first.
+	//
+	// A value the check does not apply to produces no claim at all. "I cannot
+	// check this" is not "I checked this and it failed".
+	if consistent, applicable := verifyGitHubToken(value); applicable {
+		if consistent {
+			a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the token's embedded CRC32 checksum verifies, so the value is internally consistent as a credential of this provider", nil)
+		} else {
+			a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the token carries a provider format and length but its embedded CRC32 checksum does not verify, so it is not a credential of that provider")
+		}
+	}
+
 	if prefix, ok := recognisedProviderPrefix(strings.TrimLeft(value, `"'`)); ok {
 		a.support(subject, "the value carries the recognised provider prefix "+prefix+
 			" and a token body, so it is not a bare vocabulary reference")
