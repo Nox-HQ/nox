@@ -815,7 +815,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
-	policyResult := evaluatePolicy(cfg, allFindings, capabilities)
+	policyResult := evaluatePolicy(cfg, allFindings, capabilities, coverage)
 
 	// Stage 5: Contribute observations, if this installation opted in. Runs
 	// last, over the refined findings, so what is shared is what the scan
@@ -1321,7 +1321,8 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 
 // evaluatePolicy runs the configured fail-on / baseline policy gate over the
 // refined findings. It returns nil when no policy is configured. Stage 4.
-func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet, caps *capability.Registry) *policy.Result {
+func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet, caps *capability.Registry,
+	cov *capability.Coverage) *policy.Result {
 	// A project that declares a capability requirement has configured a policy,
 	// even with no severity threshold set. Leaving it out of this condition
 	// would accept the setting and never evaluate it — a gate that looks
@@ -1333,7 +1334,7 @@ func evaluatePolicy(cfg *ScanConfig, allFindings *findings.FindingSet, caps *cap
 	}
 	policyCfg := policyConfigFrom(cfg)
 	result := policy.Evaluate(policyCfg, allFindings.Findings())
-	return policy.EvaluateCapabilities(policyCfg, caps, result)
+	return policy.EvaluateCapabilities(policyCfg, caps, cov, result)
 }
 
 // policyBudget converts the string-keyed budget from config into the

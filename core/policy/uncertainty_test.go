@@ -15,6 +15,27 @@ type gate map[capability.AnalysisCapability]bool
 
 func (g gate) Provided(c capability.AnalysisCapability) bool { return g[c] }
 
+// Answered lets the same fixture stand for both halves of the decision: a
+// capability this installation provides is treated as having concluded once.
+// That keeps every test below meaning what it meant before the run view
+// existed — "provided" was the whole question then — while the run-specific
+// cases state their own counts explicitly.
+func (g gate) Answered(c capability.AnalysisCapability) (answered, inconclusive int) {
+	if g[c] {
+		return 1, 0
+	}
+	return 0, 0
+}
+
+// run states a run view directly, for the cases where provided and answered
+// come apart. The pair is (answered, inconclusive).
+type run map[capability.AnalysisCapability][2]int
+
+func (r run) Answered(c capability.AnalysisCapability) (answered, inconclusive int) {
+	v := r[c]
+	return v[0], v[1]
+}
+
 func highFinding() findings.Finding {
 	return findings.Finding{
 		RuleID: "SEC-003", Severity: findings.SeverityHigh,
@@ -35,7 +56,7 @@ func TestNoAdoptionCliff(t *testing.T) {
 	// The same config a repository already has, evaluated through the new path
 	// against an installation that provides nothing at all.
 	after := policy.EvaluateCapabilities(
-		policy.Config{FailOn: findings.SeverityCritical}, gate{},
+		policy.Config{FailOn: findings.SeverityCritical}, gate{}, gate{},
 		policy.Evaluate(policy.Config{FailOn: findings.SeverityCritical},
 			[]findings.Finding{highFinding()}))
 
@@ -58,7 +79,7 @@ func TestUnmetRequirementWarnsByDefaultAndNamesTheFlag(t *testing.T) {
 		FailOn:              findings.SeverityCritical,
 		RequireCapabilities: []string{"reachability"},
 	}
-	r := policy.EvaluateCapabilities(cfg, gate{}, policy.Evaluate(cfg, nil))
+	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
 
 	if !r.Pass {
 		t.Error("the default mode failed the build; warn must not gate")
@@ -90,13 +111,13 @@ func TestFailModeGatesOnAnUnmetRequirement(t *testing.T) {
 
 	// With the capability present, a clean scan passes.
 	present := policy.EvaluateCapabilities(cfg,
-		gate{capability.Reachability: true}, policy.Evaluate(cfg, nil))
+		gate{capability.Reachability: true}, gate{capability.Reachability: true}, policy.Evaluate(cfg, nil))
 	if !present.Pass {
 		t.Fatalf("a met requirement failed the build: %+v", present.Warnings)
 	}
 
 	// Uninstall the analyzer and the same clean scan does NOT go green.
-	absent := policy.EvaluateCapabilities(cfg, gate{}, policy.Evaluate(cfg, nil))
+	absent := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
 	if absent.Pass {
 		t.Error("removing a required analyzer left the build passing — the exact " +
 			"failure this setting exists to close")
@@ -118,7 +139,7 @@ func TestIgnoreIsSilent(t *testing.T) {
 		Uncertainty:         policy.UncertaintyIgnore,
 		RequireCapabilities: []string{"reachability", "call_graph"},
 	}
-	r := policy.EvaluateCapabilities(cfg, gate{}, policy.Evaluate(cfg, nil))
+	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
 	if !r.Pass {
 		t.Error("ignore mode failed the build")
 	}
@@ -168,7 +189,7 @@ func TestFailModePreservesAnExistingFailure(t *testing.T) {
 	if base.Pass {
 		t.Fatal("a high finding at fail_on=high did not fail; the fixture is wrong")
 	}
-	r := policy.EvaluateCapabilities(cfg, gate{}, base)
+	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, base)
 
 	if r.Pass {
 		t.Error("the combined result passed")
@@ -189,7 +210,7 @@ func TestNilGateIsTreatedAsProvidingNothing(t *testing.T) {
 		Uncertainty:         policy.UncertaintyFail,
 		RequireCapabilities: []string{"reachability"},
 	}
-	r := policy.EvaluateCapabilities(cfg, nil, policy.Evaluate(cfg, nil))
+	r := policy.EvaluateCapabilities(cfg, nil, nil, policy.Evaluate(cfg, nil))
 	if r.Pass {
 		t.Error("a nil capability gate passed a declared requirement")
 	}
@@ -226,5 +247,86 @@ func TestValidationSeesEveryGateField(t *testing.T) {
 			t.Errorf("policy.%s accepted an invalid value; a gate keyword that "+
 				"silently resolves to a default is worse than no policy at all", tc.field)
 		}
+	}
+}
+
+// TestTheThreeWaysARequirementGoesUnmetAreWordedApart checks that each way a
+// requirement can go unmet reads differently to the operator.
+//
+// Unsupported, inconclusive and unexercised all fail the gate, and all three
+// need a different action from the reader: install a plugin, look at why the
+// analysis could not tell, or find out why nothing put the question. A single
+// "not provided by this installation" sent an operator to install something
+// they already had.
+//
+// The inconclusive case is the one Track H is about. An intelligence service
+// that answers slowly or partially leaves capabilities recorded as Unknown, and
+// a gate that accepted "we asked and could not tell" as satisfaction of "this
+// must be determined" would be the false all-clear rebuilt one layer up. That
+// branch had no test until reversing it in the implementation changed nothing
+// anywhere.
+func TestTheThreeWaysARequirementGoesUnmetAreWordedApart(t *testing.T) {
+	base := policy.Config{Uncertainty: policy.UncertaintyFail}
+
+	t.Run("unsupported", func(t *testing.T) {
+		cfg := base
+		cfg.RequireCapabilities = []string{"call_graph"}
+		r := policy.EvaluateCapabilities(cfg, gate{}, run{}, policy.Evaluate(cfg, nil))
+		assertUnmet(t, r, "call_graph", "not provided by this installation")
+	})
+
+	t.Run("inconclusive", func(t *testing.T) {
+		cfg := base
+		cfg.RequireCapabilities = []string{"reachability"}
+		r := policy.EvaluateCapabilities(cfg,
+			gate{capability.Reachability: true},
+			run{capability.Reachability: {0, 3}},
+			policy.Evaluate(cfg, nil))
+		assertUnmet(t, r, "reachability", "could not determine")
+		if strings.Contains(joinWarnings(r), "not provided by this installation") {
+			t.Error("a capability that ran and could not tell was reported as absent " +
+				"from the installation; the operator would go and install it again")
+		}
+	})
+
+	t.Run("unexercised", func(t *testing.T) {
+		cfg := base
+		cfg.RequireCapabilities = []string{"reachability"}
+		r := policy.EvaluateCapabilities(cfg,
+			gate{capability.Reachability: true},
+			run{capability.Reachability: {0, 0}},
+			policy.Evaluate(cfg, nil))
+		assertUnmet(t, r, "reachability", "nothing in this scan put the question")
+	})
+
+	t.Run("answered satisfies", func(t *testing.T) {
+		cfg := base
+		cfg.RequireCapabilities = []string{"reachability"}
+		r := policy.EvaluateCapabilities(cfg,
+			gate{capability.Reachability: true},
+			run{capability.Reachability: {1, 9}},
+			policy.Evaluate(cfg, nil))
+		if !r.Pass {
+			t.Errorf("a capability that concluded about one subject failed its "+
+				"requirement: %v. Nine inconclusive results alongside one real answer "+
+				"is a normal scan, not an unmet dependency", r.Warnings)
+		}
+	})
+}
+
+func joinWarnings(r *policy.Result) string { return strings.Join(r.Warnings, " ") }
+
+func assertUnmet(t *testing.T, r *policy.Result, capName, want string) {
+	t.Helper()
+	if r.Pass {
+		t.Fatalf("an unmet requirement for %s passed the gate", capName)
+	}
+	got := joinWarnings(r)
+	if !strings.Contains(got, capName) {
+		t.Errorf("the warning does not name %s: %q", capName, got)
+	}
+	if !strings.Contains(got, want) {
+		t.Errorf("the warning does not say %q, so the reader cannot tell which of the "+
+			"three ways this went unmet: %q", want, got)
 	}
 }

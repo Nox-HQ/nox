@@ -62,9 +62,25 @@ type CapabilityGate interface {
 	Provided(c capability.AnalysisCapability) bool
 }
 
+// CapabilityRun is the run half of the same decision: what a capability
+// actually established during THIS scan.
+//
+// It exists because CapabilityGate alone cannot keep the promise this file
+// makes. Provided answers "is anything on this installation able to establish
+// c" — a fact about the binary, true before the scan starts and unchanged by
+// anything that happens during it. A project that declares it depends on
+// reachability is not asking about the binary.
+type CapabilityRun interface {
+	// Answered reports how many subjects c concluded about, and how many it was
+	// asked about and could not determine. A nil implementation means the
+	// caller has no run view, and the gate falls back to the installation
+	// question alone.
+	Answered(c capability.AnalysisCapability) (answered, inconclusive int)
+}
+
 // EvaluateCapabilities checks a project's declared capability requirements
-// against what the installation actually provides, and folds the outcome into
-// an existing policy Result.
+// against what the installation provides AND what this scan established, and
+// folds the outcome into an existing policy Result.
 //
 // # Why requirements are declared rather than inferred
 //
@@ -80,7 +96,27 @@ type CapabilityGate interface {
 // will tell it — loudly, and at `fail` fatally — when that stops being true.
 // That is the narrow, real case: not "nox does not know everything", but
 // "nox stopped knowing something this project was relying on".
-func EvaluateCapabilities(cfg Config, gate CapabilityGate, r *Result) *Result {
+//
+// # Why the installation question is not enough
+//
+// This used to ask Provided and stop, and that did not keep the promise above.
+// Measured: a scan of a Go module whose advisory source was unreachable
+// produced zero findings, recorded a degradation saying in plain words that it
+// "cannot confirm the absence of known CVEs", and returned pass=true exit=0
+// under uncertainty=fail with require_capabilities: [reachability]. Every
+// capability was still "provided" — core/analyzers/deps is compiled into every
+// build — and none of them had established anything.
+//
+// That is the strictest configuration this gate offers returning a clean bill
+// on a scan that answered nothing, which is the failure the whole programme
+// exists to prevent, in the one place built to prevent it.
+//
+// So a requirement is satisfied only when the capability is provided AND this
+// scan actually reached a conclusion with it. Three outcomes, deliberately
+// worded apart, because they need different actions from the reader:
+// unsupported means install a plugin, inconclusive means the analysis ran and
+// could not tell, and unexercised means nothing in this scan put the question.
+func EvaluateCapabilities(cfg Config, gate CapabilityGate, run CapabilityRun, r *Result) *Result {
 	if r == nil {
 		r = &Result{Pass: true, ExitCode: 0}
 	}
@@ -89,29 +125,60 @@ func EvaluateCapabilities(cfg Config, gate CapabilityGate, r *Result) *Result {
 		return r
 	}
 
-	var missing []string
+	var unsupported, inconclusive, unexercised []string
 	for _, name := range cfg.RequireCapabilities {
 		c := capability.AnalysisCapability(name)
-		if gate != nil && gate.Provided(c) {
+		if gate == nil || !gate.Provided(c) {
+			unsupported = append(unsupported, name)
 			continue
 		}
-		missing = append(missing, name)
+		if run == nil {
+			// No run view. Falling back to the installation answer is the old
+			// behaviour and is permissive, so it must never be reached silently
+			// from the scan pipeline — TestScanAlwaysSuppliesARunView holds that.
+			continue
+		}
+		answered, undetermined := run.Answered(c)
+		switch {
+		case answered > 0:
+			continue
+		case undetermined > 0:
+			inconclusive = append(inconclusive, name)
+		default:
+			unexercised = append(unexercised, name)
+		}
 	}
+	missing := append(append(append([]string(nil), unsupported...), inconclusive...), unexercised...)
 	if len(missing) == 0 {
 		return r
 	}
 	sort.Strings(missing)
+	sort.Strings(unsupported)
+	sort.Strings(inconclusive)
+	sort.Strings(unexercised)
 
 	// The wording carries the whole point. An operator who reads this as "nox
 	// is missing a feature" has drawn the wrong conclusion; what it means is
 	// that findings this project triages using that capability are now
 	// unclassified, and their silence is not a clearance.
+	var parts []string
+	if len(unsupported) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%s: not provided by this installation", strings.Join(unsupported, ", ")))
+	}
+	if len(inconclusive) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%s: ran but could not determine anything", strings.Join(inconclusive, ", ")))
+	}
+	if len(unexercised) > 0 {
+		parts = append(parts, fmt.Sprintf(
+			"%s: provided, but nothing in this scan put the question", strings.Join(unexercised, ", ")))
+	}
 	detail := fmt.Sprintf(
-		"required analysis capabilit%s %s %s not provided by this installation: "+
-			"findings that depend on %s are unevaluated, not cleared",
+		"required analysis capabilit%s not satisfied — %s. Findings that depend on %s "+
+			"are unevaluated, not cleared",
 		plural(len(missing), "y", "ies"),
-		strings.Join(missing, ", "),
-		plural(len(missing), "is", "are"),
+		strings.Join(parts, "; "),
 		plural(len(missing), "it", "them"))
 
 	switch mode {
