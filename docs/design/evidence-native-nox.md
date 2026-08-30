@@ -430,10 +430,18 @@ what was never asked, and CI can gate on a capability going missing.
 - **`isBareProviderPrefix` is unreachable.** No rule matches a bare `AKIA` or
   `"glpat-"`, so the refiner never sees a candidate. Either it is dead or the
   rules changed under it.
-- **The intelligence service counts disputers as corroboration.** Its publish
-  guard uses every distinct reporter, so a second reporter arriving to *dispute*
-  a candidate satisfies the requirement that permits publishing it.
-  `Ledger.IndependentSupport` is the primitive that fixes it.
+- ~~**The intelligence service counts disputers as corroboration.**~~
+  **Corrected — this was overstated.** The service has no way to record a
+  dispute: both its claim producers add supporting claims, so its publish guard
+  counts only supporting reporters by construction and is correct as written.
+  What is true is that it counts *participants* rather than *believers*, and
+  nothing stated that assumption — which `nox-core` v0.2.0 made reachable by
+  adding `Polarity`. Now guarded by
+  `TestEveryClaimThisServiceRecordsIsSupporting`, which fails the moment a
+  non-supporting claim is added and names `Ledger.IndependentSupport` as the
+  fix. Recorded here rather than deleted, because the error is more instructive
+  than the item: a live security defect was reported on the strength of reading
+  one call site, when checking whether the input could exist took two greps.
 - **Dedup's own drop is unrecorded.** Track F names the flow, so nothing is
   lost about *what* was merged, but which specific finding was discarded is not
   written down.
