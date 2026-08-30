@@ -1,7 +1,8 @@
 # Evidence-Native Nox — roadmap evaluation and execution plan
 
-Status: proposed. Supersedes nothing; `docs/roadmap.md` records shipped phases
-and stays as the release history.
+Status: in progress. Tracks A, B, C1, C2 and E1 have landed — see §2.9 for
+where the programme stands and what it found. `docs/roadmap.md` records shipped
+phases and stays as the release history.
 
 The proposed roadmap's North Star is right and its invariant —
 **unknown must never silently become safe** — is already the doctrine written
@@ -356,25 +357,59 @@ Unchanged from the proposal, and non-negotiable:
   model. Four of the five are already in place (§1.1); authority (B5) and
   retraction (B4) are the outstanding two.
 
-### 2.9 Next up
+### 2.9 Where the programme stands
 
-Track A is done; its three results are summarised in §2.2 and committed under
-`docs/benchmarks/2026-Q3/`. A3 answered the question that was blocking Track B,
-and the answer was *out-of-band*.
+**Landed as of 2026-08-30.** Tracks A, B, C1, C2 and E1 are on `main`; the
+kernel is released at `nox-core` v0.2.1 and both consumers are bumped.
 
-Track B is therefore unblocked and starts next: `Subject`, the relation
-vocabulary, polarity, lifecycle and producer authority, shipped together as
-`nox-core` v0.2.0, with both consumers bumped and clean-cloned.
+| | what shipped | measured |
+|---|---|---|
+| **A** | precision baseline, refutation corpus, ledger budget | 203 TP / 0 FP / 7 FN core-only; 0.771 with plugins |
+| **B** | `Subject`, `Relation`, `Polarity`, `Status`, `Authority` | nox-core v0.2.0; v0.2.1 added `SubjectCandidate` |
+| **E1** | six secrets refiners record why they drop a candidate | 5 of 6 covered end to end; the sixth is unreachable and says so |
+| **C1** | out-of-band shadow ledger, subject derived not stored | 0 bytes per finding; output byte-identical |
+| **C2** | `core/adjudicate`, shadow only, divergence report | 15 of 37 findings diverge, all over-claimed |
 
-Two items surfaced by Track A that are not on any track yet and should be:
+Three things the work found that the plan did not anticipate:
+
+- **`SubjectCandidate` was missing.** The original seven subject kinds came
+  from the dependency-applicability chain — what nox reasons *about* — and
+  omitted what nox mostly *produces*. Added in v0.2.1.
+- **An existing test was vacuous.** `TestScan_DataURIPayloadIsNotASecret`
+  asserted "no findings" on input that produced no raw matches, so the filter
+  it guarded was never called; it passed identically with that filter deleted.
+- **The divergence number needs reading carefully.** 15 of 37 is not "the
+  analyzers over-claim". It is that they *under-record*: a rule that checked a
+  provider format, a length and an entropy threshold gets to say only "a
+  pattern matched". The gap closes by recording more, not by weighing patterns
+  more heavily.
+
+**Next**, in order of value:
+
+1. **D — analysis capability and honest unknown.** It must land before any
+   output flip, because the moment refutation can change output, *not
+   evaluated* and *refuted* have to be distinguishable in the domain.
+2. **Close C1's gap.** Refinement's own drops — suppression, baseline, VEX,
+   dedup — are still silent, and each is a refutation.
+3. **E2/E3.** The refiners that turn checks the analyzers already perform into
+   claims, which is what moves C2's divergence number honestly.
+
+Four items surfaced by the work that no track owns yet:
 
 - **`api-abuse` API-ABUSE-001 has precision 0.000** and has never scored a true
-  positive on the corpus. It should be re-measured rather than re-described,
-  and it is a first-order candidate for Track J.
+  positive on the corpus. Re-measure rather than re-describe; a first-order
+  candidate for Track J.
 - **Gate B has no corpus.** The refutation suite is offline-only by design, so
   dependency applicability and reachability are unrepresented. Track G must
-  bring a corpus scored against a pinned vulnerability snapshot before
-  deterministic unreachability is allowed to suppress anything.
+  bring one scored against a pinned vulnerability snapshot before deterministic
+  unreachability may suppress anything.
+- **`isBareProviderPrefix` is unreachable.** No rule matches a bare `AKIA` or
+  `"glpat-"`, so the refiner never sees a candidate. Either it is dead or the
+  rules changed under it.
+- **The intelligence service counts disputers as corroboration.** Its publish
+  guard uses every distinct reporter, so a second reporter arriving to *dispute*
+  a candidate satisfies the requirement that permits publishing it.
+  `Ledger.IndependentSupport` is the primitive that fixes it.
 
 ### 2.10 Explicit non-goals
 
