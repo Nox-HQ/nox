@@ -25,10 +25,38 @@ import (
 // wholesale. It matches each glob in generatedFileIgnorePatterns against both
 // the full (slash-normalised) path and its basename, mirroring the per-rule
 // matching in core/rules/engine.go.
+//
+// # Directory patterns match at any depth
+//
+// A pattern of the form "dir/*" names a tool-state DIRECTORY, and the intent is
+// that nothing inside it is scanned. filepath.Match cannot express that: its
+// "*" does not cross a separator and the pattern is anchored at the start, so
+// ".claude/*" matched .claude/settings.json and missed
+// .claude/worktrees/agent-x/.nox/baseline.json entirely.
+//
+// That was not theoretical. Scanning a repository with git worktrees under
+// .claude/ produced 107 high-severity "Cloudflare API Token" findings, every
+// one of them a SHA-256 fingerprint inside nox's OWN baseline files — the tool
+// reporting its own output as credentials, in the one directory the list
+// already claimed to exclude. Every directory entry had the same hole:
+// .nox, .claude, .roady, .cursor, .continue, .vex, testdata.
+//
+// So directory patterns are matched by path SEGMENT. Anything under a named
+// directory is skipped wherever that directory sits.
 func isGeneratedSecretsPath(path string) bool {
 	norm := filepath.ToSlash(path)
 	base := filepath.Base(norm)
+	segments := strings.Split(norm, "/")
+
 	for _, pattern := range generatedFileIgnorePatterns {
+		if dir, ok := strings.CutSuffix(pattern, "/*"); ok {
+			for _, seg := range segments[:max(0, len(segments)-1)] {
+				if seg == dir {
+					return true
+				}
+			}
+			continue
+		}
 		if matched, _ := filepath.Match(pattern, norm); matched {
 			return true
 		}
