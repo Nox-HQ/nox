@@ -14,6 +14,11 @@ scan:
     - "core/analyzers/deps/testdata/lockfiles/"
     - "testdata/precision-corpus/"
     - "testdata/precision-suite/"
+    # The hard refutation corpus: five real flows a static analysis cannot
+    # follow, so every file is deliberately vulnerable. They exist to test that
+    # nox REFUSES to refute what it cannot see (see the corpus README and
+    # core/refutation_hard_test.go), and the self-scan must not flag fixtures.
+    - "testdata/refutation-hard/"
     # Intentionally finding-bearing inputs for the metamorphic corpus oracle
     # (scripts/metamorphic/sweep.py). Same rationale as the precision corpora:
     # the sweep scans them explicitly in isolated temp dirs; the self-scan must
