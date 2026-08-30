@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox-core/evidence"
@@ -413,5 +414,112 @@ func TestUnevaluatedNeverReadsAsCleared(t *testing.T) {
 					"negative may", s, c)
 			}
 		}
+	}
+}
+
+// TestConfigDrivenRemovalsLeaveATrail closes the gap C1 left open.
+//
+// Suppression, baselining and VEX were never actually silent — each sets a
+// Status the reporters carry. The genuinely silent removals are the
+// config-driven ones: a disabled rule, an excluded path, a generated-file
+// filter. Those delete the finding outright, and an operator reading a clean
+// scan cannot tell "nox found nothing here" from "nox found it and my config
+// removed it".
+func TestConfigDrivenRemovalsLeaveATrail(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "creds.py"),
+		[]byte("GITHUB_TOKEN = \"ghp_7Kd2mQ9xR4tB1nZ6wY3vC8hL5jF0gS2pA9eU\"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// First establish the finding exists, so the assertion below cannot pass
+	// because nothing was ever found.
+	base, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	var ruleID string
+	for _, f := range base.Findings.Findings() {
+		ruleID = f.RuleID
+	}
+	if ruleID == "" {
+		t.Fatal("the fixture produced no finding; this test would assert nothing")
+	}
+
+	// Now disable the rule that produced it.
+	cfgYAML := "scan:\n  rules:\n    disable:\n      - " + ruleID + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte(cfgYAML), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	res, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, f := range res.Findings.Findings() {
+		if f.RuleID == ruleID {
+			t.Fatalf("%s was not removed; the fixture does not exercise the path", ruleID)
+		}
+	}
+
+	var trail int
+	for _, subject := range res.Reasoning.Subjects() {
+		for _, c := range res.Reasoning.About(subject).Claims {
+			if c.Polarity.Effective() != evidence.PolarityUnknown {
+				continue
+			}
+			if !strings.Contains(c.Statement, ruleID) {
+				continue
+			}
+			trail++
+			// The claim must not weigh as evidence in either direction. A
+			// configuration decision says nothing about whether the finding was
+			// true, and recording it as a refutation would put fabricated
+			// evidence in the ledger.
+			if c.Refutes() || c.Supports() {
+				t.Errorf("a config removal was recorded as %s; it is not evidence",
+					c.Polarity.Effective())
+			}
+			if !strings.Contains(c.Statement, ".nox.yaml") {
+				t.Errorf("the trail does not name the configuration that removed it: %q",
+					c.Statement)
+			}
+		}
+	}
+	if trail == 0 {
+		t.Errorf("%s was removed by configuration and left no trail; an operator "+
+			"cannot tell this from nox never having found it", ruleID)
+	}
+}
+
+// TestRemovalTrailCostsNothingWhenUnasked. The snapshot is O(findings) per
+// removal step, which is not a price to pay on a scan that never asked for the
+// trail.
+func TestRemovalTrailCostsNothingWhenUnasked(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "creds.py"),
+		[]byte("GITHUB_TOKEN = \"ghp_7Kd2mQ9xR4tB1nZ6wY3vC8hL5jF0gS2pA9eU\"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"),
+		[]byte("scan:\n  rules:\n    disable:\n      - SEC-003\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	quiet, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	loud, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	if quiet.Reasoning != nil {
+		t.Error("a scan that did not ask for reasoning allocated a store")
+	}
+	if len(quiet.Findings.Findings()) != len(loud.Findings.Findings()) {
+		t.Errorf("recording changed the finding count: %d vs %d",
+			len(quiet.Findings.Findings()), len(loud.Findings.Findings()))
 	}
 }

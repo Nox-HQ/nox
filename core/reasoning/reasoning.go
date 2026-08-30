@@ -189,3 +189,28 @@ func (s *Store) Support(subject evidence.Subject, kind evidence.Kind, source, to
 		Provenance: evidence.Provenance{Source: source, Tool: tool},
 	})
 }
+
+// Withheld records that a candidate was removed from the results by
+// CONFIGURATION rather than by evidence.
+//
+// The polarity is Unknown, and that is the considered choice rather than a
+// default. A rule the operator disabled, a path they excluded, a directory
+// they marked generated — none of these say anything about whether the finding
+// was true. Recording them as refutations would put fabricated evidence in the
+// ledger: nox would appear to have established something it never examined,
+// which is precisely the confusion the polarity distinction exists to prevent,
+// committed by the code that introduced the distinction.
+//
+// Unknown weighs nothing in either direction, which is correct — a
+// configuration decision is not evidence — while still leaving a trail. An
+// operator can then tell "nox found nothing here" from "nox found it and my
+// config removed it", which they currently cannot.
+func (s *Store) Withheld(subject evidence.Subject, source, tool, statement string) {
+	s.Record(evidence.Claim{
+		Kind:       evidence.KindHeuristic,
+		Statement:  statement,
+		Polarity:   evidence.PolarityUnknown,
+		Subject:    subject,
+		Provenance: evidence.Provenance{Source: source, Tool: tool},
+	})
+}

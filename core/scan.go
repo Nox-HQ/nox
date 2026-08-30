@@ -781,7 +781,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	for i := range artifacts {
 		scannedPaths = append(scannedPaths, artifacts[i].Path)
 	}
-	if err := refineFindings(allFindings, cfg, opts, target, degradations, scannedPaths); err != nil {
+	if err := refineFindings(allFindings, cfg, opts, target, degradations, scannedPaths, reasons); err != nil {
 		return nil, err
 	}
 
@@ -1130,10 +1130,23 @@ func singleFileArtifacts(path string, cfg *ScanConfig) ([]discovery.Artifact, er
 // conditional severity, dedup + deterministic sort, inline suppressions,
 // optional terraform-plan findings, baseline matching, and VEX. It is stage 3
 // of the scan pipeline.
-func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string, deg *degrade.Degradations, scanned []string) error {
+func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts ScanOptions, target string, deg *degrade.Degradations, scanned []string, reasons *reasoning.Store) error {
+	// Every config-driven removal below is wrapped so the candidate it deleted
+	// leaves a trail. Without it an operator cannot tell "nox found nothing
+	// here" from "nox found it and my config removed it", and those are very
+	// different states to be in.
+	//
+	// The wrapper is a no-op on a nil store, so a scan that did not ask for
+	// reasoning does not pay for the snapshots.
+	withheld := func(reason string, remove func()) {
+		recordWithheld(reasons, allFindings, reason, remove)
+	}
+
 	// Config rule disabling and severity overrides.
 	if len(cfg.Scan.Rules.Disable) > 0 {
-		allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
+		withheld("removed by scan.rules.disable in .nox.yaml", func() {
+			allFindings.RemoveByRuleIDs(cfg.Scan.Rules.Disable)
+		})
 	}
 	for ruleID, sev := range cfg.Scan.Rules.SeverityOverride {
 		allFindings.OverrideSeverity(ruleID, findings.Severity(sev))
@@ -1146,7 +1159,9 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		switch ar.Action {
 		case "disable":
 			if len(ar.Rules) > 0 && len(ar.Paths) > 0 {
-				allFindings.RemoveByRuleIDsAndPaths(ar.Rules, ar.Paths)
+				withheld("removed by scan.analyzer_rules disable in .nox.yaml", func() {
+					allFindings.RemoveByRuleIDsAndPaths(ar.Rules, ar.Paths)
+				})
 			}
 		case "skip_analyzer":
 			patterns := analyzerRulePatterns(ar.Analyzer)
@@ -1157,7 +1172,9 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 			if len(paths) == 0 {
 				paths = []string{"*"} // all files
 			}
-			allFindings.RemoveByRuleIDsAndPaths(patterns, paths)
+			withheld("removed by scan.analyzer_rules skip_analyzer "+ar.Analyzer+" in .nox.yaml", func() {
+				allFindings.RemoveByRuleIDsAndPaths(patterns, paths)
+			})
 		}
 	}
 
@@ -1165,10 +1182,14 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	// inside test/fixture/example trees — false-positive sources. Dependency
 	// scanning already ran against the same lockfiles, so no real CVE is hidden.
 	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
-		allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
+		withheld("content rule dropped on a generated or vendored path", func() {
+			allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
+		})
 	}
 	if noiseDirs := cfg.Scan.GeneratedPaths.ResolveNoiseDirs(); len(noiseDirs) > 0 {
-		allFindings.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, noiseDirs)
+		withheld("content rule dropped inside a test, fixture or example tree", func() {
+			allFindings.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, noiseDirs)
+		})
 	}
 
 	// conditional_severity overrides based on rule + path.
@@ -2068,6 +2089,39 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 		case "false":
 			cov.Record(subject, capability.Reachability, capability.Negative)
 		}
+	}
+}
+
+// recordWithheld runs a removal and records which candidates it deleted.
+//
+// The removal functions on FindingSet do not report what they took, and giving
+// each of them a reporting variant would be a wide change to a much-used API
+// for one caller's benefit. Diffing around the call gets the same answer at the
+// one place that needs it.
+//
+// It is a no-op on a nil store, and that guard is what keeps the cost honest:
+// the snapshot is O(findings) per removal step, which is not something to pay
+// on a six-million-finding scan that never asked for the trail.
+func recordWithheld(store *reasoning.Store, fs *findings.FindingSet, reason string, remove func()) {
+	if store == nil {
+		remove()
+		return
+	}
+
+	before := make(map[evidence.Subject]findings.Finding, len(fs.Findings()))
+	for _, f := range fs.Findings() {
+		before[SubjectForFinding(f)] = f
+	}
+
+	remove()
+
+	for _, f := range fs.Findings() {
+		delete(before, SubjectForFinding(f))
+	}
+	for subject, f := range before {
+		store.Withheld(subject, "nox-scan", "config",
+			fmt.Sprintf("%s (%s at %s:%d)", reason, f.RuleID,
+				f.Location.FilePath, f.Location.StartLine))
 	}
 }
 
