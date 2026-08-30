@@ -1053,6 +1053,45 @@ policy:
   baseline_mode: strict
 ```
 
+#### Requiring an analysis to have run
+
+`fail_on` gates on what nox found. The two settings below gate on what nox was
+able to determine, which is a different question and the one that goes wrong
+quietly — a scan whose analysis could not run reports no findings, and no
+findings looks exactly like a clean result.
+
+```yaml
+policy:
+  uncertainty: fail                        # warn (default) | fail | ignore
+  require_capabilities: [reachability]     # empty by default
+```
+
+**`require_capabilities`** — the analyses this project's triage depends on.
+Empty by default, which is every existing repository and changes nothing for
+them. Listing one asserts that you rely on that question being answered, and
+nox will tell you when it stops being. Run `nox analysis-capabilities` to see
+the names and what this installation provides.
+
+A requirement is met only when the capability is provided **and this scan
+actually reached a conclusion with it**. Those come apart the moment something
+fails at runtime, which is the only moment the setting exists for. Three ways it
+can go unmet, worded apart because each needs a different response:
+
+| Message | What happened | What to do |
+|---|---|---|
+| `not provided by this installation` | Nothing on this build can answer it | Install the plugin that provides it |
+| `ran but could not determine anything` | The analysis ran and came back empty | Look at why — a slow or partial source, a timeout |
+| `provided, but nothing in this scan put the question` | The capability exists and this scan never used it | Check the scan reached the code you think it did |
+
+**`uncertainty`** — what an unmet requirement does. `warn` (the default) prints
+and does not change the exit code; `fail` exits non-zero; `ignore` skips the
+check. A mistyped value is rejected rather than resolved to the permissive
+default.
+
+Worth knowing what this does *not* cover: `require_capabilities` speaks about
+analyses, not about every check completing. For "fail if any part of the scan
+did not finish", use `--fail-on-degraded`.
+
 ### Explain Defaults
 
 The `explain` section configures defaults for `nox explain`. CLI flags always take precedence.

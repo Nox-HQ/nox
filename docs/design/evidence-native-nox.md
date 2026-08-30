@@ -400,6 +400,32 @@ cases already understood.
   supersession; local adjudication stays sovereign — if Intel disappears, nox
   still scans, still reasons, and *reports the missing capability* via D3.
   *Gate C.*
+
+  **Sovereignty is landed; the network semantics are not.** Measured with the
+  service unreachable: the scan completes, findings are unaffected, and a
+  degradation says in plain words that it "cannot confirm the absence of known
+  CVEs". Those three held already.
+
+  The fourth did not, and it was a live false all-clear in the gate built to
+  prevent them. Under `uncertainty: fail` with
+  `require_capabilities: [reachability]` — the strictest configuration D5
+  offers — that same scan returned `pass=true`, exit 0, no warnings. Nothing was
+  lying: `reachability` genuinely is provided, because `core/analyzers/deps` is
+  compiled into every build. `EvaluateCapabilities` asked whether the
+  installation *could* establish reachability, a fact about the binary, and
+  reported it as though it had answered whether reachability *had been*
+  established for this code. Those coincide right up until something fails at
+  runtime.
+
+  A requirement is now met only when the capability is provided **and this scan
+  reached a conclusion with it** — `Coverage.Answered`, where `Positive` and
+  `Negative` are conclusions and `Unknown` and `TimedOut` are not. Unsupported,
+  inconclusive and unexercised are worded apart, because "install a plugin",
+  "the analysis could not tell" and "nothing put the question" need different
+  responses and one sentence sent operators to install what they already had.
+
+  Still open: the claim model is shared but the maturity ladder, Sybil
+  semantics and supersession are not wired end to end.
 - **I — Replay and explanation.** Persist an evidence-rich artifact; make
   re-adjudication deterministic (same ledger + same adjudicator version = same
   verdict) before attempting full scan reproducibility; every finding answers
@@ -423,8 +449,10 @@ Unchanged from the proposal, and non-negotiable:
 - **Gate C — Intelligence safety.** Before early Intel strengthens a public
   conclusion, producer authority, provenance, deterministic confirmation,
   retraction and the publication invariant are all enforced in the domain
-  model. Four of the five are already in place (§1.1); authority (B5) and
-  retraction (B4) are the outstanding two.
+  model. All five are now in the kernel — authority (B5) and retraction (B4)
+  landed with `nox-core` v0.2.0. The client-side half of Gate C — that losing
+  Intel degrades a scan visibly rather than silently — is enforced by the
+  capability gate described under H.
 
 ### 2.9 Where the programme stands
 
@@ -446,6 +474,7 @@ are bumped. Track C is complete except for C5, the v2.0.0 flip itself.
 | **G** | applicability ladder, Gate B corpus, `PREVENTED` as a normal result | 5-case reachability suite; found a false contract on first run |
 | **C4** | ingredient contract, waiver survival across a real scan pair | 0 waivers lost; message flip costs 22/37 baseline + every pinned VEX |
 | **C3** | conflict reaches the scan result; INCONCLUSIVE rejected with reasons | 0 conflicts on every corpus, and structurally so, not by luck |
+| **H** (part) | a capability requirement reads the run, not the installation | intel down + `require_capabilities` was pass/exit 0; now fails |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -482,6 +511,14 @@ is now held by a contract rather than by intent.
   producer: `FindingSet.Add` hashes `Message`, the rule engine hashes the
   matched text, and the output is indistinguishable downstream. 22/15 on the
   precision suite. See C4 above.
+- **D5's gate protected nothing, for a reason no test could see.** It asked
+  `Provided` — is this capability compiled in — and the answer is yes on every
+  build, forever, whatever happens at runtime. Every unit test passed because
+  every unit test set up an installation and asked about that installation. It
+  took running a scan against a dead endpoint to see that the strictest
+  available configuration returned a clean bill on a scan that determined
+  nothing. Third defect this programme has found in the same shape: a check
+  written correctly against the wrong input.
 - **A guard that pins a transcription cannot guard the thing.**
   `TestCorpusTokensCarryValidChecksums` checked a hardcoded list of two token
   literals copied out of the corpora, and passed while a third drifted:

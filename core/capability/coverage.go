@@ -161,3 +161,38 @@ func (c *Coverage) Summary() map[State]int {
 	}
 	return out
 }
+
+// Answered reports how many subjects ac actually concluded about in this scan,
+// and how many it was asked about and could not determine.
+//
+// This is the run-level question, as distinct from the installation-level one
+// Registry.Provided answers. The two come apart exactly when something fails at
+// runtime: `reachability` is provided by every nox build because
+// core/analyzers/deps is compiled in, and on a scan whose advisory source was
+// unreachable it establishes nothing at all. An operator asking "was
+// reachability answered for my code?" is asking this, not that.
+//
+// Negative counts as answered. It is a real conclusion — "the build links no
+// package under crypto/md5" — and the strongest one a static scan can reach.
+// What must never count is Unknown and TimedOut: those are the two states that
+// mean the question was put and came back empty, and letting them satisfy a
+// requirement would rebuild the false all-clear one layer up.
+func (c *Coverage) Answered(ac AnalysisCapability) (answered, inconclusive int) {
+	if c == nil || !ac.Valid() {
+		return 0, 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k, state := range c.states {
+		if k.ac != ac {
+			continue
+		}
+		switch state {
+		case Positive, Negative:
+			answered++
+		case Unknown, TimedOut:
+			inconclusive++
+		}
+	}
+	return answered, inconclusive
+}
