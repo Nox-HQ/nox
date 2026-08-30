@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -43,7 +45,20 @@ type Analyzer struct {
 	// provider-rule-vs-generic-rule pileup on a single token (see dedup.go).
 	// Built once at construction from the loaded rule set's structure.
 	spec map[string]int
+	// reasoning receives a refuting claim for every candidate this analyzer
+	// drops. Nil by default and nil for every existing caller, which is what
+	// keeps recording free when nobody asked for it: reasoning.Store is
+	// nil-safe, so the call sites below are unconditional and there is no
+	// second code path that could drift from the first.
+	reasoning *reasoning.Store
 }
+
+// RecordReasoningTo directs this analyzer's refutations at store.
+//
+// It is a setter rather than a NewAnalyzer parameter because the reasoning
+// store is scan-scoped while the analyzer is constructed in three places, one
+// of them the rule catalog, which has no scan and wants no store.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
 
 // NewAnalyzer creates an Analyzer with built-in secret detection rules loaded
 // programmatically. The rules use regex matching and apply to all file types.
@@ -168,13 +183,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// gitleaks/trufflehog/detect-secrets example allowlists.
 		lang := lexctx.LangFromPath(artifact.Path)
 		for i := range results {
+			// Every drop below records WHY before it drops. The reason is known
+			// only here, and a refiner that discards it produces a result
+			// indistinguishable from one that had nothing to discard — which is
+			// precisely the failure the refutation corpus exists to catch and
+			// the reasoning store exists to make auditable.
+			candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
+				results[i].Location.StartLine, results[i].Location.StartColumn)
+
 			if inEmbeddedBlob(lang, content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
 				continue
 			}
 			// inEmbeddedBlob consults lexctx, which reports LangUnknown for
 			// markup and stylesheets — so an inline `data:` URI in .html/.css/.md
 			// was never covered. The marker is unambiguous in raw bytes.
 			if inDataURIPayload(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match lies inside a data: URI payload")
 				continue
 			}
 			// Drop a bare provider-prefix match with no token body — the literal
@@ -186,9 +213,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// comment (a genuinely leaked credential) is still kept, because its
 			// matched value is more than the bare prefix.
 			if isBareProviderPrefix(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match is a bare provider prefix with no token body; a live credential always carries a 20+ character high-entropy body")
 				continue
 			}
 			if isPlaceholderFinding(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the matched VALUE is a documentation placeholder, read from the literal rather than inferred from the identifier")
 				continue
 			}
 			// A secret shown inside a display-text HTML/JSX attribute
@@ -196,6 +227,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// telling a user what to paste, not key material the repository
 			// holds.
 			if inDisplayTextAttribute(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match sits in a display-text HTML/JSX attribute, so it is the instruction telling a user what to paste, not key material this repository holds")
 				continue
 			}
 			// An assignment-shaped config-field rule that matched inside a
@@ -203,6 +236,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// assigned. Provider rules are untouched — a full token in a
 			// comment is a real leak.
 			if dropConfigFieldRuleInComment(lang, content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
 				continue
 			}
 			fs.Add(results[i])
@@ -274,4 +309,15 @@ func inEmbeddedBlob(lang lexctx.Lang, content []byte, f *findings.Finding) bool 
 		end = start + 1
 	}
 	return lexctx.InDataBlob(lang, content, start, end)
+}
+
+// refute records why a candidate was dropped.
+//
+// It exists so the six call sites above read as one line of intent each, and
+// so the provenance is written once. A refiner that had to spell out its own
+// source and tool at every drop would eventually spell one of them differently,
+// and a claim attributed to a producer that does not exist is a claim no
+// Authority can check.
+func (a *Analyzer) refute(subject evidence.Subject, kind evidence.Kind, statement string) {
+	a.reasoning.Refute(subject, kind, "nox-scan", "secrets", statement)
 }

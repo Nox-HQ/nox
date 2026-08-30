@@ -20,9 +20,29 @@ import (
 // The data-URI marker is lexically unambiguous in raw bytes, so this does not
 // need a language at all.
 func TestScan_DataURIPayloadIsNotASecret(t *testing.T) {
-	// A payload chosen to contain the runs that tripped SEC-629 / SEC-692 on
-	// the real dashboard: mixed-case alphanumerics of credential-like length.
-	payload := strings.Repeat("iVBORw0KGgoAAAANSUhEUgAAAHgAAABtCAYAAABqf6X6", 40)
+	// The payload must contain something the rules actually match, or this test
+	// proves nothing.
+	//
+	// It used to be strings.Repeat("iVBORw0KGgo…", 40). That produces ZERO raw
+	// matches — a repeated 44-character block has too little entropy for
+	// SEC-161/162/163 and matches no provider pattern — so the assertion
+	// "reported no findings" held whether or not inDataURIPayload did anything
+	// at all. The filter under test was never once called. A test that passes
+	// identically when the code it guards is deleted is the same defect as a
+	// scan reporting an unexercised check as an all-clear, which is the thing
+	// this repository exists to refuse; found while wiring the refiners to
+	// record their reasoning (Track E1).
+	//
+	// An AWS access key ID embedded in the payload is matched by SEC-001, so
+	// the filter is genuinely exercised — and rawMatchCount below pins that it
+	// stays exercised rather than quietly reverting to asserting nothing.
+	//
+	// The "/" before the key is load-bearing. SEC-001 needs a word boundary
+	// before AKIA, and a base64 run butted straight against it supplies none;
+	// "/" is a legitimate base64 character, so the payload stays realistic
+	// while the key remains matchable.
+	payload := strings.Repeat("iVBORw0KGgoAAAANSUhEUgAAAHgAAABtCAYAAABqf6X6", 40) +
+		"/AKIAIOSFODNN7EXAMPLE"
 	html := `<!DOCTYPE html>
 <html><body>
 <img class="logo" src="data:image/png;base64,` + payload + `">
@@ -34,6 +54,10 @@ func TestScan_DataURIPayloadIsNotASecret(t *testing.T) {
 		{"markdown", "README.md"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if n := rawMatchCount(t, tc.file, html); n == 0 {
+				t.Fatal("the sample produces no raw matches, so the data: URI filter " +
+					"is never called and this test asserts nothing")
+			}
 			got := scanStringForTest(t, tc.file, html)
 			if len(got) != 0 {
 				var ids []string
@@ -45,6 +69,18 @@ func TestScan_DataURIPayloadIsNotASecret(t *testing.T) {
 			}
 		})
 	}
+}
+
+// rawMatchCount returns how many findings the rules produce before any filter
+// runs. It exists so a suppression test can assert there was something to
+// suppress.
+func rawMatchCount(t *testing.T, name, content string) int {
+	t.Helper()
+	raw, err := NewAnalyzer().ScanFile(name, []byte(content))
+	if err != nil {
+		t.Fatalf("scan %s: %v", name, err)
+	}
+	return len(raw)
 }
 
 // The suppression must be scoped to the URI payload. A real credential
