@@ -22,6 +22,8 @@ import (
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
+	"github.com/nox-hq/nox/core/applicability"
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -715,6 +717,20 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							meta["theoretical"] = "true"
 						}
 					}
+					// Applicability: how far the argument from "this advisory
+					// exists" to "an attacker can use it here" actually got, and
+					// why it stopped. Recorded on every dependency finding,
+					// including — especially — the ones where it got nowhere,
+					// because "we could not tell" and "we did not look" are the
+					// answers a reader most needs and least often gets.
+					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown)
+					meta["applicability"] = string(verdict.Outcome)
+					meta["applicability_reached"] = string(verdict.Reached)
+					if verdict.StoppedAt != "" {
+						meta["applicability_stopped_at"] = string(verdict.StoppedAt)
+						meta["applicability_because"] = string(verdict.Because)
+					}
+
 					if pkg.Ecosystem == "go" {
 						affected := goAffectedImports(&ov, pkg.Name)
 						if reachable, determined := goVulnReachable(affected, linkedGoPkgs, linkedGoKnown); determined {
@@ -724,10 +740,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							} else {
 								meta["reachable"] = "false"
 								sev = findings.SeverityInfo
-								message += " (not reachable: the affected package is not linked by this build)"
 							}
 						}
 					}
+
+					// The message says what was established rather than only
+					// what was not. "not reachable" alone invites the reader to
+					// supply the more comfortable reading; the ladder says how
+					// far nox got and where it stopped.
+					message += " — " + verdict.Describe()
 
 					fs.Add(findings.Finding{
 						RuleID:     "VULN-001",
@@ -748,4 +769,41 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 
 	return inventory, fs, nil
+}
+
+// applicabilityFor climbs the applicability ladder as far as the evidence
+// actually supports, and records where it stopped.
+//
+// Every rung above SymbolUsed is currently out of reach: nox has no call-graph
+// analysis, so CallReachable cannot be established for anything. Saying so is
+// the point. A scanner that stops climbing and stays silent leaves the reader
+// to assume it stopped because there was nothing above; this says it stopped
+// because nobody has built the thing that would look.
+func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, linkedKnown bool) applicability.Verdict {
+	// Present and AffectedVersion are established by the fact of the finding:
+	// the package is in the lockfile, and OSV matched its version.
+	const reached = applicability.AffectedVersion
+
+	if pkg.Ecosystem != "go" {
+		// Dependency reachability is implemented for Go only. An npm package is
+		// not unreachable; it is unexamined, and nothing here could examine it.
+		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
+	}
+
+	affected := goAffectedImports(ov, pkg.Name)
+	reachable, determined := goVulnReachable(affected, linked, linkedKnown)
+	if !determined {
+		// The advisory named no import paths, or the linked set is unknown.
+		// Either way nothing was established, and the rung stays unclimbed.
+		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unknown)
+	}
+	if !reachable {
+		return applicability.Refuted(reached, applicability.SymbolUsed, capability.Negative,
+			[]string{"the build links no package under " + strings.Join(affected, ", ")})
+	}
+
+	// The affected package IS linked. That is SymbolUsed established — and the
+	// next rung, whether anything calls it, is one nox cannot climb at all.
+	return applicability.Undeterminable(applicability.SymbolUsed,
+		applicability.CallReachable, capability.Unsupported)
 }
