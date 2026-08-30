@@ -235,6 +235,50 @@ func (f *Finding) MatchesRuleID(id string) bool {
 	return false
 }
 
+// MatchesFingerprint reports whether fp addresses this finding, by full
+// fingerprint or by an unambiguous prefix.
+//
+// Prefix matching exists because a full SHA-256 is 64 characters and nobody
+// retypes one; every surface that lets a person name a finding accepts a
+// prefix. It lives here rather than in each adapter because it had already
+// drifted: the MCP server and the CLI each grew their own copy, differing on
+// whether the input was lowercased, so the same prefix could resolve in one
+// and not the other. That is the cross-adapter duplication this codebase has
+// fixed five times before.
+//
+// An empty prefix matches nothing. Treating it as "matches everything" would
+// turn a missing argument into a silent select-all, which is the wrong default
+// on any surface that acts on what it selects.
+func (f *Finding) MatchesFingerprint(fp string) bool {
+	fp = strings.TrimSpace(fp)
+	if fp == "" || f.Fingerprint == "" {
+		return false
+	}
+	if strings.EqualFold(f.Fingerprint, fp) {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(f.Fingerprint), strings.ToLower(fp)) {
+		return true
+	}
+	// A waiver written before a rule retirement names the fingerprint the
+	// retired rule would have produced; the same courtesy applies to a person
+	// naming one at a prompt.
+	for _, alias := range f.AliasFingerprints {
+		if strings.EqualFold(alias, fp) ||
+			strings.HasPrefix(strings.ToLower(alias), strings.ToLower(fp)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Addresses reports whether selector names this finding, by rule ID (current or
+// retired) or by fingerprint (full or prefix). It is what every adapter should
+// call when a person names a finding.
+func (f *Finding) Addresses(selector string) bool {
+	return f.MatchesRuleID(selector) || f.MatchesFingerprint(selector)
+}
+
 // NewFinding constructs a Finding with a normalized location. It is the
 // preferred way to create findings: the location range is made valid and the
 // caller's severity/confidence are used as-is (validate with Validate). Fields

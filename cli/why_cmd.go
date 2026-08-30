@@ -123,9 +123,10 @@ func matches(f findings.Finding, selector string) bool {
 	if selector == "" {
 		return true
 	}
-	return strings.EqualFold(f.RuleID, selector) ||
-		strings.HasPrefix(f.Fingerprint, strings.ToLower(selector)) ||
-		f.MatchesRuleID(selector)
+	// findings.Addresses, not a local copy. The MCP server and this command
+	// each had their own prefix match and they already disagreed about case,
+	// so the same prefix resolved on one surface and not the other.
+	return f.Addresses(selector)
 }
 
 func printExplanation(e explain.Explanation) {
