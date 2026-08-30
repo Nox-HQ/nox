@@ -429,7 +429,7 @@ cases already understood.
   build the `present → affected version → symbol relevant → used → reachable →
   attacker influence → exploitable` ladder, and make `PREVENTED` a normal,
   visible scan result rather than a suppression. *Gate B.*
-- **H — Intel as evidence network.** One claim model shared with local nox;
+- **H — Intel as evidence network.** *Landed.* One claim model shared with local nox;
   research maturity ladder; independence and Sybil semantics; retraction and
   supersession; local adjudication stays sovereign — if Intel disappears, nox
   still scans, still reasons, and *reports the missing capability* via D3.
@@ -458,8 +458,44 @@ cases already understood.
   "the analysis could not tell" and "nothing put the question" need different
   responses and one sentence sent operators to install what they already had.
 
-  Still open: the claim model is shared but the maturity ladder, Sybil
-  semantics and supersession are not wired end to end.
+  **The rest of H was mostly already built, and saying so is the finding.**
+  The claim model is genuinely shared — the service derives confidence and
+  exploitability from `nox-core/evidence` and stores neither, so a stored
+  verdict cannot drift from the evidence behind it. The research maturity
+  ladder is `DisclosureState`, a guarded statechart from `INTERNAL` to
+  `PUBLIC`, where research agents may investigate and may never disclose.
+  Independence and Sybil semantics are there and unusually honest: reporters
+  are a set rather than a counter, unattributed observations never corroborate,
+  and `CorroborationIsAttested` documents outright that reporter identities are
+  self-asserted, that threshold aggregation buys k-anonymity rather than Sybil
+  resistance, and that the answer is therefore to *show* the operator whether
+  anything is checkable rather than to gate on it silently.
+
+  **Retraction was the real gap, and it is meaningful in exactly one of the two
+  repositories.** In the CLI claims live for one scan and are discarded, so
+  there is nothing to retract — you re-scan. In the service they persist per
+  candidate across reporters and time, and the ledger is the audit trail behind
+  a disclosure decision.
+
+  Three things came out of wiring it:
+
+  1. **`nox-core` v0.2.2 — a retracted claim now weighs nothing everywhere.**
+     `Status` says of itself that it weighs nothing "exactly as an unrecognised
+     Kind does", and only `counted()` honoured that. `Kinds`,
+     `HasDeterministic`, `HasSemantic` and `IndependentSources` read every claim
+     regardless of lifecycle — so a retracted reporter still corroborated, and
+     consensus would survive the withdrawal of the belief it was made of.
+     Nothing caught it because nothing had ever set a `Status`.
+  2. **`Strongest` splits in two.** It stays an audit accessor over the whole
+     trail, because an audit view reporting a non-empty ledger as empty is worse
+     than the problem. `StrongestLive` is the verdict-facing one, and
+     `adjudicate.rationale` now uses it: explaining a LOW verdict with "the
+     exploit reproduced" — retracted — reads as a bug in the verdict.
+  3. **Two service consumers were reading raw claims.** The KEV kill switch
+     fired forever on a withdrawn entry, and `CorroborationIsAttested` reported
+     a withdrawn attestation as attestation. Both found by running the service
+     tests against a real database — without `NOXINTEL_TEST_DSN` every
+     assertion in that file skips and the suite reports green.
 - **I — Replay and explanation.** Persist an evidence-rich artifact; make
   re-adjudication deterministic (same ledger + same adjudicator version = same
   verdict) before attempting full scan reproducibility; every finding answers
@@ -490,8 +526,8 @@ Unchanged from the proposal, and non-negotiable:
 
 ### 2.9 Where the programme stands
 
-**Landed as of 2026-08-30.** Tracks A, B, C, D, E, F and G are complete and on
-`main`, along with the sovereignty half of H; the kernel is released at
+**Landed as of 2026-08-30.** Tracks A, B, C, D, E, F, G and H are complete and
+on `main`; the kernel is released at
 `nox-core` v0.2.1 and both consumers are bumped. Everything ships in the `v1.x`
 line: the major version the plan reserved for C5 was there to protect consumers
 from an output flip the measurement ruled out.
@@ -512,6 +548,7 @@ from an output flip the measurement ruled out.
 | **C3** | conflict reaches the scan result; INCONCLUSIVE rejected with reasons | 0 conflicts on every corpus, and structurally so, not by luck |
 | **H** (part) | a capability requirement reads the run, not the installation | intel down + `require_capabilities` was pass/exit 0; now fails |
 | **C5** | two scales kept apart: analyzer confidence and evidence confidence | the flip would have taken `--min-confidence high` from 11 to 0 |
+| **H** | retraction wired end to end; kernel lifecycle made uniform | 5 kernel accessors ignored `Status`; 2 service consumers read raw claims |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -548,6 +585,16 @@ is now held by a contract rather than by intent.
   producer: `FindingSet.Add` hashes `Message`, the rule engine hashes the
   matched text, and the output is indistinguishable downstream. 22/15 on the
   precision suite. See C4 above.
+- **A feature nothing uses cannot be known to work.** B4 shipped the claim
+  lifecycle and wired it into one function; four other accessors kept the old
+  reading for two releases, with no test noticing, because no consumer ever set
+  a `Status`. The inconsistency was only reachable at the moment something
+  finally retracted a claim — which is also the moment it would have mattered.
+- **A green suite can be a suite that skipped.** The service's database tests
+  skip themselves when `NOXINTEL_TEST_DSN` is unset, and its own CI comment
+  calls a run without a database "theatre". Running them for real caught a kill
+  switch that fired forever on a withdrawn CISA entry — a bug introduced by the
+  same change that the skipping suite had just reported green.
 - **The plan's headline change would have built the failure it was written to
   prevent.** C5 was the programme's destination — retire analyzer-authored
   confidence, let the evidence speak. Implemented literally it takes
@@ -592,10 +639,8 @@ is now held by a contract rather than by intent.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **The rest of H, then I and J.** Track C is complete. C5 landed as a
-   two-scale model after its measurement ruled out the flip; what remains in H
-   is the maturity ladder, Sybil semantics and supersession across the service
-   boundary.
+3. **I, then J.** Tracks A–H are complete. What remains is deterministic
+   re-adjudication and explanation (I), and the rule migration (J).
 
 #### Open items no track owns
 

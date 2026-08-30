@@ -100,7 +100,12 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 	}
 
 	sub := l.About(subject)
-	strongest, ok := sub.Strongest()
+	// StrongestLive, not Strongest: this sentence explains the verdict, so it
+	// must name a claim that contributed to it. A LOW verdict justified by "the
+	// exploit reproduced under the determinism gate" — retracted, weighing
+	// nothing — reads as a bug in the verdict, and the reader cannot tell which
+	// half to believe. Strongest stays the audit-trail accessor.
+	strongest, ok := sub.StrongestLive()
 	if !ok {
 		return evidence.Describe(state)
 	}
