@@ -242,6 +242,21 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		OutputSchema(detail.FindingDetail{}).
 		Handler(s.handleGetFindingDetail)
 
+	// Track D and Milestone 9.3 reach the agent surface here. Both are
+	// read-only and both answer a question the existing tools cannot: what was
+	// never evaluated, and why a finding was reported.
+	srv.Tool("analysis_capabilities").
+		Description("What this installation can establish and what THIS scan actually established, per analysis capability. Call it before summarising a scan: a capability that is provided but answered nothing was available and never used, which is not a clean result — it means the question was not asked. Degradations tell you a check broke; this tells you a question was never put.").
+		ReadOnly().
+		OutputSchema(capabilityOutput{}).
+		Handler(s.handleAnalysisCapabilities)
+
+	srv.Tool("why").
+		Description("Answer eight questions about a finding: what was observed, why it matters, what supports it, what argues against it, what was NOT evaluated, the potential impact, whether it affects this application, and what to do. Deterministic — derived from what the scan established, not written by a model. Pass a fingerprint (full or prefix) or a rule ID; omit to explain every active finding.").
+		ReadOnly().
+		OutputSchema(whyOutput{}).
+		Handler(s.handleWhy)
+
 	srv.Tool("summary").
 		Description("Aggregate overview of the last scan: active/total/suppressed counts and breakdowns by severity, confidence, and rule family, plus dependency and AI-component totals. Call this first to size up a scan before paging through individual findings.").
 		ReadOnly().
@@ -511,7 +526,13 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 		return "Error: " + err.Error(), nil
 	}
 
-	result, err := nox.RunScan(input.Path)
+	// RecordReasoning, not RunScan's default. The `why` tool answers from the
+	// evidence a scan gathers, and that evidence cannot be reconstructed
+	// afterwards — a scan that did not record it can only report that it did
+	// not. An agent surface is precisely where being able to ask "why" is worth
+	// the cost, and the ledger is held out-of-band so a finding still carries
+	// no extra bytes.
+	result, err := nox.RunScanWithOptions(input.Path, nox.ScanOptions{RecordReasoning: true})
 	if err != nil {
 		return "Error: scan failed: " + err.Error(), nil
 	}
@@ -689,7 +710,7 @@ func (s *Server) handleFindingByFingerprint(_ context.Context, input findingByFi
 	all := pc.result.Findings.Findings()
 	for i := range all {
 		f := &all[i]
-		if f.Fingerprint == fp || strings.HasPrefix(f.Fingerprint, fp) {
+		if f.Addresses(fp) {
 			loc := f.Location
 			return structured(fingerprintLookupOutput{
 				Found:       true,
