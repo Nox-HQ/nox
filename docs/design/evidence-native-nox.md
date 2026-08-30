@@ -167,31 +167,44 @@ and **E runs in parallel from the start**, for the reasons in §1.4.
 
 No architecture changes. Everything here is measurement.
 
-- **A1 — Re-baseline precision.** Already an open, explicitly-blocked item in
-  `.roady/spec.yaml`: "Re-measure `nox bench --precision` with the 0.3.0
-  plugins installed before closing this out." The 1.000 → 0.407 → 0.597 series
-  measured plugins that emitted findings; two of the three no longer do.
-  Capture precision, recall, FP/TP by rule, duplicate rate, and wall time, for
-  each of: no plugins, 0.3.0 plugins, every `precision-suite-*` corpus.
-  Commit the result under `docs/benchmarks/2026-Q3/`.
-  *Exit:* one authoritative baseline every later milestone is measured against.
+**Status: complete.** Results in `docs/benchmarks/2026-Q3/`.
 
-- **A2 — Refutation corpus.** `testdata/refutation-suite/`, a new corpus whose
-  ground truth is inverted: each case is a **real** vulnerability that a
-  plausible refinement would wrongly refute. Minimum coverage, one case per
-  refuter we intend to build: comment/prose lexer refinement, constant
-  analysis, taint refutation, reachability, flow merging, applicability.
-  A guard test asserts recall stays 1.000 on this corpus **forever**.
-  *Exit:* measurable protection against "we cut false positives by hiding real
-  vulnerabilities". This is Gate A's instrument and must exist before any
-  refutation reaches output.
+- **A1 — Re-baseline precision. ✓** `docs/benchmarks/2026-Q3/README.md`.
+  Core only, all 20 corpora: 203 TP, 0 FP, 7 FN — precision 1.000, recall
+  0.967, every miss a TAINT-002/TAINT-006 gap in clojure, dart or shell. The
+  plugin matrix on `precision-suite`: threat-enrich 0.3.0 and triage-agent
+  0.3.0 together contribute **zero** findings and zero false positives, so the
+  enrichment conversion worked completely; overall precision with the full
+  plugin set is **0.771**, against 0.597 before. Every remaining false positive
+  is `api-abuse`, the one plugin deliberately kept as a detector.
+  One correction to the record: the spec's claim that #28 took API-ABUSE-001's
+  corpus FPs "17 -> 0" is wrong — 0.2.2 measures 17, 0.2.3 measures 10, and the
+  rule's precision is still 0.000. It goes on Track J's migration list.
 
-- **A3 — Ledger cardinality budget.** A spike, not a feature: attach a
-  synthetic 3-claim ledger to every finding on the `llama_index` bench run and
-  measure peak RSS and wall-clock delta. Publish a hard budget (proposal: ≤15%
-  wall-clock, ≤25% RSS at 6M findings) that Track C is designed against.
-  If the budget cannot be met, the ledger is stored out-of-band and referenced,
-  and that decision is made **now**, not after C is built.
+- **A2 — Refutation corpus. ✓** `testdata/refutation-suite/`, seven samples,
+  one per refiner on the roadmap: lexical context, generated-code suppression,
+  constant analysis, sanitizer recognition, flow merging, reachability, value
+  semantics. No clean samples — every file carries a real, currently-detected
+  vulnerability shaped so a plausible refiner dismisses it for a reason that
+  sounds good and is wrong. Scores 10 TP / 0 FP / 0 FN.
+  `TestRefutationSuiteRecall` asserts recall is exactly 1.000, and was verified
+  to fail with a readable message when a sample's sink is removed.
+  *Known gap:* dependency-level applicability and reachability are absent,
+  because those cases need OSV data and this corpus is scored offline. **Gate B
+  therefore has no corpus yet** and Track G must bring one.
+
+- **A3 — Ledger cardinality budget. ✓** `docs/benchmarks/2026-Q3/ledger-budget.md`.
+  Measured: a bare finding costs 656 B live, 1,248 B with a three-claim ledger
+  — 1.90×, and **6.62 GiB projected at 5,698,790 findings against 3.48 GiB
+  bare**. The ratio budget (≤4×) passes; the absolute budget (≤6 GiB) does not,
+  and the absolute one is what binds — a hosted CI runner offers 7 GB.
+  **Decision: the ledger is not carried inline on `Finding` unconditionally.**
+  Track C is designed against a reference — an out-of-band store keyed by
+  fingerprint, or omission above a threshold recorded as a `degrade.Kind`,
+  never a silent drop. Shrinking the ledger until it fits is not an option; the
+  claims are the product.
+  The gate arms itself: a reflection check fails the budget on the commit that
+  gives `Finding` a ledger field, not on a later one.
 
 ### 2.3 Track B — Kernel semantics (`nox-core`, one release)
 
@@ -227,10 +240,12 @@ checkout present, per the topology invariant.
 The seam already exists: `core/scan.go` Stage 3, `refineFindings`
 (`core/scan.go:1029`), runs after all analyzers and plugins and before policy.
 
-- **C1 — Shadow ledger.** `Finding` gains an optional `Ledger`. Analyzers keep
-  authoring `Confidence` exactly as today; a shim synthesises a single claim
-  from each analyzer's existing output. Nothing in the output changes. Measured
-  against the A3 budget.
+- **C1 — Shadow ledger, out-of-band.** `Finding` gains a *reference* to a
+  ledger, not a ledger — A3 settled that. Analyzers keep authoring `Confidence`
+  exactly as today; a shim synthesises a single claim from each analyzer's
+  existing output into the side store. Nothing in the output changes. The A3
+  budget test arms itself the moment an inline field appears, so this
+  constraint is enforced by CI rather than by memory.
 - **C2 — Adjudicator, shadow mode.** A new `core/adjudicate` consumes the
   proposition graph and derives `Exploitability` via explicit state
   transitions — no global risk equation. It writes to a new field and to
@@ -341,17 +356,25 @@ Unchanged from the proposal, and non-negotiable:
   model. Four of the five are already in place (§1.1); authority (B5) and
   retraction (B4) are the outstanding two.
 
-### 2.9 The first three pull requests
+### 2.9 Next up
 
-1. **A1** — re-baseline precision with 0.3.0 plugins; commit
-   `docs/benchmarks/2026-Q3/`. Unblocks a spec item that is already open.
-2. **A2** — `testdata/refutation-suite/` with a recall-1.000 guard test.
-   Nothing that changes output ships before this exists.
-3. **A3** — cardinality spike on the `llama_index` bench; publish the budget
-   Track C is designed against.
+Track A is done; its three results are summarised in §2.2 and committed under
+`docs/benchmarks/2026-Q3/`. A3 answered the question that was blocking Track B,
+and the answer was *out-of-band*.
 
-Track B starts once A3's budget is known, because it determines whether the
-ledger is inline or out-of-band.
+Track B is therefore unblocked and starts next: `Subject`, the relation
+vocabulary, polarity, lifecycle and producer authority, shipped together as
+`nox-core` v0.2.0, with both consumers bumped and clean-cloned.
+
+Two items surfaced by Track A that are not on any track yet and should be:
+
+- **`api-abuse` API-ABUSE-001 has precision 0.000** and has never scored a true
+  positive on the corpus. It should be re-measured rather than re-described,
+  and it is a first-order candidate for Track J.
+- **Gate B has no corpus.** The refutation suite is offline-only by design, so
+  dependency applicability and reachability are unrepresented. Track G must
+  bring a corpus scored against a pinned vulnerability snapshot before
+  deterministic unreachability is allowed to suppress anything.
 
 ### 2.10 Explicit non-goals
 
