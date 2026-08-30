@@ -222,6 +222,37 @@ VULN finding existed, the mapping never ran, and it passed with the defect
 restored. It now drives `recordCapabilityCoverage` directly. A third test
 asserted nothing at all and was deleted rather than shipped.
 
+## Milestone B — landed, with the caveat stated
+
+`testdata/refutation-hard` holds five cases where a real flow exists and a
+static analysis cannot follow it: reflection through `MethodByName`, dynamic
+dispatch chosen from request data, a flow that only occurs after the eighth
+loop iteration, a closure fetched from a map, and `plugin.Open`.
+
+**The criterion is met.** Zero refutations, zero `capability.Negative`
+conclusions, zero refuted reach outcomes across the corpus. nox states no
+negative it has not earned.
+
+**It is met by silence, not by design, and that distinction is the finding.**
+One of the five produces a finding — the bounded loop, which the taint engine
+handles. The other four produce nothing at all: no candidate, no claim, no
+capability state. nox does not recognise that reflection defeated it; it never
+formed a candidate. Milestone A shipped the `Limitation` vocabulary and nothing
+emits it yet, so `nox why` cannot say "the analysis stopped at an unresolved
+dispatch" and says nothing instead.
+
+That matters for what a better engine would do. One that followed *part* of
+these flows could conclude "no path" where it owes the reader "could not resolve
+the callee", and the corpus would not catch it, because the claim would be about
+a subject that exists. Emitting limitations is the remaining half of C and the
+natural next step.
+
+**The corpus was vacuous on its first build**, and the guard against that is now
+the first test in the file. The initial fixtures used a bare function parameter
+as the tainted value; nox produced zero subjects, so the acceptance criterion
+passed while testing nothing. Giving them a real source made the engine reach
+them, and one case firing is the proof that it does.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
