@@ -173,3 +173,19 @@ func Candidate(ruleID, path string, line, column int) evidence.Subject {
 		ID:   fmt.Sprintf("%s@%s:%d:%d", ruleID, path, line, column),
 	}
 }
+
+// Support is Refute's counterpart: it records a claim FOR a subject.
+//
+// Like Refute, the polarity is not a parameter. The two directions are separate
+// methods so that a call site reads as what it means, and so that neither can
+// be turned into the other by getting one argument wrong.
+func (s *Store) Support(subject evidence.Subject, kind evidence.Kind, source, tool, statement string, attributes map[string]string) {
+	s.Record(evidence.Claim{
+		Kind:       kind,
+		Statement:  statement,
+		Polarity:   evidence.PolaritySupports,
+		Subject:    subject,
+		Attributes: attributes,
+		Provenance: evidence.Provenance{Source: source, Tool: tool},
+	})
+}
