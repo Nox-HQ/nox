@@ -110,10 +110,27 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 // Divergence records a finding whose analyzer-authored confidence disagrees
 // with what its evidence supports.
 //
-// This is the measurement C5 needs before analyzer-authored confidence can be
-// retired. Retiring it on the argument that evidence "should" be better is a
-// bet; retiring it having counted where the two disagree and in which
-// direction is a decision.
+// It was built as the measurement C5 needed before analyzer-authored
+// confidence could be retired. The measurement was taken and C5 decided the
+// other way, so this is now a standing report rather than a one-off: the two
+// confidences are different quantities, both are kept, and where they disagree
+// is output instead of being resolved.
+//
+// # What the measurement showed
+//
+// Retiring Confidence in favour of the adjudicated value does not recalibrate
+// the scale — it removes the top of it. The kernel puts HIGH at strength 70
+// (source_confirmed, controlled_reproduction, public_advisory) and a static
+// scan's strongest claim is KindStatic at 40. On the precision suite the flip
+// took `--min-confidence high` from 11 findings to zero, and it would be zero
+// on every project permanently, because analysing harder does not produce
+// strength 70; executing something or someone else reporting it does.
+//
+// A filter that always returns nothing is indistinguishable from a clean
+// repository. So the analyzer keeps authorship of Confidence — which the
+// precision suite says is well calibrated, 37 true positives and no false ones
+// — and the evidence gets Finding.EvidenceConfidence to disagree in.
+// TestTheFlipWouldHaveEmptiedTheTopOfTheScale keeps that number executable.
 //
 // # How to read the number, and how not to
 //
@@ -154,7 +171,8 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 //
 // So the number measures the gap between what nox knows and what nox can
 // currently record AS EVIDENCE. That gap is worth having a number for; it is
-// not evidence that the analyzers are wrong.
+// not evidence that the analyzers are wrong — and C5 is where acting as though
+// it were would have done real damage.
 type Divergence struct {
 	Fingerprint string              `json:"fingerprint"`
 	RuleID      string              `json:"rule_id"`

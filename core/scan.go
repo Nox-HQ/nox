@@ -2052,6 +2052,7 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adju
 		ledger := store.About(subject)
 		verdict := adjudicate.Adjudicate(ledger, subject)
 		fs.SetExploitability(i, string(verdict.Exploitability))
+		fs.SetEvidenceConfidence(i, string(verdict.Confidence))
 
 		// Verdict.Conflicted used to be computed here and dropped on the floor.
 		// It costs nothing today because nothing conflicts, which is exactly

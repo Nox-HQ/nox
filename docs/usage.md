@@ -1053,6 +1053,30 @@ policy:
   baseline_mode: strict
 ```
 
+#### Two confidences, and which one filters
+
+A finding carries two confidence values, and they answer different questions:
+
+| Field | Question | Range on a static scan |
+|---|---|---|
+| `Confidence` | How likely is this a true positive? | `high`, `medium`, `low` |
+| `EvidenceConfidence` | What strength of evidence was recorded for it? | `LOW`, `MEDIUM` |
+
+`--min-confidence` filters on the first. It is the analyzer's calibrated
+judgement about its own rule, and on nox's precision corpus it is accurate — 37
+true positives, no false ones.
+
+`EvidenceConfidence` appears only on scans that recorded reasoning, and it is a
+statement about the *ledger*, not about the world. It cannot exceed `MEDIUM` on
+a static scan: the evidence model puts `HIGH` at the strength of a controlled
+reproduction, a confirming source or a published advisory, and reading code
+does not produce those. A finding at `high` confidence with `MEDIUM` evidence
+is the ordinary case, not a contradiction — it means the rule is reliable and
+nothing has independently corroborated this particular hit.
+
+Do not filter on `EvidenceConfidence` expecting it to behave like
+`Confidence`. Requiring `HIGH` would match nothing on any project.
+
 #### Requiring an analysis to have run
 
 `fail_on` gates on what nox found. The two settings below gate on what nox was
