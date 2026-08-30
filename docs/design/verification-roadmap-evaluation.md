@@ -72,6 +72,43 @@ identity. Track G added a scoped representation beside it —
 boolean is what capability coverage reads. Two representations of the same fact,
 one of them exactly the thing the milestone forbids.
 
+**1b. The invariant is already violated on `main`, and I found it by running
+the chain end to end against the live intelligence service rather than by
+reading.**
+
+`goVulnReachable` establishes one thing: the advisory's affected import path is
+in the build's linked package set. On the ladder that is `symbol_used`. It is
+written to `meta["reachable"]`, a name that reads as `call_reachable`, and then
+`recordCapabilityCoverage` maps that boolean onto `capability.Reachability`.
+
+So evidence about `symbol_used` establishes the `reachability` capability, which
+is exactly what the invariant forbids. Two consequences, both live:
+
+- A project declaring `require_capabilities: [reachability]` is told the
+  question was answered when a weaker one was. The gate added in Track H reads
+  `Coverage.Answered()`, and this counts.
+- `reachable=false` sets the finding's severity to `info`, so the misnamed
+  boolean drives severity directly.
+
+Scanning a module with one vulnerable dependency through
+`https://intel.klarlabs.de` produced 54 findings including this, on the same
+finding, at the same time:
+
+```
+reachable              = true
+applicability          = undetermined
+applicability_reached  = symbol_used
+```
+
+The scoped representation Track G added is honest — it says it got to
+`symbol_used` and stopped. The unscoped boolean beside it says `reachable=true`,
+and that is the field a dashboard or a triage script sorts on.
+
+This is the strongest argument for doing A first, and for starting it by
+deleting the boolean rather than adding scope beside it: Track G already added
+the scoped form and left the unscoped one in place, and the two now disagree in
+production.
+
 **2. The refutation corpus has none of the hard cases.** Seven samples, all
 lexical: comments, banners, constants, a sanitizer on another variable, two
 distinct values, a wrapper, a placeholder. Nothing involving reflection, dynamic
@@ -93,6 +130,31 @@ The first is best-effort because nox does not control target state; the second i
 deterministic. Milestone H's acceptance criterion — never claim execution
 reproducibility where only adjudication reproducibility is guaranteed — has a
 naming collision working against it before the audit even starts.
+
+## What the end-to-end campaign established
+
+Run on five repositories across four languages (Go, Python, Rust, TypeScript),
+plus a module with a real vulnerable dependency against the live intelligence
+service.
+
+- **Determinism holds.** Fifteen scans, three per repository: `findings.json`
+  and the evidence artifact are byte-identical within each repository once the
+  generation timestamp is excluded.
+- **Replay reproduces every verdict** on every repository, before and after two
+  rule changes.
+- **The MCP surface works on real code.** `why` answers all eight questions and
+  the twelve-character fingerprint selector resolves; `analysis_capabilities`
+  reports five to six capabilities per repository that were provided and never
+  asked — which is the number an agent previously had no way to see.
+- **The intelligence path works end to end.** `/v1/querybatch` against the live
+  service returns advisories carrying `ecosystem_specific.imports`, the
+  applicability ladder engages on them, and a genuinely unaffected advisory
+  reaches `not_impacting` with the reason recorded.
+
+**Subject isolation holds**, which matters for Milestone G. `Ledger.counted`
+requires exact subject equality including `Kind`, so a claim about a flow cannot
+contribute to a verdict about a candidate. G therefore needs new subject kinds
+for the reproduction levels, not new aggregation rules.
 
 ## Three cautions on the plan itself
 
