@@ -2423,7 +2423,7 @@ func TestRefineFindings_ContextDowngrade_Default(t *testing.T) {
 	t.Parallel()
 
 	fs := refineContextDowngradeFixture()
-	if err := refineFindings(fs, &ScanConfig{}, ScanOptions{}, t.TempDir(), nil, nil); err != nil {
+	if err := refineFindings(fs, &ScanConfig{}, ScanOptions{}, t.TempDir(), nil, nil, nil); err != nil {
 		t.Fatalf("refineFindings: %v", err)
 	}
 
@@ -2471,7 +2471,7 @@ func TestRefineFindings_ContextDowngrade_Disabled(t *testing.T) {
 	off := false
 	cfg := &ScanConfig{}
 	cfg.Scan.ContextDowngrade = &off
-	if err := refineFindings(fs, cfg, ScanOptions{}, t.TempDir(), nil, nil); err != nil {
+	if err := refineFindings(fs, cfg, ScanOptions{}, t.TempDir(), nil, nil, nil); err != nil {
 		t.Fatalf("refineFindings: %v", err)
 	}
 
