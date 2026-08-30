@@ -89,6 +89,22 @@ type PolicySettings struct {
 	// baselining every finding. Keys are severity names (critical/high/medium/
 	// low/info).
 	Budget map[string]int `yaml:"budget"`
+
+	// Uncertainty says what to do about what the scan did not establish:
+	// "warn" (default), "fail", or "ignore". It reads the axis the gate never
+	// has — not how bad a finding would be if true, but how much nox actually
+	// determined.
+	Uncertainty string `yaml:"uncertainty"`
+
+	// RequireCapabilities names the analysis capabilities this project's triage
+	// depends on ("reachability", "taint", …; see `nox analysis-capabilities`).
+	//
+	// Empty for every existing repository, and empty changes nothing. Listing
+	// one asserts that this project relies on that question being answered —
+	// so that uninstalling the plugin which answers it can no longer make the
+	// build quietly greener, which is the whole failure this setting exists to
+	// close.
+	RequireCapabilities []string `yaml:"require_capabilities"`
 }
 
 // ComplianceSettings controls compliance framework filtering.
