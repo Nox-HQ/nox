@@ -257,17 +257,51 @@ The seam already exists: `core/scan.go` Stage 3, `refineFindings`
   deterministic evidence is not overturnable by heuristics; equal contradictory
   strength → `INCONCLUSIVE`; conflicts stay visible in the ledger. Across
   subjects: claims compose, never compete.
-- **C4 — Fingerprint and waiver compatibility.** Before any output flip:
-  adjudication must not change a fingerprint. If it must, reuse the
-  `RetiredRuleIDs`/`AliasFingerprints` mechanism and ship the same kind of
-  migration note as `docs/migration-fingerprint-v2.md`. A test asserts that
-  every baseline entry and VEX statement valid before the flip is still valid
-  after it.
+- **C4 — Fingerprint and waiver compatibility.** *Landed.* Adjudication must
+  not change a fingerprint, and three tests now hold that line rather than this
+  paragraph:
+
+  - `findings.TestFingerprintIngredientsAreClosed` classifies every field of
+    `Finding` as an ingredient or not, checks each classification by mutating
+    the field, and fails by name on a field nobody has classified. A field
+    added by a later track cannot join the hash by accident.
+  - `TestWaiversSurviveAdjudication` builds a baseline, two VEX documents and a
+    set of `nox:ignore` directives against a non-adjudicating scan, then checks
+    all four against an adjudicating one. Both halves come from real scans.
+  - `TestExplainingInTheMessageUnwaives` measures the mistake instead of
+    warning about it, because the tempting shape for C5 — a finding that
+    explains itself by saying more — reaches straight into the hash.
+
+  **No migration note is needed**, and that is a measured result rather than an
+  assumption: no fingerprint moves, so the `RetiredRuleIDs` /
+  `AliasFingerprints` mechanism stays in reserve. The condition under which
+  C5 would need it is now a failing test rather than a thing to remember.
+
+  Two facts came out of building it, and both constrain C5:
+
+  **`Message` is a fingerprint ingredient.** Appending one clause to every
+  message costs 22 of 37 baseline entries and every fingerprint-pinned VEX
+  statement on the precision suite. Inline `nox:ignore` directives and unpinned
+  VEX statements survive, because they key on the rule ID — so an operator sees
+  roughly half their waivers fail, which reads as a partial outage rather than
+  as a format change. C5 writes its verdict to `Exploitability`, `Status` and
+  `Metadata`. Never to `Message`.
+
+  **The ingredient set is not uniform across producers.** `FindingSet.Add`
+  hashes the finding's `Message`; the rule engine hashes the text its pattern
+  matched and never reads the message at all. On the precision suite that is a
+  22/15 split, and nothing downstream can tell which contract a given
+  fingerprint was written under — both paths emit the same `Finding` through
+  the same reports. So "adjudication must not extend the message" binds one
+  producer and is vacuous for the other, while "must not change the matched
+  text" is the reverse. Pinned by `TestFingerprintProducersAreNotUniform`.
+  This is a constraint on C5, not a live defect: fingerprints are stable today
+  under either recipe.
 - **C5 — The flip.** `Finding` becomes an adjudicated output;
   analyzer-authored `Confidence` becomes an input to adjudication rather than
   the authority. `Severity` keeps its meaning — potential consequence if true —
   and is *not* merged into confidence. Ships as **`nox` v2.0.0**. Gated on
-  Gate A.
+  Gate A and on C4, which is now met.
 
 ### 2.5 Track D — Analysis capability and honest unknown
 
@@ -359,9 +393,9 @@ Unchanged from the proposal, and non-negotiable:
 
 ### 2.9 Where the programme stands
 
-**Landed as of 2026-08-30.** Tracks A, B, C1, C2, D, E1, E2, E3 and F are on
-`main`; the kernel is released at `nox-core` v0.2.1 and both consumers are
-bumped.
+**Landed as of 2026-08-30.** Tracks A, B, C1, C2, C4, D, E1, E2, E3, F and G
+are on `main`; the kernel is released at `nox-core` v0.2.1 and both consumers
+are bumped.
 
 | | what shipped | measured |
 |---|---|---|
@@ -374,12 +408,16 @@ bumped.
 | **D5** | `policy.uncertainty`, `policy.require_capabilities` | clean scan + missing required capability = exit 1 |
 | **E2/E3** | four AI refiners record; secrets records what it verified | 37 → 61 supporting claims; divergence unchanged |
 | **F** | `findings.FlowID`, relations in the store, TRIAGE-002 recreated | 18 flows on the corpus, every edge evidence-backed |
+| **G** | applicability ladder, Gate B corpus, `PREVENTED` as a normal result | 5-case reachability suite; found a false contract on first run |
+| **C4** | ingredient contract, waiver survival across a real scan pair | 0 waivers lost; message flip costs 22/37 baseline + every pinned VEX |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
 record why, config removals leave a trail, flows are named so two findings can
 be one condition, one adjudicator derives the verdict, capability coverage says
-what was never asked, and CI can gate on a capability going missing.
+what was never asked, and CI can gate on a capability going missing. The one
+output the flip must not disturb — the fingerprint every waiver is keyed on —
+is now held by a contract rather than by intent.
 
 #### What the work found that the plan did not anticipate
 
@@ -403,6 +441,18 @@ what was never asked, and CI can gate on a capability going missing.
   strongest supporting claim; three heuristics are still a heuristic; the
   independence promotion cannot apply because they share a producer. The number
   moves on evidence of a different KIND — see below.
+- **The fingerprint has two ingredient sets, not one.** C4 assumed the question
+  "does adjudication move a fingerprint" had a single answer. It has one per
+  producer: `FindingSet.Add` hashes `Message`, the rule engine hashes the
+  matched text, and the output is indistinguishable downstream. 22/15 on the
+  precision suite. See C4 above.
+- **A helper can fabricate the defect it is testing for.** The first waiver
+  survival test mutated findings in place and recomputed fingerprints through
+  `FindingSet.Add`. It reported 15 of 37 baseline entries broken by a flip that
+  touched only `Exploitability` and `Metadata` — the flip was innocent, and the
+  helper had silently re-fingerprinted the rule engine's findings under the
+  wrong recipe. That 15 is what led to the split above. Both halves of the test
+  now come from real scans.
 
 #### Next, in order of value
 
@@ -414,9 +464,11 @@ what was never asked, and CI can gate on a capability going missing.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **C3–C5.** Conflict semantics, fingerprint compatibility, and the flip that
-   makes `Finding` an adjudicated output. C5 is gated on the divergence
-   measurement, which now exists.
+3. **C3 and C5.** Conflict semantics, and the flip that makes `Finding` an
+   adjudicated output. C5 is gated on the divergence measurement, which now
+   exists, and on C4, which now holds — with two constraints C4 measured:
+   the verdict goes to `Exploitability`/`Status`/`Metadata`, never to
+   `Message`, and the constraint differs per fingerprint producer.
 
 #### Open items no track owns
 

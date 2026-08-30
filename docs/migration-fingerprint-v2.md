@@ -66,3 +66,26 @@ findings.SetFingerprintVersion(findings.FingerprintV1) // Go API
 ```
 
 V1 remains fully supported; only the *default* changed.
+
+## What else can move a fingerprint
+
+Nothing that a nox upgrade does on its own. The fingerprint is computed from the
+rule ID, the file path, and the matched text or message — and from the start
+line under V1. Nothing else a finding carries reaches the hash: not severity,
+not confidence, not status, and not the adjudicated exploitability state
+introduced by the evidence work.
+
+That is enforced rather than intended.
+`findings.TestFingerprintIngredientsAreClosed` classifies every field of
+`Finding` and fails on one nobody has classified, so a field added later cannot
+join the hash by accident, and `TestWaiversSurviveAdjudication` checks a
+baseline, two VEX documents and a set of `nox:ignore` directives written against
+one scan against the findings of another. If a future release ever does need to
+move a fingerprint, it reuses the alias mechanism that already keeps waivers
+working across a rule retirement (`RetiredRuleIDs` / `AliasFingerprints`) and
+says so here.
+
+The one thing on your side that moves a V2 fingerprint is the finding's own
+text: the rule ID, the path, and the code the rule matched. Editing the line so
+the match text changes is a different finding, and it is meant to need a fresh
+decision.
