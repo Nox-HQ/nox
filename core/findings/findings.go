@@ -162,6 +162,36 @@ type Finding struct {
 	// absent value as either a state or a clearance.
 	Exploitability string `json:",omitempty"`
 
+	// EvidenceConfidence is what the recorded evidence supports, on the
+	// kernel's scale (LOW, MEDIUM, HIGH, CONFIRMED). Present only on scans that
+	// recorded reasoning; empty means nothing was adjudicated.
+	//
+	// It sits BESIDE Confidence rather than replacing it, and the distinction
+	// is the whole of Track C5. The two answer different questions:
+	//
+	//	Confidence         how likely is this finding a true positive
+	//	EvidenceConfidence what strength of evidence was recorded for it
+	//
+	// Neither substitutes for the other. Confidence is a calibration claim
+	// about the rule, and on the precision suite it is right — 37 true
+	// positives, no false ones, so the analyzers' "high" is accurate.
+	// EvidenceConfidence is a statement about the ledger's contents, and it
+	// caps at MEDIUM for any static scan: the kernel puts HIGH at strength 70,
+	// which is source_confirmed, controlled_reproduction or a public advisory,
+	// and a pattern scanner reaches KindStatic at 40.
+	//
+	// That cap is why the plan's original C5 — retire Confidence and let the
+	// adjudicator author it — was measured and abandoned. Under it, every
+	// finding on both corpora fell to medium or low, `--min-confidence high`
+	// went from 11 findings to zero, and it would have gone to zero on every
+	// project forever, because no static scan can clear 70. A filter that
+	// always returns nothing reads exactly like a clean repository.
+	//
+	// So the analyzer keeps authorship of Confidence, and the evidence gets its
+	// own field to disagree in. Where they disagree is reported rather than
+	// resolved — see ScanResult.Divergences.
+	EvidenceConfidence string `json:",omitempty"`
+
 	// RetiredRuleIDs are the IDs of retired rules that reported THIS finding's
 	// condition at THIS location before they were retired, and AliasFingerprints
 	// are the fingerprints those rules would have produced here.
@@ -693,6 +723,18 @@ func (fs *FindingSet) SetStatus(i int, s Status) {
 func (fs *FindingSet) SetExploitability(i int, state string) {
 	if i >= 0 && i < len(fs.items) {
 		fs.items[i].Exploitability = state
+	}
+}
+
+// SetEvidenceConfidence records what the ledger supports about finding i.
+//
+// Deliberately separate from Confidence, which the analyzer authors and this
+// must never touch: the two are different quantities, and C5 measured what
+// happens when one is made to stand for the other. See the field's own
+// documentation.
+func (fs *FindingSet) SetEvidenceConfidence(i int, level string) {
+	if i >= 0 && i < len(fs.items) {
+		fs.items[i].EvidenceConfidence = level
 	}
 }
 

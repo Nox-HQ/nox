@@ -332,11 +332,45 @@ The seam already exists: `core/scan.go` Stage 3, `refineFindings`
   text" is the reverse. Pinned by `TestFingerprintProducersAreNotUniform`.
   This is a constraint on C5, not a live defect: fingerprints are stable today
   under either recipe.
-- **C5 — The flip.** `Finding` becomes an adjudicated output;
-  analyzer-authored `Confidence` becomes an input to adjudication rather than
-  the authority. `Severity` keeps its meaning — potential consequence if true —
-  and is *not* merged into confidence. Ships as **`nox` v2.0.0**. Gated on
-  Gate A and on C4, which is now met.
+- **C5 — The flip.** *Landed as a two-scale model, not a flip. The plan's
+  version was measured and abandoned.*
+
+  The plan: `Finding` becomes an adjudicated output, analyzer-authored
+  `Confidence` demoted from authority to input, shipped as a major version.
+  `Severity` keeps its meaning — potential consequence if true — and is *not*
+  merged into confidence. That last part holds and always did.
+
+  **Why the flip cannot ship.** The kernel puts `HIGH` at strength 70 —
+  `source_confirmed`, `controlled_reproduction`, `public_advisory` — and a
+  static scan's strongest claim is `KindStatic` at 40, which is `MEDIUM`. So
+  adjudicated confidence has no top of scale available to a pattern scanner,
+  and never will: the missing strength comes from executing something or from
+  somebody else reporting it, not from analysing harder.
+
+  Measured on the precision suite: 15 of 37 findings demoted, none promoted,
+  and `--min-confidence high` goes from **11 findings to zero**. Not "fewer" —
+  zero, on every project, permanently. A filter that always returns nothing is
+  indistinguishable from a clean repository, which is the single outcome this
+  programme exists to prevent. The plan would have built it into the tool.
+
+  **What shipped instead.** The two are different quantities and both are kept:
+
+  | field | question | authored by | range on a static scan |
+  |---|---|---|---|
+  | `Confidence` | how likely is this a true positive | the analyzer | low … high |
+  | `EvidenceConfidence` | what strength of evidence was recorded | adjudication | LOW … MEDIUM |
+
+  `Confidence` keeps authorship and keeps `--min-confidence`, and the precision
+  suite says it deserves to — 37 true positives, no false ones, so its "high"
+  is accurate. `EvidenceConfidence` is a new field beside `Exploitability`,
+  absent unless the scan adjudicated. Where they disagree is reported, not
+  resolved: `ScanResult.Divergences` becomes a standing output rather than the
+  one-off measurement it was built as.
+
+  **Ships as a `v1.x` minor.** Nothing breaks: no fingerprint moves (C4), no
+  existing field changes meaning, and one optional field is added. The major
+  version the plan called for was there to protect consumers from an output
+  flip that is no longer happening.
 
 ### 2.5 Track D — Analysis capability and honest unknown
 
@@ -456,9 +490,11 @@ Unchanged from the proposal, and non-negotiable:
 
 ### 2.9 Where the programme stands
 
-**Landed as of 2026-08-30.** Tracks A, B, C1, C2, C3, C4, D, E1, E2, E3, F and
-G are on `main`; the kernel is released at `nox-core` v0.2.1 and both consumers
-are bumped. Track C is complete except for C5, the v2.0.0 flip itself.
+**Landed as of 2026-08-30.** Tracks A, B, C, D, E, F and G are complete and on
+`main`, along with the sovereignty half of H; the kernel is released at
+`nox-core` v0.2.1 and both consumers are bumped. Everything ships in the `v1.x`
+line: the major version the plan reserved for C5 was there to protect consumers
+from an output flip the measurement ruled out.
 
 | | what shipped | measured |
 |---|---|---|
@@ -475,6 +511,7 @@ are bumped. Track C is complete except for C5, the v2.0.0 flip itself.
 | **C4** | ingredient contract, waiver survival across a real scan pair | 0 waivers lost; message flip costs 22/37 baseline + every pinned VEX |
 | **C3** | conflict reaches the scan result; INCONCLUSIVE rejected with reasons | 0 conflicts on every corpus, and structurally so, not by luck |
 | **H** (part) | a capability requirement reads the run, not the installation | intel down + `require_capabilities` was pass/exit 0; now fails |
+| **C5** | two scales kept apart: analyzer confidence and evidence confidence | the flip would have taken `--min-confidence high` from 11 to 0 |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -511,6 +548,15 @@ is now held by a contract rather than by intent.
   producer: `FindingSet.Add` hashes `Message`, the rule engine hashes the
   matched text, and the output is indistinguishable downstream. 22/15 on the
   precision suite. See C4 above.
+- **The plan's headline change would have built the failure it was written to
+  prevent.** C5 was the programme's destination — retire analyzer-authored
+  confidence, let the evidence speak. Implemented literally it takes
+  `--min-confidence high` to zero findings on every project forever, because
+  the kernel's HIGH needs strength 70 and a static scan tops out at 40. "No
+  findings" that is not clean, shipped as the intended design. The plan was
+  right that the two confidences are different things and wrong about which
+  one to keep; measuring before flipping is the only reason that is a paragraph
+  here instead of a release.
 - **D5's gate protected nothing, for a reason no test could see.** It asked
   `Provided` — is this capability compiled in — and the answer is yes on every
   build, forever, whatever happens at runtime. Every unit test passed because
@@ -546,11 +592,10 @@ is now held by a contract rather than by intent.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **C5.** The flip that makes `Finding` an adjudicated output. Gated on the
-   divergence measurement, which exists, and on C4, which holds — with two
-   constraints C4 measured: the verdict goes to
-   `Exploitability`/`Status`/`Metadata`, never to `Message`, and the constraint
-   differs per fingerprint producer.
+3. **The rest of H, then I and J.** Track C is complete. C5 landed as a
+   two-scale model after its measurement ruled out the flip; what remains in H
+   is the maturity ladder, Sybil semantics and supersession across the service
+   boundary.
 
 #### Open items no track owns
 

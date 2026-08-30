@@ -52,6 +52,7 @@ var fingerprintIngredients = map[string]fingerprintRole{
 	"Metadata":             notAnIngredient,
 	"Status":               notAnIngredient,
 	"Exploitability":       notAnIngredient,
+	"EvidenceConfidence":   notAnIngredient,
 	"RetiredRuleIDs":       notAnIngredient,
 	"AliasFingerprints":    notAnIngredient,
 }
