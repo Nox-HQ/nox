@@ -12,6 +12,14 @@
 # that treats "example"/"sample" anywhere nearby as a placeholder signal, drops
 # two real credentials. The value is the evidence; the name is not.
 #
-# The literals here are synthetic and match no issued credential.
-EXAMPLE_PLACEHOLDER_TOKEN = "ghp_7Kd2mQ9xR4tB1nZ6wY3vC8hL5jF0gS2pA9eU"  # nox-expect: SEC-003
+# The literals here are synthetic and match no issued credential. The GitHub
+# token nonetheless carries a VALID embedded CRC32 checksum, and that is
+# deliberate: it was replaced once checksum verification landed, because the
+# original had a random body and would have been refuted deterministically.
+#
+# A sample that a refiner can correctly dismiss does not guard against anything.
+# The point of this case is a credential no OFFLINE check can distinguish from a
+# real one, so every offline check has to pass — including the one that did not
+# exist when the sample was written.
+EXAMPLE_PLACEHOLDER_TOKEN = "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"  # nox-expect: SEC-003
 SAMPLE_AWS_KEY = "AKIA2E4MQJ7XTBUNDXYZ"  # nox-expect: SEC-001 SEC-508
