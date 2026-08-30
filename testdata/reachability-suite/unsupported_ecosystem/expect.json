@@ -1,0 +1,8 @@
+{
+  "advisory_imports": ["left-pad"],
+  "want_reachable": true,
+  "want_determined": false,
+  "want_state": "unsupported",
+  "may_suppress": false,
+  "why": "Dependency reachability is implemented for Go only. An npm dependency is not unreachable; it is unexamined, and nox has no implementation that could examine it."
+}

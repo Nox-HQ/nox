@@ -52,6 +52,13 @@ scan:
     # future value-semantics refiner cannot dismiss them on the name. The
     # refutation harness scans this dir explicitly; the self-scan must not.
     - "testdata/refutation-suite/"
+    # The reachability suite (Gate B, docs/design/evidence-native-nox.md). Its
+    # `reachable` case imports crypto/md5 on purpose — the whole case is "the
+    # affected package IS linked", and an advisory scoping to a weak-crypto
+    # stdlib package is what makes it a realistic one. The suite is scored by
+    # its own test, which reads the modules directly; the self-scan must not
+    # flag a fixture for containing exactly what it was built to contain.
+    - "testdata/reachability-suite/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"

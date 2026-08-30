@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -45,6 +47,29 @@ func goAffectedImports(vuln *osvVuln, module string) []string {
 // silently hide real vulnerabilities, so when the toolchain cannot answer,
 // this reports ok=false and callers keep the finding.
 func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, bool) {
+	// A directory with no go.mod is not a module, and `go list -deps -e ./...`
+	// does NOT say so: it exits 0 and prints the standard library's dependency
+	// closure. Ninety-one packages, none of them the caller's, and no error.
+	//
+	// Without this check the result is a confident wrong answer rather than an
+	// absent one — a large non-empty set with ok=true, in which any advisory's
+	// import path is missing, so every Go advisory would be answered
+	// "deterministically unreachable" for a directory nox never managed to
+	// enumerate. That is precisely the Gate B failure: a blind spot reported as
+	// an all-clear.
+	//
+	// The only caller today passes a directory where a go.mod was already
+	// found, so this was not reachable in production. It was reachable from the
+	// documented contract — "when the toolchain cannot answer, this reports
+	// ok=false" — which was false as written, and would have become reachable
+	// the first time a second caller believed it. Found by
+	// testdata/reachability-suite on its first run.
+	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
+		slog.DebugContext(ctx, "no go.mod; the linked package set is unknown rather than empty",
+			"dir", dir)
+		return nil, false
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, goListTimeout)
 	defer cancel()
 
