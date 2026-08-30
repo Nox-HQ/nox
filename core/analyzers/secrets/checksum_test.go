@@ -1,6 +1,12 @@
 package secrets
 
-import "testing"
+import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"testing"
+)
 
 // TestChecksumAgainstPublishedTokens is the test that licenses everything else
 // in checksum.go.
@@ -121,23 +127,65 @@ func TestBase62PadsAndRoundTrips(t *testing.T) {
 //
 // Both corpora had tokens with random bodies until checksum verification
 // landed, which made them refutable — a poor true positive for "a hardcoded
-// GitHub token", and in the refutation suite a case that guarded nothing. If a
-// future edit reintroduces a random body, this fails rather than quietly
-// weakening both corpora.
+// GitHub token", and in the refutation suite a case that guarded nothing.
+//
+// # Why this walks the corpus instead of listing tokens
+//
+// It used to check a hardcoded list of two literals copied out of the corpora,
+// and it passed while a third sample drifted: testdata/precision-suite/
+// tp_secrets.go carried a random body, so nox recorded a KindStatic refutation
+// saying "this is not a GitHub credential" against a sample the corpus declares
+// a true positive, and reported it anyway. Nothing failed, because the test was
+// not looking at the corpus — it was looking at a copy of the part of the
+// corpus somebody remembered to copy.
+//
+// That is the same defect shape as the unreachable policy validation found in
+// Track D5: a check written correctly against the wrong input. A test that
+// pins a transcription of the thing it guards cannot detect the thing it
+// guards changing. It was found by Track C3, which went looking for subjects
+// whose evidence contradicts itself and found exactly one.
 func TestCorpusTokensCarryValidChecksums(t *testing.T) {
-	for _, tok := range []string{
-		"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", // testdata/precision-suite/tp_secrets.py
-		"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", // testdata/refutation-suite/r7_placeholder_named_secret.py
-	} {
-		consistent, applicable := verifyGitHubToken(tok)
-		if !applicable {
-			t.Errorf("%s is not a checkable GitHub token", tok)
-			continue
-		}
-		if !consistent {
-			t.Errorf("%s carries an invalid checksum: a checksum-aware scanner can "+
-				"deterministically refute it, which is not what either corpus needs "+
-				"its GitHub sample to be", tok)
+	roots := []string{
+		filepath.Join("..", "..", "..", "testdata", "precision-suite"),
+		filepath.Join("..", "..", "..", "testdata", "refutation-suite"),
+		filepath.Join("..", "..", "..", "testdata", "reachability-suite"),
+	}
+	tokenPattern := regexp.MustCompile(`gh[pousr]_[A-Za-z0-9]{36}`)
+
+	var checked int
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, tok := range tokenPattern.FindAllString(string(content), -1) {
+				checked++
+				consistent, applicable := verifyGitHubToken(tok)
+				if !applicable {
+					t.Errorf("%s: %s is not a checkable GitHub token", path, tok)
+					continue
+				}
+				if !consistent {
+					t.Errorf("%s: %s carries an invalid checksum. A checksum-aware scanner "+
+						"deterministically refutes it, so the corpus declares a sample whose "+
+						"strongest evidence contradicts what the corpus says it is", path, tok)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walking %s: %v", root, err)
 		}
 	}
+
+	// A pattern that stops matching would make every assertion above vacuous,
+	// and it would look exactly like a clean corpus.
+	if checked == 0 {
+		t.Fatal("no GitHub token was found in any corpus; this test is checking nothing")
+	}
+	t.Logf("checked %d GitHub tokens across the committed corpora", checked)
 }

@@ -57,6 +57,25 @@ type Verdict struct {
 // reports is empty and the honest answer is POTENTIAL. That is not a
 // placeholder to be improved: it is the true state of a finding nobody has
 // tried to exploit, and Track G is what will move some of them off it.
+//
+// # Why a conflict is not INCONCLUSIVE
+//
+// The roadmap asked for equal contradictory strength to surface as
+// INCONCLUSIVE. It must not, and the reason is in the kernel: Exploitability is
+// a DYNAMIC-VALIDATION lifecycle, and INCONCLUSIVE means specifically that
+// execution occurred and the evidence was insufficient to decide. A static scan
+// executes nothing, so routing a static disagreement there would make one state
+// mean two incompatible things — "we attacked it and could not tell" and "we
+// attacked nothing and two producers disagree" — with no way for a reader to
+// know which. The intelligence service derives exploitability from the same
+// function, so that ambiguity would cross a repository boundary as well.
+//
+// Neither does the kernel need a new state. Conflict is not a point on the
+// exploitability ladder at all; it is a property of the evidence, orthogonal to
+// how far validation got. A finding can be POTENTIAL and conflicted, or
+// CONFIRMED and conflicted, and collapsing the two axes loses that. So conflict
+// stays its own field — and the work of C3 is to stop throwing that field away
+// between here and the scan result.
 func Adjudicate(l evidence.Ledger, subject evidence.Subject) Verdict {
 	state := evidence.DeriveExploitability(evidence.RunOutcome{}, &l)
 	confidence := l.ConfidenceAbout(subject)
@@ -175,4 +194,92 @@ func Diverged(analyzerLabel string, adjudicated evidence.Confidence) (diverged, 
 		return false, false
 	}
 	return true, a.AtLeast(adjudicated) && a != adjudicated
+}
+
+// Conflict records a finding whose evidence contradicts itself at equal
+// strength: something supports it and something refutes it, and neither
+// outranks the other.
+//
+// It is reported rather than resolved. A conflict is a disagreement between two
+// producers about the same subject, and the one thing nox must not do with it
+// is pick a winner silently — that is the behaviour the whole evidence spine
+// exists to replace. An operator who can see that the AI analyzer and the
+// secrets analyzer disagree about one line can go and look; an operator handed
+// whichever verdict happened to be computed last cannot.
+//
+// # It does not fire today, and that is worth stating precisely
+//
+// On every committed corpus this is empty, and not by luck. A refuted candidate
+// is DROPPED before any supporting claim is recorded, and a surviving one is
+// corroborated on a separate path — so the two polarities do not meet. The one
+// place they do meet is the checksum verifier, which files a KindStatic
+// refutation against a candidate whose supports are KindHeuristic, and 40 does
+// not equal 10.
+//
+// So conflict is currently unreachable rather than merely unobserved, and the
+// distinction matters: an unreachable check and a working one look identical
+// from the outside, which is precisely how "we never exercised it" gets
+// reported as "it holds". What makes it reachable is a SECOND producer filing
+// claims about a subject the scanner already has an opinion on — the
+// intelligence service under Track H, or a plugin. That is exactly when a
+// silently discarded conflict would start hiding a real disagreement, and it is
+// why this is wired now, while it costs nothing, rather than then.
+//
+// TestConflictIsUnreachableUntilASecondProducerExists holds that reasoning to
+// the corpus, so the day it stops being true, something says so.
+type Conflict struct {
+	Fingerprint string           `json:"fingerprint"`
+	RuleID      string           `json:"rule_id"`
+	Subject     evidence.Subject `json:"subject"`
+	// Strength is the kind at which the two sides tied. It is the useful half
+	// of the report: a tie between two heuristics is a coin-flip nobody should
+	// act on, and a tie between two deterministic claims means one of the
+	// producers is wrong about something checkable.
+	Strength evidence.Kind `json:"strength"`
+	// Supporting and Refuting are the two statements that tied, so the report
+	// says what the disagreement IS rather than only that there is one.
+	Supporting string `json:"supporting"`
+	Refuting   string `json:"refuting"`
+}
+
+// ConflictFor builds the report for a subject the ledger says is conflicted.
+// It returns ok=false when the ledger does not in fact conflict, so a caller
+// cannot manufacture a conflict report by asking for one.
+func ConflictFor(l evidence.Ledger, subject evidence.Subject) (Conflict, bool) {
+	if !l.Conflict(subject) {
+		return Conflict{}, false
+	}
+	sub := l.About(subject)
+	support, hasSupport := strongestWhere(sub, evidence.Claim.Supports)
+	refutation, hasRefutation := strongestWhere(sub, evidence.Claim.Refutes)
+	if !hasSupport || !hasRefutation {
+		// Unreachable via Ledger.Conflict, which requires both. Returning
+		// ok=false rather than a half-filled report keeps that true if the
+		// kernel's definition ever widens.
+		return Conflict{}, false
+	}
+	return Conflict{
+		Subject:    subject,
+		Strength:   support.Kind,
+		Supporting: support.Statement,
+		Refuting:   refutation.Statement,
+	}, true
+}
+
+// strongestWhere returns the strongest claim matching pol. It mirrors the
+// kernel's own selection so the pair this reports is the pair the kernel
+// compared when it called the subject conflicted — reporting a different pair
+// would describe a disagreement that did not decide anything.
+func strongestWhere(l evidence.Ledger, pol func(evidence.Claim) bool) (evidence.Claim, bool) {
+	var best evidence.Claim
+	var found bool
+	for _, c := range l.Claims {
+		if !pol(c) {
+			continue
+		}
+		if !found || c.Kind.Strength() > best.Kind.Strength() {
+			best, found = c, true
+		}
+	}
+	return best, found
 }

@@ -253,10 +253,45 @@ The seam already exists: `core/scan.go` Stage 3, `refineFindings`
   `findings.json` only; SARIF, policy and exit codes are untouched. Divergence
   between analyzer confidence and adjudicated state is logged, and the
   divergence report is the input to C5.
-- **C3 — Conflict semantics.** Within a subject: stronger evidence wins;
-  deterministic evidence is not overturnable by heuristics; equal contradictory
-  strength → `INCONCLUSIVE`; conflicts stay visible in the ledger. Across
-  subjects: claims compose, never compete.
+- **C3 — Conflict semantics.** *Landed, with one part of the plan rejected.*
+  Within a subject: stronger evidence wins; deterministic evidence is not
+  overturnable by heuristics; equal contradictory strength is a conflict;
+  conflicts stay visible. Across subjects: claims compose, never compete. All
+  four now have tests that assert the exact value rather than a bound — a
+  reproduction supporting and a heuristic refuting stays `CONFIRMED`, because an
+  assertion phrased "not high" would pass even if a guess had retired a proof.
+
+  **Equal contradictory strength must NOT become `INCONCLUSIVE`.** The kernel's
+  `Exploitability` is a dynamic-validation lifecycle, and `INCONCLUSIVE` means
+  specifically that execution occurred and the evidence could not decide. A
+  static scan executes nothing, so routing a static disagreement there would
+  make one state mean two incompatible things — "we attacked it and could not
+  tell" and "we attacked nothing and two producers disagree" — with no way for a
+  reader to tell which. The intelligence service derives exploitability from the
+  same function, so the ambiguity would cross a repository boundary. Nor does
+  the kernel need a new state: conflict is a property of the evidence,
+  orthogonal to how far validation got. A finding can be `POTENTIAL` and
+  conflicted, or `CONFIRMED` and conflicted.
+
+  So conflict stays its own axis, and the actual work of C3 was that the axis
+  was being thrown away. `Verdict.Conflicted` was computed in
+  `adjudicateFindings` and discarded; nothing outside the adjudicator's own test
+  read it. It now reaches `ScanResult.Conflicts` as an `adjudicate.Conflict`
+  naming the two statements that tied and the strength they tied at — a report
+  saying only "these disagree" sends a person hunting through the ledger for
+  the disagreement.
+
+  **It does not fire today, and the reason is structural rather than lucky.** A
+  refuted candidate is dropped before any supporting claim is recorded, and a
+  surviving one is corroborated on a separate path, so the two polarities never
+  meet. The one place they do is the checksum verifier, which files a
+  `KindStatic` refutation against a candidate whose supports are
+  `KindHeuristic` — and 40 does not equal 10. Conflict is therefore
+  *unreachable*, not merely unobserved, and the two are indistinguishable from
+  outside. What makes it reachable is a second producer filing claims about a
+  subject the scanner already has an opinion on: Track H, or a plugin.
+  `TestConflictIsUnreachableUntilASecondProducerExists` fails on that day and
+  says to go read the disagreement.
 - **C4 — Fingerprint and waiver compatibility.** *Landed.* Adjudication must
   not change a fingerprint, and three tests now hold that line rather than this
   paragraph:
@@ -393,9 +428,9 @@ Unchanged from the proposal, and non-negotiable:
 
 ### 2.9 Where the programme stands
 
-**Landed as of 2026-08-30.** Tracks A, B, C1, C2, C4, D, E1, E2, E3, F and G
-are on `main`; the kernel is released at `nox-core` v0.2.1 and both consumers
-are bumped.
+**Landed as of 2026-08-30.** Tracks A, B, C1, C2, C3, C4, D, E1, E2, E3, F and
+G are on `main`; the kernel is released at `nox-core` v0.2.1 and both consumers
+are bumped. Track C is complete except for C5, the v2.0.0 flip itself.
 
 | | what shipped | measured |
 |---|---|---|
@@ -410,6 +445,7 @@ are bumped.
 | **F** | `findings.FlowID`, relations in the store, TRIAGE-002 recreated | 18 flows on the corpus, every edge evidence-backed |
 | **G** | applicability ladder, Gate B corpus, `PREVENTED` as a normal result | 5-case reachability suite; found a false contract on first run |
 | **C4** | ingredient contract, waiver survival across a real scan pair | 0 waivers lost; message flip costs 22/37 baseline + every pinned VEX |
+| **C3** | conflict reaches the scan result; INCONCLUSIVE rejected with reasons | 0 conflicts on every corpus, and structurally so, not by luck |
 | — | config-driven removals leave a trail | polarity Unknown, not Refutes |
 
 The scan pipeline now runs end to end: analyzers observe, refiners refute and
@@ -446,6 +482,15 @@ is now held by a contract rather than by intent.
   producer: `FindingSet.Add` hashes `Message`, the rule engine hashes the
   matched text, and the output is indistinguishable downstream. 22/15 on the
   precision suite. See C4 above.
+- **A guard that pins a transcription cannot guard the thing.**
+  `TestCorpusTokensCarryValidChecksums` checked a hardcoded list of two token
+  literals copied out of the corpora, and passed while a third drifted:
+  `tp_secrets.go` kept a random body, so nox recorded a deterministic
+  refutation saying "this is not a GitHub credential" against a sample the
+  corpus declares a true positive — and reported it anyway. Same shape as the
+  unreachable D5 validation: a check written correctly against the wrong input.
+  The guard now walks the corpora. Found by C3, which went looking for subjects
+  whose evidence contradicts itself and found exactly one.
 - **A helper can fabricate the defect it is testing for.** The first waiver
   survival test mutated findings in place and recomputed fingerprints through
   `FindingSet.Add`. It reported 15 of 37 baseline entries broken by a flip that
@@ -464,11 +509,11 @@ is now held by a contract rather than by intent.
    than the silence it replaces.
 2. **Track G — reachability and applicability.** Gate B, `PREVENTED` as a
    normal result, and the applicability ladder. It also needs a corpus (below).
-3. **C3 and C5.** Conflict semantics, and the flip that makes `Finding` an
-   adjudicated output. C5 is gated on the divergence measurement, which now
-   exists, and on C4, which now holds — with two constraints C4 measured:
-   the verdict goes to `Exploitability`/`Status`/`Metadata`, never to
-   `Message`, and the constraint differs per fingerprint producer.
+3. **C5.** The flip that makes `Finding` an adjudicated output. Gated on the
+   divergence measurement, which exists, and on C4, which holds — with two
+   constraints C4 measured: the verdict goes to
+   `Exploitability`/`Status`/`Metadata`, never to `Message`, and the constraint
+   differs per fingerprint producer.
 
 #### Open items no track owns
 
