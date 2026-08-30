@@ -151,6 +151,17 @@ type Finding struct {
 	Metadata    map[string]string
 	Status      Status `json:"Status,omitempty"`
 
+	// Exploitability is the adjudicated lifecycle state, present only on scans
+	// that recorded reasoning (ScanOptions.RecordReasoning). It is a state
+	// label, NOT a ledger: the evidence itself lives out-of-band, for the
+	// reasons measured in docs/benchmarks/2026-Q3/ledger-budget.md.
+	//
+	// Empty means the scan did not adjudicate, which is different from
+	// POTENTIAL — one says nothing was asked, the other says static evidence
+	// exists and no attack path was constructed. Consumers must not read an
+	// absent value as either a state or a clearance.
+	Exploitability string `json:",omitempty"`
+
 	// RetiredRuleIDs are the IDs of retired rules that reported THIS finding's
 	// condition at THIS location before they were retired, and AliasFingerprints
 	// are the fingerprints those rules would have produced here.
@@ -647,6 +658,15 @@ func (fs *FindingSet) OverrideSeverity(ruleID string, severity Severity) {
 func (fs *FindingSet) SetStatus(i int, s Status) {
 	if i >= 0 && i < len(fs.items) {
 		fs.items[i].Status = s
+	}
+}
+
+// SetExploitability records the adjudicated lifecycle state of the finding at
+// the given index. It mirrors SetStatus: the adjudicator holds a FindingSet,
+// not the findings, and Findings() hands back a slice callers must not modify.
+func (fs *FindingSet) SetExploitability(i int, state string) {
+	if i >= 0 && i < len(fs.items) {
+		fs.items[i].Exploitability = state
 	}
 }
 

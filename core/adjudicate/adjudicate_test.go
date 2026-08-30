@@ -1,0 +1,155 @@
+package adjudicate_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/adjudicate"
+)
+
+var candidate = evidence.Subject{Kind: evidence.SubjectCandidate, ID: "SEC-003@app/creds.py:1:16"}
+
+func supporting(kind evidence.Kind, statement string) evidence.Claim {
+	return evidence.Claim{
+		Kind: kind, Statement: statement, Subject: candidate,
+		Provenance: evidence.Provenance{Source: "nox-scan", Tool: "secrets"},
+	}
+}
+
+func refuting(kind evidence.Kind, statement string) evidence.Claim {
+	c := supporting(kind, statement)
+	c.Polarity = evidence.PolarityRefutes
+	return c
+}
+
+// TestAScanNeverClaimsExploitability is the honesty rule. nox does not execute
+// the code it scans, so no static finding may present as anything but
+// POTENTIAL — and saying POTENTIAL out loud is the point, because a finding
+// that stays silent about it reads as a stronger claim than it is.
+func TestAScanNeverClaimsExploitability(t *testing.T) {
+	for _, kind := range []evidence.Kind{
+		evidence.KindHeuristic, evidence.KindStatic, evidence.KindSourceConfirmed,
+		evidence.KindControlledReproduction, evidence.KindPublicAdvisory,
+	} {
+		var l evidence.Ledger
+		l.Add(supporting(kind, "established somehow"))
+		v := adjudicate.Adjudicate(l, candidate)
+		if v.Exploitability != evidence.Potential {
+			t.Errorf("a %s claim with no attack run produced %s, want POTENTIAL",
+				kind, v.Exploitability)
+		}
+	}
+}
+
+// TestRationaleNeverAssertsSafety mirrors the kernel's own guard. §25 is
+// explicit that nox reports "not reproduced" or "prevented under the
+// strategies tested", never "safe" — and a rationale is exactly the free-text
+// field where a careless "looks fine" would be written.
+func TestRationaleNeverAssertsSafety(t *testing.T) {
+	ledgers := []evidence.Ledger{
+		{},
+		{Claims: []evidence.Claim{supporting(evidence.KindHeuristic, "a pattern matched")}},
+		{Claims: []evidence.Claim{refuting(evidence.KindStatic, "the value is a placeholder")}},
+		{Claims: []evidence.Claim{
+			supporting(evidence.KindStatic, "taint reaches the sink"),
+			refuting(evidence.KindStatic, "a sanitizer dominates the path"),
+		}},
+	}
+	banned := []string{"safe", "secure", "no risk", "not vulnerable", "clean"}
+	for i, l := range ledgers {
+		got := strings.ToLower(adjudicate.Adjudicate(l, candidate).Rationale)
+		for _, word := range banned {
+			if strings.Contains(got, word) {
+				t.Errorf("ledger %d produced a rationale asserting safety (%q contains %q)",
+					i, got, word)
+			}
+		}
+		if got == "" {
+			t.Errorf("ledger %d produced an empty rationale", i)
+		}
+	}
+}
+
+// TestConfidenceFollowsTheEvidence covers the arithmetic the verdict inherits
+// from the kernel, at the level a caller sees it.
+func TestConfidenceFollowsTheEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		claims []evidence.Claim
+		want   evidence.Confidence
+	}{
+		{"nothing recorded", nil, evidence.ConfidenceLow},
+		{"a bare pattern match", []evidence.Claim{
+			supporting(evidence.KindHeuristic, "a pattern matched")}, evidence.ConfidenceLow},
+		{"deterministic analysis", []evidence.Claim{
+			supporting(evidence.KindStatic, "taint path resolved")}, evidence.ConfidenceMedium},
+		{"refuted by something stronger", []evidence.Claim{
+			supporting(evidence.KindHeuristic, "a pattern matched"),
+			refuting(evidence.KindStatic, "every argument is constant")}, evidence.ConfidenceLow},
+		{"refuted by something weaker", []evidence.Claim{
+			supporting(evidence.KindStatic, "taint path resolved"),
+			refuting(evidence.KindHeuristic, "looks like test code")}, evidence.ConfidenceMedium},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := evidence.Ledger{Claims: tc.claims}
+			if got := adjudicate.Adjudicate(l, candidate).Confidence; got != tc.want {
+				t.Errorf("confidence = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConflictIsReportedNotResolved. Two producers disagreeing at equal
+// strength is worth surfacing; collapsing it to a number is how a disagreement
+// becomes invisible.
+func TestConflictIsReportedNotResolved(t *testing.T) {
+	l := evidence.Ledger{Claims: []evidence.Claim{
+		supporting(evidence.KindStatic, "taint reaches the sink"),
+		refuting(evidence.KindStatic, "a sanitizer dominates the path"),
+	}}
+	v := adjudicate.Adjudicate(l, candidate)
+	if !v.Conflicted {
+		t.Error("equally strong contradictory claims were not reported as a conflict")
+	}
+	if !strings.Contains(v.Rationale, "conflict") {
+		t.Errorf("rationale %q does not mention the conflict", v.Rationale)
+	}
+}
+
+// TestUnknownAnalyzerLabelIsNotTreatedAsMiddling. A label this build does not
+// understand is not evidence of anything, and reading it as medium confidence
+// would let a typo look like a considered judgement.
+func TestUnknownAnalyzerLabelIsNotTreatedAsMiddling(t *testing.T) {
+	for _, label := range []string{"", "High", "critical", "unknown", "  high"} {
+		if got := adjudicate.ConfidenceFrom(label); got != evidence.ConfidenceLow {
+			t.Errorf("ConfidenceFrom(%q) = %s, want LOW", label, got)
+		}
+	}
+	if got := adjudicate.ConfidenceFrom("high"); got != evidence.ConfidenceHigh {
+		t.Errorf("ConfidenceFrom(\"high\") = %s, want HIGH", got)
+	}
+}
+
+// TestDivergenceDirection pins which way round "overclaimed" means, because
+// getting it backwards would invert the one number C5 depends on.
+func TestDivergenceDirection(t *testing.T) {
+	for _, tc := range []struct {
+		label           string
+		adjudicated     evidence.Confidence
+		wantDiverged    bool
+		wantOverclaimed bool
+	}{
+		{"high", evidence.ConfidenceLow, true, true},
+		{"high", evidence.ConfidenceHigh, false, false},
+		{"low", evidence.ConfidenceHigh, true, false},
+		{"medium", evidence.ConfidenceLow, true, true},
+		{"low", evidence.ConfidenceLow, false, false},
+	} {
+		diverged, over := adjudicate.Diverged(tc.label, tc.adjudicated)
+		if diverged != tc.wantDiverged || over != tc.wantOverclaimed {
+			t.Errorf("Diverged(%q, %s) = (%v, %v), want (%v, %v)",
+				tc.label, tc.adjudicated, diverged, over, tc.wantDiverged, tc.wantOverclaimed)
+		}
+	}
+}

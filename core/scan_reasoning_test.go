@@ -220,3 +220,127 @@ func TestSubjectIsDerivedNotStored(t *testing.T) {
 		}
 	}
 }
+
+// TestAdjudicationIsShadowOnly is the C2 safety property. The verdict is
+// written and nothing acts on it: the policy gate, the severities and the
+// analyzer confidences are all exactly what they were. A build cannot pass or
+// fail differently because adjudication happened.
+func TestAdjudicationIsShadowOnly(t *testing.T) {
+	dir := reasoningFixture(t)
+
+	quiet, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan without reasoning: %v", err)
+	}
+	loud, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan with reasoning: %v", err)
+	}
+
+	a, b := quiet.Findings.Findings(), loud.Findings.Findings()
+	if len(a) != len(b) {
+		t.Fatalf("adjudication changed the finding count: %d vs %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i].Severity != b[i].Severity {
+			t.Errorf("finding %d severity changed: %s -> %s", i, a[i].Severity, b[i].Severity)
+		}
+		if a[i].Confidence != b[i].Confidence {
+			t.Errorf("finding %d analyzer confidence changed: %s -> %s; adjudication must "+
+				"record a verdict, never overwrite the label C5 has to compare against",
+				i, a[i].Confidence, b[i].Confidence)
+		}
+		if a[i].Fingerprint != b[i].Fingerprint {
+			t.Errorf("finding %d fingerprint changed", i)
+		}
+	}
+
+	if (quiet.PolicyResult == nil) != (loud.PolicyResult == nil) {
+		t.Fatal("adjudication changed whether a policy result exists")
+	}
+	if quiet.PolicyResult != nil {
+		if quiet.PolicyResult.Pass != loud.PolicyResult.Pass {
+			t.Error("adjudication changed the policy gate outcome")
+		}
+		if quiet.PolicyResult.ExitCode != loud.PolicyResult.ExitCode {
+			t.Errorf("adjudication changed the exit code: %d -> %d",
+				quiet.PolicyResult.ExitCode, loud.PolicyResult.ExitCode)
+		}
+	}
+}
+
+// TestExploitabilityIsAbsentUnlessAdjudicated pins the distinction a consumer
+// must not lose: an empty state means nothing was asked, POTENTIAL means static
+// evidence exists and no attack path was constructed. Neither is a clearance,
+// and conflating them would turn "we did not look" into a verdict.
+func TestExploitabilityIsAbsentUnlessAdjudicated(t *testing.T) {
+	dir := reasoningFixture(t)
+
+	quiet, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, f := range quiet.Findings.Findings() {
+		if f.Exploitability != "" {
+			t.Errorf("a scan that did not adjudicate set Exploitability=%q on %s",
+				f.Exploitability, f.RuleID)
+		}
+	}
+
+	loud, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	reported := loud.Findings.Findings()
+	if len(reported) == 0 {
+		t.Fatal("fixture produced no findings; this test asserts nothing")
+	}
+	for _, f := range reported {
+		if f.Exploitability != string(evidence.Potential) {
+			t.Errorf("finding %s has Exploitability=%q, want POTENTIAL — a scan "+
+				"executes nothing, so no other state is honest", f.RuleID, f.Exploitability)
+		}
+	}
+}
+
+// TestDivergenceIsMeasuredNotAssumed. The report is the input to C5, so it must
+// actually contain the comparison rather than being an empty slice that reads
+// like agreement.
+func TestDivergenceIsMeasuredNotAssumed(t *testing.T) {
+	res, err := RunScanWithOptions("../testdata/precision-suite",
+		ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(res.Findings.Findings()) == 0 {
+		t.Fatal("the suite produced no findings; this test asserts nothing")
+	}
+	if len(res.Divergences) == 0 {
+		t.Fatal("no divergence was reported across the whole precision suite. Either " +
+			"every analyzer's confidence now matches its evidence — which would be " +
+			"remarkable — or the comparison stopped running.")
+	}
+
+	for _, d := range res.Divergences {
+		if d.Fingerprint == "" || d.RuleID == "" {
+			t.Errorf("divergence %+v is unattributable to a finding", d)
+		}
+		if d.Analyzer == d.Adjudicated {
+			t.Errorf("divergence recorded for %s where the two agree (%s)", d.RuleID, d.Analyzer)
+		}
+		if d.Overclaimed && !d.Analyzer.AtLeast(d.Adjudicated) {
+			t.Errorf("%s marked overclaimed but analyzer %s is not above adjudicated %s",
+				d.RuleID, d.Analyzer, d.Adjudicated)
+		}
+	}
+
+	// A scan that did not record reasoning has nothing to compare and must say
+	// nothing rather than report agreement.
+	off, err := RunScanWithOptions("../testdata/precision-suite", ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(off.Divergences) != 0 {
+		t.Error("a scan without reasoning reported divergences it could not have measured")
+	}
+}
