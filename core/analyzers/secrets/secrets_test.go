@@ -660,10 +660,18 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // (SEC-356..SEC-370 and SEC-430..SEC-433): they fired on password-less URLs like
 // `redis://localhost`, and the credential-aware DSN rules SEC-073/SEC-074/SEC-076
 // already cover connection strings that carry userinfo credentials.
+//
+// 913 -> 911 removed SEC-542 and SEC-524, both of which paired the pattern
+// `[a-zA-Z0-9]{32,}` with a file-level keyword and a HIGH severity. SEC-542
+// restated SEC-087, which detects a Cloudflare API token properly by requiring
+// the assignment; it is retired INTO SEC-087 so waivers keep working. SEC-524
+// was deleted outright: an Azure subscription ID is not a credential, and the
+// pattern could not have matched one anyway, since a subscription ID is a UUID
+// and the hyphens fall outside the class.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 913 {
-		t.Fatalf("expected 913 built-in secret rules, got %d", len(rules))
+	if len(rules) != 911 {
+		t.Fatalf("expected 911 built-in secret rules, got %d", len(rules))
 	}
 }
 
