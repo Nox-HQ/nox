@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/reasoning"
 )
 
@@ -342,5 +343,75 @@ func TestDivergenceIsMeasuredNotAssumed(t *testing.T) {
 	}
 	if len(off.Divergences) != 0 {
 		t.Error("a scan without reasoning reported divergences it could not have measured")
+	}
+}
+
+// TestCapabilityCoverageIsReportedOnEveryScan. "What could nox not tell you?"
+// is answerable without collecting any evidence, so it is answered
+// unconditionally — including on a scan that did not record reasoning.
+func TestCapabilityCoverageIsReportedOnEveryScan(t *testing.T) {
+	dir := reasoningFixture(t)
+	res, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if res.Capabilities == nil || res.Coverage == nil {
+		t.Fatal("a scan without reasoning reported no capability registry or coverage")
+	}
+	if len(res.Capabilities.Missing()) == 0 {
+		t.Error("the scan claims nox is missing no capability, which cannot be true " +
+			"of a scanner that never executes the code it reads")
+	}
+
+	reported := res.Findings.Findings()
+	if len(reported) == 0 {
+		t.Fatal("fixture produced no findings; this test asserts nothing")
+	}
+	for _, f := range reported {
+		subject := SubjectForFinding(f)
+
+		// Nothing executed, so no finding may claim dynamic verification.
+		if got := res.Coverage.State(subject, capability.DynamicVerification); got.Conclusive() {
+			t.Errorf("finding %s reports dynamic verification as %q; nox scan "+
+				"executes nothing", f.RuleID, got)
+		}
+		// And the gap must be visible rather than implied by silence.
+		var sawDynamic bool
+		for _, g := range res.Coverage.Gaps(subject) {
+			if g.Capability == capability.DynamicVerification {
+				sawDynamic = true
+			}
+			if g.State.SuppressesFinding() {
+				t.Errorf("gap %+v is reported as suppressing; only a conclusive "+
+					"negative may do that", g)
+			}
+		}
+		if !sawDynamic {
+			t.Errorf("finding %s does not list dynamic verification as unevaluated", f.RuleID)
+		}
+	}
+}
+
+// TestUnevaluatedNeverReadsAsCleared is Track D's exit criterion, at pipeline
+// level: breaking or uninstalling an analyzer must not be able to make a build
+// look better than it is.
+func TestUnevaluatedNeverReadsAsCleared(t *testing.T) {
+	dir := reasoningFixture(t)
+	res, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, f := range res.Findings.Findings() {
+		subject := SubjectForFinding(f)
+		for _, c := range capability.All() {
+			s := res.Coverage.State(subject, c)
+			if !s.Valid() {
+				t.Errorf("capability %q reported an undefined state %q", c, s)
+			}
+			if s.SuppressesFinding() && s != capability.Negative {
+				t.Errorf("state %q for %q may suppress a finding; only a conclusive "+
+					"negative may", s, c)
+			}
+		}
 	}
 }

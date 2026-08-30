@@ -37,11 +37,13 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/graph"
 	"github.com/nox-hq/nox/core/intel"
+	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
@@ -87,6 +89,17 @@ type ScanResult struct {
 	// slice means every configured check completed; a non-empty one means the
 	// findings are incomplete and "no findings" must not be read as "clean".
 	Degradations []Degradation
+
+	// Capabilities is what this installation can establish at all, and
+	// Coverage is what each capability actually concluded about each subject.
+	//
+	// Both are populated on every scan, including one that did not record
+	// reasoning, because "what could nox not tell you?" is answerable without
+	// any evidence being collected and is worth answering unconditionally. A
+	// capability nothing provides is a limit; one that is provided and said
+	// nothing is a gap; and neither is a clearance.
+	Capabilities *capability.Registry
+	Coverage     *capability.Coverage
 
 	// Reasoning holds the claims for and against each candidate this scan
 	// considered: why a finding was reported, and why a dropped one was not.
@@ -327,6 +340,12 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	if opts.RecordReasoning {
 		reasons = reasoning.New()
 	}
+
+	// The capability registry is built unconditionally. It costs one small map
+	// and it answers a question every scan should be able to answer — what this
+	// installation cannot tell you — whether or not anybody asked for evidence.
+	capabilities := capability.DefaultRegistry()
+	coverage := capability.NewCoverage(capabilities)
 
 	// Initialize analyzers.
 	secretsAnalyzer := secrets.NewAnalyzer()
@@ -785,6 +804,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// refutation that ought to be recorded the way the analyzers' are. They are
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
+	recordCapabilityCoverage(coverage, allFindings)
 	divergences := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
@@ -796,6 +816,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
 	return &ScanResult{
+		Capabilities: capabilities,
+		Coverage:     coverage,
 		Reasoning:    reasons,
 		Divergences:  divergences,
 		Findings:     allFindings,
@@ -2000,4 +2022,54 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) []adjud
 		})
 	}
 	return out
+}
+
+// recordCapabilityCoverage records, per reported finding, what the analyses
+// that ran actually concluded about it.
+//
+// It records only what is TRUE of a scan, which is a much shorter list than it
+// looks. A finding exists because a rule matched, so lexical context was
+// consulted wherever a lexer exists for the language — that is Positive. Taint
+// concluded about a finding the taint engine produced, and about nothing else.
+// Everything not recorded here resolves through the registry: provided but
+// silent is NotEvaluated, unprovided is Unsupported.
+//
+// Dynamic verification is the case worth being explicit about. `nox scan`
+// executes nothing, ever, so it is never conclusive here — which is exactly why
+// every scan finding adjudicates to POTENTIAL, and why an operator reading a
+// clean scan should be able to see that nox did not try.
+func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet) {
+	if cov == nil || fs == nil {
+		return
+	}
+	for _, f := range fs.Findings() {
+		subject := SubjectForFinding(f)
+
+		// A rule fired on this location, so the lexer either classified the
+		// file or could not. LangUnknown means no lexer exists for it, which is
+		// a limit rather than a gap.
+		if lexctx.LangFromPath(f.Location.FilePath) == lexctx.LangUnknown {
+			cov.Record(subject, capability.LexicalContext, capability.Unsupported)
+		} else {
+			cov.Record(subject, capability.LexicalContext, capability.Positive)
+		}
+
+		// The taint engine concluded about the findings it produced, and said
+		// nothing about the rest — which stays NotEvaluated rather than being
+		// asserted as anything.
+		if strings.HasPrefix(f.RuleID, "TAINT-") {
+			cov.Record(subject, capability.Taint, capability.Positive)
+			cov.Record(subject, capability.SymbolResolution, capability.Positive)
+		}
+
+		// Dependency reachability answers only where it was determined, and the
+		// deps analyzer already refuses to answer otherwise: goVulnReachable
+		// returns false only on positive evidence.
+		switch f.Metadata["reachable"] {
+		case "true":
+			cov.Record(subject, capability.Reachability, capability.Positive)
+		case "false":
+			cov.Record(subject, capability.Reachability, capability.Negative)
+		}
+	}
 }
