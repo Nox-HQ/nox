@@ -253,6 +253,50 @@ as the tainted value; nox produced zero subjects, so the acceptance criterion
 passed while testing nothing. Giving them a real source made the engine reach
 them, and one case firing is the proof that it does.
 
+## Milestone C — landed in two halves
+
+The first half shipped with A: `reach.Limitation` names ten reasons an analysis
+stops being able to speak for a whole program, each with a sentence an operator
+can act on.
+
+The second half is `reach.Detect`, which makes something actually speak it.
+Milestone B measured the gap precisely: four of five hard cases produced
+complete silence, so nox had nothing to attach an explanation to and a reader
+could not tell those files from clean ones.
+
+**It is lexical, and that is a considered limit rather than a shortcut.**
+Recognising these constructs properly means resolving types, which is the
+analysis the construct defeats — the detector cannot be stronger than the thing
+it reports on. What makes it safe is the direction of its error: a marker only
+ever ADDS a limitation, which only ever weakens a claim. A false positive means
+nox says "I may have missed something" when it did not, and a scope carrying a
+spurious limitation can still `Establish`; it just cannot `Refute`.
+
+**Dynamic dispatch is deliberately not detected.** `interface{}` and `any`
+appear in ordinary Go constantly, so a marker for them fires on nearly every
+file — and a limitation reported everywhere carries no information and trains a
+reader to skip the field. That was measured, not assumed: the first version of
+the marker list included `interface{}` and a bare `import (`, and reported
+`dynamic_loading` on all five hard cases including the three that contain none,
+because Go's own import block matched.
+
+Measured after the fix: reflection and dynamic loading detected on the two cases
+that have them, silence on the three that cannot be detected lexically, and
+**21 of 794** of nox's own Go files flagged — 2.6%, quiet enough to mean
+something. `TestDetectIsQuietOnNoxItself` keeps that executable with a ceiling
+of 15%.
+
+**The remaining limit, stated:** only findings are annotated. A file with no
+finding gets no annotation, so B's four-of-five silence is only partly
+addressed. Attaching limitations to files rather than findings needs a per-file
+record the scan result does not carry, which is a larger change than this one.
+
+**A usability bug surfaced while testing it.** `nox why . --offline` reported
+`no active finding matches "--offline"`: Go's flag package stops parsing at the
+first positional, so the flag became a selector. `nox show` splits flags from
+positionals first for exactly this reason; `nox why` now does too. Found by
+using the command, not by reading it.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:

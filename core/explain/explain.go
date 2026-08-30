@@ -30,6 +30,7 @@ import (
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reach"
 )
 
 // Explanation is the eight answers, in the order a person reads them.
@@ -89,7 +90,7 @@ func Explain(in Inputs) Explanation {
 	e.Observed = observed(f)
 	e.WhyItMatters = whyItMatters(f, in.Rule)
 	e.Supports, e.Against = argument(in.Ledger, in.Subject)
-	e.NotEvaluated = notEvaluated(in.Coverage, in.Subject)
+	e.NotEvaluated = append(limitationLines(f), notEvaluated(in.Coverage, in.Subject)...)
 	e.PotentialImpact = potentialImpact(f, in.Rule)
 	e.AffectsThisApplication = affectsThisApplication(f)
 	e.WhatToDo = whatToDo(in.Rule)
@@ -239,7 +240,29 @@ func notEvaluated(cov *capability.Coverage, s evidence.Subject) []string {
 	}
 	sort.Strings(out)
 	if len(out) == 0 {
-		return []string{"Every analysis nox has reached a conclusion about this finding."}
+		out = []string{"Every analysis nox has reached a conclusion about this finding."}
+	}
+	return out
+}
+
+// limitationLines reports the constructs in this file that defeat static
+// analysis, so silence about the rest of the file reads as what it is.
+//
+// It appears under "what was not evaluated" because that is the question it
+// answers. A capability state says an analysis reached no conclusion; this says
+// why one could not be reached here, which is the difference between a reader
+// installing a plugin and a reader understanding that the code is not
+// statically analysable at this point.
+func limitationLines(f findings.Finding) []string {
+	raw := f.Metadata["analysis_limitations"]
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, name := range strings.Split(raw, ",") {
+		l := reach.Limitation(strings.TrimSpace(name))
+		out = append(out, "this file defeats static analysis — "+l.Describe()+
+			" — so any analysis of it is incomplete, and nothing here was ruled out")
 	}
 	return out
 }
