@@ -547,7 +547,23 @@ cases already understood.
   Every label still reproduced. Only the sentence moved, which is the half
   anybody actually reads. Found by the replay disagreeing with the scan that had
   just produced it.
-- **J — Migration and validation.** Rule families in value/risk order — noisy
+- **J — Migration and validation.** *10.1's profiles landed; the migration
+  itself is barely begun, and now measurable.* See
+  `docs/design/rule-family-migration.md` for the five questions answered per
+  family and the ordering, which measuring changed.
+
+  The headline: across both corpora, **two findings carry evidence that was
+  earned** rather than classified — both the same GitHub checksum. `TAINT` and
+  `VULN` sit above heuristic because `reasoning.ObservationKind` promotes their
+  rule prefix, which is defensible and is not migration; the metric separates
+  the two so that distinction cannot quietly flatter the work.
+
+  `IAC` is 490 rules — the second largest family, absent from the roadmap's
+  ordering — and all 490 are regex or absence matchers over text. It cannot
+  exceed heuristic without structural parsing, which is a feature rather than a
+  migration. Saying so beats classifying a regex as static.
+
+  Original scope follows. Rule families in value/risk order — noisy
   AI rules, secrets, endpoint/API misuse, taint overlaps, dependency
   applicability — each answering: what is the observation, what confirms it,
   what refutes it, what capability is required, what stays unknown. Plugin
