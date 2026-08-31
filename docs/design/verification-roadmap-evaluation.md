@@ -533,6 +533,43 @@ assert, what publication requires, how an unpublished hypothesis reaches a user
 without becoming a claim nox cannot support. The client is ready to receive
 them, which is the half that can be got right in the open.
 
+## Milestone J — landed on existing primitives, measured by the right metric
+
+The milestone is explicit that this does not need a new fuzzer: *initially this
+can work with existing attack primitives.* It does. `Run` already consumes a
+plan of grounded hypotheses and directs probes toward each — the direction is
+there. What was missing is the metric, and the metric is the milestone's real
+content: **hypotheses resolved per unit of verification effort, not coverage.**
+
+A coverage number cannot distinguish a harness that fired a million probes and
+confirmed nothing from one that fired three and confirmed one. `Efficiency` can:
+it reports hypotheses, attempts, and resolutions, and `AttemptsPerResolution` is
+the headline — lower is a harness that decides more per probe.
+
+**Resolution is three-plus-one-valued, and the shape is load-bearing.**
+Confirmed, refuted, inconclusive, not-run. Only CONFIRMED is confirmed. PREVENTED
+is refuted — the objective was not reachable — but the wording stays short of
+"the target is secure". Inconclusive is the honest majority, not a harness
+failure, and counting only confirmations would make the harness look worse the
+more careful it was. Not-run cost nothing and must not dilute the denominator.
+
+**A run that decides nothing says so.** `AttemptsPerResolution` returns zero when
+`Resolved` is zero, and the CLI prints "this run decided nothing" rather than a
+divided value a reader might take for a clean result — the same failure shape as
+a regression suite printing "fix holds" for a target it never reached.
+
+Measured end to end against the real HTTP harness: the vulnerable route resolves
+2 hypotheses in 30 attempts, 15.0 attempts per resolution; the non-existent
+route resolves nothing and reports it. The safe profile simulates, sends
+nothing, and reports 0 attempts and "decided nothing", which is the honest
+reading of a run that executed against no target.
+
+**What this is not.** It is not an autonomous fuzzer firing at arbitrary
+targets. It rests entirely on the existing `Run`, which requires `--authorize`
+for any non-safe profile and selects a network-less adapter for the safe one —
+the passive/active boundary K pins. J adds accounting and a metric on top of
+that boundary, not a new way through it.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
