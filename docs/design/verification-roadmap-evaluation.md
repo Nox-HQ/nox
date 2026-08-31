@@ -297,6 +297,37 @@ first positional, so the flag became a selector. `nox show` splits flags from
 positionals first for exactly this reason; `nox why` now does too. Found by
 using the command, not by reading it.
 
+## Milestone F — landed, and one condition rejected on the evidence
+
+Four of the five conditions are enforced by `evidence.DeriveExploitability`, and
+the kernel already walks them as a full cross product of every `RunOutcome`
+boolean. Removing real execution, a violation, repeatability, sound control or
+a deterministic oracle each prevents CONFIRMED.
+
+**The fifth — "completed run" — was implemented, tested, and reverted.** Adding
+`BudgetExhausted` as a sixth bar makes nox *less* accurate rather than safer: a
+genuinely reproduced exploit would be downgraded to INCONCLUSIVE because the
+runner later hit a time limit. Budget exhaustion says the run stopped early; it
+does not say that what it already observed was wrong. That is precisely why the
+kernel bars it for PREVENTED, where "we saw nothing" IS the claim and an
+unfinished search is exactly why you might see nothing.
+
+The kernel's existing cross-product test states the rule as
+`Executed && Violated && Reproduced && ControlSound && deterministic` —
+deliberately four conditions, not five — and it was right.
+
+**The condition is satisfied structurally instead**, and that is now pinned
+where the guarantee is actually made. `Reproduced` cannot be true unless the
+determinism gate ran to completion, and every runner sets `BudgetExhausted`
+only on a path that leaves before reaching that gate. Both runners are written
+that way and neither said so, which is the same shape this programme has now
+found five times: a rule enforced by the control flow of the current callers
+rather than by the type, and therefore invisible to the next one.
+
+This is the second time the roadmap's literal text has been wrong against
+measurement, after C5. Both times the plan was right about the concern and
+wrong about the remedy.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
