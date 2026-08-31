@@ -360,7 +360,20 @@ func absenceSpan(content []byte, loc []int, mode string) []byte {
 	case "brace-block":
 		return braceBlockFollowing(content, loc[1])
 	case "brace-enclosing":
-		return braceBlockEnclosing(content, loc[0])
+		// JSON bounds a resource by its enclosing { }. A CloudFormation
+		// template written in YAML has no braces, so braceBlockEnclosing returns
+		// nil and every brace-enclosing absence rule silently fails to fire —
+		// measured: IAC-051 flags an unencrypted S3 bucket in a JSON template
+		// and misses the identical bucket in YAML, an entire format left
+		// unscanned by the CloudFormation absence rules. Fall back to the
+		// indentation-bounded span, which is the YAML equivalent of "the block
+		// this anchor introduces". The rules already list *.yaml and *.yml in
+		// their file patterns, so YAML was always in scope; only the span could
+		// not reach it.
+		if span := braceBlockEnclosing(content, loc[0]); span != nil {
+			return span
+		}
+		return yamlEnclosingSpan(content, loc[0])
 	case "yaml-block":
 		return yamlBlockSpan(content, loc[0])
 	case "yaml-doc":
@@ -587,6 +600,50 @@ func yamlBlockSpan(content []byte, pos int) []byte {
 // when there are no separators) that contains pos. Used for K8s resources whose
 // companion property may sit anywhere within the same document — e.g. a
 // Deployment and a `securityContext:` nested several levels below its `kind:`.
+// yamlEnclosingSpan returns the YAML mapping block that ENCLOSES the anchor,
+// which is the indentation analogue of braceBlockEnclosing.
+//
+// The distinction from yamlBlockSpan is the whole point, and it was found by a
+// false positive. yamlBlockSpan bounds the block an anchor INTRODUCES — for an
+// anchor on a `Type: AWS::S3::Bucket` line, that is just the scalar, and a
+// sibling `BucketEncryption:` falls outside it, so an encrypted bucket looked
+// unencrypted. brace-enclosing walks OUT to the object containing the anchor;
+// this is its YAML equivalent: from the anchor, up to the nearest less-indented
+// line (the resource key), then that key's whole block.
+func yamlEnclosingSpan(content []byte, pos int) []byte {
+	// The anchor's own line start and indent.
+	lineStart := pos
+	for lineStart > 0 && content[lineStart-1] != '\n' {
+		lineStart--
+	}
+	anchorIndent := lineIndent(content, lineStart)
+
+	// Walk up to the nearest preceding non-blank line with a smaller indent:
+	// the mapping key that owns the block the anchor sits in.
+	parentStart := lineStart
+	for parentStart > 0 {
+		// Move to the previous line.
+		prevEnd := parentStart - 1
+		ps := prevEnd
+		for ps > 0 && content[ps-1] != '\n' {
+			ps--
+		}
+		if trimmed := bytes.TrimSpace(content[ps:prevEnd]); len(trimmed) > 0 {
+			if lineIndent(content, ps) < anchorIndent {
+				parentStart = ps
+				break
+			}
+		}
+		parentStart = ps
+		if ps == 0 {
+			break
+		}
+	}
+	// yamlBlockSpan from the parent key captures the parent and all of its more-
+	// indented children — the enclosing resource block.
+	return yamlBlockSpan(content, parentStart)
+}
+
 func yamlDocSpan(content []byte, pos int) []byte {
 	lines := bytes.SplitAfter(content, []byte("\n"))
 	starts := make([]int, len(lines))
