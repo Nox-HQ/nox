@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -85,6 +86,47 @@ func classifyRuleSpecificity(r *rules.Rule) int {
 	return specProviderDefault
 }
 
+// findingRef names one finding by the coordinates that identify its evidence
+// subject, so a suppression can be reported without carrying the finding.
+type findingRef struct {
+	rule   string
+	line   int
+	column int
+}
+
+// suppression is one finding dedup removed, and the finding that superseded it.
+//
+// # Why dedup has to hand these back
+//
+// Dedup is the largest suppressor in the secrets analyzer: one GitHub or Stripe
+// token trips five to eight overlapping rules, and collapsing them to the
+// canonical owner is what took the precision corpus from 8.00 findings per
+// issue to 1.00. Every one of those collapses discarded a finding, and until
+// now discarded the reason with it.
+//
+// That is the same defect Track E1 fixed for the refiners, with one difference
+// that matters: a refiner REFUTES — it establishes the candidate was never a
+// secret. Dedup refutes nothing. The dropped finding is TRUE; an entropy rule
+// that matched a real GitHub token matched a real GitHub token. It is dropped
+// because reporting one secret five times is noise, not because it was wrong.
+//
+// Recording it as a refutation would therefore be a lie in the ledger, and a
+// load-bearing one: refutations weigh against a candidate, so the store would
+// end up asserting that five true detections of a live credential were each
+// evidence of nothing being there. That is why these become Withheld claims,
+// whose polarity is Unknown and which weigh nothing in either direction, plus a
+// relation saying the two candidates are one secret.
+type suppression struct {
+	dropped  findingRef
+	survivor findingRef
+	reason   string
+}
+
+// refTo names a finding for a suppression record.
+func refTo(f *findings.Finding) findingRef {
+	return findingRef{rule: f.RuleID, line: f.Location.StartLine, column: f.Location.StartColumn}
+}
+
 // dedupBySpecificity collapses secret findings that overlap on the same line to
 // the canonical finding(s) per overlapping span. It runs two passes over each
 // overlapping span:
@@ -100,9 +142,9 @@ func classifyRuleSpecificity(r *rules.Rule) int {
 // Findings on different lines, or non-overlapping spans on the same line, are
 // all preserved. content is the file bytes, used to recover the matched token
 // for owner resolution; spec maps rule ID → specificity tier.
-func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []byte) []findings.Finding {
+func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []byte) ([]findings.Finding, []suppression) {
 	if len(in) < 2 {
-		return in
+		return in, nil
 	}
 	// Index findings so we can sort by (line, start col) without copying the
 	// findings themselves (they are passed around by pointer/value per repo
@@ -123,12 +165,14 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 	})
 
 	suppressed := make([]bool, len(in))
+	// Collected in drop order, which is deterministic because `order` is.
+	var dropped []suppression
 
 	// Pass 1 — owner resolution. For each finding whose matched token names a
 	// known provider, drop every OTHER provider finding overlapping its span
 	// that isn't a canonical owner of that token. Generic (non-provider)
 	// findings are left for pass 2.
-	resolveOwners(in, order, suppressed, spec, content)
+	resolveOwners(in, order, suppressed, spec, content, &dropped)
 
 	for a := 0; a < len(order); a++ {
 		ia := order[a]
@@ -160,8 +204,10 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 			switch {
 			case sb > sa:
 				suppressed[ia] = true
+				dropped = append(dropped, specificitySuppression(fa, fb))
 			case sa > sb:
 				suppressed[ib] = true
+				dropped = append(dropped, specificitySuppression(fb, fa))
 			}
 			if suppressed[ia] {
 				break // fa gone; move to next anchor
@@ -175,7 +221,19 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 			out = append(out, in[i])
 		}
 	}
-	return out
+	return out, dropped
+}
+
+// specificitySuppression describes a pass-2 collapse: a generic entropy or
+// keyword rule that matched the same span as a more specific provider rule.
+func specificitySuppression(dropped, survivor *findings.Finding) suppression {
+	return suppression{
+		dropped:  refTo(dropped),
+		survivor: refTo(survivor),
+		reason: fmt.Sprintf(
+			"a more specific rule matched the same span: %s owns this value, and %s is a generic match on the same token, so it is reported once rather than twice",
+			survivor.RuleID, dropped.RuleID),
+	}
 }
 
 // resolveOwners implements pass 1 of dedupBySpecificity. For every finding
@@ -184,7 +242,7 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 // owners of that token. Generic entropy/keyword findings are untouched here —
 // they are handled by the specificity collapse in pass 2. order is the
 // (line,col,rule) sort; suppressed is updated in place.
-func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec map[string]int, content []byte) {
+func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec map[string]int, content []byte, dropped *[]suppression) {
 	for a := 0; a < len(order); a++ {
 		ia := order[a]
 		if suppressed[ia] {
@@ -216,6 +274,7 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 			}
 			if _, ok := owners[fb.RuleID]; !ok {
 				suppressed[ib] = true
+				*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fb, owners))
 			}
 		}
 		// If fa itself is not an owner of the token it matched (a mis-attributed
@@ -224,6 +283,7 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 		// suppress the last finding on a real secret.
 		if _, ok := owners[fa.RuleID]; !ok && ownerPresent(in, order, suppressed, fa, owners) {
 			suppressed[ia] = true
+			*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fa, owners))
 		}
 	}
 }
@@ -244,6 +304,44 @@ func ownerPresent(in []findings.Finding, order []int, suppressed []bool, fa *fin
 		}
 	}
 	return false
+}
+
+// ownerSuppression describes a pass-1 drop: a provider rule that matched a span
+// whose token belongs to a different provider.
+//
+// The survivor named is the canonical OWNER on the span, found fresh, not the
+// anchor that happened to identify the provider — the anchor can itself be a
+// mis-attributed rule that is dropped moments later, and naming a survivor that
+// does not survive would make the ledger point at nothing.
+func ownerSuppression(in []findings.Finding, order []int, suppressed []bool, anchor, dropped *findings.Finding, owners map[string]struct{}) suppression {
+	survivor := anchor
+	if idx, ok := ownerIndex(in, order, suppressed, anchor, owners); ok {
+		survivor = &in[idx]
+	}
+	return suppression{
+		dropped:  refTo(dropped),
+		survivor: refTo(survivor),
+		reason: fmt.Sprintf(
+			"the matched token's prefix names a provider whose canonical rule is %s; %s matched the same span without owning that token type",
+			survivor.RuleID, dropped.RuleID),
+	}
+}
+
+// ownerIndex returns the index of a surviving canonical owner overlapping fa.
+func ownerIndex(in []findings.Finding, order []int, suppressed []bool, fa *findings.Finding, owners map[string]struct{}) (int, bool) {
+	for _, idx := range order {
+		if suppressed[idx] {
+			continue
+		}
+		fb := &in[idx]
+		if fb.Location.StartLine != fa.Location.StartLine || !spansOverlap(fa, fb) {
+			continue
+		}
+		if _, ok := owners[fb.RuleID]; ok {
+			return idx, true
+		}
+	}
+	return 0, false
 }
 
 // matchedValue recovers the matched token text for a finding from the file

@@ -198,7 +198,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// most-specific (provider) finding and drop the generic entropy/keyword
 		// duplicates. This is the dominant precision drag on real secrets — one
 		// GitHub/Slack/Stripe token otherwise emits 5-8 findings.
-		results = dedupBySpecificity(results, a.spec, content)
+		var deduped []suppression
+		results, deduped = dedupBySpecificity(results, a.spec, content)
+		a.recordSuppressions(artifact.Path, deduped)
 
 		// Drop matches that fall inside an embedded data blob (a base64 SVG, a
 		// data: URI) in a source file — a 32-char run inside such a blob is never
@@ -350,6 +352,49 @@ func inEmbeddedBlob(lang lexctx.Lang, content []byte, f *findings.Finding) bool 
 // Authority can check.
 func (a *Analyzer) refute(subject evidence.Subject, kind evidence.Kind, statement string) {
 	a.reasoning.Refute(subject, kind, "nox-scan", "secrets", statement)
+}
+
+// recordSuppressions files what dedup removed, and what superseded it.
+//
+// Two things are recorded per drop, because they answer different questions and
+// neither substitutes for the other:
+//
+//   - A WITHHELD claim on the dropped candidate. Its polarity is Unknown, so it
+//     weighs nothing in either direction — which is the only honest weight. The
+//     dropped finding was not refuted: an entropy rule that matched a real
+//     GitHub token matched a real GitHub token, and it is gone because five
+//     reports of one credential is noise, not because it was wrong. Filing it as
+//     a refutation would make the ledger assert that five true detections of a
+//     live credential were each evidence of nothing being there.
+//   - A RELATION from the dropped candidate to the survivor. This is the edge
+//     reasoning.Relate was built for and names dedup as the motivating case: the
+//     store could say what it believed about a candidate but not which
+//     candidates were about the same thing, so the relationship dedup knows
+//     about was lost the moment it acted. With it, Concerning(survivor) answers
+//     "how many candidates did this one secret account for?" — the Track F
+//     question, asked of secrets instead of dataflow.
+//
+// A nil store discards both, like every other recording path here.
+func (a *Analyzer) recordSuppressions(path string, drops []suppression) {
+	for i := range drops {
+		d := &drops[i]
+		dropped := reasoning.Candidate(d.dropped.rule, path, d.dropped.line, d.dropped.column)
+		survivor := reasoning.Candidate(d.survivor.rule, path, d.survivor.line, d.survivor.column)
+
+		a.reasoning.Withheld(dropped, "nox-scan", "secrets", d.reason)
+		if dropped == survivor {
+			// A finding cannot supersede itself. Nothing in dedup produces
+			// this, but a self-edge would be a cycle in the relation graph and
+			// silently useless, so it is refused rather than trusted not to
+			// arise.
+			continue
+		}
+		a.reasoning.Relate(evidence.Relation{
+			From: dropped,
+			Kind: evidence.RelConcerns,
+			To:   survivor,
+		})
+	}
 }
 
 // corroborate records what the analyzer actually VERIFIED about a value it is

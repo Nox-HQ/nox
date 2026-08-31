@@ -55,26 +55,57 @@ func TestEndToEndEvidenceChain(t *testing.T) {
 		reported[SubjectForFinding(f)] = true
 	}
 
-	var refutations int
+	// A dropped candidate must record a REASON. Which polarity that reason
+	// carries depends on why it was dropped, and the distinction is
+	// load-bearing rather than pedantic:
+	//
+	//   - EPISTEMIC drops refute. A refiner decided the candidate was never a
+	//     secret — it sat in a data blob, it was a placeholder, it was a bare
+	//     prefix — so the claim weighs against the candidate being real.
+	//   - EDITORIAL drops withhold, with polarity Unknown, weighing nothing.
+	//     Dedup removes a finding that is TRUE: an entropy rule that matched a
+	//     real GitHub token matched a real GitHub token, and it goes because
+	//     reporting one credential five times is noise. Filing that as a
+	//     refutation would make the store assert that five true detections of a
+	//     live credential were each evidence of nothing being there.
+	//
+	// What is forbidden either way is a drop that records NOTHING, and a drop
+	// that records SUPPORT — a candidate cannot be dropped on the strength of
+	// evidence for it.
+	var refutations, withheld int
 	for _, s := range res.Reasoning.Subjects() {
 		if reported[s] {
 			continue
 		}
-		for _, c := range res.Reasoning.About(s).Claims {
-			if !c.Refutes() {
-				t.Errorf("dropped candidate %s recorded a %s claim; a drop is a refutation",
-					s, c.Polarity.Effective())
+		claims := res.Reasoning.About(s).Claims
+		if len(claims) == 0 {
+			t.Errorf("dropped candidate %s recorded nothing; the reason for a "+
+				"suppression must survive the suppression", s)
+		}
+		for _, c := range claims {
+			if c.Supports() {
+				t.Errorf("dropped candidate %s recorded a SUPPORTING claim (%q); "+
+					"a candidate cannot be dropped on evidence for it", s, c.Statement)
 				continue
 			}
 			if c.Statement == "" {
 				t.Errorf("dropped candidate %s recorded no reason", s)
 			}
-			refutations++
+			if c.Refutes() {
+				refutations++
+			} else {
+				withheld++
+			}
 		}
 	}
 	if refutations == 0 {
 		t.Error("no candidate was refuted across the whole corpus; either the refiners " +
 			"stopped recording, or they stopped running")
+	}
+	if withheld == 0 {
+		t.Error("no candidate was withheld across the whole corpus; dedup collapses " +
+			"overlapping matches on this corpus, so silence here means it stopped " +
+			"recording what it dropped")
 	}
 
 	// Stage 2 — every reported finding has a recorded reason for existing.
