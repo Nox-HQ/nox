@@ -106,3 +106,62 @@ func TestNoRunnerReportsAReproductionItCutShort(t *testing.T) {
 		t.Errorf("a hypothesis that never ran is %s", tr.Exploitability)
 	}
 }
+
+// TestAnAttackConfirmsTheInvariantItTestedAndNothingAbove is Milestone G at the
+// producer.
+//
+// The kernel aggregates per subject, so the reproduction hierarchy is only real
+// if a producer attributes its claims. Until this landed, core/attack set no
+// Subject on any claim: every claim shared the zero subject and landed in one
+// bag, where the cheapest deterministic claim satisfied the precondition for
+// the most expensive.
+//
+// A run that saw a guardrail bypassed and reproduced it has established that
+// the guardrail was bypassed. What an attacker could then do is a later
+// proposition with its own evidence, and promoting across that gap is how a
+// scanner reports an RCE it never saw.
+func TestAnAttackConfirmsTheInvariantItTestedAndNothingAbove(t *testing.T) {
+	h := Hypothesis{ID: "hyp-1", Rationale: "a prompt boundary is splice-able"}
+	ledger := &evidence.Ledger{}
+	ledger.Add(evidence.Claim{
+		Kind:      evidence.KindDynamicExploit,
+		Subject:   InvariantSubject(h),
+		Statement: "a deterministic oracle observed the invariant violated and it reproduced",
+	})
+	outcome := evidence.RunOutcome{
+		Executed: true, Violated: true, Reproduced: true, ControlSound: true,
+	}
+
+	if got := evidence.DeriveExploitabilityAbout(outcome, ledger, InvariantSubject(h)); got != evidence.Confirmed {
+		t.Errorf("the invariant this run actually tested was not confirmed: %s", got)
+	}
+
+	// Everything above it on the hierarchy stays unconfirmed on this evidence.
+	for _, k := range []evidence.SubjectKind{
+		evidence.SubjectSecurityEffect, evidence.SubjectExploit,
+	} {
+		s := evidence.Subject{Kind: k, ID: h.ID}
+		if got := evidence.DeriveExploitabilityAbout(outcome, ledger, s); got == evidence.Confirmed {
+			t.Errorf("a reproduced invariant violation confirmed %s — a later "+
+				"proposition this run produced no evidence for", k)
+		}
+	}
+}
+
+// TestEveryAttackClaimIsAttributed. The subject is what makes the hierarchy
+// real, and a claim without one rejoins the undifferentiated bag. Checked on
+// the ledger a real run builds rather than on the constructor, because the
+// constructor is easy to get right and the call sites are what drift.
+func TestEveryAttackClaimIsAttributed(t *testing.T) {
+	h := Hypothesis{ID: "hyp-2", Rationale: "grounding"}
+	l := groundingLedger(h, "2026-08-31T00:00:00Z")
+	if len(l.Claims) == 0 {
+		t.Fatal("the grounding ledger is empty; this test checks nothing")
+	}
+	for i, c := range l.Claims {
+		if c.Subject.Zero() {
+			t.Errorf("claim %d (%q) carries no subject, so it aggregates with every "+
+				"other unattributed claim regardless of what it is about", i, c.Statement)
+		}
+	}
+}
