@@ -1016,3 +1016,19 @@ func matchRulePatterns(ruleID string, patterns []string) bool {
 	}
 	return false
 }
+
+// SetMetadata records a key on finding i, creating the map if needed.
+//
+// Used by scan-stage annotations that are derived rather than authored by an
+// analyzer — see recordAnalysisLimitations. Metadata is a non-ingredient field,
+// so nothing written here can move a fingerprint; that is held by
+// TestFingerprintIngredientsAreClosed.
+func (fs *FindingSet) SetMetadata(i int, key, value string) {
+	if i < 0 || i >= len(fs.items) || key == "" {
+		return
+	}
+	if fs.items[i].Metadata == nil {
+		fs.items[i].Metadata = map[string]string{}
+	}
+	fs.items[i].Metadata[key] = value
+}

@@ -45,13 +45,26 @@ Flags:
 `)
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	// Split flags from positionals before parsing. Go's flag package stops at
+	// the first non-flag argument, so `nox why . --offline` left --offline as a
+	// positional and it was then read as a finding selector — the tool told the
+	// user no finding matched "--offline". `nox show` splits first for the same
+	// reason; this now does too.
+	var flagArgs, positional []string
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-") {
+			flagArgs = append(flagArgs, args[i])
+			continue
+		}
+		positional = append(positional, args[i])
+	}
+	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
 
 	target := "."
 	selector := ""
-	for _, a := range fs.Args() {
+	for _, a := range positional {
 		if looksLikeSelector(a) {
 			selector = a
 			continue
