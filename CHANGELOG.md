@@ -7,7 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-08-31
+
+Two programmes in one release: nox became evidence-native, and its dynamic
+validation gained a domain model for reachability, verification and
+reproduction. Nothing breaks — every `nox scan` behaves as before, and the new
+surfaces are opt-in — so this is a minor release despite its size. What changed
+is that nox now records *why* it believes each finding, can be asked, and can
+prove it did not silently turn an unknown into an all-clear.
+
+### Added
+
+- **`nox why <finding>` answers eight questions about a finding, deterministically**
+  (#526, #528). What was observed, why it matters, what supports it, what argues
+  against it, **what was not evaluated**, the potential impact, **whether it
+  affects this application**, and what to do. The two in bold are the ones a
+  scanner usually leaves out: an analysis that never ran is a gap, not a limit,
+  and silence about it lets a reader assume everything was looked at. It reads
+  only what the scan established — every sentence traces to a claim, a capability
+  state, or a rule's own metadata — so the same finding always produces the same
+  answers. `nox explain` remains the model-written counterpart; only one of the
+  two can be put in front of an auditor. Available over MCP as the `why` and
+  `analysis_capabilities` tools.
+
+- **`nox scan --evidence-out evidence.json` keeps the evidence, and `nox replay`
+  re-derives the verdicts from it** (#525). A scan gathers evidence for and
+  against every candidate and discards it — carrying it inline costs about 2.4×
+  the size of the findings. `--evidence-out` keeps it; `nox replay` re-derives
+  every verdict from that file and nothing else, not the repository, not the
+  rules, not the network. That is what makes "does this evidence still support
+  this verdict?" answerable months later, when all three have moved on. A
+  divergence under a newer adjudicator is reported as a change, not a defect.
+
+- **`nox why` and `nox attack plan` name what nox could not establish.** The
+  reachability vocabulary (#533) distinguishes six propositions from
+  "the package is linked" to "an attacker-controlled path was observed", and a
+  scan that stops climbing says where and why it stopped, with the analysis
+  limitation named — reflection, dynamic loading, FFI (#535). A finding's
+  explanation closes with the cheapest open question something on this
+  installation could actually answer (#543).
+
+- **`policy.uncertainty` and `policy.require_capabilities` gate on what nox did
+  not determine** (#509, #510, #522). A project can declare that its triage
+  depends on an analysis — reachability, taint — and be failed, loudly, when
+  that analysis stops being answered. The gate reads what *this scan* actually
+  established, not merely what the installed build *could* establish: a scan
+  whose advisory source was unreachable no longer satisfies a reachability
+  requirement it never exercised.
+
+- **`nox attack plan --evidence` carries the scan's evidence onto each
+  hypothesis** (#545). The scan produces the hypothesis; the attack fills in the
+  observation. A plan now carries the typed subject, the scan's ledger, the
+  attacker-controlled input, a suspected trigger condition, the expected oracle,
+  the assumptions nox is making, and the questions still open — so `nox attack`
+  no longer rediscovers, badly, why nox thought a finding worth testing.
+
+- **`nox attack run` reports hypotheses resolved per unit of effort** (#547),
+  not coverage. A run that fired many probes and decided nothing now reads worse
+  than a small run that decided something, and a run that decided nothing says
+  so rather than printing a number a reader might take for a clean result.
+
+- **GitHub tokens are verified by their embedded checksum** (#515). Several
+  providers encode a checksum in the credential, and verifying one is
+  deterministic rather than heuristic — the first claim in the secrets pipeline
+  that can lift a finding off the "a pattern matched" floor honestly. A token
+  whose checksum does not verify is deterministically not a credential of that
+  provider.
+
+### Changed
+
+- **A finding now carries two confidences, and they answer different questions**
+  (#523). `Confidence` is the analyzer's calibrated judgement that a finding is
+  a true positive — on nox's own corpus, 37 true positives and no false ones, so
+  it is accurate. `EvidenceConfidence` is what the recorded evidence supports,
+  and it caps at `MEDIUM` for any static scan: the evidence model puts `HIGH` at
+  the strength of a controlled reproduction or a confirming source, which
+  reading code does not produce. They are kept apart because merging them —
+  filtering on evidence strength as though it were calibration — would empty
+  `--min-confidence high` on every project, permanently. `--min-confidence`
+  filters on the first.
+
+- **The shared kernel moved to `nox-core` v0.2.3** (#520–#547). Typed subjects,
+  claim polarity, a claim lifecycle, producer authority, the reproduction
+  hierarchy and subject-scoped confirmation now live in the kernel both the CLI
+  and the intelligence service share. A retracted claim weighs nothing
+  everywhere it is read, not only where it was first wired in.
+
+- **The passive/active boundary is enforced by test, not only by convention**
+  (#542). `nox scan` reads; `nox attack` acts, requires `--authorize`, and its
+  safe profile selects a network-less adapter. The scan pipeline carries no
+  import of the attack package, checked by parsing its imports, because a
+  convention is what a refactor does not consult.
+
 ### Fixed
+
+- **nox no longer reports its own baseline files as leaked credentials** (#529).
+  The tool-state exclusion (`.nox`, `.claude`, `.roady`, …) matched only at the
+  repository root, so the same directory one level down was scanned — and a
+  SHA-256 fingerprint in a nested `.nox/baseline.json` fired a high-severity
+  "Cloudflare API Token". On one real repository this was 107 false positives.
+  Directory exclusions now match at any depth.
+
+- **36 vendor secret rules stopped matching any long string near a keyword**
+  (#530). A rule like SEC-542 with the pattern `[a-zA-Z0-9]{32,}` and the
+  file-level keyword `cloudflare` meant, in practice, "this file mentions
+  cloudflare somewhere and contains 32 alphanumeric characters somewhere". The
+  proximity control that fixes this already existed; a one-character bug in its
+  pattern skipped exactly the unbounded quantifiers — the most dangerous form.
+  Two rules were retired: SEC-542 (a duplicate of SEC-087, which detects the
+  same token correctly) and SEC-524 (an Azure subscription ID is not a
+  credential). Waivers written against SEC-542 keep working.
+
+- **`nox why . --offline` no longer reads the flag as a finding selector**
+  (#535). Go's flag parser stops at the first positional; the command now splits
+  flags from positionals first, as `nox show` already did.
 
 - **AI-006 no longer flags a constant sentence that contains the word
   "prompt"** (#497). `print` in the rule's call alternation also matches inside
@@ -2912,7 +3025,9 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.30.1...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.32.0...HEAD
+[1.32.0]: https://github.com/nox-hq/nox/compare/v1.31.0...v1.32.0
+[1.31.0]: https://github.com/nox-hq/nox/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/nox-hq/nox/compare/v1.30.0...v1.30.1
 [1.26.0]: https://github.com/nox-hq/nox/compare/v1.25.2...v1.26.0
 [1.25.2]: https://github.com/nox-hq/nox/compare/v1.25.1...v1.25.2
