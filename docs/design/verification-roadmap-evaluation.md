@@ -328,6 +328,45 @@ This is the second time the roadmap's literal text has been wrong against
 measurement, after C5. Both times the plan was right about the concern and
 wrong about the remedy.
 
+## Milestones H and K — landed
+
+### H, the artifact audit
+
+The attack artifact turned out to be in better shape than expected. Hypothesis
+identity, the action sequence with the exact payload sent, resolved
+nondeterministic values, target identity, oracle result, determinism-gate tally,
+termination status, profile and the evidence ledger are all persisted. What is
+thin: the oracle DEFINITION is recorded only on a reproduced violation, control
+attempts are not distinguishable from attack attempts within `Attempts`, and
+environment assumptions and target *state* are absent.
+
+**The acceptance criterion was violated, in its most literal form.** Every
+trace carried a `ReplayCommand` — including hypotheses that never executed —
+while `attack.Replay` refuses any trace without recorded evidence. The artifact
+advertised a reproduction the tool declines. It is now set only where a winning
+probe exists, and a `ReplayNote` says why not otherwise.
+
+**The two replays are now distinguished where a reader meets them.** `nox
+replay` re-derives verdicts from a stored ledger and touches nothing:
+deterministic, because the ledger is the whole input. `nox attack replay`
+re-fires the winning probe at a live target: best-effort, because nox does not
+control target state, so a failed replay may mean the bug was fixed, the data
+changed, or the service moved. A trace that cannot be re-fired now says the
+verdict is still re-derivable, which is the distinction stated in the place it
+matters.
+
+### K, the boundary
+
+Already enforced by wiring, and now by test. Three properties: every exported
+entry point that takes a context and a run config refuses an unauthorized
+non-safe profile; the safe profile allows no network and demands no
+authorization it does not need; and **`core` — the scan pipeline — carries no
+import of `core/attack`**, checked by parsing its imports rather than by
+convention, because a convention is what a refactor does not consult.
+
+The entry points are enumerated from the source rather than listed by hand, and
+the count is asserted, so a fifth arrives as a failure rather than as silence.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
