@@ -3,6 +3,8 @@ package secrets
 import (
 	"hash/crc32"
 	"strings"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // This file establishes something about a matched value that a regex cannot:
@@ -104,4 +106,37 @@ func onlyBase62(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// verifyJWT reports whether value is a structurally valid JSON Web Token, and
+// whether the check APPLIED.
+//
+// It is the second deterministic signal in this pipeline, after the GitHub
+// checksum. A JWT is three base64url segments separated by dots, and the first
+// — the header — decodes to a JSON object naming a signing algorithm. That is
+// offline-verifiable: no network, no key. It does not check the SIGNATURE,
+// which needs the key nox does not have and must not want; it establishes that
+// the value is a real JWT rather than a string that happens to match the loose
+// `eyJ....eyJ....` pattern.
+//
+// The distinction matters because the pattern is weak. `eyJ` is `{"` in
+// base64url, so any header starting `eyJ` decodes to something starting `{"` —
+// but a full segment that is valid base64url AND decodes to a complete JSON
+// object with an `alg` field is a much stronger statement, and its absence is a
+// deterministic refutation rather than a heuristic doubt.
+//
+// Three-valued like the checksum: a value that is not three dot-separated
+// segments is not something this can speak about (applicable=false), a value
+// whose header decodes to a JSON object with `alg` is consistent, and one that
+// looks like a JWT but whose header does not decode is deterministically not a
+// JWT.
+func verifyJWT(value string) (consistent, applicable bool) {
+	if !lexctx.LooksJWTShaped(value) {
+		// Not the shape of a JWT, so this check has nothing to say.
+		return false, false
+	}
+	// Shaped like one; whether it IS one is the structural question lexctx
+	// answers, and it answers it the same way for the data-blob refiner, so the
+	// two cannot disagree about what a JWT is.
+	return lexctx.LooksLikeJWT(value), true
 }
