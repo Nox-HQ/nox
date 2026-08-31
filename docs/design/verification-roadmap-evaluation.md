@@ -490,6 +490,49 @@ records no path constraints at all (see the SMT spike), so this is what the
 scenario believes rather than something derived, and it should not read as a
 precision nox does not have.
 
+## Milestone M — the client half landed; the service half is a conversation
+
+M's shape: intel should say more than "CVE-X affects package@version". It can
+carry the affected symbol, a trigger condition, an affected configuration, known
+entry points, a PoC hypothesis, an oracle, reproduction evidence, known
+refutations and maintainer evidence — and **local nox then determines whether
+those propositions apply here**.
+
+That last clause is the whole milestone, and it was already half-built. The
+reasoning shim refuses to record an advisory as evidence about a candidate, with
+a comment saying why — an advisory is about a PACKAGE, and a finding is about a
+CANDIDATE — and it closes "the package subject and its advisory claim belong to
+Track G". That side was never built. `core/intel.ResearchProposition` is it.
+
+**Three properties, each enforced rather than documented:**
+
+Every claim is filed against `SubjectPackage`, and aggregation is per-subject,
+so a maintainer-grade intel claim about a library leaves confidence about a
+local candidate at LOW. That is the mechanism, not a convention: intel cannot
+decide what affects a repository it has never seen.
+
+The maturity ladder maps to evidence kinds, and an **unrecognised rung maps to
+`KindHeuristic`** rather than to something in the middle. A vocabulary this
+build does not understand is not evidence of anything, and reading it generously
+is how a source's words become a consumer's verdict.
+
+**Refutations survive transport.** A source that forwards only what supports its
+conclusion cannot be checked. `nox-intelligence` currently has no way to record
+a dispute — verified twice earlier in this programme — so this is the receiving
+end being ready before the sending end exists.
+
+`AppliesLocally` returns **questions, not answers**: does this build reference
+the symbol, is this deployment configured that way, does this application expose
+that entry point. Intel can say a symbol is dangerous; only the local build can
+say whether it is referenced.
+
+**Not built, deliberately:** the service side. Emitting these propositions means
+extending the query payload and the disclosure model in a private repository,
+and it is a design conversation before it is code — what a researcher may
+assert, what publication requires, how an unpublished hypothesis reaches a user
+without becoming a claim nox cannot support. The client is ready to receive
+them, which is the half that can be got right in the open.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
