@@ -91,8 +91,8 @@ Flags:
 			Finding:  f,
 			Ledger:   res.Reasoning.About(subject),
 			Subject:  subject,
-			Coverage: res.Coverage,
-			Rule:     cat[f.RuleID],
+			Coverage: res.Coverage, Registry: res.Capabilities,
+			Rule: cat[f.RuleID],
 		}))
 	}
 
