@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/rules/structural"
 )
 
 // MatchResult describes a single match of a rule pattern within file content.
@@ -17,7 +18,30 @@ type MatchResult struct {
 	Line      int
 	Column    int
 	MatchText string
+
+	// Structural, when non-empty, is what parsing the document established
+	// about this result — "the cloudformation resource \"LogBucket\"
+	// (AWS::S3::Bucket) was parsed and sets no BucketEncryption".
+	//
+	// It is carried on the result rather than recorded where it is computed
+	// because the matcher has no reasoning store and must not grow one: the
+	// rule engine stays a pure function of content and rules, and the analyzer
+	// that owns the evidence seam turns this sentence into a claim.
+	//
+	// Empty means the result came from text matching, which is a heuristic. The
+	// difference is the whole point, so it must never be filled in by the
+	// regex path.
+	Structural string
 }
+
+// StructuralClaimKey is the finding-metadata key carrying MatchResult.Structural.
+//
+// Exported because the producer (the rule engine) and the consumer (the IaC
+// analyzer's evidence seam) are in different packages, and a metadata key
+// spelled twice is a key that eventually gets spelled two ways — after which
+// the claim is silently never recorded and the ledger looks exactly as it did
+// before the structural path existed.
+const StructuralClaimKey = "structural_claim"
 
 // Matcher is the interface that all pattern-matching strategies must satisfy.
 // Implementations receive raw file content and a pointer to the triggering
@@ -286,6 +310,16 @@ func stripLineComments(content []byte) []byte {
 // (and, when set, contains AbsenceRequire). The returned MatchResult points at
 // the anchor so the finding lands on the resource declaration.
 func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
+	// A rule carrying a structural descriptor asks the document instead of the
+	// text. The verdict is authoritative only when it was DECIDED — the content
+	// parsed and its schema was recognised — because "I could not read this" is
+	// not "there is nothing here", and a scanner that conflates the two turns
+	// every unreadable file into an all-clear. Everything else falls through to
+	// the patterns below, which is exactly today's behaviour.
+	if v, ok := structuralAbsence(content, rule); ok {
+		return v
+	}
+
 	anchorRe, err := m.compile(rule.AbsenceAnchor)
 	if err != nil || anchorRe == nil {
 		return nil
@@ -347,6 +381,38 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		results = append(results, r)
 	}
 	return results
+}
+
+// structuralAbsence evaluates a rule's structural descriptor, returning the
+// results and whether the verdict decided the question.
+//
+// ok=false means fall back to text matching. It covers three distinct cases
+// that must all degrade the same way: the rule has no descriptor, the content
+// did not parse, or it parsed into a schema this build does not understand.
+func structuralAbsence(content []byte, rule *Rule) ([]MatchResult, bool) {
+	if len(rule.AbsenceResourceTypes) == 0 || len(rule.AbsencePropertyPath) == 0 {
+		return nil, false
+	}
+	v := structural.Evaluate(content, rule.AbsenceResourceTypes,
+		rule.AbsencePropertyPath, rule.AbsenceRequireAll)
+	if !v.Decided {
+		return nil, false
+	}
+
+	// A decided verdict with no absent resources is a real result: the template
+	// was read and every resource of this type is configured. Returning an
+	// empty slice with ok=true is what stops the regex path from re-reporting
+	// what parsing just refuted.
+	results := make([]MatchResult, 0, len(v.Absent))
+	for _, hit := range v.Absent {
+		results = append(results, MatchResult{
+			Line:       hit.Line,
+			Column:     1,
+			MatchText:  hit.Type,
+			Structural: hit.Statement(true),
+		})
+	}
+	return results, true
 }
 
 // absenceSpan returns the byte slice of content that constitutes the anchor's

@@ -121,6 +121,51 @@ type Rule struct {
 	// (the anchor line plus its more-indented children), or "yaml-doc" (the
 	// enclosing `---`-delimited YAML document).
 	AbsenceSpan string `yaml:"absence_span"`
+
+	// AbsenceResourceType and AbsencePropertyPath make an absence rule
+	// STRUCTURAL: the document is parsed, the resource is resolved by type, and
+	// the property is looked up by path rather than searched for as text.
+	//
+	// This is what lets an IAC finding carry a claim stronger than "a pattern
+	// matched". A regex over YAML is a heuristic however specific it is, so
+	// absence-by-regex can only ever mean "I did not see it in a span I guessed
+	// by indentation". Parsing answers the question the rule is actually
+	// asking, and answers it in both directions: a property the pattern could
+	// not see refutes the finding, and a property the parser confirms missing
+	// supports it deterministically.
+	//
+	// Both fields are optional and are the ONLY thing that switches the
+	// behaviour. A rule without them matches exactly as it does today, so
+	// migration is per-rule and reversible, and a family that has no document
+	// to parse — Dockerfiles are line-oriented, Terraform is HCL — simply never
+	// sets them.
+	//
+	// The types are the document's own spelling ("AWS::S3::Bucket",
+	// "Deployment", "Microsoft.Storage/storageAccounts"); a resource matching
+	// any of them is evaluated. Paths are addressed from the resource OBJECT,
+	// so they carry the schema's own descent — `Properties.BucketEncryption`,
+	// `properties.encryption`, `spec.template.spec.containers[]`.
+	//
+	// The paths are ALTERNATIVES: the resource is hardened when any one of them
+	// is set, mirroring the alternation the regex form already uses, so a
+	// migrated rule keeps the meaning of the rule it replaces. Alternatives are
+	// also how one rule covers kinds whose pod template sits at a different
+	// depth — `spec.containers[]` for a Pod, `spec.template.spec.containers[]`
+	// for a Deployment.
+	//
+	// The structural path is used only when the content parses AND its schema
+	// is recognised. Anything else falls back to the patterns above, because a
+	// document nox cannot read is not a document with nothing in it.
+	AbsenceResourceTypes []string `yaml:"absence_resource_types"`
+	AbsencePropertyPath  []string `yaml:"absence_property_path"`
+	// AbsenceRequireAll switches the quantifier used inside a path's wildcards.
+	//
+	// Kubernetes needs it: a pod is hardened only when EVERY container is, so
+	// `spec.template.spec.containers[].securityContext` satisfied by one of
+	// three containers has found a vulnerable pod, not a safe one. It is opt-in
+	// because getting it wrong in this direction HIDES findings, and a default
+	// that hides is worse than one that is explicit at every site that needs it.
+	AbsenceRequireAll bool `yaml:"absence_require_all"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.

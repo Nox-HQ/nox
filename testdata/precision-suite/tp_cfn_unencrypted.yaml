@@ -1,0 +1,13 @@
+# True positive for the CloudFormation absence rules. This bucket sets no
+# encryption at all, and a correct scanner reports it.
+#
+# It is the recall side of clean_cfn_encrypted.yaml: the structural path
+# removes false positives, and this file is what stops that removal from being
+# achieved by simply reporting nothing. If a future refinement silences this,
+# the rule has been gutted rather than sharpened.
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  PlainBucket:  # nox-expect: IAC-051
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: plain

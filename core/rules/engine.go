@@ -117,6 +117,18 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				// of the same rule — including findings in unrelated files.
 				Metadata: copyMetadata(rule.Metadata),
 			}
+			// A structural result was decided by PARSING the document, not by
+			// matching text against a span. That difference is the whole
+			// reason the structural path exists, so it travels with the
+			// finding: the rule engine has no reasoning store and must not
+			// grow one, and the analyzer that owns the evidence seam turns
+			// this sentence into a deterministic claim.
+			if mr.Structural != "" {
+				if f.Metadata == nil {
+					f.Metadata = map[string]string{}
+				}
+				f.Metadata[StructuralClaimKey] = mr.Structural
+			}
 			// Fingerprint is computed by FindingSet.Add, but we also set it
 			// here so callers who do not use FindingSet still get a stable
 			// fingerprint.

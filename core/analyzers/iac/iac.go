@@ -9,14 +9,21 @@ import (
 	"os"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
+
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
 
 // Analyzer wraps a rules.Engine pre-loaded with IaC security rules.
 type Analyzer struct {
 	engine *rules.Engine
+	// reasoning receives a claim for every finding this analyzer decided by
+	// parsing the document rather than by matching text. Nil unless a caller
+	// asked for evidence, which keeps recording free when nobody did.
+	reasoning *reasoning.Store
 }
 
 // NewAnalyzer creates an Analyzer with built-in IaC security rules loaded
@@ -35,6 +42,46 @@ func NewAnalyzer() *Analyzer {
 // Rules returns the analyzer's RuleSet for catalog aggregation.
 func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
 
+// RecordReasoningTo directs this analyzer's claims at store.
+//
+// The IaC family had no evidence seam at all until the structural path existed,
+// and that was the honest state of things: every IAC finding rested on a
+// pattern match, so the only claim it could have filed is the bare observation
+// the scan already records. There was nothing to say. There is now.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
+
+// recordStructuralClaims files what parsing established about each finding.
+//
+// The claim is KindStatic, and that is the point of the whole feature: "the
+// resource was parsed and sets no BucketEncryption" is static analysis, while
+// "no pattern matched inside a span I guessed by indentation" is a heuristic
+// however carefully the pattern was written. It is the first claim in this
+// family that can lift a finding off the heuristic floor honestly.
+//
+// # Why refutations are not recorded here
+//
+// The structural path also refutes — a resource whose property the pattern
+// could not see is not reported at all — and none of those produce a claim,
+// deliberately. A refutation in this model attaches to a candidate, and there
+// is no candidate: the finding was never created. That is different from the
+// secrets refiners, which drop a candidate that existed and must say why. What
+// is lost is visible in the finding count and in nothing else, which is the
+// same place a false positive's removal has always been visible.
+func (a *Analyzer) recordStructuralClaims(path string, fs []findings.Finding) {
+	if a.reasoning == nil {
+		return
+	}
+	for i := range fs {
+		claim := fs[i].Metadata[rules.StructuralClaimKey]
+		if claim == "" {
+			continue
+		}
+		subject := reasoning.Candidate(fs[i].RuleID, path,
+			fs[i].Location.StartLine, fs[i].Location.StartColumn)
+		a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "iac", claim, nil)
+	}
+}
+
 // ScanFile delegates to the underlying rules engine to scan the given file
 // content and returns any IaC-related findings.
 func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, error) {
@@ -42,7 +89,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	if err != nil {
 		return nil, err
 	}
-	return dropArtifactsWhenAlways(results, content), nil
+	out := dropArtifactsWhenAlways(results, content)
+	a.recordStructuralClaims(path, out)
+	return out, nil
 }
 
 // dropArtifactsWhenAlways removes IAC-348 findings whose `when: always` sits

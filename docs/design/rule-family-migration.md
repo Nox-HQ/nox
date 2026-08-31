@@ -68,24 +68,72 @@ regex results under more sentences is motion, not progress.
 - **Remains unknown.** Whether the credential is live, whether it is still
   valid, and whether it was ever used. Nox does not and must not check.
 
-### IAC — 490 rules — *cannot be migrated as it stands*
+### IAC — 490 rules — *24 absence rules migrated; the rest as it was*
 
-- **Observation.** A regex matched text in a configuration file. All 490 rules
-  are 433 `regex` plus 57 `absence`; nothing parses the document.
-- **Confirms.** Nothing available today. A regex match over YAML or HCL is a
-  heuristic however specific the pattern, and classifying it otherwise would put
-  strength behind the one thing on the ladder that earns none.
-- **Refutes.** For the 57 `absence` rules, a real refutation exists and is not
-  implemented: absence-by-regex is weak, and the setting may be present in a
-  form the pattern does not recognise. Structural lookup could establish that.
-- **Capability required.** Structural parsing — resolve the resource, read the
-  attribute. That is a feature, not a migration, and it is the single largest
-  piece of work implied by Track J.
+- **Observation.** A regex matched text in a configuration file. 433 `regex`
+  plus 57 `absence`.
+- **Confirms.** For a migrated absence rule: the document was parsed, the
+  resource resolved by type, and the attribute is not set (`KindStatic`). That
+  is static analysis, and it is the first claim this family has ever been able
+  to make. For everything else, still nothing — a regex match over YAML or HCL
+  is a heuristic however specific the pattern.
+- **Refutes.** Implemented, and it is the half that pays first. A property the
+  pattern could not see — reached through a YAML anchor, nested a level deeper,
+  or spelled outside the alternation — refutes the finding deterministically.
+  Measured: on a template with three buckets, two encrypted (one through an
+  anchor) and one not, the regex path reports **2 findings, one of them false**;
+  the structural path reports **1**, on the bucket that is genuinely
+  unencrypted.
+- **Capability required.** Structural parsing, now provided for the three
+  document-shaped schemas by `core/rules/structural`: CloudFormation,
+  Kubernetes and ARM, in YAML or JSON, on `gopkg.in/yaml.v3` and no new
+  dependency. Terraform needs an HCL parser and has none; Dockerfiles are
+  line-oriented and have no document to parse.
 - **Remains unknown.** Whether the configuration is actually deployed, and
   whether the resource is reachable. Neither is visible from the file.
 
-This family is second-largest and appears nowhere in the roadmap's ordering.
-Recording that here rather than letting it stay unmentioned.
+#### What the migration actually reached, and why it is 24 and not 57
+
+Enumerating all 57 absence rules against the structural model separates them
+into five kinds, and only the first can migrate. The counts sum to 57 because
+every rule was placed, not sampled:
+
+| kind | rules | why |
+|---|---|---|
+| resource-and-attribute | **24** | the property belongs to the resource the rule names — migrated |
+| not a document | 20 | Dockerfile is line-oriented; Terraform and the GCP rules are HCL; a Helm template is not valid YAML until it is rendered |
+| cross-resource | 8 | the property is a *different object*: a VPC's flow log, a Namespace's ResourceQuota, a workload's PodDisruptionBudget, an Azure server's `auditingSettings` child |
+| sub-structure anchored | 4 | anchored on `securityContext:`, `hostPath:`, `emptyDir:` or an IAM statement rather than on a resource type |
+| predicate-gated | 1 | IAC-096 applies only to a `Microsoft.Web/sites` whose `kind` is `functionapp`, and the descriptor has no field for that condition |
+
+The cross-resource group is the honest next capability: it needs resolution
+*across* resources in a document set, not within one, and the model here
+deliberately stops at one resource because a lookup that silently searched the
+whole file would be the regex behaviour with a parser attached.
+
+The other three are not blocked on the parser at all. Terraform needs an HCL
+dependency this scanner does not carry, a Dockerfile has no document to parse,
+and the sub-structure rules would need rewriting rather than annotating — each
+of which is a decision, not an omission.
+
+#### The two rules that hold this together
+
+- The structural path is used only when the document **parsed AND its schema was
+  recognised**. "I could not read this" is not "there is nothing here", and a
+  scanner that conflates them turns every unreadable file into an all-clear.
+  Everything else falls back to the text path, so migrating a rule adds a
+  capability rather than trading one away. `TestUnparseableTemplateFallsBackToTextMatching`
+  holds it; removing the guard fails it.
+- A wildcard's quantifier is explicit. `spec.template.spec.containers[]`
+  satisfied by *one* of three containers has found a vulnerable pod, not a safe
+  one, so pod rules use the all-quantifier. Getting this backwards hides
+  findings rather than inventing them, which is why it is opt-in per rule and
+  not a default.
+
+Measured after, on the precision suite: IAC moves from
+`corroborated=0 above=0 earned=0 strongest=heuristic` to
+`corroborated=1 above=1 earned=1 strongest=static` — the family's first earned
+evidence — with precision and recall both still 1.00.
 
 ### AI / MCP / AGENT / AGENTFLOW — 90 rules — *refiners exist, corroboration does not*
 
@@ -168,9 +216,11 @@ overlaps, dependency applicability. Measuring suggests a different one.
    a prompt is a literal rather than assembled from input — which needs a
    capability nothing implements yet.
 3. **IAC structural parsing.** Largest single piece of work, largest family, and
-   the only way 490 rules ever exceed heuristic. Should be scoped as a feature —
-   but measuring it first found a bounded, high-value bug that did not need the
-   feature.
+   the only way 490 rules ever exceed heuristic. Now built for the three
+   document-shaped schemas (CloudFormation, Kubernetes, ARM), migrating 24 of
+   the 57 absence rules — see the family section above for why it is 24, and
+   what the remaining two groups need. Measuring it first also found a bounded,
+   high-value bug that did not need the feature:
 
    Every brace-enclosing absence rule (IAC-051 and its family) silently missed
    CloudFormation written in YAML. The span that bounds a resource block was

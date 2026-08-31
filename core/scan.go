@@ -390,6 +390,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	dataAnalyzer := data.NewAnalyzer()
 	iacAnalyzer := iac.NewAnalyzer()
+	iacAnalyzer.RecordReasoningTo(reasons)
 	// degradations collects checks that could not complete. Analyzers write to
 	// it concurrently; it is surfaced on ScanResult so "no findings" can be
 	// distinguished from "did not look".

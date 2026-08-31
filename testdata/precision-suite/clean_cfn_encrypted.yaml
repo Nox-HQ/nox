@@ -1,0 +1,38 @@
+# Clean sample: every bucket below IS encrypted. Any finding here is a FALSE
+# POSITIVE.
+#
+# This is the regression the structural absence path exists to prevent. The
+# regex form of IAC-051 searched for BucketEncryption inside a span it bounded
+# by indentation, so a bucket that inherits its encryption through a YAML
+# anchor — the ordinary way a template avoids repeating a block — showed an
+# empty span and was reported as unencrypted. Parsing resolves the alias and
+# sees the property that is actually there.
+#
+# MirrorBucket is the one that used to fire. Keep it.
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties: &encrypted
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  MirrorBucket:
+    Type: AWS::S3::Bucket
+    Properties: *encrypted
+
+  # Encryption supplied by an intrinsic function. What it resolves to needs the
+  # deployment context, which is not in this file — but the author DID
+  # configure the property, and reporting it as missing would flag the
+  # mechanism templates use most.
+  ParameterisedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption: !Ref EncryptionConfig
+
+  QueueNotABucket:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: work
