@@ -419,6 +419,40 @@ stops where it does — but recommending it would send a reader to do something
 they cannot. `nox why` now closes with the cheapest question something here
 could actually answer.
 
+## Milestone I — measured, and the recommendation is not to adopt
+
+`docs/research/smt-spike/` carries the design, written before the measurement,
+and the result.
+
+Measured over 27 repositories and corpora, 2,151 findings: **22 taint flows,
+1.0% of output.** A constraint solver operates on flows. Even a perfect one
+would be working on one percent of what nox reports.
+
+77% of those flows have no conditional between source and sink at all. Every
+guard that does exist is an equality or an interval comparison. **Zero string-
+theory guards and zero regex guards appeared anywhere** — the class of problem
+SMT is uniquely good at did not occur.
+
+The blocking criterion is modelling completeness: `taint.Flow` records no path
+constraints, no guards, no conditions. A solver has no input today, and
+producing it is path-sensitive analysis — a larger project than the solver,
+undertaken to feed a stage that runs on 1% of findings.
+
+**Recommendation: do not adopt SMT.** Not because solving is weak, but because
+nox does not currently have the problem it solves. The honest next investment is
+recall in the taint engine; constraint solving decides among paths, and nox's
+difficulty is finding paths at all.
+
+The verifier the milestone describes was deliberately not built. Its translation
+layer — SAT supports feasibility of a path under a model, UNSAT refutes a path
+under a model and never a finding — already exists as `core/verify` from
+Milestone E. The domain model is ready for a solver; there is not yet a question
+for one to answer. Building it first would have produced a working component
+with nothing to consume it. Measuring first cost an afternoon.
+
+The measurement is committed and re-runnable, so if the flow count rises by an
+order of magnitude the question can be re-asked rather than re-argued.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:
