@@ -367,6 +367,58 @@ convention, because a convention is what a refactor does not consult.
 The entry points are enumerated from the source rather than listed by hand, and
 the count is asserted, so a fifth arrives as a failure rather than as silence.
 
+## Milestones E and L — landed
+
+### E, the verification vocabulary
+
+`core/verify` is what a verification producer speaks: `FEASIBLE`,
+`INFEASIBLE_WITHIN_SCOPE`, `OBSERVED`, `VIOLATED`, `REPRODUCED`, `UNKNOWN`. A
+constraint solver is one producer; so is a fuzzer, a symbolic executor, an
+attack adapter, a harness, a PoC runner, a property checker. Coupling the domain
+model to SAT/UNSAT would make it a hostage to a tool choice that has not been
+made.
+
+**It is a separate axis, following C3's precedent.** `Exploitability` is a
+lifecycle; a verification result is what one producer established about one
+proposition under one model. Folding them would give `INCONCLUSIVE` a second
+meaning, which is the mistake C3 declined.
+
+The rules E states are structural rather than documented. The only refuting
+outcome is named `INFEASIBLE_WITHIN_SCOPE` — there is no way to spell
+"infeasible" without saying within what — and it refuses to be stated from a
+scope with limitations, the same asymmetry `core/reach` enforces. A `Subject` is
+required, so a result cannot be filed against nothing and reach everything by
+sharing the zero subject, which is how a solver's answer about a path would
+otherwise become a statement about a finding. And no outcome a solver can
+produce maps to `KindControlledReproduction`: only something that ran and
+recurred earns the kind that carries CONFIRMED.
+
+It reuses `reach.Scope` rather than defining its own. A verification answer and
+a reachability answer are bounded by the same kinds of thing, and two scope
+types would drift. If Milestone M needs this in the kernel, that is the moment
+to promote both — with a real second consumer, rather than guessing now.
+
+### L, the verification-aware adjudicator
+
+`adjudicate.MissingEvidence` answers the other half of the adjudicator's job:
+not what the evidence supports, but what is absent. A verdict that stops
+somewhere is not a dead end; it is a question with an unknown, and naming the
+unknown turns a report into a next step.
+
+The ordering is the substance — lexical context, constants, symbols, taint, call
+graph, entry points, reachability, attacker reachability, dynamic verification —
+cheapest first, because a multi-stage architecture spends cheap evidence first
+and escalates only on what survives. Not every hypothesis should reach the
+bottom.
+
+Two distinctions it keeps. A capability that ran and could not tell leaves its
+question **open**, because "somebody asked once" is not an answer. And
+availability is part of the answer rather than a filter: a gap nothing on this
+installation can fill is real and belongs in the list — it is why the verdict
+stops where it does — but recommending it would send a reader to do something
+they cannot. `nox why` now closes with the cheapest question something here
+could actually answer.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:

@@ -128,7 +128,7 @@ func (s *Server) handleWhy(_ context.Context, input whyInput) (mcp.StructuredRes
 		}
 		out.Explanations = append(out.Explanations, explain.Explain(explain.Inputs{
 			Finding: f, Ledger: ledger, Subject: subject,
-			Coverage: pc.result.Coverage, Rule: cat[f.RuleID],
+			Coverage: pc.result.Coverage, Registry: pc.result.Capabilities, Rule: cat[f.RuleID],
 		}))
 	}
 	if len(out.Explanations) == 0 {

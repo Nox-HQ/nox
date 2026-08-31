@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
@@ -76,6 +77,9 @@ type Inputs struct {
 	Ledger   evidence.Ledger
 	Subject  evidence.Subject
 	Coverage *capability.Coverage
+	// Registry is what this installation provides, needed to tell an open
+	// question something could answer from one nothing can.
+	Registry *capability.Registry
 	Rule     catalog.RuleMeta
 }
 
@@ -93,7 +97,7 @@ func Explain(in Inputs) Explanation {
 	e.NotEvaluated = append(limitationLines(f), notEvaluated(in.Coverage, in.Subject)...)
 	e.PotentialImpact = potentialImpact(f, in.Rule)
 	e.AffectsThisApplication = affectsThisApplication(f)
-	e.WhatToDo = whatToDo(in.Rule)
+	e.WhatToDo = whatToDo(in.Rule) + nextEvidence(in)
 	return e
 }
 
@@ -338,6 +342,26 @@ func affectsThisApplication(f findings.Finding) string {
 	default:
 		return fmt.Sprintf("Applicability reached %s.", reached)
 	}
+}
+
+// nextEvidence names the cheapest open question something on this installation
+// could answer, appended to the remediation.
+//
+// It is the actionable half of "what was not evaluated". That field says which
+// questions are open; this says which one to take first, and only ever
+// recommends something the reader can actually do — a gap nothing can fill is
+// worth naming as a limit but is not a next step.
+func nextEvidence(in Inputs) string {
+	if in.Coverage == nil || in.Registry == nil {
+		return ""
+	}
+	gaps := adjudicate.MissingEvidence(in.Coverage, in.Registry, in.Subject)
+	next, ok := adjudicate.CheapestAvailable(gaps)
+	if !ok {
+		return ""
+	}
+	return " The cheapest thing that would move this conclusion is " +
+		string(next.Capability) + ": " + next.Question
 }
 
 func whatToDo(rule catalog.RuleMeta) string {
