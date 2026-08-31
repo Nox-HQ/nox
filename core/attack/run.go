@@ -324,14 +324,26 @@ func notRunTrace(h Hypothesis, cfg RunConfig, note string) Trace {
 	})
 }
 
+// InvariantSubject is the proposition an attack run can establish: that this
+// hypothesis's security invariant was violated.
+//
+// It is invariant_violation rather than exploit on purpose. A run that saw a
+// guardrail bypassed has established that the guardrail was bypassed; what an
+// attacker could then do is a later proposition needing its own evidence, and
+// promoting across that gap is how a scanner reports an RCE it never saw.
+func InvariantSubject(h Hypothesis) evidence.Subject {
+	return evidence.Subject{Kind: evidence.SubjectInvariantViolation, ID: h.ID}
+}
+
 // groundingLedger returns a ledger seeded with the hypothesis's grounding as a
-// heuristic claim. It is deliberately NON-deterministic in the evidence sense, so
-// it can never on its own carry a trace to CONFIRMED — only a reproduced
+// heuristic claim. It is deliberately NON-deterministic in the evidence sense,
+// so it can never on its own carry a trace to CONFIRMED — only a reproduced
 // deterministic oracle can add that.
 func groundingLedger(h Hypothesis, now string) *evidence.Ledger {
 	l := &evidence.Ledger{}
 	l.Add(evidence.Claim{
 		Kind:      evidence.KindHeuristic,
+		Subject:   InvariantSubject(h),
 		Statement: h.Rationale,
 		Provenance: evidence.Provenance{
 			Source:     "nox-attack",
@@ -487,11 +499,27 @@ attackLoop:
 // violation observed by a machine-checkable oracle in a sound environment — this
 // is the single gate that lets a trace reach CONFIRMED, and it is enforced here
 // rather than trusted to the caller.
+//
+// Every claim is attributed to a SUBJECT, and the subject says which
+// proposition the evidence is about. Until Milestone G this file set none, so
+// every claim shared the zero subject and landed in one bag where the cheapest
+// deterministic claim satisfied the precondition for the most expensive.
+// Reproducing an invariant violation is not reproducing an exploit, and the
+// subject is what keeps those apart — the kernel aggregates per subject, so the
+// distinction is only real if somebody makes it here.
 func (r *runner) finalize(trace Trace, outcome evidence.RunOutcome, h Hypothesis, winner *Attempt, verdict OracleVerdict, controlSound bool) Trace {
 	ledger := groundingLedger(h, r.cfg.Now)
+	// What a reproduced oracle hit actually establishes: the security invariant
+	// this scenario names was violated, and it recurred. That is
+	// invariant_violation on the reproduction hierarchy. It is deliberately NOT
+	// filed against the exploit — nothing here demonstrated an end-to-end
+	// exploit, and an oracle that saw a control bypassed has not thereby shown
+	// what an attacker could do with it.
+	violated := InvariantSubject(h)
 	if outcome.Violated && outcome.Reproduced && controlSound && winner != nil {
 		ledger.Add(evidence.Claim{
 			Kind:      oracleEvidenceKind(verdict.Kind),
+			Subject:   violated,
 			Statement: fmt.Sprintf("a %s oracle observed the invariant violated and it reproduced (%d/%d)", verdict.Kind, trace.ReproductionHits, trace.ReproductionSamples),
 			Provenance: evidence.Provenance{
 				Source:     "nox-attack",
@@ -504,7 +532,7 @@ func (r *runner) finalize(trace Trace, outcome evidence.RunOutcome, h Hypothesis
 	}
 	trace.Outcome = outcome
 	trace.Ledger = *ledger
-	trace.Exploitability = evidence.DeriveExploitability(outcome, ledger)
+	trace.Exploitability = evidence.DeriveExploitabilityAbout(outcome, ledger, violated)
 	trace.Confidence = ledger.Confidence()
 	return classified(trace)
 }
