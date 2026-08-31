@@ -143,8 +143,24 @@ type Trace struct {
 	ReproductionSamples int `json:"reproduction_samples"`
 	// Note is a human-readable explanation of the outcome.
 	Note string `json:"note,omitempty"`
-	// ReplayCommand is the literal command to reproduce this trace.
-	ReplayCommand string `json:"replay_command"`
+	// ReplayCommand is the literal command to re-run this trace against a
+	// target, and it is EMPTY when there is nothing to re-run.
+	//
+	// It used to be set on every trace, including hypotheses that never
+	// executed — so an artifact advertised a reproduction it could not perform,
+	// and attack.Replay answered "carries no reproducible evidence". That is
+	// nox claiming execution reproducibility it does not have, which is the one
+	// thing this artifact must not do.
+	//
+	// Note what KIND of reproducibility this is. Re-running against a target is
+	// best-effort: nox does not control the target's state, so a replay that
+	// fails may mean the bug was fixed, the data changed, or the service moved.
+	// That is a different guarantee from `nox replay`, which re-derives verdicts
+	// from a stored ledger and is deterministic. Two commands named replay,
+	// answering different questions — see ReplayNote.
+	ReplayCommand string `json:"replay_command,omitempty"`
+	// ReplayNote says why this trace cannot be re-run, when it cannot.
+	ReplayNote string `json:"replay_note,omitempty"`
 	// FindingFingerprints links the trace back to the static findings its
 	// hypothesis was grounded in. This is an additive field beyond the original
 	// contract; it lets Correlate merge static and dynamic claims without needing
@@ -319,7 +335,7 @@ func notRunTrace(h Hypothesis, cfg RunConfig, note string) Trace {
 		Ledger:              *ledger,
 		ReproductionSamples: cfg.Samples,
 		Note:                note,
-		ReplayCommand:       "nox attack replay trace-" + h.ID,
+		ReplayNote:          "nothing ran, so there is nothing to re-run",
 		FindingFingerprints: h.FindingFingerprints,
 	})
 }
@@ -365,7 +381,6 @@ func (r *runner) attackHypothesis(h Hypothesis) Trace {
 		Objective:           h.Objective,
 		Path:                h.Path,
 		ReproductionSamples: r.cfg.Samples,
-		ReplayCommand:       "nox attack replay trace-" + h.ID,
 		FindingFingerprints: h.FindingFingerprints,
 	}
 	outcome := evidence.RunOutcome{HypothesisConstructed: true, ControlSound: true}
@@ -529,6 +544,16 @@ func (r *runner) finalize(trace Trace, outcome evidence.RunOutcome, h Hypothesis
 			},
 			Attributes: map[string]string{"oracle": verdict.OracleName, "signal": verdict.Signal},
 		})
+	}
+	// Advertise a re-run only where there is something to re-run. Replay
+	// reconstructs the winning probe from trace.Evidence, so a trace without it
+	// cannot be replayed and must not say it can.
+	if trace.Evidence != nil {
+		trace.ReplayCommand = "nox attack replay " + trace.ID
+	} else {
+		trace.ReplayNote = "no reproduced violation was recorded, so there is no " +
+			"winning probe to re-run; `nox replay` still re-derives this verdict " +
+			"from its evidence"
 	}
 	trace.Outcome = outcome
 	trace.Ledger = *ledger
