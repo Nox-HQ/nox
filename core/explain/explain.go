@@ -27,9 +27,11 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reach"
 )
 
 // Explanation is the eight answers, in the order a person reads them.
@@ -75,6 +77,9 @@ type Inputs struct {
 	Ledger   evidence.Ledger
 	Subject  evidence.Subject
 	Coverage *capability.Coverage
+	// Registry is what this installation provides, needed to tell an open
+	// question something could answer from one nothing can.
+	Registry *capability.Registry
 	Rule     catalog.RuleMeta
 }
 
@@ -89,10 +94,10 @@ func Explain(in Inputs) Explanation {
 	e.Observed = observed(f)
 	e.WhyItMatters = whyItMatters(f, in.Rule)
 	e.Supports, e.Against = argument(in.Ledger, in.Subject)
-	e.NotEvaluated = notEvaluated(in.Coverage, in.Subject)
+	e.NotEvaluated = append(limitationLines(f), notEvaluated(in.Coverage, in.Subject)...)
 	e.PotentialImpact = potentialImpact(f, in.Rule)
 	e.AffectsThisApplication = affectsThisApplication(f)
-	e.WhatToDo = whatToDo(in.Rule)
+	e.WhatToDo = whatToDo(in.Rule) + nextEvidence(in)
 	return e
 }
 
@@ -239,7 +244,29 @@ func notEvaluated(cov *capability.Coverage, s evidence.Subject) []string {
 	}
 	sort.Strings(out)
 	if len(out) == 0 {
-		return []string{"Every analysis nox has reached a conclusion about this finding."}
+		out = []string{"Every analysis nox has reached a conclusion about this finding."}
+	}
+	return out
+}
+
+// limitationLines reports the constructs in this file that defeat static
+// analysis, so silence about the rest of the file reads as what it is.
+//
+// It appears under "what was not evaluated" because that is the question it
+// answers. A capability state says an analysis reached no conclusion; this says
+// why one could not be reached here, which is the difference between a reader
+// installing a plugin and a reader understanding that the code is not
+// statically analysable at this point.
+func limitationLines(f findings.Finding) []string {
+	raw := f.Metadata["analysis_limitations"]
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, name := range strings.Split(raw, ",") {
+		l := reach.Limitation(strings.TrimSpace(name))
+		out = append(out, "this file defeats static analysis — "+l.Describe()+
+			" — so any analysis of it is incomplete, and nothing here was ruled out")
 	}
 	return out
 }
@@ -315,6 +342,26 @@ func affectsThisApplication(f findings.Finding) string {
 	default:
 		return fmt.Sprintf("Applicability reached %s.", reached)
 	}
+}
+
+// nextEvidence names the cheapest open question something on this installation
+// could answer, appended to the remediation.
+//
+// It is the actionable half of "what was not evaluated". That field says which
+// questions are open; this says which one to take first, and only ever
+// recommends something the reader can actually do — a gap nothing can fill is
+// worth naming as a limit but is not a next step.
+func nextEvidence(in Inputs) string {
+	if in.Coverage == nil || in.Registry == nil {
+		return ""
+	}
+	gaps := adjudicate.MissingEvidence(in.Coverage, in.Registry, in.Subject)
+	next, ok := adjudicate.CheapestAvailable(gaps)
+	if !ok {
+		return ""
+	}
+	return " The cheapest thing that would move this conclusion is " +
+		string(next.Capability) + ": " + next.Question
 }
 
 func whatToDo(rule catalog.RuleMeta) string {

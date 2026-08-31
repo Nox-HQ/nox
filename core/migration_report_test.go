@@ -95,12 +95,41 @@ func TestEarnedEvidenceIsNotTheSameAsAGenerousClassification(t *testing.T) {
 // without anything having been migrated. A metric that silently flatters the
 // work is worse than no metric.
 func TestBareObservationIsRecognised(t *testing.T) {
-	r := measureOn(t, "../testdata/precision-suite")
-	for _, f := range r.Families {
-		if f.Corroborated == f.Findings && f.Earned == 0 && f.Family != "TAINT" {
-			t.Errorf("family %s reports every finding corroborated with nothing earned, "+
-				"which is what the metric looks like when it has stopped recognising "+
-				"the bare observation claim", f.Family)
+	// Test the recogniser directly, not through a proxy. An earlier version
+	// asserted that no family is "corroborated everywhere with nothing earned",
+	// on the theory that only a broken recogniser produces that shape. That
+	// theory expired: once the AI analyzer records what it checked about
+	// survivors (heuristic corroboration, nothing earned), a fully-corroborated
+	// heuristic family is the NORMAL state, indistinguishable from a broken
+	// recogniser under the proxy. So this checks the actual property — a
+	// finding whose only claim is the bare observation is not counted as
+	// corroborated — which is what the proxy was standing in for.
+	obs := func(ruleID string) evidence.Claim {
+		return evidence.Claim{
+			Kind: evidence.KindHeuristic, Statement: "rule " + ruleID + " matched at this location",
 		}
+	}
+	bare := findings.Finding{RuleID: "SEC-003", Fingerprint: "a"}
+	extra := findings.Finding{RuleID: "SEC-003", Fingerprint: "b"}
+
+	rep := migration.Measure([]findings.Finding{bare, extra}, func(f findings.Finding) evidence.Ledger {
+		if f.Fingerprint == "a" {
+			return evidence.Ledger{Claims: []evidence.Claim{obs("SEC-003")}}
+		}
+		return evidence.Ledger{Claims: []evidence.Claim{
+			obs("SEC-003"),
+			{Kind: evidence.KindHeuristic, Statement: "the value carries a recognised provider prefix"},
+		}}
+	})
+	if len(rep.Families) != 1 {
+		t.Fatalf("expected one family, got %d", len(rep.Families))
+	}
+	// Of the two findings, only the one with a claim BEYOND the observation is
+	// corroborated. A recogniser that stopped matching the observation string
+	// would count both.
+	if rep.Families[0].Corroborated != 1 {
+		t.Errorf("corroborated = %d, want 1; the bare-observation finding was counted "+
+			"as corroborated, so isBareObservation has stopped matching the statement "+
+			"the scan writes", rep.Families[0].Corroborated)
 	}
 }

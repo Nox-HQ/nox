@@ -314,6 +314,7 @@ var subcommandFlags = []struct {
 		flags: []flagSpec{
 			{"findings", "--findings=testdata/nox-flag-efficacy-absent.json", "names the scan artifact the plan is grounded in; a missing file is a hard error"},
 			{"inventory", "--inventory=testdata/nox-flag-efficacy-absent.json", "supplies the tool matrix that grounds tool and exfiltration hypotheses"},
+			{"evidence", "--evidence=testdata/nox-flag-efficacy-absent.json", "carries what the scan established onto each hypothesis; a missing file warns and plans without it"},
 			{"output", "--output=testdata/nox-flag-efficacy-absent.json", "chooses where the plan is written"},
 			{"json", "--json=true", "prints the plan instead of a summary"},
 		},

@@ -133,15 +133,58 @@ Recording that here rather than letting it stay unmentioned.
 The roadmap's order was: noisy AI rules, secrets, endpoint/API misuse, taint
 overlaps, dependency applicability. Measuring suggests a different one.
 
-1. **SEC checksum verification, more providers.** The only intervention proven
-   to move a finding off the heuristic floor, no new capability required, and it
-   applies to the largest family. Cheapest real progress available.
-2. **AI corroboration.** The refiners exist and only refute; recording what was
-   checked about survivors is the smaller half of work already begun. It will
-   not move confidence — see above — but it makes `nox why` answer "what
-   supports it" with something other than the rule firing.
+1. **SEC deterministic verification.** Started, and it went somewhere the plan
+   did not predict.
+
+   The checksum path is nearly exhausted at GitHub: its CRC32 is one of very few
+   schemes verifiable OFFLINE, and most providers can only be verified by an API
+   call, which nox's architecture forbids. So the honest next deterministic
+   signal is not another checksum but JWT structure: a JWT's header base64url-
+   decodes to JSON naming a signing algorithm, checkable with no network and no
+   key.
+
+   Building it surfaced a silent false negative. The data-blob refiner dropped
+   any string over 96 bytes as an opaque base64 payload, and a full JWT runs to
+   hundreds of bytes — so hardcoded JWTs were discarded before they became
+   findings. nox could not see an entire credential class. `lexctx.LooksLikeJWT`
+   now stops that: a structurally valid JWT is a credential, not a blob, however
+   long. Surfacing it then exposed a dedup gap — three rules match a JWT and did
+   not collapse — closed by adding `eyJ` as a canonical owner. End to end: a
+   hardcoded JWT goes from zero findings to one, carrying a deterministic claim
+   that it decodes as a token rather than resting on the pattern.
+
+   The remaining checksum work (Stripe, Slack, npm) is not there: none publishes
+   an offline-verifiable checksum. That is a result, not a gap — it says the
+   deterministic wins in this family are the structural ones (JWT, and base64/
+   hex decodability), not more checksums.
+2. **AI corroboration.** *Done.* The refiners recorded why they dropped a
+   candidate and nothing about the ones that survived, so a reported AI
+   finding's ledger said only "the rule fired". A survivor now records what was
+   checked: that it is in real code, and — for a rule with a context
+   requirement — that the context its rule needs was actually present. Measured:
+   AI-002 goes from one supporting claim to three. Heuristic, so it moves
+   explanation not confidence (E3 measured that), which is the honest ceiling
+   for a proximity check. The remaining AI work is constant evaluation — knowing
+   a prompt is a literal rather than assembled from input — which needs a
+   capability nothing implements yet.
 3. **IAC structural parsing.** Largest single piece of work, largest family, and
-   the only way 490 rules ever exceed heuristic. Should be scoped as a feature.
+   the only way 490 rules ever exceed heuristic. Should be scoped as a feature —
+   but measuring it first found a bounded, high-value bug that did not need the
+   feature.
+
+   Every brace-enclosing absence rule (IAC-051 and its family) silently missed
+   CloudFormation written in YAML. The span that bounds a resource block was
+   `brace-enclosing`, which walks out to the enclosing `{ }` — and YAML has
+   none, so the span came back empty and the rule never fired. Measured: IAC-051
+   flags an unencrypted S3 bucket in a JSON template and misses the identical
+   bucket in YAML. The rules already listed *.yaml in their file patterns, so
+   the format was always in scope; only the span could not reach it. Fixed with
+   an indentation-bounded ENCLOSING span — distinct from the block span, a
+   distinction a false positive taught: the block span of a `Type:` anchor is
+   the scalar alone, so a sibling encryption property fell outside it and an
+   encrypted bucket looked unencrypted. This is not the structural rewrite; it
+   is one bounded fix the rewrite would have subsumed, delivered now because it
+   is a real false negative with a reproduction.
 4. **Endpoint/API misuse** is a plugin (`nox-plugin-api-abuse`) and cannot be
    fixed from this repository. Its API-ABUSE-001 sits at precision 0.000 — never
    a true positive on the corpus — which under Milestone 10.2 makes it a

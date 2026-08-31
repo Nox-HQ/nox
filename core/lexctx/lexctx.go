@@ -288,6 +288,15 @@ const blobThreshold = 96
 // content-only — no heurist­ic that depends on scan order or environment.
 func isStringBlob(content []byte, r Region) bool {
 	body := content[r.Start:r.End]
+	// A structurally valid JWT is a credential, not an opaque payload, and it
+	// is often long — a full token runs to hundreds of bytes. The length
+	// heuristic below cannot tell it from a base64 image chunk, so it must
+	// defer to the structural check, or nox drops real hardcoded JWTs as data
+	// blobs. That was happening: blobThreshold's own comment reasoned about "a
+	// JWT header segment" and missed that the whole token is long.
+	if LooksLikeJWT(string(body)) {
+		return false
+	}
 	if len(body) > blobThreshold {
 		return true
 	}

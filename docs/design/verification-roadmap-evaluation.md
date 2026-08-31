@@ -253,6 +253,325 @@ as the tainted value; nox produced zero subjects, so the acceptance criterion
 passed while testing nothing. Giving them a real source made the engine reach
 them, and one case firing is the proof that it does.
 
+## Milestone C — landed in two halves
+
+The first half shipped with A: `reach.Limitation` names ten reasons an analysis
+stops being able to speak for a whole program, each with a sentence an operator
+can act on.
+
+The second half is `reach.Detect`, which makes something actually speak it.
+Milestone B measured the gap precisely: four of five hard cases produced
+complete silence, so nox had nothing to attach an explanation to and a reader
+could not tell those files from clean ones.
+
+**It is lexical, and that is a considered limit rather than a shortcut.**
+Recognising these constructs properly means resolving types, which is the
+analysis the construct defeats — the detector cannot be stronger than the thing
+it reports on. What makes it safe is the direction of its error: a marker only
+ever ADDS a limitation, which only ever weakens a claim. A false positive means
+nox says "I may have missed something" when it did not, and a scope carrying a
+spurious limitation can still `Establish`; it just cannot `Refute`.
+
+**Dynamic dispatch is deliberately not detected.** `interface{}` and `any`
+appear in ordinary Go constantly, so a marker for them fires on nearly every
+file — and a limitation reported everywhere carries no information and trains a
+reader to skip the field. That was measured, not assumed: the first version of
+the marker list included `interface{}` and a bare `import (`, and reported
+`dynamic_loading` on all five hard cases including the three that contain none,
+because Go's own import block matched.
+
+Measured after the fix: reflection and dynamic loading detected on the two cases
+that have them, silence on the three that cannot be detected lexically, and
+**21 of 794** of nox's own Go files flagged — 2.6%, quiet enough to mean
+something. `TestDetectIsQuietOnNoxItself` keeps that executable with a ceiling
+of 15%.
+
+**The remaining limit, stated:** only findings are annotated. A file with no
+finding gets no annotation, so B's four-of-five silence is only partly
+addressed. Attaching limitations to files rather than findings needs a per-file
+record the scan result does not carry, which is a larger change than this one.
+
+**A usability bug surfaced while testing it.** `nox why . --offline` reported
+`no active finding matches "--offline"`: Go's flag package stops parsing at the
+first positional, so the flag became a selector. `nox show` splits flags from
+positionals first for exactly this reason; `nox why` now does too. Found by
+using the command, not by reading it.
+
+## Milestone F — landed, and one condition rejected on the evidence
+
+Four of the five conditions are enforced by `evidence.DeriveExploitability`, and
+the kernel already walks them as a full cross product of every `RunOutcome`
+boolean. Removing real execution, a violation, repeatability, sound control or
+a deterministic oracle each prevents CONFIRMED.
+
+**The fifth — "completed run" — was implemented, tested, and reverted.** Adding
+`BudgetExhausted` as a sixth bar makes nox *less* accurate rather than safer: a
+genuinely reproduced exploit would be downgraded to INCONCLUSIVE because the
+runner later hit a time limit. Budget exhaustion says the run stopped early; it
+does not say that what it already observed was wrong. That is precisely why the
+kernel bars it for PREVENTED, where "we saw nothing" IS the claim and an
+unfinished search is exactly why you might see nothing.
+
+The kernel's existing cross-product test states the rule as
+`Executed && Violated && Reproduced && ControlSound && deterministic` —
+deliberately four conditions, not five — and it was right.
+
+**The condition is satisfied structurally instead**, and that is now pinned
+where the guarantee is actually made. `Reproduced` cannot be true unless the
+determinism gate ran to completion, and every runner sets `BudgetExhausted`
+only on a path that leaves before reaching that gate. Both runners are written
+that way and neither said so, which is the same shape this programme has now
+found five times: a rule enforced by the control flow of the current callers
+rather than by the type, and therefore invisible to the next one.
+
+This is the second time the roadmap's literal text has been wrong against
+measurement, after C5. Both times the plan was right about the concern and
+wrong about the remedy.
+
+## Milestones H and K — landed
+
+### H, the artifact audit
+
+The attack artifact turned out to be in better shape than expected. Hypothesis
+identity, the action sequence with the exact payload sent, resolved
+nondeterministic values, target identity, oracle result, determinism-gate tally,
+termination status, profile and the evidence ledger are all persisted. What is
+thin: the oracle DEFINITION is recorded only on a reproduced violation, control
+attempts are not distinguishable from attack attempts within `Attempts`, and
+environment assumptions and target *state* are absent.
+
+**The acceptance criterion was violated, in its most literal form.** Every
+trace carried a `ReplayCommand` — including hypotheses that never executed —
+while `attack.Replay` refuses any trace without recorded evidence. The artifact
+advertised a reproduction the tool declines. It is now set only where a winning
+probe exists, and a `ReplayNote` says why not otherwise.
+
+**The two replays are now distinguished where a reader meets them.** `nox
+replay` re-derives verdicts from a stored ledger and touches nothing:
+deterministic, because the ledger is the whole input. `nox attack replay`
+re-fires the winning probe at a live target: best-effort, because nox does not
+control target state, so a failed replay may mean the bug was fixed, the data
+changed, or the service moved. A trace that cannot be re-fired now says the
+verdict is still re-derivable, which is the distinction stated in the place it
+matters.
+
+### K, the boundary
+
+Already enforced by wiring, and now by test. Three properties: every exported
+entry point that takes a context and a run config refuses an unauthorized
+non-safe profile; the safe profile allows no network and demands no
+authorization it does not need; and **`core` — the scan pipeline — carries no
+import of `core/attack`**, checked by parsing its imports rather than by
+convention, because a convention is what a refactor does not consult.
+
+The entry points are enumerated from the source rather than listed by hand, and
+the count is asserted, so a fifth arrives as a failure rather than as silence.
+
+## Milestones E and L — landed
+
+### E, the verification vocabulary
+
+`core/verify` is what a verification producer speaks: `FEASIBLE`,
+`INFEASIBLE_WITHIN_SCOPE`, `OBSERVED`, `VIOLATED`, `REPRODUCED`, `UNKNOWN`. A
+constraint solver is one producer; so is a fuzzer, a symbolic executor, an
+attack adapter, a harness, a PoC runner, a property checker. Coupling the domain
+model to SAT/UNSAT would make it a hostage to a tool choice that has not been
+made.
+
+**It is a separate axis, following C3's precedent.** `Exploitability` is a
+lifecycle; a verification result is what one producer established about one
+proposition under one model. Folding them would give `INCONCLUSIVE` a second
+meaning, which is the mistake C3 declined.
+
+The rules E states are structural rather than documented. The only refuting
+outcome is named `INFEASIBLE_WITHIN_SCOPE` — there is no way to spell
+"infeasible" without saying within what — and it refuses to be stated from a
+scope with limitations, the same asymmetry `core/reach` enforces. A `Subject` is
+required, so a result cannot be filed against nothing and reach everything by
+sharing the zero subject, which is how a solver's answer about a path would
+otherwise become a statement about a finding. And no outcome a solver can
+produce maps to `KindControlledReproduction`: only something that ran and
+recurred earns the kind that carries CONFIRMED.
+
+It reuses `reach.Scope` rather than defining its own. A verification answer and
+a reachability answer are bounded by the same kinds of thing, and two scope
+types would drift. If Milestone M needs this in the kernel, that is the moment
+to promote both — with a real second consumer, rather than guessing now.
+
+### L, the verification-aware adjudicator
+
+`adjudicate.MissingEvidence` answers the other half of the adjudicator's job:
+not what the evidence supports, but what is absent. A verdict that stops
+somewhere is not a dead end; it is a question with an unknown, and naming the
+unknown turns a report into a next step.
+
+The ordering is the substance — lexical context, constants, symbols, taint, call
+graph, entry points, reachability, attacker reachability, dynamic verification —
+cheapest first, because a multi-stage architecture spends cheap evidence first
+and escalates only on what survives. Not every hypothesis should reach the
+bottom.
+
+Two distinctions it keeps. A capability that ran and could not tell leaves its
+question **open**, because "somebody asked once" is not an answer. And
+availability is part of the answer rather than a filter: a gap nothing on this
+installation can fill is real and belongs in the list — it is why the verdict
+stops where it does — but recommending it would send a reader to do something
+they cannot. `nox why` now closes with the cheapest question something here
+could actually answer.
+
+## Milestone I — measured, and the recommendation is not to adopt
+
+`docs/research/smt-spike/` carries the design, written before the measurement,
+and the result.
+
+Measured over 27 repositories and corpora, 2,151 findings: **22 taint flows,
+1.0% of output.** A constraint solver operates on flows. Even a perfect one
+would be working on one percent of what nox reports.
+
+77% of those flows have no conditional between source and sink at all. Every
+guard that does exist is an equality or an interval comparison. **Zero string-
+theory guards and zero regex guards appeared anywhere** — the class of problem
+SMT is uniquely good at did not occur.
+
+The blocking criterion is modelling completeness: `taint.Flow` records no path
+constraints, no guards, no conditions. A solver has no input today, and
+producing it is path-sensitive analysis — a larger project than the solver,
+undertaken to feed a stage that runs on 1% of findings.
+
+**Recommendation: do not adopt SMT.** Not because solving is weak, but because
+nox does not currently have the problem it solves. The honest next investment is
+recall in the taint engine; constraint solving decides among paths, and nox's
+difficulty is finding paths at all.
+
+The verifier the milestone describes was deliberately not built. Its translation
+layer — SAT supports feasibility of a path under a model, UNSAT refutes a path
+under a model and never a finding — already exists as `core/verify` from
+Milestone E. The domain model is ready for a solver; there is not yet a question
+for one to answer. Building it first would have produced a working component
+with nothing to consume it. Measuring first cost an afternoon.
+
+The measurement is committed and re-runnable, so if the flow count rises by an
+order of magnitude the question can be re-asked rather than re-argued.
+
+## Milestone D — landed
+
+The scan produces the hypothesis; the attack fills in the observation. Before
+this, the attack rediscovered it, and badly: the runner seeded its ledger with a
+single heuristic claim restating the rationale, while the scan had already
+gathered better evidence and thrown it away — the ledger is out-of-band and dies
+with the scan.
+
+`Hypothesis` now carries the subject, the scan's ledger, the attacker-controlled
+input, a suspected trigger condition, the expected oracle, the assumptions, and
+the open questions. `groundingLedger` uses what it was handed instead of
+rebuilding a thinner version, and carried claims keep their own subjects — they
+are evidence about a candidate or a flow, not about this hypothesis's invariant,
+and re-attributing them would be exactly the promotion G exists to prevent.
+
+**The handoff is the Track I artifact.** `nox attack plan --evidence
+evidence.json` reads what `nox scan --evidence-out` kept. That was not planned:
+the artifact was built for replay, and it turns out to hold precisely what D
+asks to cross the boundary — input identity, claims with provenance, subjects,
+capability state. Measured on the `core/confirm` fixtures: without it a
+hypothesis carries no subject, no claims and no unknowns; with it, a typed
+subject, the scan's claims, six open questions and three assumptions.
+
+**Assumptions are the part worth arguing with.** They name what nox did NOT
+establish — that the entry point is attacker-reachable, that the static path is
+the one that executes, that nothing showed the code reachable at runtime, that
+the file carried an analysis limitation. Stating them is what lets a reader
+disagree with the hypothesis rather than only with its result.
+
+Everything is optional. A caller with no artifact gets what it had before, which
+keeps `attack plan` usable from a findings file alone — its offline case.
+
+The `trigger_condition` says "suspected" in the string, deliberately. nox
+records no path constraints at all (see the SMT spike), so this is what the
+scenario believes rather than something derived, and it should not read as a
+precision nox does not have.
+
+## Milestone M — the client half landed; the service half is a conversation
+
+M's shape: intel should say more than "CVE-X affects package@version". It can
+carry the affected symbol, a trigger condition, an affected configuration, known
+entry points, a PoC hypothesis, an oracle, reproduction evidence, known
+refutations and maintainer evidence — and **local nox then determines whether
+those propositions apply here**.
+
+That last clause is the whole milestone, and it was already half-built. The
+reasoning shim refuses to record an advisory as evidence about a candidate, with
+a comment saying why — an advisory is about a PACKAGE, and a finding is about a
+CANDIDATE — and it closes "the package subject and its advisory claim belong to
+Track G". That side was never built. `core/intel.ResearchProposition` is it.
+
+**Three properties, each enforced rather than documented:**
+
+Every claim is filed against `SubjectPackage`, and aggregation is per-subject,
+so a maintainer-grade intel claim about a library leaves confidence about a
+local candidate at LOW. That is the mechanism, not a convention: intel cannot
+decide what affects a repository it has never seen.
+
+The maturity ladder maps to evidence kinds, and an **unrecognised rung maps to
+`KindHeuristic`** rather than to something in the middle. A vocabulary this
+build does not understand is not evidence of anything, and reading it generously
+is how a source's words become a consumer's verdict.
+
+**Refutations survive transport.** A source that forwards only what supports its
+conclusion cannot be checked. `nox-intelligence` currently has no way to record
+a dispute — verified twice earlier in this programme — so this is the receiving
+end being ready before the sending end exists.
+
+`AppliesLocally` returns **questions, not answers**: does this build reference
+the symbol, is this deployment configured that way, does this application expose
+that entry point. Intel can say a symbol is dangerous; only the local build can
+say whether it is referenced.
+
+**The receiving loop is now closed** (`intel.FromRecord`): a served intelligence record becomes a `ResearchProposition`, its maturity read from the ledger's strongest live claim, its refutations carried across, its affected imports mapped into the local applicability questions. So what the service already sends — the evidence ledger, the corroboration count, the advisory's affected imports — is consumed as research the local scan tests, not as an opaque advisory it can only trust or ignore.
+
+**Still not built, deliberately:** the researcher-intake side. Emitting the richer fields — a trigger condition, a PoC hypothesis, known entry points — means
+extending the query payload and the disclosure model in a private repository,
+and it is a design conversation before it is code — what a researcher may
+assert, what publication requires, how an unpublished hypothesis reaches a user
+without becoming a claim nox cannot support. The client is ready to receive
+them, which is the half that can be got right in the open.
+
+## Milestone J — landed on existing primitives, measured by the right metric
+
+The milestone is explicit that this does not need a new fuzzer: *initially this
+can work with existing attack primitives.* It does. `Run` already consumes a
+plan of grounded hypotheses and directs probes toward each — the direction is
+there. What was missing is the metric, and the metric is the milestone's real
+content: **hypotheses resolved per unit of verification effort, not coverage.**
+
+A coverage number cannot distinguish a harness that fired a million probes and
+confirmed nothing from one that fired three and confirmed one. `Efficiency` can:
+it reports hypotheses, attempts, and resolutions, and `AttemptsPerResolution` is
+the headline — lower is a harness that decides more per probe.
+
+**Resolution is three-plus-one-valued, and the shape is load-bearing.**
+Confirmed, refuted, inconclusive, not-run. Only CONFIRMED is confirmed. PREVENTED
+is refuted — the objective was not reachable — but the wording stays short of
+"the target is secure". Inconclusive is the honest majority, not a harness
+failure, and counting only confirmations would make the harness look worse the
+more careful it was. Not-run cost nothing and must not dilute the denominator.
+
+**A run that decides nothing says so.** `AttemptsPerResolution` returns zero when
+`Resolved` is zero, and the CLI prints "this run decided nothing" rather than a
+divided value a reader might take for a clean result — the same failure shape as
+a regression suite printing "fix holds" for a target it never reached.
+
+Measured end to end against the real HTTP harness: the vulnerable route resolves
+2 hypotheses in 30 attempts, 15.0 attempts per resolution; the non-existent
+route resolves nothing and reports it. The safe profile simulates, sends
+nothing, and reports 0 attempts and "decided nothing", which is the honest
+reading of a run that executed against no target.
+
+**What this is not.** It is not an autonomous fuzzer firing at arbitrary
+targets. It rests entirely on the existing `Run`, which requires `--authorize`
+for any non-safe profile and selects a network-less adapter for the safe one —
+the passive/active boundary K pins. J adds accounting and a metric on top of
+that boundary, not a new way through it.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:

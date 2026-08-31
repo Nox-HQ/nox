@@ -836,6 +836,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
+	recordAnalysisLimitations(allFindings, target, reasons)
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
@@ -2164,6 +2165,69 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 			cov.Record(subject, capability.SymbolResolution, capability.Negative)
 		case reach.Undetermined:
 			cov.Record(subject, capability.SymbolResolution, capability.Unknown)
+		}
+	}
+}
+
+// recordAnalysisLimitations annotates findings whose file contains a construct
+// that defeats static analysis, so "nothing else was found here" reads as what
+// it is.
+//
+// This is Milestone C's second half. The first gave nox a vocabulary for
+// incompleteness; this is the first thing that speaks it. It does not know
+// WHICH flow a reflective call defeated — that needs the taint engine to know
+// it was defeated, and the engine has no such notion — but it can say the file
+// contains a call whose target is a string at runtime, which is enough for a
+// reader to know that silence about the rest of the file is a statement about
+// what was visible.
+//
+// Only findings are annotated, which is a real limit and worth naming: a file
+// with no finding at all gets no annotation, so the four-of-five silence on the
+// hard corpus is only partly addressed. Attaching limitations to files rather
+// than findings would need a per-file record the scan result does not have, and
+// that is a larger change than this one.
+func recordAnalysisLimitations(fs *findings.FindingSet, target string, store *reasoning.Store) {
+	if fs == nil {
+		return
+	}
+	byFile := map[string][]int{}
+	items := fs.Findings()
+	for i := range items {
+		if p := items[i].Location.FilePath; p != "" {
+			byFile[p] = append(byFile[p], i)
+		}
+	}
+
+	for filePath, idx := range byFile {
+		full := filePath
+		if !filepath.IsAbs(full) {
+			full = filepath.Join(ConfigRoot(target), full)
+		}
+		if fi, err := os.Stat(full); err != nil || fi.IsDir() {
+			continue
+		}
+		content, err := os.ReadFile(full)
+		if err != nil {
+			continue
+		}
+		limits := reach.Detect(content)
+		if len(limits) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(limits))
+		for _, l := range limits {
+			names = append(names, string(l))
+		}
+		joined := strings.Join(names, ",")
+		for _, i := range idx {
+			fs.SetMetadata(i, "analysis_limitations", joined)
+		}
+		// Withheld, not refuting: a construct the analysis cannot follow is not
+		// an argument against any finding. It is a statement that the search
+		// behind any negative here was incomplete.
+		for _, i := range idx {
+			store.Withheld(SubjectForFinding(items[i]), "nox-scan", "scan",
+				"the analysis of this file is incomplete: "+limits[0].Describe())
 		}
 	}
 }
