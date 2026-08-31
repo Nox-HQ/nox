@@ -526,7 +526,9 @@ the symbol, is this deployment configured that way, does this application expose
 that entry point. Intel can say a symbol is dangerous; only the local build can
 say whether it is referenced.
 
-**Not built, deliberately:** the service side. Emitting these propositions means
+**The receiving loop is now closed** (`intel.FromRecord`): a served intelligence record becomes a `ResearchProposition`, its maturity read from the ledger's strongest live claim, its refutations carried across, its affected imports mapped into the local applicability questions. So what the service already sends — the evidence ledger, the corroboration count, the advisory's affected imports — is consumed as research the local scan tests, not as an opaque advisory it can only trust or ignore.
+
+**Still not built, deliberately:** the researcher-intake side. Emitting the richer fields — a trigger condition, a PoC hypothesis, known entry points — means
 extending the query payload and the disclosure model in a private repository,
 and it is a design conversation before it is code — what a researcher may
 assert, what publication requires, how an unpublished hypothesis reaches a user
