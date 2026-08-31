@@ -104,6 +104,27 @@ func (a *Analyzer) refute(subject evidence.Subject, kind evidence.Kind, statemen
 	a.reasoning.Refute(subject, kind, "nox-scan", "ai", statement)
 }
 
+// corroborate records what the analyzer VERIFIED about a candidate it is about
+// to report, the positive counterpart of the refiners above.
+//
+// It exists because of the same gap the secrets analyzer had before E3: every
+// drop recorded why it dropped, and every SURVIVOR recorded nothing — so a
+// reported AI finding's ledger said only "the rule fired", never what nox
+// checked before believing it. A survivor of these refiners has been checked:
+// it is in real code, not a comment or blob; an AI-002 interpolation has prompt
+// context near it; an AI-006 logging call logs a real value. Recording that is
+// what lets `nox why` answer "what supports it" with an inspection rather than
+// a tautology.
+//
+// Every claim here is a heuristic and deliberately so — a proximity check is
+// not a proof, and E3 measured that recording these does not move confidence,
+// only explanation. Aggregation takes the strongest supporting claim, and three
+// heuristics are still a heuristic. What it buys is a ledger that says what was
+// examined, not one that would have said only what would have stopped it.
+func (a *Analyzer) corroborate(subject evidence.Subject, statement string) {
+	a.reasoning.Support(subject, evidence.KindHeuristic, "nox-scan", "ai", statement, nil)
+}
+
 // Option configures an Analyzer.
 type Option func(*Analyzer)
 
@@ -238,6 +259,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				a.refute(candidate, evidence.KindHeuristic,
 					"the call executes a SQL statement, so the AI token the rule gated on is a column name inside the query text")
 				continue
+			}
+			// Survived every refiner above. Record what that means: the match
+			// was inspected and is in real code, and for the rules with a
+			// context requirement, that the context nox required was present.
+			a.corroborate(candidate, "the match was inspected and lies in code, not in a comment, string literal or embedded blob")
+			switch results[i].RuleID {
+			case "AI-002":
+				a.corroborate(candidate, "a prompt or LLM context was found near the interpolation, so it is a prompt rather than an unrelated formatted string")
+			case "AI-006":
+				a.corroborate(candidate, "the logging call carries a non-constant argument, so it logs a value that could be a prompt or response")
+			case "AI-049":
+				a.corroborate(candidate, "the call is a code-execution sink rather than a SQL statement whose AI token is a column name")
 			}
 			fs.Add(results[i])
 		}

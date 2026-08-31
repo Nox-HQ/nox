@@ -157,10 +157,16 @@ overlaps, dependency applicability. Measuring suggests a different one.
    an offline-verifiable checksum. That is a result, not a gap — it says the
    deterministic wins in this family are the structural ones (JWT, and base64/
    hex decodability), not more checksums.
-2. **AI corroboration.** The refiners exist and only refute; recording what was
-   checked about survivors is the smaller half of work already begun. It will
-   not move confidence — see above — but it makes `nox why` answer "what
-   supports it" with something other than the rule firing.
+2. **AI corroboration.** *Done.* The refiners recorded why they dropped a
+   candidate and nothing about the ones that survived, so a reported AI
+   finding's ledger said only "the rule fired". A survivor now records what was
+   checked: that it is in real code, and — for a rule with a context
+   requirement — that the context its rule needs was actually present. Measured:
+   AI-002 goes from one supporting claim to three. Heuristic, so it moves
+   explanation not confidence (E3 measured that), which is the honest ceiling
+   for a proximity check. The remaining AI work is constant evaluation — knowing
+   a prompt is a literal rather than assembled from input — which needs a
+   capability nothing implements yet.
 3. **IAC structural parsing.** Largest single piece of work, largest family, and
    the only way 490 rules ever exceed heuristic. Should be scoped as a feature.
 4. **Endpoint/API misuse** is a plugin (`nox-plugin-api-abuse`) and cannot be
