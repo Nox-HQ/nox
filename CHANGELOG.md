@@ -74,6 +74,34 @@ prove it did not silently turn an unknown into an all-clear.
   whose checksum does not verify is deterministically not a credential of that
   provider.
 
+- **A hardcoded JWT is verified by its structure** (#549). The checksum path is
+  nearly exhausted at GitHub: its CRC32 is one of very few schemes verifiable
+  offline, and most providers can only be checked by calling their API, which
+  nox's architecture forbids. The honest next deterministic signal is structural
+  — a JWT's header base64url-decodes to JSON naming a signing algorithm,
+  checkable with no network and no key. It establishes that the value *is* a
+  JWT, never that its signature holds.
+
+- **A surviving AI finding records what it was checked against** (#551). The AI
+  refiners recorded why they *dropped* a candidate and nothing about the ones
+  that survived, so a reported AI finding's ledger said only "the rule fired".
+  A survivor now carries the inspections it passed — it is in real code, and for
+  a rule with a context requirement, that context was found. Every such claim is
+  a heuristic deliberately, so this moves explanation and not confidence:
+  `nox why` answers "what supports it" with something other than a tautology.
+
+- **A served intelligence record is consumed as research, not as an opaque
+  advisory** (#550). `intel.FromRecord` turns a record into a
+  `ResearchProposition`: the affected package's import paths become the symbols
+  the local applicability test asks about, the corroboration count and refuting
+  claims cross the wire, and the maturity is read from the ledger's strongest
+  *live* claim — a retracted or disputed claim weighs nothing, the same rule the
+  kernel applies to confidence. Intel evidence is about a package; only local
+  analysis decides whether it applies here. The researcher-intake side is
+  deliberately not built: a record cannot yet carry a trigger condition or a PoC
+  hypothesis, because asserting those is a disclosure decision rather than an
+  adapter.
+
 ### Changed
 
 - **A finding now carries two confidences, and they answer different questions**
@@ -132,6 +160,28 @@ prove it did not silently turn an unknown into an all-clear.
   noun is an identifier, or code follows it inside the call (a concatenation, an
   f-string or template-literal hole, a printf argument). Five waivers in nox's
   own CLI became unnecessary and were removed.
+
+- **Hardcoded JWTs were dropped before they became findings** (#549). The
+  data-blob refiner discarded any string over 96 bytes as an opaque base64
+  payload, and a full JWT runs to hundreds of bytes — so nox could not see an
+  entire credential class. The threshold's own comment gave it away: it reasoned
+  about "a JWT header segment" and missed that the whole token is long.
+  `lexctx.LooksLikeJWT` closes it, in one place so the blob refiner and the
+  secrets analyzer cannot disagree about what a JWT is. Surfacing them then
+  exposed a dedup gap — three rules match a JWT and did not collapse — closed by
+  making `eyJ` a canonical owner prefix. End to end, a hardcoded JWT goes from
+  zero findings to one.
+
+- **Every `brace-enclosing` absence rule silently missed CloudFormation written
+  in YAML** (#552). IAC-051 and its family bound a resource block with a span
+  that walks out to the enclosing `{ }`. YAML has none, so the span came back
+  empty and the rule never fired — while the rules already listed `*.yaml` in
+  their file patterns, so the format was always in scope. An unencrypted S3
+  bucket was flagged in a JSON template and missed in the identical YAML one.
+  Fixed with an indentation-bounded *enclosing* span, a distinction a false
+  positive taught: the block span of a `Type:` anchor is the scalar alone, so a
+  sibling encryption property fell outside it and an encrypted bucket looked
+  unencrypted. The JSON path is untouched.
 
 ## [1.31.0] - 2026-08-29
 
