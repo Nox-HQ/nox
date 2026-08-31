@@ -3,6 +3,7 @@ package attack
 import (
 	"sort"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/catalog"
 )
 
@@ -105,6 +106,41 @@ type Hypothesis struct {
 	Path []PathStep `json:"path"`
 	// InvariantIDs are the invariants a successful attack would violate.
 	InvariantIDs []string `json:"invariant_ids"`
+
+	// Everything below is the deterministic handoff between passive analysis
+	// and active verification. The scan produces the hypothesis; the attack
+	// fills in the observation. Without these, `nox attack` rediscovers why nox
+	// considered this worth testing — badly, because it cannot see the evidence
+	// the scan gathered and discarded.
+
+	// Subject is the proposition this hypothesis is about, typed. A run's
+	// claims are filed against it, so a reproduction confirms this and nothing
+	// above it — see the reproduction hierarchy in nox-core.
+	Subject evidence.Subject `json:"subject,omitzero"`
+	// Evidence is what the SCAN established, carried rather than rebuilt. The
+	// runner previously seeded a ledger with one heuristic claim restating the
+	// rationale, which is a thinner record than the scan already held.
+	Evidence evidence.Ledger `json:"evidence,omitzero"`
+	// AttackerInput names the input an attacker would control — the field,
+	// parameter or header the payload enters through.
+	AttackerInput string `json:"attacker_input,omitempty"`
+	// TriggerCondition states, in words, what would have to hold for the
+	// objective to be reached. It is a suspicion, not a constraint: nox records
+	// no path constraints (see docs/research/smt-spike), so this is what a
+	// person or a producer believes rather than something solved.
+	TriggerCondition string `json:"trigger_condition,omitempty"`
+	// ExpectedOracle names what would settle this if the attack ran — chosen
+	// when the hypothesis is built rather than at fire time, so a reader of the
+	// plan knows what success would look like before anything executes.
+	ExpectedOracle string `json:"expected_oracle,omitempty"`
+	// Assumptions are the things taken as true without evidence. Stating them
+	// is what lets a reader disagree with the hypothesis rather than only with
+	// its result.
+	Assumptions []string `json:"assumptions,omitempty"`
+	// Unknowns are the questions still open about this subject, cheapest first
+	// — adjudicate.MissingEvidence, carried across the boundary. They are why
+	// this is a hypothesis rather than a conclusion.
+	Unknowns []string `json:"unknowns,omitempty"`
 }
 
 // Scenario is a reusable attack template in the V1 library: a class of exploit,
