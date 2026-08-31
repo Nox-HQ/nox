@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox-core/vulnsource"
 )
 
 // ResearchProposition is a structured claim an intelligence source makes about
@@ -203,4 +204,106 @@ func (p ResearchProposition) AppliesLocally() []string {
 		q = append(q, "does this package appear in this build at all?")
 	}
 	return q
+}
+
+// FromRecord adapts a served intelligence record into a research proposition
+// this repository can test for local applicability.
+//
+// This is the receiving end of Milestone M. The intelligence service serves
+// PUBLIC candidates carrying an evidence ledger, a corroboration count and the
+// affected import paths of the advisory they reconcile against — and the
+// milestone's shape is that local nox then determines whether any of that
+// applies here. This turns what the service sent into the questions the local
+// scan still has to answer.
+//
+// It reads only what a record carries. The richer proposition fields — a
+// trigger condition, a PoC hypothesis, known entry points — need a
+// researcher-intake path the service does not yet have, and building that is a
+// disclosure decision (what a researcher may assert, and how an unpublished
+// hypothesis reaches a user) rather than an adapter. What is here is everything
+// the wire currently carries, mapped honestly; what is not is named so.
+//
+// Maturity comes from the ledger's strongest LIVE claim, so a retracted or
+// disputed claim cannot inflate it — the same rule the kernel applies to
+// confidence. A record with no evidence maps to a hypothesis, the weakest rung,
+// rather than to nothing.
+func FromRecord(rec vulnsource.Record) ResearchProposition {
+	p := ResearchProposition{
+		Advisory: rec.ID,
+		Maturity: MaturityHypothesis,
+	}
+	if len(rec.Affected) > 0 {
+		p.Ecosystem = rec.Affected[0].Package.Ecosystem
+		p.Package = rec.Affected[0].Package.Name
+		for _, aff := range rec.Affected {
+			for _, imp := range aff.EcosystemSpecific.Imports {
+				if imp.Path != "" {
+					p.AffectedSymbols = append(p.AffectedSymbols, imp.Path)
+				}
+			}
+		}
+	}
+	if intel := rec.Intelligence; intel != nil {
+		p.ReporterCount = intel.Corroboration
+		if intel.Evidence != nil {
+			p.Maturity = maturityOf(intel.Evidence)
+			p.Attested = attested(intel.Evidence)
+			for _, c := range intel.Evidence.Claims {
+				if c.Live() && c.Refutes() {
+					p.Refutations = append(p.Refutations, c.Statement)
+				}
+			}
+		}
+	}
+	return p
+}
+
+// maturityOf reads the ledger's strongest live claim onto the research ladder.
+//
+// It is the inverse of Maturity.kind(), and it takes the STRONGEST live claim
+// because that is what the kernel's confidence aggregation does — a ledger is
+// as mature as its best-supported evidence, and a retracted claim is not part
+// of that. A ledger with only heuristics is a hypothesis; one with a controlled
+// reproduction is at that rung, and no higher unless a maintainer or advisory
+// claim outranks it.
+func maturityOf(l *evidence.Ledger) Maturity {
+	best := MaturityHypothesis
+	bestRank := -1
+	rank := map[evidence.Kind]int{
+		evidence.KindResearchHypothesis:     0,
+		evidence.KindIndependentObservation: 1,
+		evidence.KindStatic:                 2,
+		evidence.KindControlledReproduction: 3,
+		evidence.KindMaintainerConfirmed:    4,
+		evidence.KindPublicAdvisory:         5,
+	}
+	rungFor := map[evidence.Kind]Maturity{
+		evidence.KindResearchHypothesis:     MaturityHypothesis,
+		evidence.KindIndependentObservation: MaturityIndependent,
+		evidence.KindStatic:                 MaturityStatic,
+		evidence.KindControlledReproduction: MaturityReproduced,
+		evidence.KindMaintainerConfirmed:    MaturityMaintainer,
+		evidence.KindPublicAdvisory:         MaturityAdvisory,
+	}
+	for _, c := range l.Claims {
+		if !c.Live() || !c.Supports() {
+			continue
+		}
+		if r, ok := rank[c.Kind]; ok && r > bestRank {
+			bestRank = r
+			best = rungFor[c.Kind]
+		}
+	}
+	return best
+}
+
+// attested reports whether any live claim came from a source whose identity was
+// checkable — anything but the anonymous contribution source.
+func attested(l *evidence.Ledger) bool {
+	for _, c := range l.Claims {
+		if c.Live() && c.Provenance.Source != "" && c.Provenance.Source != "nox-intel" {
+			return true
+		}
+	}
+	return false
 }
