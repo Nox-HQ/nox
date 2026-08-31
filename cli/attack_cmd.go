@@ -478,6 +478,20 @@ func printRunSummary(r *attack.Result, output string) {
 	if r.BudgetStop != "" {
 		fmt.Printf("  stopped early: %s (affected traces are INCONCLUSIVE, not prevented)\n", r.BudgetStop)
 	}
+
+	// The verification-effort metric: hypotheses resolved per probe, not
+	// coverage. A run that fired many probes and decided nothing reads worse
+	// here than a small run that decided something, which is the comparison a
+	// coverage number cannot make.
+	e := r.Efficiency()
+	fmt.Printf("  resolved %d of %d hypotheses in %d attempt(s)", e.Resolved, e.Hypotheses, e.Attempts)
+	if e.Resolved > 0 {
+		fmt.Printf(" — %.1f attempts per resolution", e.AttemptsPerResolution())
+	} else {
+		fmt.Print(" — this run decided nothing")
+	}
+	fmt.Println()
+
 	fmt.Printf("[attack] wrote %s\n", output)
 }
 
