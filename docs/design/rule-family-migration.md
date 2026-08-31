@@ -162,7 +162,23 @@ overlaps, dependency applicability. Measuring suggests a different one.
    not move confidence — see above — but it makes `nox why` answer "what
    supports it" with something other than the rule firing.
 3. **IAC structural parsing.** Largest single piece of work, largest family, and
-   the only way 490 rules ever exceed heuristic. Should be scoped as a feature.
+   the only way 490 rules ever exceed heuristic. Should be scoped as a feature —
+   but measuring it first found a bounded, high-value bug that did not need the
+   feature.
+
+   Every brace-enclosing absence rule (IAC-051 and its family) silently missed
+   CloudFormation written in YAML. The span that bounds a resource block was
+   `brace-enclosing`, which walks out to the enclosing `{ }` — and YAML has
+   none, so the span came back empty and the rule never fired. Measured: IAC-051
+   flags an unencrypted S3 bucket in a JSON template and misses the identical
+   bucket in YAML. The rules already listed *.yaml in their file patterns, so
+   the format was always in scope; only the span could not reach it. Fixed with
+   an indentation-bounded ENCLOSING span — distinct from the block span, a
+   distinction a false positive taught: the block span of a `Type:` anchor is
+   the scalar alone, so a sibling encryption property fell outside it and an
+   encrypted bucket looked unencrypted. This is not the structural rewrite; it
+   is one bounded fix the rewrite would have subsumed, delivered now because it
+   is a real false negative with a reproduction.
 4. **Endpoint/API misuse** is a plugin (`nox-plugin-api-abuse`) and cannot be
    fixed from this repository. Its API-ABUSE-001 sits at precision 0.000 — never
    a true positive on the corpus — which under Milestone 10.2 makes it a
