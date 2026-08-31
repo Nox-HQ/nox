@@ -297,6 +297,14 @@ var canonicalOwners = []ownerEntry{
 	{"sk_test_", owned("SEC-030")},        // Stripe test secret key
 	{"AIza", owned("SEC-007")},            // GCP / Gemini API key
 	{"glpat-", owned("SEC-018")},          // GitLab PAT
+	// A JWT is three base64url segments starting with eyJ (`{"` encoded), and
+	// three rules match it — SEC-084, SEC-251, SEC-371. They are one credential
+	// class, so they collapse to one canonical owner the way the provider
+	// prefixes above do. SEC-371 is canonical: the tightest pattern, at high
+	// severity. This became reachable only once LooksLikeJWT stopped the
+	// data-blob refiner dropping real JWTs — before that, all three were
+	// suppressed upstream and never reached dedup.
+	{"eyJ", owned("SEC-371")}, // JSON Web Token
 }
 
 // ownersForValue returns the owner rule-ID set for a matched value, or nil if

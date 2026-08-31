@@ -414,6 +414,23 @@ func (a *Analyzer) corroborate(subject evidence.Subject, content []byte, f *find
 		}
 	}
 
+	// The second deterministic signal: a JWT's structure is offline-verifiable.
+	// The header base64url-decodes to a JSON object naming a signing algorithm,
+	// which no string that merely matches the loose eyJ....eyJ.... pattern will
+	// do by accident. It establishes that this IS a JWT, never that its
+	// signature is valid — that needs a key, and nox does not want one. A value
+	// shaped like a JWT whose header does not decode is deterministically not
+	// one, the same refutation the checksum makes for GitHub.
+	if consistent, applicable := verifyJWT(value); applicable {
+		if consistent {
+			a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the value decodes as a JWT: its header is base64url-encoded JSON naming a signing algorithm, so it is a real token rather than a lookalike", nil)
+		} else {
+			a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the value is shaped like a JWT but its header does not base64url-decode to a JSON object with an algorithm, so it is not one")
+		}
+	}
+
 	if prefix, ok := recognisedProviderPrefix(strings.TrimLeft(value, `"'`)); ok {
 		a.support(subject, "the value carries the recognised provider prefix "+prefix+
 			" and a token body, so it is not a bare vocabulary reference")

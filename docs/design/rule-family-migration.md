@@ -133,9 +133,30 @@ Recording that here rather than letting it stay unmentioned.
 The roadmap's order was: noisy AI rules, secrets, endpoint/API misuse, taint
 overlaps, dependency applicability. Measuring suggests a different one.
 
-1. **SEC checksum verification, more providers.** The only intervention proven
-   to move a finding off the heuristic floor, no new capability required, and it
-   applies to the largest family. Cheapest real progress available.
+1. **SEC deterministic verification.** Started, and it went somewhere the plan
+   did not predict.
+
+   The checksum path is nearly exhausted at GitHub: its CRC32 is one of very few
+   schemes verifiable OFFLINE, and most providers can only be verified by an API
+   call, which nox's architecture forbids. So the honest next deterministic
+   signal is not another checksum but JWT structure: a JWT's header base64url-
+   decodes to JSON naming a signing algorithm, checkable with no network and no
+   key.
+
+   Building it surfaced a silent false negative. The data-blob refiner dropped
+   any string over 96 bytes as an opaque base64 payload, and a full JWT runs to
+   hundreds of bytes — so hardcoded JWTs were discarded before they became
+   findings. nox could not see an entire credential class. `lexctx.LooksLikeJWT`
+   now stops that: a structurally valid JWT is a credential, not a blob, however
+   long. Surfacing it then exposed a dedup gap — three rules match a JWT and did
+   not collapse — closed by adding `eyJ` as a canonical owner. End to end: a
+   hardcoded JWT goes from zero findings to one, carrying a deterministic claim
+   that it decodes as a token rather than resting on the pattern.
+
+   The remaining checksum work (Stripe, Slack, npm) is not there: none publishes
+   an offline-verifiable checksum. That is a result, not a gap — it says the
+   deterministic wins in this family are the structural ones (JWT, and base64/
+   hex decodability), not more checksums.
 2. **AI corroboration.** The refiners exist and only refute; recording what was
    checked about survivors is the smaller half of work already begun. It will
    not move confidence — see above — but it makes `nox why` answer "what
