@@ -357,6 +357,18 @@ func InvariantSubject(h Hypothesis) evidence.Subject {
 // deterministic oracle can add that.
 func groundingLedger(h Hypothesis, now string) *evidence.Ledger {
 	l := &evidence.Ledger{}
+	// What the SCAN established, carried on the hypothesis rather than
+	// rediscovered. Milestone D: the scan produces the hypothesis, the attack
+	// fills in the observation, and a run that rebuilt a one-claim ledger from
+	// the rationale was discarding the better record it had been handed.
+	//
+	// Claims arrive with their own subjects — a candidate, a flow — and keep
+	// them. They are evidence about those propositions and not about this
+	// hypothesis's invariant, so re-attributing them would be exactly the
+	// promotion the reproduction hierarchy exists to prevent.
+	for _, c := range h.Evidence.Claims {
+		l.Add(c)
+	}
 	l.Add(evidence.Claim{
 		Kind:      evidence.KindHeuristic,
 		Subject:   InvariantSubject(h),

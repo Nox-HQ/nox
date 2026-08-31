@@ -453,6 +453,43 @@ with nothing to consume it. Measuring first cost an afternoon.
 The measurement is committed and re-runnable, so if the flow count rises by an
 order of magnitude the question can be re-asked rather than re-argued.
 
+## Milestone D — landed
+
+The scan produces the hypothesis; the attack fills in the observation. Before
+this, the attack rediscovered it, and badly: the runner seeded its ledger with a
+single heuristic claim restating the rationale, while the scan had already
+gathered better evidence and thrown it away — the ledger is out-of-band and dies
+with the scan.
+
+`Hypothesis` now carries the subject, the scan's ledger, the attacker-controlled
+input, a suspected trigger condition, the expected oracle, the assumptions, and
+the open questions. `groundingLedger` uses what it was handed instead of
+rebuilding a thinner version, and carried claims keep their own subjects — they
+are evidence about a candidate or a flow, not about this hypothesis's invariant,
+and re-attributing them would be exactly the promotion G exists to prevent.
+
+**The handoff is the Track I artifact.** `nox attack plan --evidence
+evidence.json` reads what `nox scan --evidence-out` kept. That was not planned:
+the artifact was built for replay, and it turns out to hold precisely what D
+asks to cross the boundary — input identity, claims with provenance, subjects,
+capability state. Measured on the `core/confirm` fixtures: without it a
+hypothesis carries no subject, no claims and no unknowns; with it, a typed
+subject, the scan's claims, six open questions and three assumptions.
+
+**Assumptions are the part worth arguing with.** They name what nox did NOT
+establish — that the entry point is attacker-reachable, that the static path is
+the one that executes, that nothing showed the code reachable at runtime, that
+the file carried an analysis limitation. Stating them is what lets a reader
+disagree with the hypothesis rather than only with its result.
+
+Everything is optional. A caller with no artifact gets what it had before, which
+keeps `attack plan` usable from a findings file alone — its offline case.
+
+The `trigger_condition` says "suspected" in the string, deliberately. nox
+records no path constraints at all (see the SMT spike), so this is what the
+scenario believes rather than something derived, and it should not read as a
+precision nox does not have.
+
 ## Proposed order
 
 The proposed A→M sequence is sound. Two adjustments, both from the gaps above:

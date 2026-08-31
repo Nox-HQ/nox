@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -54,6 +55,22 @@ type PlanInput struct {
 	Inventory *ai.Inventory
 	// Now is an RFC3339 timestamp stamped onto the plan.
 	Now string
+
+	// Evidence returns what the scan established about a finding, and the
+	// subject its claims were filed against. Optional: a caller that has no
+	// reasoning store passes nil and every hypothesis carries an empty ledger,
+	// which is the old behaviour.
+	//
+	// It is a function rather than a map because the caller owns the subject
+	// derivation. Duplicating that here would put two implementations of
+	// "which subject is this finding about" in the tree, and they would
+	// disagree the first time one changed.
+	Evidence func(findings.Finding) (evidence.Subject, evidence.Ledger)
+
+	// Unknowns returns the open questions about a subject, cheapest first —
+	// adjudicate.MissingEvidence, supplied by the caller so this package does
+	// not depend on the capability registry. Optional.
+	Unknowns func(evidence.Subject) []string
 }
 
 // Plan is the attack blueprint: the assets and boundaries derived from the scan,
@@ -139,7 +156,9 @@ func BuildPlan(in PlanInput) (*Plan, error) {
 		fpShort := shortID(f.Fingerprint)
 		for _, sid := range []string{ScenarioPIDirect, ScenarioPIIndirect} {
 			usedScenarios[sid] = true
-			hyps = append(hyps, injectionHypothesis(sid, f, entry, fpShort))
+			h := injectionHypothesis(sid, f, entry, fpShort)
+			attachEvidence(&h, f, in)
+			hyps = append(hyps, h)
 		}
 	}
 
@@ -235,7 +254,78 @@ func injectionHypothesis(scenarioID string, f findings.Finding, entry, fpShort s
 		EntryPoint:          entry,
 		Path:                path,
 		InvariantIDs:        invIDs,
+		AttackerInput:       attackerInputOf(f),
+		TriggerCondition:    triggerConditionOf(f, scen),
+		ExpectedOracle:      scen.Category,
+		Assumptions:         assumptionsOf(f, entry),
 	}
+}
+
+// attachEvidence carries what the scan established onto the hypothesis.
+//
+// This is the acceptance criterion for Milestone D: given a scan result, `nox
+// attack` must be able to consume a hypothesis without rediscovering why nox
+// considered it worth testing. The runner previously seeded its ledger with a
+// single heuristic claim restating the rationale — a thinner record than the
+// scan already held and then threw away.
+//
+// A caller that supplies neither function gets exactly the old behaviour: an
+// empty ledger, no subject, no unknowns. That keeps `nox attack plan` usable
+// from a findings file alone, which is how it is used offline.
+func attachEvidence(h *Hypothesis, f findings.Finding, in PlanInput) {
+	if in.Evidence != nil {
+		subject, ledger := in.Evidence(f)
+		h.Subject = subject
+		h.Evidence = ledger
+	}
+	if in.Unknowns != nil && !h.Subject.Zero() {
+		h.Unknowns = in.Unknowns(h.Subject)
+	}
+}
+
+// attackerInputOf names the input an attacker would control, from what the
+// finding recorded. Empty when the finding does not say — an invented field
+// name would read as knowledge.
+func attackerInputOf(f findings.Finding) string {
+	for _, k := range []string{"source_var", "field", "parameter", "source"} {
+		if v := f.Metadata[k]; v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// triggerConditionOf states what would have to hold, in words.
+//
+// A suspicion, not a constraint. nox records no path constraints at all (see
+// docs/research/smt-spike/RESULT.md), so this is what the scenario believes
+// rather than something derived, and it says so rather than implying a
+// precision it does not have.
+func triggerConditionOf(f findings.Finding, scen Scenario) string {
+	input := attackerInputOf(f)
+	if input == "" {
+		input = "the attacker-controlled input"
+	}
+	return "suspected: " + input + " reaches the " + scen.Category +
+		" sink without being neutralised for that context"
+}
+
+// assumptionsOf states what the hypothesis takes as true without evidence.
+//
+// Naming them is what lets a reader disagree with the hypothesis rather than
+// only with its result. Every entry here is something nox did NOT establish.
+func assumptionsOf(f findings.Finding, entry string) []string {
+	out := []string{
+		"the entry point " + entry + " is reachable by an attacker",
+		"the code path observed statically is the one that executes",
+	}
+	if f.Metadata["reach_level"] == "" {
+		out = append(out, "nothing established that this code is reachable at runtime")
+	}
+	if lim := f.Metadata["analysis_limitations"]; lim != "" {
+		out = append(out, "the analysis of this file was incomplete ("+lim+")")
+	}
+	return out
 }
 
 // toolCapabilities classifies one tool by name and capability tags into whether

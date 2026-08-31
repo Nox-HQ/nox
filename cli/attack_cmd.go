@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox/core/replay"
+
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/attack"
@@ -84,6 +86,8 @@ const attackPlanUsage = `Usage: nox attack plan [path] [flags]
 Flags:
   --findings <path>   findings.json from a prior scan (default findings.json)
   --inventory <path>  ai.inventory.json from a prior scan (default ai.inventory.json)
+  --evidence <path>   the evidence artifact a scan was asked to keep; carries
+                      what that scan established onto each hypothesis
   --output <path>     write the plan here (default attack.plan.json)
   --json              print the plan as JSON instead of a summary
                       (the plan is written to --output either way)
@@ -96,11 +100,13 @@ func runAttackPlan(args []string) int {
 	var (
 		findingsIn  string
 		inventoryIn string
+		evidenceIn  string
 		output      string
 		asJSON      bool
 	)
 	fs.StringVar(&findingsIn, "findings", "findings.json", "findings.json from a prior nox scan")
 	fs.StringVar(&inventoryIn, "inventory", "ai.inventory.json", "ai.inventory.json from a prior nox scan")
+	fs.StringVar(&evidenceIn, "evidence", "", "the evidence artifact a scan was asked to keep; carries what that scan established onto each hypothesis")
 	fs.StringVar(&output, "output", defaultPlanPath, "write the plan here")
 	fs.BoolVar(&asJSON, "json", false, "print the plan as JSON instead of a summary")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, attackPlanUsage) }
@@ -131,12 +137,31 @@ func runAttackPlan(args []string) int {
 		fmt.Fprintf(os.Stderr, "warning: %v — tool-abuse and exfiltration scenarios will be skipped\n", invErr)
 	}
 
-	plan, err := attack.BuildPlan(attack.PlanInput{
+	// Milestone D's handoff. The evidence a scan gathers lives out-of-band and
+	// is discarded when the scan ends, so a plan built from findings.json alone
+	// cannot see why nox believed anything. `nox scan --evidence-out` keeps it,
+	// and this reads it — the artifact built for replay turns out to be exactly
+	// the scan-to-attack handoff.
+	//
+	// Optional throughout: without it every hypothesis carries an empty ledger,
+	// which is the behaviour before this existed and keeps `attack plan` usable
+	// from a findings file alone.
+	in := attack.PlanInput{
 		Root:      root,
 		Findings:  found,
 		Inventory: inv,
 		Now:       time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if evidenceIn != "" {
+		art, aerr := replay.Load(evidenceIn)
+		if aerr != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v — hypotheses will carry no evidence\n", aerr)
+		} else {
+			in.Evidence = evidenceFromArtifact(art)
+			in.Unknowns = unknownsFromArtifact(art)
+		}
+	}
+	plan, err := attack.BuildPlan(in)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: building plan: %v\n", err)
 		return 2
@@ -857,4 +882,56 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// evidenceFromArtifact adapts a Track I evidence artifact into the lookup
+// BuildPlan wants: given a finding, the subject its claims were filed against
+// and the ledger of those claims.
+//
+// The artifact records verdicts by fingerprint and claims by subject, so the
+// join is fingerprint → subject → ledger. A finding the artifact does not know
+// yields the zero subject and an empty ledger, which is honest: this scan
+// established nothing about it.
+func evidenceFromArtifact(a *replay.Artifact) func(findings.Finding) (evidence.Subject, evidence.Ledger) {
+	bySubject := make(map[string]evidence.Subject, len(a.Findings))
+	for _, v := range a.Findings {
+		bySubject[v.Fingerprint] = v.Subject
+	}
+	return func(f findings.Finding) (evidence.Subject, evidence.Ledger) {
+		s, ok := bySubject[f.Fingerprint]
+		if !ok {
+			return evidence.Subject{}, evidence.Ledger{}
+		}
+		l, _ := a.LedgerFor(s)
+		return s, l
+	}
+}
+
+// unknownsFromArtifact reports the questions the scan left open, cheapest
+// first, from the capability state it recorded.
+//
+// A capability that answered nothing is an open question whether or not
+// anything provides it, and both are worth carrying: one tells the reader what
+// to install, the other tells them what to run. The order is the artifact's,
+// which is capability.All()'s — the same cheapest-first ordering
+// adjudicate.MissingEvidence uses.
+func unknownsFromArtifact(a *replay.Artifact) func(evidence.Subject) []string {
+	var open []string
+	for _, c := range a.Capabilities {
+		if c.Answered > 0 {
+			continue
+		}
+		switch {
+		case !c.Provided:
+			open = append(open, c.Capability+": nothing on that installation could establish it")
+		case c.Inconclusive > 0:
+			open = append(open, c.Capability+": ran and could not determine anything")
+		default:
+			open = append(open, c.Capability+": nothing in that scan put the question")
+		}
+	}
+	// Scan-wide rather than per-subject: the artifact records capability counts
+	// across the scan, not per finding. Saying so beats inventing a per-subject
+	// breakdown the artifact cannot support.
+	return func(evidence.Subject) []string { return open }
 }
