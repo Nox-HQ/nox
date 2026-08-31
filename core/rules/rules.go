@@ -166,6 +166,28 @@ type Rule struct {
 	// because getting it wrong in this direction HIDES findings, and a default
 	// that hides is worse than one that is explicit at every site that needs it.
 	AbsenceRequireAll bool `yaml:"absence_require_all"`
+	// AbsenceCompanion* make the rule CROSS-RESOURCE: what the subject needs is
+	// not a property on it but a different object bound to it — a flow log for
+	// a VPC, a PodDisruptionBudget for a workload, a ResourceQuota for a
+	// Namespace, an auditingSettings child for a SQL server.
+	//
+	// These rules cannot be expressed by the property path above, because the
+	// property is on another resource; and the text form they replace searches
+	// the whole file for the companion's NAME, which cannot see whether the
+	// companion binds to THIS subject, cannot report more than one subject, and
+	// is satisfied by any text that contains the word.
+	//
+	// AbsenceCompanionLink names the binding mechanism ("ref", "selector",
+	// "namespace", "child") — see structural.Link. It is stated per rule and
+	// never inferred, because resolving with the wrong mechanism answers "not
+	// bound" for every subject, which for an absence rule invents a finding on
+	// each of them.
+	//
+	// AbsenceCompanionPath applies to "ref" only: where inside the companion
+	// the reference to the subject is written.
+	AbsenceCompanionTypes []string `yaml:"absence_companion_types"`
+	AbsenceCompanionLink  string   `yaml:"absence_companion_link"`
+	AbsenceCompanionPath  string   `yaml:"absence_companion_path"`
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.

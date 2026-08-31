@@ -119,8 +119,8 @@ func armElements(res *yaml.Node) []*yaml.Node {
 // same reasoning as maxAliasDepth: the document is attacker-controllable.
 func armResources(r *yaml.Node) []Resource {
 	var out []Resource
-	var walk func(n *yaml.Node, depth int)
-	walk = func(n *yaml.Node, depth int) {
+	var walk func(n *yaml.Node, parent *yaml.Node, parentType string, depth int)
+	walk = func(n *yaml.Node, parent *yaml.Node, parentType string, depth int) {
 		if depth > maxAliasDepth {
 			return
 		}
@@ -129,16 +129,19 @@ func armResources(r *yaml.Node) []Resource {
 			if typ == "" {
 				continue
 			}
-			out = append(out, Resource{
-				Family: FamilyARM,
-				Type:   typ,
-				Name:   scalarAt(el, "name"),
-				Props:  el,
-				Line:   el.Line,
-			})
-			walk(el, depth+1)
+			child := Resource{
+				Family:     FamilyARM,
+				Type:       typ,
+				Name:       scalarAt(el, "name"),
+				Props:      el,
+				Line:       el.Line,
+				Parent:     parent,
+				ParentType: parentType,
+			}
+			out = append(out, child)
+			walk(el, el, child.QualifiedType(), depth+1)
 		}
 	}
-	walk(r, 0)
+	walk(r, nil, "", 0)
 	return out
 }

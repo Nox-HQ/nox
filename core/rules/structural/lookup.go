@@ -147,3 +147,24 @@ func isSet(n *yaml.Node) bool {
 	}
 	return true
 }
+
+// nodeAt resolves a plain dotted path to its node, or nil.
+//
+// Wildcards are deliberately not accepted: this addresses ONE node — the slot a
+// companion writes its reference into — and a path that fans out has no single
+// node to return. Callers that ask a yes/no question use Has or HasAll.
+func nodeAt(props *yaml.Node, path string) *yaml.Node {
+	n := resolve(props)
+	for _, seg := range splitPath(path) {
+		if seg == "[]" || seg == "*" {
+			return nil
+		}
+		if n = mapValue(n, seg); n == nil {
+			return nil
+		}
+	}
+	if !isSet(n) {
+		return nil
+	}
+	return n
+}

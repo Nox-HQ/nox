@@ -386,15 +386,32 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 // structuralAbsence evaluates a rule's structural descriptor, returning the
 // results and whether the verdict decided the question.
 //
-// ok=false means fall back to text matching. It covers three distinct cases
+// ok=false means fall back to text matching. It covers four distinct cases
 // that must all degrade the same way: the rule has no descriptor, the content
-// did not parse, or it parsed into a schema this build does not understand.
+// did not parse, it parsed into a schema this build does not understand, or —
+// for a cross-resource rule — a companion's binding could not be resolved.
 func structuralAbsence(content []byte, rule *Rule) ([]MatchResult, bool) {
-	if len(rule.AbsenceResourceTypes) == 0 || len(rule.AbsencePropertyPath) == 0 {
+	if len(rule.AbsenceResourceTypes) == 0 {
 		return nil, false
 	}
-	v := structural.Evaluate(content, rule.AbsenceResourceTypes,
-		rule.AbsencePropertyPath, rule.AbsenceRequireAll)
+
+	var v structural.Verdict
+	switch {
+	case len(rule.AbsenceCompanionTypes) > 0:
+		// Cross-resource: the requirement is another object bound to the
+		// subject, not a property on it.
+		v = structural.EvaluateCompanion(content, rule.AbsenceResourceTypes,
+			structural.Companion{
+				Types: rule.AbsenceCompanionTypes,
+				Link:  structural.Link(rule.AbsenceCompanionLink),
+				Path:  rule.AbsenceCompanionPath,
+			})
+	case len(rule.AbsencePropertyPath) > 0:
+		v = structural.Evaluate(content, rule.AbsenceResourceTypes,
+			rule.AbsencePropertyPath, rule.AbsenceRequireAll)
+	default:
+		return nil, false
+	}
 	if !v.Decided {
 		return nil, false
 	}

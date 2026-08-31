@@ -1,0 +1,28 @@
+# True positive for cross-resource resolution, and the finding the text path is
+# structurally incapable of producing.
+#
+# This template DOES contain a flow log — so IAC-059's text form searches the
+# file, finds "FlowLog", and reports nothing at all. But the flow log watches
+# WatchedVpc; UnwatchedVpc has no monitoring whatsoever. Resolving which VPC
+# the flow log names is the only way to see that.
+#
+# If a future change silences this, the rule has gone back to counting the word
+# rather than resolving the resource.
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  WatchedVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+  UnwatchedVpc:  # nox-expect: IAC-059
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+
+  Logs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Ref WatchedVpc
+      ResourceType: VPC
+      TrafficType: ALL

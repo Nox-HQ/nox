@@ -68,7 +68,11 @@ func TestAbsenceRules_HardenedCleanInsecureFlagged(t *testing.T) {
 		},
 		{
 			id: "IAC-059", path: "vpc.json",
-			hardened: `{"Resources":{"V":{"Type":"AWS::EC2::VPC","Properties":{}},"F":{"Type":"AWS::EC2::FlowLog","Properties":{}}}}`,
+			// The flow log must REFERENCE the VPC. It used to be enough for one
+			// to exist with empty properties, which is what the text path could
+			// see; a flow log that targets nothing monitors nothing, and
+			// TestCompanionRefusesAnUnboundFlowLog holds that it is flagged.
+			hardened: `{"Resources":{"V":{"Type":"AWS::EC2::VPC","Properties":{}},"F":{"Type":"AWS::EC2::FlowLog","Properties":{"ResourceId":{"Ref":"V"},"TrafficType":"ALL"}}}}`,
 			insecure: `{"Resources":{"V":{"Type":"AWS::EC2::VPC","Properties":{}}}}`,
 		},
 		{

@@ -14,6 +14,21 @@ type Hit struct {
 	Property string
 	// Family is the schema the resource was read from.
 	Family Family
+
+	// Companion, when set, is the resource type whose existence and linkage the
+	// rule required — a PodDisruptionBudget for a workload, a flow log for a
+	// VPC. It switches Statement to the cross-resource sentences, because what
+	// was established is about the document set and not about this resource's
+	// own properties.
+	Companion string
+	// CompanionName names the bound companion on a Present hit.
+	CompanionName string
+	// Unlinked distinguishes the two ways a companion can be missing: false
+	// means the document set declares none of that type at all, true means it
+	// declares one that binds to something else. The second is the finding no
+	// text search can produce, and reading it as the first would understate
+	// what parsing established.
+	Unlinked bool
 }
 
 // Verdict is the outcome of evaluating an absence rule structurally.
@@ -102,10 +117,36 @@ func (h Hit) Statement(absent bool) string {
 	if name == "" {
 		name = "an unnamed resource"
 	}
+	if h.Companion != "" {
+		return h.companionStatement(name, absent)
+	}
 	if absent {
 		return fmt.Sprintf("the %s resource %q (%s) was parsed and sets no %s",
 			h.Family, name, h.Type, h.Property)
 	}
 	return fmt.Sprintf("the %s resource %q (%s) sets %s, which the rule's pattern did not match",
 		h.Family, name, h.Type, h.Property)
+}
+
+// companionStatement renders a cross-resource outcome.
+//
+// It says "the document set" rather than "the cluster" on purpose: what was
+// enumerated is one file's resources, and a companion in a second file is
+// outside what this evidence covers. Overstating that scope is the way a
+// per-file parse turns into a claim about a deployment.
+func (h Hit) companionStatement(name string, absent bool) string {
+	if !absent {
+		companion := h.CompanionName
+		if companion == "" {
+			companion = "an unnamed resource"
+		}
+		return fmt.Sprintf("the %s resource %q (%s) is bound to the %s %q, a linkage the rule's pattern could not check",
+			h.Family, name, h.Type, h.Companion, companion)
+	}
+	if h.Unlinked {
+		return fmt.Sprintf("the %s resource %q (%s) was parsed, and every %s in the document set binds to a different resource",
+			h.Family, name, h.Type, h.Companion)
+	}
+	return fmt.Sprintf("the %s resource %q (%s) was parsed, and the document set declares no %s",
+		h.Family, name, h.Type, h.Companion)
 }
