@@ -21,6 +21,15 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 			info.shellTrue = true
 		}
 	}
+	// The program is the first positional argument, read RAW so the string
+	// literal naming it survives.
+	for _, p := range rawParts {
+		if isKeywordArg(p) {
+			continue
+		}
+		info.shellProgram = namesShellProgram(p)
+		break
+	}
 
 	seen := map[string]struct{}{}
 	for idx, p := range codeParts {
@@ -155,4 +164,70 @@ func isShellTrue(lang langKind, p string) bool {
 		return strings.Contains(compact, "shell:true")
 	}
 	return strings.Contains(compact, "shell=True")
+}
+
+// shellPrograms are the interpreters whose presence as the PROGRAM voids the
+// arg-vector exemption.
+//
+// The exemption's premise is that a tainted value passed as its own argv
+// element is never parsed by a shell. Running a shell AS the program is exactly
+// how that premise fails, and `sh -c "…"` is the ordinary way a command line is
+// executed through an argv-taking API — so the exemption was silencing the
+// classic injection rather than the safe case it was written for.
+//
+// Basename-matched, so `/bin/sh` and `/usr/bin/env` resolve. `env` is included
+// because `env sh -c …` and `env VAR=1 sh -c …` reach a shell just as directly.
+var shellPrograms = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "dash": true, "ash": true,
+	"ksh": true, "csh": true, "tcsh": true, "fish": true, "busybox": true,
+	"cmd": true, "cmd.exe": true, "powershell": true, "powershell.exe": true,
+	"pwsh": true, "env": true,
+}
+
+// namesShellProgram reports whether a call's first positional argument names a
+// shell, either directly (`spawn("sh", …)`) or as the head of an argv vector
+// (`subprocess.run(["sh", "-c", …])`).
+//
+// It reads the RAW argument text, literals intact, because the program name is
+// a string literal and the code view blanks it.
+func namesShellProgram(raw string) bool {
+	arg := strings.TrimSpace(raw)
+	if arg == "" {
+		return false
+	}
+	// An argv vector: take its first element.
+	if strings.HasPrefix(arg, "[") || strings.HasPrefix(arg, "(") {
+		inner := strings.TrimLeft(arg, "[(")
+		if i := strings.IndexAny(inner, ",])"); i >= 0 {
+			arg = inner[:i]
+		} else {
+			arg = inner
+		}
+	}
+	return shellPrograms[shellBasename(unquoteLiteral(arg))]
+}
+
+// unquoteLiteral strips one layer of surrounding quotes, returning "" when the
+// text is not a quoted literal — an identifier naming the program is unknown,
+// not a shell.
+func unquoteLiteral(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) < 2 {
+		return ""
+	}
+	q := s[0]
+	if (q != '"' && q != '\'' && q != '`') || s[len(s)-1] != q {
+		return ""
+	}
+	return s[1 : len(s)-1]
+}
+
+// shellBasename reduces a program path to the executable name, so `/bin/sh`
+// and `sh` are the same program.
+func shellBasename(p string) string {
+	p = strings.TrimSpace(p)
+	if i := strings.LastIndexAny(p, `/\`); i >= 0 {
+		p = p[i+1:]
+	}
+	return strings.ToLower(p)
 }

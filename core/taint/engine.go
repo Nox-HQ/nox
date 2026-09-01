@@ -60,6 +60,15 @@ type SinkArgInfo struct {
 	// positional argument. For cursor.execute the SQL string is arg 0; a tainted
 	// value only in arg 1 (the params tuple) is the SAFE parameterized form.
 	FirstArgTainted bool
+	// ShellProgram records that the program being executed is itself a shell:
+	// `subprocess.run(["sh", "-c", cmd])`, `spawn("bash", ["-c", cmd])`.
+	//
+	// The arg-vector exemption exists because passing a tainted value as its own
+	// argv element means no shell parses it. Naming a shell as the PROGRAM is
+	// precisely how that premise fails, and it is the ordinary way a command is
+	// run through an argv-taking API — so without this the exemption silenced
+	// the classic injection it was never meant to cover.
+	ShellProgram bool
 	// PositionalVars lists, per positional argument slot (index 0 = first
 	// positional), the variable identifiers appearing in that slot. It lets the
 	// interprocedural summary pass map a caller's argument position to the
