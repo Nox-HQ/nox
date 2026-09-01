@@ -55,6 +55,13 @@ type iacRule struct {
 	// path. A pod is hardened only when every container is; "any" would call a
 	// pod with one hardened container safe.
 	absenceRequireAll bool
+	// absenceCompanion* make the rule CROSS-RESOURCE: what the subject needs is
+	// a different object bound to it, not a property on itself. See
+	// rules.Rule.AbsenceCompanionTypes and structural.Companion for the link
+	// kinds and why the mechanism is stated per rule.
+	absenceCompanionTypes []string
+	absenceCompanionLink  string
+	absenceCompanionPath  string
 }
 
 // builtinBaseIaCRules returns the original set of IaC security rules (IAC-001 to IAC-185).
@@ -730,8 +737,17 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceAnchor:   `(?i)AWS::EC2::VPC\b`,
 			absenceProperty: `(?i)FlowLog`,
 			absenceSpan:     "file",
-			description:     "CloudFormation VPC without flow logs",
-			cwe:             "CWE-778", keywords: []string{"AWS::EC2::VPC", "FlowLog", "TrafficType"},
+			// A flow log is a separate resource that names its VPC in
+			// Properties.ResourceId. The text form is satisfied by any
+			// occurrence of "FlowLog" — including a `FlowLogsEnabled: false`
+			// tag, and including a flow log for a VPC this template does not
+			// create.
+			absenceResourceTypes:  []string{"AWS::EC2::VPC"},
+			absenceCompanionTypes: []string{"AWS::EC2::FlowLog"},
+			absenceCompanionLink:  "ref",
+			absenceCompanionPath:  "Properties.ResourceId",
+			description:           "CloudFormation VPC without flow logs",
+			cwe:                   "CWE-778", keywords: []string{"AWS::EC2::VPC", "FlowLog", "TrafficType"},
 			filePatterns: []string{"*.template", "*.json", "*.yaml", "*.yml"},
 			tags:         []string{"iac", "cloudformation", "aws", "logging"},
 			remediation:  "Add an AWS::EC2::FlowLog resource for every VPC to capture network traffic metadata. Flow logs are essential for security monitoring and incident response.",
@@ -952,8 +968,15 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceAnchor:   `(?i)AWS::SecretsManager::Secret\b`,
 			absenceProperty: `(?i)RotationRules|RotationSchedule`,
 			absenceSpan:     "file",
-			description:     "CloudFormation Secrets Manager secret without rotation rules",
-			cwe:             "CWE-324", keywords: []string{"AWS::SecretsManager::Secret", "RotationRules"},
+			// RotationRules live on an AWS::SecretsManager::RotationSchedule,
+			// never on the secret, so no lookup within the secret can find
+			// them. The schedule names its secret in Properties.SecretId.
+			absenceResourceTypes:  []string{"AWS::SecretsManager::Secret"},
+			absenceCompanionTypes: []string{"AWS::SecretsManager::RotationSchedule"},
+			absenceCompanionLink:  "ref",
+			absenceCompanionPath:  "Properties.SecretId",
+			description:           "CloudFormation Secrets Manager secret without rotation rules",
+			cwe:                   "CWE-324", keywords: []string{"AWS::SecretsManager::Secret", "RotationRules"},
 			filePatterns: []string{"*.template", "*.json", "*.yaml", "*.yml"},
 			tags:         []string{"iac", "cloudformation", "aws", "secrets"},
 			remediation:  "Add RotationRules with AutomaticallyAfterDays to Secrets Manager secrets. Automatic rotation limits the lifetime of compromised credentials.",
@@ -1016,8 +1039,14 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceAnchor:   `(?i)Microsoft\.Sql/servers`,
 			absenceProperty: `(?i)auditingSettings`,
 			absenceSpan:     "file",
-			description:     "Azure SQL Server without auditing settings",
-			cwe:             "CWE-778", keywords: []string{"Microsoft.Sql/servers", "auditingSettings"},
+			// auditingSettings is a CHILD resource of the server, declared
+			// either nested in its `resources` array or at the top level under
+			// a "<server>/<name>" name.
+			absenceResourceTypes:  []string{"Microsoft.Sql/servers"},
+			absenceCompanionTypes: []string{"Microsoft.Sql/servers/auditingSettings"},
+			absenceCompanionLink:  "child",
+			description:           "Azure SQL Server without auditing settings",
+			cwe:                   "CWE-778", keywords: []string{"Microsoft.Sql/servers", "auditingSettings"},
 			filePatterns: []string{"*.json", "azuredeploy.json", "*.bicep"},
 			tags:         []string{"iac", "arm", "azure", "database", "logging"},
 			remediation:  "Enable auditing on Azure SQL Server with a retention period of at least 90 days. Send audit logs to a storage account or Log Analytics workspace.",
@@ -1035,11 +1064,14 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-086", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?i)Microsoft\.Sql/servers`,
-			absenceProperty: `(?i)firewallRules`,
-			absenceSpan:     "file",
-			description:     "Azure SQL Server without firewall rules",
-			cwe:             "CWE-284", keywords: []string{"Microsoft.Sql/servers", "firewallRules"},
+			absenceAnchor:         `(?i)Microsoft\.Sql/servers`,
+			absenceProperty:       `(?i)firewallRules`,
+			absenceSpan:           "file",
+			absenceResourceTypes:  []string{"Microsoft.Sql/servers"},
+			absenceCompanionTypes: []string{"Microsoft.Sql/servers/firewallRules"},
+			absenceCompanionLink:  "child",
+			description:           "Azure SQL Server without firewall rules",
+			cwe:                   "CWE-284", keywords: []string{"Microsoft.Sql/servers", "firewallRules"},
 			filePatterns: []string{"*.json", "azuredeploy.json", "*.bicep"},
 			tags:         []string{"iac", "arm", "azure", "database", "network"},
 			remediation:  "Configure firewall rules to restrict SQL Server access to specific IP ranges. Avoid using 0.0.0.0 as start IP which allows all Azure services.",
@@ -1586,8 +1618,14 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceAnchor:   `(?i)kind\s*:\s*(Deployment|StatefulSet)`,
 			absenceProperty: `(?i)PodDisruptionBudget`,
 			absenceSpan:     "file",
-			description:     "Kubernetes workload without PodDisruptionBudget",
-			cwe:             "CWE-693", keywords: []string{"PodDisruptionBudget"},
+			// A budget binds to a workload through its label selector, which
+			// the text form cannot see: one PodDisruptionBudget anywhere in the
+			// file silences the rule for every workload in it, selected or not.
+			absenceResourceTypes:  []string{"Deployment", "StatefulSet"},
+			absenceCompanionTypes: []string{"PodDisruptionBudget"},
+			absenceCompanionLink:  "selector",
+			description:           "Kubernetes workload without PodDisruptionBudget",
+			cwe:                   "CWE-693", keywords: []string{"PodDisruptionBudget"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "availability"},
 			remediation:  "Create a PodDisruptionBudget for each Deployment and StatefulSet to ensure minimum availability during voluntary disruptions like node drains.",
@@ -1598,8 +1636,13 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceAnchor:   `(?i)kind\s*:\s*Namespace`,
 			absenceProperty: `(?i)ResourceQuota`,
 			absenceSpan:     "file",
-			description:     "Kubernetes namespace without ResourceQuota",
-			cwe:             "CWE-770", keywords: []string{"Namespace", "ResourceQuota"},
+			// A quota is scoped to a namespace by metadata.namespace, so a
+			// quota for team-b does not bound team-a however near it sits.
+			absenceResourceTypes:  []string{"Namespace"},
+			absenceCompanionTypes: []string{"ResourceQuota"},
+			absenceCompanionLink:  "namespace",
+			description:           "Kubernetes namespace without ResourceQuota",
+			cwe:                   "CWE-770", keywords: []string{"Namespace", "ResourceQuota"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "resources"},
 			remediation:  "Create ResourceQuota objects for each namespace to prevent any single namespace from consuming excessive cluster resources.",
@@ -1607,11 +1650,14 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-134", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?i)kind\s*:\s*Namespace`,
-			absenceProperty: `(?i)LimitRange`,
-			absenceSpan:     "file",
-			description:     "Kubernetes namespace without LimitRange",
-			cwe:             "CWE-770", keywords: []string{"Namespace", "LimitRange"},
+			absenceAnchor:         `(?i)kind\s*:\s*Namespace`,
+			absenceProperty:       `(?i)LimitRange`,
+			absenceSpan:           "file",
+			absenceResourceTypes:  []string{"Namespace"},
+			absenceCompanionTypes: []string{"LimitRange"},
+			absenceCompanionLink:  "namespace",
+			description:           "Kubernetes namespace without LimitRange",
+			cwe:                   "CWE-770", keywords: []string{"Namespace", "LimitRange"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "resources"},
 			remediation:  "Create LimitRange objects for namespaces to set default resource requests and limits for containers that do not specify their own.",
@@ -2248,6 +2294,9 @@ func convertIaCRules(defs []iacRule) []rules.Rule {
 			r.AbsenceResourceTypes = defs[i].absenceResourceTypes
 			r.AbsencePropertyPath = defs[i].absencePropertyPath
 			r.AbsenceRequireAll = defs[i].absenceRequireAll
+			r.AbsenceCompanionTypes = defs[i].absenceCompanionTypes
+			r.AbsenceCompanionLink = defs[i].absenceCompanionLink
+			r.AbsenceCompanionPath = defs[i].absenceCompanionPath
 			// Absence rules must NOT be keyword-gated. The engine skips a rule
 			// when none of its keywords appear in the file, but these rules'
 			// keywords name the hardening property — which is precisely what is

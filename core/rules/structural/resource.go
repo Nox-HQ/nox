@@ -46,6 +46,37 @@ type Resource struct {
 	Props *yaml.Node
 	// Line is the 1-based line the resource is declared on.
 	Line int
+	// Parent is the Props node of the resource this one is declared INSIDE,
+	// or nil for a top-level resource. ARM is the only schema that nests, and
+	// nesting is itself a binding: a SQL server's `auditingSettings` declared
+	// inside the server's `resources` array belongs to that server and to no
+	// other, whatever either of them is named.
+	//
+	// Identity is the parent's node pointer rather than its name, because ARM
+	// names are usually expressions (`[parameters('serverName')]`) that this
+	// package will not evaluate. Comparing pointers answers "is this the same
+	// declaration?" exactly, and yaml.v3 allocates one node per declaration, so
+	// sorting the resource slice cannot invalidate it.
+	Parent *yaml.Node
+	// ParentType is the parent's Type, kept so QualifiedType can spell a
+	// nested child the way a top-level declaration of it would be spelled.
+	ParentType string
+}
+
+// QualifiedType returns the type a rule author writes to name this resource.
+//
+// ARM allows one child resource to be declared two ways — nested inside its
+// parent as `type: auditingSettings`, or at the top level as
+// `type: Microsoft.Sql/servers/auditingSettings` — and they mean the same
+// thing. A rule naming the child must match both, so a nested type is
+// qualified with its parent's. A type that already carries a "/" is left
+// alone: ARM permits the fully-qualified spelling in the nested position too,
+// and qualifying it twice would match nothing.
+func (r Resource) QualifiedType() string {
+	if r.ParentType == "" || strings.Contains(r.Type, "/") {
+		return r.Type
+	}
+	return r.ParentType + "/" + r.Type
 }
 
 // Resources enumerates every resource in the parsed documents.
@@ -91,12 +122,21 @@ func Resources(docs []*yaml.Node) []Resource {
 func OfTypes(resources []Resource, types []string) []Resource {
 	var out []Resource
 	for _, r := range resources {
-		for _, t := range types {
-			if strings.EqualFold(r.Type, t) {
-				out = append(out, r)
-				break
-			}
+		if matchesAnyType(r, types) {
+			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// matchesAnyType reports whether r is named by any of types, under either its
+// own spelling or its qualified one.
+func matchesAnyType(r Resource, types []string) bool {
+	qualified := r.QualifiedType()
+	for _, t := range types {
+		if strings.EqualFold(r.Type, t) || strings.EqualFold(qualified, t) {
+			return true
+		}
+	}
+	return false
 }
