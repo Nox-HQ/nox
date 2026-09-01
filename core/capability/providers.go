@@ -40,12 +40,15 @@ func Builtins() []Provider {
 		// core/lexctx classifies comment and string regions in 22 languages
 		// and is what the secrets refiners consult before dropping a match.
 		builtin{"core/lexctx", []AnalysisCapability{LexicalContext}},
-		// core/consteval resolves whether a Go expression is a compile-time
-		// constant, which is what separates `fmt.Print(bashCompletion)` from
-		// `fmt.Print(response)` — a distinction lexing cannot draw, because
-		// both arguments are identifiers. Go only: every other language answers
-		// undetermined, so the matrix reads Unsupported rather than claiming a
-		// coverage that does not exist.
+		// core/consteval resolves whether an expression is an immutable binding,
+		// which is what separates `print(promptTemplate)` where the name is a
+		// constant from the same call where it is a variable — a distinction
+		// lexing cannot draw, because both arguments are identifiers. Go goes
+		// through go/ast; fourteen more languages through their const/final/val
+		// forms; Python and Ruby by single binding under their naming
+		// convention. A format with no binding form answers undetermined, so the
+		// matrix reads Unsupported rather than claiming coverage that does not
+		// exist.
 		builtin{"core/consteval", []AnalysisCapability{ConstantEvaluation}},
 		// core/taint resolves source-to-sink dataflow, and its extractors
 		// resolve symbols within a file to do it.

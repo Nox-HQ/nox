@@ -2137,8 +2137,11 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 			cov.Record(subject, capability.LexicalContext, capability.Positive)
 		}
 
-		// Constant evaluation is answerable only where an engine exists. A
-		// Python file is not a file where it failed, it is one where nox has no
+		// Constant evaluation is answerable wherever a binding form can be read
+		// — Go through go/ast, fourteen more through their `const`/`final`/`val`
+		// forms, Python and Ruby by single binding under their naming
+		// convention. A format with no binding form at all (YAML, a Dockerfile)
+		// is not a file where evaluation failed, it is one where nox has no
 		// evaluator, and Unsupported says that where NotEvaluated would leave a
 		// reader guessing which it was.
 		if consteval.Supported(lexctx.LangFromPath(f.Location.FilePath)) {

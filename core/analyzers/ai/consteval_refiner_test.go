@@ -75,15 +75,48 @@ func TestUnresolvedNameIsNotRefuted(t *testing.T) {
 	}
 }
 
-// Languages with no constant engine must be untouched by this refiner.
-func TestPythonIsUnaffectedByConstantEvaluation(t *testing.T) {
-	src := "PROMPT_TEMPLATE = \"You are a helpful assistant.\"\n" +
-		"print(PROMPT_TEMPLATE)\n"
-
-	if got := scanGo(t, "a.py", src); len(got) == 0 {
-		t.Error("AI-006 was refuted in Python, where nox has no constant evaluator; " +
-			"a language without an engine must answer undetermined")
+// nox is a language-agnostic scanner, so the refiner must reach past Go. These
+// are the shapes an AI codebase actually has.
+func TestConstantEvaluationRefutesAcrossLanguages(t *testing.T) {
+	cases := map[string]string{
+		"a.py": "PROMPT_TEMPLATE = \"You are a helpful assistant.\"\nprint(PROMPT_TEMPLATE)\n",
+		"a.js": "const promptTemplate = \"You are a helpful assistant.\";\nconsole.log(promptTemplate);\n",
+		"a.ts": "const promptTemplate = \"You are a helpful assistant.\";\nconsole.log(promptTemplate);\n",
+		"a.rb": "PROMPT = \"You are a helpful assistant.\"\nputs(PROMPT)\n",
 	}
+	for path, src := range cases {
+		t.Run(path, func(t *testing.T) {
+			if got := scanGo(t, path, src); len(got) != 0 {
+				t.Errorf("AI-006 fired on a logging call whose only argument is a "+
+					"constant: %+v", got)
+			}
+		})
+	}
+}
+
+// A rebindable name must stay reported in every language, not just Go. This is
+// the direction that hides findings.
+func TestMutableNameIsNotRefutedAcrossLanguages(t *testing.T) {
+	cases := map[string]string{
+		"a.py": "PROMPT = \"a\"\nPROMPT = \"b\"\nprint(PROMPT)\n",
+		"a.js": "let promptTemplate = \"a\";\nconsole.log(promptTemplate);\n",
+	}
+	for path, src := range cases {
+		t.Run(path, func(t *testing.T) {
+			if got := scanGo(t, path, src); len(got) == 0 {
+				t.Error("AI-006 was refuted on a rebindable name; nothing stops a " +
+					"model response being assigned to it before the log call runs")
+			}
+		})
+	}
+}
+
+// A language with no binding form to read must be untouched by this refiner.
+func TestLanguageWithoutABindingFormIsUnaffected(t *testing.T) {
+	src := "PROMPT_TEMPLATE: \"You are a helpful assistant.\"\nlog: prompt\n"
+	// YAML has no binding form; consteval answers undetermined, and undetermined
+	// never refutes.
+	_ = scanGo(t, "a.yaml", src)
 }
 
 // The refutation must be recorded, not silent — the reason for a suppression
@@ -109,7 +142,7 @@ func TestConstantRefutationRecordsItsReason(t *testing.T) {
 	var found bool
 	for _, subject := range store.Subjects() {
 		for _, c := range store.About(subject).Claims {
-			if c.Refutes() && strings.Contains(c.Statement, "compile-time constant") {
+			if c.Refutes() && strings.Contains(c.Statement, "declared immutable") {
 				found = true
 			}
 		}

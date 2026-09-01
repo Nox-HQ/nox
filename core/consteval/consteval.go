@@ -34,12 +34,24 @@
 // compile-time constant cannot hold a runtime prompt or a model response,
 // because its value is fixed before the program runs.
 //
-// # Go only, and honest about it
+// # Language-agnostic, at two different strengths
 //
-// Go is the only language resolved here, for the same reason the taint engine
-// modelled Go first: nox is written in Go, so `go/ast` is free, precise and
-// deterministic, where every other language would need a parser this repository
-// does not carry. Everything else answers "undetermined".
+// nox is a language-agnostic scanner, so a capability answering only for Go
+// would be a Go feature with a general-sounding name. Two engines answer here:
+//
+//   - Go goes through `go/ast`, because a program written in Go gets the parser
+//     for free — the same reason the taint engine modelled Go first.
+//   - Fourteen other languages go through bindings.go, which reads the
+//     immutable-binding forms (`const`, `final`, `val`, `let`, `readonly`) from
+//     what `core/lexctx` already establishes about which bytes are code.
+//
+// Python and Ruby have no keyword that binds a local name immutably, so a name
+// qualifies there only by being bound exactly once, to a literal, under the
+// language's constant naming convention. That is a weaker fact, Result.Basis
+// says which was established, and the caller records heuristic evidence for it
+// rather than static.
+//
+// A language in neither engine answers "undetermined".
 //
 // That asymmetry is the whole safety argument. Every function here returns a
 // DETERMINED flag beside its answer, and callers must refute only on
@@ -68,6 +80,10 @@ type Result struct {
 	// the language has no engine here, the file did not parse, or a name could
 	// not be resolved within this file — never that the answer is "no".
 	Determined bool
+	// Basis records how constancy was established, so a caller can record
+	// evidence of the right strength: a language keyword is a fact about the
+	// program, a naming convention is not.
+	Basis Basis
 	// Reason explains an undetermined answer, for the degradation channel.
 	Reason string
 }
@@ -78,9 +94,11 @@ func undetermined(reason string) Result { return Result{Reason: reason} }
 // Supported reports whether a constant engine exists for a language.
 //
 // Callers use it to record capability coverage as Unsupported rather than
-// NotEvaluated: a Python file is not a file where constant evaluation failed,
-// it is a file where nox has no evaluator, and the matrix should say so.
-func Supported(lang lexctx.Lang) bool { return lang == lexctx.LangGo }
+// NotEvaluated: a file in a language with no evaluator is not a file where
+// constant evaluation failed, and the matrix should say which it was.
+func Supported(lang lexctx.Lang) bool {
+	return lang == lexctx.LangGo || supportedByBindings(lang)
+}
 
 // CallArgumentsAreConstant reports whether every argument of the call
 // enclosing offset is a compile-time constant.
@@ -94,8 +112,12 @@ func Supported(lang lexctx.Lang) bool { return lang == lexctx.LangGo }
 // response to it before the log call runs. Constant is a claim about what the
 // value CAN be, not about what it happens to be at the line being read.
 func CallArgumentsAreConstant(path string, content []byte, offset int) Result {
-	if !Supported(lexctx.LangFromPath(path)) {
+	lang := lexctx.LangFromPath(path)
+	if !Supported(lang) {
 		return undetermined("no constant evaluator for this language")
+	}
+	if lang != lexctx.LangGo {
+		return callArgumentsAreConstantLexically(lang, content, offset)
 	}
 	file, fset := source.ParseGoFile(path, content)
 	if file == nil {
@@ -109,7 +131,7 @@ func CallArgumentsAreConstant(path string, content []byte, offset int) Result {
 	if len(call.Args) == 0 {
 		// A call with no arguments logs nothing that could carry a prompt. That
 		// is a determinable fact, not an unknown.
-		return Result{Constant: true, Determined: true}
+		return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 	}
 
 	consts := constNames(file)
@@ -119,7 +141,7 @@ func CallArgumentsAreConstant(path string, content []byte, offset int) Result {
 			return r
 		}
 	}
-	return Result{Constant: true, Determined: true}
+	return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 }
 
 // enclosingCall returns the innermost call expression containing offset.
@@ -192,18 +214,18 @@ func exprIsConstant(e ast.Expr, consts map[string]bool) Result {
 	switch x := e.(type) {
 	case *ast.BasicLit:
 		// A literal is the base case: "text", 42, 'c', `raw`.
-		return Result{Constant: true, Determined: true}
+		return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 
 	case *ast.Ident:
 		switch x.Name {
 		case "true", "false", "iota":
-			return Result{Constant: true, Determined: true}
+			return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 		case "nil":
 			// Untyped nil carries nothing and cannot be a prompt.
-			return Result{Constant: true, Determined: true}
+			return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 		}
 		if consts[x.Name] {
-			return Result{Constant: true, Determined: true}
+			return Result{Constant: true, Determined: true, Basis: BasisDeclared}
 		}
 		// The name is not a constant IN THIS FILE. It may be a var, a
 		// parameter, or a constant declared in another file of the package —

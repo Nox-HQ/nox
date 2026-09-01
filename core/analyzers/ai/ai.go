@@ -266,8 +266,21 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if results[i].RuleID == "AI-006" {
 				offset := lexctx.LineColToOffset(content, results[i].Location.StartLine, results[i].Location.StartColumn)
 				if r := consteval.CallArgumentsAreConstant(artifact.Path, content, offset); r.Determined && r.Constant {
-					a.refute(candidate, evidence.KindStatic,
-						"every argument to the logging call resolves to a compile-time constant, so the call cannot carry a runtime prompt or model response")
+					// The evidence kind follows the BASIS, because the two are
+					// not the same fact. A language keyword (`const`, `final`,
+					// `val`) makes immutability a property of the program and
+					// the claim static. Python and Ruby have no such keyword,
+					// so the answer rests on the name being bound once under a
+					// naming convention — real, checkable, and weaker. Filing
+					// the second as static would put a keyword's certainty
+					// behind a convention.
+					kind, why := evidence.KindStatic,
+						"every argument to the logging call is declared immutable, so the call cannot carry a runtime prompt or model response"
+					if r.Basis == consteval.BasisSingleBinding {
+						kind, why = evidence.KindHeuristic,
+							"every argument to the logging call is bound once in this file, to a literal, under the language's constant naming convention, so the call carries no runtime prompt or model response"
+					}
+					a.refute(candidate, kind, why)
 					continue
 				}
 			}

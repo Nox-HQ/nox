@@ -110,11 +110,17 @@ func TestCrossFileConstantIsUndeterminedNotFalse(t *testing.T) {
 	}
 }
 
-// Every language without an engine answers undetermined. Reading that as "not
-// constant" would be harmless; reading it as "constant" would drop findings in
-// every language nox cannot parse, which is most of them.
+// A language with no engine answers undetermined. Reading that as "not
+// constant" would be harmless; reading it as "constant" would drop findings
+// wherever nox cannot resolve a binding.
+//
+// The list here was once a.py, a.js and a.rb as well — this evaluator answered
+// only for Go, which for a language-agnostic scanner is a Go feature with a
+// general-sounding name. Those languages moved to
+// TestConstantEvaluationSpansLanguages when bindings.go was built. What remains
+// are the formats with no binding form at all.
 func TestUnsupportedLanguagesAreUndetermined(t *testing.T) {
-	for _, path := range []string{"a.py", "a.js", "a.rb", "a.yaml", "Dockerfile"} {
+	for _, path := range []string{"a.yaml", "Dockerfile", "a.sh", "a.txt"} {
 		t.Run(path, func(t *testing.T) {
 			got := CallArgumentsAreConstant(path, []byte("print('hello')\n"), 0)
 			if got.Determined {
@@ -125,11 +131,15 @@ func TestUnsupportedLanguagesAreUndetermined(t *testing.T) {
 			}
 		})
 	}
-	if Supported(lexctx.LangPython) {
-		t.Error("Python reported as supported; no evaluator exists for it")
+	if !Supported(lexctx.LangPython) {
+		t.Error("Python reported as unsupported; bindings.go resolves it by " +
+			"single binding under the ALL_CAPS convention")
 	}
 	if !Supported(lexctx.LangGo) {
 		t.Error("Go reported as unsupported; go/ast is the engine this package is built on")
+	}
+	if Supported(lexctx.LangYAML) {
+		t.Error("YAML reported as supported; it has no binding form to read")
 	}
 }
 

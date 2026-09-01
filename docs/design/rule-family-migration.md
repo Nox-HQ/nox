@@ -291,11 +291,28 @@ overlaps, dependency applicability. Measuring suggests a different one.
    resolving "constants where a language engine exists", which was true of no
    engine in the repository.
 
-   `core/consteval` answers it for Go, via `go/ast`, for the same reason the
-   taint engine modelled Go first: nox is written in Go, so the parser is free,
-   precise and deterministic. Every other language answers UNDETERMINED and the
-   capability matrix records Unsupported, because a refutation drops a finding
-   and "no evaluator here" must never read as "nothing here".
+   `core/consteval` answers it across fifteen languages, at two strengths.
+   nox is a language-agnostic scanner, so an evaluator that answered only for
+   Go would be a Go feature with a general-sounding name.
+
+   Go goes through `go/ast`, because a program written in Go gets the parser
+   for free — the same reason the taint engine modelled Go first. Fourteen more
+   (JS/TS, Java, C#, Rust, Kotlin, Swift, Scala, PHP, Dart, Groovy, C/C++,
+   Objective-C, and Python and Ruby) go through a recognizer built on what
+   `core/lexctx` already establishes about which bytes are code, reading the
+   immutable-binding forms `const`, `final`, `val`, `let`, `readonly`.
+
+   Python and Ruby have no keyword that binds a local name immutably, so a name
+   qualifies there only by being bound exactly once, to a literal, under the
+   language's constant naming convention. That is a genuinely weaker fact and
+   is recorded as one: the refutation carries `KindHeuristic` where a keyword
+   language carries `KindStatic`. Filing the second as the first would put a
+   keyword's certainty behind a naming convention.
+
+   A format with no binding form at all — YAML, a Dockerfile — answers
+   UNDETERMINED and the capability matrix records Unsupported, because a
+   refutation drops a finding and "no evaluator here" must never read as
+   "nothing here".
 
    What it reaches is narrower than "knowing a prompt is a literal rather than
    assembled from input". It answers one question — does every argument of this
