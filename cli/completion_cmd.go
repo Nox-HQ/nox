@@ -14,13 +14,13 @@ func runCompletion(args []string) int {
 	shell := args[0]
 	switch shell {
 	case "bash":
-		fmt.Print(bashCompletion) // nox:ignore AI-006 -- shell completion script
+		fmt.Print(bashCompletion)
 	case "zsh":
-		fmt.Print(zshCompletion) // nox:ignore AI-006 -- shell completion script
+		fmt.Print(zshCompletion)
 	case "fish":
-		fmt.Print(fishCompletion) // nox:ignore AI-006 -- shell completion script
+		fmt.Print(fishCompletion)
 	case "powershell":
-		fmt.Print(powershellCompletion) // nox:ignore AI-006 -- shell completion script
+		fmt.Print(powershellCompletion)
 	default:
 		fmt.Fprintf(os.Stderr, "unsupported shell: %s\n", shell)
 		fmt.Fprintln(os.Stderr, "Supported shells: bash, zsh, fish, powershell")

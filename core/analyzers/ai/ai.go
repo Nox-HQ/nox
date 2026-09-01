@@ -16,6 +16,7 @@ import (
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/consteval"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
@@ -250,6 +251,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				a.refute(candidate, evidence.KindStatic,
 					"every argument to the logging call is constant text, so the call logs no value and there is no prompt to leak")
 				continue
+			}
+			// The lexical check above sees text, not meaning: an argument that
+			// is a NAME is code, so `fmt.Print(bashCompletion)` reads as a value
+			// being logged even when that name is bound by `const`. Resolving
+			// the name answers what lexing cannot — a compile-time constant is
+			// fixed before the program runs, so it cannot hold a runtime prompt
+			// or a model response.
+			//
+			// Only a DETERMINED constant refutes. An unresolved name, a var, a
+			// language with no evaluator: all stay reported, because refuting
+			// drops a finding and "I could not tell" is not "there is nothing
+			// here".
+			if results[i].RuleID == "AI-006" {
+				offset := lexctx.LineColToOffset(content, results[i].Location.StartLine, results[i].Location.StartColumn)
+				if r := consteval.CallArgumentsAreConstant(artifact.Path, content, offset); r.Determined && r.Constant {
+					a.refute(candidate, evidence.KindStatic,
+						"every argument to the logging call resolves to a compile-time constant, so the call cannot carry a runtime prompt or model response")
+					continue
+				}
 			}
 			// AI-049 asserts an eval/code-execution sink (CWE-95). A call
 			// executing a SQL statement is a database sink, and the AI token

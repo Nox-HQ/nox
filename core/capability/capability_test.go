@@ -156,15 +156,23 @@ func TestBuiltinsAreHonestAboutWhatIsMissing(t *testing.T) {
 	r := capability.DefaultRegistry()
 
 	for _, c := range []capability.AnalysisCapability{
-		capability.CallGraph, capability.EntryPoint, capability.ConstantEvaluation,
+		capability.CallGraph, capability.EntryPoint,
 	} {
 		if r.Provided(c) {
 			t.Errorf("%q is declared as built-in; nox has no such analysis, and "+
 				"claiming one turns a limit into a false assurance", c)
 		}
 	}
+	// ConstantEvaluation moved into the list below when core/consteval was
+	// built. It is declared on the same terms as Reachability, which has always
+	// been here and has always answered for Go alone: Provided() is an
+	// INSTALLATION-level claim that an engine exists, and per-finding coverage
+	// carries the language limit — Unsupported for every file the engine cannot
+	// read. Declaring it does not assert that every finding was evaluated, and
+	// the matrix is what says which were.
 	for _, c := range []capability.AnalysisCapability{
 		capability.LexicalContext, capability.Taint, capability.Reachability,
+		capability.ConstantEvaluation,
 	} {
 		if !r.Provided(c) {
 			t.Errorf("%q is not declared but nox does provide it; an undeclared "+
