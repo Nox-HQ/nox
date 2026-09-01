@@ -29,7 +29,14 @@
 // straight-line, intraprocedural propagation over those Units.
 //
 // SCOPE AND LIMITS (honest, deterministic first version):
-//   - Python and JS/TS only (whatever core/lexctx lexes as code).
+//   - Python, JS/TS and Go (whatever core/lexctx lexes as code, for the SDK
+//     spellings llmPromptCalls names). Go was absent until the prompt-sink
+//     vocabulary learned its case convention: `Chat.Completions.New` and
+//     `CreateChatCompletion` are the same APIs as `chat.completions.create`,
+//     and without them an AI application written in Go got no agentic dataflow
+//     analysis at all — measured as zero findings against AGENTFLOW-001 on the
+//     line-for-line Python equivalent. Other languages lex fine and will report
+//     as soon as their SDK spellings are added.
 //   - Intraprocedural and straight-line: source var → prompt arg, and LLM-call
 //     result var → sink arg, within one function body, following simple
 //     reassignment. No cross-function/cross-file flow, no control-flow graph, no
@@ -135,7 +142,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		lang := lexctx.LangFromPath(art.Path)
 		if lang == lexctx.LangUnknown {
-			continue // Python and JS/TS only
+			// Any language core/lexctx lexes participates; only a file with no
+			// lexer is skipped. The gate was never Python-and-JS — that was the
+			// reach of the PROMPT SINK vocabulary below, which held only the
+			// Python/JS SDK spellings, so a Go file arrived here and then flowed
+			// from a recognised source to an unrecognised destination.
+			continue
 		}
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
@@ -476,6 +488,7 @@ func stmtCallsLLM(st *taint.Statement) bool {
 // the taint catalog's prompt_injection sinks — so embedding calls (which do not
 // produce steerable text output) are excluded from the AGENTFLOW-002 source set.
 var llmPromptCalls = map[string]struct{}{
+	// Python and JS/TS SDK spellings.
 	"chat.completions.create": {},
 	"completions.create":      {},
 	"ChatCompletion.create":   {},
@@ -486,6 +499,32 @@ var llmPromptCalls = map[string]struct{}{
 	"litellm.completion":      {},
 	"invoke_model":            {},
 	"converse":                {},
+
+	// Go SDK spellings. The same APIs, in the case convention Go uses — and
+	// their absence is why an AI application written in Go got NO agentic
+	// dataflow analysis at all. Measured before adding them: a Go handler
+	// taking `r.URL.Query().Get("persona")` straight into a model call produced
+	// zero findings, while the line-for-line Python equivalent produced
+	// AGENTFLOW-001. The untrusted SOURCE was already recognised for Go by the
+	// taint catalog; only the prompt SINK had no Go spelling, so the flow ran
+	// from a known source to an unknown destination and stopped.
+	"Chat.Completions.New":     {}, // openai-go
+	"Completions.New":          {}, // openai-go, legacy completions
+	"Messages.New":             {}, // anthropic-sdk-go
+	"Messages.NewStreaming":    {}, // anthropic-sdk-go
+	"CreateChatCompletion":     {}, // go-openai
+	"CreateCompletion":         {}, // go-openai
+	"GenerateContent":          {}, // google genai for Go; langchaingo
+	"GenerateFromSinglePrompt": {}, // langchaingo
+	"InvokeModel":              {}, // AWS Bedrock for Go
+	"Converse":                 {}, // AWS Bedrock for Go
+	"ConverseStream":           {}, // AWS Bedrock for Go
+
+	// .NET spellings.
+	"CompleteChat":            {}, // Azure.AI.OpenAI / OpenAI .NET
+	"CompleteChatAsync":       {},
+	"GetChatCompletions":      {}, // Azure.AI.OpenAI, earlier surface
+	"GetChatCompletionsAsync": {},
 }
 
 // isPromptCall reports whether a raw call chain is an LLM model invocation.

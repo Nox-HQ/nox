@@ -580,6 +580,32 @@ func (ex *goExtractor) exprVars(e ast.Expr) []string {
 			for _, a := range x.Args {
 				walk(a)
 			}
+		case *ast.CompositeLit:
+			// A struct, slice or map literal passed as an argument. Without this
+			// the walk stopped at the brace and never reached the identifiers
+			// inside, so a tainted value assembled into a literal was invisible
+			// to every Go sink.
+			//
+			// It is the dominant shape in Go SDK calls — the parameters of a
+			// model invocation, a query config, an options struct are all
+			// composite literals — and the asymmetry showed up starkly against
+			// Python, where the equivalent nested dict/list was already tracked:
+			// a Go handler taking an HTTP query parameter into
+			// `New(ctx, Params{Messages: []string{"..." + persona}})` produced
+			// nothing, while the line-for-line Python equivalent reported the
+			// flow.
+			for _, el := range x.Elts {
+				walk(el)
+			}
+		case *ast.KeyValueExpr:
+			// Only the VALUE. In a struct literal the key is a field name, not a
+			// free variable, and reading it would add every field name in every
+			// literal to the statement's reads — systematic noise that could
+			// taint a value because a field happened to share a variable's name.
+			// The cost is a tainted MAP key going unseen, which is both rare and
+			// the safe direction to miss: an invented read produces findings,
+			// a missed one does not.
+			walk(x.Value)
 		}
 	}
 	walk(e)
