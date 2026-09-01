@@ -83,7 +83,7 @@ func TestDedupBySpecificity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := dedupBySpecificity(tt.in, spec, nil)
+			got, _ := dedupBySpecificity(tt.in, spec, nil)
 			gotIDs := make(map[string]int)
 			for i := range got {
 				gotIDs[got[i].RuleID]++
@@ -123,7 +123,7 @@ func TestDedupOwnerResolution(t *testing.T) {
 			mkFinding("SEC-496", 1, 17, 57),
 			mkFinding("SEC-161", 1, 17, 57),
 		}
-		got := ruleIDsOf(dedupBySpecificity(in, spec, content))
+		got := ruleIDsOf(firstOf(dedupBySpecificity(in, spec, content)))
 		if len(got) != 1 || got[0] != "SEC-003" {
 			t.Fatalf("github: got %v, want [SEC-003]", got)
 		}
@@ -136,7 +136,7 @@ func TestDedupOwnerResolution(t *testing.T) {
 			mkFinding("SEC-508", 1, 12, 32),
 			mkFinding("SEC-161", 1, 12, 32),
 		}
-		got := ruleIDsOf(dedupBySpecificity(in, spec, content))
+		got := ruleIDsOf(firstOf(dedupBySpecificity(in, spec, content)))
 		ids := map[string]bool{}
 		for _, g := range got {
 			ids[g] = true
@@ -155,7 +155,7 @@ func TestDedupOwnerResolution(t *testing.T) {
 			mkFinding("SEC-338", 1, 11, 55),
 			mkFinding("SEC-163", 1, 11, 54),
 		}
-		got := ruleIDsOf(dedupBySpecificity(in, spec, content))
+		got := ruleIDsOf(firstOf(dedupBySpecificity(in, spec, content)))
 		if len(got) != 1 || got[0] != "SEC-030" {
 			t.Fatalf("stripe: got %v, want [SEC-030]", got)
 		}
@@ -199,3 +199,7 @@ func TestClassifyRuleSpecificity(t *testing.T) {
 		t.Errorf("entropy SEC-161 (%d) should rank below provider SEC-003 (%d)", spec["SEC-161"], spec["SEC-003"])
 	}
 }
+
+// firstOf keeps the existing assertions reading about findings alone, now that
+// dedupBySpecificity also hands back what it dropped.
+func firstOf(fs []findings.Finding, _ []suppression) []findings.Finding { return fs }

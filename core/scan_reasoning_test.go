@@ -166,9 +166,17 @@ func TestRefutedCandidateKeepsItsReason(t *testing.T) {
 		}
 		ledger := res.Reasoning.About(subject)
 		for _, c := range ledger.Claims {
-			if !c.Refutes() {
-				t.Errorf("dropped candidate %s recorded a %s claim; a drop is a refutation",
-					subject, c.Polarity.Effective())
+			// A drop is either EPISTEMIC — a refiner established the candidate
+			// was never a secret, which refutes — or EDITORIAL: dedup removed a
+			// finding that is TRUE because reporting one credential five times
+			// is noise. The second weighs nothing (polarity Unknown) and must
+			// not be filed as a refutation, or the store would assert that
+			// true detections of a live credential were evidence of nothing
+			// being there. What is forbidden either way is SUPPORT: a candidate
+			// cannot be dropped on the strength of evidence for it.
+			if c.Supports() {
+				t.Errorf("dropped candidate %s recorded a SUPPORTING claim (%q)",
+					subject, c.Statement)
 			}
 			if c.Statement == "" {
 				t.Errorf("dropped candidate %s recorded an empty reason", subject)
@@ -479,6 +487,15 @@ func TestConfigDrivenRemovalsLeaveATrail(t *testing.T) {
 	for _, subject := range res.Reasoning.Subjects() {
 		for _, c := range res.Reasoning.About(subject).Claims {
 			if c.Polarity.Effective() != evidence.PolarityUnknown {
+				continue
+			}
+			// Scope to the configuration trail by PROVENANCE, not by polarity
+			// alone. Unknown is the polarity of every editorial removal, and
+			// since dedup began recording what it drops there is more than one
+			// producer of them — dedup files as tool "secrets", config as
+			// "config". Matching on polarity alone swept dedup's claims into an
+			// assertion about .nox.yaml that was never about them.
+			if c.Provenance.Tool != "config" {
 				continue
 			}
 			if !strings.Contains(c.Statement, ruleID) {
