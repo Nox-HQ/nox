@@ -890,6 +890,20 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		}
 		return true
 	case "subprocess.run", "subprocess.call", "subprocess.Popen",
+		// check_output takes the same (args-vector | string, shell=) shape as
+		// its siblings and was simply missing from this list, so
+		// `subprocess.check_output(["git", "log", tainted])` — a safe argv exec
+		// — reported a command injection while the identical call through
+		// subprocess.run did not. Found on httpie, where it is the only taint
+		// finding in the repository and is not an injection.
+		"subprocess.check_output",
+		// child_process.execFile is deliberately NOT here. It looks like spawn's
+		// shape — (file, args[]), no shell — but adding it measurably traded a
+		// false positive for a false NEGATIVE: `execFile("sh", ["-c", tainted])`
+		// runs a shell as the program, and the exemption silenced it. The same
+		// hole exists for the spawn entry above and predates this list; it is
+		// left alone rather than widened, because a missed injection costs more
+		// than a reported safe call.
 		"child_process.spawn":
 		// An arg-vector exec (list/array first arg) without shell=True is safe.
 		// We approximate "arg vector" as: shell not True and the first argument
