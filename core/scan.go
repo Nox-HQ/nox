@@ -38,6 +38,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/capability"
+	"github.com/nox-hq/nox/core/consteval"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
@@ -2134,6 +2135,19 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 			cov.Record(subject, capability.LexicalContext, capability.Unsupported)
 		} else {
 			cov.Record(subject, capability.LexicalContext, capability.Positive)
+		}
+
+		// Constant evaluation is answerable wherever a binding form can be read
+		// — Go through go/ast, fourteen more through their `const`/`final`/`val`
+		// forms, Python and Ruby by single binding under their naming
+		// convention. A format with no binding form at all (YAML, a Dockerfile)
+		// is not a file where evaluation failed, it is one where nox has no
+		// evaluator, and Unsupported says that where NotEvaluated would leave a
+		// reader guessing which it was.
+		if consteval.Supported(lexctx.LangFromPath(f.Location.FilePath)) {
+			cov.Record(subject, capability.ConstantEvaluation, capability.Positive)
+		} else {
+			cov.Record(subject, capability.ConstantEvaluation, capability.Unsupported)
 		}
 
 		// The taint engine concluded about the findings it produced, and said

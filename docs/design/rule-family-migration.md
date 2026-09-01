@@ -281,7 +281,65 @@ overlaps, dependency applicability. Measuring suggests a different one.
    an offline-verifiable checksum. That is a result, not a gap — it says the
    deterministic wins in this family are the structural ones (JWT, and base64/
    hex decodability), not more checksums.
-2. **AI corroboration.** *Done.* The refiners recorded why they dropped a
+2. **AI constant evaluation.** *Built, and smaller than the plan implied.*
+
+   `capability.ConstantEvaluation` had been declared since the capability model
+   was written, `core/adjudicate` listed it as a question worth asking — "is
+   this value a literal, or is it built from input?" — and nothing answered it.
+   It appeared in exactly two places in the tree: its own declaration, and the
+   list of things nox cannot do. `capability.Builtins()` described nox as
+   resolving "constants where a language engine exists", which was true of no
+   engine in the repository.
+
+   `core/consteval` answers it across fifteen languages, at two strengths.
+   nox is a language-agnostic scanner, so an evaluator that answered only for
+   Go would be a Go feature with a general-sounding name.
+
+   Go goes through `go/ast`, because a program written in Go gets the parser
+   for free — the same reason the taint engine modelled Go first. Fourteen more
+   (JS/TS, Java, C#, Rust, Kotlin, Swift, Scala, PHP, Dart, Groovy, C/C++,
+   Objective-C, and Python and Ruby) go through a recognizer built on what
+   `core/lexctx` already establishes about which bytes are code, reading the
+   immutable-binding forms `const`, `final`, `val`, `let`, `readonly`.
+
+   Python and Ruby have no keyword that binds a local name immutably, so a name
+   qualifies there only by being bound exactly once, to a literal, under the
+   language's constant naming convention. That is a genuinely weaker fact and
+   is recorded as one: the refutation carries `KindHeuristic` where a keyword
+   language carries `KindStatic`. Filing the second as the first would put a
+   keyword's certainty behind a naming convention.
+
+   A format with no binding form at all — YAML, a Dockerfile — answers
+   UNDETERMINED and the capability matrix records Unsupported, because a
+   refutation drops a finding and "no evaluator here" must never read as
+   "nothing here".
+
+   What it reaches is narrower than "knowing a prompt is a literal rather than
+   assembled from input". It answers one question — does every argument of this
+   call resolve to a compile-time constant? — which refutes AI-006 on
+   `fmt.Print(promptTemplate)` where `promptTemplate` is a `const`. The rule
+   matches `prompt` at a word boundary, so it fires on the NAME of a constant,
+   and lexical analysis cannot help: the argument IS code, it is simply code
+   whose value is fixed before the program runs. A `var` does not qualify, and
+   neither does a name declared in another file of the package — both are
+   undetermined, and undetermined stays reported.
+
+   **Measuring it corrected the motivation.** The case that prompted the work
+   was four hand-written waivers in nox's own repository reading
+   `fmt.Print(bashCompletion) // nox:ignore AI-006 -- shell completion script`.
+   Constant evaluation was expected to make them unnecessary. It does not,
+   because they were never necessary: `bashCompletion` has no word boundary
+   before "Completion" and never matched the pattern. The word "completion" in
+   the WAIVER TEXT was the only reason AI-006 fired. Each waiver caused the
+   finding it waived. They are deleted, and
+   `TestTriggerWordInATrailingCommentDoesNotCreateAFinding` pins the class.
+
+   The remaining AI work is unchanged in kind and now better bounded: knowing
+   that a prompt is ASSEMBLED FROM INPUT needs dataflow into the prompt
+   expression, which is taint, not constant evaluation. Constant evaluation
+   closes only the half where the answer is "this cannot vary at all".
+
+3. **AI corroboration.** *Done.* The refiners recorded why they dropped a
    candidate and nothing about the ones that survived, so a reported AI
    finding's ledger said only "the rule fired". A survivor now records what was
    checked: that it is in real code, and — for a rule with a context
@@ -291,7 +349,7 @@ overlaps, dependency applicability. Measuring suggests a different one.
    for a proximity check. The remaining AI work is constant evaluation — knowing
    a prompt is a literal rather than assembled from input — which needs a
    capability nothing implements yet.
-3. **IAC structural parsing.** Largest single piece of work, largest family, and
+4. **IAC structural parsing.** Largest single piece of work, largest family, and
    the only way 490 rules ever exceed heuristic. Now built for the three
    document-shaped schemas (CloudFormation, Kubernetes, ARM), migrating 24 of
    the 57 absence rules — see the family section above for why it is 24, and
@@ -311,7 +369,7 @@ overlaps, dependency applicability. Measuring suggests a different one.
    encrypted bucket looked unencrypted. This is not the structural rewrite; it
    is one bounded fix the rewrite would have subsumed, delivered now because it
    is a real false negative with a reproduction.
-4. **Endpoint/API misuse** is a plugin (`nox-plugin-api-abuse`) and cannot be
+5. **Endpoint/API misuse** is a plugin (`nox-plugin-api-abuse`) and cannot be
    fixed from this repository. Its API-ABUSE-001 sits at precision 0.000 — never
    a true positive on the corpus — which under Milestone 10.2 makes it a
    candidate generator whose output must survive refutation before it becomes a
