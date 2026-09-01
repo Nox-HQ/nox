@@ -1,0 +1,48 @@
+# Clean sample: every VPC below IS monitored. Any finding here is a FALSE
+# POSITIVE.
+#
+# This is the refutation half of cross-resource resolution. A flow log is a
+# separate resource that names its VPC through an intrinsic, so no lookup
+# inside the VPC can find it — which is why IAC-059's text form searched the
+# whole file for the word "FlowLog" instead. That form cannot tell which VPC a
+# flow log watches; resolution can.
+#
+# The three VPCs here are each monitored through a different intrinsic, because
+# a template may bind with any of them and all three must refute.
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  ShortFormVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+  GetAttVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+
+  SubVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.2.0.0/16
+
+  ShortFormLogs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Ref ShortFormVpc
+      ResourceType: VPC
+      TrafficType: ALL
+
+  GetAttLogs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !GetAtt GetAttVpc.VpcId
+      ResourceType: VPC
+      TrafficType: ALL
+
+  SubLogs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceId: !Sub "${SubVpc}"
+      ResourceType: VPC
+      TrafficType: ALL

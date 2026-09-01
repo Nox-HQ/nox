@@ -3,9 +3,9 @@
   "recall": 1,
   "f1": 1,
   "fp": 0,
-  "tp": 37,
+  "tp": 39,
   "fn": 0,
-  "findings_per_issue": 1.0571428571428572,
+  "findings_per_issue": 1.054054054054054,
   "rules": [
     {
       "rule_id": "AI-002",
@@ -19,6 +19,16 @@
     },
     {
       "rule_id": "DATA-005",
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "rule_id": "IAC-051",
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "rule_id": "IAC-059",
       "precision": 1,
       "recall": 1
     },

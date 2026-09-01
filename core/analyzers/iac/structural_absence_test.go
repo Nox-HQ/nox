@@ -9,6 +9,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
+	"github.com/nox-hq/nox/core/rules/structural"
 )
 
 // aliasTemplate is the case that motivated the structural path: two encrypted
@@ -195,8 +196,32 @@ func TestMigratedRulesKeepTheirTextPath(t *testing.T) {
 		if r.AbsenceProperty == "" {
 			t.Errorf("%s: structural descriptor but no absence property to fall back to", r.ID)
 		}
-		if len(r.AbsencePropertyPath) == 0 {
-			t.Errorf("%s: resource types but no property path", r.ID)
+		// A descriptor addresses the requirement either as a property on the
+		// resource or as a companion bound to it. One or the other must be
+		// there, or the structural path has nothing to evaluate and silently
+		// falls back on every file.
+		hasProperty := len(r.AbsencePropertyPath) > 0
+		hasCompanion := len(r.AbsenceCompanionTypes) > 0
+		if !hasProperty && !hasCompanion {
+			t.Errorf("%s: resource types but neither a property path nor a companion", r.ID)
+		}
+		if !hasCompanion {
+			continue
+		}
+		// The link mechanism is never inferred: resolving with the wrong one
+		// answers "not bound" for every subject, which invents a finding on
+		// each of them.
+		switch structural.Link(r.AbsenceCompanionLink) {
+		case structural.LinkRef:
+			if r.AbsenceCompanionPath == "" {
+				t.Errorf("%s: a ref companion needs the path holding the reference", r.ID)
+			}
+		case structural.LinkSelector, structural.LinkNamespace, structural.LinkChild:
+			if r.AbsenceCompanionPath != "" {
+				t.Errorf("%s: %s linkage takes no path", r.ID, r.AbsenceCompanionLink)
+			}
+		default:
+			t.Errorf("%s: unknown companion link %q", r.ID, r.AbsenceCompanionLink)
 		}
 	}
 	if migrated == 0 {

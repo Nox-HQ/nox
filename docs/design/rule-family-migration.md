@@ -101,20 +101,96 @@ every rule was placed, not sampled:
 | kind | rules | why |
 |---|---|---|
 | resource-and-attribute | **24** | the property belongs to the resource the rule names — migrated |
+| cross-resource | **7 of 8** | the property is a *different object* — migrated by companion resolution; see below |
 | not a document | 20 | Dockerfile is line-oriented; Terraform and the GCP rules are HCL; a Helm template is not valid YAML until it is rendered |
-| cross-resource | 8 | the property is a *different object*: a VPC's flow log, a Namespace's ResourceQuota, a workload's PodDisruptionBudget, an Azure server's `auditingSettings` child |
 | sub-structure anchored | 4 | anchored on `securityContext:`, `hostPath:`, `emptyDir:` or an IAM statement rather than on a resource type |
 | predicate-gated | 1 | IAC-096 applies only to a `Microsoft.Web/sites` whose `kind` is `functionapp`, and the descriptor has no field for that condition |
 
-The cross-resource group is the honest next capability: it needs resolution
-*across* resources in a document set, not within one, and the model here
-deliberately stops at one resource because a lookup that silently searched the
-whole file would be the regex behaviour with a parser attached.
+The remaining three groups are not blocked on the parser at all. Terraform needs
+an HCL dependency this scanner does not carry, a Dockerfile has no document to
+parse, and the sub-structure rules would need rewriting rather than annotating —
+each of which is a decision, not an omission.
 
-The other three are not blocked on the parser at all. Terraform needs an HCL
-dependency this scanner does not carry, a Dockerfile has no document to parse,
-and the sub-structure rules would need rewriting rather than annotating — each
-of which is a decision, not an omission.
+#### Cross-resource: 31 of 57, by resolving the companion
+
+The eight cross-resource rules ask whether a resource is protected by a
+DIFFERENT object: a VPC by a flow log, a Deployment by a PodDisruptionBudget, a
+Namespace by a ResourceQuota or LimitRange, a SQL server by an
+`auditingSettings` or `firewallRules` child, a secret by a RotationSchedule.
+None of those properties is on the resource the rule names, so the
+single-resource model could not reach any of them and the text form searched the
+whole file for the companion's NAME instead.
+
+That form is wrong in three measured ways, and `core/rules/structural`'s
+companion resolution answers all three:
+
+- **It cannot see linkage.** A PodDisruptionBudget selecting `app: api`
+  satisfies IAC-132 for every workload in the file. Measured, on a manifest with
+  three workloads and one budget that selects one of them: the text path reports
+  **0 findings**; resolution reports **2**, on the workloads nothing protects.
+- **It cannot see quantity.** `absenceSpan: "file"` evaluates once and reports at
+  the first anchor, so four unprotected Deployments were one finding. Resolution
+  decides per subject.
+- **It is satisfied by text that is not a resource.** IAC-059's property regex is
+  `(?i)FlowLog`, which a `FlowLogsEnabled: false` tag matches — so a VPC with
+  logging explicitly turned OFF read as a VPC with logging configured.
+
+Four linkage mechanisms cover the seven rules, and each is named per rule rather
+than inferred, because resolving with the wrong one answers "not bound" for
+every subject and so invents a finding on each of them:
+
+| link | binds by | rules |
+|---|---|---|
+| `ref` | a CloudFormation intrinsic naming the subject's logical name — `!Ref`, `!GetAtt`, `!Sub`, and their `Fn::` long forms | IAC-059, IAC-079 |
+| `selector` | a Kubernetes label selector matching the subject's **pod template** labels | IAC-132 |
+| `namespace` | `metadata.namespace` equalling the subject Namespace's name | IAC-133, IAC-134 |
+| `child` | ARM child nesting, or a top-level `"<parent>/<child>"` name | IAC-084, IAC-086 |
+
+The eighth, IAC-153, is cross-*step* rather than cross-resource: it asks whether
+a GitHub Actions workflow that uploads an artifact also attests it. A workflow is
+a document, but it is not one of the three schemas this package models, so
+migrating it needs a fourth family — a new schema, not a new linkage.
+
+##### The three-valued answer is what keeps this sound
+
+Linkage resolves to bound, not-bound, or **undecidable**, and the third value is
+the load-bearing one. A selector written with `matchExpressions`, an ARM name
+that is a `[concat(...)]` expression, and a flow log pointed at a template
+parameter are all cases where the answer needs information the file does not
+carry. Reading any of them as "not bound" would report a resource that is very
+likely protected. An undecidable pair therefore takes the whole file back to the
+text path — the same degradation as an unparseable document, for the same
+reason.
+
+The inverse asymmetry is deliberate too. A flow log whose `ResourceId` is a
+literal `vpc-0a1b2c3d` is decidably NOT bound to anything this template creates,
+because referring to a resource in the same template *requires* an intrinsic.
+That is a fact about the companion, not an unknown, and it is the case the text
+path most reliably gets wrong.
+
+##### What it cost, and what it found
+
+One fixture changed. IAC-059's "hardened" sample was a VPC beside a flow log
+with empty `Properties` — a flow log that targets nothing. It passed only
+because the text path counted the word. It is now the true-positive case in
+`TestCompanionRefusesAnUnboundFlowLog`, and the hardened fixture references the
+VPC as a real template would.
+
+Measured on the precision suite, with a clean sample binding three VPCs through
+three different intrinsics and a true positive whose flow log watches the *other*
+VPC: precision and recall stay at 1.00, and IAC moves from
+`corroborated=1 above=1 earned=1` to `corroborated=2 above=2 earned=2`. Suite
+earned evidence goes from 3 to 4.
+
+##### What remains unknown, and is now stated rather than implied
+
+A document set is one file. A PodDisruptionBudget in a second manifest is not
+visible, and "no companion in this file" is not "no companion anywhere". That
+limit is inherited — the text rule it replaces is scoped to one file too — but
+the claim now says what was parsed rather than what is deployed, and
+`Hit.Statement` says "the document set" for exactly that reason. Cross-FILE
+resolution is the next capability this group would want, and it needs the scan
+to hold a document set across files, which nothing does today.
 
 #### The two rules that hold this together
 
