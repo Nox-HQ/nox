@@ -15,6 +15,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
+	"github.com/nox-hq/nox/core/rules/structural"
 )
 
 // Analyzer wraps a rules.Engine pre-loaded with IaC security rules.
@@ -168,6 +169,14 @@ func enclosingKey(lines []string, line int) string {
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
+	// The index is what makes a cross-resource rule answerable at all in a real
+	// manifest tree: a Helm chart or a kustomize base puts each object in its
+	// own file, so a Deployment's PodDisruptionBudget is almost never in the
+	// same document set. Built first, from the same bytes the scan reads, and
+	// consulted only to REFUTE — see structural.Index.
+	index := structural.NewIndex()
+	contents := make(map[string][]byte, len(artifacts))
+
 	var collected []findings.Finding
 	for _, artifact := range artifacts {
 		// Honour cancellation between artifacts — see the note in the secrets
@@ -186,8 +195,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 
+		index.Add(artifact.Path, content)
+		contents[artifact.Path] = content
 		collected = append(collected, results...)
 	}
+
+	collected = a.refuteCompanionsFoundInOtherFiles(index, contents, collected)
 
 	// GitHub Actions context downgrades are applied by the scan pipeline across
 	// EVERY analyzer's output (core/scan.go), not just IaC's. Applying them a
@@ -200,4 +213,102 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+// refuteCompanionsFoundInOtherFiles drops a cross-resource finding when the
+// companion it asked for exists in another file the same scan read.
+//
+// # Why this is a post-pass and not part of the verdict
+//
+// The per-file structural verdict is the authoritative one, and it must stay
+// answerable from a single file: `ScanFile` is what the MCP server and the LSP
+// call, and they hand over one buffer with no tree behind it. So the cross-file
+// answer is layered on top, where it can only ever REMOVE a finding the
+// single-file pass already produced.
+//
+// That direction is the whole safety argument. A scan that read more files may
+// clear a resource it would otherwise flag; it may never flag one it would
+// otherwise clear. The reverse would make a finding depend on which directory
+// the operator pointed at, which is the kind of instability that teaches people
+// to ignore a scanner.
+//
+// A finding is reconsidered only when its rule carries a companion descriptor
+// AND the finding sits on a resource this pass can re-resolve by line. Anything
+// else is left exactly as it was.
+func (a *Analyzer) refuteCompanionsFoundInOtherFiles(index *structural.Index, contents map[string][]byte, in []findings.Finding) []findings.Finding {
+	if index == nil || index.Len() < 2 {
+		// One file cannot contain a cross-FILE companion, so there is nothing
+		// this pass could establish that the per-file verdict did not.
+		return in
+	}
+
+	out := in[:0:0]
+	for i := range in {
+		f := &in[i]
+		rule, ok := a.engine.Rules().ByID(f.RuleID)
+		if !ok || len(rule.AbsenceCompanionTypes) == 0 {
+			out = append(out, in[i])
+			continue
+		}
+		content, ok := contents[f.Location.FilePath]
+		if !ok {
+			out = append(out, in[i])
+			continue
+		}
+		subject, ok := structural.ResourceAt(content, f.Location.StartLine)
+		if !ok {
+			// The finding came from the text path, which reports at an anchor
+			// rather than a resource declaration. Nothing to re-resolve.
+			out = append(out, in[i])
+			continue
+		}
+
+		hit, found := index.CompanionElsewhere(subject, f.Location.FilePath, structural.Companion{
+			Types: rule.AbsenceCompanionTypes,
+			Link:  structural.Link(rule.AbsenceCompanionLink),
+			Path:  rule.AbsenceCompanionPath,
+		})
+		if !found {
+			// The finding stands. But its claim was written by the per-file
+			// pass and says the DOCUMENT SET declares no such companion, which
+			// is true of that file and misleading once a wider scan has seen
+			// one that simply does not cover this resource. Saying which it was
+			// costs nothing and is the difference between "nothing of this kind
+			// exists here" and "one exists and it protects something else".
+			if index.HasType(rule.AbsenceCompanionTypes, f.Location.FilePath) {
+				noteCompanionScannedElsewhere(&in[i], rule.AbsenceCompanionTypes[0])
+			}
+			out = append(out, in[i])
+			continue
+		}
+
+		// The reason for a suppression has to survive the suppression.
+		a.refuteCrossFile(f, hit)
+	}
+	return out
+}
+
+// refuteCrossFile records why a finding was dropped by the cross-file pass.
+func (a *Analyzer) refuteCrossFile(f *findings.Finding, hit structural.Hit) {
+	if a.reasoning == nil {
+		return
+	}
+	subject := reasoning.Candidate(f.RuleID, f.Location.FilePath,
+		f.Location.StartLine, f.Location.StartColumn)
+	a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "iac",
+		hit.CrossFileStatement())
+}
+
+// noteCompanionScannedElsewhere amends a surviving finding's structural claim
+// so it distinguishes an absent companion from an unrelated one.
+func noteCompanionScannedElsewhere(f *findings.Finding, companionType string) {
+	claim := f.Metadata[rules.StructuralClaimKey]
+	if claim == "" {
+		return
+	}
+	if f.Metadata == nil {
+		f.Metadata = map[string]string{}
+	}
+	f.Metadata[rules.StructuralClaimKey] = claim +
+		"; another " + companionType + " was found among the manifests scanned, and it does not cover this resource"
 }

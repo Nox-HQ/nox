@@ -182,15 +182,45 @@ VPC: precision and recall stay at 1.00, and IAC moves from
 `corroborated=1 above=1 earned=1` to `corroborated=2 above=2 earned=2`. Suite
 earned evidence goes from 3 to 4.
 
-##### What remains unknown, and is now stated rather than implied
+##### Cross-file resolution, which the common case actually needed
 
-A document set is one file. A PodDisruptionBudget in a second manifest is not
-visible, and "no companion in this file" is not "no companion anywhere". That
-limit is inherited — the text rule it replaces is scoped to one file too — but
-the claim now says what was parsed rather than what is deployed, and
-`Hit.Statement` says "the document set" for exactly that reason. Cross-FILE
-resolution is the next capability this group would want, and it needs the scan
-to hold a document set across files, which nothing does today.
+A document set was one file, and real manifests are not written that way. A Helm
+chart, a kustomize base and every manifest directory put each object in its own
+file, so a Deployment's PodDisruptionBudget is almost never in the same
+document. That made the COMMON case a false positive: measured on a two-file
+tree — a Deployment in `deployment.yaml`, a budget in `pdb.yaml` whose selector
+matches it exactly — IAC-132 reported the workload as unprotected and said "the
+document set declares no PodDisruptionBudget". The budget was one file over.
+
+`structural.Index` holds the resources of every file a scan read, and a
+post-pass reconsiders each cross-resource finding against it. Three properties
+make it safe:
+
+- **It can only REMOVE a finding.** The index is consulted after the per-file
+  verdict and only for a subject that verdict already called absent. A scan that
+  read more files may clear a resource it would otherwise flag; it may never
+  flag one it would otherwise clear. The reverse would make a finding depend on
+  which directory the operator pointed at.
+  `TestCrossFilePassNeverAddsAFinding` holds it.
+- **The per-file verdict stays authoritative on its own.** `ScanFile` is what
+  the MCP server and the LSP call, and they hand over one buffer with no tree
+  behind it, so the cross-file answer is layered on top rather than folded in.
+- **An undecidable linkage leaves the finding standing.** Within a file an
+  undecidable pair takes the verdict back to the text path; here the per-file
+  answer already exists and the index is only asked to refute it, so "I cannot
+  tell whether that budget covers this workload" changes nothing.
+
+It also separated two outcomes the per-file claim had run together. A finding
+that survives now says whether NOTHING of that kind was scanned or whether one
+was scanned and does not cover this resource — both leave the finding standing,
+and they are very different things for an operator to read.
+
+##### What remains unknown
+
+Only files this scan read are in the index. A PodDisruptionBudget outside the
+scanned tree is invisible, and the claim says "among the manifests scanned"
+rather than "in this cluster" for exactly that reason. Narrowing the scan
+narrows what can be refuted, never what can be reported.
 
 #### The two rules that hold this together
 
