@@ -2,10 +2,21 @@
   "_comment": [
     "Real repositories scanned by scripts/rule-diff.sh to detect rule-behaviour",
     "changes between two nox builds. Chosen for VARIETY of the surfaces nox",
-    "actually gets pointed at -- Go services, Terraform/Kubernetes manifests,",
-    "Dockerfiles, GitHub Actions workflows, JS/TS dependency trees, and the",
-    "LANGUAGES the taint engine models -- not for being clean. A repo with real",
-    "findings is more useful here than one without.",
+    "actually gets pointed at -- Go services, Kubernetes manifests, Dockerfiles,",
+    "GitHub Actions workflows, JS/TS dependency trees, and the LANGUAGES the taint",
+    "engine models -- not for being clean. A repo with real findings is more useful",
+    "here than one without.",
+    "",
+    "IAC is the largest family in the catalogue (490 rules) and the one whose",
+    "behaviour the structural-parsing programme changes deliberately. Until",
+    "kubernetes/examples was added the corpus carried NO CloudFormation, ARM,",
+    "Kubernetes or Terraform document at all, so 'No rule-level change on the",
+    "corpus' after an IAC change was a pass by absence of coverage rather than a",
+    "verification. A gate that cannot see a family cannot clear it.",
+    "",
+    "Still uncovered: Azure ARM templates (IAC-084/086 and the ARM property rules)",
+    "and Terraform. Those families remain verified only by testdata/precision-suite",
+    "and the analyzer tests -- a green rule diff says nothing about them.",
     "",
     "Language coverage matters as much as artifact variety: the taint engine",
     "models 15+ languages, and a corpus of only Go/IaC repos cannot show a taint",
@@ -48,6 +59,18 @@
       "url": "https://github.com/elixir-plug/plug",
       "sha": "2463704245eccacb2c528d7651cf86120b9f0543",
       "why": "Elixir conn pipeline, dense in the pipe operator and pattern-match destructuring the elixir taint model binds. Baseline is zero taint findings; it exists because no Go/IaC repo exercises elixir at all, and elixir taint changes shipped this session with no real-world control"
+    },
+    {
+      "name": "kubernetes-examples",
+      "url": "https://github.com/kubernetes/examples",
+      "sha": "d6b8cd27eacb51e651a1aa6f7c190a28713eff6e",
+      "why": "Kubernetes manifests -- 75 rules fire, the widest IAC coverage in the corpus, including the structural property-path rules (IAC-137/138/139/140/145). It carries 30 workloads but only ONE PodDisruptionBudget and no ResourceQuota, so it controls the 'no companion declared anywhere' branch of the cross-resource rules and NOT the linkage branch -- aws-cloudformation-templates covers that. Scans in 0.7s, the cheapest entry here, because it is manifests rather than source"
+    },
+    {
+      "name": "aws-cloudformation-templates",
+      "url": "https://github.com/aws-cloudformation/aws-cloudformation-templates",
+      "sha": "a0f43bc6d20813052892546f445037cf84c75b54",
+      "why": "The only CloudFormation in the corpus, and the only entry that exercises cross-resource LINKAGE rather than mere absence. Measured when companion resolution landed: IAC-059 went 67 -> 37 (30 VPCs the text path called unmonitored do have a flow log referencing them) and IAC-079 went 8 -> 10 (secrets whose rotation schedule does not reference them). kubernetes/examples showed NO change on the same commit, which is why both are here"
     }
   ]
 }
