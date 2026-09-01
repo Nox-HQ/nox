@@ -15,6 +15,11 @@ import (
 // filePath and language are attached to every Unit so findings can be located.
 func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Unit {
 	drafts := extractUnits(lang, content)
+	// A sink is named in the catalog by its qualified path, and the recognizers
+	// record a call exactly as written — so `from os import system; system(x)`
+	// matched nothing. Expanding through the file's imports is what lets an
+	// ordinary import idiom be recognised. Additions only; see imports.go.
+	applyImportAliases(drafts, importAliases(lang, content))
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]

@@ -3,9 +3,9 @@
   "recall": 1,
   "f1": 1,
   "fp": 0,
-  "tp": 39,
+  "tp": 44,
   "fn": 0,
-  "findings_per_issue": 1.054054054054054,
+  "findings_per_issue": 1.0476190476190477,
   "rules": [
     {
       "rule_id": "AI-002",
