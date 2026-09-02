@@ -165,20 +165,26 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.La
 // source line.
 func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 	sink := flow.Sink
+	// A source used directly as the sink's argument (`eval "$@"`,
+	// `os.system(request.args.get("c"))`) binds no variable; name the source
+	// expression instead of an empty variable.
+	origin := fmt.Sprintf("%s via %q", flow.Source.Kind, flow.SourceVar)
+	if flow.SourceVar == "" {
+		origin = fmt.Sprintf("%s from %q used directly", flow.Source.Kind, flow.Source.Call)
+	}
 	var msg string
 	if len(flow.Via) > 0 {
 		// Cross-function flow: name the intermediate helper(s) so triage can follow
 		// the path from the caller's source through the summarized helper(s) to the
 		// sink.
 		msg = fmt.Sprintf(
-			"Untrusted input (%s via %q) reaches %s sink %q through %s without sanitization — %s.",
-			flow.Source.Kind, flow.SourceVar, sink.VulnClass, sink.Call,
-			viaPath(flow.Via), sink.CWE,
+			"Untrusted input (%s) reaches %s sink %q through %s without sanitization — %s.",
+			origin, sink.VulnClass, sink.Call, viaPath(flow.Via), sink.CWE,
 		)
 	} else {
 		msg = fmt.Sprintf(
-			"Untrusted input (%s via %q) reaches %s sink %q without sanitization — %s.",
-			flow.Source.Kind, flow.SourceVar, sink.VulnClass, sink.Call, sink.CWE,
+			"Untrusted input (%s) reaches %s sink %q without sanitization — %s.",
+			origin, sink.VulnClass, sink.Call, sink.CWE,
 		)
 	}
 	meta := map[string]string{
