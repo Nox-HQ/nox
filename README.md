@@ -33,7 +33,7 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
-> **The MCP scanner that never sees your code.** No API. No token. No telemetry. Deterministic. Run `nox scan --offline` and the scan path makes zero outbound connections — enforced by a test, not a promise (`TestOSVDisabled_NoNetworkEgress`). Unlike scanners that proxy your traffic or phone home to a vendor API, nox runs entirely on your machine.
+> **The MCP scanner that never sees your code.** No token. No telemetry. Deterministic. Run `nox scan --offline` and the scan path makes zero outbound connections — enforced by a test, not a promise (`TestOSVDisabled_NoNetworkEgress`). Online, exactly one thing leaves the machine: the dependency list (ecosystem, package, version), sent to the advisory source — [NOX Intelligence](docs/intelligence.md) by default, every answer verified against OSV.dev, or OSV.dev directly with `scan.intelligence.disabled: true`. Source code never leaves; findings leave only if you turn contribution on.
 
 - **Deterministic** -- same inputs produce same outputs, no hidden state
 - **Offline-first** -- zero required external services
@@ -198,16 +198,17 @@ Detects misconfigurations across **7 IaC categories**:
 
 ### Dependencies & SCA (6 rules)
 
-Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and queries the [OSV.dev](https://osv.dev) database for known vulnerabilities:
+Parses lockfiles from **8 ecosystems** (Go, npm, PyPI, RubyGems, Cargo, Maven, Gradle, NuGet) and asks [NOX Intelligence](docs/intelligence.md) — an OSV-compatible advisory source that is verified against [OSV.dev](https://osv.dev) on every lookup — for known vulnerabilities:
 
 | Rule | Description |
 |------|-------------|
 | VULN-001 | Known vulnerability in dependency (severity mapped from CVSS) |
 
-- Batches queries to the OSV.dev API (up to 1000 packages per request)
+- Batches queries (up to 1000 packages per request); the same `/v1/querybatch` wire format as OSV.dev
+- Every intelligence answer is checked against OSV.dev; a withheld advisory is restored from OSV and reported as a degradation, so the service can never cost a scan a finding
 - CVSS scores mapped to nox severity levels (Critical/High/Medium/Low/Info)
-- Graceful degradation on network errors (offline-first)
-- Disable with `--no-osv` flag or `scan.osv.disabled: true` in `.nox.yaml`
+- Graceful degradation on network errors (offline-first): an unreachable service degrades to the OSV.dev scan nox always ran
+- Ask OSV.dev directly with `scan.intelligence.disabled: true`; disable lookups entirely with `--no-osv` / `--offline` / `scan.osv.disabled: true`
 - Vulnerability data enriches CycloneDX and SPDX SBOM output
 
 ### Supply-chain integrity (deterministic, offline)
@@ -279,7 +280,13 @@ scan:
     - "testdata/"
     - "*.test.js"
   osv:
-    disabled: false          # Set true to skip OSV lookups (offline mode)
+    disabled: false          # Set true to skip vulnerability lookups (offline mode)
+    base_url: ""             # OSV-compatible reference database (default api.osv.dev; a self-hosted mirror works)
+  intelligence:
+    disabled: false          # Set true to ask OSV.dev directly instead of NOX Intelligence
+    endpoint: ""             # Self-hosted service (default: NOX_INTEL_ENDPOINT, else https://intel.klarlabs.de)
+    verify_against_osv: true # Check every answer against the reference; a withheld advisory is restored and reported
+    contribute: false        # Send redacted observations back (opt-in; see docs/intelligence.md)
   rules:
     disable:
       - "AI-008"           # Unpinned model refs OK here

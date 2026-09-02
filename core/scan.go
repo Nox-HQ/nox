@@ -412,7 +412,10 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// two cannot drift into disagreeing about what "offline" means.
 	vulnLookupEnabled := !opts.Offline && !opts.DisableOSV && !cfg.Scan.OSV.Disabled
 
-	depsOpts := []deps.AnalyzerOption{deps.WithDegradations(degradations)}
+	depsOpts := []deps.AnalyzerOption{
+		deps.WithDegradations(degradations),
+		deps.WithOSVBaseURL(cfg.Scan.OSV.ReferenceBaseURL()),
+	}
 	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
@@ -436,24 +439,24 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			Allow: cfg.License.Allow,
 		}))
 	}
-	// An intelligence endpoint replaces OSV.dev as the source dependency
-	// scanning asks. It is off unless configured, so the default path is
-	// unchanged.
+	// The intelligence service is the source dependency scanning asks, by
+	// default; `scan.intelligence.disabled` asks OSV.dev directly instead.
 	//
 	// When verification is on (the default), the intelligence source is checked
 	// against OSV on every lookup and any record it withheld is restored from
 	// OSV and reported as a degradation. That is what keeps "superset" a
 	// property rather than a promise: a source that starts dropping advisories
 	// costs its operator trust, immediately and visibly, but never costs the
-	// scan a finding.
-	if endpoint := cfg.Scan.Intelligence.Endpoint; endpoint != "" && vulnLookupEnabled {
+	// scan a finding. It is also what makes a compiled-in default defensible:
+	// an unreachable service degrades to exactly the OSV scan nox ran before.
+	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
 		intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), degradations).
 			WithCache(advisoryCache)
 
 		var src vulnsource.Source = intel
 		if cfg.Scan.Intelligence.VerificationEnabled() {
 			src = vulnsource.NewVerifying(intel, func(refDeg *degrade.Degradations) vulnsource.Source {
-				return osvsource.New(osvsource.DefaultBaseURL, intelHTTPClient(), refDeg).
+				return osvsource.New(cfg.Scan.OSV.ReferenceBaseURL(), intelHTTPClient(), refDeg).
 					WithCache(advisoryCache)
 			}, degradations)
 		}
@@ -977,15 +980,16 @@ func parseFeedRefresh(s string) (time.Duration, error) {
 // Querying an endpoint and contributing to it are two decisions, and this is
 // the second one. A lookup already transmits (ecosystem, package, version) for
 // every dependency, so if querying implied contributing then "contribute:
-// false" would be a lie for anyone with an endpoint configured. Both are off by
-// default and both must be set explicitly.
+// false" would be a lie for anyone with an endpoint configured. Querying is on
+// by default; contributing is off until set, in config AND by the caller.
 //
 // Failure is recorded, never propagated. A scan that failed because an upload
 // did would make opting in actively hostile, and would give operators a reason
 // to switch off the thing that makes corroboration possible at all.
 func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptions, fs []findings.Finding, deg *degrade.Degradations) {
 	ic := cfg.Scan.Intelligence
-	if !opts.ContributeObservations || !ic.Contribute || ic.Endpoint == "" {
+	endpoint := ic.ResolvedEndpoint()
+	if !opts.ContributeObservations || !ic.Contribute || endpoint == "" {
 		return
 	}
 
@@ -1013,7 +1017,7 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	res := intel.NewClient(ic.Endpoint, intelHTTPClient()).Contribute(ctx, obs)
+	res := intel.NewClient(endpoint, intelHTTPClient()).Contribute(ctx, obs)
 	if res.FirstError != nil {
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("%d of %d observations were not accepted: %v",

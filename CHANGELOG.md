@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+NOX Intelligence becomes the default advisory source. Every online `nox scan`
+now asks `https://intel.klarlabs.de` which advisories match each dependency and
+verifies the answer against OSV.dev; a withheld record is restored from OSV and
+reported as a degradation, and an unreachable service degrades to exactly the
+OSV.dev scan nox always ran. What leaves the machine is unchanged — the
+`(ecosystem, package, version)` list OSV.dev always received — and contribution
+stays a separate, opt-in decision. The complete account is `docs/intelligence.md`.
+
+### Added
+
+- `scan.intelligence.disabled: true` asks OSV.dev directly; the service is never
+  contacted. `--offline` still asks nobody.
+- `NOX_INTEL_ENDPOINT` is honoured by `nox scan`, not only by the `nox intel`
+  subcommands, so a self-hosted service is named once. Resolution order is
+  `disabled > scan.intelligence.endpoint > NOX_INTEL_ENDPOINT > compiled-in`.
+- `scan.osv.base_url` names the reference database used for verification, for
+  self-hosted OSV mirrors.
+- Tests that assert the three states from the wire: service and reference,
+  reference only, nobody (`TestScan_IntelligenceIsTheDefaultSource`,
+  `TestScan_IntelligenceDisabledAsksTheReferenceDirectly`,
+  `TestScan_OfflineAsksNobody`).
+- `docs/intelligence.md`: what a scan sends, to whom, and how to turn it off at
+  every level. Roadmap Phase 11 plans the gaps from where the market moves.
+
+### Changed
+
+- `nox intel login/register/add-operator/invite/enroll --endpoint` defaults to
+  the endpoint scans query rather than an empty string.
+- `docs/design/intelligence-service.md` no longer describes the service as
+  proposed.
+
 ## [1.32.0] - 2026-08-31
 
 Two programmes in one release: nox became evidence-native, and its dynamic

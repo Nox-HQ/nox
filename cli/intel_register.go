@@ -16,8 +16,8 @@ import (
 func runIntelRegister(args []string) int {
 	cmdName = "nox intel add-operator"
 	fs := flag.NewFlagSet("intel register", flag.ContinueOnError)
-	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
-		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
+	endpoint := fs.String("endpoint", intelEndpointDefault(),
+		"intelligence service base URL (default: NOX_INTEL_ENDPOINT, else the service scans query)")
 	email := fs.String("email", "", "address of the operator to register")
 	org := fs.String("org", "", "organisation to register them into")
 	role := fs.String("role", "member", "member or admin")
@@ -96,8 +96,8 @@ func runIntelRegister(args []string) int {
 func runIntelInvite(args []string) int {
 	cmdName = "nox intel invite"
 	fs := flag.NewFlagSet("intel invite", flag.ContinueOnError)
-	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
-		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
+	endpoint := fs.String("endpoint", intelEndpointDefault(),
+		"intelligence service base URL (default: NOX_INTEL_ENDPOINT, else the service scans query)")
 	email := fs.String("email", "", "address of the operator to re-invite")
 	org := fs.String("org", "",
 		"organisation they belong to (only needed if you administer more than one)")

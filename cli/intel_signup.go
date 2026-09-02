@@ -22,14 +22,14 @@ import (
 // technically honest.
 func runIntelSignup(args []string) int {
 	fs := flag.NewFlagSet("intel register", flag.ContinueOnError)
-	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
-		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
+	endpoint := fs.String("endpoint", intelEndpointDefault(),
+		"intelligence service base URL (default: NOX_INTEL_ENDPOINT, else the service scans query)")
 	noBrowser := fs.Bool("no-browser", false, "print the URL instead of opening a browser")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *endpoint == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nox intel register --endpoint URL\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nox intel register [--endpoint URL]\n\n")
 		fmt.Fprintf(os.Stderr, "Opens the page where an organisation is created. Organisations are\n")
 		fmt.Fprintf(os.Stderr, "not created from the command line: that is where terms, billing and\n")
 		fmt.Fprintf(os.Stderr, "address verification live.\n\n")

@@ -82,9 +82,11 @@ network capability.
 
 `core/confirm` is the earlier, narrower version of this loop and stays as-is.
 
-Vulnerability intelligence is deliberately NOT in the CLI. See
-`docs/design/intelligence-service.md` for the boundary and why redaction and the
-private evidence graph stay client-side while aggregation and research do not.
+Vulnerability intelligence is deliberately NOT in the CLI. The CLI consumes it:
+every online scan asks NOX Intelligence by default and verifies the answer
+against OSV.dev (`docs/intelligence.md`; opt-out `scan.intelligence.disabled`).
+See `docs/design/intelligence-service.md` for the boundary and why redaction and
+the private evidence graph stay client-side while aggregation and research do not.
 
 ### MCP Server
 
