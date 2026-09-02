@@ -262,6 +262,39 @@ F1 0.933** (14 TP, 0 FP, 2 FN). The two recall gaps are honest and documented
 local-summary interprocedural model). Ruby inherits every intraprocedural limit
 above and is module/`def`-scoped like Python.
 
+## Status update: shared state joins units that never call each other
+
+Function summaries join a value that passes through a CALL. They do not join a
+value laundered through state two units SHARE without calling each other — an
+instance variable set in one method and read in another. That was a documented
+recall gap (the Ruby `@ivar` case above) until `core/taint/engine/sharedstate.go`
+closed it narrowly: a binding of a **syntactically shared** name is copied,
+with empty sink evidence, into every other unit that reads that name, and the
+ordinary intra-unit propagation does the rest. The copy is prepended, so a unit
+that assigns the same name locally still shadows it. The join is
+flow-insensitive across units, the standard over-approximation for shared
+state. Only names the language marks as shared participate — a plain local never
+joins, which is what keeps every same-named local in a file from becoming one
+variable.
+
+Per language, "shared" means:
+
+| Language | Shared names | Scope of the join |
+|---|---|---|
+| Ruby | `@ivar`, `@@cvar`, `$global` | file |
+| Perl | `$PKG` globals, `our` | file |
+| Dart | fields declared in a class body (`String target = ...;`, `late`, `static`); top-level variables | **per class** for fields (the same field name in two classes stays two variables); file for top-level variables. `this.field` is normalized to the bare name. |
+
+Dart also opted in to **container binding**: an element assignment
+(`m['k'] = x`) binds the container (as for Perl), and an in-place mutator
+(`add`, `addAll`, `insert`, `insertAll`, `addEntries`, `write`, `writeln`,
+`writeAll`) is modeled as `urls = urls.add(x)` — taint already in the container
+is kept, taint in the argument is added. Both are container-level, not
+per-element, so they can only widen taint; Dart was enabled after the join was
+measured to add zero findings across 1072 real Dart files (dart-lang/http,
+cfug/dio, dart-lang/shelf, flutter/samples) while closing the two documented
+`testdata/precision-suite-dart` false negatives (recall 0.667 → 1.0).
+
 ## Semantics: a partially tainted URL is still reported (SSRF, TAINT-006)
 
 A recurring shape, found in three languages while validating the engine against

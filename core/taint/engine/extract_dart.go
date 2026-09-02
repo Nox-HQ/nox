@@ -27,8 +27,10 @@ import "strings"
 //     still captured, but the member is not opened as its own named unit.
 //   - Cascades (`..method()`), null-aware chains (`?.`), and `await`/`Future`
 //     laundering are recognized only as far as their argument reads; a value
-//     laundered through an async callback is not tracked. These gaps are recorded
-//     as honest FNs in testdata/precision-suite-dart/README.md.
+//     laundered through an async callback is not tracked.
+//   - Cross-method flow through a class FIELD or a top-level variable IS joined
+//     (see sharedstate.go): fields are shared per class, top-level names per
+//     file. The join is flow-insensitive across methods.
 //   - A typed function PARAMETER arriving as untrusted input (a shelf `Request`)
 //     is not a source CALL, so it is not tainted from its type — the same
 //     documented gap as the other web extractors.
@@ -39,14 +41,43 @@ func extractDart(lines []logicalLine) []unitDraft {
 
 	// depth is the running brace nesting. funDepth is the depth at which the
 	// current function body lives (-1 when at module scope); when depth falls back
-	// to funDepth the function has closed and scope returns to the module.
+	// to funDepth the function has closed and scope returns to the enclosing
+	// class body or the module.
 	depth := 0
 	funDepth := -1
+
+	// Shared state (see sharedstate.go). A top-level variable is shared by every
+	// unit in the file; an instance/static FIELD is shared by the methods of its
+	// class only, so the same field name in two classes stays two variables.
+	// Each open class carries its own body unit (field initializers) and its
+	// field set; on `}` the class's units are joined and the frame is popped.
+	topShared := map[string]bool{}
+	var classes []*dartClassFrame
+	scopeUnit := func() *unitDraft {
+		if n := len(classes); n > 0 {
+			return classes[n-1].body
+		}
+		return module
+	}
+	closeClasses := func(depth int) {
+		for len(classes) > 0 {
+			fr := classes[len(classes)-1]
+			if depth > fr.depth {
+				return
+			}
+			classes = classes[:len(classes)-1]
+			joinUnitRange(units, fr.start, len(units), fr.fields)
+		}
+	}
 
 	for _, ll := range lines {
 		trimmed := strings.TrimSpace(ll.code)
 		if trimmed == "" {
 			continue
+		}
+		if len(classes) > 0 {
+			ll = blankDartThis(ll)
+			trimmed = strings.TrimSpace(ll.code)
 		}
 
 		// A `return ...` line is a statement, never a header — check it first so a
@@ -56,7 +87,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 			before := depth
 			depth += braceDelta(trimmed)
 			if funDepth >= 0 && before > funDepth && depth <= funDepth {
-				cur = module
+				cur = scopeUnit()
 				funDepth = -1
 			}
 			continue
@@ -74,16 +105,44 @@ func extractDart(lines []logicalLine) []unitDraft {
 			continue
 		}
 
+		// A class-like header opens a frame: its body unit collects the field
+		// initializers, and its methods join through the fields it declares.
+		if funDepth < 0 && isDartClassHead(trimmed) {
+			body := &unitDraft{funcName: ""}
+			classes = append(classes, &dartClassFrame{
+				depth: depth, start: len(units), body: body, fields: map[string]bool{},
+			})
+			units = append(units, body)
+			cur = body
+			depth += braceDelta(trimmed)
+			continue
+		}
+
 		before := depth
 		depth += braceDelta(trimmed)
 		closesFun := funDepth >= 0 && before > funDepth && depth <= funDepth
 
 		if isDartStructuralLine(trimmed) {
 			if closesFun {
-				cur = module
 				funDepth = -1
 			}
+			closeClasses(depth)
+			if funDepth < 0 {
+				cur = scopeUnit()
+			}
 			continue
+		}
+
+		// A declaration directly in a class body (a field) or at the top level
+		// (a global) names shared state.
+		if funDepth < 0 {
+			if name, ok := dartDeclaredName(trimmed); ok {
+				if n := len(classes); n > 0 && before == classes[n-1].depth+1 {
+					classes[n-1].fields[name] = true
+				} else if n == 0 && before == 0 {
+					topShared[name] = true
+				}
+			}
 		}
 
 		if st, ok := recognizeStatement(langDart, ll); ok {
@@ -91,16 +150,105 @@ func extractDart(lines []logicalLine) []unitDraft {
 		}
 
 		if closesFun {
-			cur = module
+			cur = scopeUnit()
 			funDepth = -1
 		}
 	}
+	closeClasses(0)
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
 		out = append(out, *u)
 	}
-	return out
+	return joinSharedState(out, topShared)
+}
+
+// dartClassFrame is one open class-like body: the brace depth of its header,
+// the index of its first unit (its body unit), and the fields it declares.
+type dartClassFrame struct {
+	depth  int
+	start  int
+	body   *unitDraft
+	fields map[string]bool
+}
+
+// joinUnitRange runs joinSharedState over units[start:end] in place, so the
+// join is scoped to one class's body and methods.
+func joinUnitRange(units []*unitDraft, start, end int, shared map[string]bool) {
+	if len(shared) == 0 || end-start < 2 {
+		return
+	}
+	drafts := make([]unitDraft, 0, end-start)
+	for _, u := range units[start:end] {
+		drafts = append(drafts, *u)
+	}
+	drafts = joinSharedState(drafts, shared)
+	for i := range drafts {
+		*units[start+i] = drafts[i]
+	}
+}
+
+// isDartClassHead reports whether trimmed opens a class, mixin, enum, or
+// extension body (`[abstract|base|final|sealed|interface] class Name ... {`).
+func isDartClassHead(trimmed string) bool {
+	if !strings.HasSuffix(trimmed, "{") {
+		return false
+	}
+	for _, kw := range []string{
+		"class ", "abstract class ", "base class ", "final class ", "sealed class ",
+		"interface class ", "abstract base class ", "abstract final class ",
+		"abstract interface class ", "mixin ", "mixin class ", "base mixin ",
+		"enum ", "extension ", "extension type ",
+	} {
+		if strings.HasPrefix(trimmed, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// dartDeclaredName returns the variable a declaration line declares:
+// `[static] [late] [final|const|var|Type] name [= expr];`. A member with a
+// parameter list or an arrow body (`String f(x) => ...`, `Fetcher(this.x);`, a
+// getter `String get x => ...`) is not a variable, and a bare reassignment
+// (`x = e;`, no type or keyword) declares nothing.
+func dartDeclaredName(trimmed string) (string, bool) {
+	decl := strings.TrimSuffix(trimmed, ";")
+	if eq := strings.IndexByte(decl, '='); eq >= 0 {
+		// splitAssignment strips the type; require that a type or keyword was
+		// there, and that the target is neither a parameter list nor an arrow
+		// member (`String get x => ...`).
+		lhs, _ := splitAssignment(langDart, decl)
+		head := strings.TrimSpace(decl[:eq])
+		if lhs == "" || head == lhs || strings.ContainsRune(head, '(') || strings.HasPrefix(decl[eq:], "=>") {
+			return "", false
+		}
+		return lhs, true
+	}
+	if strings.ContainsAny(decl, "(=>") {
+		return "", false
+	}
+	name := stripDartDeclType(decl)
+	if name == strings.TrimSpace(decl) || !isBareIdent(name) || isKeyword(name) {
+		return "", false
+	}
+	return name, true
+}
+
+// blankDartThis blanks an explicit `this.` receiver in the code view so
+// `this.target = e` binds and `f(this.target)` reads the same bare field name
+// the implicit form uses. Offsets are preserved (the raw view is untouched).
+func blankDartThis(ll logicalLine) logicalLine {
+	code := []byte(ll.code)
+	for i := 0; i+5 <= len(code); i++ {
+		if string(code[i:i+5]) != "this." || (i > 0 && isIdentPart(code[i-1])) {
+			continue
+		}
+		copy(code[i:i+5], "     ")
+		i += 4
+	}
+	ll.code = string(code)
+	return ll
 }
 
 // dartFuncHeader returns the function/method name and its positional+named

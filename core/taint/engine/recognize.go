@@ -84,6 +84,17 @@ func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
 
 	st.chains = dottedChains(exprCode)
 
+	// A mutator call on a container is a store into it (see containerMutators).
+	if st.assigns == "" {
+		if root, ok := containerMutationRoot(lang, code); ok {
+			st.assigns = root
+			if _, seen := reads[root]; !seen {
+				st.reads = append(st.reads, root)
+				sortStrings(st.reads)
+			}
+		}
+	}
+
 	if st.assigns == "" && len(st.calls) == 0 && len(st.reads) == 0 {
 		return stmtDraft{}, false
 	}
@@ -482,6 +493,45 @@ func dottedAssignRoot(left string) (string, bool) {
 // corpus demands it.
 var containerTaintLangs = map[langKind]bool{
 	langPerl: true,
+	langDart: true,
+}
+
+// containerMutators are, per language, the methods that MUTATE their receiver
+// container in place (`urls.add(x)`, `buf.write(x)`). A call to one is a store
+// into the container with no `=` for splitAssignment to see, so before this the
+// taint was lost at the store exactly as it was for `list[0] = x` before
+// containerTaintLangs. The statement is modeled as a rebinding of the receiver
+// that also READS it (`urls = urls.add(x)`): taint already in the container is
+// kept, taint in the arguments is added. Container-level and field-insensitive,
+// like containerTaintLangs, and enabled per language as a corpus demands it.
+var containerMutators = map[langKind]map[string]bool{
+	langDart: {
+		"add": true, "addAll": true, "insert": true, "insertAll": true,
+		"addEntries": true, "write": true, "writeln": true, "writeAll": true,
+	},
+}
+
+// containerMutationRoot returns the receiver of a whole-statement mutator call
+// (`urls.add(x)` -> `urls`). The statement must be exactly `IDENT.method(...)`
+// with the call's parenthesis closing the statement, so a chained or nested
+// call (`urls.add(x).length`, `f(urls.add(x))`) yields ok=false rather than a
+// misattributed binding.
+func containerMutationRoot(lang langKind, code string) (string, bool) {
+	mutators := containerMutators[lang]
+	if mutators == nil {
+		return "", false
+	}
+	code = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(code), ";"))
+	dot := strings.IndexByte(code, '.')
+	open := strings.IndexByte(code, '(')
+	if dot <= 0 || open < dot+2 {
+		return "", false
+	}
+	root, method := code[:dot], code[dot+1:open]
+	if !isBareIdent(root) || isKeyword(root) || !mutators[method] {
+		return "", false
+	}
+	return root, matchParen(code, open) == len(code)-1
 }
 
 // containerAssignRoot returns the container name of an element-assignment target
