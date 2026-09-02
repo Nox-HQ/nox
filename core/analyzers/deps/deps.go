@@ -404,6 +404,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// the build actually links so advisories can be scoped by import path.
 	var goModDir string
 
+	// Source files whose imports can answer applicability for the ecosystems
+	// the toolchain cannot. Paths only: nothing is read unless a finding asks.
+	srcImports := &sourceImports{}
+	for _, art := range artifacts {
+		if art.Type == discovery.Source {
+			srcImports.paths = append(srcImports.paths, art.AbsPath)
+		}
+	}
+
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile {
 			continue
@@ -727,7 +736,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// including — especially — the ones where it got nowhere,
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
-					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown)
+					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports)
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
 					if verdict.StoppedAt != "" {
@@ -795,14 +804,22 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // the point. A scanner that stops climbing and stays silent leaves the reader
 // to assume it stopped because there was nothing above; this says it stopped
 // because nobody has built the thing that would look.
-func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, linkedKnown bool) applicability.Verdict {
+func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, linkedKnown bool, src *sourceImports) applicability.Verdict {
 	// Present and AffectedVersion are established by the fact of the finding:
 	// the package is in the lockfile, and OSV matched its version.
 	const reached = applicability.AffectedVersion
 
 	if pkg.Ecosystem != "go" {
-		// Dependency reachability is implemented for Go only. An npm package is
-		// not unreachable; it is unexamined, and nothing here could examine it.
+		// Go is answered by the toolchain, which sees the transitive link set.
+		// Everything else is answered by this project's own imports, which can
+		// only ever CLIMB — see importApplicability for why absence there
+		// refutes nothing.
+		if v, ok := importApplicability(pkg, reached, src); ok {
+			return v
+		}
+		// Not unreachable: unexamined, or examined and not directly imported,
+		// which are the same answer because nothing here can see through a
+		// dependency.
 		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
 	}
 

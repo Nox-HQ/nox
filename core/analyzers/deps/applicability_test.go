@@ -91,7 +91,7 @@ func TestApplicabilityClimbsAsFarAsTheEvidenceGoes(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			v := applicabilityFor(tc.pkg, tc.adv, tc.linked, tc.linkedKnown)
+			v := applicabilityFor(tc.pkg, tc.adv, tc.linked, tc.linkedKnown, &sourceImports{})
 			if v.Outcome != tc.wantOutcome {
 				t.Errorf("outcome = %q, want %q", v.Outcome, tc.wantOutcome)
 			}
@@ -131,7 +131,7 @@ func TestOnlyTheUnlinkedCaseIsNotImpacting(t *testing.T) {
 		{goAdvisory(module, "golang.org/x/crypto/ssh"), nil, false, "go"},
 		{goAdvisory("left-pad"), nil, false, "npm"},
 	} {
-		v := applicabilityFor(Package{Name: module, Ecosystem: tc.eco}, tc.adv, tc.linked, tc.linkedKnown)
+		v := applicabilityFor(Package{Name: module, Ecosystem: tc.eco}, tc.adv, tc.linked, tc.linkedKnown, &sourceImports{})
 		if v.Outcome == applicability.NotImpacting {
 			notImpacting++
 		}
@@ -150,7 +150,7 @@ func TestTheMessageSaysWhatWasEstablished(t *testing.T) {
 	linked := map[string]struct{}{"golang.org/x/crypto/openpgp": {}}
 
 	unlinked := applicabilityFor(Package{Name: module, Ecosystem: "go"},
-		goAdvisory(module, "golang.org/x/crypto/ssh"), linked, true)
+		goAdvisory(module, "golang.org/x/crypto/ssh"), linked, true, &sourceImports{})
 	got := unlinked.Describe()
 	if !strings.Contains(got, "not currently impacting") {
 		t.Errorf("%q does not state the conclusion in a developer's terms", got)
@@ -160,7 +160,7 @@ func TestTheMessageSaysWhatWasEstablished(t *testing.T) {
 	}
 
 	stalled := applicabilityFor(Package{Name: module, Ecosystem: "go"},
-		goAdvisory(module, "golang.org/x/crypto/openpgp"), linked, true)
+		goAdvisory(module, "golang.org/x/crypto/openpgp"), linked, true, &sourceImports{})
 	got = stalled.Describe()
 	if strings.Contains(got, "not currently impacting") {
 		t.Errorf("%q claims non-impact for a linked package", got)
