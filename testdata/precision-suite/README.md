@@ -6,8 +6,12 @@ ground truth** — what a *correct* scanner should do — so real false positive
 and false negatives surface as a number below 1.0. That is the point: a corpus
 that always scores 1.0 measures nothing.
 
-The corpus spans **Python, JS/TS, and Go** (`clean_*.{py,js,ts,go}` /
-`tp_*.{py,go}`). Go samples were added once `lexctx` began classifying Go
+The corpus spans **Python, JS/TS, Go, Clojure, Elixir and C#**
+(`clean_*.{py,js,ts,go}` / `tp_*.{py,go,clj,ex,cs}`). The last three arrived
+with alias resolution: the suite had NO sample in any of them, so it scored 1.00
+while the engine was blind to the canonical `(:require [clojure.java.shell :as
+sh])` spelling of its highest-severity Clojure sink. A corpus that does not span
+a language cannot report on it. Go samples were added once `lexctx` began classifying Go
 (#197): nox is now measured in its own language for the first time. Adding them
 first *lowered* recall (the six Go taint classes were genuine false negatives
 until a Go taint model existed); the Go taint model has since landed
