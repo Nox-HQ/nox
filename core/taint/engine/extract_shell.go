@@ -60,23 +60,8 @@ func extractShell(lines []logicalLine) []unitDraft {
 		// recognized normally.
 		if decl, ok := stripShellDeclPrefix(ll); ok {
 			ll = decl
-			trimmed = strings.TrimSpace(ll.code)
 		}
-		if isShellStructuralLine(trimmed) {
-			continue
-		}
-		if sts, ok := shellReadStatements(ll); ok {
-			cur.stmts = append(cur.stmts, sts...)
-			continue
-		}
-		if st, ok := shellAssignment(ll); ok {
-			cur.stmts = append(cur.stmts, st)
-			continue
-		}
-		if st, ok := shellCommand(ll); ok {
-			cur.stmts = append(cur.stmts, st)
-			continue
-		}
+		cur.stmts = append(cur.stmts, shellPipelineStatements(ll)...)
 	}
 
 	out := make([]unitDraft, 0, len(units))
@@ -84,6 +69,173 @@ func extractShell(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// shellPipelineStatements recognizes one logical line as a PIPELINE: each
+// top-level `|` segment is a command of its own, and the value written by the
+// segments upstream of a command arrives on its stdin. For most commands stdin
+// is mere data, but two shapes turn it into the thing a sink acts on: `xargs`
+// hands it to the command it invokes as ARGUMENTS, and a bare `sh`/`bash`
+// executes it as a SCRIPT. The reads of every upstream segment (variables and
+// inline sources alike) are therefore carried down the pipeline and, at such a
+// consumer, become a tainted argument slot of the sink. A line without a pipe
+// is a single segment and behaves exactly as before.
+func shellPipelineStatements(ll logicalLine) []stmtDraft {
+	var out []stmtDraft
+	var piped *shellPipe
+	for k, seg := range shellPipelineSegments(ll) {
+		sts := shellSegmentStatements(seg, piped)
+		out = append(out, sts...)
+		if k == 0 {
+			piped = &shellPipe{}
+		}
+		piped.absorb(seg, sts)
+	}
+	return out
+}
+
+// shellSegmentStatements recognizes one pipeline segment. piped is nil for the
+// first segment (nothing is upstream of it).
+func shellSegmentStatements(seg logicalLine, piped *shellPipe) []stmtDraft {
+	seg = stripShellLoopReadHeader(seg)
+	trimmed := strings.TrimSpace(seg.code)
+	if trimmed == "" || isShellStructuralLine(trimmed) {
+		return nil
+	}
+	if sts, ok := shellReadStatements(seg); ok {
+		return sts
+	}
+	if st, ok := shellAssignment(seg); ok {
+		return []stmtDraft{st}
+	}
+	if st, ok := shellCommand(seg, piped); ok {
+		return []stmtDraft{st}
+	}
+	return nil
+}
+
+// shellPipe is the value flowing down a pipeline: the named variables read by
+// the segments upstream and the code text of those segments (so an inline
+// source such as `$1` or `$QUERY_STRING` written upstream is found by the
+// inline-source scan exactly as it would be in an argument word). It
+// accumulates across segments rather than resetting at each, because a filter
+// in between (`grep`, `sort`, `tr`, …) passes the data through.
+type shellPipe struct {
+	vars []string
+	code []string
+}
+
+func (p *shellPipe) absorb(seg logicalLine, sts []stmtDraft) {
+	for _, st := range sts {
+		for _, v := range st.reads {
+			p.vars = appendUnique(p.vars, v)
+		}
+	}
+	if strings.TrimSpace(seg.code) != "" {
+		p.code = append(p.code, seg.code)
+	}
+}
+
+// shellPipelineSegments splits a logical line at its top-level pipes. A `|`
+// inside `(...)` or `$(...)` belongs to the subshell, `||` is the OR operator,
+// and `|&` pipes stderr too. Literal contents are blanked in the code view, so
+// a `|` inside a string is never seen. Offsets are preserved: each segment's
+// code and raw views are slices at the same positions, so the alignment the
+// recognizer relies on survives.
+func shellPipelineSegments(ll logicalLine) []logicalLine {
+	code := ll.code
+	aligned := len(code) == len(ll.raw)
+	var segs []logicalLine
+	depth, start := 0, 0
+	cut := func(end, next int) {
+		seg := logicalLine{line: ll.line, code: code[start:end], raw: code[start:end]}
+		if aligned {
+			seg.raw = ll.raw[start:end]
+		}
+		segs = append(segs, seg)
+		start = next
+	}
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		case '|':
+			if depth != 0 {
+				continue
+			}
+			if i+1 < len(code) && code[i+1] == '|' {
+				i++ // the OR operator, not a pipe
+				continue
+			}
+			next := i + 1
+			if next < len(code) && code[next] == '&' {
+				next++
+			}
+			cut(i, next)
+			i = next - 1
+		}
+	}
+	cut(len(code), len(code))
+	return segs
+}
+
+// stripShellLoopReadHeader turns `while read -r line; do` (and `until …`) into
+// the `read -r line` it wraps, blanking the keyword and the trailing `; do` to
+// spaces so offsets hold. A loop header is otherwise structural scaffolding and
+// skipped, which lost the variable the loop reads into — and with it every
+// `cmd | while read -r line; do eval "$line"` flow.
+func stripShellLoopReadHeader(ll logicalLine) logicalLine {
+	code := ll.code
+	i := 0
+	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+		i++
+	}
+	rest := code[i:]
+	var kw string
+	switch {
+	case strings.HasPrefix(rest, "while "):
+		kw = "while "
+	case strings.HasPrefix(rest, "until "):
+		kw = "until "
+	default:
+		return ll
+	}
+	j := i + len(kw)
+	for j < len(code) && (code[j] == ' ' || code[j] == '\t') {
+		j++
+	}
+	// An `IFS=` style prefix is allowed before the read.
+	j += skipShellLeadingAssignments(code[j:])
+	for j < len(code) && (code[j] == ' ' || code[j] == '\t') {
+		j++
+	}
+	if !strings.HasPrefix(code[j:], "read ") && strings.TrimSpace(code[j:]) != "read" {
+		return ll
+	}
+	blank := func(s string, from, to int) string {
+		return s[:from] + strings.Repeat(" ", to-from) + s[to:]
+	}
+	code = blank(code, i, j)
+	raw := ll.raw
+	if len(raw) == len(ll.code) {
+		raw = blank(raw, i, j)
+	}
+	// Trailing `; do` / `;do` / ` do`.
+	if end := strings.LastIndex(code, "do"); end >= 0 && strings.TrimSpace(code[end+2:]) == "" {
+		k := end
+		for k > 0 && (code[k-1] == ' ' || code[k-1] == '\t' || code[k-1] == ';') {
+			k--
+		}
+		code = blank(code, k, len(code))
+		if len(raw) == len(code) {
+			raw = blank(raw, k, len(raw))
+		}
+	}
+	return logicalLine{line: ll.line, code: code, raw: raw}
 }
 
 // shellReadStatements recognizes a `read [flags] var1 var2 …` builtin, which
@@ -342,7 +494,7 @@ func splitShellAssignment(code string) (name string, valueStart int, ok bool) {
 // positional slots, whether the first argument carries a tainted value) that the
 // engine's per-sink danger logic consumes. Returns ok=false for a line with no
 // command word.
-func shellCommand(ll logicalLine) (stmtDraft, bool) {
+func shellCommand(ll logicalLine, piped *shellPipe) (stmtDraft, bool) {
 	code := ll.code
 	raw := ll.raw
 	aligned := len(code) == len(raw)
@@ -378,9 +530,21 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 			return stmtDraft{}, false
 		}
 	}
-	// Normalize a leading `command`/`builtin`/`exec` wrapper to its target so
-	// `command eval x` still resolves eval.
-	// (Kept simple: only the bare callee is used.)
+	// A transparent wrapper (`sudo`, `env`, `nohup`, `timeout N`, `command`,
+	// `xargs`, …) runs the command after it: that command is the callee, and
+	// the wrapper's own flags are skipped. `xargs` additionally turns the piped
+	// stdin into arguments of the command it invokes.
+	viaXargs := false
+	for shellWrapperFlags[callee] != nil {
+		inner, next, ok := shellUnwrapWrapper(callee, code, i)
+		if !ok {
+			break
+		}
+		if callee == "xargs" {
+			viaXargs = true
+		}
+		callee, i = inner, next
+	}
 
 	// `exec` with a REDIRECTION and no command word (`exec 200>"$f"`, `exec >log`)
 	// rebinds the shell's own file descriptors — it executes nothing, so a tainted
@@ -394,7 +558,7 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 	// Collect the positional arguments (space-separated words) with quoting info.
 	rawArgsSeg := ""
 	if aligned && i <= len(raw) {
-		rawArgsSeg = raw[i:]
+		rawArgsSeg = shellStripTrailingComment(code[i:], raw[i:])
 	}
 	args := splitShellArgs(code[i:], rawArgsSeg)
 
@@ -431,6 +595,14 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 			skipNext = true
 		}
 		info.positionalVars = append(info.positionalVars, append([]string(nil), vars...))
+		// The slot's code text lets the engine spot a SOURCE used directly as
+		// the argument (`eval "$@"`, `curl "$QUERY_STRING"`), which binds no
+		// variable. A single-quoted word is inert and carries nothing.
+		argCode := ""
+		if !a.singleQuote {
+			argCode = a.code
+		}
+		info.positionalArgs = append(info.positionalArgs, argCode)
 		if len(vars) > 0 {
 			info.argCount++
 		}
@@ -450,6 +622,27 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 	if info.argCount == 0 {
 		info.argCount = len(args)
 	}
+	// The piped-in value becomes an argument of the command when `xargs`
+	// invokes it, and the executed script when a bare `sh`/`bash` reads it.
+	if piped != nil && (viaXargs || shellExecutesStdin(callee, args, hasDashC)) {
+		slot := len(info.positionalVars)
+		info.positionalVars = append(info.positionalVars, append([]string(nil), piped.vars...))
+		info.positionalArgs = append(info.positionalArgs, strings.Join(piped.code, " "))
+		info.argCount++
+		for _, v := range piped.vars {
+			if _, dup := seen[v]; !dup {
+				seen[v] = struct{}{}
+				info.taintedArgVars = append(info.taintedArgVars, v)
+				allReads = append(allReads, v)
+			}
+		}
+		if slot == 0 && len(piped.vars) > 0 {
+			info.firstArgTainted = true
+		}
+		if !viaXargs {
+			hasDashC = true // stdin IS the command line being executed
+		}
+	}
 	sortStrings(info.taintedArgVars)
 	info.shellTrue = hasDashC
 
@@ -462,6 +655,107 @@ func shellCommand(ll logicalLine) (stmtDraft, bool) {
 		return stmtDraft{}, false
 	}
 	return st, true
+}
+
+// shellWrapperFlags lists the transparent wrapper commands and, for each, the
+// flags that take a separate value (so the value is skipped too, not read as
+// the inner command). `xargs -I{}` with the value attached is one word and is
+// skipped as a plain flag. `timeout` takes its duration as a bare word, handled
+// in shellUnwrapWrapper.
+var shellWrapperFlags = map[string]map[string]bool{
+	"xargs": {
+		"-I": true, "-n": true, "-P": true, "-L": true, "-d": true, "-s": true,
+		"-E": true, "-a": true, "--max-args": true, "--max-procs": true,
+		"--max-lines": true, "--replace": true, "--delimiter": true,
+		"--arg-file": true, "--max-chars": true, "--eof": true,
+	},
+	"sudo": {
+		"-u": true, "-g": true, "-U": true, "-h": true, "-p": true, "-C": true,
+		"-r": true, "-t": true, "-T": true, "--user": true, "--group": true,
+	},
+	"env":     {"-u": true, "-C": true, "-S": true, "--unset": true, "--chdir": true},
+	"nice":    {"-n": true, "--adjustment": true},
+	"timeout": {"-s": true, "-k": true, "--signal": true, "--kill-after": true},
+	"nohup":   {},
+	"command": {},
+	"builtin": {},
+	"time":    {},
+}
+
+// shellUnwrapWrapper skips the wrapper's flags (and `NAME=value` environment
+// words) after code[i:] and returns the inner command name and the offset just
+// past it. ok=false when no command word follows (`sudo -v`, a bare `xargs`).
+func shellUnwrapWrapper(wrapper, code string, i int) (inner string, next int, ok bool) {
+	valueFlags := shellWrapperFlags[wrapper]
+	needDuration := wrapper == "timeout"
+	for {
+		for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+			i++
+		}
+		if i >= len(code) {
+			return "", i, false
+		}
+		start := i
+		for i < len(code) && code[i] != ' ' && code[i] != '\t' {
+			i++
+		}
+		word := code[start:i]
+		switch {
+		case word == "--":
+			continue
+		case strings.HasPrefix(word, "-"):
+			if valueFlags[word] {
+				// The value is the next word; skip it.
+				for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+					i++
+				}
+				for i < len(code) && code[i] != ' ' && code[i] != '\t' {
+					i++
+				}
+			}
+			continue
+		case strings.Contains(word, "="):
+			continue // an environment assignment word
+		case needDuration:
+			needDuration = false
+			continue
+		}
+		name := shellCalleeName(word)
+		if name == "" || !isShellIdentStart(name[0]) {
+			return "", i, false
+		}
+		return name, i, true
+	}
+}
+
+// shellExecutesStdin reports whether a shell invoked at the end of a pipe runs
+// what it reads: a bare `sh`/`bash` (optionally `-s`, or other flags) with no
+// script word and no `-c` executes its stdin as a script. `sh script.sh` and
+// `sh -c 'fixed'` do not — stdin is data to them.
+func shellExecutesStdin(callee string, args []shellArg, hasDashC bool) bool {
+	if hasDashC || (callee != "sh" && callee != "bash") {
+		return false
+	}
+	for _, a := range args {
+		if !strings.HasPrefix(strings.TrimSpace(a.raw), "-") {
+			return false
+		}
+	}
+	return true
+}
+
+// shellStripTrailingComment cuts a trailing `# comment` off the raw view of an
+// argument list. The code view already blanks it, but the raw view (which the
+// argument splitter reads for quoting) still carries the words, and they were
+// counted as arguments: `sh # runs stdin` looked like `sh` with three script
+// words. A `#` that the code view keeps (`$#`, `${#x}`) is not a comment.
+func shellStripTrailingComment(code, raw string) string {
+	for i := 0; i < len(raw) && i < len(code); i++ {
+		if raw[i] == '#' && code[i] == ' ' && (i == 0 || raw[i-1] == ' ' || raw[i-1] == '\t') {
+			return raw[:i]
+		}
+	}
+	return raw
 }
 
 // shellFetchCommands are the URL-fetching commands whose SSRF sink is controlled
@@ -761,6 +1055,55 @@ func shellCommandSubCallees(code string) []string {
 			}
 		}
 		i = inner
+	}
+	return out
+}
+
+// shellCommandSub is one `$(cmd …)` command substitution: the text of the
+// whole substitution, the command it runs, and the text inside the parens.
+type shellCommandSub struct {
+	text   string
+	callee string
+	inner  string
+}
+
+// shellCommandSubs returns the top-level `$(...)` substitutions in code, in
+// order. Nested substitutions stay inside their parent's inner text so a
+// caller recursing into it sees them in turn. Backtick substitutions are not
+// nestable and are left to shellCommandSubCallees.
+func shellCommandSubs(code string) []shellCommandSub {
+	var out []shellCommandSub
+	n := len(code)
+	for i := 0; i+1 < n; i++ {
+		if code[i] != '$' || code[i+1] != '(' {
+			continue
+		}
+		depth := 0
+		end := -1
+		for j := i + 1; j < n; j++ {
+			switch code[j] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					end = j
+				}
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			break
+		}
+		inner := code[i+2 : end]
+		callee := ""
+		if names := shellCommandSubCallees(code[i : end+1]); len(names) > 0 {
+			callee = names[0]
+		}
+		out = append(out, shellCommandSub{text: code[i : end+1], callee: callee, inner: inner})
+		i = end
 	}
 	return out
 }

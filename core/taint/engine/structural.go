@@ -751,6 +751,9 @@ func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand)
 // call's own arguments, so a source is never matched outside the sanitizer that
 // wraps it.
 func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	if lang == "shell" {
+		return e.scanShellInlineSource(lang, code)
+	}
 	for _, c := range topLevelCalls(code) {
 		// The call itself may be a source (request.args.get(...), r.FormValue(...)).
 		if s, ok := e.sourceForChain(lang, c.callee); ok {
@@ -774,6 +777,35 @@ func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, ma
 	// Bare-identifier source (PHP superglobal read: _GET['c']).
 	for _, id := range freeIdentifiers(langPython, code) {
 		if s, ok := e.sourceForChain(lang, id); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	return taint.Source{}, nil, false
+}
+
+// scanShellInlineSource is scanInlineSource for shell, whose sources are not
+// calls but expansions: a positional / special parameter (`$1`, `$@`) or a
+// CGI environment variable (`$QUERY_STRING`) written directly in an argument
+// word. A command substitution `$(sanitizer "$1")` wrapping one clears the
+// sanitizer's classes, mirroring the call-nesting rule of the other languages.
+func (e *StructuralEngine) scanShellInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	rest := code
+	for _, sub := range shellCommandSubs(code) {
+		if s, cleared, ok := e.scanShellInlineSource(lang, sub.inner); ok {
+			for _, class := range e.sanitizerClasses(lang, sub.callee) {
+				cleared[class] = true
+			}
+			return s, cleared, true
+		}
+		rest = strings.Replace(rest, sub.text, "", 1)
+	}
+	for _, m := range shellPositionalMarkers(rest) {
+		if s, ok := e.cat.Source(lang, m); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	for _, v := range shellNamedExpansions(rest) {
+		if s, ok := e.cat.Source(lang, v); ok {
 			return s, map[taint.VulnClass]bool{}, true
 		}
 	}
