@@ -63,6 +63,12 @@ type sinkArgDraft struct {
 	argCount        int
 	shellTrue       bool
 	firstArgTainted bool
+	// shellProgram records that the PROGRAM being executed is itself a shell —
+	// `subprocess.run(["sh", "-c", cmd])`, `spawn("bash", ["-c", cmd])`. The
+	// arg-vector exemption rests on the premise that no shell interprets the
+	// arguments, and naming a shell as the program is exactly how that premise
+	// fails.
+	shellProgram bool
 	// positionalVars lists, per positional argument slot, the variable names in
 	// that slot (index 0 = first positional). Used by the interprocedural pass to
 	// bind a caller argument position to a callee parameter index.

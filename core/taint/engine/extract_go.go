@@ -518,6 +518,11 @@ func (ex *goExtractor) collectExpr(st *stmtDraft, e ast.Expr) {
 func (ex *goExtractor) callArgInfo(call *ast.CallExpr) sinkArgDraft {
 	var info sinkArgDraft
 	seen := map[string]struct{}{}
+	// The program is the first argument. `exec.Command("sh", "-c", cmd)` runs a
+	// shell, which voids the arg-vector exemption — see SinkArgInfo.ShellProgram.
+	if len(call.Args) > 0 {
+		info.shellProgram = namesShellProgram(goExprText(call.Args[0]))
+	}
 	for idx, arg := range call.Args {
 		info.argCount++
 		firstIsLiteralOrVector := idx == 0 && (isStringLiteral(arg) || isCompositeVector(arg))
@@ -797,4 +802,14 @@ func isGoKeyword(s string) bool {
 		return true
 	}
 	return false
+}
+
+// goExprText renders a basic literal back to its source form so the shell-program
+// check can read the program name. Anything that is not a literal returns "",
+// which reads as "unknown program", never as a shell.
+func goExprText(e ast.Expr) string {
+	if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		return lit.Value
+	}
+	return ""
 }
