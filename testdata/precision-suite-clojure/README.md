@@ -44,31 +44,30 @@ where the honest false negatives live (see below).
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-clojure` scores
-**precision 1.00 / recall 0.81 / F1 0.90** (13 TP, 0 FP, 3 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (16 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits is a true positive, and every clean stressor
 (parameterized jdbc vector, `Integer/parseInt` coercion, placeholder creds,
-data-URI blob, generated banner) fires nothing — while recall is the lowest of any
-language. The last gap — the threading-macro form — is now closed, alongside the
-two higher-order-dispatch gaps (`apply`, `map`).
+data-URI blob, generated banner) fires nothing. The gaps this corpus was built
+to pin — the threading-macro form, higher-order DISPATCH (`apply`, `map`) and
+higher-order CONSTRUCTION (`partial`, `comp`, `as->`) — are all closed.
 
-Recall is deliberately BELOW 1.0 again. It reached 1.0 when the threading model
-landed, at which point the corpus could only catch regressions — so
-`tp_hof_construction.clj` was added, pinning three real misses. `apply` and `map`
-DISPATCH a function and are modeled; `partial` and `comp` instead BUILD one, and
-`as->` renames the threaded value, so in all three the sink is a value rather
-than a call head the recognizer tracks. The drop from 1.00 to 0.81 is the corpus
-getting harder, not the engine getting worse: precision is still 1.000 with zero
-false positives. `clean_threading.clj` was added as the guard: threading
-is THE idiomatic Clojure shape, so modeling it is exactly where an engine risks
-inventing noise, and that sample asserts silence across `->`, `->>`, `some->`
-and `cond->` chains over constants, coerced numbers and pure data transforms.
-It matters more than usual here because no large real-world Clojure corpus was
-available to validate against — the guard is a corpus one.
+The history matters more than the number. Recall reached 1.0 once before, when
+the threading model landed, at which point the corpus could only catch
+regressions — so `tp_hof_construction.clj` was added, pinning three real misses
+and dropping recall to 0.81 on purpose: `partial` and `comp` BUILD a function
+that is invoked through a local name, and `as->` renames the threaded value,
+so in all three the sink was a value rather than a call head the recognizer
+tracked. Closing them (see below) brought recall back to 1.0 with precision
+still 1.000, measured against **78 `partial`, 41 `comp` and 7 `as->` uses in
+ring and reitit** that produced zero new findings. `clean_threading.clj` is the
+guard: threading is THE idiomatic Clojure shape, so modeling it is exactly where
+an engine risks inventing noise, and that sample asserts silence across `->`,
+`->>`, `some->` and `cond->` chains over constants, coerced numbers and pure
+data transforms.
 
-That gap is **honest, not curated**: the FN samples are annotated as the true
-positives a correct scanner should fire, so the number tells the truth. The way to
-raise it is to build the engine (a threading-macro desugarer, HOF modeling), never
-to delete the samples.
+The discipline stands: the next real miss goes in as an annotated true positive
+so the number tells the truth, and the way to raise it is to build the engine,
+never to delete the samples.
 
 ## Sample inventory
 
@@ -117,15 +116,27 @@ Clean stressors (zero annotations — any finding is a false positive):
   slot. `->` prepends and `->>` appends, but for taint the question is whether
   the value reaches the sink at all, and both do. A position-sensitive argument
   note (the parameterized-jdbc vector check) therefore does not apply to a
-  threaded stage. `as->` is not handled: it names its own binding.
+  threaded stage. `as->` is modeled separately: it binds the threaded value
+  to the NAME the author chose, and each stage names it as an ordinary
+  argument, so the value is bound from the initial expression and rebound to
+  each stage's result — a sanitizing stage clears it for the stages after.
 - **Higher-order dispatch — CLOSED for the dispatcher family.** `apply`, `map`,
   `mapv`, `pmap`, `mapcat`, `keep`, `filter`, `remove`, `some`, `every?` and
   `run!` take the function to invoke as their FIRST argument, so a sink reached
   through them was never a literal call head. The statement is now re-attributed
   to the dispatched SYMBOL and the remaining arguments scored against it. Only a
   bare symbol is re-attributed — an inline `#(...)`/`fn` literal has no name to
-  attribute the flow to and leaves the dispatcher as callee. `partial` and `comp`
-  build a function rather than invoking one and are still not modeled.
+  attribute the flow to and leaves the dispatcher as callee.
+- **Higher-order construction — CLOSED.** `partial` and `comp` BUILD a function
+  that is later invoked through a binding, so the sink never appears as a call
+  head under any name. A `let`/`def` binding whose value is `(partial sym
+  fixed…)` or `(comp sym…)` is remembered, lexically scoped, and a later call
+  through that name is rewritten into the calls it makes: `(f x)` ≡
+  `(sym fixed… x)` for partial, and `(sym1 (sym2 x))` for comp — applied
+  right to left through a synthetic binding so a sanitizer inside the
+  composition clears the taint before a sink further left. Only bare symbols
+  are recorded (an inline `#(...)`/`fn` literal is left alone), and each
+  symbol still has to be a catalog sink to report.
 - **Destructuring binds** — `{:keys [a b]}`, `[x & xs]` — are not tracked; only a
   bare-symbol binding target taints. A value bound through destructuring is lost.
 - **`slurp` of a URL** is SSRF, not path traversal, but the recognizer cannot tell
@@ -138,5 +149,5 @@ Clean stressors (zero annotations — any finding is a false positive):
 Precision is defended throughout: the sinks fire only when a tracked binding
 actually carries a source, and the parameterized jdbc vector keeps the value out of
 the SQL-string argument, so `clean_safe_db.clj` stays clean. The `--min-precision
-0.90` CI gate and the committed `baseline.json` ratchet ensure the wide, honest
-recall gap can never be hidden and no new Clojure false positive can creep in.
+0.90` CI gate and the committed `baseline.json` ratchet ensure a closed gap can
+never silently reopen and no new Clojure false positive can creep in.
