@@ -33,6 +33,11 @@ type secretRule struct {
 	// every finding an operator accepted under it, because baselines hash the
 	// rule ID and VEX statements and nox:ignore comments name it directly.
 	retires []rules.RetiredRule
+	// validate, when set, vetoes individual matches after the pattern has
+	// accepted them (see rules.Rule.ValidateMatch). It carries the part of a
+	// rule's meaning a regex cannot express in one pass, such as "the
+	// password component is not a template placeholder".
+	validate func(string) bool
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
@@ -638,6 +643,7 @@ func builtinSecretRules() []*rules.Rule {
 		{
 			id: "SEC-073", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(mysql|postgres(?:ql)?|mssql|sqlserver|oracle|mariadb)://[^:\n]+:[^@\n]+@[^\s'"]+`,
+			validate:    isURLCredentialLiteral,
 			description: "Database Connection String with credentials detected",
 			cwe:         "CWE-798", keywords: []string{"://"},
 			remediation: "Use environment variables or a secrets manager for database connection strings.",
@@ -646,6 +652,7 @@ func builtinSecretRules() []*rules.Rule {
 		{
 			id: "SEC-074", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
 			pattern:     `mongodb\+srv://[^:\n]+:[^@\n]+@[^\s'"]+`,
+			validate:    isURLCredentialLiteral,
 			description: "MongoDB SRV Connection String with credentials detected",
 			cwe:         "CWE-798", keywords: []string{"mongodb+srv://"},
 			remediation: "Use environment variables for MongoDB connection strings. Rotate the database password.",
@@ -662,6 +669,7 @@ func builtinSecretRules() []*rules.Rule {
 		{
 			id: "SEC-076", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
 			pattern:     `rediss?://[^:\n]+:[^@\n]+@[^\s'"]+`,
+			validate:    isURLCredentialLiteral,
 			description: "Redis URL with password detected",
 			cwe:         "CWE-798", keywords: []string{"redis://", "rediss://"},
 			remediation: "Use environment variables for Redis connection strings. Rotate the password.",
@@ -764,6 +772,7 @@ func builtinSecretRules() []*rules.Rule {
 			// userinfo (e.g. https://opensource.org/licenses/MIT) must not
 			// match — see issue #60.
 			pattern:     `https?://[^/\s:@'"<>]+:[^/\s@'"<>]+@[^\s'"<>]+`,
+			validate:    isURLCredentialLiteral,
 			description: "URL with embedded password detected",
 			cwe:         "CWE-798", keywords: []string{"://"},
 			remediation: "Remove credentials from URLs. Use environment variables or a credentials provider.",
@@ -3798,6 +3807,7 @@ func builtinSecretRules() []*rules.Rule {
 			Keywords:               d.keywords,
 			Retires:                d.retires,
 			RequireContextKeywords: requireContext,
+			ValidateMatch:          d.validate,
 			Tags:                   []string{"secrets"},
 			Metadata:               md,
 			Remediation:            d.remediation,

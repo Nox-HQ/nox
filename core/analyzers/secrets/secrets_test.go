@@ -489,7 +489,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-071": "sbp_" + "aabbccddeeff00112233445566778899aabbccdd\n",
 		"SEC-072": "confluent_api_key = \"" + "ABCDEFGHIJKLMNOP\"\n",
 		"SEC-073": "postgres://" + "admin:s3cret@localhost:5432/db\n",
-		"SEC-074": "mongodb+srv://" + "user:pass@cluster0.example.net/mydb\n",
+		"SEC-074": "mongodb+srv://" + "user:Sup3rS3cretPw@cluster0.example.net/mydb\n",
 		"SEC-075": "firebase_api_key = \"" + "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\"\n",
 		"SEC-076": "redis://" + "default:mypassword@redis.example.com:6379\n",
 		"SEC-077": "AGE-SECRET-KEY-" + "1QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L" + "QPZRY9X8GF2TVDW0S3JN54KHCE6M\n",
