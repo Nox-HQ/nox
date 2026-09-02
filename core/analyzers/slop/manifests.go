@@ -77,7 +77,7 @@ var importToDist = map[string]string{
 	"pptx":              "python-pptx",
 	"cairo":             "pycairo",
 	"gi":                "pygobject",
-	"OpenSSL":           "pyopenssl",
+	"openssl":           "pyopenssl",
 	"cryptography":      "cryptography",
 	"magic":             "python-magic",
 	"redis":             "redis",
@@ -88,6 +88,39 @@ var importToDist = map[string]string{
 	"multipart":         "python-multipart",
 	"nacl":              "pynacl",
 	"zoneinfo_backport": "backports.zoneinfo",
+	"dns":               "dnspython",
+	"googleapiclient":   "google-api-python-client",
+	"socks":             "pysocks",
+	"pkg_resources":     "setuptools",
+	"crypto":            "pycryptodome",
+	"zmq":               "pyzmq",
+	"mysqldb":           "mysqlclient",
+	"git":               "gitpython",
+	"ldap":              "python-ldap",
+	"websocket":         "websocket-client",
+	"wx":                "wxpython",
+	"ruamel":            "ruamel.yaml",
+	"_pytest":           "pytest",
+	// pywin32 ships a family of extension modules under one distribution.
+	"win32security":    "pywin32",
+	"win32file":        "pywin32",
+	"win32con":         "pywin32",
+	"win32console":     "pywin32",
+	"win32event":       "pywin32",
+	"win32process":     "pywin32",
+	"win32service":     "pywin32",
+	"win32serviceutil": "pywin32",
+	"win32gui":         "pywin32",
+	"win32pipe":        "pywin32",
+	"win32crypt":       "pywin32",
+	"win32net":         "pywin32",
+	"win32clipboard":   "pywin32",
+	"win32profile":     "pywin32",
+	"win32ts":          "pywin32",
+	"pywintypes":       "pywin32",
+	"pythoncom":        "pywin32",
+	"ntsecuritycon":    "pywin32",
+	"winerror":         "pywin32",
 }
 
 // normalizePyPI lowercases and unifies separators per PEP 503 so that
@@ -125,11 +158,18 @@ func (d *declaredSet) addNPM(name string) {
 }
 
 func (d *declaredSet) addPyPI(name string) {
-	name = normalizePyPI(name)
+	raw := strings.TrimSpace(name)
+	name = normalizePyPI(raw)
 	if name == "" {
 		return
 	}
 	d.pypi[name] = struct{}{}
+	// A namespace-package distribution (zope.interface, backports.zoneinfo,
+	// sphinxcontrib.spelling) is imported through its namespace root; the
+	// dotted name is what identifies it as one.
+	if i := strings.IndexByte(raw, '.'); i > 0 {
+		d.pypi[normalizePyPI(raw[:i])] = struct{}{}
+	}
 }
 
 // hasNPM reports whether an npm package (top-level name) is declared.
@@ -146,6 +186,15 @@ func (d *declaredSet) hasPyPI(importRoot string) bool {
 	}
 	if dist, ok := importToDist[strings.ToLower(importRoot)]; ok {
 		if _, ok := d.pypi[normalizePyPI(dist)]; ok {
+			return true
+		}
+	}
+	// The conventional ways a distribution decorates the module it ships:
+	// python-digitalocean, python-augeas, python-dateutil; pyyaml, pyserial,
+	// pyopenssl; kubernetes-python. The explicit table above covers the
+	// names that follow no convention at all.
+	for _, dist := range []string{"python-" + n, "py" + n, "py-" + n, n + "-python"} {
+		if _, ok := d.pypi[dist]; ok {
 			return true
 		}
 	}
@@ -172,6 +221,10 @@ func collectDeclared(files map[string][]byte) *declaredSet {
 			parsePyprojectDeps(content, d)
 		case base == "pipfile":
 			parsePipfile(content, d)
+		case base == "setup.py":
+			parseSetupPy(content, d)
+		case base == "setup.cfg":
+			parseSetupCfg(content, d)
 		}
 	}
 	return d
@@ -287,6 +340,111 @@ func parsePipfile(content []byte, d *declaredSet) {
 			if n := pyReqNameRe.FindStringSubmatch(strings.TrimSpace(trimmed[:i])); n != nil {
 				d.addPyPI(n[1])
 			}
+		}
+	}
+}
+
+// setupPyReqListRe finds the opening bracket of any requirement list in a
+// setup.py: install_requires=[...], tests_require=[...], setup_requires=[...],
+// the lists inside extras_require={...}, and the module-level variables those
+// keyword arguments are commonly assigned from (`install_requires = [...]`).
+var setupPyReqListRe = regexp.MustCompile(`(?i)(?:_requires?|extras_require)\s*=\s*[\[{(]`)
+
+// parseSetupPy extracts requirement names from a setuptools setup.py without
+// executing it. Nox never runs untrusted code, so this reads the literal lists
+// only: from each requirement-list opener it walks to the matching closer and
+// takes every string literal at any nesting depth, which covers extras_require
+// dicts (whose keys are extra names, harmless as declarations) and lists built
+// by concatenation. Requirements computed at runtime are invisible, and a
+// setup.py that delegates everything to setup.cfg or pyproject.toml declares
+// nothing here -- those files are parsed on their own.
+func parseSetupPy(content []byte, d *declaredSet) {
+	text := string(content)
+	for _, loc := range setupPyReqListRe.FindAllStringIndex(text, -1) {
+		for _, lit := range stringLiteralsInBrackets(text[loc[1]-1:]) {
+			if n := pyReqNameRe.FindStringSubmatch(strings.TrimSpace(lit)); n != nil {
+				d.addPyPI(n[1])
+			}
+		}
+	}
+}
+
+// stringLiteralsInBrackets returns the quoted strings inside the bracketed
+// expression that starts at s[0], stopping at the matching closer. Python
+// string prefixes (f, r, u, b) are skipped so an f-string requirement such as
+// f'acme>={version}' still yields its name.
+func stringLiteralsInBrackets(s string) []string {
+	var out []string
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '[', '{', '(':
+			depth++
+		case ']', '}', ')':
+			depth--
+			if depth <= 0 {
+				return out
+			}
+		case '#':
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+		case '\'', '"':
+			end := strings.IndexByte(s[i+1:], c)
+			if end < 0 {
+				return out
+			}
+			out = append(out, s[i+1:i+1+end])
+			i += end + 1
+		}
+	}
+	return out
+}
+
+// parseSetupCfg extracts requirement names from a setuptools setup.cfg: the
+// install_requires / tests_require / setup_requires keys under [options] and
+// every list under [options.extras_require]. Values are newline-separated,
+// indented continuation lines; the single-line semicolon form is not
+// supported by setuptools and not read here.
+func parseSetupCfg(content []byte, d *declaredSet) {
+	section := ""
+	inList := false
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			section = strings.ToLower(trimmed)
+			inList = false
+			continue
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+		continuation := line != "" && (line[0] == ' ' || line[0] == '\t')
+		if continuation {
+			if inList {
+				if n := pyReqNameRe.FindStringSubmatch(trimmed); n != nil {
+					d.addPyPI(n[1])
+				}
+			}
+			continue
+		}
+		inList = false
+		key, value, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			continue
+		}
+		key = strings.ToLower(strings.TrimSpace(key))
+		switch {
+		case section == "[options]" && (key == "install_requires" || key == "tests_require" || key == "setup_requires"):
+			inList = true
+		case section == "[options.extras_require]":
+			inList = true
+		default:
+			continue
+		}
+		// A value on the key line itself is the first requirement.
+		if n := pyReqNameRe.FindStringSubmatch(strings.TrimSpace(value)); n != nil {
+			d.addPyPI(n[1])
 		}
 	}
 }

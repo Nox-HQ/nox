@@ -111,7 +111,7 @@ func predictiveSeverity(tier string) findings.Severity {
 func isManifest(base string) bool {
 	base = strings.ToLower(base)
 	switch base {
-	case "package.json", "package-lock.json", "pyproject.toml", "pipfile":
+	case "package.json", "package-lock.json", "pyproject.toml", "pipfile", "setup.py", "setup.cfg":
 		return true
 	}
 	return base == "requirements.txt" ||
@@ -126,6 +126,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// the source tree before evaluating any import.
 	manifests := make(map[string][]byte)
 	local := make(map[string]struct{})
+	pkgDirs := make(map[string]struct{})
 	for i := range artifacts {
 		art := artifacts[i]
 		base := filepath.Base(art.Path)
@@ -138,7 +139,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			for root := range localModuleRoots(art.Path) {
 				local[root] = struct{}{}
 			}
+			if base == "__init__.py" {
+				pkgDirs[filepath.ToSlash(filepath.Dir(art.Path))] = struct{}{}
+			}
 		}
+	}
+	for root := range topLevelPackages(pkgDirs) {
+		local[root] = struct{}{}
 	}
 	declared := collectDeclared(manifests)
 
@@ -147,7 +154,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, err
 		}
 		art := artifacts[i]
-		if art.Type != discovery.Source {
+		if art.Type != discovery.Source || isVendoredPath(art.Path) {
 			continue
 		}
 		eco := ecosystemForExt(filepath.Ext(art.Path))
@@ -176,8 +183,18 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 		if isStdlib(eco, pkg) {
 			continue
 		}
-		if _, isLocal := local[pkg]; isLocal && eco == ecoPyPI {
-			continue // first-party Python module
+		if eco == ecoPyPI {
+			if _, isLocal := local[pkg]; isLocal {
+				continue // first-party Python module
+			}
+			// PEP 508 requires a distribution name to start with a letter or
+			// digit, so an underscore-led import (_ssl, _typeshed, _pytest,
+			// _manylinux) can never resolve to a registry package. It is a
+			// private module of CPython or of an installed package, and there
+			// is nothing here for a squatter to register.
+			if strings.HasPrefix(pkg, "_") {
+				continue
+			}
 		}
 
 		// Predictive dimension (additive, opt-in): when a feed is loaded and the
@@ -278,9 +295,55 @@ func localModuleRoots(path string) map[string]struct{} {
 	}
 	// A directory at the tree root is an importable package root.
 	roots[first] = struct{}{}
-	// Common "src layout": src/<pkg>/... → <pkg> is the package root.
-	if (first == "src" || first == "lib") && len(segs) >= 3 {
-		roots[segs[1]] = struct{}{}
+	// "src layout": src/<pkg>/... → <pkg> is the package root. A monorepo
+	// nests one per subproject (certbot-ci/src/certbot_integration_tests), so
+	// the src segment may sit at any depth.
+	for i := 0; i+1 < len(segs)-1; i++ {
+		if segs[i] == "src" || segs[i] == "lib" {
+			roots[segs[i+1]] = struct{}{}
+		}
 	}
 	return roots
+}
+
+// topLevelPackages returns the names of the Python packages whose directory
+// holds an __init__.py and whose parent does not: the importable roots. A
+// nested subpackage (myapp/plugins) is reachable only through its parent, so
+// admitting it would let `import plugins` pass as first-party.
+func topLevelPackages(pkgDirs map[string]struct{}) map[string]struct{} {
+	roots := make(map[string]struct{})
+	for dir := range pkgDirs {
+		if dir == "." || dir == "" {
+			continue
+		}
+		parent := filepath.ToSlash(filepath.Dir(dir))
+		if _, nested := pkgDirs[parent]; nested {
+			continue
+		}
+		roots[filepath.Base(dir)] = struct{}{}
+	}
+	return roots
+}
+
+// vendoredSegments are the directory names under which a project carries a
+// copy of someone else's code. SLOP-001 asks whether the PROJECT imports a
+// package it never declared; the imports inside a vendored library are that
+// library's, resolved against its own manifest, which is not here. pipenv
+// alone carries pip, urllib3, requests and rich under vendor/ and patched/,
+// and every optional import inside them (keyring, socks, OpenSSL) fired.
+var vendoredSegments = map[string]struct{}{
+	"vendor": {}, "_vendor": {}, "vendored": {}, "patched": {},
+	"node_modules": {}, "third_party": {}, "thirdparty": {}, "3rdparty": {},
+}
+
+// isVendoredPath reports whether any directory segment of path names a
+// vendored tree.
+func isVendoredPath(path string) bool {
+	segs := strings.Split(filepath.ToSlash(path), "/")
+	for _, seg := range segs[:len(segs)-1] {
+		if _, ok := vendoredSegments[strings.ToLower(seg)]; ok {
+			return true
+		}
+	}
+	return false
 }
