@@ -49,6 +49,19 @@ const (
 	VulnOpenRedirect          VulnClass = "open_redirect"          // CWE-601
 )
 
+// knownVulnClass reports whether class is one of the classes above, so a
+// catalog entry naming a class that nothing reports fails to load instead of
+// silently excluding nothing.
+func knownVulnClass(class VulnClass) bool {
+	switch class {
+	case VulnCommandInjection, VulnSQLInjection, VulnCodeInjection, VulnXSS,
+		VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
+		VulnPromptInjection, VulnOpenRedirect:
+		return true
+	}
+	return false
+}
+
 // SourceKind describes the provenance of untrusted input. It is informational
 // (it enriches findings and helps triage) rather than part of the taint join;
 // any tainted value can in principle reach any sink.
@@ -78,6 +91,24 @@ type Source struct {
 	Call string `json:"call"`
 	// Kind records the provenance for triage and reporting.
 	Kind SourceKind `json:"kind"`
+	// NotFor lists the vulnerability classes this source can never reach — a
+	// property of what the VALUE is, not of where it came from. A Ring request
+	// `:body` is an InputStream, so `slurp` on it reads the request; it never
+	// opens a path, and reporting it as path traversal is a false positive on
+	// every occurrence. A flow from the source to a sink of a listed class is
+	// not reported. Every other class is untouched: the same body, once read
+	// into a string, still reaches a SQL or command sink.
+	NotFor []VulnClass `json:"not_for,omitempty"`
+}
+
+// Excludes reports whether class is one the source's value can never reach.
+func (s Source) Excludes(class VulnClass) bool {
+	for _, c := range s.NotFor {
+		if c == class {
+			return true
+		}
+	}
+	return false
 }
 
 // Sink is a callable that is dangerous when it receives tainted data. The
@@ -180,6 +211,11 @@ func load(fsys embed.FS) (*Catalog, error) {
 		for _, s := range lc.Sources {
 			if s.Call == "" {
 				return nil, fmt.Errorf("taint: %s: source with empty call", lang)
+			}
+			for _, class := range s.NotFor {
+				if !knownVulnClass(class) {
+					return nil, fmt.Errorf("taint: %s: source %q excludes unknown vuln class %q", lang, s.Call, class)
+				}
 			}
 			srcIdx[s.Call] = s
 		}

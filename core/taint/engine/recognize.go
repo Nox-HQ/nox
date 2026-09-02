@@ -98,6 +98,9 @@ func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
 	if st.assigns == "" && len(st.calls) == 0 && len(st.reads) == 0 {
 		return stmtDraft{}, false
 	}
+	if st.assigns != "" {
+		st.expr = exprCode
+	}
 	return st, true
 }
 

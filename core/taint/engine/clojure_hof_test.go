@@ -101,3 +101,17 @@ func TestClojureHOFConstruction(t *testing.T) {
 		})
 	}
 }
+
+// A `fn` opened inside a defn body is a unit of the FILE, not of the scope
+// that walked it. The scoped walk introduced for `partial`/`comp` copied the
+// unit list by value, so the nested unit — and the flow inside it — vanished.
+func TestClojureNestedFnKeepsItsUnit(t *testing.T) {
+	src := `(ns app.t (:require [clojure.java.shell :as shell]))
+(defn outer [req]
+  (fn [x] (let [c (:params x)] (shell/sh "sh" "-c" c))))
+`
+	got := analyzeRuleIDs(t, "t.clj", lexctx.LangClojure, src)
+	if want := []string{"TAINT-002"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}

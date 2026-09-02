@@ -295,6 +295,51 @@ measured to add zero findings across 1072 real Dart files (dart-lang/http,
 cfug/dio, dart-lang/shelf, flutter/samples) while closing the two documented
 `testdata/precision-suite-dart` false negatives (recall 0.667 → 1.0).
 
+## Status update: a sanitizer on the binding line counts
+
+Propagation rule 3 says a statement whose assignee is produced by a sanitizer
+clears taint. The engine applied it on the statement AFTER the source: `raw =
+request.args.get("n")` tainted `raw`, and `n = int(raw)` cleared `n`. Written
+as one statement — `n = int(request.args.get("n"))`, the shape nearly every
+real program uses — the source was recognized, the binding was tainted, and
+the `int(...)` around it was invisible, because the sanitizer pass looked at
+what the statement CALLED, and the statement called the source. Five clean
+fixtures across Python and JS (`clean_inline_sanitizer.py/.js`) fired on
+`origin/main`; every recognizer language (Python, JS/TS, Java, PHP, Ruby) had
+the gap, and only Go — whose AST extractor hoists inline sources into their
+own statements — did not. The Clojure form recognizer had the same gap twice
+over: a source used directly as a sink argument had no binding to taint at
+all.
+
+The fix is a code view of the assigned expression on the `Statement`
+(`Expr`), and a walk over it that visits every source it contains together
+with the sanitizer classes of the calls WRAPPING that source
+(`bindingCleared`). The binding starts out cleared for the intersection over
+all sources — `int(source_a) + source_b` is cleared for nothing, because
+`source_b` is bare — and the sink gate reads that set exactly as it reads a
+later-line sanitizer. The walk blanks each top-level call's span before the
+dotted-chain and free-identifier passes so a chain inside a call is not
+re-visited unwrapped. Clojure walks the same expression as forms, records the
+positional argument text of every call so a source inside a sink argument is
+seen, and joins a top-level `def` into the `defn`s that read it through the
+shared-state join above. Measured: the five fixture false positives are gone,
+Python/JS corpus repositories (certbot, httpie, pipenv, shelljs, node-gyp)
+are unchanged to the finding, and the Clojure suite went 16 → 20 TP at
+precision 1.0.
+
+### A source can be excluded per class: `not_for`
+
+Ring's `:body` is an `InputStream` by the Ring spec, so `(slurp (:body req))`
+reads the request and never opens a path — yet `slurp` is the path-traversal
+sink, and every such read on ring and reitit was reported as TAINT-004 (all
+of them stream reads, request or response). Dropping `:body` as a source
+would lose the real flow where the body is read into a string and reaches
+SQL. A catalog `Source` therefore carries `not_for`: the vuln classes its
+VALUE can never reach by type. The sink gate consults it beside the cleared
+set; the class must be a known one, checked at load. The rule for using it:
+`not_for` states a fact about the value's TYPE, never a judgment that a flow
+is unlikely.
+
 ## Semantics: a partially tainted URL is still reported (SSRF, TAINT-006)
 
 A recurring shape, found in three languages while validating the engine against

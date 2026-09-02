@@ -179,3 +179,32 @@ func TestSanitizerInvariants(t *testing.T) {
 		}
 	}
 }
+
+// A source's not_for is a claim about the VALUE ("a Ring :body is a stream,
+// never a path"), so it must name classes the engine reports, and it must
+// leave every other class alone.
+func TestSourceExcludes(t *testing.T) {
+	cat := MustDefault()
+	body, ok := cat.Source("clojure", ":body")
+	if !ok {
+		t.Fatal("clojure :body is not a source")
+	}
+	if !body.Excludes(VulnPathTraversal) {
+		t.Error("clojure :body should exclude path_traversal")
+	}
+	if body.Excludes(VulnSQLInjection) || body.Excludes(VulnCommandInjection) {
+		t.Error("clojure :body must still reach sql/command sinks")
+	}
+	for _, lang := range cat.Languages() {
+		for _, s := range cat.Sources(lang) {
+			for _, class := range s.NotFor {
+				if !knownVulnClass(class) {
+					t.Errorf("%s: source %q excludes unknown class %q", lang, s.Call, class)
+				}
+			}
+		}
+	}
+	if knownVulnClass("teleportation") {
+		t.Error("an unknown class must not validate")
+	}
+}

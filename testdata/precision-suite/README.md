@@ -209,6 +209,8 @@ Clean stressors (zero annotations — any finding is a false positive):
 | `clean_placeholders.ts` | TS placeholder tokens | clean |
 | `clean_prose_comments.py` | sinks quoted in comments | clean |
 | `clean_safe_db.py` | parameterized / arg-vector / quoted | clean |
+| `clean_inline_sanitizer.py` | `int(request.args.get(…))` / `shlex.quote(…)` / `float(…)` wrapped around the source ON the binding line, then a shell sink | clean (same-statement sanitizer honoured) |
+| `clean_inline_sanitizer.js` | `parseInt(req.query.n)` / `Number(req.body.limit)` on the binding line, then `execSync`/`exec` | clean (same-statement sanitizer honoured) |
 | `clean_hashes.js` | lockfile hashes, git SHA | clean |
 | `clean_svg_blob.ts` | base64 data-URI SVG | clean |
 | `clean_minified_bundle.js` | minified bundle strings | clean |

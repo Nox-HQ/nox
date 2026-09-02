@@ -35,6 +35,14 @@ import (
 //     shapes the recognizer does not model.
 //   - Only a bare-symbol binding target is tracked (`(def x …)`, `(let [x …])`);
 //     a destructuring target is skipped (no field/element sensitivity claimed).
+//   - A `fn` literal used as a let-binding VALUE is not a unit; one in a
+//     `defn` body is (its unit lands in the FILE's list, not the scope's).
+//
+// Closed, and kept closed by the precision suite: a source INSIDE a sink call
+// (`(shell/sh "sh" "-c" (:params req))`) is seen through the call's recorded
+// positional argument text; a sanitizer WRAPPING the source on the binding
+// line clears the binding for its classes (the engine walks `expr` as forms);
+// a top-level `def` is shared state joined into every `defn` that reads it.
 //
 // A miss only weakens RECALL (a false negative), never correctness — an
 // unrecognized form simply yields no statement. Precision is defended: the sinks
@@ -45,18 +53,19 @@ import (
 func extractClojure(content []byte, regions []lexctx.Region) []unitDraft {
 	code := clojureCodeMask(content, regions)
 	module := &unitDraft{funcName: ""}
-	w := &clojureWalk{units: []*unitDraft{module}, hofs: map[string]clojureHOF{}}
+	units := []*unitDraft{module}
+	w := &clojureWalk{units: &units, hofs: map[string]clojureHOF{}, defs: map[string]bool{}}
 
 	forms := parseClojureForms(code, 0, len(code))
 	for _, f := range forms {
 		walkClojureForm(code, f, module, w)
 	}
 
-	out := make([]unitDraft, 0, len(w.units))
-	for _, u := range w.units {
+	out := make([]unitDraft, 0, len(units))
+	for _, u := range units {
 		out = append(out, *u)
 	}
-	return out
+	return joinSharedState(out, w.defs)
 }
 
 // clojureWalk is the state threaded through the form walk: the units built so
@@ -65,8 +74,15 @@ func extractClojure(content []byte, regions []lexctx.Region) []unitDraft {
 // so a binding never leaks past the form that made it, while a top-level `def`
 // stays visible to every later form in the file.
 type clojureWalk struct {
-	units []*unitDraft
+	// units is shared by every scope: a unit opened inside a scoped walk (a
+	// `fn` in a defn body) must land in the file's unit list, not in a copy.
+	units *[]*unitDraft
 	hofs  map[string]clojureHOF
+	// defs are the names bound by a top-level `def`/`defonce`: file-wide shared
+	// state that every defn reading the name joins (see joinSharedState), so
+	// `(def limit (System/getenv "LIMIT"))` reaches `(shell/sh "sleep" limit)`
+	// in a function that never calls anything.
+	defs map[string]bool
 }
 
 // clojureHOF is a function BUILT by `partial` or `comp` and bound to a name.
@@ -91,7 +107,7 @@ type clojureHOF struct {
 // scoped returns a copy of w whose hofs can be extended without affecting the
 // enclosing scope.
 func (w *clojureWalk) scoped() *clojureWalk {
-	inner := &clojureWalk{units: w.units, hofs: make(map[string]clojureHOF, len(w.hofs))}
+	inner := &clojureWalk{units: w.units, hofs: make(map[string]clojureHOF, len(w.hofs)), defs: w.defs}
 	for k, v := range w.hofs {
 		inner.hofs[k] = v
 	}
@@ -284,6 +300,9 @@ func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk)
 	case "def", "defonce", "def-":
 		if st, ok := clojureDefStatement(code, f); ok {
 			cur.stmts = append(cur.stmts, st)
+			if cur == (*w.units)[0] {
+				w.defs[st.assigns] = true
+			}
 			if len(f.children) >= 3 {
 				if hof, ok := clojureHOFConstruction(code, f.children[2]); ok {
 					w.hofs[st.assigns] = hof
@@ -296,7 +315,7 @@ func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk)
 	case "defn", "defn-", "fn":
 		newUnit := clojureDefnUnit(code, f)
 		if newUnit != nil {
-			w.units = append(w.units, newUnit)
+			*w.units = append(*w.units, newUnit)
 			// Walk the body forms into the new unit, in their own scope.
 			walkClojureDefnBody(code, f, newUnit, w.scoped())
 			return
@@ -349,6 +368,7 @@ func clojureDefStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	// The value expression is the third child onward (usually one).
 	if len(f.children) >= 3 {
 		clojureCollectExpr(code, f.children[2], &st)
+		st.expr = clojureFormText(code, f.children[2])
 	}
 	clojureFinalizeReads(&st)
 	return st, true
@@ -391,6 +411,7 @@ func clojureBindingPairs(code []byte, vec clojureForm, cur *unitDraft, w *clojur
 		clojureFinalizeReads(&valStmt)
 		if name != "" {
 			valStmt.assigns = name
+			valStmt.expr = clojureFormText(code, kids[i+1])
 			cur.stmts = append(cur.stmts, valStmt)
 			// A name bound to a constructed function is remembered for the call
 			// site; a name rebound to anything else shadows an outer record.
@@ -496,15 +517,19 @@ func clojureCallStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	for i := argStart; i < len(f.children); i++ {
 		arg := f.children[i]
 		var vars []string
+		argText := ""
 		if jdbcParam && arg.delim == '[' && clojureVectorIsParamBind(code, arg) {
 			// Parameterized bind vector: its values are safe placeholders, not
 			// interpolated SQL. Record an empty slot so the argument shape still
-			// counts the positional but carries no tainted var.
+			// counts the positional but carries no tainted var — and no argument
+			// text, so an inline source inside the vector is not scanned either.
 			vars = nil
 		} else {
 			vars = clojureExprVars(code, arg)
+			argText = clojureFormText(code, arg)
 		}
 		info.positionalVars = append(info.positionalVars, append([]string(nil), vars...))
+		info.positionalArgs = append(info.positionalArgs, argText)
 		info.argCount++
 		for _, v := range vars {
 			if _, dup := seen[v]; !dup {
@@ -773,6 +798,16 @@ func clojureAtomText(code []byte, f clojureForm) string {
 		return ""
 	}
 	return strings.TrimSpace(string(code[f.start:f.end]))
+}
+
+// clojureFormText returns the masked source text of one form (an atom or a
+// whole bracketed form), the expression view the engine's inline-source scan
+// re-parses. Literals are already blanked in the mask.
+func clojureFormText(code []byte, f clojureForm) string {
+	if f.start < 0 || f.end > len(code) || f.start >= f.end {
+		return ""
+	}
+	return string(code[f.start:f.end])
 }
 
 // clojureNormalizeCallee maps a Clojure symbol head to the catalog call key. A

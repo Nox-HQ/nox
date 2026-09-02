@@ -5422,7 +5422,8 @@
         {
           "call": ":body",
           "kind": "http_body",
-          "note": "Ring request body stream/string"
+          "not_for": ["path_traversal"],
+          "note": "Ring request body: an InputStream by the Ring spec, so slurp on it reads the request and never opens a path (measured on ring + reitit: every (slurp (:body ...)) was a stream read, request or response). Still a source for every other class once read into a string."
         },
         {
           "call": ":headers",
