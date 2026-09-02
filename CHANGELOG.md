@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.33.0] - 2026-09-02
 
 NOX Intelligence becomes the default advisory source. Every online `nox scan`
 now asks `https://intel.klarlabs.de` which advisories match each dependency and
@@ -14,6 +14,24 @@ reported as a degradation, and an unreachable service degrades to exactly the
 OSV.dev scan nox always ran. What leaves the machine is unchanged — the
 `(ecosystem, package, version)` list OSV.dev always received — and contribution
 stays a separate, opt-in decision. The complete account is `docs/intelligence.md`.
+
+The rest of the release is what measuring on real repositories found. Taint
+analysis resolved imports and aliases — the ordinary `from os import system`,
+`const { exec } = require(…)` and `(:require [clojure.java.shell :as sh])` were
+invisible, so the engine was inert on most real Python, Node and Clojure code —
+and a real-repo noise review took npm/cli from 238,770 findings to 11,083 with
+rule fixes that each carry a corpus before/after. IAC absence rules parse
+CloudFormation, Kubernetes and ARM documents instead of bounding a span with a
+regex, and resolve the companion object (a VPC's flow log, a Deployment's
+PodDisruptionBudget) across files. The rule-behaviour gate can now see IAC,
+Python and JavaScript, which it previously cleared by absence of coverage.
+
+The release was gated on an end-to-end journey against pinned public
+repositories (npm/cli, pipenv, gin, koel, fluffychat) and the production
+service: 71 checks across the default path, opt-out, endpoint override,
+precedence, unreachable service, `--offline`, `--no-osv`, every output format
+and determinism. Three of the fixes below were found by it and by nothing
+else.
 
 ### Added
 
@@ -36,6 +54,58 @@ stays a separate, opt-in decision. The complete account is `docs/intelligence.md
   lockfile is not a degradation, it is simply not a lockfile. Hosted pub
   packages resolve to the `pub` ecosystem; editable/virtual/directory uv
   entries and path/git/sdk pub entries are skipped.
+
+- Taint analysis resolves imports and aliases. Python `import os as o` /
+  `from os import system`, JS/TS `const cp = require(…)` / `const { exec } =
+  require(…)` / `import { exec } from …`, Clojure `:as`/`:as-alias`, Elixir
+  `alias …, as:` and C# `using X = …` all reach the catalog's qualified sink.
+  Before, a sink matched only when the local name equalled the module name:
+  1 of 3 Python idioms and 1 of 5 Node idioms fired. Expansion is additive —
+  nothing that matched before can stop matching — and a call written once is
+  one flow however many catalog spellings resolve for it. Rust already
+  resolved `use … as` and is untouched; languages without a checked import
+  syntax keep today's behaviour rather than acquiring a guess (#561, #566).
+- Prompt-injection dataflow reaches Go and .NET: `Chat.Completions.New`,
+  `Messages.New`, `CreateChatCompletion`, `GenerateContent`, `InvokeModel` are
+  prompt sinks. With them, the Go extractor reads identifiers inside composite
+  literals — a tainted value assembled into a struct, slice or map literal was
+  invisible to **every** Go sink, not only the AI ones (#560).
+- `capability.ConstantEvaluation` is provided, across fifteen languages: Go
+  by `go/ast` (`const`), twelve recognizer languages by keyword (`const`,
+  `final`, `val`, `readonly`, …) at static strength, Python and Ruby by the
+  bound-once `ALL_CAPS` convention at heuristic strength. A prompt-shaped
+  name bound to an immutable literal no longer fires AI-006 (#558).
+- IAC absence rules parse CloudFormation, Kubernetes and ARM documents
+  (`core/rules/structural`, `yaml.v3`, no new dependency) and read the
+  attribute by path: 24 of 57 absence rules migrated, the other 33 placed and
+  named. A YAML-anchored encryption block no longer counts as unencrypted,
+  and IAC findings carry their first `KindStatic` evidence (#553).
+- Seven cross-resource IAC rules resolve the companion object by `ref`,
+  label `selector`, `namespace` or ARM `child` linkage instead of searching
+  the file for its name — so a PodDisruptionBudget selecting `app: api` no
+  longer protects every workload in the file, four unprotected Deployments
+  are four findings, and `FlowLogsEnabled: false` is not a flow log.
+  Undecidable linkage falls back to the text path (#554). The index spans
+  every file the scan read, so a budget in `pdb.yaml` clears the Deployment
+  in `deployment.yaml`; the cross-file pass can only remove a finding, never
+  add one (#559).
+- Secrets deduplication records what it dropped: a withheld claim on the
+  dropped candidate and a relation to its survivor, so `nox why` can tell
+  "found nothing" from "found it five times and reported it once". A dedup
+  drop is not a refutation — the dropped finding is true — and is not
+  recorded as one (#556).
+- Taint recall across languages, measured per language: shell pipelines and
+  wrappers (`xargs`, `sudo`, `env`) carry taint; Dart fields and containers
+  carry it across methods; Clojure follows `partial`, `comp` and `as->`; a
+  sanitizer on the binding line (`n = int(request.args.get("n"))`) counts in
+  every recognizer language, as it already did in Go; catalog `Source.not_for`
+  marks the sink classes a source's value can never reach by type (#564).
+- The rule-behaviour corpus gains `kubernetes/examples` and
+  `aws-cloudformation-templates` (#555) and `certbot/certbot` and
+  `shelljs/shelljs` (#562). It carried no IaC document and no Python or
+  JavaScript file, so "no rule-level change" after a change to those families
+  was a pass by absence of coverage. ARM and Terraform remain uncovered, and
+  the manifest says so.
 
 ### Changed
 
@@ -64,6 +134,16 @@ stays a separate, opt-in decision. The complete account is `docs/intelligence.md
   `DATA-001` findings on one `composer.lock` were the lockfile, not sensitive
   data in code. The same address in a source file is still reported, and the
   other `DATA-*` rules still fire in a lockfile: a real one there is a real leak.
+
+- `nox scan --no-cache` is accepted again, as its help text promises; it
+  exited 2 with `flag provided but not defined` (#567).
+- Real-repo noise review, each with a corpus before/after in its commit:
+  SEC-161 SRI hashes, SEC-046 PyPI tokens, SEC/IAC password patterns stopping
+  at line end, DATA-001 e-mails in fixture trees, SLOP-001 Python imports,
+  TAINT-005 `setTimeout` with a function, SEC-073/074/076/085 templated URL
+  passwords, config-field matches ending on a comment line, multi-line match
+  reporting. npm/cli 238,770 → 11,083, certbot 199 → 130, httpie 143 → 61,
+  pipenv 209 → 113; all twenty precision suites green (#564).
 
 ## [1.32.0] - 2026-08-31
 
@@ -3133,7 +3213,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.32.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.33.0...HEAD
+[1.33.0]: https://github.com/nox-hq/nox/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/nox-hq/nox/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/nox-hq/nox/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/nox-hq/nox/compare/v1.30.0...v1.30.1
