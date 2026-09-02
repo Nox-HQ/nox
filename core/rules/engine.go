@@ -95,13 +95,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				}
 			}
 
-			loc := findings.Location{
-				FilePath:    path,
-				StartLine:   mr.Line,
-				EndLine:     mr.Line,
-				StartColumn: mr.Column,
-				EndColumn:   mr.Column + len(mr.MatchText),
-			}
+			loc := matchLocation(path, mr)
 
 			f := findings.Finding{
 				RuleID:     rule.ID,
@@ -313,4 +307,27 @@ func isBinary(content []byte) bool {
 		}
 	}
 	return false
+}
+
+// matchLocation converts a match into a Location that describes the span the
+// match actually covers. The engine matches whole documents, so a pattern can
+// legitimately span lines (a PEM block, a YAML mapping whose key and value sit
+// on consecutive lines); recording EndLine == StartLine and an EndColumn past
+// the end of the line hid that, and hid the cross-line false positives with
+// it -- a match that had crossed into the next line was indistinguishable in
+// the output from one that had not. The fingerprint reads only the start
+// line, so this changes what a reader sees and nothing a baseline keys on.
+func matchLocation(path string, mr MatchResult) findings.Location {
+	loc := findings.Location{
+		FilePath:    path,
+		StartLine:   mr.Line,
+		EndLine:     mr.Line,
+		StartColumn: mr.Column,
+		EndColumn:   mr.Column + len(mr.MatchText),
+	}
+	if last := strings.LastIndexByte(mr.MatchText, '\n'); last >= 0 {
+		loc.EndLine += strings.Count(mr.MatchText, "\n")
+		loc.EndColumn = len(mr.MatchText) - last
+	}
+	return loc
 }

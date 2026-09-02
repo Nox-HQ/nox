@@ -1,5 +1,7 @@
 package lexctx
 
+import "bytes"
+
 // Kind labels the lexical role of a byte range.
 type Kind int
 
@@ -234,8 +236,13 @@ func SuppressNonCode(lang Lang, content []byte, matchStart, matchEnd int) bool {
 	r := regions[idx]
 	// A match straddling regions (leaking out of a comment/string into code) is
 	// suspect but not clearly noise — keep it so we never hide a real finding.
+	// The one straddle that is clearly noise: a match that runs from one
+	// comment line into the next. The engine matches whole documents, so a
+	// pattern's `\s*` can swallow the newline between two `//` lines; the
+	// match then touches nothing but comment text and whitespace, and is
+	// prose exactly as a single-line comment match is.
 	if r.End < matchEnd {
-		return false
+		return r.Kind == KindComment && onlyCommentsAndBlanks(regions, idx, content, matchEnd)
 	}
 	switch r.Kind {
 	case KindComment:
@@ -245,6 +252,27 @@ func SuppressNonCode(lang Lang, content []byte, matchStart, matchEnd int) bool {
 	default:
 		return false
 	}
+}
+
+// onlyCommentsAndBlanks reports whether every region from regions[from]
+// (a comment) up to matchEnd is either a comment or code that is nothing but
+// whitespace inside the matched span -- the newline and indentation between
+// consecutive comment lines.
+func onlyCommentsAndBlanks(regions []Region, from int, content []byte, matchEnd int) bool {
+	for i := from; i < len(regions) && regions[i].Start < matchEnd; i++ {
+		r := regions[i]
+		if r.Kind == KindComment {
+			continue
+		}
+		if r.Kind != KindCode {
+			return false
+		}
+		end := min(r.End, matchEnd)
+		if len(bytes.TrimSpace(content[r.Start:end])) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // InDataBlob reports whether the match [matchStart,matchEnd) lies entirely

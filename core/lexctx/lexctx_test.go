@@ -264,3 +264,33 @@ func TestSuppressNonCodeStringPolicy(t *testing.T) {
 		t.Error("token inside a comment must be suppressed")
 	}
 }
+
+// TestSuppressNonCodeSpansConsecutiveComments pins the cross-line case: the
+// engine matches whole documents, so a pattern whose `\s*` swallows a newline
+// can start on one comment line and end on the next. Two `//` lines are two
+// comment regions with a newline between them; a match that never touches
+// anything but comment text and that newline is still prose, and is dropped.
+// One that leaks from the comment into real code on the next line is kept.
+func TestSuppressNonCodeSpansConsecutiveComments(t *testing.T) {
+	prose := "package p\n// innerHTML\n// response as HTML\nfunc f() {}\n"
+	start := indexOf(prose, "innerHTML")
+	end := indexOf(prose, "response") + len("response")
+	if !SuppressNonCode(LangGo, []byte(prose), start, end) {
+		t.Error("a match spanning two consecutive comment lines must be suppressed")
+	}
+
+	leak := "package p\n// innerHTML\nw.Write(response)\n"
+	start = indexOf(leak, "innerHTML")
+	end = indexOf(leak, "response") + len("response")
+	if SuppressNonCode(LangGo, []byte(leak), start, end) {
+		t.Error("a match leaking from a comment into code must be kept")
+	}
+
+	// Python: `#` comments, and a blank line between them is still whitespace.
+	py := "x = 1\n# innerHTML\n\n# response\n"
+	start = indexOf(py, "innerHTML")
+	end = indexOf(py, "response") + len("response")
+	if !SuppressNonCode(LangPython, []byte(py), start, end) {
+		t.Error("comment lines separated by a blank line are still prose")
+	}
+}
