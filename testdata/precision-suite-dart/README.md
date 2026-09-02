@@ -22,14 +22,14 @@ RULE       TP  FP  FN  PRECISION  RECALL  F1
 TAINT-001  1   0   0   1.000      1.000   1.000
 TAINT-002  1   0   0   1.000      1.000   1.000
 TAINT-004  1   0   0   1.000      1.000   1.000
-TAINT-006  1   0   1   1.000      0.500   0.667
-OVERALL    4   0   1   1.000      0.800   0.889
+TAINT-006  3   0   0   1.000      1.000   1.000
+OVERALL    6   0   0   1.000      1.000   1.000
 ```
 
-**Precision 1.00 / recall 0.800 / F1 0.889** (4 TP, 0 FP, 1 FN). Precision is
+**Precision 1.00 / recall 1.00 / F1 1.00** (6 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits on this corpus is a true positive, and no
-`clean_*` sample false-positives. Recall is **0.800**, held below 1.0 by one
-honestly-labeled false negative (see the gap below).
+`clean_*` sample false-positives. Recall reached 1.0 when the two former
+false negatives in `tp_known_fns.dart` were closed (see below).
 
 ## Ground-truth philosophy
 
@@ -71,21 +71,27 @@ string.
 | `clean_rawstring_blob.dart` | a base64 `data:` URI and a regex token in `r'...'` raw strings — data blobs, not code |
 | `clean_generated.dart` | `Process.run` / `db.rawQuery` appear only in comments (incl. a nested block comment) — lexctx classifies them as comment, never code |
 
-## The recall gap (honest false negatives)
+## The closed recall gap
 
-`tp_known_fns.dart` carries two real flows nox does not catch. Both are the Dart
-side of a capability the engine HAS but scopes per language, because each is an
-over-approximation that can only widen taint and is enabled where a corpus
-demanded it:
+`tp_known_fns.dart` carries two real flows that were honest false negatives.
+Both are the Dart side of a capability the engine scopes per language, because
+each is an over-approximation that can only widen taint and is enabled where a
+corpus demands it. Dart opted in after the join was measured to add **zero
+findings across 1072 real Dart files** (dart-lang/http, cfug/dio,
+dart-lang/shelf, flutter/samples):
 
-- **cross-method flow through an instance FIELD** — the source lands in a field
-  in one method and the sink reads it in another. Shared state is joined across
-  units for Ruby (`@ivar`) and Perl (`our`); Dart is not in that set.
-- **taint laundered through a LIST ELEMENT** — binding a container from an
-  element assignment is enabled for Perl only.
-
-Closing either is a matter of opting Dart in and measuring, not of new
-machinery.
+- **cross-method flow through an instance FIELD** — a field declared in a class
+  body is shared state for that class's methods (Ruby joins `@ivar`, Perl
+  `our`). The join is per class: the same field name in two classes stays two
+  variables, and a local of the same name still shadows the field in its own
+  method. `this.field` is normalized to the bare name. A top-level variable is
+  shared by every unit in the file.
+- **taint laundered through a LIST ELEMENT** — an element assignment
+  (`m['k'] = x`) binds the container, as for Perl, and an in-place mutator
+  (`add`, `addAll`, `insert`, `insertAll`, `addEntries`, `write`, `writeln`,
+  `writeAll`) is modeled as `urls = urls.add(x)`: taint already in the
+  container is kept, taint in the argument is added. Container-level, not per
+  element — `urls[1]` is tainted when `urls[0]` was the store.
 
 ### Withdrawn: `tp_ssrf_field.dart`
 
@@ -115,5 +121,5 @@ CI enforces `--baseline` (no per-rule precision/recall regression) **and**
 above the floor: the arg-shape check (parameterized `rawQuery`), the `int.parse`
 sanitizer, the raw-string blob heuristic, and lexctx's comment/nested-comment
 classification keep every `clean_*` sample quiet. The gate pins the committed
-snapshot so the known FN cannot be silently hidden and no new Dart false positive
+snapshot so a closed FN cannot silently reopen and no new Dart false positive
 can creep in.

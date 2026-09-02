@@ -44,31 +44,47 @@ where the honest false negatives live (see below).
 ## What this corpus currently reveals
 
 As of writing, `nox bench --precision testdata/precision-suite-clojure` scores
-**precision 1.00 / recall 0.81 / F1 0.90** (13 TP, 0 FP, 3 FN). Precision is
+**precision 1.00 / recall 1.00 / F1 1.00** (20 TP, 0 FP, 0 FN). Precision is
 perfect — every finding nox emits is a true positive, and every clean stressor
-(parameterized jdbc vector, `Integer/parseInt` coercion, placeholder creds,
-data-URI blob, generated banner) fires nothing — while recall is the lowest of any
-language. The last gap — the threading-macro form — is now closed, alongside the
-two higher-order-dispatch gaps (`apply`, `map`).
+(parameterized jdbc vector, `Integer/parseInt` coercion, a sanitizer on the
+binding line or wrapped around the source inside the sink call, placeholder
+creds, data-URI blob, generated banner) fires nothing. The gaps this corpus was
+built to pin — the threading-macro form, higher-order DISPATCH (`apply`, `map`),
+higher-order CONSTRUCTION (`partial`, `comp`, `as->`), the INLINE source
+`(shell/sh "sh" "-c" (:params req))` with no binding at all, and a top-level
+`def` read from inside a `defn` — are all closed.
 
-Recall is deliberately BELOW 1.0 again. It reached 1.0 when the threading model
-landed, at which point the corpus could only catch regressions — so
-`tp_hof_construction.clj` was added, pinning three real misses. `apply` and `map`
-DISPATCH a function and are modeled; `partial` and `comp` instead BUILD one, and
-`as->` renames the threaded value, so in all three the sink is a value rather
-than a call head the recognizer tracks. The drop from 1.00 to 0.81 is the corpus
-getting harder, not the engine getting worse: precision is still 1.000 with zero
-false positives. `clean_threading.clj` was added as the guard: threading
-is THE idiomatic Clojure shape, so modeling it is exactly where an engine risks
-inventing noise, and that sample asserts silence across `->`, `->>`, `some->`
-and `cond->` chains over constants, coerced numbers and pure data transforms.
-It matters more than usual here because no large real-world Clojure corpus was
-available to validate against — the guard is a corpus one.
+The history matters more than the number. Recall reached 1.0 once before, when
+the threading model landed, at which point the corpus could only catch
+regressions — so `tp_hof_construction.clj` was added, pinning three real misses
+and dropping recall to 0.81 on purpose: `partial` and `comp` BUILD a function
+that is invoked through a local name, and `as->` renames the threaded value,
+so in all three the sink was a value rather than a call head the recognizer
+tracked. Closing them (see below) brought recall back to 1.0 with precision
+still 1.000, measured against **78 `partial`, 41 `comp` and 7 `as->` uses in
+ring and reitit** that produced zero new findings. `clean_threading.clj` is the
+guard: threading is THE idiomatic Clojure shape, so modeling it is exactly where
+an engine risks inventing noise, and that sample asserts silence across `->`,
+`->>`, `some->` and `cond->` chains over constants, coerced numbers and pure
+data transforms.
 
-That gap is **honest, not curated**: the FN samples are annotated as the true
-positives a correct scanner should fire, so the number tells the truth. The way to
-raise it is to build the engine (a threading-macro desugarer, HOF modeling), never
-to delete the samples.
+The most recent round (`tp_inline_source.clj`, `clean_inline_sanitizer.clj`)
+took recall to 0.80 before the engine caught up. Two of the four misses were
+the same shape every other language shares: the source sat INSIDE the sink
+call (`(shell/sh "sh" "-c" (:params req))`) with no binding for the engine to
+taint, and a `def` at the top of the namespace read from a `defn` below it was
+never joined into that function's flow. The other two were the clean side:
+`(Integer/parseInt (:params req))` on the binding line, and the same form
+placed directly in a sink argument, both fired — the sanitizer and the source
+were in one statement, and the engine only ever saw sanitizers on a LATER
+line. Closing all four was measured on ring and reitit: zero new findings, and
+the two `(slurp (:body req))` reports on ring — a stream read that never
+opens a path — went away, because the catalog now says which classes a
+source's value can never reach (`not_for`), rather than deleting the source.
+
+The discipline stands: the next real miss goes in as an annotated true positive
+so the number tells the truth, and the way to raise it is to build the engine,
+never to delete the samples.
 
 ## Sample inventory
 
@@ -81,6 +97,7 @@ True positives — the idiomatic straight-line flows nox **does** catch:
 | `tp_sqlinjection.clj` | `(jdbc/query db (str "… " id))` string concat | TAINT-001 ×2 | TP ×2 |
 | `tp_pathtraversal.clj` | `(slurp …)` / `(io/reader …)` of a tainted path | TAINT-004 ×2 | TP ×2 |
 | `tp_ssrf.clj` | `(client/get …)` / `(client/post …)` of a tainted URL | TAINT-006 ×2 | TP ×2 |
+| `tp_inline_source.clj` | source INSIDE the sink call, `str`-wrapped source, top-level `def` from `System/getenv` read by a `defn`, jdbc `str` concat | TAINT-002 ×3, TAINT-001 | TP ×4 |
 
 True positives that are honest **false negatives** (annotated ground truth nox is
 expected to MISS — the Lisp recall gap):
@@ -97,6 +114,7 @@ Clean stressors (zero annotations — any finding is a false positive):
 | --- | --- | --- |
 | `clean_safe_db.clj` | parameterized `["… ?" v]` jdbc vector, `Integer/parseInt` coercion, constant command | clean |
 | `clean_validated.clj` | tainted value only logged / in a response map, `parse-long` + arithmetic | clean |
+| `clean_inline_sanitizer.clj` | `Integer/parseInt` on the binding line, in the sink argument itself, `parse-long` around a `def`, source inside a jdbc bind vector | clean |
 | `clean_placeholders.clj` | placeholder creds (`your-api-key-here`, `changeme`, `sk_test_…`), `System/getenv` reads | clean |
 | `clean_datablob.clj` | base64 data-URI SVG, git SHA, UUID, hex color, SRI integrity hash | clean (blob gating) |
 | `clean_prose.clj` | `DO NOT EDIT` banner, sinks quoted in comments, inert opcode data | clean |
@@ -117,15 +135,54 @@ Clean stressors (zero annotations — any finding is a false positive):
   slot. `->` prepends and `->>` appends, but for taint the question is whether
   the value reaches the sink at all, and both do. A position-sensitive argument
   note (the parameterized-jdbc vector check) therefore does not apply to a
-  threaded stage. `as->` is not handled: it names its own binding.
+  threaded stage. `as->` is modeled separately: it binds the threaded value
+  to the NAME the author chose, and each stage names it as an ordinary
+  argument, so the value is bound from the initial expression and rebound to
+  each stage's result — a sanitizing stage clears it for the stages after.
 - **Higher-order dispatch — CLOSED for the dispatcher family.** `apply`, `map`,
   `mapv`, `pmap`, `mapcat`, `keep`, `filter`, `remove`, `some`, `every?` and
   `run!` take the function to invoke as their FIRST argument, so a sink reached
   through them was never a literal call head. The statement is now re-attributed
   to the dispatched SYMBOL and the remaining arguments scored against it. Only a
   bare symbol is re-attributed — an inline `#(...)`/`fn` literal has no name to
-  attribute the flow to and leaves the dispatcher as callee. `partial` and `comp`
-  build a function rather than invoking one and are still not modeled.
+  attribute the flow to and leaves the dispatcher as callee.
+- **Higher-order construction — CLOSED.** `partial` and `comp` BUILD a function
+  that is later invoked through a binding, so the sink never appears as a call
+  head under any name. A `let`/`def` binding whose value is `(partial sym
+  fixed…)` or `(comp sym…)` is remembered, lexically scoped, and a later call
+  through that name is rewritten into the calls it makes: `(f x)` ≡
+  `(sym fixed… x)` for partial, and `(sym1 (sym2 x))` for comp — applied
+  right to left through a synthetic binding so a sanitizer inside the
+  composition clears the taint before a sink further left. Only bare symbols
+  are recorded (an inline `#(...)`/`fn` literal is left alone), and each
+  symbol still has to be a catalog sink to report.
+- **Inline source and same-line sanitizer — CLOSED.** The engine taints a
+  BINDING and reports a sink that reads one, so `(shell/sh "sh" "-c" (:params
+  req))` — the source as a literal argument of the sink — had nothing to
+  taint, and `(let [n (Integer/parseInt (:params req))] …)` had the sanitizer
+  on the same line as the source, where the engine only ever looked on later
+  lines. Both are now walked as forms: a call's positional argument text is
+  scanned for a source form (keyword head or catalog symbol), and every
+  source found on a binding line or in a sink argument carries the sanitizer
+  classes of the forms WRAPPING it, so `parseInt` around `(:params req)`
+  clears command injection while `str` around it clears nothing. A jdbc bind
+  vector `["… ?" (:params req)]` stays clean: the vector is not the SQL string.
+- **Top-level `def` read from a `defn` — CLOSED.** A `def` at namespace level
+  is shared state, and every `defn` in the file that reads the name sees its
+  binding — the same join every other language uses for module-level
+  assignments — so `(def cmd (System/getenv "CMD"))` reaches a `shell/sh`
+  three functions down, and `(def n (parse-long (System/getenv "N")))` does
+  not.
+- **Ring `:body` is a stream, never a path.** `(slurp (:body req))` reads the
+  request body — an `InputStream` by the Ring spec — so `slurp` on it cannot
+  open a file. The catalog marks `:body` as `not_for: [path_traversal]`; the
+  value is still a source for every other class once read into a string, so
+  a body slurped and concatenated into SQL still reports TAINT-001.
+- **A `fn` nested in a `defn` body keeps its unit.** The scoped walk that
+  carries `partial`/`comp` aliases once copied the unit list by value, so a
+  `fn` opened inside a function body — and the flow inside it — vanished.
+  Pinned by `TestClojureNestedFnKeepsItsUnit`. A `fn` used as a let-binding
+  VALUE is still not a unit (it never was).
 - **Destructuring binds** — `{:keys [a b]}`, `[x & xs]` — are not tracked; only a
   bare-symbol binding target taints. A value bound through destructuring is lost.
 - **`slurp` of a URL** is SSRF, not path traversal, but the recognizer cannot tell
@@ -138,5 +195,5 @@ Clean stressors (zero annotations — any finding is a false positive):
 Precision is defended throughout: the sinks fire only when a tracked binding
 actually carries a source, and the parameterized jdbc vector keeps the value out of
 the SQL-string argument, so `clean_safe_db.clj` stays clean. The `--min-precision
-0.90` CI gate and the committed `baseline.json` ratchet ensure the wide, honest
-recall gap can never be hidden and no new Clojure false positive can creep in.
+0.90` CI gate and the committed `baseline.json` ratchet ensure a closed gap can
+never silently reopen and no new Clojure false positive can creep in.

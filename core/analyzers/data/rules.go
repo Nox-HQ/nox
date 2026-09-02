@@ -31,7 +31,12 @@ func builtinDataRules() []*rules.Rule {
 		// Personal Identifiable Information (DATA-001 to DATA-012)
 		// -----------------------------------------------------------------
 		{
-			id: "DATA-001", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// Low, not medium: an address in source is contact information far
+			// more often than it is a leak (package authors, maintainers,
+			// notification recipients), and it is the most common DATA hit by
+			// two orders of magnitude. Medium put it on the same line of the
+			// report as a hard-coded password.
+			id: "DATA-001", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
 			pattern:     `(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`,
 			description: "Email address in code or config",
 			cwe:         "CWE-359", keywords: []string{"@"},

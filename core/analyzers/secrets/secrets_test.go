@@ -461,7 +461,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-043": "r8_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
 		"SEC-044": "cohere_api_key= " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn\n",
 		"SEC-045": "npm_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl\n",
-		"SEC-046": "pypi-" + "ABCDEFGHIJKLMNOPa\n",
+		"SEC-046": "pypi-" + "AgEIcHlwaS5vcmc" + "CJDE4NzUxNTQ2LWFiY2QtNGVmMC05MWZjLTA0YjVjZDQ2ZjFlNAACKlszLCI2ZjBiZDU3Mi1hNzMxLTRlMDktYmY3Yi0zZjFmM2VkYzA2NzAiXQAABiCLrXP7Xh\n",
 		"SEC-047": "rubygems_" + "aabbccddeeff00112233445566778899aabbccddeeff0011\n",
 		"SEC-048": "oy2" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr\n",
 		"SEC-049": "dckr_pat_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZa\n",
@@ -489,7 +489,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-071": "sbp_" + "aabbccddeeff00112233445566778899aabbccdd\n",
 		"SEC-072": "confluent_api_key = \"" + "ABCDEFGHIJKLMNOP\"\n",
 		"SEC-073": "postgres://" + "admin:s3cret@localhost:5432/db\n",
-		"SEC-074": "mongodb+srv://" + "user:pass@cluster0.example.net/mydb\n",
+		"SEC-074": "mongodb+srv://" + "user:Sup3rS3cretPw@cluster0.example.net/mydb\n",
 		"SEC-075": "firebase_api_key = \"" + "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\"\n",
 		"SEC-076": "redis://" + "default:mypassword@redis.example.com:6379\n",
 		"SEC-077": "AGE-SECRET-KEY-" + "1QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L" + "QPZRY9X8GF2TVDW0S3JN54KHCE6M\n",
@@ -992,6 +992,81 @@ func findMatchingTransition(state State) Transition {
 // TestSEC085_NoFalsePositiveOnBareURL ensures bare https URLs without a
 // userinfo component (user:pass@) do not trigger the rule. Issue #60 reported
 // it firing on JSON-LD license URLs like https://opensource.org/licenses/MIT.
+// TestSEC046_NoFalsePositiveOnJobName: `pypi-` followed by sixteen name-ish
+// characters was the whole pattern, so a GitHub Actions job called
+// `pypi-build-and-release` was reported as a leaked PyPI upload token at
+// HIGH severity and HIGH confidence (httpie, release-pypi.yml). A PyPI token
+// is a base64 macaroon whose location field is the registry host, so every
+// real one begins `pypi-AgEIcHlwaS5vcmc` (pypi.org) or
+// `pypi-AgENdGVzdC5weXBpLm9yZw` (test.pypi.org); the rule now requires that.
+func TestSEC046_NoFalsePositiveOnJobName(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("jobs:\n  pypi-build-and-release:\n    name: Build and Release\n    steps:\n      - run: pypi-publish-with-trusted-publisher\n")
+	results, err := a.ScanFile(".github/workflows/release-pypi.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-046" {
+			t.Fatalf("SEC-046 fired on a job name: %+v", f)
+		}
+	}
+}
+
+// TestSEC046_StillFiresOnTestPyPIToken covers the second registry the
+// tightened prefix admits.
+func TestSEC046_StillFiresOnTestPyPIToken(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte("TWINE_PASSWORD=" + "pypi-" + "AgENdGVzdC5weXBpLm9yZw" + "IkNGE0YjE3YzYtNzY3Ny00OWM0LWI0MzEtYjA0ZTFkMDgxZDk1AAIqWzMsIjY0ZjNkYjk4LTk3ZTMtNGM3\n")
+	results, err := a.ScanFile("release.env", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-046" {
+			return
+		}
+	}
+	t.Fatalf("SEC-046 did not fire on a test.pypi.org token")
+}
+
+// TestSEC080_DoesNotCrossLines: `[^'"]{8,}` admits a newline, and the engine
+// matches whole documents, so an opening quote on one line and a closing quote
+// twelve lines later were reported as one password assignment (pipenv's
+// vendored pip auth.py: a `Password: "` prompt string, then a dozen lines of
+// Python, then the next `ask("`). The value class now stops at the line end.
+func TestSEC080_DoesNotCrossLines(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`        password = ask_password("Password: ")
+        return username, password, True
+
+    def _should_save_password_to_keyring(self) -> bool:
+        if not self.prompting:
+            return False
+        return ask("Save credentials to keyring [y/N]: ", ["y", "n"]) == "y"
+`)
+	results, err := a.ScanFile("auth.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-080" {
+			t.Fatalf("SEC-080 crossed a line break: %+v", f.Location)
+		}
+	}
+	// The same rule on one line is still a finding.
+	hit, err := a.ScanFile("settings.py", []byte("DB_PASSWORD = \"hunter2hunter2\"\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range hit {
+		if f.RuleID == "SEC-080" {
+			return
+		}
+	}
+	t.Fatalf("SEC-080 no longer fires on a one-line password assignment")
+}
+
 func TestSEC085_NoFalsePositiveOnBareURL(t *testing.T) {
 	a := NewAnalyzer()
 	content := []byte(`<script type="application/ld+json">

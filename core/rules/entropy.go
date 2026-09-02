@@ -201,7 +201,7 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 			// its algorithm (sha256-/sha384-/sha512-) in HTML/JSX/struct tags —
 			// are public integrity values, not credentials. Skip a candidate
 			// whose base64 body is immediately preceded by an SRI prefix.
-			if isSRIIntegrityHash(lineStr, c.col) {
+			if isSRIIntegrityHash(lineStr, c.col) || hasSRIPrefix(c.text) {
 				continue
 			}
 			entropy := ShannonEntropy(c.text)
@@ -490,6 +490,25 @@ func isSRIIntegrityHash(line string, col int) bool {
 			return true
 		}
 		if b := prefixRegion[before-1]; !isAlphaNum(b) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSRIPrefix reports whether the candidate itself begins with an SRI
+// algorithm label — the shape a quoted or assignment candidate takes when the
+// whole `sha512-<base64>` value is the token, as in `"integrity": "sha512-…"`
+// in every npm registry document and package manifest. isSRIIntegrityHash
+// looks at the text before the candidate, which covers the base64 tokenizer
+// (its candidate starts after the prefix) and the HTML attribute form; this
+// covers the other tokenizers, whose candidate starts at the prefix. The label
+// must be at the start of the token, as the SRI grammar defines it — a
+// credential that merely contains "sha256-" is still a candidate.
+func hasSRIPrefix(candidate string) bool {
+	lower := strings.ToLower(candidate)
+	for _, p := range sriPrefixes {
+		if strings.HasPrefix(lower, p) && len(lower) > len(p) {
 			return true
 		}
 	}

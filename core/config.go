@@ -212,6 +212,8 @@ func NonProductionPathGlobs() []string {
 //   - TAINT-*              — dataflow/taint findings
 //   - SLOP-*               — AI-generated-code smells
 //   - VARIANT-*            — variant/anti-pattern matches
+//   - DATA-001             — an email address in docs or vendored code is
+//     contact information, not a leak; the family's other rules stay out.
 //
 // It deliberately EXCLUDES:
 //
@@ -226,7 +228,24 @@ func NonProductionPathGlobs() []string {
 func ContextDowngradeRulePatterns() []string {
 	return []string{
 		"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*",
+		"DATA-001",
 	}
+}
+
+// NoiseDirDropRulePatterns is the set of rule IDs dropped outright inside
+// test, fixture and example trees and on generated or vendored paths. It is
+// narrower than the downgrade set: a rule belongs here only when a hit in
+// such a tree is noise by construction, not merely less actionable.
+//
+//   - AI-*, MCP-* — tool-wiring and prompt patterns quoted in fixtures
+//   - DATA-001    — an email address. Fixtures are made of them: a registry
+//     mock carries one maintainer address per package version, and one
+//     package manager's test tree produced 184,599 of them on its own. The
+//     other DATA-* rules (card numbers, national IDs, keys) stay out for the
+//     same reason SEC-* is kept out of the downgrade: a real one in a
+//     fixture is a real leak.
+func NoiseDirDropRulePatterns() []string {
+	return []string{"AI-*", "MCP-*", "DATA-001"}
 }
 
 // MatchesNonProductionPath reports whether path matches any of the given globs

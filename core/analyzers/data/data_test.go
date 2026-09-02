@@ -68,7 +68,7 @@ func TestDataRuleMatches(t *testing.T) {
 		{
 			name:     "DATA-001: Email address in config",
 			ruleID:   "DATA-001",
-			severity: findings.SeverityMedium,
+			severity: findings.SeverityLow,
 			positive: "admin_email = jane.doe@acmecorp.io\n",
 			// example.com is reserved by RFC 2606 for documentation, so an
 			// address there is not PII. See TestDATA001_ReservedDomains.

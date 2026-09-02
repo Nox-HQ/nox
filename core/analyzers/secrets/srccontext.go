@@ -118,26 +118,9 @@ func dropConfigFieldRuleInComment(lang lexctx.Lang, content []byte, f *findings.
 	if end <= start {
 		end = start + 1
 	}
-	regions := lexctx.Classify(lang, content)
-	if len(regions) == 0 {
-		return false
-	}
-	// EVERY region the match overlaps must be comment. Testing only the two
-	// endpoints would accept a match that begins in one comment, crosses code,
-	// and ends in the next — and a match leaking out of a comment into code is
-	// suspect but not clearly prose, so it is kept.
-	overlapped := false
-	for _, r := range regions {
-		if r.End <= start {
-			continue
-		}
-		if r.Start >= end {
-			break
-		}
-		if r.Kind != lexctx.KindComment {
-			return false
-		}
-		overlapped = true
-	}
-	return overlapped
+	// EVERY non-blank byte the match covers must be comment. A match that
+	// begins in one comment, crosses code, and ends in the next is suspect but
+	// not clearly prose, so it is kept; the whitespace between two comment
+	// lines (a pattern's trailing `\s` swallows the newline) is not code.
+	return lexctx.WithinComments(lang, content, start, end)
 }

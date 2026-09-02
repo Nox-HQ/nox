@@ -24,14 +24,25 @@ import (
 //
 // HONEST LIMITS (recall is the LOWEST of any supported language, by design — a
 // Lisp is the furthest from the assignment/call model the engine was built for):
-//   - Threading macros (`->`, `->>`, `as->`, `some->`) reorder argument position,
-//     which a positional form recognizer does not follow — a value threaded into a
-//     sink through `->` is missed.
-//   - Higher-order flows (`map`, `apply`, `partial`, `comp`) and destructuring
-//     binds (`{:keys [a b]}`, `[x & xs]`) pass taint through shapes the recognizer
-//     does not model.
+//   - Threading macros (`->`, `->>`, `some->`, `cond->`) are modeled through a
+//     synthetic binding each stage reads and rebinds; `as->` through the name
+//     the author chose. WHAT flows is tracked, not into WHICH argument slot.
+//   - Higher-order DISPATCH (`apply`, `map`) is re-attributed to the dispatched
+//     symbol; higher-order CONSTRUCTION (`partial`, `comp`) is followed through
+//     the `let`/`def` binding that holds the built function (see clojureHOF).
+//     An inline `#(...)`/`fn` literal in either position is not followed.
+//   - Destructuring binds (`{:keys [a b]}`, `[x & xs]`) pass taint through
+//     shapes the recognizer does not model.
 //   - Only a bare-symbol binding target is tracked (`(def x …)`, `(let [x …])`);
 //     a destructuring target is skipped (no field/element sensitivity claimed).
+//   - A `fn` literal used as a let-binding VALUE is not a unit; one in a
+//     `defn` body is (its unit lands in the FILE's list, not the scope's).
+//
+// Closed, and kept closed by the precision suite: a source INSIDE a sink call
+// (`(shell/sh "sh" "-c" (:params req))`) is seen through the call's recorded
+// positional argument text; a sanitizer WRAPPING the source on the binding
+// line clears the binding for its classes (the engine walks `expr` as forms);
+// a top-level `def` is shared state joined into every `defn` that reads it.
 //
 // A miss only weakens RECALL (a false negative), never correctness — an
 // unrecognized form simply yields no statement. Precision is defended: the sinks
@@ -43,17 +54,134 @@ func extractClojure(content []byte, regions []lexctx.Region) []unitDraft {
 	code := clojureCodeMask(content, regions)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
+	w := &clojureWalk{units: &units, hofs: map[string]clojureHOF{}, defs: map[string]bool{}}
 
 	forms := parseClojureForms(code, 0, len(code))
 	for _, f := range forms {
-		walkClojureForm(code, f, module, &units)
+		walkClojureForm(code, f, module, w)
 	}
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
 		out = append(out, *u)
 	}
-	return out
+	return joinSharedState(out, w.defs)
+}
+
+// clojureWalk is the state threaded through the form walk: the units built so
+// far, and the names currently bound to a CONSTRUCTED function (see
+// clojureHOF). hofs is lexically scoped — a `let`/`defn` body works on a copy —
+// so a binding never leaks past the form that made it, while a top-level `def`
+// stays visible to every later form in the file.
+type clojureWalk struct {
+	// units is shared by every scope: a unit opened inside a scoped walk (a
+	// `fn` in a defn body) must land in the file's unit list, not in a copy.
+	units *[]*unitDraft
+	hofs  map[string]clojureHOF
+	// defs are the names bound by a top-level `def`/`defonce`: file-wide shared
+	// state that every defn reading the name joins (see joinSharedState), so
+	// `(def limit (System/getenv "LIMIT"))` reaches `(shell/sh "sleep" limit)`
+	// in a function that never calls anything.
+	defs map[string]bool
+}
+
+// clojureHOF is a function BUILT by `partial` or `comp` and bound to a name.
+// `apply`/`map` DISPATCH a function and are re-attributed at the dispatch site;
+// `partial` and `comp` instead return a new function that is later invoked
+// through the binding, so the sink never appears as a call head under any name
+// the recognizer tracks. The record keeps what is needed to rewrite the later
+// call `(name args…)` into the calls it actually makes:
+//
+//	(partial f a b)  ⇒  (name x)  ≡  (f a b x)
+//	(comp f g h)     ⇒  (name x)  ≡  (f (g (h x)))
+//
+// Only bare SYMBOLS are recorded — an inline `#(...)`/`fn` literal is left
+// alone — and each symbol still has to BE a catalog sink (or sanitizer) to
+// matter, exactly as at a dispatch site.
+type clojureHOF struct {
+	kind  string        // "partial" or "comp"
+	fns   []clojureForm // partial: the one function; comp: left to right
+	fixed []clojureForm // partial: the pre-supplied leading arguments
+}
+
+// scoped returns a copy of w whose hofs can be extended without affecting the
+// enclosing scope.
+func (w *clojureWalk) scoped() *clojureWalk {
+	inner := &clojureWalk{units: w.units, hofs: make(map[string]clojureHOF, len(w.hofs)), defs: w.defs}
+	for k, v := range w.hofs {
+		inner.hofs[k] = v
+	}
+	return inner
+}
+
+// clojureHOFConstruction recognizes a `(partial sym fixed…)` / `(comp sym…)`
+// value expression. Every function position must be a bare symbol.
+func clojureHOFConstruction(code []byte, f clojureForm) (clojureHOF, bool) {
+	if f.delim != '(' || len(f.children) < 2 {
+		return clojureHOF{}, false
+	}
+	isSym := func(ch clojureForm) bool {
+		sym := clojureNormalizeCallee(clojureAtomText(code, ch))
+		return ch.delim == 0 && sym != "" && isClojureCalleeStart(sym[0])
+	}
+	switch clojureAtomText(code, f.children[0]) {
+	case "partial":
+		if !isSym(f.children[1]) {
+			return clojureHOF{}, false
+		}
+		return clojureHOF{kind: "partial", fns: f.children[1:2], fixed: f.children[2:]}, true
+	case "comp":
+		for _, ch := range f.children[1:] {
+			if !isSym(ch) {
+				return clojureHOF{}, false
+			}
+		}
+		return clojureHOF{kind: "comp", fns: f.children[1:]}, true
+	}
+	return clojureHOF{}, false
+}
+
+// clojureHOFCall emits the statements a call `(name args…)` to a constructed
+// function actually makes, located at the call site. A partial call is one
+// statement with the fixed arguments prepended; a comp call is a chain
+// applied right to left through a synthetic binding, so a sanitizer in the
+// composition clears the taint before it reaches a sink further left.
+func clojureHOFCall(code []byte, f clojureForm, hof clojureHOF, cur *unitDraft) {
+	line := clojureLine(code, f.children[0].start)
+	args := f.children[1:]
+	if hof.kind == "partial" {
+		kids := append([]clojureForm{hof.fns[0]}, hof.fixed...)
+		if st, ok := clojureCallStatement(code, clojureForm{delim: '(', children: append(kids, args...)}); ok {
+			st.line = line
+			cur.stmts = append(cur.stmts, st)
+		}
+		return
+	}
+	tmp := "__nox_composed_" + strconv.Itoa(line)
+	bind := stmtDraft{line: line, assigns: tmp, sinkArgs: map[string]sinkArgDraft{}}
+	for _, arg := range args {
+		clojureCollectExpr(code, arg, &bind)
+	}
+	clojureFinalizeReads(&bind)
+	cur.stmts = append(cur.stmts, bind)
+	for i := len(hof.fns) - 1; i >= 0; i-- {
+		st, ok := clojureStageStatement(code, hof.fns[i])
+		if !ok {
+			continue
+		}
+		st.line = line
+		st.reads = appendUnique(st.reads, tmp)
+		for _, callee := range st.calls {
+			info := st.sinkArgs[callee]
+			info.taintedArgVars = appendUnique(info.taintedArgVars, tmp)
+			info.positionalVars = append(info.positionalVars, []string{tmp})
+			info.argCount++
+			info.firstArgTainted = true
+			st.sinkArgs[callee] = info
+		}
+		st.assigns = tmp
+		cur.stmts = append(cur.stmts, st)
+	}
 }
 
 // clojureCodeMask returns content with every non-code byte replaced by a space
@@ -157,13 +285,13 @@ func clojureMatchClose(code []byte, open, hi int) int {
 // walkClojureForm dispatches one top-level (or nested body) form to the binding /
 // unit / call recognizers, appending statements to cur (the current unit) and new
 // units to units. Non-list forms carry no statement.
-func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitDraft) {
+func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk) {
 	if f.delim != '(' || len(f.children) == 0 {
 		// A bare vector/map/atom at the top level carries no statement, but a nested
 		// call inside it might — recurse into collection children so a sink buried in
 		// a data literal is still seen.
 		for _, ch := range f.children {
-			walkClojureForm(code, ch, cur, units)
+			walkClojureForm(code, ch, cur, w)
 		}
 		return
 	}
@@ -172,38 +300,55 @@ func walkClojureForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitD
 	case "def", "defonce", "def-":
 		if st, ok := clojureDefStatement(code, f); ok {
 			cur.stmts = append(cur.stmts, st)
+			if cur == (*w.units)[0] {
+				w.defs[st.assigns] = true
+			}
+			if len(f.children) >= 3 {
+				if hof, ok := clojureHOFConstruction(code, f.children[2]); ok {
+					w.hofs[st.assigns] = hof
+				}
+			}
 		}
 		// Recurse into the value expression so a call inside it (`(def x (sh …))`)
 		// is also seen as its own statement.
-		walkClojureChildren(code, f, 1, cur, units)
+		walkClojureChildren(code, f, 1, cur, w)
 	case "defn", "defn-", "fn":
 		newUnit := clojureDefnUnit(code, f)
 		if newUnit != nil {
-			*units = append(*units, newUnit)
-			// Walk the body forms into the new unit.
-			walkClojureDefnBody(code, f, newUnit, units)
+			*w.units = append(*w.units, newUnit)
+			// Walk the body forms into the new unit, in their own scope.
+			walkClojureDefnBody(code, f, newUnit, w.scoped())
 			return
 		}
-		walkClojureChildren(code, f, 1, cur, units)
+		walkClojureChildren(code, f, 1, cur, w)
 	case "let", "let*", "binding", "loop", "when-let", "if-let", "when-some", "if-some", "with-open", "with-local-vars", "for", "doseq":
-		clojureLetForm(code, f, cur, units)
+		clojureLetForm(code, f, cur, w)
 	case "->", "->>", "some->", "some->>", "cond->", "cond->>":
-		clojureThreadingForm(code, f, cur, units)
+		clojureThreadingForm(code, f, cur, w)
+	case "as->":
+		clojureAsThreadForm(code, f, cur, w)
 	default:
+		// A call through a name bound to a constructed function is the calls
+		// that function makes (see clojureHOF).
+		if hof, ok := w.hofs[head]; ok {
+			clojureHOFCall(code, f, hof, cur)
+			walkClojureChildren(code, f, 1, cur, w)
+			return
+		}
 		// An ordinary call `(callee args…)`.
 		if st, ok := clojureCallStatement(code, f); ok {
 			cur.stmts = append(cur.stmts, st)
 		}
 		// Recurse into arguments so nested calls / bindings are also seen.
-		walkClojureChildren(code, f, 1, cur, units)
+		walkClojureChildren(code, f, 1, cur, w)
 	}
 }
 
 // walkClojureChildren recurses into a form's children starting at index from,
 // dispatching each as its own form (so nested calls and bindings surface).
-func walkClojureChildren(code []byte, f clojureForm, from int, cur *unitDraft, units *[]*unitDraft) {
+func walkClojureChildren(code []byte, f clojureForm, from int, cur *unitDraft, w *clojureWalk) {
 	for i := from; i < len(f.children); i++ {
-		walkClojureForm(code, f.children[i], cur, units)
+		walkClojureForm(code, f.children[i], cur, w)
 	}
 }
 
@@ -223,6 +368,7 @@ func clojureDefStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	// The value expression is the third child onward (usually one).
 	if len(f.children) >= 3 {
 		clojureCollectExpr(code, f.children[2], &st)
+		st.expr = clojureFormText(code, f.children[2])
 	}
 	clojureFinalizeReads(&st)
 	return st, true
@@ -232,7 +378,7 @@ func clojureDefStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 // form: each name/expr pair in the binding vector becomes a binding statement, and
 // the body forms are walked into cur. A `for`/`doseq` seq-binding vector is handled
 // the same way (the right-hand side of each pair is where a source enters).
-func clojureLetForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitDraft) {
+func clojureLetForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk) {
 	// The binding vector is the first '[' child after the head.
 	var vec *clojureForm
 	bodyStart := len(f.children)
@@ -243,19 +389,20 @@ func clojureLetForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitDr
 			break
 		}
 	}
+	w = w.scoped()
 	if vec != nil {
-		clojureBindingPairs(code, *vec, cur)
+		clojureBindingPairs(code, *vec, cur, w)
 	}
 	// Walk the body forms.
 	for i := bodyStart; i < len(f.children); i++ {
-		walkClojureForm(code, f.children[i], cur, units)
+		walkClojureForm(code, f.children[i], cur, w)
 	}
 }
 
 // clojureBindingPairs walks a binding vector's name/expr pairs (`[a e1 b e2]`) and
 // appends a binding statement per pair whose target is a bare symbol. A pair whose
 // value expression is itself a call/collection has its reads and calls collected.
-func clojureBindingPairs(code []byte, vec clojureForm, cur *unitDraft) {
+func clojureBindingPairs(code []byte, vec clojureForm, cur *unitDraft, w *clojureWalk) {
 	kids := vec.children
 	for i := 0; i+1 < len(kids); i += 2 {
 		name := clojureBindingName(code, kids[i])
@@ -264,7 +411,15 @@ func clojureBindingPairs(code []byte, vec clojureForm, cur *unitDraft) {
 		clojureFinalizeReads(&valStmt)
 		if name != "" {
 			valStmt.assigns = name
+			valStmt.expr = clojureFormText(code, kids[i+1])
 			cur.stmts = append(cur.stmts, valStmt)
+			// A name bound to a constructed function is remembered for the call
+			// site; a name rebound to anything else shadows an outer record.
+			if hof, ok := clojureHOFConstruction(code, kids[i+1]); ok {
+				w.hofs[name] = hof
+			} else {
+				delete(w.hofs, name)
+			}
 		} else if len(valStmt.calls) > 0 || len(valStmt.reads) > 0 {
 			// Destructuring target we can't name, but the value has a call/read worth
 			// recording (a source-bearing call still matters for a later sink).
@@ -302,7 +457,7 @@ func clojureDefnUnit(code []byte, f clojureForm) *unitDraft {
 
 // walkClojureDefnBody walks the body forms of a defn/fn (everything after the
 // parameter vector) into the unit.
-func walkClojureDefnBody(code []byte, f clojureForm, unit *unitDraft, units *[]*unitDraft) {
+func walkClojureDefnBody(code []byte, f clojureForm, unit *unitDraft, w *clojureWalk) {
 	// Locate the parameter vector, then walk everything after it.
 	vecIdx := -1
 	for i := 1; i < len(f.children); i++ {
@@ -316,7 +471,7 @@ func walkClojureDefnBody(code []byte, f clojureForm, unit *unitDraft, units *[]*
 		from = vecIdx + 1
 	}
 	for i := from; i < len(f.children); i++ {
-		walkClojureForm(code, f.children[i], unit, units)
+		walkClojureForm(code, f.children[i], unit, w)
 	}
 }
 
@@ -362,15 +517,19 @@ func clojureCallStatement(code []byte, f clojureForm) (stmtDraft, bool) {
 	for i := argStart; i < len(f.children); i++ {
 		arg := f.children[i]
 		var vars []string
+		argText := ""
 		if jdbcParam && arg.delim == '[' && clojureVectorIsParamBind(code, arg) {
 			// Parameterized bind vector: its values are safe placeholders, not
 			// interpolated SQL. Record an empty slot so the argument shape still
-			// counts the positional but carries no tainted var.
+			// counts the positional but carries no tainted var — and no argument
+			// text, so an inline source inside the vector is not scanned either.
 			vars = nil
 		} else {
 			vars = clojureExprVars(code, arg)
+			argText = clojureFormText(code, arg)
 		}
 		info.positionalVars = append(info.positionalVars, append([]string(nil), vars...))
+		info.positionalArgs = append(info.positionalArgs, argText)
 		info.argCount++
 		for _, v := range vars {
 			if _, dup := seen[v]; !dup {
@@ -641,6 +800,16 @@ func clojureAtomText(code []byte, f clojureForm) string {
 	return strings.TrimSpace(string(code[f.start:f.end]))
 }
 
+// clojureFormText returns the masked source text of one form (an atom or a
+// whole bracketed form), the expression view the engine's inline-source scan
+// re-parses. Literals are already blanked in the mask.
+func clojureFormText(code []byte, f clojureForm) string {
+	if f.start < 0 || f.end > len(code) || f.start >= f.end {
+		return ""
+	}
+	return string(code[f.start:f.end])
+}
+
 // clojureNormalizeCallee maps a Clojure symbol head to the catalog call key. A
 // namespaced symbol (`jdbc/query`, `clojure.java.shell/sh`, `client/get`) is kept
 // verbatim so the catalog can key on the full or a suffix form; a bare symbol
@@ -782,7 +951,7 @@ var clojureThreadHeads = map[string]bool{
 // argument note (the parameterized-jdbc vector check) therefore does not apply
 // to a threaded stage; that costs precision nowhere in the corpus but is the
 // honest limit of the approximation.
-func clojureThreadingForm(code []byte, f clojureForm, cur *unitDraft, units *[]*unitDraft) {
+func clojureThreadingForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk) {
 	// The threaded value is modeled as a synthetic BINDING that each stage reads
 	// and rebinds. The engine taints a variable at its binding and reports a sink
 	// that READS a tainted variable, so carrying evidence alone was not enough —
@@ -794,25 +963,55 @@ func clojureThreadingForm(code []byte, f clojureForm, cur *unitDraft, units *[]*
 		clojureCollectExpr(code, f.children[1], &bind)
 	}
 	cur.stmts = append(cur.stmts, bind)
-	clojureThreadStages(code, f, 2, tmp, cur, units)
+	clojureThreadStages(code, f, 2, tmp, cur, w)
 	// The initial expression may itself contain calls worth reporting on their
 	// own (`(-> (sh cmd) ...)`), so walk it normally too.
 	if len(f.children) > 1 {
-		walkClojureForm(code, f.children[1], cur, units)
+		walkClojureForm(code, f.children[1], cur, w)
 	}
+}
+
+// clojureAsThreadForm models `(as-> expr name stage…)`: like `->` but the
+// threaded value has the NAME the author chose, and each stage names it
+// explicitly as an ordinary argument. So the value is bound to that name from
+// the initial expression, and every stage rebinds it to the stage's result —
+// the stage's own argument read already carries the name to the sink, and a
+// sanitizing stage clears it for the stages after.
+func clojureAsThreadForm(code []byte, f clojureForm, cur *unitDraft, w *clojureWalk) {
+	if len(f.children) < 3 {
+		return
+	}
+	name := clojureBindingName(code, f.children[2])
+	if name == "" {
+		walkClojureChildren(code, f, 1, cur, w)
+		return
+	}
+	bind := stmtDraft{line: clojureLine(code, f.start), assigns: name, sinkArgs: map[string]sinkArgDraft{}}
+	clojureCollectExpr(code, f.children[1], &bind)
+	clojureFinalizeReads(&bind)
+	cur.stmts = append(cur.stmts, bind)
+	for _, stage := range f.children[3:] {
+		st, ok := clojureStageStatement(code, stage)
+		if !ok {
+			continue
+		}
+		st.assigns = name
+		cur.stmts = append(cur.stmts, st)
+	}
+	walkClojureForm(code, f.children[1], cur, w)
 }
 
 // clojureThreadStages emits a statement per stage in f.children[from:]. Each
 // stage READS the synthetic threaded variable and REBINDS it to its own result,
 // so the value keeps flowing and a sanitizing stage correctly clears the taint.
-func clojureThreadStages(code []byte, f clojureForm, from int, tmp string, cur *unitDraft, units *[]*unitDraft) {
+func clojureThreadStages(code []byte, f clojureForm, from int, tmp string, cur *unitDraft, w *clojureWalk) {
 	for i := from; i < len(f.children); i++ {
 		stage := f.children[i]
 		if stage.delim == '(' && len(stage.children) > 0 &&
 			clojureThreadHeads[clojureAtomText(code, stage.children[0])] {
 			// A nested threading macro re-threads the same value; all of its
 			// children after the head are stages.
-			clojureThreadStages(code, stage, 1, tmp, cur, units)
+			clojureThreadStages(code, stage, 1, tmp, cur, w)
 			continue
 		}
 		st, ok := clojureStageStatement(code, stage)

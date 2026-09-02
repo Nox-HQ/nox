@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,6 +57,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 		Reads:   append([]string(nil), d.reads...),
 		Chains:  append([]string(nil), d.chains...),
 		Returns: append([]string(nil), d.returns...),
+		Expr:    d.expr,
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -191,6 +193,15 @@ func (e *StructuralEngine) analyzeUnitInterproc(lang string, unit *taint.Unit, s
 	return res.flows
 }
 
+// stmtFlowKey identifies a flow within ONE statement: the rule it violates and
+// the value that reaches it. Two catalog sinks that resolve for the same
+// written call (an alias and its qualified form) share a key and are one flow.
+type stmtFlowKey struct {
+	ruleID     string
+	sourceLine int
+	sourceVar  string
+}
+
 // forwardPass is the single, shared forward-propagation core used by BOTH the
 // intraprocedural Analyze and the interprocedural AnalyzeFile/summarize. Keeping
 // one implementation guarantees summary semantics never diverge from
@@ -230,6 +241,15 @@ func (e *StructuralEngine) forwardPass(
 		// 1) Catalog sink check: for each call that resolves to a catalog sink,
 		//    decide whether a tainted, class-un-sanitized value reaches it in a
 		//    dangerous position.
+		//
+		// One flow per (rule, source) per statement. Import resolution records a
+		// call's qualified form ALONGSIDE the form as written (imports.go), and
+		// for the languages whose catalog enumerates aliases next to the
+		// qualified name (`shell/sh` beside `clojure.java.shell/sh`) both entries
+		// resolve for the one call the author wrote. That is one sink reached by
+		// one value: reporting it twice, once per spelling, doubles the finding.
+		// The first spelling in st.Calls -- the one as written -- names the flow.
+		emitted := map[stmtFlowKey]struct{}{}
 		for _, rawCall := range st.Calls {
 			sink, ok := e.resolveSink(lang, rawCall)
 			if !ok {
@@ -272,8 +292,8 @@ func (e *StructuralEngine) forwardPass(
 				if !isTainted {
 					continue
 				}
-				if ti.cleared[sink.VulnClass] {
-					continue // sanitized for this exact class (prior assignment / inline wrap)
+				if ti.cleared[sink.VulnClass] || ti.src.Excludes(sink.VulnClass) {
+					continue // sanitized for this exact class (prior assignment / inline wrap), or a class the source's value cannot reach
 				}
 				if inlineCleared[v][sink.VulnClass] {
 					continue // sanitized inline at the sink call
@@ -290,6 +310,11 @@ func (e *StructuralEngine) forwardPass(
 						continue // untrusted content confined to the user role (safe pattern)
 					}
 				}
+				fk := stmtFlowKey{sink.RuleID, ti.srcLine, sourceVar}
+				if _, dup := emitted[fk]; dup {
+					break // the same call under another spelling: already reported
+				}
+				emitted[fk] = struct{}{}
 				flows = append(flows, taint.Flow{
 					Source:     ti.src,
 					SourceLine: ti.srcLine,
@@ -327,9 +352,10 @@ func (e *StructuralEngine) forwardPass(
 
 		// A source assignment taints the LHS afresh (a re-source overwrites prior
 		// taint/clear state). Sources may be CALLS (request.args.get) or bare
-		// ATTRIBUTE chains (request.args, req.query), so both are consulted.
+		// ATTRIBUTE chains (request.args, req.query), so both are consulted. A
+		// sanitizer wrapping the source on this same line clears its classes.
 		if src, ok := e.resolveSource(lang, st); ok {
-			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: map[taint.VulnClass]bool{}}
+			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: e.bindingCleared(lang, st.Expr)}
 			continue
 		}
 
@@ -411,8 +437,8 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 			}
 			for _, op := range e.argOperands(lang, info, argIdx, tainted, st.Line) {
 				for _, as := range sinks {
-					if op.ti.cleared[as.sink.VulnClass] {
-						continue // caller already sanitized for this class
+					if op.ti.cleared[as.sink.VulnClass] || op.ti.src.Excludes(as.sink.VulnClass) {
+						continue // caller already sanitized for this class, or the source's value cannot reach it
 					}
 					if cls := sum.sanitizesClass[argIdx]; cls[as.sink.VulnClass] {
 						continue // helper sanitizes this parameter for this class
@@ -756,6 +782,12 @@ func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand)
 // call's own arguments, so a source is never matched outside the sanitizer that
 // wraps it.
 func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	if lang == "shell" {
+		return e.scanShellInlineSource(lang, code)
+	}
+	if lang == "clojure" {
+		return e.scanClojureInlineSource(lang, code)
+	}
 	for _, c := range topLevelCalls(code) {
 		// The call itself may be a source (request.args.get(...), r.FormValue(...)).
 		if s, ok := e.sourceForChain(lang, c.callee); ok {
@@ -785,6 +817,184 @@ func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, ma
 	return taint.Source{}, nil, false
 }
 
+// bindingCleared returns the sanitizer classes cleared on EVERY source in a
+// binding's expression: the intersection over all sources reachable in it of
+// the classes wrapped around each. One unwrapped source is enough to keep the
+// assignee fully tainted (`int(source('a')) + source('b')`), and a sanitizer
+// beside the source rather than around it clears nothing. An expression the
+// extractor could not carry (Expr == "") clears nothing.
+func (e *StructuralEngine) bindingCleared(lang, expr string) map[taint.VulnClass]bool {
+	var out map[taint.VulnClass]bool
+	e.walkInlineSources(lang, expr, func(_ taint.Source, cleared map[taint.VulnClass]bool) {
+		if out == nil {
+			out = make(map[taint.VulnClass]bool, len(cleared))
+			for class := range cleared {
+				out[class] = true
+			}
+			return
+		}
+		for class := range out {
+			if !cleared[class] {
+				delete(out, class)
+			}
+		}
+	})
+	if out == nil {
+		return map[taint.VulnClass]bool{}
+	}
+	return out
+}
+
+// walkInlineSources visits every catalog source reachable in an expression,
+// each with the sanitizer classes cleared on its own path from the expression
+// root. It is scanInlineSource without the first-match cut: a binding needs
+// all of its sources to decide what is cleared, a sink argument needs one.
+// Shell expansions never reach a binding this way (the shell extractor has
+// its own assignment model), so shell is not walked.
+func (e *StructuralEngine) walkInlineSources(lang, code string, visit func(taint.Source, map[taint.VulnClass]bool)) {
+	if lang == "shell" {
+		return
+	}
+	if lang == "clojure" {
+		e.walkClojureInlineSources(lang, code, visit)
+		return
+	}
+	calls, rest := topLevelCallsRest(code)
+	for _, c := range calls {
+		if s, ok := e.sourceForChain(lang, c.callee); ok {
+			visit(s, map[taint.VulnClass]bool{})
+			continue
+		}
+		wrapping := e.sanitizerClasses(lang, c.callee)
+		e.walkInlineSources(lang, c.codeArgs, func(s taint.Source, cleared map[taint.VulnClass]bool) {
+			for _, class := range wrapping {
+				cleared[class] = true
+			}
+			visit(s, cleared)
+		})
+	}
+	// Attribute-source and bare-identifier reads outside the calls: chains
+	// inside a call were already visited on the call's path, with its wrapping.
+	for _, ch := range dottedChains(rest) {
+		if s, ok := e.sourceForChain(lang, ch); ok {
+			visit(s, map[taint.VulnClass]bool{})
+		}
+	}
+	for _, id := range freeIdentifiers(langPython, rest) {
+		if s, ok := e.sourceForChain(lang, id); ok {
+			visit(s, map[taint.VulnClass]bool{})
+		}
+	}
+}
+
+// scanClojureInlineSource is scanInlineSource for Clojure: the first source
+// form reachable in the expression, outermost-first, with the classes of the
+// sanitizer heads wrapping it.
+func (e *StructuralEngine) scanClojureInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	var (
+		found   taint.Source
+		cleared map[taint.VulnClass]bool
+		ok      bool
+	)
+	e.walkClojureInlineSources(lang, code, func(s taint.Source, cl map[taint.VulnClass]bool) {
+		if !ok {
+			found, cleared, ok = s, cl, true
+		}
+	})
+	return found, cleared, ok
+}
+
+// walkClojureInlineSources is walkInlineSources over Clojure forms. A list
+// form's head is the call: a keyword head `(:params req)` or a source symbol
+// `(System/getenv …)` IS the source; any other head is a call whose arguments
+// are walked with the head's sanitizer classes added to the wrapping, so
+// `(Integer/parseInt (:params req))` reaches the source with command
+// injection cleared and `(str "x" (:params req))` reaches it with nothing
+// cleared. A bare symbol read that is itself a catalog source
+// (`*command-line-args*`) is visited as-is. Keywords inside a vector or map
+// literal are keys, not accesses, and are not visited (see
+// clojureCollectExpr); the forms nested in a literal still are.
+func (e *StructuralEngine) walkClojureInlineSources(lang, code string, visit func(taint.Source, map[taint.VulnClass]bool)) {
+	bytes := []byte(code)
+	for _, f := range parseClojureForms(bytes, 0, len(bytes)) {
+		e.walkClojureInlineForm(lang, bytes, f, nil, visit)
+	}
+}
+
+func (e *StructuralEngine) walkClojureInlineForm(lang string, code []byte, f clojureForm, wrapping []taint.VulnClass, visit func(taint.Source, map[taint.VulnClass]bool)) {
+	emit := func(s taint.Source) {
+		cleared := make(map[taint.VulnClass]bool, len(wrapping))
+		for _, class := range wrapping {
+			cleared[class] = true
+		}
+		visit(s, cleared)
+	}
+	if f.delim == 0 {
+		atom := clojureAtomText(code, f)
+		if atom == "" || strings.HasPrefix(atom, ":") {
+			return
+		}
+		if s, ok := e.sourceForChain(lang, atom); ok {
+			emit(s)
+		}
+		return
+	}
+	if f.delim != '(' || len(f.children) == 0 {
+		for _, ch := range f.children {
+			if ch.delim != 0 {
+				e.walkClojureInlineForm(lang, code, ch, wrapping, visit)
+			}
+		}
+		return
+	}
+	head := clojureAtomText(code, f.children[0])
+	if strings.HasPrefix(head, ":") {
+		if s, ok := e.sourceForChain(lang, head); ok {
+			emit(s)
+		} else if s, ok := e.sourceForChain(lang, strings.TrimPrefix(head, ":")); ok {
+			emit(s)
+		}
+		return
+	}
+	if s, ok := e.sourceForChain(lang, clojureNormalizeCallee(head)); ok {
+		emit(s)
+		return
+	}
+	inner := append(append([]taint.VulnClass(nil), wrapping...), e.sanitizerClasses(lang, clojureNormalizeCallee(head))...)
+	for _, ch := range f.children[1:] {
+		e.walkClojureInlineForm(lang, code, ch, inner, visit)
+	}
+}
+
+// scanShellInlineSource is scanInlineSource for shell, whose sources are not
+// calls but expansions: a positional / special parameter (`$1`, `$@`) or a
+// CGI environment variable (`$QUERY_STRING`) written directly in an argument
+// word. A command substitution `$(sanitizer "$1")` wrapping one clears the
+// sanitizer's classes, mirroring the call-nesting rule of the other languages.
+func (e *StructuralEngine) scanShellInlineSource(lang, code string) (taint.Source, map[taint.VulnClass]bool, bool) {
+	rest := code
+	for _, sub := range shellCommandSubs(code) {
+		if s, cleared, ok := e.scanShellInlineSource(lang, sub.inner); ok {
+			for _, class := range e.sanitizerClasses(lang, sub.callee) {
+				cleared[class] = true
+			}
+			return s, cleared, true
+		}
+		rest = strings.Replace(rest, sub.text, "", 1)
+	}
+	for _, m := range shellPositionalMarkers(rest) {
+		if s, ok := e.cat.Source(lang, m); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	for _, v := range shellNamedExpansions(rest) {
+		if s, ok := e.cat.Source(lang, v); ok {
+			return s, map[taint.VulnClass]bool{}, true
+		}
+	}
+	return taint.Source{}, nil, false
+}
+
 // topLevelCalls returns the calls at the OUTERMOST nesting level of code (each
 // with its argument text), skipping over a call's own arguments rather than
 // recursing into them. Unlike extractCalls (which flattens every nested call for
@@ -792,7 +1002,16 @@ func (e *StructuralEngine) scanInlineSource(lang, code string) (taint.Source, ma
 // a source WRAPPED by a sanitizer from one that is not. Literals are already
 // blanked, so no in-string paren confuses the scan.
 func topLevelCalls(code string) []callChain {
-	var calls []callChain
+	calls, _ := topLevelCallsRest(code)
+	return calls
+}
+
+// topLevelCallsRest is topLevelCalls that also returns the expression with
+// every top-level call (callee and arguments) blanked to spaces, so a caller
+// can look for attribute-chain and bare-identifier sources OUTSIDE the calls
+// without re-matching a chain that sits inside one.
+func topLevelCallsRest(code string) (calls []callChain, rest string) {
+	blanked := []byte(code)
 	i, n := 0, len(code)
 	for i < n {
 		if !isIdentStart(code[i]) {
@@ -815,9 +1034,12 @@ func topLevelCalls(code string) []callChain {
 		if callee := normalizeCallee(chain); callee != "" {
 			calls = append(calls, callChain{callee: callee, codeArgs: codeArgs, rawArgs: codeArgs})
 		}
+		for k := start; k < end; k++ {
+			blanked[k] = ' '
+		}
 		i = end // jump past the whole call: its args are NOT top-level
 	}
-	return calls
+	return calls, string(blanked)
 }
 
 // sanitizerClasses returns every vuln class a call neutralizes (by suffix match).
@@ -966,10 +1188,36 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// language discriminator: a quoted/validated shell file invocation leaves
 		// both false and is still suppressed.
 		return info.ShellTrue || info.FirstArgTainted
+	case "setTimeout", "setInterval":
+		// A timer runs its first argument as CODE only when that argument is a
+		// string. A function literal is the ordinary form -- the callback body
+		// reads tainted variables all the time, and the extractor lists them as
+		// arguments of the timer call because textually they are -- and it
+		// compiles nothing. The catalog note says "only when the first argument
+		// is a string, not a function"; this is where that is enforced.
+		return info.FirstArgTainted && !firstArgIsFunctionLiteral(info)
 	default:
 		return true
 	}
 }
+
+// firstArgIsFunctionLiteral reports whether the code view of the first
+// positional argument is a JavaScript function expression: `function (…) {`,
+// `async function`, `async (…) =>`, `(…) =>`, or `x =>`.
+func firstArgIsFunctionLiteral(info taint.SinkArgInfo) bool {
+	if len(info.PositionalArgs) == 0 {
+		return false
+	}
+	arg := strings.TrimSpace(info.PositionalArgs[0])
+	arg = strings.TrimPrefix(arg, "async")
+	arg = strings.TrimSpace(arg)
+	if strings.HasPrefix(arg, "function") {
+		return true
+	}
+	return jsArrowHeadRe.MatchString(arg)
+}
+
+var jsArrowHeadRe = regexp.MustCompile(`^(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>`)
 
 // lookupSinkArg finds the SinkArgInfo for rawCall on st, matching by suffix so
 // the extractor's full-chain key resolves against the canonical sink call.

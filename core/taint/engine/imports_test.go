@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -180,6 +181,50 @@ func TestClojureCanonicalShellAliasResolves(t *testing.T) {
 		if got != "clojure.java.shell/sh" {
 			t.Errorf(":as %s → %q, want clojure.java.shell/sh", alias, got)
 		}
+	}
+}
+
+// A call written once is one sink, however many catalog spellings resolve for
+// it. Resolution ADDS the qualified form beside the alias, and the Clojure
+// catalog enumerates `shell/sh` beside `clojure.java.shell/sh`, so before the
+// per-statement key in forwardPass both entries matched and the one command
+// injection was reported twice — measured as a 0.91 precision on a corpus with
+// no false positive in it.
+func TestAliasAndQualifiedFormAreOneFlow(t *testing.T) {
+	cases := []struct {
+		name, path string
+		lang       lexctx.Lang
+		src        string
+		wantCalls  []string
+	}{
+		{"clojure alias enumerated by the catalog", "t.clj", lexctx.LangClojure,
+			"(ns t (:require [clojure.java.shell :as shell]))\n(defn run [req]\n  (let [n (:params req)]\n    (shell/sh \"sleep\" n)))\n",
+			[]string{"shell/sh"}},
+		{"clojure alias only resolution knows", "t.clj", lexctx.LangClojure,
+			"(ns t (:require [clojure.java.shell :as sh2]))\n(defn run [req]\n  (let [n (:params req)]\n    (sh2/sh \"sleep\" n)))\n",
+			[]string{"clojure.java.shell/sh"}},
+		{"python module alias", "t.py", lexctx.LangPython,
+			"import os as o\ndef h():\n    c = request.args.get('c')\n    o.system(c)\n",
+			[]string{"os.system"}},
+		// The key is per (rule, source): two values reaching two sinks of the
+		// same rule on one line are still two flows, one per value.
+		{"two sources into two sinks on one line stay two flows", "t.py", lexctx.LangPython,
+			"import os, subprocess\ndef h():\n    a = request.args.get('a')\n    b = request.args.get('b')\n    os.system(a); subprocess.call(b, shell=True)\n",
+			[]string{"os.system", "subprocess.call"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			eng := NewStructuralEngine(nil)
+			flows := eng.AnalyzeFile(ExtractUnits(c.path, c.lang, []byte(c.src)))
+			var got []string
+			for i := range flows {
+				got = append(got, flows[i].SinkCall)
+			}
+			sortStrings(got)
+			if !reflect.DeepEqual(got, c.wantCalls) {
+				t.Fatalf("sink calls = %v, want %v", got, c.wantCalls)
+			}
+		})
 	}
 }
 

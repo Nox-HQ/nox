@@ -49,6 +49,11 @@ type stmtDraft struct {
 	// calls.
 	chains   []string
 	sinkArgs map[string]sinkArgDraft
+	// expr is the code view (literals blanked) of the value a binding assigns,
+	// or "" when the extractor has no expression text for it. The engine scans
+	// it for a sanitizer WRAPPING the source, so `n = int(source())` binds n
+	// with command/sql injection cleared instead of tainting it afresh.
+	expr string
 	// returns are the variable names returned by a `return x` / `return a, b`
 	// statement. Empty for non-return statements. The interprocedural summary
 	// pass uses it to decide whether a parameter reaches the function's return.

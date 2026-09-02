@@ -202,3 +202,72 @@ zipfile
 zipimport
 zlib
 zoneinfo
+# Present in CPython 3 but absent above: removed in 3.12 (distutils, kept for
+# the decade of code that guards it), added in 3.14 (compression,
+# annotationlib), platform modules, and undocumented but importable internals.
+distutils
+compression
+annotationlib
+nt
+pyexpat
+nturl2path
+ntpath
+genericpath
+opcode
+sre_compile
+sre_constants
+sre_parse
+idlelib
+pydoc_data
+this
+antigravity
+asynchat
+asyncore
+smtpd
+formatter
+parser
+symbol
+binhex
+dummy_threading
+# Python 2 module names. They survive in compatibility shims of the form
+# `try: import queue / except ImportError: import Queue`; the name is a real
+# historical module, not a hallucinated package.
+Queue
+ConfigParser
+StringIO
+cStringIO
+cPickle
+HTMLParser
+httplib
+urllib2
+urlparse
+xmlrpclib
+thread
+Tkinter
+tkMessageBox
+tkFileDialog
+ttk
+commands
+SocketServer
+BaseHTTPServer
+SimpleHTTPServer
+CGIHTTPServer
+Cookie
+cookielib
+anydbm
+dumbdbm
+gdbm
+whichdb
+copy_reg
+sets
+md5
+sha
+exceptions
+htmlentitydefs
+robotparser
+UserDict
+UserList
+UserString
+dummy_thread
+future_builtins
+repr

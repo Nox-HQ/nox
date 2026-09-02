@@ -39,6 +39,13 @@ type Statement struct {
 	// pass can decide whether a parameter flows to a function's return value.
 	// Empty for non-return statements. The intraprocedural engine ignores it.
 	Returns []string
+	// Expr is the code view (string literals blanked) of the expression this
+	// statement assigns to Assigns, or "" when the substrate does not carry it.
+	// The StructuralEngine scans it like a sink argument: a sanitizer wrapping
+	// the source on the binding's own line (`n = int(request.args.get('n'))`)
+	// clears its classes on the assignee. Empty means "unknown", which keeps
+	// the conservative behaviour (the assignee is tainted with nothing cleared).
+	Expr string
 }
 
 // SinkArgInfo is the argument-shape evidence a substrate extracts at a specific

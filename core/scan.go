@@ -1227,12 +1227,12 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	// scanning already ran against the same lockfiles, so no real CVE is hidden.
 	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
 		withheld("content rule dropped on a generated or vendored path", func() {
-			allFindings.RemoveByRuleIDsAndPaths([]string{"AI-*", "MCP-*"}, genPaths)
+			allFindings.RemoveByRuleIDsAndPaths(NoiseDirDropRulePatterns(), genPaths)
 		})
 	}
 	if noiseDirs := cfg.Scan.GeneratedPaths.ResolveNoiseDirs(); len(noiseDirs) > 0 {
 		withheld("content rule dropped inside a test, fixture or example tree", func() {
-			allFindings.RemoveByRuleIDsInDirs([]string{"AI-*", "MCP-*"}, noiseDirs)
+			allFindings.RemoveByRuleIDsInDirs(NoiseDirDropRulePatterns(), noiseDirs)
 		})
 	}
 

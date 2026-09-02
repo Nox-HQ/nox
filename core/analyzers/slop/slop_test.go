@@ -140,3 +140,54 @@ func TestScanDeduplicatesPerFile(t *testing.T) {
 		t.Errorf("expected ghostpkg flagged once per file, got %d", count)
 	}
 }
+
+func TestScanPrivateAndLegacyPythonModulesNotFlagged(t *testing.T) {
+	// Underscore-led modules cannot be registry packages (PEP 508 names start
+	// with a letter or digit); Python 2 names live in compatibility shims.
+	pkgs := findingsFor(t, map[string]string{
+		"m.py": "from _typeshed import StrPath\nimport _ssl\nfrom _pytest.fixtures import fixture\n" +
+			"try:\n    import queue\nexcept ImportError:\n    import Queue\n" +
+			"import distutils.util\nfrom compression import zstd\nimport urllib2\n",
+	})
+	if len(pkgs) != 0 {
+		t.Errorf("private and legacy stdlib names must not be flagged; got %v", pkgs)
+	}
+}
+
+func TestScanMonorepoSrcLayoutIsLocal(t *testing.T) {
+	// certbot-ci/src/certbot_integration_tests is first-party even though the
+	// src segment is not at the tree root; myapp/plugins is a subpackage, so a
+	// bare `import plugins` remains external.
+	pkgs := findingsFor(t, map[string]string{
+		"certbot-ci/src/certbot_integration_tests/__init__.py": "",
+		"certbot-ci/src/certbot_integration_tests/utils/x.py":  "import certbot_integration_tests.conftest\n",
+		"tools/pkg/myapp/__init__.py":                          "",
+		"tools/pkg/myapp/plugins/__init__.py":                  "",
+		"tools/pkg/myapp/plugins/a.py":                         "import myapp.plugins\nimport plugins\n",
+	})
+	if hasPkg(pkgs, "certbot_integration_tests") || hasPkg(pkgs, "myapp") {
+		t.Errorf("first-party packages flagged: %v", pkgs)
+	}
+	if !hasPkg(pkgs, "plugins") {
+		t.Errorf("a nested subpackage name must not vouch for a bare import; got %v", pkgs)
+	}
+}
+
+func TestScanSkipsVendoredCode(t *testing.T) {
+	// Imports inside a vendored library are the library's, resolved against a
+	// manifest that is not in this tree. The project's own file still counts.
+	pkgs := findingsFor(t, map[string]string{
+		"pipenv/vendor/rich/live.py":            "import ipywidgets\n",
+		"pipenv/patched/pip/_vendor/socks.py":   "import socks\n",
+		"web/static/node_modules/left-pad/i.js": "const x = require('phantom-left-pad');\n",
+		"pipenv/help.py":                        "import totally_made_up_pkg\n",
+	})
+	for _, p := range []string{"ipywidgets", "socks", "phantom-left-pad"} {
+		if hasPkg(pkgs, p) {
+			t.Errorf("vendored import %q flagged; got %v", p, pkgs)
+		}
+	}
+	if !hasPkg(pkgs, "totally_made_up_pkg") {
+		t.Errorf("project import must still be flagged; got %v", pkgs)
+	}
+}
