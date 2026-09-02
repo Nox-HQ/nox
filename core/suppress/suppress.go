@@ -43,8 +43,9 @@ type Suppression struct {
 	// findings rather than hiding them — and the caller reports it.
 	InvalidExpiry string
 
-	// DocExample marks a directive written inside a fenced code block in a
-	// markdown file — i.e. documentation showing what a nox:ignore looks like,
+	// DocExample marks a directive written inside a fenced code block or an
+	// inline code span in a markdown file — i.e. documentation showing what a
+	// nox:ignore looks like,
 	// not a waiver an operator expects to apply. It changes nothing about
 	// matching: such a directive still suppresses a real finding on its target
 	// line, exactly as before. It only tells the caller not to report it as an
@@ -60,6 +61,29 @@ var markdownExts = map[string]bool{".md": true, ".markdown": true, ".mdx": true}
 // isFence reports whether a trimmed line opens or closes a fenced code block.
 func isFence(trimmed string) bool {
 	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
+// inInlineCodeSpan reports whether a directive sits inside a markdown inline
+// code span (`like this`). A fenced block already marks a directive as
+// documentation; a span is the same statement written on one line, and prose
+// quoting a waiver to explain it is not a waiver.
+//
+// docs/design/rule-family-migration.md is the case that found this: it explains
+// that a waiver's own text can cause the finding it waives, and to explain that
+// it quotes one inline. Every scan of this repository then reported that
+// quotation as an unused waiver.
+//
+// The span must CLOSE. An odd number of backticks before the marker with none
+// after it is an unpaired backtick in prose — a real waiver on that line still
+// waives, because failing toward reporting is the safe direction.
+func inInlineCodeSpan(line string, matchStart int) bool {
+	if matchStart <= 0 || matchStart > len(line) {
+		return false
+	}
+	if strings.Count(line[:matchStart], "`")%2 == 0 {
+		return false
+	}
+	return strings.Contains(line[matchStart:], "`")
 }
 
 // suppressionRE matches nox:ignore / nox:disable directives in any
@@ -262,7 +286,7 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 			Reason:        reason,
 			Expires:       expires,
 			InvalidExpiry: invalidExpiry,
-			DocExample:    (isMarkdown && inFence) || nestedInComment(line, loc[0]),
+			DocExample:    (isMarkdown && (inFence || inInlineCodeSpan(line, loc[0]))) || nestedInComment(line, loc[0]),
 		})
 	}
 
