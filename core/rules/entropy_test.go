@@ -284,6 +284,35 @@ func TestEntropyMatcher_SkipsSRIIntegrityHash(t *testing.T) {
 	}
 }
 
+// TestEntropyMatcher_SkipsQuotedSRIIntegrityHash is the same exemption for the
+// shape the previous test does not cover: the prefix INSIDE the quoted
+// candidate. `"integrity": "sha512-…"` is how every npm registry document,
+// package manifest and lockfile-shaped fixture spells an SRI hash, and the
+// quoted-string tokenizer hands the matcher `sha512-…` as one candidate
+// starting at the prefix. isSRIIntegrityHash looked only at the text BEFORE
+// the candidate, so the exemption held for the HTML attribute form and failed
+// for JSON: 42,600 SEC-161 findings on npm/cli, all of them `sha512-`
+// integrity values in test fixtures.
+func TestEntropyMatcher_SkipsQuotedSRIIntegrityHash(t *testing.T) {
+	m := &EntropyMatcher{}
+	rule := Rule{MatcherType: "entropy", Metadata: map[string]string{"entropy_threshold": "5.0", "candidate_kinds": "assignment,quoted"}}
+	for _, line := range []string{
+		"  \"integrity\": \"sha512-1Qs1jdXEMSYwcVooLRfnCc5+e3365pw38v4AVkSsCxsjXRGKDTem5VLCl53SpHSpLnEy8O5DofJHZJELaRiJbg==\",\n",
+		"  \"other\": \"sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\"\n",
+		"integrity = \"sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8wC\"\n",
+	} {
+		if results := m.Match([]byte(line), &rule); len(results) != 0 {
+			t.Errorf("%q: expected no matches for a quoted SRI hash, got %d: %+v", line, len(results), results)
+		}
+	}
+	// A credential that merely CONTAINS an algorithm name is still a candidate:
+	// the prefix must be at the start of the token, as SRI defines it.
+	notSRI := []byte("token = \"xsha512-1Qs1jdXEMSYwcVooLRfnCc5+e3365pw38v4AVkSsCxsjXRGKDTem5VLCl53SpHSpLnEy8O5DofJHZJELaRiJbg==\"\n")
+	if results := m.Match(notSRI, &rule); len(results) == 0 {
+		t.Fatalf("a token that only contains an algorithm name must still be a candidate")
+	}
+}
+
 // TestIsSRIIntegrityHashLine covers the SRI-prefix recognition helper directly.
 func TestIsSRIIntegrityHashLine(t *testing.T) {
 	tests := []struct {
