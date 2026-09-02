@@ -2509,3 +2509,49 @@ func TestScan_TrackedOnlyOutsideRepoIsError(t *testing.T) {
 		t.Errorf("expected the error to name --tracked-only, got: %v", err)
 	}
 }
+
+// TestRunScan_EmailInFixtureTreeIsNoise: DATA-001 is dropped inside fixture
+// trees, downgraded in docs, and reported at low in shipping source. Registry
+// mocks carry one maintainer address per package version; one package
+// manager's test tree produced 184,599 of them before this held.
+func TestRunScan_EmailInFixtureTreeIsNoise(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	body := `{"maintainers": [{"email": "maintainer@some-registry-user.io"}]}` + "\n"
+	files := map[string]string{
+		"test/fixtures/registry/pkg.json": body,
+		"docs/contributors.json":          body,
+		"src/notify.json":                 body,
+	}
+	for rel, content := range files {
+		path := filepath.Join(tmpDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := RunScan(tmpDir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	got := map[string]findings.Severity{}
+	for _, f := range result.Findings.Findings() {
+		if f.RuleID == "DATA-001" {
+			got[filepath.ToSlash(f.Location.FilePath)] = f.Severity
+		}
+	}
+	if _, ok := got["test/fixtures/registry/pkg.json"]; ok {
+		t.Errorf("DATA-001 reported inside a fixture tree: %v", got)
+	}
+	if sev := got["docs/contributors.json"]; sev != findings.SeverityInfo {
+		t.Errorf("DATA-001 in docs: got %q, want info (downgraded)", sev)
+	}
+	if sev := got["src/notify.json"]; sev != findings.SeverityLow {
+		t.Errorf("DATA-001 in source: got %q, want low", sev)
+	}
+}
