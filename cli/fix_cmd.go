@@ -306,7 +306,7 @@ func workdirFor(root string, a upgradeAction) (string, error) {
 var ecoTrees = map[string][]string{
 	"go":       {"go.mod", "go.sum"},
 	"npm":      {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"},
-	"pypi":     {"requirements.txt", "pyproject.toml", "poetry.lock", "setup.py", "setup.cfg"},
+	"pypi":     {"requirements.txt", "pyproject.toml", "poetry.lock", "Pipfile", "Pipfile.lock", "uv.lock", "setup.py", "setup.cfg"},
 	"cargo":    {"Cargo.toml", "Cargo.lock"},
 	"rubygems": {"Gemfile", "Gemfile.lock"},
 	"composer": {"composer.json", "composer.lock"},

@@ -311,8 +311,8 @@ func matchGlobSegments(path, glob []string) bool {
 }
 
 // GeneratedPathsConfig controls the built-in noise filter that stops the
-// content rule families (AI-*, MCP-*) from firing on generated and vendored
-// files — lockfiles, minified bundles, generated type definitions, etc. These
+// content rule families (AI-*, MCP-*, DATA-001) from firing on generated and
+// vendored files — lockfiles, minified bundles, generated type definitions, etc. These
 // files are not human-authored and produce only false positives for prose and
 // AI-security rules. Dependency scanning is unaffected: the deps analyzer still
 // reads lockfiles directly, so this filter never hides a real CVE.
@@ -362,7 +362,8 @@ func DefaultGeneratedPaths() []string {
 	return []string{
 		// Dependency lockfiles (still read by the deps analyzer).
 		"package-lock.json", "pnpm-lock.yaml", "yarn.lock", "npm-shrinkwrap.json",
-		"Cargo.lock", "poetry.lock", "Gemfile.lock", "composer.lock", "go.sum",
+		"Cargo.lock", "poetry.lock", "Pipfile.lock", "uv.lock", "pubspec.lock",
+		"Gemfile.lock", "composer.lock", "go.sum",
 		"*-lock.json", "*-lock.yaml",
 		// Minified / bundled assets.
 		"*.min.js", "*.min.css", "*.bundle.js",

@@ -1222,9 +1222,13 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		}
 	}
 
-	// Drop content-rule findings (AI-*, MCP-*) on generated/vendored files and
-	// inside test/fixture/example trees — false-positive sources. Dependency
-	// scanning already ran against the same lockfiles, so no real CVE is hidden.
+	// Drop content-rule findings (AI-*, MCP-*, DATA-001) on generated/vendored
+	// files and inside test/fixture/example trees — false-positive sources.
+	// Dependency scanning already ran against the same lockfiles, so no real
+	// CVE is hidden. DATA-001 is in the same set for the same reason: a
+	// lockfile lists its authors' e-mail addresses by design, and 239 DATA-001
+	// findings on one composer.lock is not sensitive data in code, it is the
+	// lockfile. The other DATA-* rules still fire there: a real one is a leak.
 	if genPaths := cfg.Scan.GeneratedPaths.ResolveGeneratedPaths(); len(genPaths) > 0 {
 		withheld("content rule dropped on a generated or vendored path", func() {
 			allFindings.RemoveByRuleIDsAndPaths(NoiseDirDropRulePatterns(), genPaths)

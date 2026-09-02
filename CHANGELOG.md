@@ -30,6 +30,12 @@ stays a separate, opt-in decision. The complete account is `docs/intelligence.md
   `TestScan_OfflineAsksNobody`).
 - `docs/intelligence.md`: what a scan sends, to whom, and how to turn it off at
   every level. Roadmap Phase 11 plans the gaps from where the market moves.
+- `Pipfile.lock`, `uv.lock` and `pubspec.lock` are parsed. The release E2E
+  measured the gap: pipenv's own lockfile (110 packages) produced zero
+  components and zero advisories, and nothing said why — an unrecognised
+  lockfile is not a degradation, it is simply not a lockfile. Hosted pub
+  packages resolve to the `pub` ecosystem; editable/virtual/directory uv
+  entries and path/git/sdk pub entries are skipped.
 
 ### Changed
 
@@ -37,6 +43,19 @@ stays a separate, opt-in decision. The complete account is `docs/intelligence.md
   the endpoint scans query rather than an empty string.
 - `docs/design/intelligence-service.md` no longer describes the service as
   proposed.
+
+### Fixed
+
+- PHP dependencies are queried for advisories at all. nox-core v0.2.4 maps
+  `composer` to Packagist (and `pub` to Pub, `hex` to Hex); before, an
+  ecosystem missing from the map was filtered out of the batch silently, so a
+  `composer.lock` project reported zero advisories with no degradation. koel's
+  lockfile now reports four `league/commonmark` advisories.
+- `DATA-001` findings are dropped on generated paths, alongside `AI-*` and
+  `MCP-*`: a lockfile lists its authors' e-mail addresses by design, and 239
+  `DATA-001` findings on one `composer.lock` were the lockfile, not sensitive
+  data in code. The same address in a source file is still reported, and the
+  other `DATA-*` rules still fire in a lockfile: a real one there is a real leak.
 
 ## [1.32.0] - 2026-08-31
 
