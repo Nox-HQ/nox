@@ -16,11 +16,22 @@
     "",
     "Still uncovered: Azure ARM templates (IAC-084/086 and the ARM property rules)",
     "and Terraform. Those families remain verified only by testdata/precision-suite",
-    "and the analyzer tests -- a green rule diff says nothing about them.",
+    "and the analyzer tests -- a green rule diff says nothing about them. The same",
+    "holds for the 16 of 21 catalog languages with no entry here (Ruby, PHP,",
+    "Java, Rust and the rest): they are modelled but unwitnessed by this gate.",
     "",
     "Language coverage matters as much as artifact variety: the taint engine",
-    "models 15+ languages, and a corpus of only Go/IaC repos cannot show a taint",
-    "regression in any of them. Two entries here exist for that reason alone.",
+    "models 21 of them (core/taint/data/catalog.json), and a corpus of only Go and",
+    "IaC repos cannot show a taint regression in any of the rest. Five entries exist",
+    "for that reason alone: ring and reitit (Clojure), plug (Elixir), certbot",
+    "(Python) and shelljs (JavaScript).",
+    "",
+    "Judge a language entry by where its findings LAND, not by what the repo calls",
+    "itself. nodejs/node-gyp was measured as a JS candidate and rejected: 18 of its",
+    "21 taint findings are in the vendored gyp Python tree, so adding it 'for JS",
+    "coverage' would have been another pass by absence of coverage. TypeScript",
+    "classifies as LangJavaScript and shares its model, but no entry here carries",
+    "a .ts file, so that half is inferred rather than witnessed.",
     "",
     "Pinned by commit sha so the diff reflects a change in NOX, never a change in",
     "the repo. Bumping a sha is a deliberate act: re-read the delta it produces",
@@ -71,6 +82,18 @@
       "url": "https://github.com/aws-cloudformation/aws-cloudformation-templates",
       "sha": "a0f43bc6d20813052892546f445037cf84c75b54",
       "why": "The only CloudFormation in the corpus, and the only entry that exercises cross-resource LINKAGE rather than mere absence. Measured when companion resolution landed: IAC-059 went 67 -> 37 (30 VPCs the text path called unmonitored do have a flow log referencing them) and IAC-079 went 8 -> 10 (secrets whose rotation schedule does not reference them). kubernetes/examples showed NO change on the same commit, which is why both are here"
+    },
+    {
+      "name": "certbot",
+      "url": "https://github.com/certbot/certbot",
+      "sha": "2b817be14620d65f5215460e0022b1a7eb6eefd1",
+      "why": "The only Python in the corpus. Carries 9 standing taint findings (TAINT-002 x3, TAINT-004 x5, TAINT-005), so it controls the RECALL direction for Python. Measured when import resolution landed: TAINT-004 went 3 -> 5, both new findings real `from os.path import join` traces from argparse args in tools/snap/build_remote_single.py -- the bare-name idiom that matched nothing before. 7.9M, 6.6s"
+    },
+    {
+      "name": "shelljs",
+      "url": "https://github.com/shelljs/shelljs",
+      "sha": "f364da6625945414440bb15210f102ba5fc10ed9",
+      "why": "The only JavaScript in the corpus, and all 6 of its taint findings are in .js (checked -- see the note above on node-gyp). Deliberately a repo that shells out, because child_process is the JS surface the taint engine models. Measured when import resolution landed: TAINT-002 went 0 -> 2, a rule that fired ZERO times here before, through `var child = require('child_process')` -- so this entry demonstrably sees the alias path rather than only the one idiom that always worked. 1.2M and 1.2s, second only to kubernetes/examples"
     }
   ]
 }
