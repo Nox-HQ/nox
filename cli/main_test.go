@@ -214,6 +214,24 @@ func TestRun_ScanInterspersedFlags(t *testing.T) {
 	}
 }
 
+// --no-cache is registered on the scan flagset only. Hoisting it to the top
+// level handed it to a flagset that never defined it, so the documented
+// compatibility flag exited 2 instead of being ignored.
+func TestRun_ScanNoCacheIsAccepted(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("clean\n"), 0o644); err != nil {
+		t.Fatalf("writing temp file: %v", err)
+	}
+	for _, args := range [][]string{
+		{"scan", "--no-cache", "--offline", "--output", filepath.Join(dir, "a"), dir},
+		{"scan", dir, "--no-cache", "--offline", "--output", filepath.Join(dir, "b")},
+	} {
+		if code := run(args); code == 2 {
+			t.Fatalf("%v: exit 2 — --no-cache was rejected instead of accepted", args)
+		}
+	}
+}
+
 func TestParseFormats(t *testing.T) {
 	tests := []struct {
 		input    string
