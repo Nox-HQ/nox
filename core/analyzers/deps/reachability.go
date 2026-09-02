@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/capability"
+	"github.com/nox-hq/nox/core/depimports"
 	"github.com/nox-hq/nox/core/reach"
 )
 
@@ -182,4 +184,68 @@ func goSymbolReferenced(affectedImports []string, linked map[string]struct{}, li
 	}
 	r, ok := reach.Refute(subject, reach.SymbolReferenced, scope)
 	return r, ok
+}
+
+// maxImportScanBytes bounds a single file read when indexing imports. A source
+// file larger than this is a bundle or a generated blob, and its import list is
+// not evidence about what this project uses.
+const maxImportScanBytes = 1 << 20
+
+// sourceImports lazily indexes the imports of a scan's source files.
+//
+// Lazily, because most scans have no vulnerable dependency in an ecosystem this
+// can answer for, and the index costs a read of every source file. Nothing is
+// read until the first finding actually asks.
+type sourceImports struct {
+	paths []string
+	index *depimports.Index
+}
+
+// get builds the index on first use and returns it.
+func (s *sourceImports) get() *depimports.Index {
+	if s.index != nil {
+		return s.index
+	}
+	ix := depimports.New()
+	for _, p := range s.paths {
+		info, err := os.Stat(p)
+		if err != nil || info.Size() > maxImportScanBytes {
+			continue
+		}
+		content, err := os.ReadFile(p) // #nosec G304 -- path came from the scan's own discovery walk
+		if err != nil {
+			continue
+		}
+		ix.Add(p, content)
+	}
+	s.index = ix
+	return ix
+}
+
+// importApplicability answers the SymbolUsed rung for the ecosystems whose
+// import statement names the distribution.
+//
+// It ONLY CLIMBS. goImportedPackages deliberately asks the toolchain rather
+// than parsing the repository's own imports, because a vulnerable package is
+// usually reached THROUGH a dependency and static parsing cannot see that —
+// getting it wrong in that direction would hide real vulnerabilities. That
+// reasoning is why this never returns a refutation: a direct import is positive
+// evidence that the package is used, and its absence is not evidence of
+// anything. Every miss degrades to the undetermined verdict callers already got.
+func importApplicability(pkg Package, reached applicability.Rung, src *sourceImports) (applicability.Verdict, bool) {
+	if !depimports.Supported(pkg.Ecosystem) {
+		return applicability.Verdict{}, false
+	}
+	ix := src.get()
+	if !ix.Known(pkg.Ecosystem) {
+		// No source of that language was read, so the question was never put.
+		return applicability.Verdict{}, false
+	}
+	if !ix.Imports(pkg.Ecosystem, pkg.Name) {
+		return applicability.Verdict{}, false
+	}
+	// The project imports the package by name. That establishes SymbolUsed;
+	// whether anything calls it is the rung nox cannot climb at all.
+	return applicability.Undeterminable(applicability.SymbolUsed,
+		applicability.CallReachable, capability.Unsupported), true
 }
