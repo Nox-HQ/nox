@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -919,10 +920,36 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// language discriminator: a quoted/validated shell file invocation leaves
 		// both false and is still suppressed.
 		return info.ShellTrue || info.FirstArgTainted
+	case "setTimeout", "setInterval":
+		// A timer runs its first argument as CODE only when that argument is a
+		// string. A function literal is the ordinary form -- the callback body
+		// reads tainted variables all the time, and the extractor lists them as
+		// arguments of the timer call because textually they are -- and it
+		// compiles nothing. The catalog note says "only when the first argument
+		// is a string, not a function"; this is where that is enforced.
+		return info.FirstArgTainted && !firstArgIsFunctionLiteral(info)
 	default:
 		return true
 	}
 }
+
+// firstArgIsFunctionLiteral reports whether the code view of the first
+// positional argument is a JavaScript function expression: `function (…) {`,
+// `async function`, `async (…) =>`, `(…) =>`, or `x =>`.
+func firstArgIsFunctionLiteral(info taint.SinkArgInfo) bool {
+	if len(info.PositionalArgs) == 0 {
+		return false
+	}
+	arg := strings.TrimSpace(info.PositionalArgs[0])
+	arg = strings.TrimPrefix(arg, "async")
+	arg = strings.TrimSpace(arg)
+	if strings.HasPrefix(arg, "function") {
+		return true
+	}
+	return jsArrowHeadRe.MatchString(arg)
+}
+
+var jsArrowHeadRe = regexp.MustCompile(`^(?:\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>`)
 
 // lookupSinkArg finds the SinkArgInfo for rawCall on st, matching by suffix so
 // the extractor's full-chain key resolves against the canonical sink call.
