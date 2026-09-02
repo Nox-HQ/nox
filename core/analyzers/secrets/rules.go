@@ -409,7 +409,11 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-046", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `pypi-[A-Za-z0-9\-_]{16,}`,
+			// A PyPI token is a base64url macaroon whose first caveat is the
+			// registry location, so every real one starts with the encoding
+			// of "pypi.org" or "test.pypi.org". `pypi-` plus sixteen
+			// characters matched the job name `pypi-build-and-release`.
+			pattern:     `pypi-(?:AgEIcHlwaS5vcmc|AgENdGVzdC5weXBpLm9yZw)[A-Za-z0-9\-_]{50,}`,
 			description: "PyPI Upload Token detected",
 			cwe:         "CWE-798", keywords: []string{"pypi-"},
 			remediation: "Revoke the token on pypi.org and generate a new one.",
