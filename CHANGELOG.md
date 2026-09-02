@@ -46,6 +46,14 @@ stays a separate, opt-in decision. The complete account is `docs/intelligence.md
 
 ### Fixed
 
+- An unreachable NOX Intelligence is reported as unreachable, not as
+  withholding. nox-core v0.3.0 builds the verifying source so the service's
+  own network failure is seen for what it is: the scan carries an
+  `intel_unreachable` degradation naming the endpoint, is answered by OSV.dev
+  alone, and keeps every finding. Before, the empty answer of a dead endpoint
+  was verified against the reference and reported as `intel_suppression` —
+  "withheld 4 record(s) … cannot be trusted" — which indicted the service for
+  being offline (`TestScan_UnreachableIntelligenceIsAnsweredByTheReference`).
 - PHP dependencies are queried for advisories at all. nox-core v0.2.4 maps
   `composer` to Packagist (and `pub` to Pub, `hex` to Hex); before, an
   ecosystem missing from the map was filtered out of the batch silently, so a

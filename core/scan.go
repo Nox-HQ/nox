@@ -450,15 +450,23 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// scan a finding. It is also what makes a compiled-in default defensible:
 	// an unreachable service degrades to exactly the OSV scan nox ran before.
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
-		intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), degradations).
-			WithCache(advisoryCache)
+		newIntel := func(deg *degrade.Degradations) vulnsource.Source {
+			return osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+				WithCache(advisoryCache)
+		}
 
-		var src vulnsource.Source = intel
+		var src vulnsource.Source
 		if cfg.Scan.Intelligence.VerificationEnabled() {
-			src = vulnsource.NewVerifying(intel, func(refDeg *degrade.Degradations) vulnsource.Source {
+			// The verifier builds both sources so it owns both degradation
+			// collectors: that is what lets it report an unreachable service
+			// as unreachable — answered by the reference alone — rather than
+			// as a source that withheld every record the reference published.
+			src = vulnsource.NewVerifying(newIntel, func(refDeg *degrade.Degradations) vulnsource.Source {
 				return osvsource.New(cfg.Scan.OSV.ReferenceBaseURL(), intelHTTPClient(), refDeg).
 					WithCache(advisoryCache)
 			}, degradations)
+		} else {
+			src = newIntel(degradations)
 		}
 		depsOpts = append(depsOpts, deps.WithSource(src))
 	}
