@@ -35,6 +35,36 @@ import (
 // Go never had this problem: `extract_go.go` resolves aliases through
 // `core/source.ImportAliases`. This brings the recognizer languages up to that.
 //
+// # The same defect, one layer over: Clojure, Elixir and C#
+//
+// Those three name their sinks by a MODULE or TYPE name that an alias renames,
+// and the catalog handled it by enumerating the aliases its author expected --
+// `shell/sh` beside `clojure.java.shell/sh`, `io/reader`, `jdbc/query`. That
+// works only for the alias someone anticipated. Measured, varying nothing but
+// the `:as`:
+//
+//	(:require [clojure.java.shell :as shell])   shell/sh   MATCHED (enumerated)
+//	(:require [clojure.java.shell :as sh])      sh/sh      missed
+//	(:require [clojure.java.shell :as sh2])     sh2/sh     missed
+//
+// `sh` is the canonical alias -- it is the one in clojure.java.shell's own
+// docstring -- so the command-injection sink was invisible on the dominant
+// spelling while scoring a match on the unusual one. Resolving `:as` replaces
+// the guesswork: any alias reaches the qualified name the catalog already has.
+//
+// Elixir and C# take the mirror form. Their catalog entries are BARE module and
+// type names (`System.cmd`, `Repo.query`, `Process.Start`), which is what
+// unaliased code writes, so the resolution target is the LAST segment of the
+// alias's right-hand side rather than the whole path:
+//
+//	alias MyApp.Repo, as: DB           DB.query    -> Repo.query
+//	using Proc = System.Diagnostics.Process;   Proc.Start -> Process.Start
+//
+// Known limit, stated rather than papered over: a C# alias that names a
+// NAMESPACE (`using D = System.Diagnostics;` then `D.Process.Start`) resolves to
+// neither the bare nor the fully-qualified form the catalog carries, and is
+// still missed. The common type-alias case is what this handles.
+//
 // # Why it adds chains rather than replacing them
 //
 // An expansion is recorded ALONGSIDE the original chain, never instead of it.
@@ -56,23 +86,43 @@ var (
 	jsImport = regexp.MustCompile(`^\s*import\s+(.+?)\s+from\s*['"]([^'"]+)['"]`)
 )
 
+// aliasTable maps a local name to the name it resolves to, together with the
+// separator that joins a call chain in this language. The separator travels
+// WITH the table because it is a property of the same language decision: a
+// Clojure chain is `sh/sh`, a Python one `os.system`, and expanding either with
+// the other's separator would silently produce a name that matches nothing.
+type aliasTable struct {
+	names map[string]string
+	sep   string
+}
+
+func (t aliasTable) empty() bool { return len(t.names) == 0 }
+
 // importAliases maps a local name to the qualified path it refers to.
 //
-// A value may be a module ("os", "child_process") or a fully qualified member
-// ("os.system"), which is why callers must join the remainder of a chain onto
-// it rather than assuming one or the other.
-func importAliases(lang lexctx.Lang, content []byte) map[string]string {
+// A value may be a module ("os", "child_process"), a fully qualified member
+// ("os.system"), or -- for the languages whose catalog entries are bare -- a
+// simple module or type name ("Process"). Callers join the remainder of a chain
+// onto it rather than assuming one or the other.
+func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 	switch lang {
 	case lexctx.LangPython:
-		return pythonAliases(content)
+		return aliasTable{names: pythonAliases(content), sep: "."}
 	case lexctx.LangJavaScript:
-		return javascriptAliases(content)
+		return aliasTable{names: javascriptAliases(content), sep: "."}
+	case lexctx.LangClojure:
+		return aliasTable{names: clojureAliases(content), sep: "/"}
+	case lexctx.LangElixir:
+		return aliasTable{names: elixirAliases(content), sep: "."}
+	case lexctx.LangCSharp:
+		return aliasTable{names: csharpAliases(content), sep: "."}
 	default:
 		// Every other language keeps today's behaviour. Go resolves its own
-		// aliases in the AST extractor; the rest are unmeasured, and adding
-		// guesses for import syntaxes nobody has checked would be the same
-		// mistake in a new place.
-		return nil
+		// aliases in the AST extractor; the rest were probed and either show no
+		// gap (Rust's `use x as y` already reaches the sink) or name their sinks
+		// by a convention no alias renames. Adding guesses for import syntaxes
+		// nobody has checked would be the same mistake in a new place.
+		return aliasTable{}
 	}
 }
 
@@ -189,25 +239,100 @@ func splitJSMember(s string) (name, alias string) {
 	return splitAs(s)
 }
 
-// expandChain returns the qualified form of a dotted chain, or "" when the head
-// is not an imported name.
+// clojureAliases reads `:as` (and `:as-alias`) out of ns/require libspecs.
+//
+// Every alias in Clojure is introduced by the same vector shape --
+// `[some.namespace :as local]` -- whether it appears in an `(ns …)` form, a
+// top-level `(require '[…])`, or a multi-line `:require` block. One pattern
+// covers all three, which is why this is a resolution rather than a list of
+// namespaces someone remembered.
+var cljAlias = regexp.MustCompile(`\[\s*([A-Za-z][\w.$*+!?<>=-]*)\s+:as(?:-alias)?\s+([A-Za-z][\w.$*+!?<>=-]*)`)
+
+func clojureAliases(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, m := range cljAlias.FindAllStringSubmatch(string(content), -1) {
+		ns, local := m[1], m[2]
+		if ns == local {
+			continue // nothing to resolve
+		}
+		out[local] = ns
+	}
+	return out
+}
+
+// elixirAliases reads `alias Some.Module, as: Local`.
+//
+// Plain `alias MyApp.Repo` is deliberately skipped: it binds `Repo`, which is
+// already the bare name the catalog carries, so there is nothing to expand.
+var exAlias = regexp.MustCompile(`^\s*alias\s+([A-Z][\w.]*)\s*,\s*as:\s*([A-Z]\w*)`)
+
+func elixirAliases(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(string(content), "\n") {
+		m := exAlias.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		// The catalog names Elixir sinks bare (`System.cmd`, `Repo.query`), so
+		// the target is the last segment, not the whole path.
+		if target := lastSegment(m[1], "."); target != m[2] {
+			out[m[2]] = target
+		}
+	}
+	return out
+}
+
+// csharpAliases reads `using Local = Some.Qualified.Type;`.
+//
+// The `using var x = …` declaration and `using static …` share the keyword but
+// not the shape: both are excluded by requiring a single identifier before the
+// `=` and a plain dotted name after it.
+var csUsingAlias = regexp.MustCompile(`^\s*(?:global\s+)?using\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_][\w.]*)\s*;`)
+
+func csharpAliases(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(string(content), "\n") {
+		m := csUsingAlias.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		// As in Elixir, the catalog names the TYPE (`Process.Start`), so the
+		// alias resolves to the last segment.
+		if target := lastSegment(m[2], "."); target != m[1] {
+			out[m[1]] = target
+		}
+	}
+	return out
+}
+
+// lastSegment returns the final component of a separated path.
+func lastSegment(s, sep string) string {
+	if i := strings.LastIndex(s, sep); i >= 0 {
+		return s[i+len(sep):]
+	}
+	return s
+}
+
+// expandChain returns the resolved form of a chain, or "" when the head is not
+// an imported name.
 //
 // `system` with system→os.system becomes "os.system"; `o.system` with o→os
 // becomes "os.system"; `cp.exec` with cp→child_process becomes
-// "child_process.exec".
-func expandChain(chain string, aliases map[string]string) string {
-	if len(aliases) == 0 || chain == "" {
+// "child_process.exec"; `sh/sh` with sh→clojure.java.shell becomes
+// "clojure.java.shell/sh".
+func expandChain(chain string, t aliasTable) string {
+	if t.empty() || chain == "" {
 		return ""
 	}
-	head, rest, _ := strings.Cut(chain, ".")
-	qualified, ok := aliases[head]
+	head, rest, _ := strings.Cut(chain, t.sep)
+	qualified, ok := t.names[head]
 	if !ok {
 		return ""
 	}
 	if rest == "" {
 		return qualified
 	}
-	return qualified + "." + rest
+	return qualified + t.sep + rest
 }
 
 // applyImportAliases adds the qualified form of every call and chain a statement
@@ -215,22 +340,22 @@ func expandChain(chain string, aliases map[string]string) string {
 // through an alias or a destructured import.
 //
 // Additions only: see the package note on why nothing is replaced.
-func applyImportAliases(drafts []unitDraft, aliases map[string]string) {
-	if len(aliases) == 0 {
+func applyImportAliases(drafts []unitDraft, t aliasTable) {
+	if t.empty() {
 		return
 	}
 	for i := range drafts {
 		for j := range drafts[i].stmts {
 			st := &drafts[i].stmts[j]
-			st.calls = withExpansions(st.calls, aliases)
-			st.chains = withExpansions(st.chains, aliases)
-			expandSinkArgs(st, aliases)
+			st.calls = withExpansions(st.calls, t)
+			st.chains = withExpansions(st.chains, t)
+			expandSinkArgs(st, t)
 		}
 	}
 }
 
 // withExpansions returns the list plus any qualified forms not already present.
-func withExpansions(in []string, aliases map[string]string) []string {
+func withExpansions(in []string, t aliasTable) []string {
 	if len(in) == 0 {
 		return in
 	}
@@ -240,7 +365,7 @@ func withExpansions(in []string, aliases map[string]string) []string {
 	}
 	out := in
 	for _, c := range in {
-		expanded := expandChain(c, aliases)
+		expanded := expandChain(c, t)
 		if expanded == "" {
 			continue
 		}
@@ -257,12 +382,12 @@ func withExpansions(in []string, aliases map[string]string) []string {
 // qualified name, so the argument shape a sink is judged on survives the
 // rewrite. Without it a call would match the catalog by its expanded name and
 // then be judged on no argument evidence at all.
-func expandSinkArgs(st *stmtDraft, aliases map[string]string) {
+func expandSinkArgs(st *stmtDraft, t aliasTable) {
 	if len(st.sinkArgs) == 0 {
 		return
 	}
 	for call, info := range st.sinkArgs {
-		expanded := expandChain(call, aliases)
+		expanded := expandChain(call, t)
 		if expanded == "" {
 			continue
 		}
