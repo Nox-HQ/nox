@@ -193,6 +193,15 @@ func (e *StructuralEngine) analyzeUnitInterproc(lang string, unit *taint.Unit, s
 	return res.flows
 }
 
+// stmtFlowKey identifies a flow within ONE statement: the rule it violates and
+// the value that reaches it. Two catalog sinks that resolve for the same
+// written call (an alias and its qualified form) share a key and are one flow.
+type stmtFlowKey struct {
+	ruleID     string
+	sourceLine int
+	sourceVar  string
+}
+
 // forwardPass is the single, shared forward-propagation core used by BOTH the
 // intraprocedural Analyze and the interprocedural AnalyzeFile/summarize. Keeping
 // one implementation guarantees summary semantics never diverge from
@@ -232,6 +241,15 @@ func (e *StructuralEngine) forwardPass(
 		// 1) Catalog sink check: for each call that resolves to a catalog sink,
 		//    decide whether a tainted, class-un-sanitized value reaches it in a
 		//    dangerous position.
+		//
+		// One flow per (rule, source) per statement. Import resolution records a
+		// call's qualified form ALONGSIDE the form as written (imports.go), and
+		// for the languages whose catalog enumerates aliases next to the
+		// qualified name (`shell/sh` beside `clojure.java.shell/sh`) both entries
+		// resolve for the one call the author wrote. That is one sink reached by
+		// one value: reporting it twice, once per spelling, doubles the finding.
+		// The first spelling in st.Calls -- the one as written -- names the flow.
+		emitted := map[stmtFlowKey]struct{}{}
 		for _, rawCall := range st.Calls {
 			sink, ok := e.resolveSink(lang, rawCall)
 			if !ok {
@@ -292,6 +310,11 @@ func (e *StructuralEngine) forwardPass(
 						continue // untrusted content confined to the user role (safe pattern)
 					}
 				}
+				fk := stmtFlowKey{sink.RuleID, ti.srcLine, sourceVar}
+				if _, dup := emitted[fk]; dup {
+					break // the same call under another spelling: already reported
+				}
+				emitted[fk] = struct{}{}
 				flows = append(flows, taint.Flow{
 					Source:     ti.src,
 					SourceLine: ti.srcLine,
