@@ -1030,6 +1030,43 @@ func TestSEC046_StillFiresOnTestPyPIToken(t *testing.T) {
 	t.Fatalf("SEC-046 did not fire on a test.pypi.org token")
 }
 
+// TestSEC080_DoesNotCrossLines: `[^'"]{8,}` admits a newline, and the engine
+// matches whole documents, so an opening quote on one line and a closing quote
+// twelve lines later were reported as one password assignment (pipenv's
+// vendored pip auth.py: a `Password: "` prompt string, then a dozen lines of
+// Python, then the next `ask("`). The value class now stops at the line end.
+func TestSEC080_DoesNotCrossLines(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`        password = ask_password("Password: ")
+        return username, password, True
+
+    def _should_save_password_to_keyring(self) -> bool:
+        if not self.prompting:
+            return False
+        return ask("Save credentials to keyring [y/N]: ", ["y", "n"]) == "y"
+`)
+	results, err := a.ScanFile("auth.py", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "SEC-080" {
+			t.Fatalf("SEC-080 crossed a line break: %+v", f.Location)
+		}
+	}
+	// The same rule on one line is still a finding.
+	hit, err := a.ScanFile("settings.py", []byte("DB_PASSWORD = \"hunter2hunter2\"\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range hit {
+		if f.RuleID == "SEC-080" {
+			return
+		}
+	}
+	t.Fatalf("SEC-080 no longer fires on a one-line password assignment")
+}
+
 func TestSEC085_NoFalsePositiveOnBareURL(t *testing.T) {
 	a := NewAnalyzer()
 	content := []byte(`<script type="application/ld+json">

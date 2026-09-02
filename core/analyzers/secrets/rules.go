@@ -698,7 +698,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-079", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(password|passphrase|pass)\s*[=:]\s*['"][^'"]{4,}['"]\s*.*\.(p12|pfx)`,
+			pattern:     `(?i)(password|passphrase|pass)\s*[=:]\s*['"][^'"\n]{4,}['"][ \t]*.*\.(p12|pfx)`,
 			description: "PKCS12/PFX file password reference detected",
 			cwe:         "CWE-321", keywords: []string{".p12", ".pfx"},
 			remediation: "Store PKCS12/PFX passwords in a secrets manager, not in source code.",
@@ -718,7 +718,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-080", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(password|passwd|pwd)\s*[=:]\s*['"][^'"]{8,}['"]`,
+			pattern:     `(?i)(password|passwd|pwd)\s*[=:]\s*['"][^'"\n]{8,}['"]`,
 			description: "Generic password assignment detected",
 			cwe:         "CWE-798", keywords: []string{"password", "passwd", "pwd"},
 			remediation: "Use environment variables or a secrets manager for passwords.",
@@ -771,7 +771,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-086", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(db_pass(?:word)?|database_password)\s*[=:]\s*['"][^'"]{4,}['"]`,
+			pattern:     `(?i)(db_pass(?:word)?|database_password)\s*[=:]\s*['"][^'"\n]{4,}['"]`,
 			description: "Hardcoded database password detected",
 			cwe:         "CWE-798", keywords: []string{"db_pass", "database_password"},
 			remediation: "Use environment variables or a secrets manager for database passwords.",
@@ -856,7 +856,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-095", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(snowflake[_-]?password|sf[_-]?password)\s*[=:]\s*['"][^'"]{6,}['"]`,
+			pattern:     `(?i)(snowflake[_-]?password|sf[_-]?password)\s*[=:]\s*['"][^'"\n]{6,}['"]`,
 			description: "Snowflake Key Pair password detected",
 			cwe:         "CWE-798", keywords: []string{"snowflake_password", "snowflake-password", "sf_password", "sf-password"},
 			remediation: "Rotate the exposed password immediately. Use environment variables or a secrets manager.",

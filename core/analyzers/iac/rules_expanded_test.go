@@ -483,6 +483,32 @@ jobs:
 	}
 }
 
+// TestExpandedDetect_IAC351_DoesNotCrossLines: the engine matches the whole
+// document, so `\s*` after the colon spanned the line break and the value
+// class matched the first letter of the NEXT line. A workflow_call secrets
+// declaration -- `DOCKERHUB_TOKEN:` followed by `required: true` -- was
+// reported as a hardcoded secret at CRITICAL (certbot, deploy_docker_images.yml).
+func TestExpandedDetect_IAC351_DoesNotCrossLines(t *testing.T) {
+	a := NewAnalyzer()
+	content := []byte(`on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+      NPM_TOKEN:
+        description: publish token
+`)
+	results, err := a.ScanFile(".github/workflows/deploy.yml", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, f := range results {
+		if f.RuleID == "IAC-351" {
+			t.Fatalf("IAC-351 crossed a line break into a secrets declaration: %+v", f.Location)
+		}
+	}
+}
+
 // TestExpandedDetect_IAC351_HardcodedSecret verifies that IAC-351 fires on
 // genuine hardcoded secret variables but does NOT fire on GHA OIDC permission
 // lines (`id-token: write`), which previously triggered a critical false positive
