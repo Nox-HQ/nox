@@ -97,7 +97,10 @@ func extractInterspersedArgs(args []string) []string {
 
 func isTopLevelBoolFlag(name string) bool {
 	switch name {
-	case "quiet", "q", "verbose", "v", "version", "no-cache":
+	// no-cache is a scan flag, not a top-level one: hoisting it here handed
+	// it to a flagset that never registered it, and the documented
+	// `nox scan --no-cache` exited 2 with "flag provided but not defined".
+	case "quiet", "q", "verbose", "v", "version":
 		return true
 	}
 	return false
