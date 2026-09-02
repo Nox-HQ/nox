@@ -1,7 +1,12 @@
 # Design: NOX Intelligence Service
 
-Status: proposed. Nothing here is implemented. The decision to build this as a
-service rather than a CLI feature is recorded in
+Status: the service runs at `intel.klarlabs.de` (repository `nox-intelligence`)
+and is the source every `nox scan` asks by default, verified against OSV.dev
+on each lookup; contribution stays opt-in. The user-facing account of what a
+scan sends is [docs/intelligence.md](../intelligence.md). Research
+orchestration, coordinated disclosure and early warning are designed below and
+built only as far as the phases in the service repository record. The decision
+to build this as a service rather than a CLI feature is recorded in
 [ADR 0002](../adr/0002-intelligence-layer-is-a-separate-service.md).
 
 ## Purpose
@@ -82,7 +87,7 @@ are. Unattributed observations never count toward independence.
 
 | mode | behaviour |
 |---|---|
-| `disabled` (default) | nothing leaves the environment |
+| `disabled` (default) | nothing beyond the lookup itself leaves the environment |
 | `anonymous` | security facts contribute to aggregate intelligence |
 | `org-private` | observations stay inside the organisation's own instance |
 | `public-intelligence` | eligible validated observations may contribute to the ecosystem, under disclosure policy |

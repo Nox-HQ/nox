@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -383,6 +385,12 @@ type EntropyConfig struct {
 type OSVConfig struct {
 	Disabled bool `yaml:"disabled"`
 
+	// BaseURL is the OSV-compatible API nox treats as the reference database:
+	// the source asked directly when the intelligence service is disabled, and
+	// the one every intelligence answer is verified against. Empty means
+	// https://api.osv.dev. Set it to a self-hosted OSV mirror.
+	BaseURL string `yaml:"base_url"`
+
 	// CacheDisabled turns off the advisory cache. Default is enabled.
 	//
 	// Only advisory *documents* are ever cached, keyed on the publisher's own
@@ -398,15 +406,34 @@ type OSVConfig struct {
 	CacheDir string `yaml:"cache_dir"`
 }
 
-// IntelligenceConfig points dependency scanning at a NOX Intelligence service
-// instead of OSV.dev directly.
+// DefaultIntelligenceEndpoint is the NOX Intelligence service dependency
+// scanning asks when no endpoint is configured. It is compiled in, so a binary
+// keeps working against it for as long as the binary is in use — moving the
+// service means keeping this host answering, not just updating the constant.
+const DefaultIntelligenceEndpoint = "https://intel.klarlabs.de"
+
+// IntelligenceConfig selects who answers "is this package vulnerable?".
 //
-// Off by default. Enabling it is an explicit act, and it changes who answers
-// "is this package vulnerable?" — which is a trust decision, not a tuning knob.
+// The NOX Intelligence service answers by default, and every answer is
+// verified against OSV.dev (see VerifyAgainstOSV): a record the service
+// withholds is restored from OSV and reported as a degradation, so switching
+// the default source changed WHO is asked, never what a scan can find. What a
+// lookup transmits is exactly what an OSV lookup transmits — (ecosystem,
+// package, version) per dependency — and nothing else; contributing
+// observations back is a separate decision (see Contribute) and stays off
+// until set.
+//
+// Setting Disabled queries OSV.dev directly, as nox did before the default
+// changed. `--offline` (or `scan.osv.disabled`) turns every lookup off.
 type IntelligenceConfig struct {
 	// Endpoint is the intelligence service base URL. Empty (default) means
-	// dependency scanning queries OSV.dev exactly as before.
+	// DefaultIntelligenceEndpoint.
 	Endpoint string `yaml:"endpoint"`
+
+	// Disabled sends dependency lookups to OSV.dev directly instead of the
+	// intelligence service. It is the opt-out for operators who do not want
+	// their dependency list to reach the service at all.
+	Disabled bool `yaml:"disabled"`
 
 	// VerifyAgainstOSV checks every lookup against OSV.dev and reports any
 	// record the intelligence service withheld. Default true.
@@ -430,10 +457,45 @@ type IntelligenceConfig struct {
 	ReporterSaltPath string `yaml:"reporter_salt_path"`
 }
 
+// ReferenceBaseURL is the OSV-compatible API scans use as the reference
+// database: BaseURL when set, otherwise the public OSV.dev endpoint.
+func (c OSVConfig) ReferenceBaseURL() string {
+	if u := strings.TrimSpace(c.BaseURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	return osvsource.DefaultBaseURL
+}
+
 // VerificationEnabled reports whether lookups are checked against OSV,
 // defaulting to true when unset.
 func (c IntelligenceConfig) VerificationEnabled() bool {
 	return c.VerifyAgainstOSV == nil || *c.VerifyAgainstOSV
+}
+
+// IntelligenceEndpointEnv names the environment variable that selects the
+// intelligence service when .nox.yaml does not. The `nox intel` subcommands
+// read the same variable, so a pipeline pointed at a self-hosted service by
+// environment has every command agreeing on which service that is.
+const IntelligenceEndpointEnv = "NOX_INTEL_ENDPOINT"
+
+// ResolvedEndpoint is the intelligence service base URL lookups and
+// contributions use, resolved as
+//
+//	disabled  >  scan.intelligence.endpoint  >  NOX_INTEL_ENDPOINT  >  DefaultIntelligenceEndpoint
+//
+// and "" when Disabled — the one value that means "ask the reference database
+// directly".
+func (c IntelligenceConfig) ResolvedEndpoint() string {
+	if c.Disabled {
+		return ""
+	}
+	if ep := strings.TrimSpace(c.Endpoint); ep != "" {
+		return strings.TrimRight(ep, "/")
+	}
+	if ep := strings.TrimSpace(os.Getenv(IntelligenceEndpointEnv)); ep != "" {
+		return strings.TrimRight(ep, "/")
+	}
+	return DefaultIntelligenceEndpoint
 }
 
 // SlopConfig enables the SLOP analyzer's predictive slopsquat dimension

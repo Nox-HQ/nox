@@ -56,8 +56,18 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "  add-operator     add someone to your organisation and print their link\n")
 	fmt.Fprintf(os.Stderr, "  invite           re-issue an enrolment link that expired\n")
 	fmt.Fprintf(os.Stderr, "  enroll           bind an authenticator using an enrolment link\n\n")
-	fmt.Fprintf(os.Stderr, "Contribution is off unless scan.intelligence.contribute is set,\n")
-	fmt.Fprintf(os.Stderr, "and is a separate decision from querying an intelligence endpoint.\n")
+	fmt.Fprintf(os.Stderr, "Every scan asks %s for advisories and verifies the\n", core.DefaultIntelligenceEndpoint)
+	fmt.Fprintf(os.Stderr, "answer against OSV.dev; set scan.intelligence.disabled to ask OSV.dev directly,\n")
+	fmt.Fprintf(os.Stderr, "or --offline to ask nobody. Contribution is off unless scan.intelligence.contribute\n")
+	fmt.Fprintf(os.Stderr, "is set, and is a separate decision from querying.\n")
+}
+
+// intelEndpointDefault is the base URL an intel subcommand talks to when
+// --endpoint is not given: NOX_INTEL_ENDPOINT if set, otherwise the service
+// every scan queries by default. The same fallback as scanning, so `nox intel
+// login` signs in to the service `nox scan` is asking.
+func intelEndpointDefault() string {
+	return core.IntelligenceConfig{}.ResolvedEndpoint()
 }
 
 // runIntelAllowlist prints the allowlist. The design requires that "what would
