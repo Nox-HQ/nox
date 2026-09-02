@@ -16,6 +16,11 @@ import (
 // filePath and language are attached to every Unit so findings can be located.
 func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Unit {
 	drafts := extractUnits(lang, content)
+	// A sink is named in the catalog by its qualified path, and the recognizers
+	// record a call exactly as written — so `from os import system; system(x)`
+	// matched nothing. Expanding through the file's imports is what lets an
+	// ordinary import idiom be recognised. Additions only; see imports.go.
+	applyImportAliases(drafts, importAliases(lang, content))
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]
@@ -62,6 +67,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 				ArgCount:              a.argCount,
 				ShellTrue:             a.shellTrue,
 				FirstArgTainted:       a.firstArgTainted,
+				ShellProgram:          a.shellProgram,
 				PositionalVars:        copyPositional(a.positionalVars),
 				PositionalArgs:        append([]string(nil), a.positionalArgs...),
 				PromptRoles:           copyRoles(a.promptRoles),
@@ -1074,7 +1080,17 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// list/varargs in the 2nd+ positional slot — `sql.rows("... = ?", [id])` /
 		// `sql.executeQuery("... = ?", [id])` — rather than interpolating the tainted
 		// value into the SQL string (1st positional). Matched on the method suffix.
-		"rows", "executeQuery", "firstRow", "eachRow":
+		"rows", "executeQuery", "firstRow", "eachRow",
+		// Go's database/sql binds parameters positionally after the query
+		// string: db.Query("… WHERE id = $1", id). The driver binds id, so it is
+		// the parameterized form — and its absence here made the standard safe
+		// Go query a false positive. tp_sqlinjection.go stays a true positive
+		// because it CONCATENATES into the query string, which puts the taint in
+		// the first argument.
+		"db.Query", "db.QueryContext", "db.QueryRow", "db.QueryRowContext",
+		"db.Exec", "db.ExecContext",
+		"tx.Query", "tx.QueryContext", "tx.QueryRow", "tx.QueryRowContext",
+		"tx.Exec", "tx.ExecContext":
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional
@@ -1084,12 +1100,43 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		}
 		return true
 	case "subprocess.run", "subprocess.call", "subprocess.Popen",
-		"child_process.spawn":
+		// check_output takes the same (args-vector | string, shell=) shape as
+		// its siblings and was simply missing from this list, so
+		// `subprocess.check_output(["git", "log", tainted])` — a safe argv exec
+		// — reported a command injection while the identical call through
+		// subprocess.run did not. Found on httpie, where it is the only taint
+		// finding in the repository and is not an injection.
+		"subprocess.check_output",
+		// child_process.execFile is deliberately NOT here. It looks like spawn's
+		// shape — (file, args[]), no shell — but adding it measurably traded a
+		// false positive for a false NEGATIVE: `execFile("sh", ["-c", tainted])`
+		// runs a shell as the program, and the exemption silenced it. The same
+		// hole exists for the spawn entry above and predates this list; it is
+		// left alone rather than widened, because a missed injection costs more
+		// than a reported safe call.
+		"child_process.spawn",
+		// Go's exec.Command takes (program, args...) — an arg vector by
+		// construction, never a shell unless the program is one. Its absence
+		// here made `exec.Command("ls", "-la", dir)` with a tainted dir a false
+		// positive, which is the standard safe form in every Go service.
+		// tp_cmdinjection.go stays a true positive because it runs
+		// exec.Command("sh", "-c", …) — caught by the ShellProgram guard below.
+		"exec.Command", "exec.CommandContext":
 		// An arg-vector exec (list/array first arg) without shell=True is safe.
 		// We approximate "arg vector" as: shell not True and the first argument
 		// is not a bare tainted string (FirstArgTainted false means the command
 		// is a list literal or constant). shell=True always re-arms it.
 		if info.ShellTrue {
+			return true
+		}
+		// …unless the PROGRAM is itself a shell. The exemption rests on the
+		// premise that a tainted value passed as its own argv element is never
+		// parsed by a shell, and `run(["sh", "-c", cmd])` is exactly how that
+		// premise fails — it is also the ordinary way a command line is executed
+		// through an argv-taking API. Measured before this guard: five of six
+		// shell-program injections across subprocess.* and spawn were silenced,
+		// which is the classic injection the exemption was never meant to cover.
+		if info.ShellProgram {
 			return true
 		}
 		if !info.FirstArgTainted {
