@@ -39,7 +39,12 @@ is checked against the reference database, a record the service withheld is
 restored from the reference, and the discrepancy is reported as a degradation
 on the scan. A service that starts dropping advisories costs its operator
 trust immediately and visibly, and never costs the scan a finding. An
-unreachable service degrades to exactly the OSV.dev scan nox always ran.
+unreachable service degrades to exactly the OSV.dev scan nox always ran, and
+says so: the scan carries an `intel_unreachable` degradation naming the
+endpoint, distinct from the `intel_suppression` a withheld record raises —
+silence is not withholding, and the two are never confused. Only when the
+reference is unreachable as well does the scan report an advisory under-report
+(`osv_lookup`), the one degradation that can hide a finding.
 
 ## Turning it off, at every level
 
