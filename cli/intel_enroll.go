@@ -30,8 +30,8 @@ import (
 func runIntelEnroll(args []string) int {
 	cmdName = "nox intel enroll"
 	fs := flag.NewFlagSet("intel enroll", flag.ContinueOnError)
-	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
-		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
+	endpoint := fs.String("endpoint", intelEndpointDefault(),
+		"intelligence service base URL (default: NOX_INTEL_ENDPOINT, else the service scans query)")
 	email := fs.String("email", "", "operator address to enrol")
 	yes := fs.Bool("no-confirm", false,
 		"print the URI and exit without confirming (the new factor stays inactive)")
@@ -46,8 +46,8 @@ func runIntelEnroll(args []string) int {
 	// honoured with one: the address comes from the code server-side.
 	if *endpoint == "" || (*email == "" && *invite == "") {
 		fmt.Fprintf(os.Stderr, "Usage:\n")
-		fmt.Fprintf(os.Stderr, "  nox intel enroll --endpoint URL --code CODE          # from an invitation\n")
-		fmt.Fprintf(os.Stderr, "  nox intel enroll --endpoint URL --email you@example.com   # break-glass\n\n")
+		fmt.Fprintf(os.Stderr, "  nox intel enroll --code CODE                 # from an invitation\n")
+		fmt.Fprintf(os.Stderr, "  nox intel enroll --email you@example.com     # break-glass\n\n")
 		fmt.Fprintf(os.Stderr, "An invitation is the ordinary path and needs no operator token.\n")
 		fmt.Fprintf(os.Stderr, "The token (NOX_INTEL_TOKEN) is for the case an invitation cannot cover:\n")
 		fmt.Fprintf(os.Stderr, "an operator who has lost their phone and holds no valid link.\n")

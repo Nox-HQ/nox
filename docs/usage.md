@@ -868,6 +868,35 @@ scan:
 
 This is useful for reducing noise from dependencies in `node_modules/` or test fixtures.
 
+### Vulnerability source (NOX Intelligence, verified against OSV.dev)
+
+Dependency scanning asks **NOX Intelligence** for advisories by default and
+verifies every answer against a reference database (OSV.dev unless
+`scan.osv.base_url` names a mirror). A record the service withholds is restored
+from the reference and reported as a degradation, so the service can add
+findings and can never remove one. What a lookup transmits is what an OSV
+lookup transmits — `(ecosystem, package, version)` per dependency — and nothing
+else. See [docs/intelligence.md](intelligence.md).
+
+```yaml
+scan:
+  intelligence:
+    disabled: false           # true: ask the reference database directly, never the service
+    endpoint: ""              # self-hosted service; empty resolves NOX_INTEL_ENDPOINT, then the public service
+    verify_against_osv: true  # default; set false only for a service you operate and audit yourself
+    contribute: false         # opt-in: send redacted observations back after a `nox scan`
+  osv:
+    base_url: ""              # OSV-compatible reference (default https://api.osv.dev)
+    disabled: false           # true: no vulnerability lookups at all (same as --no-osv)
+```
+
+Resolution order for the endpoint is `disabled` > `scan.intelligence.endpoint`
+> `NOX_INTEL_ENDPOINT` > the compiled-in public service. `--offline` turns off
+every lookup regardless. Contribution is a separate decision from querying and
+is off until `scan.intelligence.contribute: true` is set; only `nox scan`
+contributes (never `diff`, `bench` or `intel preview`), and
+`nox intel preview <path>` shows exactly what would be sent.
+
 ### Predictive Slopsquat Feed (SLOP-002)
 
 The SLOP analyzer can consume a versioned, offline **predictive slopsquat

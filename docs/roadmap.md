@@ -384,8 +384,113 @@ coordinated disclosure, and early warning require multi-tenant state, auth, and 
 operational footprint that has no business in a CLI release cycle. The client-side
 half — privacy redaction, the private evidence graph, and organisation-specific
 blast radius — stays local and auditable, but it is designed against a service
-rather than shipped as a stand-in for one. See
+rather than shipped as a stand-in for one. The CLI *consumes* the service — since
+Phase 11, by default — and the boundary is what keeps both sides honest. See
 `docs/design/intelligence-service.md`.
+
+## Phase 11 — Intelligence by Default
+
+Phase 11 changes one default and then plans against where the market is going,
+not where it is. The default: every online `nox scan` asks NOX Intelligence for
+advisories and verifies the answer against OSV.dev (`docs/intelligence.md`).
+Opting out is one config key; `--offline` still asks nobody. Contribution stays a
+separate, opt-in decision. That is the whole of 11a. Everything after it is
+ordered by five observations about the market, each of which names the gap it
+turns into work.
+
+**What the market is doing.** (1) Finding vulnerabilities is commoditised —
+every scanner, and every LLM, finds the same SQL injection; *triage* is the
+product, and triage is a network property (what did everyone else do with this
+finding?). (2) Buyers are consolidating onto platforms; a primitive survives that
+by being the best-verified *source* those platforms consume, not by growing a
+dashboard. (3) AI is on both sides: agents generate the code that gets scanned
+and agents consume the findings, so the API shape matters more than the CLI
+shape. (4) Regulation — the EU Cyber Resilience Act's reporting duties, VEX as
+the exchange format — turns "is this reachable in *our* deployment?" into a
+document with a deadline. (5) Trust in a shared source is earned in public:
+uptime, a published payload, verified claims, and a visible way to leave.
+
+### 11a. The default, and its opt-out ✓
+
+- `scan.intelligence` resolves `disabled > endpoint > NOX_INTEL_ENDPOINT >
+  compiled-in endpoint`; `scan.osv.base_url` names the reference for
+  verification and for self-hosted mirrors.
+- Every intel subcommand defaults to the same endpoint scans use.
+- Verification is on by default: a withheld advisory is restored from the
+  reference and reported as a degradation; an unreachable service degrades to
+  the OSV.dev scan nox always ran.
+- Tests assert the three states from the wire: service + reference, reference
+  only, nobody.
+
+### 11b. Trust in public — earned before the network is asked for anything
+
+Ordered first because a compiled-in default is a promise the project makes on
+behalf of every user who never reads a config file.
+
+- **Payload page** — `docs/intelligence.md` is the canonical statement of what
+  leaves the machine; the service publishes the same page and a status/uptime
+  page, so the promise is checkable from either side.
+- **Service CI** — the service has none today; its store tests skip without a
+  database. A Postgres service container in CI makes the tenant-isolation test a
+  gate, not an aspiration. Nothing network-derived ships until this is green.
+- **Verified domain claims** — an organisation's `verified: true` is an operator
+  assertion today; DNS TXT verification turns it into a fact the service checked.
+- **The endpoint's name** — the default is compiled in, so the domain is now an
+  API contract. Decide `intel.klarlabs.de` vs `intel.nox-hq.dev` once, keep a
+  permanent redirect from whichever loses, and treat any later change as a
+  breaking release.
+- **Release notes** name the default change as the headline and the one-line
+  opt-out, every release until the next default changes.
+- **Operator credentials** — the founder token is reissued and stored outside a
+  shell history; billing stays postponed until there is more than one reporter
+  to bill.
+
+### 11c. Reporters, not observations — the only number that matters
+
+The evidence spine counts independence in distinct reporters, so the network's
+value is exactly its reporter count, and every feature below is worthless at one.
+The north-star metric is *distinct reporters per ecosystem per week*; the
+service exposes it, and the roadmap re-orders around whatever moves it. Nothing
+that requires corroboration (11d–11f) is promised at a reporter count that
+cannot supply it.
+
+### 11d. Triage is the product — the first network feature
+
+- **Dismissal corpus** — "what did everyone else do with this finding": per
+  fingerprint class, the share of reporters who waived, fixed, or disputed, with
+  the reasons redacted to the allowlist. Arrives on the finding as
+  `intel_corroboration` and in `nox why`; never changes a verdict, because
+  independence and repetition are not evidence at reproduction strength.
+- **KEV / EPSS / reachability as Community triage** — deterministic, public
+  inputs the CLI already has or can fetch; they reorder, they do not confirm.
+- **Early warning stays deferred** until reporters fund the research that
+  produces it; an embargoed disclosure is excluded from early warning by design.
+
+### 11e. Agents are the consumers — the API is the product surface
+
+- **Intelligence API / OEM** — the same advisory + corroboration answer over a
+  documented, versioned HTTP surface for platforms and agents; MCP exposes it
+  through the existing read-only tools so an agent that scans with nox reasons
+  with the network's triage without another integration.
+- The CLI stays a thin, deterministic consumer: the service may add fields, the
+  CLI may ignore them, and neither release blocks the other.
+
+### 11f. Regulation turns exposure into a document — Enterprise
+
+- **Organisation exposure / blast radius** — the private evidence graph answers
+  "which of *our* services carry this, and is it reachable there?" on data that
+  never leaves.
+- **CRA / VEX reporting** — that answer rendered as VEX the way `nox vex`
+  renders it today, with the corroboration that makes a `not_affected`
+  defensible attached as evidence rather than asserted.
+
+### Deliberately not in Phase 11
+
+Research orchestration and autonomous exploit research on the service, advisory
+publication, and coordinated disclosure. All three are designed in
+`docs/design/intelligence-service.md` and all three depend on 11b and 11c being
+true first: a network that cannot show its isolation test or count its reporters
+has no business publishing advisories.
 
 ## Explicitly Out of Scope
 

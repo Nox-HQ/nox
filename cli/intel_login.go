@@ -17,15 +17,15 @@ import (
 // and can be revoked for one operator without disturbing anyone else.
 func runIntelLogin(args []string) int {
 	fs := flag.NewFlagSet("intel login", flag.ContinueOnError)
-	endpoint := fs.String("endpoint", os.Getenv("NOX_INTEL_ENDPOINT"),
-		"intelligence service base URL (or NOX_INTEL_ENDPOINT)")
+	endpoint := fs.String("endpoint", intelEndpointDefault(),
+		"intelligence service base URL (default: NOX_INTEL_ENDPOINT, else the service scans query)")
 	noBrowser := fs.Bool("no-browser", false,
 		"print the URL and code instead of opening a browser")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *endpoint == "" {
-		fmt.Fprintf(os.Stderr, "Usage: nox intel login --endpoint URL\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nox intel login [--endpoint URL]\n\n")
 		fmt.Fprintf(os.Stderr, "Opens your browser to approve this terminal. Your authenticator\n")
 		fmt.Fprintf(os.Stderr, "code is never typed here — it stays in the browser, where it\n")
 		fmt.Fprintf(os.Stderr, "cannot end up in scrollback or a captured log.\n")
@@ -95,7 +95,7 @@ func runIntelWhoami(args []string) int {
 	}
 	s, ok := loadSession()
 	if !ok {
-		fmt.Println("Not signed in. Run: nox intel login --endpoint URL --email you@example.com")
+		fmt.Println("Not signed in. Run: nox intel login")
 		return 1
 	}
 	fmt.Printf("%s at %s\n", s.Email, s.Endpoint)
