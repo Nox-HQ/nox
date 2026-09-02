@@ -254,6 +254,24 @@ func SuppressNonCode(lang Lang, content []byte, matchStart, matchEnd int) bool {
 	}
 }
 
+// WithinComments reports whether the span [start, end) of content is prose: it
+// begins inside a comment and touches nothing but comment text and the
+// whitespace between comment lines. A span that begins outside a comment, or
+// that reaches any non-blank code or string byte, is not. It is the
+// span-level form of the rule SuppressNonCode applies to a straddling match,
+// for callers that already hold a finding's location rather than a match.
+func WithinComments(lang Lang, content []byte, start, end int) bool {
+	if lang == LangUnknown || end <= start || start < 0 || end > len(content) {
+		return false
+	}
+	regions := Classify(lang, content)
+	idx := regionIndexAt(regions, start)
+	if idx < 0 || regions[idx].Kind != KindComment {
+		return false
+	}
+	return onlyCommentsAndBlanks(regions, idx, content, end)
+}
+
 // onlyCommentsAndBlanks reports whether every region from regions[from]
 // (a comment) up to matchEnd is either a comment or code that is nothing but
 // whitespace inside the matched span -- the newline and indentation between

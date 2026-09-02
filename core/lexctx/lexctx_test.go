@@ -294,3 +294,23 @@ func TestSuppressNonCodeSpansConsecutiveComments(t *testing.T) {
 		t.Error("comment lines separated by a blank line are still prose")
 	}
 }
+
+func TestWithinComments(t *testing.T) {
+	src := []byte("# one\n# two\nx=1 # three\n")
+	cases := []struct {
+		name       string
+		start, end int
+		want       bool
+	}{
+		{"single comment", 0, 5, true},
+		{"two comment lines and the newline between", 2, 11, true},
+		{"leaks into code", 6, 15, false},
+		{"begins in code", 12, 22, false},
+		{"empty span", 3, 3, false},
+	}
+	for _, tc := range cases {
+		if got := WithinComments(LangShell, src, tc.start, tc.end); got != tc.want {
+			t.Errorf("%s: WithinComments(%d,%d) = %v, want %v", tc.name, tc.start, tc.end, got, tc.want)
+		}
+	}
+}

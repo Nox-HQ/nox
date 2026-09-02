@@ -218,6 +218,17 @@ func TestConfigFieldRuleNotMatchedInProse(t *testing.T) {
 		}
 	})
 
+	t.Run("terraform password rule spanning two comment lines", func(t *testing.T) {
+		// The pattern's trailing `\s` swallows the newline after the value, so
+		// the match ends on the NEXT comment line. The whitespace between two
+		// comment lines is not code; the match is still prose.
+		src := "#   1. export SYNO_USERNAME=\"adminUser\"\n#   2. export SYNO_PASSWORD=\"adminPassword\"\n# 2. Set optional environment variables\nSYNO_HOSTNAME=localhost\n"
+		got := scanOne(t, "synology_dsm.sh", src)
+		if firedRule(got, "SEC-240") {
+			t.Errorf("SEC-240 fired on a comment run in a shell script (all: %s)", ruleIDs(got))
+		}
+	})
+
 	t.Run("terraform password rule on a real assignment", func(t *testing.T) {
 		src := "resource \"azurerm_mssql_server\" \"x\" {\n  administrator_login_password = \"h7Qz2LmXk9Ta\"\n}\n"
 		got := scanOne(t, "main.tf", src)
