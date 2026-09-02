@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Pipfile.lock`, `uv.lock` and `pubspec.lock` are parsed. The release E2E
+  measured the gap: pipenv's own lockfile (110 packages) produced zero
+  components and zero advisories, and nothing said why — an unrecognised
+  lockfile is not a degradation, it is simply not a lockfile. Hosted pub
+  packages resolve to the `pub` ecosystem; editable/virtual/directory uv
+  entries and path/git/sdk pub entries are skipped.
+
+### Fixed
+
+- PHP dependencies are queried for advisories at all. nox-core v0.2.4 maps
+  `composer` to Packagist (and `pub` to Pub, `hex` to Hex); before, an
+  ecosystem missing from the map was filtered out of the batch silently, so a
+  `composer.lock` project reported zero advisories with no degradation. koel's
+  lockfile now reports four `league/commonmark` advisories.
+- `DATA-*` findings are dropped on generated paths, alongside `AI-*` and
+  `MCP-*`: a lockfile lists its authors' e-mail addresses by design, and 239
+  `DATA-001` findings on one `composer.lock` were the lockfile, not sensitive
+  data in code. The same address in a source file is still reported.
+
 ## [1.32.0] - 2026-08-31
 
 Two programmes in one release: nox became evidence-native, and its dynamic
