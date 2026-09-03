@@ -76,10 +76,21 @@ func TestStartBinary_TokenRoundTrip(t *testing.T) {
 		t.Fatalf("building test plugin: %v\n%s", err, out)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	p, err := StartBinary(ctx, bin, nil, 10*time.Second)
+	// The startup budget matches the fallback RegisterBinaryWithTrack uses in
+	// production. The 10s that stood here was tighter than any value a real
+	// caller passes — every track profile allows 1 to 5 minutes — so the test
+	// was asserting a startup latency the product never requires, and failing
+	// on a busy machine: this binary is compiled by the line above, so its
+	// first execution is a cold start that also has to bind a port.
+	//
+	// Observed failing at load ~20 with "timed out waiting for plugin address:
+	// context deadline exceeded" after 14.5s, blocking an unrelated push. The
+	// subject of this test is the token round-trip, not how fast a cold binary
+	// comes up.
+	p, err := StartBinary(ctx, bin, nil, 30*time.Second)
 	if err != nil {
 		t.Fatalf("StartBinary: %v", err)
 	}
