@@ -737,7 +737,7 @@ plugin_policy:
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	policy := cfg.PluginPolicy.ToPolicy()
+	policy := ToPolicy(&cfg.PluginPolicy)
 	if policy.MaxRiskClass != RiskClassActive {
 		t.Errorf("MaxRiskClass = %q, want %q", policy.MaxRiskClass, RiskClassActive)
 	}

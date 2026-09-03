@@ -206,8 +206,8 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	var overrides plugin.Policy
 	ignoreTrackProfiles := false
 	if cfg, cfgErr := plugin.LoadConfig(filepath.Join(core.ConfigRoot(target), ".nox.yaml")); cfgErr == nil {
-		policy = cfg.PluginPolicy.ToPolicy()
-		overrides = cfg.PluginPolicy.Overrides()
+		policy = plugin.ToPolicy(&cfg.PluginPolicy)
+		overrides = plugin.Overrides(&cfg.PluginPolicy)
 		ignoreTrackProfiles = cfg.PluginPolicy.IgnoreTrackProfiles
 	}
 
@@ -348,8 +348,8 @@ func runScanPlugins(ctx context.Context, target string, required []string) (*cor
 	var overrides plugin.Policy
 	ignoreTrackProfiles := false
 	if cfg, cfgErr := plugin.LoadConfig(filepath.Join(core.ConfigRoot(target), ".nox.yaml")); cfgErr == nil {
-		policy = cfg.PluginPolicy.ToPolicy()
-		overrides = cfg.PluginPolicy.Overrides()
+		policy = plugin.ToPolicy(&cfg.PluginPolicy)
+		overrides = plugin.Overrides(&cfg.PluginPolicy)
 		ignoreTrackProfiles = cfg.PluginPolicy.IgnoreTrackProfiles
 	}
 	out, err := runPluginBinaries(ctx, target, binaries, &policy, &overrides, ignoreTrackProfiles)
