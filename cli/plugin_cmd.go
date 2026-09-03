@@ -737,7 +737,7 @@ func runPluginCall(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
 		return 2
 	}
-	policy := cfg.PluginPolicy.ToPolicy()
+	policy := plugin.ToPolicy(&cfg.PluginPolicy)
 
 	host := plugin.NewHost(plugin.WithPolicy(&policy))
 	defer func() { _ = host.Close() }()

@@ -37,6 +37,58 @@ type ScanConfig struct {
 	Compliance ComplianceSettings `yaml:"compliance"`
 	Cache      CacheSettings      `yaml:"cache"`
 	Plugins    PluginsConfig      `yaml:"plugins"`
+
+	// PluginPolicy is the plugin sandbox policy. The scan engine never reads
+	// it — package plugin does, from this same file — but the schema lives
+	// here because this struct is what UnknownConfigKeys validates .nox.yaml
+	// against, and a key missing from it is reported as one nox does not
+	// recognise.
+	//
+	// That report was wrong for this key, and wrong in the dangerous
+	// direction: `plugin_policy` was in force (it is how an operator widens a
+	// plugin's network or filesystem allowlist) while the scan told them it
+	// was "ignored, so whatever they were meant to configure is not in
+	// effect" and advised checking for a typo. An operator who followed that
+	// advice would delete a sandbox boundary they had deliberately set.
+	//
+	// Declaring it here also means the existing strict decode validates the
+	// keys INSIDE the block, so a misspelt `allowed_network_host` in a
+	// security policy is named rather than silently dropped.
+	//
+	// package plugin aliases this type rather than redeclaring it: core cannot
+	// import plugin (plugin imports core), and two copies of a security
+	// policy's schema would drift.
+	PluginPolicy PluginPolicyConfig `yaml:"plugin_policy"`
+}
+
+// PluginPolicyConfig defines plugin sandbox overrides loaded from .nox.yaml.
+//
+// Overrides are one-directional: an operator can widen an allowlist but cannot
+// empty one, because a zero-length list reads as "not configured". See
+// IgnoreTrackProfiles for the escape hatch that exists because of it.
+type PluginPolicyConfig struct {
+	AllowedNetworkHosts   []string `yaml:"allowed_network_hosts"`
+	AllowedNetworkCIDRs   []string `yaml:"allowed_network_cidrs"`
+	AllowedFilePaths      []string `yaml:"allowed_file_paths"`
+	AllowedEnvVars        []string `yaml:"allowed_env_vars"`
+	MaxRiskClass          string   `yaml:"max_risk_class"`
+	AllowConfirmationReqd bool     `yaml:"allow_confirmation_required"`
+	MaxArtifactMB         int      `yaml:"max_artifact_mb"`
+	MaxConcurrency        int      `yaml:"max_concurrency"`
+	ToolTimeoutSeconds    int      `yaml:"tool_timeout_seconds"`
+	RequestsPerMinute     int      `yaml:"requests_per_minute"`
+	BandwidthMBPerMinute  int      `yaml:"bandwidth_mb_per_minute"`
+
+	// IgnoreTrackProfiles forces every plugin onto the default policy
+	// regardless of its registry track.
+	//
+	// This exists because the override semantics are one-directional: an
+	// operator can widen an allowlist but cannot empty one, since a zero-length
+	// list reads as "not configured". Without this flag there would be no way
+	// to revoke the localhost access the dynamic-runtime profile grants — an
+	// operator could only add to it. Setting this restores the pre-track
+	// behaviour: passive risk class, empty allowlists, opt-in only.
+	IgnoreTrackProfiles bool `yaml:"ignore_track_profiles"`
 }
 
 // PluginsConfig declares the plugins a project requires plus any

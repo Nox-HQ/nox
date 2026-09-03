@@ -84,7 +84,7 @@ func TestPolicyConfig_ToPolicy(t *testing.T) {
 		BandwidthMBPerMinute: 10,
 	}
 
-	p := cfg.ToPolicy()
+	p := ToPolicy(&cfg)
 
 	if len(p.AllowedNetworkHosts) != 1 || p.AllowedNetworkHosts[0] != "*.example.com" {
 		t.Errorf("AllowedNetworkHosts = %v", p.AllowedNetworkHosts)
@@ -111,7 +111,7 @@ func TestPolicyConfig_ToPolicy(t *testing.T) {
 
 func TestPolicyConfig_ToPolicy_ZeroValues(t *testing.T) {
 	cfg := PolicyConfig{}
-	p := cfg.ToPolicy()
+	p := ToPolicy(&cfg)
 	def := DefaultPolicy()
 
 	if p.MaxRiskClass != def.MaxRiskClass {
