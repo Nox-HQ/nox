@@ -428,6 +428,8 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		return &core.PluginScanOutput{Degradations: regDegradations}, nil
 	}
 
+	regDegradations = append(regDegradations, uninvocableDegradations(host.Plugins())...)
+
 	// Run the analysis `scan` tool across every plugin that declares it.
 	// workspace_root is passed both as the host workspace argument and in the
 	// input map, since plugins read it from req.Input["workspace_root"].
@@ -492,4 +494,59 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		"findings this plugin would have produced are missing from this scan; other plugins still ran")...)
 
 	return out, nil
+}
+
+// scanInvokesTool is the name of the analysis-phase tool nox scan calls on
+// every registered plugin. Anything else runs only if it asks for scan context.
+const scanInvokesTool = "scan"
+
+// uninvocableDegradations reports plugins that registered but that `nox scan`
+// has no way to call.
+//
+// A scan reaches exactly two kinds of tool: one named "scan", during the
+// analysis phase, and any tool declaring requires_scan_context, afterwards. A
+// plugin whose tools are neither is loaded, handshaken, counted as registered
+// — and then never invoked. Nothing in the output says so.
+//
+// That is the failure mode degradations exist to prevent, arriving through a
+// door the existing checks do not watch. The plugin degradation covers
+// installed-but-undeclared and declared-but-rejected; this is the third case,
+// declared and accepted and inert, and it is the quietest of the three: the
+// operator wrote the plugin into plugins.required, the scan reported no
+// problem with it, and it contributed nothing.
+//
+// Measured on the installed set: nox/red-team (analyze, validate) and nox/grc
+// (assess, gap_report, evidence) are both unreachable from nox scan today.
+// Their tools are invoked explicitly with `nox plugin call`, which is a
+// legitimate design — the defect is that a scan could not tell you so.
+func uninvocableDegradations(infos []plugin.Info) []core.Degradation {
+	var out []core.Degradation
+	for _, info := range infos {
+		var names []string
+		invocable := false
+		for _, cap := range info.Capabilities {
+			for _, t := range cap.Tools {
+				names = append(names, t.Name)
+				if t.Name == scanInvokesTool || t.RequiresScanContext {
+					invocable = true
+				}
+			}
+		}
+		if invocable {
+			continue
+		}
+		detail := fmt.Sprintf("required plugin %q exposes no tool that nox scan invokes", info.Name)
+		if len(names) > 0 {
+			detail += fmt.Sprintf(" (it provides: %s)", strings.Join(names, ", "))
+		}
+		out = append(out, core.Degradation{
+			Kind:   degrade.Plugin,
+			Detail: detail,
+			Impact: "it registered and then ran nothing: a scan invokes a tool named " +
+				"\"scan\" plus any tool declaring requires_scan_context. Invoke the " +
+				"others explicitly with `nox plugin call`, or drop the plugin from " +
+				"plugins.required so the scan does not imply it contributed",
+		})
+	}
+	return out
 }
