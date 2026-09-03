@@ -41,6 +41,33 @@ Host (nox)                    Plugin (subprocess)
 5. **Invocation**: Host calls `InvokeTool` for each scan operation
 6. **Shutdown**: Host sends SIGTERM, waits 5s, then SIGKILL
 
+### What `nox scan` actually invokes
+
+Registering is not the same as running. A scan calls exactly two kinds of tool:
+
+| when | which tools |
+|---|---|
+| analysis phase | the tool named **`scan`**, on every plugin that declares it |
+| after the scan | every tool declaring **`requires_scan_context`**, given the findings |
+
+A tool that is neither is **never invoked by a scan**. It is reachable only
+through `nox plugin call <plugin> <tool>`, which is a legitimate design for
+tools an operator runs deliberately — compliance assessments, exploit
+validation — but it means listing such a plugin in `plugins.required` gets you
+nothing at scan time.
+
+Two plugins in the published registry are in exactly that position today:
+`nox/red-team` (`analyze`, `validate`) and `nox/grc` (`assess`, `gap_report`,
+`evidence`). Both work when called explicitly. Since nox 1.34.0 a scan says so:
+
+```
+[degraded] required plugin "nox/grc" exposes no tool that nox scan invokes
+           (it provides: assess, gap_report, evidence)
+```
+
+If you want your plugin to contribute to a scan, name its entry point `scan`,
+or set `requires_scan_context` on the tool that reasons over findings.
+
 ## SDK Reference
 
 ### Manifest Builder
@@ -339,3 +366,17 @@ nox plugin install nox/my-scanner@^1.0.0
 - Check that tool names match between manifest and handler registration
 - Verify the workspace_root is accessible
 - Check for context cancellation (timeout)
+
+### The plugin registers but nothing happens during a scan
+
+- Check the tool is named `scan` or declares `requires_scan_context` — see
+  [What `nox scan` actually invokes](#what-nox-scan-actually-invokes). Anything
+  else is only reachable via `nox plugin call`.
+- A read-only tool still inherits the **plugin-level** safety ceiling unless it
+  declares its own `ToolSafety(...)`. A passive `plan`-style tool shipped
+  alongside an active `apply` one is refused with it under a passive policy,
+  which is not what you want: declare the narrower requirements per tool and
+  the host will admit the plugin and refuse only the active tool.
+- Widen a sandbox with `plugin_policy` in `.nox.yaml`. Overrides are
+  one-directional — you can add to an allowlist but not empty one; use
+  `ignore_track_profiles: true` to revoke what a track profile grants.
