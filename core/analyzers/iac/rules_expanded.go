@@ -1021,9 +1021,20 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-360", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)restartPolicy:\s*['"]?Never`,
-			description:  "K8s pod restart policy set to Never",
-			cwe:          "CWE-693",
+			pattern:     `(?i)restartPolicy:\s*['"]?Never`,
+			description: "K8s pod restart policy set to Never",
+			cwe:         "CWE-693",
+			// IAC-374 declared a byte-identical pattern and description, so a
+			// single `restartPolicy: Never` produced two findings that a
+			// triager had to dismiss separately. IAC-360 survives: it is the
+			// earlier ID and graded the condition at high confidence, which is
+			// right for a deterministic literal match.
+			//
+			// The alias keeps waivers written against IAC-374 matching. It
+			// carries IAC-374's own pattern so it never reaches a location
+			// IAC-374 would not have reported — an ID-level waiver still covers
+			// exactly what it used to.
+			retires:      []rules.RetiredRule{{ID: "IAC-374", Pattern: `(?i)restartPolicy:\s*['"]?Never`}},
 			keywords:     []string{"restartPolicy", "Never"},
 			filePatterns: k8sFilePatterns,
 			tags:         []string{"iac", "kubernetes", "availability"},
@@ -1174,17 +1185,9 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Ensure preStop hooks complete within terminationGracePeriodSeconds to allow graceful shutdown without forced termination.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-374", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)restartPolicy:\s*['"]?Never`,
-			description:  "K8s pod restart policy set to Never",
-			cwe:          "CWE-693",
-			keywords:     []string{"restartPolicy", "Never"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "availability"},
-			remediation:  "Consider using restartPolicy: OnFailure for workloads that should retry on error. Never means failed pods stay failed.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-374 retired into IAC-360, which reported the identical condition
+		// with the identical pattern. IAC-360's `retires` carries the alias that
+		// keeps waivers written against IAC-374 matching.
 		{
 			id: "IAC-375", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)activeDeadlineSeconds:\s*\d+`,
@@ -2576,21 +2579,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
-		}
+		out[i] = defs[i].toRule()
 	}
 	return out
 }

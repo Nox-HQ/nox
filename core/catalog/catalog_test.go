@@ -43,8 +43,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// character class plus a file-level keyword: SEC-542 (retired into
 	// SEC-087, which detects the same credential by requiring the assignment)
 	// and SEC-524 (an Azure subscription ID is not a credential).
-	if got := len(cat); got != 1535 {
-		t.Errorf("Catalog() returned %d rules, want 1535", got)
+	// 1535 -> 1534 retired IAC-374 into IAC-360: the two declared a
+	// byte-identical pattern and description, so one `restartPolicy: Never`
+	// reported twice. The alias on IAC-360 keeps waivers written against
+	// IAC-374 matching, so the drop is in rule COUNT only, not in coverage.
+	if got := len(cat); got != 1534 {
+		t.Errorf("Catalog() returned %d rules, want 1534", got)
 	}
 }
 
