@@ -2169,8 +2169,22 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/400.html"},
 		},
 		{
-			id: "IAC-464", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:      k8sManifestPrefix + `Namespace`,
+			// Anchored to a kind line, and NOT built on k8sManifestPrefix.
+			//
+			// That prefix is `(?is)apiVersion:...kind:...` — dotall, so its
+			// trailing `.*` spans the whole file, and case-insensitive. Appending
+			// the bare word `Namespace` therefore matched that word ANYWHERE
+			// after the first kind: line, which includes the `namespace:` field
+			// that nearly every namespaced manifest carries. A ConfigMap
+			// declaring `namespace: example` was reported as "K8s Namespace
+			// defined".
+			//
+			// Severity drops to Info to match what the description has always
+			// said. A rule whose own message reads "(informational)" has no
+			// business at Medium: it inflated every Kubernetes repository's
+			// medium count with a fact, not a problem.
+			id: "IAC-464", severity: findings.SeverityInfo, confidence: findings.ConfidenceHigh,
+			pattern:      `(?im)^\s*kind:\s*Namespace\s*$`,
 			description:  "K8s Namespace defined (informational)",
 			cwe:          "CWE-693",
 			keywords:     []string{"Namespace"},
