@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -677,18 +678,109 @@ func runPluginRemove(args []string) int {
 }
 
 // runPluginCall invokes a tool on an installed plugin.
-func runPluginCall(args []string) int {
-	fs := flag.NewFlagSet("plugin call", flag.ContinueOnError)
-	var inputFile string
-	fs.StringVar(&inputFile, "input", "", "JSON file with tool input")
+// extractInputFlag pulls --input out of args wherever it appears and returns
+// the remaining positional arguments.
+//
+// flag.FlagSet.Parse stops at the first non-flag argument, so with the
+// documented order — `nox plugin call <name> <tool> [--input f]` — the flag was
+// never parsed. It fell through to the key=value loop, where SplitN(kv, "=", 2)
+// accepted "--input=f" as a key named "--input", and the tool ran with no input
+// at all. A silently empty input is the worst outcome available: the plugin
+// reports whatever it reports when asked nothing, which reads as a result.
+//
+// Both spellings are accepted anywhere in the argument list.
+func extractInputFlag(args []string) (inputFile string, positional []string, err error) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--input" || a == "-input":
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("%s needs a file path", a)
+			}
+			inputFile = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--input=") || strings.HasPrefix(a, "-input="):
+			inputFile = a[strings.IndexByte(a, '=')+1:]
+			if inputFile == "" {
+				return "", nil, fmt.Errorf("%s needs a file path", a)
+			}
+		case strings.HasPrefix(a, "-"):
+			return "", nil, fmt.Errorf("unknown flag %q (only --input is accepted here)", a)
+		default:
+			positional = append(positional, a)
+		}
+	}
+	return inputFile, positional, nil
+}
 
-	if err := fs.Parse(args); err != nil {
+// jsonScalarRE matches the values an operator most likely meant as a JSON
+// scalar rather than a string: booleans, null, and plain numbers.
+var jsonScalarRE = regexp.MustCompile(`^(true|false|null|-?\d+(\.\d+)?)$`)
+
+// parseToolArg parses one tool argument.
+//
+//	key=value    value is always a string
+//	key:=value   value is parsed as JSON — bool, number, null, array, object
+//
+// The typed form exists because every value used to be a string, so a tool
+// input declared as a bool could not be satisfied from the command line at all.
+// nox/ai-eval gates its attack corpus behind `authorize: true` and asserts
+// req.Input["authorize"].(bool); passing authorize=true sent the STRING "true",
+// the assertion failed, and the operator got a lecture about authorisation
+// rather than a word about types.
+//
+// key= stays a string unconditionally, so nothing that works today changes
+// meaning. Where the value looks like a scalar the caller probably meant, the
+// mismatch is called out on stderr rather than guessed at: guessing would make
+// a tool taking the literal string "true" impossible to call.
+func parseToolArg(arg string) (key string, value any, err error) {
+	if k, raw, ok := strings.Cut(arg, ":="); ok {
+		if k == "" {
+			return "", nil, fmt.Errorf("invalid argument %q: empty key", arg)
+		}
+		var v any
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+			return "", nil, fmt.Errorf("invalid JSON in %q: %v (use %s=%s to send it as a string)", arg, err, k, raw)
+		}
+		return k, v, nil
+	}
+
+	k, raw, ok := strings.Cut(arg, "=")
+	if !ok || k == "" {
+		return "", nil, fmt.Errorf("invalid argument %q: expected key=value (string) or key:=value (JSON)", arg)
+	}
+	if jsonScalarRE.MatchString(raw) {
+		fmt.Fprintf(os.Stderr,
+			"[note] %s was sent as the string %q. If the tool expects a JSON %s, write %s:=%s\n",
+			k, raw, scalarKindOf(raw), k, raw)
+	}
+	return k, raw, nil
+}
+
+// scalarKindOf names the JSON type a bare value would have parsed as, for the
+// hint in parseToolArg.
+func scalarKindOf(raw string) string {
+	switch raw {
+	case "true", "false":
+		return "boolean"
+	case "null":
+		return "null"
+	default:
+		return "number"
+	}
+}
+
+func runPluginCall(args []string) int {
+	inputFile, remaining, err := extractInputFlag(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
 	}
 
-	remaining := fs.Args()
 	if len(remaining) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin call <name> <tool> [--input <file.json>] [key=value ...]")
+		fmt.Fprintln(os.Stderr, "Usage: nox plugin call <name> <tool> [--input <file.json>] [key=value ...] [key:=<json> ...]")
+		fmt.Fprintln(os.Stderr, "  key=value    sends a string")
+		fmt.Fprintln(os.Stderr, "  key:=value   sends JSON — true, 42, null, [\"a\"], {\"k\":1}")
 		return 2
 	}
 
@@ -722,12 +814,12 @@ func runPluginCall(args []string) int {
 		}
 	}
 	for _, kv := range kvArgs {
-		parts := strings.SplitN(kv, "=", 2)
-		if len(parts) != 2 {
-			fmt.Fprintf(os.Stderr, "error: invalid key=value argument: %q\n", kv)
+		key, value, err := parseToolArg(kv)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 2
 		}
-		input[parts[0]] = parts[1]
+		input[key] = value
 	}
 
 	// Load policy from .nox.yaml if present.
