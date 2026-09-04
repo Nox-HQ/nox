@@ -12,11 +12,13 @@ import (
 
 func TestExpandedRules_Count(t *testing.T) {
 	rules := builtinExpandedIaCRules()
-	// 226, not the original 235: nine expanded rules (IAC-283, IAC-287,
+	// 225, not the original 235: nine expanded rules (IAC-283, IAC-287,
 	// IAC-291, IAC-292, IAC-310, IAC-312, IAC-321, IAC-333, IAC-337) were
-	// retired in #394 because a base rule already reported their condition.
-	if got := len(rules); got != 226 {
-		t.Errorf("expected 226 expanded rules, got %d", got)
+	// retired in #394 because a base rule already reported their condition,
+	// and IAC-374 followed into IAC-360 — the two declared byte-identical
+	// patterns and descriptions, so one `restartPolicy: Never` reported twice.
+	if got := len(rules); got != 225 {
+		t.Errorf("expected 225 expanded rules, got %d", got)
 	}
 }
 

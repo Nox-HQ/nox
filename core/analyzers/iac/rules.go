@@ -2266,47 +2266,63 @@ func builtinBaseIaCRules() []rules.Rule {
 func convertIaCRules(defs []iacRule) []rules.Rule {
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
-		md := map[string]string{"cwe": defs[i].cwe}
-		maps.Copy(md, defs[i].extraMetadata)
-		r := rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     md,
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
-			Retires:      defs[i].retires,
-		}
-		if defs[i].absenceAnchor != "" {
-			r.MatcherType = "absence"
-			r.Pattern = ""
-			r.AbsenceAnchor = defs[i].absenceAnchor
-			r.AbsenceProperty = defs[i].absenceProperty
-			r.AbsenceRequire = defs[i].absenceRequire
-			r.AbsenceSpan = defs[i].absenceSpan
-			r.AbsenceResourceTypes = defs[i].absenceResourceTypes
-			r.AbsencePropertyPath = defs[i].absencePropertyPath
-			r.AbsenceRequireAll = defs[i].absenceRequireAll
-			r.AbsenceCompanionTypes = defs[i].absenceCompanionTypes
-			r.AbsenceCompanionLink = defs[i].absenceCompanionLink
-			r.AbsenceCompanionPath = defs[i].absenceCompanionPath
-			// Absence rules must NOT be keyword-gated. The engine skips a rule
-			// when none of its keywords appear in the file, but these rules'
-			// keywords name the hardening property — which is precisely what is
-			// absent when the rule should fire. Keyword-gating them would skip
-			// the file exactly when it is misconfigured. The anchor regex is the
-			// gate instead: the matcher returns nothing when no resource anchor
-			// is present, so clearing keywords costs only a cheap no-op scan.
-			r.Keywords = nil
-		}
-		out[i] = r
+		out[i] = defs[i].toRule()
 	}
 	return out
+}
+
+// toRule converts a rule definition into the engine's rules.Rule.
+//
+// One conversion, shared by both definition files. There used to be two —
+// rules.go and rules_expanded.go each had their own loop — and the second
+// silently omitted `retires`, `extraMetadata` and the whole absence block. A
+// rule in rules_expanded.go could therefore declare a retirement that compiled,
+// passed the dedup test's validation of its ID and pattern, and was then
+// dropped on the way to the engine: the surviving rule would report the
+// finding with no RetiredRuleIDs, so every baseline entry, VEX statement and
+// nox:ignore comment written against the retired ID would silently stop
+// matching. That is the exact outcome RetiredRule exists to prevent, reachable
+// by putting a retirement in the wrong file.
+func (d iacRule) toRule() rules.Rule {
+	md := map[string]string{"cwe": d.cwe}
+	maps.Copy(md, d.extraMetadata)
+	r := rules.Rule{
+		ID:           d.id,
+		Version:      "1.0",
+		Description:  d.description,
+		Severity:     d.severity,
+		Confidence:   d.confidence,
+		MatcherType:  "regex",
+		Pattern:      d.pattern,
+		FilePatterns: d.filePatterns,
+		Keywords:     d.keywords,
+		Tags:         d.tags,
+		Metadata:     md,
+		Remediation:  d.remediation,
+		References:   d.references,
+		Retires:      d.retires,
+	}
+	if d.absenceAnchor != "" {
+		r.MatcherType = "absence"
+		r.Pattern = ""
+		r.AbsenceAnchor = d.absenceAnchor
+		r.AbsenceProperty = d.absenceProperty
+		r.AbsenceRequire = d.absenceRequire
+		r.AbsenceSpan = d.absenceSpan
+		r.AbsenceResourceTypes = d.absenceResourceTypes
+		r.AbsencePropertyPath = d.absencePropertyPath
+		r.AbsenceRequireAll = d.absenceRequireAll
+		r.AbsenceCompanionTypes = d.absenceCompanionTypes
+		r.AbsenceCompanionLink = d.absenceCompanionLink
+		r.AbsenceCompanionPath = d.absenceCompanionPath
+		// Absence rules must NOT be keyword-gated. The engine skips a rule
+		// when none of its keywords appear in the file, but these rules'
+		// keywords name the hardening property — which is precisely what is
+		// absent when the rule should fire. Keyword-gating them would skip
+		// the file exactly when it is misconfigured. The anchor regex is the
+		// gate instead: the matcher returns nothing when no resource anchor
+		// is present, so clearing keywords costs only a cheap no-op scan.
+		r.Keywords = nil
+	}
+	return r
 }

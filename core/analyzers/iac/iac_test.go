@@ -616,11 +616,12 @@ func TestDetect_CustomDockerfileExtension(t *testing.T) {
 
 func TestAllIaCRules_Count(t *testing.T) {
 	rules := builtinIaCRules()
-	// 490, not 500: ten duplicate IDs were retired in #394 (see
-	// knownDuplicateRulePairs). Each lives on as an alias on the rule that
-	// absorbed it, so the drop is in rule COUNT only, not in coverage.
-	if got := len(rules); got != 490 {
-		t.Errorf("expected 490 IaC rules, got %d", got)
+	// 489, not 500: ten duplicate IDs were retired in #394 (see
+	// knownDuplicateRulePairs) and IAC-374 followed, into IAC-360, which
+	// declared a byte-identical pattern. Each lives on as an alias on the rule
+	// that absorbed it, so the drop is in rule COUNT only, not in coverage.
+	if got := len(rules); got != 489 {
+		t.Errorf("expected 489 IaC rules, got %d", got)
 	}
 }
 
