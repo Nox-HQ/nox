@@ -11,6 +11,20 @@ This is the same technique that found three nox rule bugs by hand (a blank
 line before a Dockerfile `COPY` → false positive; a comment mentioning
 `HEALTHCHECK` → false negative).
 
+Most mutations are whitespace and comment edits. `embed_in_block_scalar` is
+different in kind: it wraps a Kubernetes manifest in a YAML block scalar, the
+shape every wrapper tool uses — RollOps `RolloutConfig`, Argo CD `Application`
+with inline manifests, a Helm template rendered into a ConfigMap, a Flux patch.
+The workload described is identical, so every rule that fired on it standing
+alone must still fire on it embedded.
+
+That relation was violated seven ways at once (#576). Absence rules bounded to
+a YAML document never looked inside the string — the block's contents are a
+*value* of the outer document, not a document — while pattern rules, being
+plain regexes over the file, carried on matching. Half the ruleset evaluated,
+and nothing in the output said the other half had not: an absence rule that
+never runs produces exactly what a clean result produces.
+
 There are **two modes**, sharing one engine:
 
 | | Per-PR gate | Corpus audit (oracle) |
