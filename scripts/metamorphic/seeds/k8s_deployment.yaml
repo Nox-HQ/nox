@@ -1,0 +1,27 @@
+# Seed for the embed_in_block_scalar mutation: a plain Kubernetes workload.
+#
+# Wrapping this in a block scalar must not change which rules fire on it. Before
+# #576 that relation was violated seven ways at once — every absence rule
+# bounded to a YAML document stopped looking, while the pattern rules carried on
+# matching, so half the ruleset evaluated with no signal that the other half
+# had not.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seed-app
+  namespace: seed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seed-app
+  template:
+    metadata:
+      labels:
+        app: seed-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:latest
+        ports:
+        - containerPort: 80
