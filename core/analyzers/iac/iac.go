@@ -21,6 +21,11 @@ import (
 // Analyzer wraps a rules.Engine pre-loaded with IaC security rules.
 type Analyzer struct {
 	engine *rules.Engine
+	// absence holds only the absence-matcher rules, and is run separately over
+	// Kubernetes manifests embedded in YAML block scalars. Pattern rules match
+	// inside a block scalar already, so they are deliberately excluded: running
+	// them twice would double-report. See extractEmbeddedManifests.
+	absence *rules.Engine
 	// reasoning receives a claim for every finding this analyzer decided by
 	// parsing the document rather than by matching text. Nil unless a caller
 	// asked for evidence, which keeps recording free when nobody did.
@@ -35,9 +40,14 @@ func NewAnalyzer() *Analyzer {
 	for i := range iacRules {
 		rs.Add(&iacRules[i])
 	}
-	return &Analyzer{
-		engine: rules.NewEngine(rs),
+	a := &Analyzer{engine: rules.NewEngine(rs)}
+	// A second engine holding only the absence rules, for manifests embedded
+	// in YAML block scalars. See extractEmbeddedManifests for why the pattern
+	// rules must not be re-run over them.
+	if ars := absenceRuleSet(iacRules); ars != nil {
+		a.absence = rules.NewEngine(ars)
 	}
+	return a
 }
 
 // Rules returns the analyzer's RuleSet for catalog aggregation.
@@ -91,6 +101,11 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 		return nil, err
 	}
 	out := dropArtifactsWhenAlways(results, content)
+	embedded, err := a.scanEmbedded(path, content, out)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, embedded...)
 	a.recordStructuralClaims(path, out)
 	return out, nil
 }
