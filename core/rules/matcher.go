@@ -400,15 +400,15 @@ func structuralAbsence(content []byte, rule *Rule) ([]MatchResult, bool) {
 	case len(rule.AbsenceCompanionTypes) > 0:
 		// Cross-resource: the requirement is another object bound to the
 		// subject, not a property on it.
-		v = structural.EvaluateCompanion(content, rule.AbsenceResourceTypes,
+		v = structural.EvaluateCompanionWithSubject(content, rule.AbsenceResourceTypes,
 			structural.Companion{
 				Types: rule.AbsenceCompanionTypes,
 				Link:  structural.Link(rule.AbsenceCompanionLink),
 				Path:  rule.AbsenceCompanionPath,
-			})
+			}, rule.AbsenceSubjectMinInt)
 	case len(rule.AbsencePropertyPath) > 0:
-		v = structural.Evaluate(content, rule.AbsenceResourceTypes,
-			rule.AbsencePropertyPath, rule.AbsenceRequireAll)
+		v = structural.EvaluateWithSubject(content, rule.AbsenceResourceTypes,
+			rule.AbsencePropertyPath, rule.AbsenceRequireAll, rule.AbsenceSubjectMinInt)
 	default:
 		return nil, false
 	}

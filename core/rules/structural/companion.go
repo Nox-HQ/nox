@@ -106,6 +106,12 @@ const (
 // binds elsewhere — because they are different findings to read and the second
 // is the one the text path could never produce.
 func EvaluateCompanion(content []byte, subjectTypes []string, c Companion) Verdict {
+	return EvaluateCompanionWithSubject(content, subjectTypes, c, nil)
+}
+
+// EvaluateCompanionWithSubject is EvaluateCompanion with a precondition on the
+// subject. See EvaluateWithSubject.
+func EvaluateCompanionWithSubject(content []byte, subjectTypes []string, c Companion, subjectMinInt map[string]int) Verdict {
 	if len(subjectTypes) == 0 || len(c.Types) == 0 || c.Link == "" {
 		return Verdict{Reason: "rule carries no companion descriptor"}
 	}
@@ -128,6 +134,9 @@ func EvaluateCompanion(content []byte, subjectTypes []string, c Companion) Verdi
 
 	v := Verdict{Decided: true}
 	for _, s := range subjects {
+		if !subjectQualifies(s, subjectMinInt) {
+			continue
+		}
 		hit := Hit{
 			Type: s.Type, Name: s.Name, Line: s.Line, Family: s.Family,
 			Companion: companionType,

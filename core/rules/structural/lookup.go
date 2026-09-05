@@ -1,6 +1,7 @@
 package structural
 
 import (
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -167,4 +168,40 @@ func nodeAt(props *yaml.Node, path string) *yaml.Node {
 		return nil
 	}
 	return n
+}
+
+// IntAtLeast reports whether path admits a value of at least min.
+//
+// Three cases, and the difference between the last two is the whole point:
+//
+//	absent            FALSE. `spec.replicas` is absent far more often than it
+//	                  is written and Kubernetes defaults it to 1, so absence is
+//	                  a KNOWN value, not a missing one. Reading it as "unknown,
+//	                  therefore qualifying" is how IAC-132 came to recommend a
+//	                  PodDisruptionBudget for every single-replica workload in a
+//	                  fleet, which blocks node drains rather than protecting
+//	                  anything.
+//
+//	integer           compared against min, the ordinary case.
+//
+//	unreadable        TRUE. `replicas: {{ .Values.replicas }}` in an unrendered
+//	                  Helm chart is UNKNOWN, and unknown is not one. Silencing
+//	                  the rule there would lose the finding for every chart that
+//	                  renders to three replicas — a document nox cannot read is
+//	                  not a document with nothing in it. So an unreadable value
+//	                  fails toward reporting, which is the direction that costs
+//	                  a false positive rather than a missed one.
+func IntAtLeast(props *yaml.Node, path string, minValue int) bool {
+	n := nodeAt(props, path)
+	if n == nil {
+		return false
+	}
+	if n.Kind != yaml.ScalarNode {
+		return true
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(n.Value))
+	if err != nil {
+		return true
+	}
+	return v >= minValue
 }

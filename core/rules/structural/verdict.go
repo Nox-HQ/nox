@@ -67,6 +67,15 @@ type Verdict struct {
 // hardened, not any — and getting it wrong hides findings rather than inventing
 // them, so it is an explicit argument at every call site.
 func Evaluate(content []byte, resourceTypes, propertyPaths []string, requireAll bool) Verdict {
+	return EvaluateWithSubject(content, resourceTypes, propertyPaths, requireAll, nil)
+}
+
+// EvaluateWithSubject is Evaluate with a precondition on the subject: a
+// resource is only judged when every path in subjectMinInt holds an integer of
+// at least its value. A resource that fails the precondition is neither Absent
+// nor Present — the rule does not apply to it, which is different from it
+// being configured.
+func EvaluateWithSubject(content []byte, resourceTypes, propertyPaths []string, requireAll bool, subjectMinInt map[string]int) Verdict {
 	if len(resourceTypes) == 0 || len(propertyPaths) == 0 {
 		return Verdict{Reason: "rule carries no structural descriptor"}
 	}
@@ -85,6 +94,9 @@ func Evaluate(content []byte, resourceTypes, propertyPaths []string, requireAll 
 
 	v := Verdict{Decided: true}
 	for _, r := range OfTypes(all, resourceTypes) {
+		if !subjectQualifies(r, subjectMinInt) {
+			continue
+		}
 		hit := Hit{Type: r.Type, Name: r.Name, Line: r.Line, Family: r.Family}
 
 		found := ""
@@ -149,4 +161,15 @@ func (h Hit) companionStatement(name string, absent bool) string {
 	}
 	return fmt.Sprintf("the %s resource %q (%s) was parsed, and the document set declares no %s",
 		h.Family, name, h.Type, h.Companion)
+}
+
+// subjectQualifies reports whether a resource is in scope for a rule carrying a
+// subject precondition. No precondition means every resource qualifies.
+func subjectQualifies(r Resource, minInt map[string]int) bool {
+	for path, min := range minInt {
+		if !IntAtLeast(r.Props, path, min) {
+			return false
+		}
+	}
+	return true
 }
