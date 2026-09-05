@@ -313,6 +313,50 @@ def mut_keyword_comments(lines, filename):
     return variants
 
 
+
+# Wrapper that embeds a Kubernetes manifest as a block scalar, in the shape
+# every tool of this kind uses: RollOps RolloutConfig, Argo CD Application with
+# inline manifests, a Helm template rendered into a ConfigMap, a Flux patch.
+EMBED_WRAPPER = [
+    "apiVersion: metamorphic.test/v1",
+    "kind: EmbeddedManifest",
+    "metadata:",
+    "  name: embedded",
+    "spec:",
+    "  manifest: |",
+]
+EMBED_INDENT = "    "
+
+
+def _is_k8s_manifest(lines, filename):
+    _, ext = os.path.splitext(filename)
+    if ext not in (".yaml", ".yml"):
+        return False
+    text = "\n".join(lines)
+    return "apiVersion:" in text and "kind:" in text
+
+
+def mut_embed_in_block_scalar(lines, filename):
+    """Wrap a Kubernetes manifest in a YAML block scalar.
+
+    Semantics-preserving for the purposes of this relation: the workload being
+    described is identical, so every rule that fired on it standing alone must
+    still fire on it embedded.
+
+    This is the relation that would have caught the block-scalar blind spot
+    (#576), where absence rules bounded to a YAML document never looked inside
+    the string and silently reported nothing — while pattern rules, being plain
+    regexes over the file, carried on matching. Half the ruleset evaluated, and
+    no signal that the other half had not.
+    """
+    if not _is_k8s_manifest(lines, filename):
+        return []
+    edits = [{"op": "insert", "pos": 0, "text": w} for w in EMBED_WRAPPER]
+    edits += [{"op": "replace", "idx": i, "text": EMBED_INDENT + ln if ln.strip() else ln}
+              for i, ln in enumerate(lines)]
+    return [("embed_in_block_scalar", edits)]
+
+
 MUTATIONS = [
     mut_blank_line_top,
     mut_blank_line_bottom,
@@ -322,6 +366,7 @@ MUTATIONS = [
     mut_crlf,
     mut_pad_before_trailing_comment,
     mut_keyword_comments,
+    mut_embed_in_block_scalar,
 ]
 
 
