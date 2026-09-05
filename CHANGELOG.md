@@ -5,6 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Ten changes, eight of them defects nox found in itself. The theme is one shape:
+a check that never ran, reported identically to a check that passed.
+
+The largest is recall. IaC absence rules could not see a Kubernetes manifest
+embedded in a YAML block scalar — the block's contents are a string *value* of
+the outer document, not a document — while pattern rules, being regexes over
+the file, carried on matching. Half the ruleset evaluated, and nothing in the
+output said the other half had not. Every workload deployed through a wrapper
+that embeds its manifest (RollOps `RolloutConfig`, Argo CD `Application` with
+inline manifests, a Helm template rendered into a ConfigMap, a Flux patch) had
+its hardening checks silently skipped while the scan reported clean. On three
+real repositories that deploy this way, 57 findings appear that no scan had
+ever reported: missing PodDisruptionBudgets, absent pod anti-affinity, missing
+liveness and readiness probes.
+
+Dependency applicability stops being Go-only. npm, PyPI, Cargo, pub and
+RubyGems now climb the ladder from `affected_version` to `symbol_used` when the
+workspace imports the vulnerable package. It only ever climbs: a package is
+frequently reached *through* a dependency, which parsing the repository's own
+files cannot see, so a negative answer establishes nothing and never refutes.
+
+Three findings came from nox failing its own gate on an unrelated pull request.
+
+### Added
+
+- Dependency applicability for npm, PyPI, Cargo, pub and RubyGems
+  (`core/depimports`), climbing-only by design. Maven, NuGet, Packagist and Hex
+  are deliberately excluded: their imports name a namespace the manifest does
+  not carry, so a match would be a guess.
+- IaC absence rules evaluate Kubernetes manifests embedded in YAML block
+  scalars. Only the absence rules are re-run over an extracted document —
+  pattern rules already match inside the block, so running them again would
+  double-report — and a dedupe keyed on (rule, line) covers the absence rules
+  whose anchors already reached inside.
+- A metamorphic relation, `embed_in_block_scalar`: wrapping a Kubernetes
+  manifest in a block scalar must not change which rules fire. It reports nine
+  violations against 1.33.0 and none against this release, and now runs on every
+  pull request and in the weekly corpus audit against every rule.
+- `nox plugin call` accepts typed arguments: `key:=<json>` sends a bool, number,
+  null, array or object. `key=` still sends a string unconditionally, so nothing
+  that works today changes meaning.
+- A scan reports a required plugin it cannot invoke. A plugin whose tools are
+  neither named `scan` nor declare `requires_scan_context` was loaded, counted
+  as registered, and never called — indistinguishable from a detector that ran
+  and found nothing. `nox/red-team` and `nox/grc` are both in that position.
+- The plugin invocation contract is documented in `docs/plugin-authoring.md`.
+  It existed only in `cli/plugin_scan.go` and `plugin/host.go`, and two
+  published plugins were built without it.
+
+### Fixed
+
+- `IAC-464` matched the word `namespace` rather than the Namespace kind. Built
+  on a dotall, case-insensitive prefix, it fired on the `namespace:` field that
+  nearly every namespaced manifest carries: a ConfigMap declaring
+  `namespace: example` was reported as "K8s Namespace defined". On a real
+  Kubernetes repository this is 9 findings to 1, and the medium-severity total
+  57 to 48. Severity drops to Info, which is what the description always said.
+- `IAC-374` retires into `IAC-360`. The two declared a byte-identical pattern
+  and description, so one `restartPolicy: Never` reported twice. The alias keeps
+  waivers written against `IAC-374` matching.
+- `rules.go` and `rules_expanded.go` share one conversion. Each had its own, and
+  the second silently omitted `retires`, `extraMetadata` and the whole absence
+  block — so a retirement declared in that file compiled, passed the dedup
+  test's validation, and was then dropped on the way to the engine, un-waiving
+  findings in every consuming repository.
+- `plugin_policy` is a key nox recognises. The strict-config check decoded
+  against `core.ScanConfig` while the schema lived in package `plugin`, so every
+  scan using it reported the key as unrecognised over an impact line reading
+  "they are ignored" — advice that, followed, would delete a sandbox boundary
+  the operator had deliberately set.
+- `nox plugin call --input` is honoured after the positional arguments, where
+  the usage string says to put it. `flag.Parse` stops at the first non-flag
+  argument, so it fell through to the key=value loop, was accepted as a key
+  named `--input`, and the tool ran with no input at all. A `-`-prefixed
+  argument that is not a known flag is now an error rather than a tool argument.
+- A `nox:ignore` directive inside a markdown inline code span is documentation,
+  as it already was inside a fenced block.
+
+### Changed
+
+- Rule counts drop by one: 490 to 489 IaC rules, 226 to 225 expanded, 1535 to
+  1534 in the catalog. Coverage is unchanged — the retired condition is still
+  reported, once.
+- `TestStartBinary_TokenRoundTrip` no longer asserts a 10-second cold start.
+  Production allows 30 seconds by fallback and one to five minutes by track, so
+  the test failed on a constraint no caller imposes — and only under
+  `-count=1`, which is what the pre-push gate runs.
+
 ## [1.33.0] - 2026-09-02
 
 NOX Intelligence becomes the default advisory source. Every online `nox scan`
