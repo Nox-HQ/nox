@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.34.0] - 2026-09-05
 
 Ten changes, eight of them defects nox found in itself. The theme is one shape:
 a check that never ran, reported identically to a check that passed.
@@ -3303,7 +3303,8 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.33.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.34.0...HEAD
+[1.34.0]: https://github.com/nox-hq/nox/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/nox-hq/nox/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/nox-hq/nox/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/nox-hq/nox/compare/v1.30.1...v1.31.0
