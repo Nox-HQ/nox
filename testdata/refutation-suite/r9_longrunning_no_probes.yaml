@@ -12,13 +12,16 @@
 # no way to tell a wedged process from a healthy one, and the service will keep
 # routing to a container that stopped serving.
 #
+# IAC-183 and IAC-286 were annotated here until #590 retired them into IAC-132
+# and IAC-131; Gate A required that removal to be deliberate.
+#
 # The wrong reasoning it catches is the narrowing generalizing from the kind to
 # the shape. The container below runs a command that LOOKS one-shot — a
 # `--once` flag, no server subcommand — and a refiner reading intent out of the
 # command line rather than the workload kind would exempt it. The workload kind
 # is the fact; the command line is a guess.
 apiVersion: apps/v1
-kind: Deployment  # nox-expect: IAC-139, IAC-140, IAC-131, IAC-183, IAC-286, IAC-132, IAC-142
+kind: Deployment  # nox-expect: IAC-139, IAC-140, IAC-131, IAC-132, IAC-142
 metadata:
   name: session-gateway
   namespace: prod

@@ -176,14 +176,15 @@
     {
       "corpus": "refutation-suite",
       "scored": true,
-      "tp": 27,
+      "tp": 23,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0,
       "guard": "cli.TestRefutationSuiteRecall + cli.TestRefutationBranchCoverage",
       "gate": "A",
-      "branches": 11
+      "branches": 11,
+      "note": "27 -> 23: IAC-183 and IAC-286 annotations removed when the duplicates were retired; Gate A required that removal to be deliberate"
     },
     {
       "corpus": "refutation-hard",
@@ -216,7 +217,7 @@
   },
   "rule_families": {
     "SEC": 913,
-    "IAC": 500,
+    "IAC": 497,
     "AI": 50,
     "CWE": 44,
     "MCP": 21,
@@ -234,7 +235,7 @@
     "CONT": 2,
     "AGENTFLOW": 2,
     "MEMSAFE": 1,
-    "_total_distinct": 1600,
+    "_total_distinct": 1597,
     "_note": "grep over core/analyzers and core/rules for quoted IDs; a handful of the small families are test fixtures"
   },
   "latency_ms": {
