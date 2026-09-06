@@ -59,8 +59,8 @@ A second north-star question joins the first:
 | Milestone | Exit criterion | State on 2026-09-06 |
 |---|---|---|
 | **0.1** Current-state baseline | one authoritative baseline exists | **done** — `docs/benchmarks/2026-09` |
-| **0.2** Refutation corpus | a deliberately wrong refutation fails CI | **partly done** — Gate A covers refiners, not rule narrowing |
-| **0.3** Semantic corpus coverage | removing the only fixture for a branch fails coverage | open |
+| **0.2** Refutation corpus | a deliberately wrong refutation fails CI | **done** — 27 cases over 11 branches, refiners *and* rule narrowing |
+| **0.3** Semantic corpus coverage | removing the only fixture for a branch fails coverage | **done** — `bench.RefutationBranches`, 16 branches, `TestRefutationBranchCoverage` |
 | **0.4** Negative-delta accountability | unexplained narrowing is rejected or reviewed | open |
 | **0.5** Path-coherence validation | no rule loads with behaviourally inert mandatory fields | open |
 
@@ -81,18 +81,29 @@ that scored them are unchanged — the engine moved, not the ground truth.
 `testdata/refutation-hard` (5 cases that must never reach `PREVENTED`), and
 `testdata/reachability-suite` (Gate B, exactly one suppressible case).
 
-**The gap.** Every case guards a *refiner*. None guards a *rule* narrowed by
-its own applicability conditions, and there is no IaC case at all. Three rule
-narrowings merged in the week before the baseline; Gate A could not have caught
-any of them, and the rule-diff corpus could not witness two of them. Rule-level
-narrowing is where refutation actually ships today, and it is the branch with
-no instrumentation.
+**The gap, and its closure.** Every case used to guard a *refiner*. None
+guarded a *rule* narrowed by its own applicability conditions, and there was no
+IaC case at all — so #582, #583 and #585 each removed real findings with
+nothing able to catch an over-narrowing. Milestone 0.3 added four rule-level
+fixtures (`r8`–`r11`) covering the replica precondition, the workload-kind
+narrowing, the kinds that stay governed, and the pipeline quoting producer.
+The suite is 27 cases over 11 branches; `refutation-hard` contributes 5 more.
 
 ### 0.3 — Semantic corpus coverage
 
-Corpus metadata asserts what is exercised: resource kind, language, rule
-family, matcher path, proposition, refutation branch. Removing the only fixture
-for a branch makes coverage fail rather than pass silently.
+Corpus metadata asserts what is exercised: rule family, matcher path,
+proposition, refutation branch, and the wrong reasoning the fixture catches.
+
+The universe of branches lives in `core/bench.RefutationBranches` — in code,
+where deleting a testdata file cannot reach it — and each fixture claims one
+with a `nox-cover:` annotation. `TestRefutationBranchCoverage` fails when a
+registered branch has no witness, when a claim names an unregistered branch,
+and when a fixture sits in a corpus other than the one its branch declares. An
+empty registry is an error rather than a pass.
+
+**Falsified, not asserted:** deleting `r11_pipeline_unquoted.sh` leaves
+`TestRefutationSuiteRecall` passing at 1.000 and fails coverage naming
+`sanitizer-pipeline-producer`. That difference is the whole milestone.
 
 ### 0.4 — Negative-delta accountability
 

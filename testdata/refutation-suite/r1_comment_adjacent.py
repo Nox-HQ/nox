@@ -1,4 +1,5 @@
 # Guards: lexical-context refinement (Track E1).
+# nox-cover: lexical-context
 #
 # nox already drops rule matches that land inside comments — core/lexctx
 # classifies comment and string regions, and secrets/srccontext.go uses it to

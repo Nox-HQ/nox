@@ -1,4 +1,5 @@
 // Guards: generated-code suppression (Track E1).
+// nox-cover: generated-code
 //
 // nox skips machine-generated files — clean_generated.go in the precision
 // suite pins that behaviour, and it is worth keeping: generated code is not

@@ -74,9 +74,15 @@ This is the half the roadmap adds, and the half nothing else watches.
 
 | Corpus | Cases | Result | Guard | Gate |
 |---|---:|---|---|---|
-| `refutation-suite` | 10 | 10 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` | A |
-| `refutation-hard` | 5 | not precision-scored by design | — | A |
+| `refutation-suite` | 27 | 27 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
+| `refutation-hard` | 5 | not precision-scored by design | `TestRefutationBranchCoverage` | A |
 | `reachability-suite` | 5 | 1 case may suppress, by name | `TestGateB` | B |
+
+**Branch coverage: 16 of 16 registered refutation branches witnessed**
+(`core/bench.RefutationBranches`). Milestone 0.3 added the registry, four
+rule-level fixtures, and a gate that fails when the last fixture for a branch
+is deleted — a deletion recall alone cannot see, because it removes the
+expectations along with the sample.
 
 `refutation-hard` and `reachability-suite` are deliberately **not** scored for
 fire-rate: a finding in `refutation-hard` is neither a true nor a false
@@ -121,7 +127,11 @@ as flow identity spreads beyond `core/attack`.
 Recorded explicitly, because a baseline whose gaps are unstated reads as
 completeness:
 
-1. **Rule-level narrowing has no refutation corpus.** Every case in
+1. ~~**Rule-level narrowing has no refutation corpus.**~~ **Closed by
+   Milestone 0.3** — `absence-subject-precondition`, `absence-resource-kind`,
+   `absence-kind-still-governed` and `sanitizer-pipeline-producer` are now
+   registered branches with fixtures. The original text follows, because it is
+   the argument that produced them. Every case in
    `refutation-suite` guards a *refiner* — lexical context, constant analysis,
    sanitizer recognition, flow identity, wrapper reachability, value semantics.
    None guards a *rule* being narrowed by its own applicability conditions, and

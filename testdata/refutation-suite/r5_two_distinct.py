@@ -1,4 +1,5 @@
 # Guards: flow identity and structural deduplication (Track F).
+# nox-cover: flow-identity
 #
 # Track F merges observations that describe one underlying condition: a source,
 # its propagation and its sink are one security hypothesis, not three

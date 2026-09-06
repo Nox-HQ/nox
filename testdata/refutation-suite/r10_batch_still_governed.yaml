@@ -1,0 +1,32 @@
+# Guards: absence-kind-still-governed (IAC-137, IAC-138, IAC-145; PR #583).
+# nox-cover: absence-kind-still-governed
+#
+# The companion to r9. #583 narrowed IAC-139 and IAC-140 off batch workloads,
+# and deliberately left IAC-137, IAC-138 and IAC-145 applying to them: resource
+# limits, resource requests and a security context are as necessary on a
+# CronJob as on a Deployment. A job that runs unbounded can exhaust a node, and
+# one that runs as root has root for as long as it runs.
+#
+# The wrong reasoning it catches is the step from "some rules do not apply to
+# this kind" to "this kind is exempt". That step is cheap to take — the
+# resource-type list is one shared field, and dropping a kind from it once
+# looks like a tidy-up — and it silently removes every hardening check from
+# every scheduled job in a cluster.
+#
+# This CronJob declares no limits, no requests and no security context. It also
+# declares no timeZone, which IAC-379 reports separately and correctly.
+apiVersion: batch/v1
+kind: CronJob  # nox-expect: IAC-137, IAC-138, IAC-145
+metadata:
+  name: ledger-reconcile
+  namespace: prod
+spec:
+  schedule: "*/15 * * * *"  # nox-expect: IAC-379
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: reconcile
+              image: registry.internal/ledger-reconcile@sha256:2222222222222222222222222222222222222222222222222222222222222222

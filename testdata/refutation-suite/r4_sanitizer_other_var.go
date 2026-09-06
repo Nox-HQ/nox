@@ -1,4 +1,5 @@
 // Guards: same-line and nearby sanitizer recognition (Track E / taint).
+// nox-cover: sanitizer-recognition
 //
 // Recognising a sanitizer is how a taint engine avoids reporting code that is
 // already safe, and the triage-agent history shows why it is tempting to do it

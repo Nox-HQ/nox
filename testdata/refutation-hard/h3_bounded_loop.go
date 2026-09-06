@@ -1,3 +1,4 @@
+// nox-cover: unmodelled-bounded-loop
 // Bounded analysis. The tainted value only reaches the sink after the eighth
 // iteration, so an analysis that unrolls to a small bound sees a clean pass.
 package hard

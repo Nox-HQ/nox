@@ -29,3 +29,9 @@ enforces at construction.
 These are not scored for precision. A finding here is neither a true nor a false
 positive; what is being measured is whether nox ever states a NEGATIVE it has
 not earned.
+
+Each case carries a `nox-cover:` annotation naming the branch it witnesses, and
+`bench.RefutationBranches` registers all five. Deleting one of these files
+leaves its branch registered and unwitnessed, and
+`TestRefutationBranchCoverage` fails naming it — which matters more here than
+anywhere else, because this corpus has no recall number to drop.

@@ -1,0 +1,61 @@
+# Guards: absence-subject-precondition (IAC-132, IAC-142; PR #582).
+# nox-cover: absence-subject-precondition
+#
+# #582 gave IAC-132 and IAC-142 a subject precondition: a disruption budget and
+# pod anti-affinity are meaningless on a workload that runs one replica,
+# because a single-replica Deployment has no availability to preserve. That
+# narrowing was correct and removed 65 findings.
+#
+# This is the other side of it. THREE replicas is exactly the shape the rules
+# were written for: a node drain can take every pod at once, and this workload
+# declares neither a budget nor anti-affinity.
+#
+# The wrong reasoning it catches is a precondition that keeps widening. Read
+# spec.replicas from the wrong nesting level, raise the floor from 2 to some
+# larger number, or answer "unreadable" as "exempt" rather than "report", and a
+# genuinely replicated production workload silently stops being checked — while
+# the rule-diff report shows a pleasing drop and the precision suite improves.
+#
+# The remaining annotated rules are advisories that fire on any workload of
+# this shape and are unrelated to the precondition; they are listed so the file
+# scores zero false positives. IAC-183 is NOT a second condition: it is a
+# duplicate of IAC-132 that never received the precondition, and it is pinned
+# here deliberately so that removing it can be measured rather than asserted.
+# See the suite README.
+#
+# This header says "budget" rather than spelling the resource kind, because an
+# IaC rule currently matches its keyword inside a YAML comment. That is a real
+# gap in lexical refinement on the IaC path and it is filed; it is not what
+# this fixture is for, and encoding it here would make the corpus assert it.
+apiVersion: apps/v1
+kind: Deployment  # nox-expect: IAC-132, IAC-142, IAC-131, IAC-183, IAC-286
+metadata:
+  name: payments-api
+  namespace: prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      containers:
+        - name: api
+          image: registry.internal/payments-api@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          resources:
+            limits: { cpu: "1", memory: 512Mi }
+            requests: { cpu: 100m, memory: 128Mi }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+          readinessProbe:
+            httpGet: { path: /ready, port: 8080 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop: [ALL]
