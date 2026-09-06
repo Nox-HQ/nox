@@ -74,9 +74,14 @@ This is the half the roadmap adds, and the half nothing else watches.
 
 | Corpus | Cases | Result | Guard | Gate |
 |---|---:|---|---|---|
-| `refutation-suite` | 27 | 27 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
+| `refutation-suite` | 23 | 23 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
 | `refutation-hard` | 5 | not precision-scored by design | `TestRefutationBranchCoverage` | A |
 | `reachability-suite` | 5 | 1 case may suppress, by name | `TestGateB` | B |
+
+The suite went 27 → 23 when IAC-183 and IAC-286 were retired: Gate A failed
+with *"4 real vulnerabilities are no longer reported"* until those annotations
+were removed in the same commit as the rule change. A duplicate ID cannot leave
+the corpus by accident.
 
 **Branch coverage: 16 of 16 registered refutation branches witnessed**
 (`core/bench.RefutationBranches`). Milestone 0.3 added the registry, four

@@ -47,8 +47,15 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// byte-identical pattern and description, so one `restartPolicy: Never`
 	// reported twice. The alias on IAC-360 keeps waivers written against
 	// IAC-374 matching, so the drop is in rule COUNT only, not in coverage.
-	if got := len(cat); got != 1534 {
-		t.Errorf("Catalog() returned %d rules, want 1534", got)
+	// 1534 -> 1531 retired three Kubernetes duplicates: IAC-183 into IAC-132
+	// (byte-identical absence configuration; IAC-183 also lacked the subject
+	// precondition, so it re-reported what IAC-132 refuted), IAC-176 into
+	// IAC-145 (same missing securityContext, from the weaker text path), and
+	// IAC-286 into IAC-131 (same NetworkPolicy advisory, same kinds, same file
+	// patterns). Each survivor carries the alias, so the drop is in rule COUNT
+	// only, not in coverage.
+	if got := len(cat); got != 1531 {
+		t.Errorf("Catalog() returned %d rules, want 1531", got)
 	}
 }
 

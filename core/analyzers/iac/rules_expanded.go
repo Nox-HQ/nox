@@ -241,17 +241,14 @@ func builtinExpandedIaCRules() []rules.Rule {
 		// =================================================================
 		// Kubernetes Advanced (IAC-286 to IAC-305)
 		// =================================================================
-		{
-			id: "IAC-286", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)kind:\s*(?:Deployment|StatefulSet|DaemonSet)`,
-			description:  "K8s workload (verify NetworkPolicy exists)",
-			cwe:          "CWE-693",
-			keywords:     []string{"Deployment", "StatefulSet", "DaemonSet"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "network"},
-			remediation:  "Define NetworkPolicy resources to restrict ingress and egress traffic for workloads. Without NetworkPolicies, pods can communicate with any other pod in the cluster.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-286 retired into IAC-131, which carries the same advisory —
+		// "this is a workload; verify a NetworkPolicy exists" — over the same
+		// three kinds, the same two file patterns, and a pattern that differs
+		// only by tolerating a space before the colon. Every workload manifest
+		// in every repo reported it twice, once at medium and once at low.
+		//
+		// IAC-131's `retires` carries the alias that keeps waivers written
+		// against IAC-286 matching.
 		// IAC-287 retired into IAC-030, which already reported this condition.
 		// IAC-030's `retires` carries the alias that keeps waivers written
 		// against IAC-287 matching.

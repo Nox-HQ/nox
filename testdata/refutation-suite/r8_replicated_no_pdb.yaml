@@ -16,19 +16,23 @@
 # genuinely replicated production workload silently stops being checked — while
 # the rule-diff report shows a pleasing drop and the precision suite improves.
 #
-# The remaining annotated rules are advisories that fire on any workload of
-# this shape and are unrelated to the precondition; they are listed so the file
-# scores zero false positives. IAC-183 is NOT a second condition: it is a
-# duplicate of IAC-132 that never received the precondition, and it is pinned
-# here deliberately so that removing it can be measured rather than asserted.
-# See the suite README.
+# The remaining annotated rule (IAC-131) is an advisory that fires on any
+# workload of this shape and is unrelated to the precondition; it is listed so
+# the file scores zero false positives.
+#
+# This file previously also annotated IAC-183 and IAC-286, the duplicates of
+# IAC-132 and IAC-131. Both were retired in #590, and Gate A caught the change:
+# TestRefutationSuiteRecall failed with "4 real vulnerabilities are no longer
+# reported" until these two annotations were removed deliberately, in the same
+# commit as the rule change. That is the mechanism working — a duplicate ID
+# cannot leave the corpus by accident.
 #
 # This header says "budget" rather than spelling the resource kind, because an
 # IaC rule currently matches its keyword inside a YAML comment. That is a real
 # gap in lexical refinement on the IaC path and it is filed; it is not what
 # this fixture is for, and encoding it here would make the corpus assert it.
 apiVersion: apps/v1
-kind: Deployment  # nox-expect: IAC-132, IAC-142, IAC-131, IAC-183, IAC-286
+kind: Deployment  # nox-expect: IAC-132, IAC-142, IAC-131
 metadata:
   name: payments-api
   namespace: prod

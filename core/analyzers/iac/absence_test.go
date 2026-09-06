@@ -221,11 +221,12 @@ func TestAbsenceRules_HardenedCleanInsecureFlagged(t *testing.T) {
 			hardened: "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: web\nspec:\n  tls:\n    - hosts: [web]\n",
 			insecure: "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: web\nspec:\n  rules:\n    - host: web\n",
 		},
-		{
-			id: "IAC-176", path: "deploy.yaml",
-			hardened: "apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n    spec:\n      securityContext:\n        runAsNonRoot: true\n",
-			insecure: "apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n    spec:\n      containers: []\n",
-		},
+		// IAC-176's entry was removed with the rule: it was retired into
+		// IAC-145, whose own entry is above. Verified before removing, not
+		// after — IAC-145 fires on the exact insecure fixture IAC-176 carried
+		// here ("kind: Deployment" with an empty containers list and no
+		// securityContext anywhere), so the condition is still asserted and
+		// only the duplicate ID is gone.
 
 		// ---- Terraform backend / misc (brace-block / line span, HCL) ----
 		{

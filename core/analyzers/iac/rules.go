@@ -1610,6 +1610,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		{
 			id: "IAC-131", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
 			pattern:     `(?i)kind\s*:\s*Deployment|kind\s*:\s*StatefulSet|kind\s*:\s*DaemonSet`,
+			retires:     []rules.RetiredRule{{ID: "IAC-286", Pattern: `(?i)kind:\s*(?:Deployment|StatefulSet|DaemonSet)`}},
 			description: "Kubernetes workload detected - verify NetworkPolicy exists",
 			cwe:         "CWE-284", keywords: []string{"Deployment", "StatefulSet", "DaemonSet", "NetworkPolicy"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -1626,6 +1627,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			// the text form cannot see: one PodDisruptionBudget anywhere in the
 			// file silences the rule for every workload in it, selected or not.
 			absenceResourceTypes:  []string{"Deployment", "StatefulSet"},
+			retires:               []rules.RetiredRule{{ID: "IAC-183", Pattern: `(?i)kind\s*:\s*(Deployment|StatefulSet)`}},
 			absenceCompanionTypes: []string{"PodDisruptionBudget"},
 			absenceCompanionLink:  "selector",
 			// Only when there is more than one replica to protect.
@@ -1843,6 +1845,7 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceResourceTypes: []string{"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Pod"},
 			absencePropertyPath:  []string{"spec.template.spec.securityContext", "spec.securityContext", "spec.template.spec.containers[].securityContext", "spec.containers[].securityContext", "spec.jobTemplate.spec.template.spec.containers[].securityContext"},
 			absenceRequireAll:    true,
+			retires:              []rules.RetiredRule{{ID: "IAC-176", Pattern: `(?i)kind\s*:\s*Deployment`}},
 			description:          "Kubernetes pod without security context",
 			cwe:                  "CWE-250", keywords: []string{"securityContext"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -2190,18 +2193,18 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		// Helm / Docker Compose expansions (IAC-176 to IAC-185)
 		// =================================================================
-		{
-			id: "IAC-176", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?i)kind\s*:\s*Deployment`,
-			absenceProperty: `(?i)securityContext`,
-			absenceSpan:     "yaml-doc",
-			description:     "Helm chart template missing securityContext",
-			cwe:             "CWE-250", keywords: []string{"securityContext", "template"},
-			filePatterns: []string{"*.yaml", "*.yml", "*.tpl"},
-			tags:         []string{"iac", "helm", "privilege"},
-			remediation:  "Include securityContext in Helm chart deployment templates. Set runAsNonRoot: true, readOnlyRootFilesystem: true, and drop ALL capabilities as defaults.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
-		},
+		// IAC-176 retired into IAC-145, which reports the same missing
+		// securityContext from the structural path across seven workload kinds
+		// with absence_require_all, where IAC-176 searched one YAML document
+		// for the word and only on `kind: Deployment`.
+		//
+		// IAC-176 was therefore strictly weaker where they overlapped: a
+		// Deployment whose second container omits securityContext satisfies
+		// IAC-176 (the word appears in the document) and is correctly reported
+		// by IAC-145. It called itself a Helm rule while matching every *.yaml.
+		//
+		// IAC-145's `retires` carries the alias that keeps waivers written
+		// against IAC-176 matching.
 		{
 			id: "IAC-177", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
 			pattern:     `(?i)resources\s*:\s*\{\s*\}|resources\s*:\s*\n\s+#|resources\s*:\s*null`,
@@ -2262,18 +2265,21 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Add healthcheck to Compose services to enable automatic restart of unhealthy containers and proper dependency ordering with depends_on condition: service_healthy.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-183", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:   `(?i)kind\s*:\s*(Deployment|StatefulSet)`,
-			absenceProperty: `(?i)PodDisruptionBudget`,
-			absenceSpan:     "file",
-			description:     "Helm chart without PodDisruptionBudget template",
-			cwe:             "CWE-693", keywords: []string{"PodDisruptionBudget"},
-			filePatterns: []string{"*.yaml", "*.yml", "*.tpl"},
-			tags:         []string{"iac", "helm", "availability"},
-			remediation:  "Include a PodDisruptionBudget template in Helm charts to ensure minimum availability during voluntary disruptions like node upgrades and cluster autoscaling.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-183 retired into IAC-132, which reported the same condition from
+		// a byte-identical absence configuration — same anchor, same property,
+		// absence_span: file. It called itself a Helm rule and matched every
+		// *.yaml, Helm or not.
+		//
+		// Keeping both cost more than a duplicate line. #582 gave IAC-132 a
+		// subject precondition (a disruption budget is meaningless on a
+		// single-replica workload) and the structural path; IAC-183 received
+		// neither, so it went on reporting exactly what IAC-132 had just
+		// refuted. The 65 findings that change removed were removed under one
+		// ID and still reported under the other, and rule-diff read
+		// `IAC-132: 29 -> 16` against an IAC-183 that never moved.
+		//
+		// IAC-132's `retires` carries the alias that keeps waivers written
+		// against IAC-183 matching.
 		{
 			id: "IAC-184", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)user\s*:\s*["']?(root|0)["']?\s*$`,
