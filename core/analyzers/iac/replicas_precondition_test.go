@@ -58,4 +58,7 @@ func TestMultiReplicaHardeningStillDiscriminates(t *testing.T) {
 	if ruleFires(t, "deploy.yaml", hardened, "IAC-142") {
 		t.Error("IAC-142 fired on a Deployment that has podAntiAffinity")
 	}
+	if ruleFires(t, "deploy.yaml", hardened, "IAC-132") {
+		t.Error("IAC-132 fired on a Deployment that has a PodDisruptionBudget")
+	}
 }
