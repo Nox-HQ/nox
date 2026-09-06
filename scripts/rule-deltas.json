@@ -1,0 +1,70 @@
+{
+  "_why": [
+    "Milestone 0.4. rule-diff.sh reports every per-rule count change between the",
+    "last release and this build. Reporting is not accountability: a drop and a",
+    "correct narrowing look identical in that output, and the only thing telling",
+    "them apart was whoever happened to read the job summary.",
+    "",
+    "This file is the other half. Every rule whose count DROPS must have an entry",
+    "here saying why. An unexplained drop fails the job; so does an entry that no",
+    "longer describes a real drop, because a ledger nothing validates rots into",
+    "decoration.",
+    "",
+    "The baseline is the last released nox, so entries accumulate between releases",
+    "and are cleared when one is cut. `nox_release` records which release they are",
+    "written against: if it does not match the tag rule-diff resolved, the ledger",
+    "is stale as a whole and says so rather than silently passing."
+  ],
+  "nox_release": "v1.34.0",
+  "classifications": {
+    "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
+    "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
+    "sanitizer-recognized": "the value reaching the sink is neutralized for this vulnerability class",
+    "refined-away": "a cheaper semantic fact refutes the candidate the pattern generated",
+    "rule-removed": "the rule was deleted outright; no survivor reports the condition"
+  },
+  "entries": [
+    {
+      "rule": "IAC-132",
+      "classification": "applicability-narrowed",
+      "pr": 582,
+      "reason": "A PodDisruptionBudget is meaningless on a workload that runs one replica: there is no availability to preserve. absence_subject_min_int on spec.replicas exempts single-replica Deployments and StatefulSets. An unreadable replicas value reports rather than exempts."
+    },
+    {
+      "rule": "IAC-142",
+      "classification": "applicability-narrowed",
+      "pr": 582,
+      "reason": "Pod anti-affinity spreads replicas across nodes. With one replica there is nothing to spread, so the same precondition applies as IAC-132."
+    },
+    {
+      "rule": "IAC-139",
+      "classification": "applicability-narrowed",
+      "pr": 583,
+      "reason": "A liveness probe restarts a container the kubelet believes is wedged. A Job or CronJob container is meant to run to completion and exit, so the probe restarts work that finished correctly. Narrowed to Deployment, StatefulSet, DaemonSet, ReplicaSet and Pod."
+    },
+    {
+      "rule": "IAC-140",
+      "classification": "applicability-narrowed",
+      "pr": 583,
+      "reason": "A readiness probe gates traffic to a container. Batch workloads receive none, so the probe gates nothing. Same workload kinds as IAC-139."
+    },
+    {
+      "rule": "IAC-183",
+      "classification": "duplicate-retired",
+      "pr": 591,
+      "reason": "Byte-identical absence configuration to IAC-132 — same anchor, same property, absence_span: file — without the subject precondition, so it re-reported exactly what IAC-132 refuted. Retired into IAC-132, which carries the alias. 17 of the removals across the corpus were HorizontalPodAutoscaler documents where the bare kind regex matched spec.scaleTargetRef; the rest were the single-replica workloads #582 exempted."
+    },
+    {
+      "rule": "IAC-176",
+      "classification": "duplicate-retired",
+      "pr": 591,
+      "reason": "Reported the same missing securityContext as IAC-145 from the weaker text path: one YAML document searched for the word, only on kind: Deployment. IAC-145 resolves seven workload kinds structurally with absence_require_all. Retired into IAC-145, which carries the alias. Every removal measured on podinfo was a HorizontalPodAutoscaler."
+    },
+    {
+      "rule": "IAC-286",
+      "classification": "duplicate-retired",
+      "pr": 591,
+      "reason": "The same NetworkPolicy advisory as IAC-131 over the same three kinds and the same file patterns, differing only by tolerating a space before the colon. Every workload manifest reported it twice. Retired into IAC-131, which carries the alias; per-file overlap on podinfo was 21 of 21, so nothing was removed that IAC-131 does not still report."
+    }
+  ]
+}

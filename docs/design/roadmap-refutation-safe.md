@@ -59,9 +59,9 @@ A second north-star question joins the first:
 | Milestone | Exit criterion | State on 2026-09-06 |
 |---|---|---|
 | **0.1** Current-state baseline | one authoritative baseline exists | **done** — `docs/benchmarks/2026-09` |
-| **0.2** Refutation corpus | a deliberately wrong refutation fails CI | **done** — 27 cases over 11 branches, refiners *and* rule narrowing |
+| **0.2** Refutation corpus | a deliberately wrong refutation fails CI | **done** — 23 cases over 11 branches, refiners *and* rule narrowing |
 | **0.3** Semantic corpus coverage | removing the only fixture for a branch fails coverage | **done** — `bench.RefutationBranches`, 16 branches, `TestRefutationBranchCoverage` |
-| **0.4** Negative-delta accountability | unexplained narrowing is rejected or reviewed | open |
+| **0.4** Negative-delta accountability | unexplained narrowing is rejected or reviewed | **done** — `scripts/rule-deltas.json`; rule-diff exits 3 and fails the job |
 | **0.5** Path-coherence validation | no rule loads with behaviourally inert mandatory fields | open |
 
 ### 0.1 — Current-state baseline
@@ -107,10 +107,36 @@ empty registry is an error rather than a pass.
 
 ### 0.4 — Negative-delta accountability
 
-`scripts/rule-diff.sh` already reports per-rule before/after counts across ten
-pinned repos. It exits 1 as a `::notice` — a report, not a gate. Every removed
-finding gains a recorded reason; unexplained narrowing is rejected or
-explicitly reviewed.
+`scripts/rule-diff.sh` reported per-rule before/after counts across ten pinned
+repos and exited 1 as a `::notice`. Reporting is not accountability: a drop and
+a correct narrowing print identically, so the answer to "is that right?" was
+whatever the reader assumed.
+
+`scripts/rule-deltas.json` is the other half. Every rule whose count **falls**
+needs an entry with a classification from a fixed vocabulary and a reason.
+Rising counts stay reported and ungated — a new false positive is visible in
+the output and costs nobody a vulnerability.
+
+Four ways the harness now fails (exit 3, and the job goes red):
+
+1. a rule dropped findings with no entry;
+2. an entry describes a drop that no longer happens — checked only on a full
+   run of the committed corpus, because a reduced corpus or a skipped repo is
+   missing evidence rather than a stale reason;
+3. an entry has no reason, or names a classification nobody defined;
+4. the ledger's `nox_release` disagrees with the baseline the harness resolved,
+   which means a release was cut and the entries it explained were never
+   cleared.
+
+**Falsified, not asserted.** All five paths were exercised against the real
+`v1.34.0` baseline: the committed ledger passes at exit 1 with seven accounted
+deltas, and deleting an entry, corrupting one, mis-declaring the release, and
+adding a phantom each produce exit 3 naming the rule.
+
+One flaw surfaced while testing and was fixed rather than lived with. The
+stale-entry check is corpus-dependent, so on a reduced corpus every entry whose
+witnessing repo was left out looked stale. It is an error only on a full
+committed-corpus run with nothing skipped, and a warning otherwise.
 
 ### 0.5 — Path-coherence validation
 
