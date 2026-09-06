@@ -14,6 +14,12 @@
     "corpus' after an IAC change was a pass by absence of coverage rather than a",
     "verification. A gate that cannot see a family cannot clear it.",
     "",
+    "kubernetes/examples carries no Job and no CronJob, so it could not witness",
+    "IAC-139/140 being narrowed off batch workloads -- the diff came back green on a",
+    "change it was structurally unable to see. podinfo was added for exactly that",
+    "branch: 4 CronJobs and a Job, and it moved IAC-139 13 -> 9 and IAC-140 13 -> 9",
+    "on the commit that narrowed them.",
+    "",
     "Still uncovered: Azure ARM templates (IAC-084/086 and the ARM property rules)",
     "and Terraform. Those families remain verified only by testdata/precision-suite",
     "and the analyzer tests -- a green rule diff says nothing about them. The same",
@@ -76,6 +82,12 @@
       "url": "https://github.com/kubernetes/examples",
       "sha": "d6b8cd27eacb51e651a1aa6f7c190a28713eff6e",
       "why": "Kubernetes manifests -- 75 rules fire, the widest IAC coverage in the corpus, including the structural property-path rules (IAC-137/138/139/140/145). It carries 30 workloads but only ONE PodDisruptionBudget and no ResourceQuota, so it controls the 'no companion declared anywhere' branch of the cross-resource rules and NOT the linkage branch -- aws-cloudformation-templates covers that. Scans in 0.7s, the cheapest entry here, because it is manifests rather than source"
+    },
+    {
+      "name": "podinfo",
+      "url": "https://github.com/stefanprodan/podinfo",
+      "sha": "dd507173b7b75b2312a36cabe0de5f09c1ce69c8",
+      "why": "The only BATCH workload in the corpus: 4 CronJobs and a Job, alongside a Deployment, HPA and Ingress. kubernetes/examples has neither kind, so IAC-139/140 could be narrowed off Job and CronJob with the diff staying green -- a change the gate was structurally unable to see. Measured on that commit: IAC-139 13 -> 9 and IAC-140 13 -> 9, while kubernetes/examples showed no change at all, which is why both are here. 3.4M, 51 rules fire, 1.3s"
     },
     {
       "name": "aws-cloudformation-templates",
