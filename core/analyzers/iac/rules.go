@@ -1717,11 +1717,18 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-139", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:        `(?i)containers\s*:`,
-			absenceProperty:      `(?i)livenessProbe`,
-			absenceSpan:          "yaml-block",
-			absenceResourceTypes: []string{"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Pod"},
-			absencePropertyPath:  []string{"spec.template.spec.containers[].livenessProbe", "spec.containers[].livenessProbe", "spec.jobTemplate.spec.template.spec.containers[].livenessProbe"},
+			absenceAnchor:   `(?i)containers\s*:`,
+			absenceProperty: `(?i)livenessProbe`,
+			absenceSpan:     "yaml-block",
+			// Not Job or CronJob. A liveness probe restarts a container the
+			// kubelet decides is unhealthy — which for batch work re-runs the
+			// job body from the start, and for a non-idempotent migration or a
+			// half-finished backup is worse than the hang it reacts to.
+			// `activeDeadlineSeconds` is the mechanism for a stuck Job. The
+			// rule's own remediation ("detect and restart unhealthy pods")
+			// describes something a batch workload does not want done to it.
+			absenceResourceTypes: []string{"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Pod"},
+			absencePropertyPath:  []string{"spec.template.spec.containers[].livenessProbe", "spec.containers[].livenessProbe"},
 			absenceRequireAll:    true,
 			description:          "Kubernetes container without liveness probe",
 			cwe:                  "CWE-693", keywords: []string{"livenessProbe"},
@@ -1732,11 +1739,15 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-140", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			absenceAnchor:        `(?i)containers\s*:`,
-			absenceProperty:      `(?i)readinessProbe`,
-			absenceSpan:          "yaml-block",
-			absenceResourceTypes: []string{"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Pod"},
-			absencePropertyPath:  []string{"spec.template.spec.containers[].readinessProbe", "spec.containers[].readinessProbe", "spec.jobTemplate.spec.template.spec.containers[].readinessProbe"},
+			absenceAnchor:   `(?i)containers\s*:`,
+			absenceProperty: `(?i)readinessProbe`,
+			absenceSpan:     "yaml-block",
+			// Not Job or CronJob. Readiness gates a pod's membership in a
+			// Service's endpoints, and a Job's pod is not behind a Service —
+			// there is no traffic to withhold. The remediation ("only sends
+			// traffic to pods that are ready") has no referent here.
+			absenceResourceTypes: []string{"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Pod"},
+			absencePropertyPath:  []string{"spec.template.spec.containers[].readinessProbe", "spec.containers[].readinessProbe"},
 			absenceRequireAll:    true,
 			description:          "Kubernetes container without readiness probe",
 			cwe:                  "CWE-693", keywords: []string{"readinessProbe"},
