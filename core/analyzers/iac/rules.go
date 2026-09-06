@@ -31,6 +31,10 @@ type iacRule struct {
 	// rules.RetiredRule. Retiring an ID without it un-waives, in every
 	// consuming repo, findings an operator explicitly accepted.
 	retires []rules.RetiredRule
+	// absenceSubjectMinInt restricts the rule to subjects whose property at the
+	// given path is an integer of at least the given value. See
+	// rules.Rule.AbsenceSubjectMinInt.
+	absenceSubjectMinInt map[string]int
 	// absence* fields, when set, switch the rule to the block-scoped absence
 	// matcher (matcher_type "absence") instead of a plain regex. They replace
 	// the RE2-incompatible negative-lookahead patterns that never compiled: the
@@ -1624,8 +1628,26 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceResourceTypes:  []string{"Deployment", "StatefulSet"},
 			absenceCompanionTypes: []string{"PodDisruptionBudget"},
 			absenceCompanionLink:  "selector",
-			description:           "Kubernetes workload without PodDisruptionBudget",
-			cwe:                   "CWE-693", keywords: []string{"PodDisruptionBudget"},
+			// Only when there is more than one replica to protect.
+			//
+			// A PodDisruptionBudget on a single-replica workload is not a
+			// missing safeguard, it is a hazard: `minAvailable: 1` means the
+			// eviction API may never remove the only pod, so `kubectl drain`
+			// blocks forever and the node cannot be patched or replaced.
+			// `maxUnavailable: 1` is the opposite — it permits exactly the
+			// disruption a budget exists to prevent, so it protects nothing.
+			// Either way the advice is wrong, and this rule was giving it for
+			// every single-replica workload in the fleet.
+			//
+			// `replicas` absent means one, by Kubernetes default, so the same
+			// applies and the requirement is not satisfied.
+			//
+			// The rule's own remediation gives the game away: "ensure minimum
+			// availability during voluntary disruptions" presupposes a replica
+			// that can remain available while another goes.
+			absenceSubjectMinInt: map[string]int{"spec.replicas": 2},
+			description:          "Kubernetes workload without PodDisruptionBudget",
+			cwe:                  "CWE-693", keywords: []string{"PodDisruptionBudget"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "availability"},
 			remediation:  "Create a PodDisruptionBudget for each Deployment and StatefulSet to ensure minimum availability during voluntary disruptions like node drains.",
@@ -1767,6 +1789,14 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceSpan:          "yaml-doc",
 			absenceResourceTypes: []string{"Deployment"},
 			absencePropertyPath:  []string{"spec.template.spec.affinity.podAntiAffinity"},
+			// Only when there is more than one replica to spread.
+			//
+			// Anti-affinity keeps replicas off the same node. With one replica
+			// there is nothing to spread, and the rule's own remediation says
+			// so: "prevents a single node failure from taking down all
+			// replicas" — with one replica a single node failure takes it down
+			// whatever the affinity says. `replicas` absent means one.
+			absenceSubjectMinInt: map[string]int{"spec.replicas": 2},
 			description:          "Kubernetes Deployment without pod anti-affinity rules",
 			cwe:                  "CWE-693", keywords: []string{"podAntiAffinity"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -2315,6 +2345,7 @@ func (d iacRule) toRule() rules.Rule {
 		r.AbsenceCompanionTypes = d.absenceCompanionTypes
 		r.AbsenceCompanionLink = d.absenceCompanionLink
 		r.AbsenceCompanionPath = d.absenceCompanionPath
+		r.AbsenceSubjectMinInt = d.absenceSubjectMinInt
 		// Absence rules must NOT be keyword-gated. The engine skips a rule
 		// when none of its keywords appear in the file, but these rules'
 		// keywords name the hardening property — which is precisely what is

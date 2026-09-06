@@ -188,9 +188,13 @@ func TestAbsenceRules_HardenedCleanInsecureFlagged(t *testing.T) {
 		// ---- Kubernetes (file / yaml-block / yaml-doc span) ----
 		{
 			// PodDisruptionBudget is a separate object → whole-file absence.
+			// replicas: 2 because a PodDisruptionBudget only applies above one
+			// replica — at one, minAvailable blocks node drains forever and
+			// maxUnavailable permits the disruption a budget exists to prevent.
+			// The subject here is the absence matcher, not the replica count.
 			id: "IAC-132", path: "deploy.yaml",
-			hardened: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n---\napiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: web-pdb\n",
-			insecure: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\n",
+			hardened: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 2\n---\napiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: web-pdb\n",
+			insecure: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 2\n",
 		},
 		{
 			id: "IAC-135", path: "pod.yaml",

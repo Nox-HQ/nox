@@ -114,6 +114,26 @@ type Rule struct {
 	AbsenceAnchor   string `yaml:"absence_anchor"`
 	AbsenceProperty string `yaml:"absence_property"`
 	AbsenceRequire  string `yaml:"absence_require"`
+	// AbsenceSubjectMinInt, when set, restricts the rule to subjects whose
+	// property at the given path is an integer of at least the given value.
+	//
+	// It exists because "this workload lacks X" is sometimes only true, or only
+	// worth saying, above a threshold. IAC-132 recommended a
+	// PodDisruptionBudget for every workload including single-replica ones,
+	// where minAvailable:1 blocks node drains forever and maxUnavailable:1
+	// permits the very disruption a budget prevents — advice that is harmful
+	// either way. IAC-142 recommended spreading replicas across nodes for
+	// workloads that have one replica to spread.
+	//
+	// AbsenceRequire cannot express this: it is a regex over the anchor's span,
+	// and the structural path does not evaluate it at all. A precondition on
+	// the SUBJECT has to be read from the parsed resource, which is what this
+	// is.
+	//
+	// A missing path fails the requirement. `spec.replicas` is absent more
+	// often than written and Kubernetes defaults it to 1, so absence must read
+	// as "one", never as "unknown, therefore qualifying".
+	AbsenceSubjectMinInt map[string]int `yaml:"absence_subject_min_int"`
 	// AbsenceSpan selects how the anchor's span is computed: "file" (whole
 	// file), "line" (the anchor's line), "brace-block" (the {...} block that
 	// follows the anchor, e.g. HCL headers), "brace-enclosing" (the {...} object

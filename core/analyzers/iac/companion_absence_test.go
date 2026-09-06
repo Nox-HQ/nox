@@ -22,6 +22,7 @@ kind: Deployment
 metadata:
   name: api
 spec:
+  replicas: 2
   template:
     metadata:
       labels:
@@ -36,6 +37,7 @@ kind: Deployment
 metadata:
   name: worker
 spec:
+  replicas: 2
   template:
     metadata:
       labels:
@@ -50,6 +52,7 @@ kind: StatefulSet
 metadata:
   name: db
 spec:
+  replicas: 2
   template:
     metadata:
       labels:
@@ -102,6 +105,7 @@ kind: Deployment
 metadata:
   name: api
 spec:
+  replicas: 2
   template:
     metadata:
       labels:

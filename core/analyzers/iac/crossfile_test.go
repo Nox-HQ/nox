@@ -23,6 +23,7 @@ metadata:
   name: api
   namespace: prod
 spec:
+  replicas: 2
   selector:
     matchLabels: {app: api}
   template:
