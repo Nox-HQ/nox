@@ -102,7 +102,7 @@ func shellSegmentStatements(seg logicalLine, piped *shellPipe) []stmtDraft {
 	if trimmed == "" || isShellStructuralLine(trimmed) {
 		return nil
 	}
-	if sts, ok := shellReadStatements(seg); ok {
+	if sts, ok := shellReadStatements(seg, piped); ok {
 		return sts
 	}
 	if st, ok := shellAssignment(seg); ok {
@@ -123,6 +123,11 @@ func shellSegmentStatements(seg logicalLine, piped *shellPipe) []stmtDraft {
 type shellPipe struct {
 	vars []string
 	code []string
+	// shellQuoted records that an upstream segment shell-quoted every value it
+	// emitted, so what arrives on stdin can be re-parsed by the shell as data
+	// rather than as syntax. Only `jq` with an `@sh` filter sets it — see
+	// shellQuotingProducer for why the bar is that specific.
+	shellQuoted bool
 }
 
 func (p *shellPipe) absorb(seg logicalLine, sts []stmtDraft) {
@@ -134,6 +139,47 @@ func (p *shellPipe) absorb(seg logicalLine, sts []stmtDraft) {
 	if strings.TrimSpace(seg.code) != "" {
 		p.code = append(p.code, seg.code)
 	}
+	if shellQuotingProducer(seg) {
+		p.shellQuoted = true
+	}
+}
+
+// shellQuotingProducer reports whether seg emits values already quoted for the
+// shell, making `eval` / `set --` on its output a data operation rather than a
+// code one.
+//
+// The bar is deliberately narrow: the callee must be `jq` AND the invocation
+// must mention `@sh`. Two reasons it is not "any sanitizer upstream".
+//
+// First, `printf` is in the shell sanitizer catalog for `printf %q`, but the
+// entry matches the CALL and not the format string. Honouring it here would
+// make `printf '%s\n' "$UNSAFE" | while read x` look sanitized when it quotes
+// nothing at all — turning a coarse entry that currently costs false positives
+// into one that costs false NEGATIVES, which is the direction that hides real
+// injections.
+//
+// Second, @sh is checked against seg.raw rather than seg.code because the code
+// view blanks string literals (that is how pipeline splitting avoids seeing a
+// `|` inside a quoted jq filter). The filter, and therefore the `@sh`, only
+// exists in the raw text.
+func shellQuotingProducer(seg logicalLine) bool {
+	code := seg.code
+	i := skipShellLeadingAssignments(code)
+	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+		i++
+	}
+	j := i
+	for j < len(code) && code[j] != ' ' && code[j] != '\t' {
+		j++
+	}
+	callee := code[i:j]
+	if k := strings.LastIndexByte(callee, '/'); k >= 0 {
+		callee = callee[k+1:] // /usr/bin/jq
+	}
+	if callee != "jq" {
+		return false
+	}
+	return strings.Contains(seg.raw, "@sh")
 }
 
 // shellPipelineSegments splits a logical line at its top-level pipes. A `|`
@@ -246,7 +292,7 @@ func stripShellLoopReadHeader(ll logicalLine) logicalLine {
 // `read` with no variable defaults to `$REPLY`, which the catalog also lists as
 // a source. Flags (`-r`, `-p "prompt"`, `-a arr`) are skipped. Returns ok=false
 // for a non-`read` line.
-func shellReadStatements(ll logicalLine) ([]stmtDraft, bool) {
+func shellReadStatements(ll logicalLine, piped *shellPipe) ([]stmtDraft, bool) {
 	code := strings.TrimSpace(ll.code)
 	if code != "read" && !strings.HasPrefix(code, "read ") {
 		return nil, false
@@ -275,12 +321,21 @@ func shellReadStatements(ll logicalLine) ([]stmtDraft, bool) {
 		// Bare `read` populates $REPLY.
 		vars = []string{"REPLY"}
 	}
+	// `read` is a stdin source. When the stdin it consumes was produced by a
+	// shell-quoting stage, the sanitizer call joins this statement's calls, and
+	// the engine's existing rule — a statement carrying a sanitizer clears taint
+	// on its assignee, and that case is evaluated BEFORE sourceAssigned — leaves
+	// the bound variable untainted. No engine change is needed.
+	calls := []string{"read"}
+	if piped != nil && piped.shellQuoted {
+		calls = append(calls, "jq")
+	}
 	out := make([]stmtDraft, 0, len(vars))
 	for _, v := range vars {
 		out = append(out, stmtDraft{
 			line:     ll.line,
 			assigns:  v,
-			calls:    []string{"read"},
+			calls:    calls,
 			sinkArgs: map[string]sinkArgDraft{},
 		})
 	}

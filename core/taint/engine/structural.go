@@ -355,7 +355,31 @@ func (e *StructuralEngine) forwardPass(
 		// ATTRIBUTE chains (request.args, req.query), so both are consulted. A
 		// sanitizer wrapping the source on this same line clears its classes.
 		if src, ok := e.resolveSource(lang, st); ok {
-			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: e.bindingCleared(lang, st.Expr)}
+			cleared := e.bindingCleared(lang, st.Expr)
+			// bindingCleared reasons about the RHS EXPRESSION: it clears only the
+			// classes cleared on every path from the expression root to a source,
+			// which is what distinguishes `int(src())` from `int(src()) + src()`
+			// and from a sanitizer sitting beside the source rather than around it.
+			//
+			// When there is no expression at all it has nothing to reason about,
+			// and its empty answer means "unknown", not "nothing was cleared".
+			// That is the shell `read` case: the statement binds a variable from
+			// stdin with no RHS, while its Calls carry the sanitizer of the
+			// pipeline stage that produced that stdin. Only then fall back to the
+			// statement's calls — a binding that HAS an expression keeps
+			// bindingCleared's precise answer, so no other language is affected.
+			//
+			// Still class-precise: `@sh` neutralizes command_injection and
+			// code_injection only, so a shell-quoted value reaching an SSRF or
+			// path-traversal sink is reported exactly as before.
+			if strings.TrimSpace(st.Expr) == "" {
+				for _, rawCall := range st.Calls {
+					for _, class := range e.sanitizerClasses(lang, rawCall) {
+						cleared[class] = true
+					}
+				}
+			}
+			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: cleared}
 			continue
 		}
 
