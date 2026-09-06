@@ -1,5 +1,11 @@
 # Evidence-Native Nox — roadmap evaluation and execution plan
 
+> **Ordering is now set by `docs/design/roadmap-refutation-safe.md`.** That
+> revision moves ground-truth refutation measurement ahead of every further
+> refutation capability. This document stays authoritative for what the
+> evidence-native programme built and what it found; where the two disagree
+> on sequence, the refutation-safe roadmap wins.
+
 Status: in progress. Tracks A, B, C1, C2, D, E1–E3 and F have landed — see
 §2.9 for where the programme stands and what it found. `docs/roadmap.md` records shipped
 phases and stays as the release history.
