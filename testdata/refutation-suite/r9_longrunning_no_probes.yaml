@@ -1,0 +1,48 @@
+# Guards: absence-resource-kind (IAC-139, IAC-140; PR #583).
+# nox-cover: absence-resource-kind
+#
+# #583 took the liveness and readiness probe rules off batch workloads. A Job
+# or CronJob container is meant to run to completion and exit; a liveness probe
+# on one restarts work that finished correctly, and a readiness probe gates
+# traffic that never arrives. Narrowing those two rules to long-running kinds
+# was right.
+#
+# A Deployment is a long-running kind. This one declares no probes at all,
+# which is the condition IAC-139 and IAC-140 exist to report: the kubelet has
+# no way to tell a wedged process from a healthy one, and the service will keep
+# routing to a container that stopped serving.
+#
+# The wrong reasoning it catches is the narrowing generalizing from the kind to
+# the shape. The container below runs a command that LOOKS one-shot — a
+# `--once` flag, no server subcommand — and a refiner reading intent out of the
+# command line rather than the workload kind would exempt it. The workload kind
+# is the fact; the command line is a guess.
+apiVersion: apps/v1
+kind: Deployment  # nox-expect: IAC-139, IAC-140, IAC-131, IAC-183, IAC-286, IAC-132, IAC-142
+metadata:
+  name: session-gateway
+  namespace: prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: session-gateway
+  template:
+    metadata:
+      labels:
+        app: session-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: registry.internal/session-gateway@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          command: ["/bin/gateway", "--once"]
+          resources:
+            limits: { cpu: "1", memory: 512Mi }
+            requests: { cpu: 100m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop: [ALL]

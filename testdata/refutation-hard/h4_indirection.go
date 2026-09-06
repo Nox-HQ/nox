@@ -1,3 +1,4 @@
+// nox-cover: unmodelled-indirection
 // Unsupported semantics. The value passes through a map and a closure stored in
 // it, so the callee is a value rather than a name.
 package hard

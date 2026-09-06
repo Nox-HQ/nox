@@ -1,4 +1,5 @@
 # Guards: reachability (Track G).
+# nox-cover: interprocedural-scope
 #
 # Gate B is the rule that deterministic unreachability may suppress a finding
 # and unknown reachability may not. This sample is the shape that makes a naive

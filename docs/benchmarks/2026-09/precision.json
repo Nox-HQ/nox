@@ -176,20 +176,23 @@
     {
       "corpus": "refutation-suite",
       "scored": true,
-      "tp": 10,
+      "tp": 27,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0,
-      "guard": "cli.TestRefutationSuiteRecall",
-      "gate": "A"
+      "guard": "cli.TestRefutationSuiteRecall + cli.TestRefutationBranchCoverage",
+      "gate": "A",
+      "branches": 11
     },
     {
       "corpus": "refutation-hard",
       "scored": false,
       "cases": 5,
       "why_unscored": "a finding here is neither a true nor a false positive; what is measured is that nox never states an unearned NEGATIVE",
-      "gate": "A"
+      "gate": "A",
+      "guard": "cli.TestRefutationBranchCoverage",
+      "branches": 5
     },
     {
       "corpus": "reachability-suite",
@@ -257,5 +260,14 @@
     "packages_ok": 76,
     "packages_failed": 0,
     "packages_without_tests": 3
-  }
+  },
+  "branch_coverage": {
+    "registry": "core/bench.RefutationBranches",
+    "branches": 16,
+    "covered": 16,
+    "uncovered": 0,
+    "gate": "cli.TestRefutationBranchCoverage",
+    "note": "removing the only fixture for a branch fails coverage while recall stays 1.000"
+  },
+  "revised_at": "2026-09-06 (Milestone 0.3)"
 }

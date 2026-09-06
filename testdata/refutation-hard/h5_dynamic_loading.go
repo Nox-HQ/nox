@@ -1,3 +1,4 @@
+// nox-cover: unmodelled-dynamic-loading
 // Dynamic loading. The callee does not exist at analysis time, so "no sink
 // found" is a statement about the code that was present.
 package hard

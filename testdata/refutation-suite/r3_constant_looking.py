@@ -1,4 +1,5 @@
 # Guards: constant-argument refutation (Track E2).
+# nox-cover: constant-evaluation
 #
 # Milestone E2 re-expresses the AI-006 fix as evidence: a regex match is
 # refuted when every argument to the matched call is deterministically

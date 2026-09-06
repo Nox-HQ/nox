@@ -1,3 +1,4 @@
+// nox-cover: unmodelled-dynamic-dispatch
 // Dynamic dispatch. One implementation sanitizes, one does not, and the choice
 // comes from data. Following only the statically-visible implementation sees a
 // clean path that is not necessarily the one that runs.

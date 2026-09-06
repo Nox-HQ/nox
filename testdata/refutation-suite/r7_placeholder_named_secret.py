@@ -1,4 +1,5 @@
 # Guards: value-semantics refutation (Track E3).
+# nox-cover: value-semantics
 #
 # ENRICH-004 matched the NAME of an assignment (`api_key = "`) and never looked
 # at the value, so every documentation placeholder scored as a hardcoded

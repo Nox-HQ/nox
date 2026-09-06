@@ -1,3 +1,4 @@
+// nox-cover: unmodelled-reflection
 // Reflection. The same source and sink as a case nox detects, with the call
 // made through reflect so nothing static resolves the callee.
 //
