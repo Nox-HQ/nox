@@ -23,6 +23,9 @@ on:
       - 'core/lexctx/**'
       - 'scripts/rule-diff.sh'
       - 'scripts/rule-diff-corpus.json'
+      # The ledger decides whether a negative delta passes, so a PR that only
+      # edits it still has to prove the entries match reality.
+      - 'scripts/rule-deltas.json'
       - '.github/workflows/rule-diff.yml'
 
 permissions:
@@ -58,6 +61,11 @@ jobs:
           tar xzf "$tmp/nox.tar.gz" -C "$tmp"
           mv "$tmp/nox" /tmp/nox-baseline
           /tmp/nox-baseline version
+          # The ledger declares which release its entries are written against.
+          # Handing the tag over lets the harness reject a ledger left behind by
+          # a release, instead of matching entries against a comparison nobody
+          # is making.
+          echo "RULE_DIFF_BASELINE_TAG=$tag" >> "$GITHUB_ENV"
 
       - name: Diff rule behaviour
         id: diff
@@ -73,12 +81,18 @@ jobs:
       - name: Report
         # Exit 2 means a scan did not RUN -- unambiguous, so it fails the job.
         #
-        # Exit 1 means rule behaviour changed. That is deliberately NOT a
+        # Exit 1 means rule behaviour changed AND every negative delta is
+        # accounted for in scripts/rule-deltas.json. That is deliberately NOT a
         # failure: most rule PRs change behaviour on purpose, and a check that
         # goes red every time it works correctly is one people learn to ignore.
-        # It is a report, and it says so -- unlike a gate that was accidentally
-        # neutered into always-green, which is the failure mode this repo has
-        # been bitten by. The delta lands in the job summary for the reviewer.
+        # The delta lands in the job summary for the reviewer.
+        #
+        # Exit 3 is new, and it IS a failure: a rule removed findings from a
+        # real repository with nothing saying why, or the ledger describes a
+        # drop that no longer happens. Reporting alone could not tell a fix
+        # from a hidden vulnerability -- both print as a smaller number -- so
+        # the direction that can hide a vulnerability now has to be argued in
+        # writing before it merges. Milestone 0.4.
         if: always()
         run: |
           code="${{ steps.diff.outputs.code }}"
@@ -92,7 +106,9 @@ jobs:
 
           case "$code" in
             0) echo "No rule-level change on the corpus." ;;
-            1) echo "::notice title=Rule behaviour changed::Review the delta in the job summary and confirm each change is intended. This is a report, not a gate." ;;
+            1) echo "::notice title=Rule behaviour changed::Every negative delta is accounted for in scripts/rule-deltas.json. Review the summary and confirm each reason is the real one." ;;
+            3) echo "::error title=Unexplained narrowing::A rule removed findings from a real repository with no entry in scripts/rule-deltas.json, or an entry no longer describes a real drop. See the job summary."
+               exit 1 ;;
             *) echo "::error title=Rule diff could not run::The harness failed (exit $code) -- a scan produced no findings.json, or the corpus is unusable. This check verified nothing."
                exit 1 ;;
           esac
