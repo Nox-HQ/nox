@@ -1,5 +1,9 @@
 # Precision baseline — 2026-Q3
 
+> **Superseded by `docs/benchmarks/2026-09` (ref `78439de`, 2026-09-06).**
+> This page stays as the historical record. Its seven false negatives are
+> closed; the numbers below describe the tree as it stood on `5848369`.
+
 The authoritative baseline for the evidence-native programme
 (`docs/design/evidence-native-nox.md`, Track A / milestone A1). Every later
 milestone is measured against these numbers.

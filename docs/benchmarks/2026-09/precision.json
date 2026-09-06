@@ -1,0 +1,261 @@
+{
+  "measured_at": "2026-09-06",
+  "nox_ref": "78439de",
+  "note": "core-only run; offline; no plugins in plugins.required; single-run wall clock includes process start",
+  "supersedes": "docs/benchmarks/2026-Q3/precision.json (ref 5848369, measured 2026-08-30)",
+  "detection_corpora": [
+    {
+      "corpus": "precision-corpus",
+      "tp": 5,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite",
+      "tp": 52,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-clojure",
+      "tp": 20,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-cpp",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-csharp",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-dart",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-elixir",
+      "tp": 14,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-groovy",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-java",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-kotlin",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-lua",
+      "tp": 11,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-objc",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-perl",
+      "tp": 12,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-php",
+      "tp": 9,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-powershell",
+      "tp": 8,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-ruby",
+      "tp": 17,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-rust",
+      "tp": 6,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-scala",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-shell",
+      "tp": 16,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    {
+      "corpus": "precision-suite-swift",
+      "tp": 7,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  ],
+  "detection_total": {
+    "tp": 230,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0
+  },
+  "refutation_corpora": [
+    {
+      "corpus": "refutation-suite",
+      "scored": true,
+      "tp": 10,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "guard": "cli.TestRefutationSuiteRecall",
+      "gate": "A"
+    },
+    {
+      "corpus": "refutation-hard",
+      "scored": false,
+      "cases": 5,
+      "why_unscored": "a finding here is neither a true nor a false positive; what is measured is that nox never states an unearned NEGATIVE",
+      "gate": "A"
+    },
+    {
+      "corpus": "reachability-suite",
+      "scored": false,
+      "cases": 5,
+      "may_suppress_cases": 1,
+      "why_unscored": "scored on (reachable, determined) and may_suppress from each case's expect.json, not on rule fire-rate",
+      "guard": "TestGateB",
+      "gate": "B"
+    }
+  ],
+  "capability_coverage": {
+    "declared": 9,
+    "provided": 7,
+    "unprovided": [
+      "call_graph",
+      "entry_point"
+    ],
+    "reported_by": "nox analysis-capabilities",
+    "in_scan_output": false
+  },
+  "rule_families": {
+    "SEC": 913,
+    "IAC": 500,
+    "AI": 50,
+    "CWE": 44,
+    "MCP": 21,
+    "DATA": 12,
+    "VARIANT": 6,
+    "AGENT": 6,
+    "TAINT": 4,
+    "VULN": 3,
+    "SLOP": 2,
+    "PROV": 2,
+    "PERM": 2,
+    "MULTI": 2,
+    "HARDEN": 2,
+    "CRYPTO": 2,
+    "CONT": 2,
+    "AGENTFLOW": 2,
+    "MEMSAFE": 1,
+    "_total_distinct": 1600,
+    "_note": "grep over core/analyzers and core/rules for quoted IDs; a handful of the small families are test fixtures"
+  },
+  "latency_ms": {
+    "bench_precision_per_corpus": [
+      53,
+      101
+    ],
+    "full_scan_self": [
+      6050,
+      7360
+    ],
+    "note": "single runs, cold-ish cache, macOS arm64; corpora measure quality not throughput"
+  },
+  "self_scan": {
+    "target": "nox repo at 78439de",
+    "findings": 62,
+    "unique_fingerprints": 55,
+    "duplicate_fingerprints": 7,
+    "status_suppressed": 60,
+    "degradations": 1
+  },
+  "test_suite": {
+    "packages_ok": 76,
+    "packages_failed": 0,
+    "packages_without_tests": 3
+  }
+}
