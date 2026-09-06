@@ -86,5 +86,9 @@ func validateRule(r *Rule) error {
 	if !validSeverities[string(r.Severity)] {
 		return fmt.Errorf("invalid severity %q for rule %s", r.Severity, r.ID)
 	}
-	return nil
+	// The three checks above ask whether each field is individually legal. None
+	// of them notices a rule whose fields are read by an evaluation path it
+	// never takes — which loads without complaint, appears in `nox rules`, and
+	// finds nothing. See Rule.CheckCoherence.
+	return r.CheckCoherence()
 }
