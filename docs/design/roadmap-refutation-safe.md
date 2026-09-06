@@ -56,13 +56,18 @@ A second north-star question joins the first:
 
 ## Phase 0 — Refutation observability and benchmark safety
 
+**Complete.** Ground-truth refutation measurement, a corpus that covers rule
+narrowing as well as refiners, coverage that fails when a branch loses its last
+fixture, negative deltas that must be argued in writing, and a loader that
+refuses a rule whose declared semantics nothing reads.
+
 | Milestone | Exit criterion | State on 2026-09-06 |
 |---|---|---|
 | **0.1** Current-state baseline | one authoritative baseline exists | **done** — `docs/benchmarks/2026-09` |
 | **0.2** Refutation corpus | a deliberately wrong refutation fails CI | **done** — 23 cases over 11 branches, refiners *and* rule narrowing |
 | **0.3** Semantic corpus coverage | removing the only fixture for a branch fails coverage | **done** — `bench.RefutationBranches`, 16 branches, `TestRefutationBranchCoverage` |
 | **0.4** Negative-delta accountability | unexplained narrowing is rejected or reviewed | **done** — `scripts/rule-deltas.json`; rule-diff exits 3 and fails the job |
-| **0.5** Path-coherence validation | no rule loads with behaviourally inert mandatory fields | open |
+| **0.5** Path-coherence validation | no rule loads with behaviourally inert mandatory fields | **done** — `Rule.CheckCoherence`, wired into `validateRule` and guarded over all 1,531 built-ins |
 
 ### 0.1 — Current-state baseline
 
@@ -156,9 +161,31 @@ through to the regex path, which reads `AbsenceAnchor`, `AbsenceProperty`,
 declaring `absence_subject_min_int` without a property path therefore loads,
 lists, and applies no precondition at all.
 
-**Measured 2026-09-06: 185 built-in IaC rules, 31 on the structural path, 0
-incoherent.** This is a latent hazard, not a live defect — which is the right
-time to close it, and the reason 0.5 is a gate rather than a bug fix.
+**Measured 2026-09-06: 1,531 built-in rules, 55 on the absence matcher, 31 of
+those structural, 2 carrying a subject precondition — 0 incoherent.** A latent
+hazard, not a live defect, which is the right time to close it and the reason
+0.5 is a gate rather than a bug fix.
+
+`Rule.CheckCoherence` refuses six shapes, each of which loads silently today:
+
+1. a structural-only field on a rule that never reaches `structuralAbsence`
+   (the `absence_subject_min_int` case);
+2. `absence_resource_types` with neither a property path nor companion types,
+   so the descriptor is never consulted;
+3. `absence_companion_link`/`path` without `absence_companion_types`, which
+   select the companion branch;
+4. an `absence_span` nobody implements — `absenceSpan()` falls to its default,
+   returns nil for every anchor, and the rule cannot fire;
+5. an absence rule missing an anchor or a property with no structural
+   descriptor to answer instead — `compile("")` returns a nil regexp and
+   `Match` gives up before looking at anything;
+6. absence fields on a `regex` or `entropy` rule, where nothing reads them.
+
+It runs in `validateRule` for YAML rules and in a catalog test for the
+built-ins, which never pass through the loader and so were previously validated
+by nothing at all. A custom rule declaring `absence_subject_min_int` without a
+property path now fails the scan with exit 2 and a message naming the inert
+field, instead of scanning with no precondition.
 
 ---
 

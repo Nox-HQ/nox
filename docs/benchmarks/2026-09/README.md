@@ -156,9 +156,10 @@ completeness:
 4. **No unevaluated rate.** There is no denominator today for "what fraction of
    propositions this scan did not evaluate", because the scan output carries no
    proposition-level evaluation state. Phase 1.
-5. **Path coherence is unguarded but currently clean.** A probe over
-   `builtinBaseIaCRules()` counted 185 rules, 31 reaching the structural
-   absence path, and **0 setting a structural-only field while falling through
-   to the regex path**. Nothing at load time would reject one. Milestone 0.5.
+5. ~~**Path coherence is unguarded but currently clean.**~~ **Closed by
+   Milestone 0.5** — `Rule.CheckCoherence` runs in `validateRule` and over all
+   built-ins. Re-measured across the whole catalog rather than IaC alone:
+   1,531 rules, 55 on the absence matcher, 31 structural, 2 with a subject
+   precondition, **0 incoherent**.
 6. **No wrong-PREVENTED rate.** `PREVENTED` is reachable only through Gate B's
    single suppressible case; the metric exists but has one observation.
