@@ -69,49 +69,49 @@
     {
       "rule": "IAC-034",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# type: LoadBalancer` in three guestbook manifests, so the Service is not a LoadBalancer. Issue #588."
     },
     {
       "rule": "IAC-143",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# namespace: default` in Helm values files and archived PV examples. Issue #588."
     },
     {
       "rule": "IAC-232",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: the same commented-out `# namespace: default` lines, matched by the kustomize rule. Issue #588."
     },
     {
       "rule": "IAC-254",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: Cassandra's shipped cassandra.yaml, where every option is listed commented-out with its default: `# truststore_password: cassandra`. This is the assignment-shaped class the secrets analyzer already drops in comments (dropConfigFieldRuleInComment); a real credential in a comment is still reported there by the provider rules, verified \u2014 SEC-001/SEC-508 fire on an AWS key in a YAML comment before and after this change. Issue #588."
     },
     {
       "rule": "IAC-306",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: `# and `id-token: write` for the OIDC keyless flow (see release.yml).` \u2014 a comment explaining the permission, matched as if it granted it. The real `id-token: write` on release.yml:20, which carries a TRAILING comment, is correctly kept. Issue #588."
     },
     {
       "rule": "IAC-357",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# type: Opaque` in an archived newrelic config. Issue #588."
     },
     {
       "rule": "IAC-397",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `#  maxUnavailable: 1` in a Helm values file. Issue #588."
     },
     {
       "rule": "IAC-398",
       "classification": "refined-away",
-      "pr": 594,
+      "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: the words 'HorizontalPodAutoscaler (HPA)' inside a header comment explaining what the manifest does. Issue #588."
     }
   ]
