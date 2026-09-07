@@ -28,7 +28,6 @@ import (
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/report"
-	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/core/vex"
 	"github.com/nox-hq/nox/plugin"
@@ -563,14 +562,13 @@ func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (s
 
 	switch format {
 	case "sarif":
-		r := sarif.NewReporter(s.version, nil)
+		r := pc.result.SARIFReporter(s.version)
 		data, err = r.Generate(pc.result.Findings)
 	default:
-		r := report.NewJSONReporter(s.version)
-		// Degradations must ride the artifact here above all: an agent has no
-		// stderr to read, so without this it cannot tell a clean scan from one
-		// whose checks did not run.
-		r.Degradations = report.DegradationsFrom(pc.result.Degradations)
+		// The result builds its own reporter here above all: an agent has no
+		// stderr to read, so degradations and capability coverage reach it
+		// through the artifact or not at all.
+		r := pc.result.JSONReporter(s.version)
 		data, err = r.Generate(pc.result.Findings)
 	}
 
@@ -1281,8 +1279,7 @@ func (s *Server) handleResourceFindings(_ context.Context, uri string, _ map[str
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	r := report.NewJSONReporter(s.version)
-	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
+	r := pc.result.JSONReporter(s.version)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
@@ -1301,7 +1298,7 @@ func (s *Server) handleResourceSARIF(_ context.Context, uri string, _ map[string
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	r := sarif.NewReporter(s.version, nil)
+	r := pc.result.SARIFReporter(s.version)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating SARIF: %w", err)
@@ -1435,8 +1432,7 @@ func (s *Server) handleProjectResourceFindings(_ context.Context, uri string, pa
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	r := report.NewJSONReporter(s.version)
-	r.Degradations = report.DegradationsFrom(pc.result.Degradations)
+	r := pc.result.JSONReporter(s.version)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating findings JSON: %w", err)
@@ -1459,7 +1455,7 @@ func (s *Server) handleProjectResourceSARIF(_ context.Context, uri string, param
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	r := sarif.NewReporter(s.version, nil)
+	r := pc.result.SARIFReporter(s.version)
 	data, err := r.Generate(pc.result.Findings)
 	if err != nil {
 		return nil, fmt.Errorf("generating SARIF: %w", err)

@@ -15,7 +15,6 @@ import (
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
 	htmlreport "github.com/nox-hq/nox/core/report/html"
-	"github.com/nox-hq/nox/core/report/sarif"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/server"
 )
@@ -718,12 +717,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		switch format {
 		case "json":
 			path := filepath.Join(outputDir, "findings.json")
-			r := report.NewJSONReporter(version)
+			r := result.JSONReporter(version)
 			r.Offline = offlineFlag
 			r.Prioritize = sortFlag == "priority"
-			r.SASTLanguages = result.SASTProfile
-			r.Degradations = report.DegradationsFrom(result.Degradations)
-			r.Enrichments = result.Enrichments
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -734,7 +730,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "sarif":
 			path := filepath.Join(outputDir, "results.sarif")
-			r := sarif.NewReporter(version, result.Rules)
+			r := result.SARIFReporter(version)
+			// The CLI writes to a file, not to a response budget, so it can
+			// afford the full rule catalog the MCP surface cannot.
+			r.Rules = result.Rules
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
