@@ -103,7 +103,7 @@ unmodelled construct on *this* path".
 | Milestone | Work | Exit | |
 |---|---|---|---|
 | **2.1** | Move degradation/baseline-drift/capability-loss gating into `core/policy`; the workflow calls it | all consumers inherit identical semantics; the bash shrinks to an invocation | |
-| **2.2** | Per-claim competence: `capability.State` + `reach.Limitation` on the claim, not the run | one scan legitimately holds different competence states for different findings | ✅ #604 |
+| **2.2** | Per-claim competence: `capability.State` + `reach.Limitation` on the claim, not the run | one scan legitimately holds different competence states for different findings | ✅ #605 |
 | **2.3** | A negative claim that met an unmodelled construct cannot render unqualified | reports and API expose scope on every negative | |
 
 2.2 landed as competence **profiles**: every finding names the set of questions
@@ -152,8 +152,8 @@ proposition chain.
 
 | Milestone | Work | Exit | |
 |---|---|---|---|
-| **3.1** | Audit the subject kinds against Gate C: every subject needs a case distinguishing it from its neighbours | no subject survives without a distinguishing case | ✅ #606 |
-| **3.2** | Subject-scoped adjudication across the scan and attack paths | an advisory about a package cannot become the strongest evidence for exploitability | ✅ #606 |
+| **3.1** | Audit the subject kinds against Gate C: every subject needs a case distinguishing it from its neighbours | no subject survives without a distinguishing case | ✅ #607 |
+| **3.2** | Subject-scoped adjudication across the scan and attack paths | an advisory about a package cannot become the strongest evidence for exploitability | ✅ #607 |
 | **3.3** | Polarity already exists; wire `REFUTES` from the refiners that currently record `Unknown` | missing evidence is never `REFUTES` |
 | **3.4** | Lifecycle is shipped (#H); verify retraction reaches the scan path, not only intel | a withdrawn claim stops contributing |
 
@@ -175,7 +175,7 @@ non-rule refutation.
 **Exists.** `core/adjudicate` is built and runs **shadow-only**, producing a
 divergence report: on the precision suite, **17 of 53 findings diverge — 16
 over-claimed and one under** (re-measured 2026-09-07). Exploitability is now
-derived subject-scoped (#606), which is the 3.2 exit property. `findings.Finding.Exploitability` already exists in the output
+derived subject-scoped (#607), which is the 3.2 exit property. `findings.Finding.Exploitability` already exists in the output
 schema. The package's own doc is explicit that the judgement is by explicit
 state transitions rather than a risk score, "because a verdict a developer can
 dispute is worth more than one they can only accept".
@@ -397,7 +397,7 @@ Deliberately last: **9.3** (SMT), **12.2** (intel artifacts).
 - No sizing here is a schedule. "Large" means it changes user-visible output or
   spans repos, not a week count.
 - ~~The 15 shadow divergences were measured on 2026-08-30 and have not been
-  re-measured.~~ **Done (#606).** The count moved to 17 of 53 and the "all
+  re-measured.~~ **Done (#607).** The count moved to 17 of 53 and the "all
   over-claimed" half stopped being true: IaC rules author LOW while their static
   evidence aggregates to MEDIUM, so 1 of 17 on the precision suite and 14 of 19
   on the refutation suite run the other way. Phase 4.1 must handle both
