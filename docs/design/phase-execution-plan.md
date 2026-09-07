@@ -130,6 +130,14 @@ becomes evidence of absence.
 
 ## Phase 3 — Typed propositions
 
+3.1 audits **thirteen** kinds, not eight — the kernel grew
+`SubjectTriggerCondition`, `SubjectInvariantViolation`, `SubjectCrash`,
+`SubjectSecurityEffect` and `SubjectExploit` for the reproduction hierarchy
+since the plan was written. nox constructs five of them. The audit is pairwise
+across all thirteen with a shared ID, because two subjects differing only by
+kind are the case a string-keyed implementation gets wrong, and the count is
+pinned so a kind added upstream must be examined rather than inherited.
+
 **Exists, in the kernel.** `nox-core/evidence` v0.2.1 already ships
 `SubjectKind`, `Subject`, `Relation`, `Polarity` (`SUPPORTS`/`REFUTES`/
 `UNKNOWN`), `Status` (supersession, retraction) and `Authority`. Eight subject
@@ -144,7 +152,7 @@ proposition chain.
 
 | Milestone | Work | Exit | |
 |---|---|---|---|
-| **3.1** | Audit the eight kinds against Gate C: every subject needs a fixture distinguishing it from its neighbours | no subject survives without a distinguishing case | |
+| **3.1** | Audit the subject kinds against Gate C: every subject needs a case distinguishing it from its neighbours | no subject survives without a distinguishing case | ✅ #606 |
 | **3.2** | Subject-scoped adjudication across the scan and attack paths | an advisory about a package cannot become the strongest evidence for exploitability | ✅ #606 |
 | **3.3** | Polarity already exists; wire `REFUTES` from the refiners that currently record `Unknown` | missing evidence is never `REFUTES` |
 | **3.4** | Lifecycle is shipped (#H); verify retraction reaches the scan path, not only intel | a withdrawn claim stops contributing |
