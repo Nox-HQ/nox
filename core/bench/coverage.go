@@ -125,6 +125,12 @@ var RefutationBranches = []Branch{
 		Proposition: "this configuration keyword is prose describing configuration, not configuration",
 	},
 	{
+		ID: "resource-kind-reference", Corpus: "refutation-suite",
+		Wrong:  "every nested `kind:` is treated as a reference to another object, which silently drops every workload declared inside a List's items",
+		Family: "IAC", Matcher: "iac/enclosing-key",
+		Proposition: "this kind names another object rather than declaring this one",
+	},
+	{
 		ID: "unmodelled-reflection", Corpus: "refutation-hard",
 		Wrong:  "no flow found through MethodByName is reported as no flow exists",
 		Family: "TAINT", Matcher: "taint/structural",

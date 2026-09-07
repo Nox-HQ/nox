@@ -14,7 +14,7 @@
     },
     {
       "corpus": "precision-suite",
-      "tp": 52,
+      "tp": 53,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
@@ -166,7 +166,7 @@
     }
   ],
   "detection_total": {
-    "tp": 230,
+    "tp": 231,
     "fp": 0,
     "fn": 0,
     "precision": 1.0,
@@ -176,14 +176,14 @@
     {
       "corpus": "refutation-suite",
       "scored": true,
-      "tp": 29,
+      "tp": 37,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0,
       "guard": "cli.TestRefutationSuiteRecall + cli.TestRefutationBranchCoverage",
       "gate": "A",
-      "branches": 12,
+      "branches": 13,
       "note": "27 -> 23: IAC-183 and IAC-286 annotations removed when the duplicates were retired; Gate A required that removal to be deliberate"
     },
     {
@@ -264,8 +264,8 @@
   },
   "branch_coverage": {
     "registry": "core/bench.RefutationBranches",
-    "branches": 17,
-    "covered": 17,
+    "branches": 18,
+    "covered": 18,
     "uncovered": 0,
     "gate": "cli.TestRefutationBranchCoverage",
     "note": "removing the only fixture for a branch fails coverage while recall stays 1.000"

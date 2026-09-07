@@ -113,6 +113,12 @@
       "classification": "refined-away",
       "pr": 599,
       "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: the words 'HorizontalPodAutoscaler (HPA)' inside a header comment explaining what the manifest does. Issue #588."
+    },
+    {
+      "rule": "IAC-131",
+      "classification": "refined-away",
+      "pr": 600,
+      "reason": "A kind: under a field that POINTS AT another object names that object; it does not declare this one. IAC-131 matched kind: Deployment anywhere in a YAML file, so every HorizontalPodAutoscaler reported \"workload detected\" because it names the Deployment it scales \u2014 a document with no pod template, no containers and nothing the rule is about. All 11 removals across the corpus were checked by hand and every one sits under scaleTargetRef: 9 on podinfo, 2 on kubernetes-examples. The test keys on the enclosing FIELD, not on depth, because a kind: List holds real objects under items: and a depth rule would delete every workload in one \u2014 pinned by r13_workloads_inside_a_list.yaml, since no corpus repo contains a List. Issue #590."
     }
   ]
 }

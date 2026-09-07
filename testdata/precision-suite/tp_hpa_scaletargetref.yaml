@@ -1,0 +1,39 @@
+# A HorizontalPodAutoscaler names the workload it scales in spec.scaleTargetRef.
+# That `kind: Deployment` is a REFERENCE, not a declaration: this document has
+# no pod template, no containers and no securityContext to be missing, so the
+# workload rules must stay silent on it.
+#
+# This sample was written during #591 and withdrawn twice, because it could not
+# score clean for two reasons that had nothing to do with each other:
+#
+#   #588  the header you are reading was itself matched, so explaining the case
+#         in prose produced the findings the case is about
+#   #590  IAC-131 fired on the scaleTargetRef below
+#
+# Both are fixed, and it lands with the second of them. Three rules used to
+# report here — IAC-183 and IAC-176 were retired into structural survivors that
+# were always correct on this shape, and IAC-131 now tests the enclosing field.
+#
+# What must stay silent is every WORKLOAD rule. IAC-398 is annotated and
+# correct: this document really is an autoscaler, and that rule is the advisory
+# about autoscalers. A fixture that claimed the file was findings-free would be
+# asserting something untrue in order to look tidier.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler  # nox-expect: IAC-398
+metadata:
+  name: backend
+  namespace: prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 3
+  maxReplicas: 40
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

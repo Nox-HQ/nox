@@ -99,3 +99,47 @@ func TestTerraformIsNotFilteredYet(t *testing.T) {
 			"and update issue #588 rather than only changing this test", got)
 	}
 }
+
+// A `kind:` under a field that points at another object names that object; it
+// does not declare this one. An HPA has no pod template, no containers and no
+// securityContext to be missing. Issue #590.
+func TestKindUnderAReferenceFieldIsNotADeclaration(t *testing.T) {
+	ids := scan(t, "hpa.yaml",
+		"apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: backend\n"+
+			"spec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: backend\n"+
+			"  minReplicas: 3\n  maxReplicas: 40\n")
+	if has(ids, "IAC-131") {
+		t.Errorf("a workload rule fired on an autoscaler's scaleTargetRef: %v", ids)
+	}
+}
+
+// The reason the test keys on the enclosing FIELD and not on indentation.
+// A List holds real objects under `items:`, and every rule that applies to a
+// Deployment applies to one declared there. A depth rule deletes all of it,
+// and no repo in the rule-diff corpus contains a List, so nothing else would
+// notice. r13_workloads_inside_a_list.yaml pins this end to end.
+func TestWorkloadsInsideAListAreStillDeclarations(t *testing.T) {
+	ids := scan(t, "list.yaml",
+		"apiVersion: v1\nkind: List\nitems:\n  - apiVersion: apps/v1\n    kind: Deployment\n"+
+			"    metadata:\n      name: checkout\n    spec:\n      replicas: 3\n      template:\n"+
+			"        spec:\n          containers:\n            - name: api\n              image: reg/app:1\n")
+	for _, want := range []string{"IAC-131", "IAC-139", "IAC-145"} {
+		if !has(ids, want) {
+			t.Errorf("%s did not fire on a Deployment declared inside a List: %v", want, ids)
+		}
+	}
+}
+
+// A reference field nobody listed keeps producing a finding. That is the safe
+// direction for an allowlist to fail in, and it is worth pinning: the opposite
+// choice — treat anything nested as a reference — is what this design rejected.
+func TestUnlistedNestingIsNotTreatedAsAReference(t *testing.T) {
+	ids := scan(t, "tpl.yaml",
+		"apiVersion: v1\nkind: Template\nobjects:\n  - apiVersion: apps/v1\n    kind: Deployment\n"+
+			"    metadata:\n      name: from-template\n    spec:\n      template:\n        spec:\n"+
+			"          containers:\n            - name: api\n              image: reg/app:1\n")
+	if !has(ids, "IAC-131") {
+		t.Errorf("a Deployment under an unlisted key `objects:` was dropped; the allowlist "+
+			"must fail toward reporting: %v", ids)
+	}
+}

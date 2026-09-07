@@ -27,7 +27,7 @@ Machine-readable: `precision.json`.
 | Corpus | TP | FP | FN | Precision | Recall |
 |---|---:|---:|---:|---:|---:|
 | precision-corpus | 5 | 0 | 0 | 1.000 | 1.000 |
-| precision-suite | 52 | 0 | 0 | 1.000 | 1.000 |
+| precision-suite | 53 | 0 | 0 | 1.000 | 1.000 |
 | precision-suite-clojure | 20 | 0 | 0 | 1.000 | 1.000 |
 | precision-suite-cpp | 7 | 0 | 0 | 1.000 | 1.000 |
 | precision-suite-csharp | 6 | 0 | 0 | 1.000 | 1.000 |
@@ -46,7 +46,7 @@ Machine-readable: `precision.json`.
 | precision-suite-scala | 7 | 0 | 0 | 1.000 | 1.000 |
 | precision-suite-shell | 16 | 0 | 0 | 1.000 | 1.000 |
 | precision-suite-swift | 7 | 0 | 0 | 1.000 | 1.000 |
-| **Total** | **230** | **0** | **0** | **1.000** | **1.000** |
+| **Total** | **231** | **0** | **0** | **1.000** | **1.000** |
 
 ### The seven false negatives are closed, and they were closed the right way
 
@@ -74,7 +74,7 @@ This is the half the roadmap adds, and the half nothing else watches.
 
 | Corpus | Cases | Result | Guard | Gate |
 |---|---:|---|---|---|
-| `refutation-suite` | 29 | 29 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
+| `refutation-suite` | 37 | 37 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
 | `refutation-hard` | 5 | not precision-scored by design | `TestRefutationBranchCoverage` | A |
 | `reachability-suite` | 5 | 1 case may suppress, by name | `TestGateB` | B |
 
@@ -83,7 +83,7 @@ with *"4 real vulnerabilities are no longer reported"* until those annotations
 were removed in the same commit as the rule change. A duplicate ID cannot leave
 the corpus by accident.
 
-**Branch coverage: 16 of 16 registered refutation branches witnessed**
+**Branch coverage: 18 of 18 registered refutation branches witnessed**
 (`core/bench.RefutationBranches`). Milestone 0.3 added the registry, four
 rule-level fixtures, and a gate that fails when the last fixture for a branch
 is deleted — a deletion recall alone cannot see, because it removes the

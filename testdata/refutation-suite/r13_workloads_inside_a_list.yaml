@@ -1,0 +1,43 @@
+# Guards: resource-kind-reference (IAC-131; issue #590).
+# nox-cover: resource-kind-reference
+#
+# #590 is that a workload rule fires on `kind: Deployment` written inside an
+# autoscaler's scaleTargetRef, where it NAMES the object being scaled rather
+# than declaring one. The document there is an autoscaler and holds no pod
+# template at all.
+#
+# The cheap fix is indentation: a kind at column 0 declares this document, a
+# nested one refers to something else. On the ten-repo corpus that heuristic is
+# exactly right — 34 of 36 matches sit at indent 0, and both nested ones are
+# references.
+#
+# It is also wrong, and this file is why. A List is a real Kubernetes document
+# whose items are real objects, indented under `items:`. Every workload below
+# is declared here, runs here, and is exactly what the rules are for: no
+# probes, no limits, no security context, nothing binding them to a policy.
+# An indentation rule silently deletes all of it, and the corpus repos happen
+# to contain no List, so nothing would have caught it.
+#
+# The reference test therefore keys on the ENCLOSING FIELD, not the depth: a
+# kind is a reference when the key above it is one of the fields Kubernetes
+# uses to point at another object. `items` is not one of them.
+apiVersion: v1
+kind: List  # a List is not itself a workload kind, so no workload rule fires here
+items:
+  - apiVersion: apps/v1
+    kind: Deployment  # nox-expect: IAC-131, IAC-132, IAC-137, IAC-138, IAC-139, IAC-140, IAC-142, IAC-145
+    metadata:
+      name: checkout
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: checkout
+      template:
+        metadata:
+          labels:
+            app: checkout
+        spec:
+          containers:
+            - name: api
+              image: registry.internal/checkout@sha256:5555555555555555555555555555555555555555555555555555555555555555
