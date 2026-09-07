@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -184,6 +185,40 @@ func goSymbolReferenced(affectedImports []string, linked map[string]struct{}, li
 	}
 	r, ok := reach.Refute(subject, reach.SymbolReferenced, scope)
 	return r, ok
+}
+
+// applyReachMetadata writes a reachability result onto a finding's metadata.
+//
+// One function, called unconditionally, because the previous arrangement wrote
+// these keys only for the outcomes that concluded something. An analysis that
+// ran and could not tell wrote nothing, and nothing is how a scanner says "we
+// never looked".
+//
+// reach_limitations is the machine-readable half of reach_scope. The prose
+// description is for a person reading `nox why`; a CI job or an agent deciding
+// whether to trust an absent reachability answer needs the named reasons, and
+// parsing them back out of an English sentence is not a contract.
+func applyReachMetadata(meta map[string]string, r reach.Result) {
+	if meta == nil || r.Level == "" {
+		return
+	}
+	// The LEVEL, named. `go list -deps` establishes that the affected import is
+	// in the linked set, which is symbol_referenced and nothing above it. This
+	// used to be written as meta["reachable"], a name that reads as
+	// call_reachable, and the capability matrix then counted it as the
+	// reachability capability — evidence for one proposition establishing a
+	// later one, which is the invariant this vocabulary exists to hold.
+	meta["reach_level"] = string(r.Level)
+	meta["reach_outcome"] = string(r.Outcome)
+	meta["reach_scope"] = r.Scope.Describe()
+	if len(r.Scope.Limitations) > 0 {
+		names := make([]string, 0, len(r.Scope.Limitations))
+		for _, l := range r.Scope.Limitations {
+			names = append(names, string(l))
+		}
+		sort.Strings(names)
+		meta["reach_limitations"] = strings.Join(names, ",")
+	}
 }
 
 // maxImportScanBytes bounds a single file read when indexing imports. A source

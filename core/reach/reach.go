@@ -208,6 +208,32 @@ const (
 	Undetermined Outcome = "undetermined"
 )
 
+// CapabilityState is what this outcome means to the capability matrix.
+//
+// The mapping lives here, once, because both halves of it are load-bearing and
+// they were previously written out at the single place that consumed them —
+// which is how the Undetermined arm came to be unreachable without anything
+// noticing. An analysis that ran and could not tell must record Unknown, and
+// Unknown is not NotEvaluated: one says the question was put and came back
+// empty, the other says nobody asked. They call for different responses from an
+// operator, and only one of them is a gap they can close.
+//
+// An unrecognised outcome maps to NotEvaluated rather than to anything
+// conclusive. A producer that cannot name what it concluded has concluded
+// nothing.
+func (o Outcome) CapabilityState() capability.State {
+	switch o {
+	case Established:
+		return capability.Positive
+	case Refuted:
+		return capability.Negative
+	case Undetermined:
+		return capability.Unknown
+	default:
+		return capability.NotEvaluated
+	}
+}
+
 // Result is one reachability proposition, its outcome, and the scope it was
 // decided under.
 type Result struct {
