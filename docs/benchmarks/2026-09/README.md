@@ -74,7 +74,7 @@ This is the half the roadmap adds, and the half nothing else watches.
 
 | Corpus | Cases | Result | Guard | Gate |
 |---|---:|---|---|---|
-| `refutation-suite` | 23 | 23 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
+| `refutation-suite` | 29 | 29 TP / 0 FP / 0 FN — recall **1.000** | `TestRefutationSuiteRecall` + `TestRefutationBranchCoverage` | A |
 | `refutation-hard` | 5 | not precision-scored by design | `TestRefutationBranchCoverage` | A |
 | `reachability-suite` | 5 | 1 case may suppress, by name | `TestGateB` | B |
 
