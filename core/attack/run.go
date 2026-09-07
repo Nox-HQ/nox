@@ -330,7 +330,7 @@ func notRunTrace(h Hypothesis, cfg RunConfig, note string) Trace {
 		Objective:           h.Objective,
 		Path:                h.Path,
 		Outcome:             outcome,
-		Exploitability:      evidence.DeriveExploitability(outcome, ledger),
+		Exploitability:      evidence.DeriveExploitabilityAbout(outcome, ledger, InvariantSubject(h)),
 		Confidence:          ledger.Confidence(),
 		Ledger:              *ledger,
 		ReproductionSamples: cfg.Samples,
@@ -403,7 +403,7 @@ func (r *runner) attackHypothesis(h Hypothesis) Trace {
 		ledger := groundingLedger(h, r.cfg.Now)
 		trace.Outcome = outcome
 		trace.Ledger = *ledger
-		trace.Exploitability = evidence.DeriveExploitability(outcome, ledger)
+		trace.Exploitability = evidence.DeriveExploitabilityAbout(outcome, ledger, InvariantSubject(h))
 		trace.Confidence = ledger.Confidence()
 		return classified(trace)
 	}
