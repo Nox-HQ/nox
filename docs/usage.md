@@ -312,6 +312,26 @@ nox baseline show .
 
 The baseline file is stored at `.nox/baseline.json` by default. When a finding matches a baseline entry (by fingerprint), it is marked as `baselined` and may be excluded from CI failure depending on the policy `baseline_mode` setting.
 
+**One entry accepts one finding.** Two genuinely distinct findings can share a
+fingerprint: the v2 digest is `sha256(rule_id, path, message)`, and a rule whose
+message is a static description — most IaC rules — produces the same digest for
+every occurrence in a file. Four workflow steps with `continue-on-error` are
+four real findings and one fingerprint.
+
+So entries are *consumed*, one per finding. If you accept one of those four,
+the other three are still reported, and a fifth added next month is reported
+too. Accept them all with `nox baseline write`, which records one entry each.
+
+This does not cost you the thing the v2 fingerprint was designed for: a
+baselined finding that moves up or down its file — an import shift, a `gofmt`,
+a comment added above — still matches, because the line is not part of the
+digest.
+
+> **Upgrading:** if your baseline has fewer entries than there are findings
+> sharing a fingerprint, the surplus findings will start appearing. They were
+> being suppressed without anyone having accepted them. Re-run
+> `nox baseline update .` to accept the ones you want and prune the rest.
+
 **Baseline file format:**
 
 ```json
