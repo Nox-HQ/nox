@@ -292,11 +292,51 @@ func TestAdjudicationIsShadowOnly(t *testing.T) {
 	}
 }
 
-// TestExploitabilityIsAbsentUnlessAdjudicated pins the distinction a consumer
-// must not lose: an empty state means nothing was asked, POTENTIAL means static
-// evidence exists and no attack path was constructed. Neither is a clearance,
-// and conflating them would turn "we did not look" into a verdict.
-func TestExploitabilityIsAbsentUnlessAdjudicated(t *testing.T) {
+// TestEveryFindingCarriesItsExploitability is milestone 4.1 at the scan.
+//
+// This replaces a test that pinned the opposite — that Exploitability was
+// absent unless the scan recorded reasoning — and the reason for the reversal
+// is worth keeping, because the old test's premise was not quite right. It
+// said an empty state meant "nothing was asked" while POTENTIAL meant "static
+// evidence exists and no attack path was constructed". The second half was
+// never carried by the value: the kernel reaches POTENTIAL from the empty
+// RunOutcome and returns before it consults the ledger. So the field said
+// nothing about evidence, and gating it on evidence being recorded bought a
+// distinction the value could not express.
+//
+// What it cost was the thing that matters. An ordinary `nox scan` wrote no
+// state at all, and a finding silent about never having been validated reads
+// as a stronger claim than it is.
+func TestEveryFindingCarriesItsExploitability(t *testing.T) {
+	dir := reasoningFixture(t)
+
+	for _, rec := range []bool{false, true} {
+		res, err := RunScanWithOptions(dir, ScanOptions{Offline: true, RecordReasoning: rec})
+		if err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		reported := res.Findings.Findings()
+		if len(reported) == 0 {
+			t.Fatal("fixture produced no findings; this test asserts nothing")
+		}
+		for _, f := range reported {
+			if f.Exploitability != string(evidence.Potential) {
+				t.Errorf("RecordReasoning=%v: %s has Exploitability=%q, want POTENTIAL — "+
+					"a scan executes nothing, so no other state is honest, and an absent "+
+					"one says nothing at all", rec, f.RuleID, f.Exploitability)
+			}
+		}
+	}
+}
+
+// The asymmetry between the two adjudicated fields, pinned.
+//
+// Exploitability is derived from the run outcome and is free. EvidenceConfidence
+// is derived from the ledger, and an empty ledger aggregates to LOW — so
+// writing it on a scan that recorded nothing would assert that nox weighed the
+// evidence and found it weak. Empty must keep meaning "no evidence was
+// recorded", which is a different sentence.
+func TestEvidenceConfidenceStaysSilentWithoutALedger(t *testing.T) {
 	dir := reasoningFixture(t)
 
 	quiet, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
@@ -304,9 +344,10 @@ func TestExploitabilityIsAbsentUnlessAdjudicated(t *testing.T) {
 		t.Fatalf("scan: %v", err)
 	}
 	for _, f := range quiet.Findings.Findings() {
-		if f.Exploitability != "" {
-			t.Errorf("a scan that did not adjudicate set Exploitability=%q on %s",
-				f.Exploitability, f.RuleID)
+		if f.EvidenceConfidence != "" {
+			t.Errorf("%s has EvidenceConfidence=%q on a scan that recorded no evidence; "+
+				"an empty ledger aggregates to LOW, and reporting that would claim nox "+
+				"weighed evidence it never collected", f.RuleID, f.EvidenceConfidence)
 		}
 	}
 
@@ -314,15 +355,15 @@ func TestExploitabilityIsAbsentUnlessAdjudicated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	reported := loud.Findings.Findings()
-	if len(reported) == 0 {
-		t.Fatal("fixture produced no findings; this test asserts nothing")
-	}
-	for _, f := range reported {
-		if f.Exploitability != string(evidence.Potential) {
-			t.Errorf("finding %s has Exploitability=%q, want POTENTIAL — a scan "+
-				"executes nothing, so no other state is honest", f.RuleID, f.Exploitability)
+	var withConfidence int
+	for _, f := range loud.Findings.Findings() {
+		if f.EvidenceConfidence != "" {
+			withConfidence++
 		}
+	}
+	if withConfidence == 0 {
+		t.Error("no finding carries an evidence confidence even with reasoning recorded; " +
+			"the field is empty in both directions and asserts nothing")
 	}
 }
 

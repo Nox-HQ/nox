@@ -182,17 +182,50 @@ dispute is worth more than one they can only accept".
 
 **Missing.** It is not authoritative. Nothing gates on it.
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **4.1** | Promote the adjudicator: `Exploitability` populated on every finding, analyzers stop deciding | analyzers no longer independently decide final truth |
-| **4.2** | `PREVENTED` reachable only from positive, deterministic, scope-sound refutation | absence of evidence cannot produce `PREVENTED` |
-| **4.3** | CI gates on adjudicated state alongside severity | a scan cannot go greener by losing capability |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **4.1** | `Exploitability` populated on every finding | analyzers no longer independently decide final truth | ✅ |
+| **4.2** | `PREVENTED` reachable only from positive, deterministic, scope-sound refutation | absence of evidence cannot produce `PREVENTED` | ✅ |
+| **4.3** | CI gates on adjudicated state alongside severity | a scan cannot go greener by losing capability | deferred, see below |
 
-**Size:** large — this is the flip. The 15 known divergences must each be
-explained before promotion, not after.
+4.1 turned out small, and the reason is worth recording because it also corrects
+the plan. Exploitability is **not** derived from the evidence: the kernel
+reaches POTENTIAL from the empty `RunOutcome` and returns before it consults the
+ledger. So the value is a constant for any static scan, costs nothing to
+compute, and gating it on `RecordReasoning` bought a distinction it could not
+express. Measured across all three corpora: `POTENTIAL` on 95 of 95 findings.
 
-**Gate:** D, and this is the phase Gate A was built for. Every divergence
-resolved downward is a finding a user stops seeing.
+What the gate cost was the thing that mattered — an ordinary `nox scan` wrote no
+state at all, and a finding silent about never having been validated reads as a
+stronger claim than it is.
+
+`EvidenceConfidence` stays conditional, and the asymmetry is deliberate: it IS
+derived from the ledger, and an empty ledger aggregates to LOW. Writing that
+would assert nox weighed evidence it never collected.
+
+Two documented claims were wrong and are corrected in place:
+
+- `Finding.Exploitability` said POTENTIAL meant "static evidence exists and no
+  attack path was constructed". The first half was never carried by the value.
+- `ScanOptions.RecordReasoning` said a scan with it off produces byte-identical
+  results to one with it on. That was already untrue when written — both
+  adjudicated fields were gated on the flag.
+
+**4.3 is deferred, and not for scheduling reasons.** Gating CI on the
+adjudicated state is meaningless while the state is a constant: every finding on
+every scan is POTENTIAL, so a gate on it either fails every build or none. It
+becomes real when Phase 8 emits hypotheses (PLAUSIBLE) and Phase 10 runs them
+(CONFIRMED / PREVENTED / INCONCLUSIVE). Until then the capability gate —
+`policy.require_capabilities` and `--fail-on-degraded`, both shipped — is what
+stops a scan going greener by losing capability, which is 4.3's actual exit.
+
+**Size:** 4.1 and 4.2 were small. The promotion they were expected to require —
+the ledger becoming authoritative for what is REPORTED — is the part that
+changes findings and has not been done.
+
+**Gate:** D. Gate A was expected to earn its keep here, and did not need to:
+nothing in 4.1 or 4.2 removes a finding. Detection stayed 231/0/0 and refutation
+37/0/0. It will be needed for the reporting promotion above.
 
 **Warning carried from C5:** the plan's instinct here is to retire
 analyzer-authored confidence entirely. Measured, that takes
@@ -378,9 +411,9 @@ reads an adjudicated finding.
 1.2  artifact carries capability coverage        DONE     unblocks 2.x
  └─ 2.2  per-claim competence                    DONE     unblocks 3.3, 4.2
      └─ 3.2  subject-scoped adjudication         DONE     unblocks 4.1
-         └─ 4.1  adjudicator authoritative       large    THE FLIP
-             ├─ 4.2  safe PREVENTED              medium
-             ├─ 5.2  structural dedup (7 → 0)    medium   independent after 4.1
+         └─ 4.1  adjudicator authoritative       DONE     small, not large
+             ├─ 4.2  safe PREVENTED              DONE
+             ├─ 5.2  structural dedup (7 → 0)    medium   independent now
              └─ 11.1 replay holds post-promotion small
 ```
 
