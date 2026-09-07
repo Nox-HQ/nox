@@ -189,6 +189,12 @@ field, instead of scanning with no precondition.
 
 ---
 
+> **Execution plan: `docs/design/phase-execution-plan.md`.** It records, per
+> phase, what already exists in the tree, what is actually missing, and the
+> milestones that close the gap. The short version: the primitives for most of
+> Phases 1–12 are already built and run in shadow, so this is largely a
+> promotion sequence rather than twelve phases of construction.
+
 ## Phase 1 — Explicit evaluation state
 
 - **1.1** Results become at least `MATCH` / `CLEAN` / `UNEVALUATED`, with a
