@@ -30,6 +30,7 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
+	rep.CompetenceProfiles = r.CompetenceProfiles
 	return rep
 }
 
@@ -49,5 +50,6 @@ func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
 		return rep
 	}
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
+	rep.CompetenceProfiles = r.CompetenceProfiles
 	return rep
 }

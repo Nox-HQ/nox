@@ -746,26 +746,30 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 					if pkg.Ecosystem == "go" {
 						affected := goAffectedImports(&ov, pkg.Name)
-						if r, ok := goSymbolReferenced(affected, linkedGoPkgs, linkedGoKnown); ok {
+						// The result is recorded whatever it concluded, and the
+						// second return value is deliberately ignored.
+						//
+						// It used to gate this whole block, and goSymbolReferenced
+						// returns false for EVERY undetermined outcome — an
+						// advisory with no import metadata, a toolchain that could
+						// not enumerate the build. Those findings then carried no
+						// reach annotation at all, so the capability matrix read
+						// them as never-evaluated and the Undetermined arm of the
+						// switch that maps them was unreachable. "Asked and could
+						// not tell" arrived looking exactly like "nobody asked",
+						// which is the one distinction this vocabulary exists to
+						// preserve.
+						r, _ := goSymbolReferenced(affected, linkedGoPkgs, linkedGoKnown)
+						if len(affected) > 0 {
 							meta["affected_imports"] = strings.Join(affected, ",")
-							// The LEVEL, named. `go list -deps` establishes that
-							// the affected import is in the linked set, which is
-							// symbol_referenced and nothing above it. This used to
-							// be written as meta["reachable"], a name that reads as
-							// call_reachable, and the capability matrix then counted
-							// it as the reachability capability — evidence for one
-							// proposition establishing a later one, which is the
-							// invariant this vocabulary exists to hold.
-							meta["reach_level"] = string(r.Level)
-							meta["reach_outcome"] = string(r.Outcome)
-							meta["reach_scope"] = r.Scope.Describe()
-							if r.Outcome == reach.Refuted {
-								// Refuted at symbol_referenced only: the build links
-								// no affected package. Severity drops because there
-								// is nothing here to call, not because the
-								// application was shown to be unaffected.
-								sev = findings.SeverityInfo
-							}
+						}
+						applyReachMetadata(meta, r)
+						if r.Outcome == reach.Refuted {
+							// Refuted at symbol_referenced only: the build links
+							// no affected package. Severity drops because there
+							// is nothing here to call, not because the
+							// application was shown to be unaffected.
+							sev = findings.SeverityInfo
 						}
 					}
 
