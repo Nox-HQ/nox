@@ -47,11 +47,39 @@ type Verdict struct {
 
 // Adjudicate derives the verdict the ledger supports about subject.
 //
-// Exploitability comes from evidence.DeriveExploitability rather than being
-// re-derived here, deliberately. That function is the one definition of what
-// each state means, shared with the intelligence service, and a second
+// Exploitability comes from evidence.DeriveExploitabilityAbout rather than
+// being re-derived here, deliberately. That function is the one definition of
+// what each state means, shared with the intelligence service, and a second
 // implementation in the scanner is exactly the drift the kernel exists to
 // prevent — it would not fail any test, it would just quietly disagree.
+//
+// # Why the -About form, when nothing needs it yet
+//
+// All three derivations here are now scoped to the same subject. They were not:
+// Confidence and Conflicted went through the subject-scoped accessors while
+// Exploitability went through the unattributed one.
+//
+// That was not a live defect and should not be described as one. A scan's
+// RunOutcome is empty, so deriveExploitability returns POTENTIAL before it ever
+// reads the ledger.
+//
+// It is worth being exact about what the unattributed form does, because the
+// obvious reading is wrong. It does not consider every claim whoever it is
+// about; it asks about the ZERO subject, which is what a claim recorded with no
+// subject carries. So the hazard is unattributed claims, where everything
+// shares one subject and therefore matches everything — the failure
+// core/attack's TestUnattributedClaimsPromoteAcrossPropositions demonstrates.
+// reasoning.Store refuses claims without a subject, so no ledger built by a
+// scan can currently reach that state.
+//
+// The reason to fix it now anyway is that both guards lapse together. Phase
+// 10.3 puts verification evidence into this same ledger, which is when
+// o.Executed becomes true and the deterministic-claim branch becomes reachable
+// at all. At that point a function whose three derivations disagree about what
+// they are deciding is a trap, and the trap has two sides: scoped too little
+// promotes a claim across propositions, and scoping the derivation without
+// attributing the claims makes CONFIRMED unreachable instead — silently, which
+// is the worse of the two.
 //
 // A scan constructs no attack path and executes nothing, so the RunOutcome it
 // reports is empty and the honest answer is POTENTIAL. That is not a
@@ -77,7 +105,7 @@ type Verdict struct {
 // stays its own field — and the work of C3 is to stop throwing that field away
 // between here and the scan result.
 func Adjudicate(l evidence.Ledger, subject evidence.Subject) Verdict {
-	state := evidence.DeriveExploitability(evidence.RunOutcome{}, &l)
+	state := evidence.DeriveExploitabilityAbout(evidence.RunOutcome{}, &l, subject)
 	confidence := l.ConfidenceAbout(subject)
 	conflicted := l.Conflict(subject)
 
@@ -139,9 +167,19 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 //
 // # How to read the number, and how not to
 //
-// On the precision suite, 15 of 37 findings diverge and every one is the
+// On the precision suite, 17 of 53 findings diverge and 16 of those are the
 // analyzer claiming MORE than the evidence supports. That is a real signal and
 // it is not the signal it first looks like.
+//
+// The seventeenth runs the other way, and so do 14 of the 19 divergences on the
+// refutation suite: IaC rules author LOW, and their static evidence aggregates
+// to MEDIUM. That matters to Phase 4.1, which was planned against an earlier
+// measurement reading "15 of 37, all over-claimed" — under which the only move
+// is downward and promotion is a question of how much to demote. It is not one
+// direction, and a flip that only knows how to lower confidence would hold
+// those findings down. The numbers are pinned in
+// TestDivergenceShapeIsMeasuredNotRemembered so this paragraph cannot go stale
+// again the way the one it replaces did.
 //
 // It is tempting to read it as "the analyzers over-claim on 41% of findings".
 // The more accurate reading is that they UNDER-RECORD. A secrets rule matching
@@ -158,7 +196,7 @@ func rationale(l evidence.Ledger, subject evidence.Subject, state evidence.Explo
 // This comment used to continue "the fix is for the checks the analyzers
 // already perform to become claims", and that was measured and found wrong.
 // Recording those checks — E3 — took the corpus from 37 supporting claims to
-// 61 and left the divergence at exactly 15. It could not have done anything
+// 61 and left the divergence unmoved. It could not have done anything
 // else: aggregation takes the STRONGEST supporting claim, every one of those
 // checks is a heuristic, and three heuristics are still a heuristic. The
 // independence promotion cannot apply either, since they all come from one

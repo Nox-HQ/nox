@@ -77,9 +77,23 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 	newTrace.ReproductionSamples = samples
 	newTrace.Outcome = outcome
 
+	// The proposition a replay re-establishes is the same one the original run
+	// tested: this hypothesis's invariant, and nothing above it.
+	//
+	// Naming it is what makes the reproduction hierarchy real here.
+	// TestAnAttackConfirmsTheInvariantItTestedAndNothingAbove records that
+	// core/attack once set no Subject on any claim, so every claim shared the
+	// zero subject and the cheapest deterministic one satisfied the
+	// precondition for the most expensive. That was fixed in the run path and
+	// not in this one: replay, regress and the MCP path kept building
+	// unattributed claims and deriving subject-blind. They were safe only
+	// because each builds a fresh single-purpose ledger — safe by accident of
+	// construction, one merge away from wrong, and Phase 10.3 is the merge.
+	subject := evidence.Subject{Kind: evidence.SubjectInvariantViolation, ID: orig.HypothesisID}
 	ledger := &evidence.Ledger{}
 	ledger.Add(evidence.Claim{
 		Kind:      evidence.KindHeuristic,
+		Subject:   subject,
 		Statement: "replay of " + orig.ID,
 		Provenance: evidence.Provenance{
 			Source:     "nox-attack",
@@ -90,6 +104,7 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 	if reproduced && outcome.Violated && outcome.ControlSound {
 		ledger.Add(evidence.Claim{
 			Kind:      oracleEvidenceKind(orig.Evidence.OracleKind),
+			Subject:   subject,
 			Statement: fmt.Sprintf("replay reproduced the exploit (%d/%d)", hits, samples),
 			Provenance: evidence.Provenance{
 				Source:     "nox-attack",
@@ -100,7 +115,7 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 		})
 	}
 	newTrace.Ledger = *ledger
-	newTrace.Exploitability = evidence.DeriveExploitability(outcome, ledger)
+	newTrace.Exploitability = evidence.DeriveExploitabilityAbout(outcome, ledger, subject)
 	newTrace.Confidence = ledger.Confidence()
 
 	if reproduced {
