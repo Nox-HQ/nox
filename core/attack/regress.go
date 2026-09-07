@@ -264,10 +264,15 @@ func runCase(ctx context.Context, c Case, t Target, cs *CanarySet, route string,
 	res := CaseResult{Case: c, Hits: hits, Samples: samples, Errors: errs}
 	reproduced := hits >= minHits
 
+	// The proposition is this case's invariant violation, named rather than
+	// left unattributed — see the note in Replay for why the whole package is
+	// being brought onto attributed claims rather than the run path alone.
+	subject := evidence.Subject{Kind: evidence.SubjectInvariantViolation, ID: c.ID}
 	ledger := &evidence.Ledger{}
 	if reproduced {
 		ledger.Add(evidence.Claim{
 			Kind:      evidence.KindDynamicExploit,
+			Subject:   subject,
 			Statement: fmt.Sprintf("recorded exploit %s reproduced (%d/%d)", c.ID, hits, samples),
 			Provenance: evidence.Provenance{
 				Source:     "nox-attack",
@@ -287,7 +292,7 @@ func runCase(ctx context.Context, c Case, t Target, cs *CanarySet, route string,
 		ControlSound:          true,
 		TargetErrors:          errs,
 	}
-	res.Exploitability = evidence.DeriveExploitability(outcome, ledger)
+	res.Exploitability = evidence.DeriveExploitabilityAbout(outcome, ledger, subject)
 	res.Regressed = res.Exploitability == evidence.Confirmed
 	switch {
 	case res.Regressed:
