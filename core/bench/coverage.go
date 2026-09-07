@@ -119,6 +119,12 @@ var RefutationBranches = []Branch{
 		Proposition: "an upstream pipeline segment quoted this value for the downstream parser",
 	},
 	{
+		ID: "lexical-context-iac", Corpus: "refutation-suite",
+		Wrong:  "a comment-aware IaC filter that starts a comment at the first bare # rather than tracking YAML string state swallows the rest of a flow-style line, taking a real misconfiguration with it",
+		Family: "IAC", Matcher: "lexctx/iac",
+		Proposition: "this configuration keyword is prose describing configuration, not configuration",
+	},
+	{
 		ID: "unmodelled-reflection", Corpus: "refutation-hard",
 		Wrong:  "no flow found through MethodByName is reported as no flow exists",
 		Family: "TAINT", Matcher: "taint/structural",

@@ -9,10 +9,13 @@ import (
 	"os"
 	"strings"
 
+	"path/filepath"
+
 	"github.com/nox-hq/nox-core/evidence"
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/rules/structural"
@@ -101,6 +104,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 		return nil, err
 	}
 	out := dropArtifactsWhenAlways(results, content)
+	out = dropMatchesInComments(path, out, content)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
@@ -108,6 +112,88 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	out = append(out, embedded...)
 	a.recordStructuralClaims(path, out)
 	return out, nil
+}
+
+// dropMatchesInComments removes findings whose match lies entirely inside a
+// comment.
+//
+// An IaC rule's evidence is configuration. A rule keyword written in a comment
+// is prose ABOUT configuration, and prose configures nothing: a manifest that
+// says
+//
+//	# This comment mentions PodDisruptionBudget and nothing else.
+//
+// reported IAC-395, "K8s defines PodDisruptionBudget (positive)", against a
+// ConfigMap. Kubernetes and Terraform files are heavily commented, and the
+// comments name exactly the resource kinds and property names the rules match,
+// so every explanatory line in a manifest was a candidate finding — landing on
+// the files operators read most. Issue #588.
+//
+// This is the IaC half of a refinement the secrets analyzer has had since
+// srccontext.go: `lexctx` is the single source of truth for lexical context,
+// and `WithinComments` is the same primitive that path uses. The rules
+// themselves need no change, which is the point — the comment question is
+// lexical, not per-rule, and answering it once is why lexctx exists.
+//
+// Unlike secrets, there is no carve-out here. That analyzer deliberately keeps
+// comment matches for PROVIDER rules, because a credential pasted into a
+// comment is a real leak: the token itself is the evidence, wherever it sits.
+// No IaC rule has that property. A Deployment named in a comment is not a
+// Deployment, and a commented-out `privileged: true` is not privileged.
+//
+// The span test is strict — every non-blank byte the match covers must be
+// comment — so a match that begins in code and runs into a trailing comment is
+// kept. That asymmetry is deliberate: this filter removes findings, and the
+// direction it must never fail in is dropping one that is partly real.
+func dropMatchesInComments(path string, in []findings.Finding, content []byte) []findings.Finding {
+	if len(in) == 0 {
+		return in
+	}
+	lang := configLang(path)
+	if lang == lexctx.LangUnknown {
+		return in
+	}
+
+	kept := in[:0]
+	for _, f := range in {
+		start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+		end := lexctx.LineColToOffset(content, f.Location.EndLine, f.Location.EndColumn)
+		if end <= start {
+			end = start + 1
+		}
+		if lexctx.WithinComments(lang, content, start, end) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
+}
+
+// configLang resolves the lexer language for an IaC file.
+//
+// It cannot use lexctx.LangFromPath, and the reason is written into that
+// function: LangYAML and LangDockerfile are deliberately NOT mapped there,
+// because the secrets, taint, ai and agentflow analyzers all gate on
+// LangFromPath and mapping .yaml would silently change their behaviour on
+// every such file. The languages exist and Classify handles them; only the
+// path lookup withholds them. So this analyzer answers the question for its
+// own files and changes nothing for anyone else.
+//
+// Terraform is absent because lexctx has no HCL lexer. `.tf` comments are
+// therefore still matched, and issue #588 stays open for them: a filter that
+// guessed at HCL comment syntax would be removing findings on a lexer nobody
+// wrote, which is the direction that hides vulnerabilities.
+func configLang(path string) lexctx.Lang {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yaml", ".yml":
+		return lexctx.LangYAML
+	}
+	base := filepath.Base(path)
+	if base == "Dockerfile" || base == "Containerfile" ||
+		strings.HasPrefix(base, "Dockerfile.") || strings.HasPrefix(base, "Containerfile.") {
+		return lexctx.LangDockerfile
+	}
+	return lexctx.LangUnknown
 }
 
 // dropArtifactsWhenAlways removes IAC-348 findings whose `when: always` sits
@@ -156,7 +242,7 @@ func enclosingKey(lines []string, line int) string {
 	if line < 1 || line > len(lines) {
 		return ""
 	}
-	indent := func(s string) int { return len(s) - len(strings.TrimLeft(s, " \t")) }
+	indent := func(s string) int { return len(s) - len(strings.TrimLeft(s, " 	")) }
 	target := indent(lines[line-1])
 	for i := line - 2; i >= 0; i-- {
 		l := lines[i]

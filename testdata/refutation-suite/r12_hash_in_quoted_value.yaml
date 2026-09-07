@@ -1,0 +1,33 @@
+# Guards: lexical-context-iac (IAC-007; issue #588).
+# nox-cover: lexical-context-iac
+#
+# r1 pins this for Python. This is the same hazard one file format over, and it
+# is the reason it exists: IaC rules match their keywords anywhere in the file,
+# including inside comments, so a manifest's own explanatory prose reports as
+# configuration. Fixing that means teaching the IaC path where a comment starts.
+#
+# The tempting way to do it is to cut each line at the first '#'. In YAML that
+# is wrong: a '#' inside a quoted scalar is data, and a comment only begins at
+# a '#' that follows whitespace outside a string.
+#
+# On the line below the '#' sits at column 59, inside the quoted SELinux level,
+# and the setting that grants full host capabilities follows it at column 69.
+# A first-hash cut deletes the rest of the line and with it a container running
+# with that setting — a real, high severity finding, removed by a filter added
+# to remove noise, with the count going down and every dashboard looking better
+# for it.
+#
+# This header spells no rule keyword, and that is not stylistic. Until the
+# filter exists these lines are scanned like any other, so naming the setting
+# in the prose made this very file report it twice — which is issue #588
+# demonstrating itself on the fixture written to guard its fix, and the reason
+# the fixture had to be worded around it rather than annotating it.
+apiVersion: v1
+kind: Pod  # nox-expect: IAC-137, IAC-138, IAC-139, IAC-140
+metadata:
+  name: build-agent
+spec:
+  containers:
+    - name: agent
+      image: registry.internal/agent@sha256:4444444444444444444444444444444444444444444444444444444444444444
+      securityContext: { seLinuxOptions: { level: "s0:c123#c456" }, privileged: true }  # nox-expect: IAC-135, IAC-007
