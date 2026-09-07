@@ -234,14 +234,20 @@ func mcpDrift(args []string) int {
 		return 2
 	}
 	jsonPath := filepath.Join(outputDir, "findings.json")
-	// no degradations: every failure above — an unreadable baseline, a manifest
-	// that could not be captured — exits 2 rather than continuing, so this
-	// command has no partial-result state to report.
+	// `nox mcp drift` compares two manifests. It runs no analyzers, and every
+	// failure above — an unreadable baseline, a manifest that could not be
+	// captured — exits 2 rather than continuing. So there is no capability
+	// matrix and no partial-result state to publish, and omitting both is the
+	// honest artifact: a matrix of zeroes would describe an installation that
+	// answered nothing, which is not what happened here.
+	//
+	// no scan behind this report
 	if err := report.NewJSONReporter(version).WriteToFile(fsSet, jsonPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", jsonPath, err)
 		return 2
 	}
 	sarifPath := filepath.Join(outputDir, "results.sarif")
+	// no scan behind this report — see above.
 	if err := sarif.NewReporter(version, nil).WriteToFile(fsSet, sarifPath); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", sarifPath, err)
 		return 2

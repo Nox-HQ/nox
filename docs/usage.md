@@ -1082,6 +1082,54 @@ policy:
   baseline_mode: strict
 ```
 
+#### In the artifacts
+
+Every `findings.json` carries a `meta.capabilities` matrix: one row per analysis
+capability, what provides it on this installation, and how many subjects it
+actually reached a conclusion about in this scan.
+
+```json
+{
+  "meta": {
+    "capabilities": [
+      {"capability": "lexical_context", "provided": true,
+       "providers": ["core/lexctx"], "answered": 48, "inconclusive": 0},
+      {"capability": "call_graph", "provided": false,
+       "answered": 0, "inconclusive": 0},
+      {"capability": "reachability", "provided": true,
+       "providers": ["core/analyzers/deps"], "answered": 0, "inconclusive": 0}
+    ]
+  }
+}
+```
+
+Read the three rows above as three different things, because they are:
+
+- `call_graph` is a **limit**. Nothing on this installation can answer it, so
+  the scan could not ask. Install a plugin that provides it, or read any finding
+  that depends on it as unevaluated.
+- `reachability` is a **gap**. It is provided, and this scan put the question to
+  nobody. That is not a clean result — it is an unused analysis.
+- `lexical_context` answered 48 subjects. `inconclusive` counts the ones it was
+  asked about and could not determine, and those are never added to `answered`:
+  "ran and could not tell" is not coverage.
+
+`provided` and `answered` are separate on purpose. `provided` is a property of
+the **installation** and is knowable without running anything; `answered` is a
+property of **this run**. They come apart exactly when something fails at
+runtime — `reachability` is provided by every nox build, and on a scan whose
+advisory source was unreachable it establishes nothing at all.
+
+`results.sarif` carries the same information as
+`invocations[].toolExecutionNotifications`, at level `note`. SARIF has no other
+slot for a statement about the run rather than the code, and without it Code
+Scanning renders a scan that *could not look* and a scan that *looked and found
+nothing* identically — both green.
+
+This is why the matrix is emitted even when everything worked: a report listing
+only the capabilities that succeeded is one a reader will take for the complete
+set of questions nox asks.
+
 #### Via MCP
 
 The evidence surface is on the MCP server too, because an agent triaging a scan

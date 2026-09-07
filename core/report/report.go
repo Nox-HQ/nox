@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -64,6 +65,52 @@ type Meta struct {
 	// indistinguishable from a scan that never looked. Omitted when the scan
 	// was complete.
 	Degradations []Degradation `json:"degradations,omitempty"`
+	// Capabilities records which analysis questions this scan could ask, and
+	// how many of them it actually answered.
+	//
+	// Degradations report what BROKE. This reports what was never possible in
+	// the first place, which no failure will ever announce: an installation
+	// that provides no call graph produces a scan with no call-graph errors
+	// and no call-graph answers, and the artifact reads exactly like one from
+	// an installation that has it and found nothing. That is the state
+	// core/capability exists to make visible, and until now it died at the
+	// artifact boundary — held on ScanResult, serialized nowhere, so the only
+	// consumers who could see it were the ones already inside the process.
+	//
+	// Omitted when the reporter was given no coverage, which keeps a report
+	// built without a scan (a filtered re-render, a fixture) from claiming a
+	// capability matrix it never had.
+	Capabilities []CapabilityCoverage `json:"capabilities,omitempty"`
+}
+
+// CapabilityCoverage is one analysis capability's standing in a scan: whether
+// this installation can answer the question at all, and how often it did.
+//
+// The two halves are separate on purpose and must not be collapsed. Provided
+// is a property of the INSTALLATION — permanent, and knowable without running
+// anything. Answered is a property of this RUN, and the two come apart exactly
+// when something fails at runtime: reachability is provided by every nox build,
+// and on a scan whose advisory source was unreachable it establishes nothing.
+// A consumer that reads only Provided sees a capability nox has; one that reads
+// only Answered cannot tell "nothing to say" from "nothing to say it with".
+type CapabilityCoverage struct {
+	Capability string `json:"capability"`
+	// Provided reports whether any implementation on this installation offers
+	// the capability. False is a limit nox can state plainly — not a failure,
+	// and never a clearance.
+	Provided bool `json:"provided"`
+	// Providers names the implementations, sorted. Empty when none.
+	Providers []string `json:"providers,omitempty"`
+	// Answered counts the subjects this capability reached a conclusion about,
+	// positive or negative. Negative counts: "the build links no package under
+	// crypto/md5" is a real answer, and the strongest a static scan reaches.
+	Answered int `json:"answered"`
+	// Inconclusive counts the subjects it was asked about and could not
+	// determine — evaluated-and-unknown, or timed out. These are the ones that
+	// must never be added to Answered: they mean the question was put and came
+	// back empty, and counting them as coverage rebuilds the false all-clear
+	// one layer up.
+	Inconclusive int `json:"inconclusive"`
 }
 
 // Degradation is a single incomplete check, as recorded in the artifact.
@@ -154,6 +201,34 @@ func DegradationsFrom(ds []degrade.Degradation) []Degradation {
 	return out
 }
 
+// CapabilitiesFrom converts a scan's capability registry and coverage into
+// their report form: one row per defined capability, cheapest first.
+//
+// Every capability is emitted, including the ones nothing provides and the ones
+// that answered nothing. That is the whole point — a matrix that lists only
+// what worked is a matrix a reader will mistake for the complete set of
+// questions. Nine rows, always, is what lets a consumer see that two of them
+// were never askable.
+//
+// A nil registry and a nil coverage are both usable: the result is every
+// capability marked unprovided with nothing answered, which is the honest
+// description of an installation that declared nothing.
+func CapabilitiesFrom(reg *capability.Registry, cov *capability.Coverage) []CapabilityCoverage {
+	all := capability.All()
+	out := make([]CapabilityCoverage, 0, len(all))
+	for _, c := range all {
+		answered, inconclusive := cov.Answered(c)
+		out = append(out, CapabilityCoverage{
+			Capability:   string(c),
+			Provided:     reg.Provided(c),
+			Providers:    reg.ProvidedBy(c),
+			Answered:     answered,
+			Inconclusive: inconclusive,
+		})
+	}
+	return out
+}
+
 // JSONReporter produces deterministic JSON output from a FindingSet.
 type JSONReporter struct {
 	ToolVersion string
@@ -177,6 +252,10 @@ type JSONReporter struct {
 	// plugin's output never reaches the artifact, which makes a plugin that
 	// annotates rather than detects indistinguishable from one that did not run.
 	Enrichments []findings.Enrichment
+	// Capabilities is the analysis capability matrix for this scan. Set it with
+	// CapabilitiesFrom(result.Capabilities, result.Coverage) — or, better, let
+	// core.ScanResult.JSONReporter set it, so no surface has to remember.
+	Capabilities []CapabilityCoverage
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -212,6 +291,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			Offline:       r.Offline,
 			SASTLanguages: r.SASTLanguages,
 			Degradations:  r.Degradations,
+			Capabilities:  r.Capabilities,
 		},
 		Findings:    f,
 		Enrichments: r.Enrichments,

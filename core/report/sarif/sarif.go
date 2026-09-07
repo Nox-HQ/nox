@@ -16,6 +16,7 @@ import (
 
 	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -47,8 +48,38 @@ type Report struct {
 
 // Run represents a single invocation of an analysis tool.
 type Run struct {
-	Tool    Tool     `json:"tool"`
-	Results []Result `json:"results"`
+	Tool Tool `json:"tool"`
+	// Invocations carries what the run could and could not establish. SARIF has
+	// no slot for "this analysis was never able to run here", so the standard's
+	// nearest honest home for it is a tool execution notification — see
+	// buildInvocations.
+	Invocations []Invocation `json:"invocations,omitempty"`
+	Results     []Result     `json:"results"`
+}
+
+// Invocation describes one execution of the tool, per SARIF §3.20.
+type Invocation struct {
+	// ExecutionSuccessful is required by the schema. It is true whenever nox
+	// produced a report at all: a capability nox never had is not a failed
+	// execution, and saying otherwise would turn every installation without a
+	// call graph into a broken run.
+	ExecutionSuccessful bool `json:"executionSuccessful"`
+	// ToolExecutionNotifications reports conditions about the run itself
+	// rather than about the code — SARIF §3.20.21.
+	ToolExecutionNotifications []Notification `json:"toolExecutionNotifications,omitempty"`
+}
+
+// Notification is a SARIF notification object (§3.58).
+type Notification struct {
+	Descriptor *ReportingDescriptorReference `json:"descriptor,omitempty"`
+	Level      string                        `json:"level"`
+	Message    Message                       `json:"message"`
+}
+
+// ReportingDescriptorReference identifies the notification's kind (§3.52), so a
+// consumer can group or filter on the id rather than parse the message text.
+type ReportingDescriptorReference struct {
+	ID string `json:"id"`
 }
 
 // Tool describes the analysis tool that produced the run.
@@ -155,6 +186,14 @@ type Reporter struct {
 	// Rules is an optional RuleSet used to populate the SARIF rule catalog.
 	// When nil, the catalog is derived from the findings themselves.
 	Rules *rules.RuleSet
+
+	// Capabilities is the scan's analysis capability matrix, rendered as tool
+	// execution notifications. It takes the type core/report already derives so
+	// that findings.sarif and findings.json cannot disagree about what nox
+	// could establish — one derivation, two artifacts. Nil for a report with no
+	// scan behind it, which emits no invocations at all rather than an empty
+	// claim of full coverage.
+	Capabilities []report.CapabilityCoverage
 }
 
 // NewReporter returns a Reporter configured with the given tool
@@ -236,7 +275,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		results = append(results, result)
 	}
 
-	report := Report{
+	doc := Report{
 		Version: sarifVersion,
 		Schema:  sarifSchema,
 		Runs: []Run{
@@ -249,12 +288,68 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 						Rules:          ruleCatalog,
 					},
 				},
-				Results: results,
+				Invocations: r.buildInvocations(),
+				Results:     results,
 			},
 		},
 	}
 
-	return json.MarshalIndent(report, "", "  ")
+	return json.MarshalIndent(doc, "", "  ")
+}
+
+// buildInvocations renders the capability matrix as tool execution
+// notifications — the one slot SARIF has for a statement about the RUN rather
+// than about the code.
+//
+// It reports only the questions that went unanswered, and that asymmetry is
+// deliberate. A SARIF consumer already sees what nox found; nothing in the
+// format tells it what nox was never able to look for, so a scan from an
+// installation with no call graph and a scan from one that has a call graph and
+// found nothing clean arrive identical. Code Scanning shows both as green.
+// These notifications are the difference, and they are the reason this milestone
+// exists: the state was already computed, and it died at the artifact boundary.
+//
+// Every notification is level "note". None of these is an execution failure — a
+// capability nobody implements is a permanent, honest limit — and levelling a
+// limit as a warning is how a signal gets filtered out by the people who most
+// need to read it.
+func (r *Reporter) buildInvocations() []Invocation {
+	if len(r.Capabilities) == 0 {
+		return nil
+	}
+	var notes []Notification
+	for _, c := range r.Capabilities {
+		var id, text string
+		switch {
+		case !c.Provided:
+			id = "nox/capability/unsupported"
+			text = fmt.Sprintf("%s: no implementation on this installation. "+
+				"This scan could not ask the question, and its silence about it is not an all-clear.", c.Capability)
+		case c.Answered == 0 && c.Inconclusive == 0:
+			id = "nox/capability/not-evaluated"
+			text = fmt.Sprintf("%s: available but evaluated nothing in this scan. "+
+				"No result here means the question was not put, not that it was answered.", c.Capability)
+		case c.Answered == 0:
+			id = "nox/capability/inconclusive"
+			text = fmt.Sprintf("%s: evaluated %d subject(s) and determined none of them.", c.Capability, c.Inconclusive)
+		case c.Inconclusive > 0:
+			id = "nox/capability/inconclusive"
+			text = fmt.Sprintf("%s: answered %d subject(s); %d could not be determined.",
+				c.Capability, c.Answered, c.Inconclusive)
+		default:
+			// Answered everything it was asked. Nothing to report.
+			continue
+		}
+		notes = append(notes, Notification{
+			Descriptor: &ReportingDescriptorReference{ID: id},
+			Level:      "note",
+			Message:    Message{Text: text},
+		})
+	}
+	if len(notes) == 0 {
+		return nil
+	}
+	return []Invocation{{ExecutionSuccessful: true, ToolExecutionNotifications: notes}}
 }
 
 // WriteToFile generates the SARIF report and writes it to the specified path

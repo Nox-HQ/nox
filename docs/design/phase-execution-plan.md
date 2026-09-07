@@ -59,23 +59,31 @@ are provided (`call_graph` and `entry_point` are not). `ScanResult` carries
 `Coverage` and `Capabilities`. `policy.require_capabilities` and
 `--fail-on-degraded` already fail a scan that lost a capability at runtime.
 
-**Missing.** `core/report.Meta` carries `schema_version`, `generated_at`,
-`tool_name`, `tool_version`, `offline`, `sast_languages` and `degradations` —
-and nothing about capability coverage. A consumer reading only `findings.json`
-cannot tell that two of nine questions were never asked. The state exists in
-process and dies at the artifact boundary.
+**Missing.** 1.3 only. `report.Meta` now carries the capability matrix (#602).
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **1.1** | Nothing — the states exist and are used | already met |
-| **1.2** | Add `capabilities` to `report.Meta`, populated from `ScanResult.Coverage`; SARIF `invocation.toolExecutionNotifications` for the same | two scans differing only by analyzer availability are not byte-identical |
-| **1.3** | Default `policy.uncertainty` to a value that does not treat unevaluated as clean | uninstalling an analyzer cannot turn a failing scan green **by default**, not only when configured |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **1.1** | Nothing — the states exist and are used | already met | ✅ |
+| **1.2** | `capabilities` on `report.Meta` from `ScanResult.Coverage`; SARIF `invocations[].toolExecutionNotifications` for the same | two scans differing only by analyzer availability are not byte-identical | ✅ #602 |
+| **1.3** | Default `policy.uncertainty` to a value that does not treat unevaluated as clean | uninstalling an analyzer cannot turn a failing scan green **by default**, not only when configured | |
 
-**Size:** small. 1.2 is a struct field and a serializer. 1.3 is a default flip
-and needs a deprecation note — it can fail scans that pass today.
+1.2 landed larger than "a struct field and a serializer" for one reason worth
+carrying forward: the four adapter sites each set `Degradations` by hand, and
+the MCP server had already shipped three that forgot. Adding capability coverage
+as a fifth field to remember would have re-run that experiment with a worse
+payload — an omitted degradation list reads as missing information, an omitted
+capability matrix reads as a scan that asked everything. So the derivation moved
+into `ScanResult.JSONReporter` / `.SARIFReporter`, and the conformance guard now
+pins the constructor rather than the assignments.
+
+**Size:** 1.3 is a default flip and needs a deprecation note — it can fail scans
+that pass today.
 
 **Gate:** B (unevaluated honesty). 1.3 must ship with a corpus case where a
-capability is removed and the scan goes from pass to fail.
+capability is removed and the scan goes from pass to fail. 1.2's own Gate B case
+is `TestLosingAProviderChangesTheArtifact`: an installation without the taint
+engine used to write a byte-identical `findings.json` to one that had it and
+found nothing.
 
 ---
 
@@ -338,7 +346,7 @@ The critical path is **1.2 → 2.2 → 3.2 → 4.1**, because everything downstr
 reads an adjudicated finding.
 
 ```
-1.2  artifact carries capability coverage        small    unblocks 2.x
+1.2  artifact carries capability coverage        DONE     unblocks 2.x
  └─ 2.2  per-claim competence                    medium   unblocks 3.3, 4.2
      └─ 3.2  ledger authoritative for one family medium   unblocks 4.1
          └─ 4.1  adjudicator authoritative       large    THE FLIP
