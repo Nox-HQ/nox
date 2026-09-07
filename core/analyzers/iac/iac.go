@@ -105,6 +105,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	}
 	out := dropArtifactsWhenAlways(results, content)
 	out = dropMatchesInComments(path, out, content)
+	out = dropKindReferences(path, out, content)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
@@ -167,6 +168,87 @@ func dropMatchesInComments(path string, in []findings.Finding, content []byte) [
 		kept = append(kept, f)
 	}
 	return kept
+}
+
+// kindReferenceFields are the Kubernetes fields whose value POINTS AT another
+// object. A `kind:` nested under one of them names something else; it does not
+// declare the document it sits in.
+//
+// This is an allowlist rather than a depth test, and that distinction is the
+// whole fix. Indentation would be cheaper and, on the ten-repo corpus, exactly
+// right: 34 of 36 IAC-131 matches sit at column 0 and both nested ones are
+// references. It is also wrong, because a `kind: List` holds real objects
+// indented under `items:` — a depth rule deletes every workload in one, and no
+// corpus repo contains a List, so nothing would have caught it.
+// r13_workloads_inside_a_list.yaml is that case.
+//
+// An allowlist fails toward reporting: a reference field nobody listed keeps
+// producing a finding, which is noise. A depth rule fails toward silence.
+var kindReferenceFields = map[string]bool{
+	"scaleTargetRef":              true, // HorizontalPodAutoscaler -> workload
+	"targetRef":                   true, // ServiceMonitor, Gateway API, Flagger
+	"roleRef":                     true, // RoleBinding -> Role
+	"subjects":                    true, // RoleBinding -> ServiceAccount/User
+	"ownerReferences":             true, // any object -> its controller
+	"crossVersionObjectReference": true, // autoscaling/v1 HPA
+	"resourceRef":                 true, // Crossplane and friends
+	"targetService":               true,
+	"backendRef":                  true, // Gateway API HTTPRoute
+	"parentRefs":                  true, // Gateway API
+}
+
+// dropKindReferences removes findings anchored to a `kind:` line that names
+// another object rather than declaring this one.
+//
+// IAC-131 matched `kind\s*:\s*Deployment` anywhere in a YAML file, so a
+// HorizontalPodAutoscaler reported "Kubernetes workload detected - verify
+// NetworkPolicy exists" because it names the Deployment it scales. The document
+// is an autoscaler: no pod template, no containers, nothing the rule is about.
+// Issue #590.
+//
+// Two rules with the same defect were already removed by retiring them into
+// structural survivors (#591) — IAC-183 and IAC-176, 17 findings on podinfo
+// alone. IAC-131 has no structural survivor to retire into, so the reference
+// test is applied directly.
+//
+// The check is deliberately narrow: only findings whose own matched line is a
+// `kind:` mapping entry are considered, and only when the nearest enclosing key
+// is a known reference field. A rule that matched something else on that line
+// is untouched.
+func dropKindReferences(path string, in []findings.Finding, content []byte) []findings.Finding {
+	if len(in) == 0 || configLang(path) != lexctx.LangYAML {
+		return in
+	}
+
+	var lines []string
+	kept := in[:0]
+	for _, f := range in {
+		if lines == nil {
+			lines = strings.Split(string(content), "\n")
+		}
+		if isKindReference(lines, f.Location.StartLine) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
+}
+
+// isKindReference reports whether the 1-based line is a `kind:` entry sitting
+// under a field that points at another object.
+func isKindReference(lines []string, line int) bool {
+	if line < 1 || line > len(lines) {
+		return false
+	}
+	trimmed := strings.TrimSpace(lines[line-1])
+	// A list item declares the object it introduces: `- kind: Deployment` inside
+	// `subjects:` is a reference, but the leading dash is part of the entry, so
+	// strip it before testing the key.
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+	if !strings.HasPrefix(trimmed, "kind:") {
+		return false
+	}
+	return kindReferenceFields[enclosingKey(lines, line)]
 }
 
 // configLang resolves the lexer language for an IaC file.
