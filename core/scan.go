@@ -230,12 +230,20 @@ type ScanOptions struct {
 	// RecordReasoning collects the claims for and against every candidate the
 	// scan considers, into ScanResult.Reasoning.
 	//
-	// It is opt-in because it is not free at scale and because nothing in the
-	// default output depends on it: a scan with it off produces byte-identical
-	// results to one with it on. Track C consumes it; until then it is how the
-	// refinements that DROP findings become auditable at all, which they were
-	// not — every one of them used to discard the finding and the reason for
-	// dropping it in the same statement.
+	// It is opt-in because it is not free at scale. What it changes in the
+	// output is narrower than it used to be: since milestone 4.1 every scan
+	// adjudicates, so Exploitability is present either way, and the only field
+	// that depends on this flag is EvidenceConfidence — which genuinely cannot
+	// be derived without a ledger.
+	//
+	// This comment used to claim a scan with it off produces byte-identical
+	// results to one with it on. That was already untrue when it was written:
+	// both adjudicated fields were gated on the flag. The accurate statement is
+	// that no finding appears or disappears because of it.
+	//
+	// It is also how the refinements that DROP findings become auditable at
+	// all, which they were not — every one of them used to discard the finding
+	// and the reason for dropping it in the same statement.
 	RecordReasoning bool
 
 	// Offline is the umbrella zero-network guarantee. When true, every
@@ -2091,13 +2099,30 @@ func recordObservations(store *reasoning.Store, fs *findings.FindingSet) {
 // evidence, writes the state onto the finding, and returns the cases where the
 // analyzer's own confidence disagreed with what the evidence supports.
 //
-// Shadow mode: the verdict is recorded and nothing acts on it. The policy gate
-// still reads Severity and analyzer Confidence exactly as before, so no build
-// changes colour because of this. What it produces is the count C5 needs —
-// where, how often, and in which direction the two disagree — measured on real
-// scans instead of argued from first principles.
+// Every scan adjudicates. That is milestone 4.1, and what it changes is which
+// findings carry a state rather than what any state means.
+//
+// Exploitability was previously written only when the scan recorded reasoning,
+// so an ordinary `nox scan` produced findings with the field absent — and
+// absent reads as nothing at all. It is now on every finding, which is
+// affordable because for a static scan the value is not derived from the
+// evidence: evidence.DeriveExploitabilityAbout reaches POTENTIAL from the empty
+// RunOutcome, before it consults the ledger. "nox executed nothing and
+// constructed no attack path" is true of every scan whether or not anybody
+// asked for a ledger, so stating it costs nothing and withholding it was the
+// silence that reads as a stronger claim.
+//
+// EvidenceConfidence is the opposite case and stays conditional. It IS derived
+// from the ledger, and an empty ledger aggregates to LOW — which would assert
+// that nox weighed the evidence and found it weak, when nox recorded none. So
+// a scan without reasoning leaves it empty, and empty keeps meaning "no
+// evidence was recorded" rather than "the evidence was poor".
+//
+// The policy gate still reads Severity and analyzer Confidence, so no build
+// changes colour because of this. Divergences are still reported rather than
+// resolved — see the C5 note in core/adjudicate.
 func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adjudicate.Divergence, []adjudicate.Conflict) {
-	if store == nil || fs == nil {
+	if fs == nil {
 		return nil, nil
 	}
 	all := fs.Findings()
@@ -2108,6 +2133,11 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adju
 		ledger := store.About(subject)
 		verdict := adjudicate.Adjudicate(ledger, subject)
 		fs.SetExploitability(i, string(verdict.Exploitability))
+		if store == nil {
+			// No ledger, so nothing to say about evidence — and nothing below
+			// this point has anything to compare against either.
+			continue
+		}
 		fs.SetEvidenceConfidence(i, string(verdict.Confidence))
 
 		// Verdict.Conflicted used to be computed here and dropped on the floor.

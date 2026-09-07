@@ -1130,6 +1130,32 @@ This is why the matrix is emitted even when everything worked: a report listing
 only the capabilities that succeeded is one a reader will take for the complete
 set of questions nox asks.
 
+#### Every finding says whether it was validated
+
+Every finding a scan reports carries an `Exploitability` state, and for a scan
+it is always `POTENTIAL`:
+
+```json
+{"RuleID": "SEC-003", "Exploitability": "POTENTIAL"}
+```
+
+That is not a placeholder. It is the true state of a condition nobody has tried
+to exploit — `nox scan` executes nothing, ever — and saying it out loud is the
+point. A finding silent about never having been validated reads as a stronger
+claim than it is, and silence is what an ordinary scan used to produce.
+
+Only `nox attack`, which executes something under `--authorize`, can move a
+finding off `POTENTIAL`. No amount of static analysis reaches `CONFIRMED`, and
+nothing reaches `PREVENTED` without a defence actually being observed — "we
+attacked it and saw nothing" and "a defence stopped the attack" produce
+identical silence, and only the second is a claim.
+
+`EvidenceConfidence` sits beside it and behaves differently on purpose: it is
+derived from the recorded evidence, so it appears only when the scan recorded
+reasoning (`--evidence-out`, `nox why`, MCP). Empty means **no evidence was
+recorded**, never "the evidence was weak" — an empty ledger aggregates to LOW,
+and reporting that would claim nox weighed something it never collected.
+
 #### Per finding, not per scan
 
 The matrix above is a run-level summary, and it cannot answer the question

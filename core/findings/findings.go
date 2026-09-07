@@ -151,20 +151,39 @@ type Finding struct {
 	Metadata    map[string]string
 	Status      Status `json:"Status,omitempty"`
 
-	// Exploitability is the adjudicated lifecycle state, present only on scans
-	// that recorded reasoning (ScanOptions.RecordReasoning). It is a state
-	// label, NOT a ledger: the evidence itself lives out-of-band, for the
-	// reasons measured in docs/benchmarks/2026-Q3/ledger-budget.md.
+	// Exploitability is the adjudicated lifecycle state, present on every
+	// finding a scan reports. It is a state label, NOT a ledger: the evidence
+	// itself lives out-of-band, for the reasons measured in
+	// docs/benchmarks/2026-Q3/ledger-budget.md.
 	//
-	// Empty means the scan did not adjudicate, which is different from
-	// POTENTIAL — one says nothing was asked, the other says static evidence
-	// exists and no attack path was constructed. Consumers must not read an
-	// absent value as either a state or a clearance.
+	// POTENTIAL is what a static scan reaches, always. The state is derived
+	// from the run outcome, and a scan's run outcome is empty: nothing was
+	// executed and no attack path was constructed. It is not derived from the
+	// evidence — the kernel returns POTENTIAL before it consults the ledger —
+	// which is why this field is now written whether or not the scan recorded
+	// reasoning. An earlier version of this comment said POTENTIAL meant
+	// "static evidence exists and no attack path was constructed"; the first
+	// half was never carried by the value.
+	//
+	// Saying it out loud is the point. A finding that stays silent about
+	// having never been validated reads as a stronger claim than it is, and
+	// silence was what an ordinary scan produced.
+	//
+	// A state other than POTENTIAL reaches a finding only from `nox attack`,
+	// which executes something. Empty means the finding did not come from a
+	// scan at all — a hand-built set, a filtered re-render — and must not be
+	// read as either a state or a clearance.
 	Exploitability string `json:",omitempty"`
 
 	// EvidenceConfidence is what the recorded evidence supports, on the
 	// kernel's scale (LOW, MEDIUM, HIGH, CONFIRMED). Present only on scans that
-	// recorded reasoning; empty means nothing was adjudicated.
+	// recorded reasoning.
+	//
+	// It stays conditional where Exploitability no longer is, and the asymmetry
+	// is the honest one: this value IS derived from the ledger. An empty ledger
+	// aggregates to LOW, and writing LOW would assert that nox weighed the
+	// evidence and found it weak when nox recorded none. So empty means "no
+	// evidence was recorded", never "the evidence was poor".
 	//
 	// It sits BESIDE Confidence rather than replacing it, and the distinction
 	// is the whole of Track C5. The two answer different questions:
