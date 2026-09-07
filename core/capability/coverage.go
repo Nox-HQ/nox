@@ -2,6 +2,8 @@ package capability
 
 import (
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/nox-hq/nox-core/evidence"
@@ -195,4 +197,92 @@ func (c *Coverage) Answered(ac AnalysisCapability) (answered, inconclusive int) 
 		}
 	}
 	return answered, inconclusive
+}
+
+// Profile is one distinct set of unanswered questions, shared by every subject
+// it was derived for.
+//
+// It exists because competence is per-claim but not per-finding: a scan holds
+// as many distinct competence states as it has (language × analyses) classes,
+// which is a handful, not one per result. Measured on nox's own corpora, 53
+// findings resolve to 4 profiles and 62 to 3. Naming the class once and
+// referring to it is what lets every finding carry its own competence without
+// the artifact paying for it — the same reasoning that put the evidence ledger
+// out-of-band (docs/benchmarks/2026-Q3/ledger-budget.md).
+type Profile struct {
+	// ID is stable within one scan and assigned in sorted signature order, so
+	// two runs over the same tree number the profiles identically. It is not
+	// stable ACROSS scans and must not be stored as if it were: it names a set
+	// of gaps, and which sets exist depends on what was scanned.
+	ID string `json:"id"`
+	// Subjects counts how many subjects resolved to this profile.
+	Subjects int `json:"subjects"`
+	// Gaps are the capabilities that did not conclude, cheapest first. An empty
+	// Gaps means every capability concluded — a state no scan has reached, and
+	// one that would still be reported rather than omitted.
+	Gaps []Gap `json:"gaps"`
+}
+
+// Profiles groups subjects by the set of capabilities that did not conclude
+// about them, and returns the distinct profiles plus the subject-to-profile
+// assignment.
+//
+// A subject nothing was recorded about still gets a profile — the one where
+// nothing concluded — because that is the most important case to be able to
+// name, not the one to leave out. Omitting it would put the findings nox knows
+// least about into the group with no entry at all.
+//
+// A nil Coverage yields no profiles and no assignment: there is nothing to say
+// about competence when nothing recorded any, and inventing a full-coverage
+// profile would be the opposite of true.
+func Profiles(c *Coverage, subjects []evidence.Subject) (profiles []Profile, bySubject map[evidence.Subject]string) {
+	if c == nil || len(subjects) == 0 {
+		return nil, nil
+	}
+	bySignature := make(map[string][]Gap)
+	counts := make(map[string]int)
+	subjectSig := make(map[evidence.Subject]string, len(subjects))
+	for _, s := range subjects {
+		// A repeated subject is one subject. Counting it twice would make the
+		// profile look like it covers more of the scan than it does.
+		if _, done := subjectSig[s]; done {
+			continue
+		}
+		gaps := c.Gaps(s)
+		var sig strings.Builder
+		for _, g := range gaps {
+			sig.WriteString(string(g.Capability))
+			sig.WriteByte('=')
+			sig.WriteString(string(g.State))
+			sig.WriteByte(';')
+		}
+		key := sig.String()
+		if _, ok := bySignature[key]; !ok {
+			bySignature[key] = gaps
+		}
+		subjectSig[s] = key
+		counts[key]++
+	}
+
+	// Sorted signature order, so the same tree numbers its profiles the same
+	// way on every run. A scan artifact whose contents renumber between
+	// identical runs is not a reproducible one.
+	sigs := make([]string, 0, len(bySignature))
+	for k := range bySignature {
+		sigs = append(sigs, k)
+	}
+	sort.Strings(sigs)
+
+	profiles = make([]Profile, 0, len(sigs))
+	idBySig := make(map[string]string, len(sigs))
+	for i, sig := range sigs {
+		id := "c" + strconv.Itoa(i+1)
+		idBySig[sig] = id
+		profiles = append(profiles, Profile{ID: id, Subjects: counts[sig], Gaps: bySignature[sig]})
+	}
+	bySubject = make(map[evidence.Subject]string, len(subjectSig))
+	for s, sig := range subjectSig {
+		bySubject[s] = idBySig[sig]
+	}
+	return profiles, bySubject
 }

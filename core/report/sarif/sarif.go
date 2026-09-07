@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/compliance"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
@@ -194,6 +195,15 @@ type Reporter struct {
 	// scan behind it, which emits no invocations at all rather than an empty
 	// claim of full coverage.
 	Capabilities []report.CapabilityCoverage
+
+	// CompetenceProfiles resolves each finding's CompetenceProfile ID into the
+	// capabilities that did not conclude about it.
+	//
+	// SARIF gets the RESOLVED list rather than the ID. A profile reference is a
+	// nox concept that a SARIF consumer has no way to look up — Code Scanning
+	// reads the result, not nox's meta block — so shipping the identifier alone
+	// would be shipping nothing.
+	CompetenceProfiles []capability.Profile
 }
 
 // NewReporter returns a Reporter configured with the given tool
@@ -270,7 +280,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			Message:      Message{Text: f.Message},
 			Locations:    locations,
 			Fingerprints: map[string]string{"nox/v1": f.Fingerprint},
-			Properties:   sarifProperties(f),
+			Properties:   r.resultProperties(f),
 		}
 		results = append(results, result)
 	}
@@ -433,6 +443,48 @@ func sarifProperties(f findings.Finding) map[string]any {
 		props[k] = v
 	}
 	return props
+}
+
+// resultProperties is sarifProperties plus this finding's own competence.
+//
+// The run-level notifications say what the scan could not establish anywhere.
+// This says what it did not establish about THIS alert, which is the question
+// somebody triaging one alert in the Code Scanning UI is actually asking — and
+// the run-level answer forces them to assume the best case for every alert.
+//
+// The list is resolved to capability names, never a profile ID: nothing on the
+// consuming side can look an ID up.
+func (r *Reporter) resultProperties(f findings.Finding) map[string]any {
+	props := sarifProperties(f)
+	gaps := r.gapsFor(f.CompetenceProfile)
+	if len(gaps) == 0 {
+		return props
+	}
+	if props == nil {
+		props = make(map[string]any, 1)
+	}
+	names := make([]string, 0, len(gaps))
+	for _, g := range gaps {
+		names = append(names, string(g.Capability)+"="+string(g.State))
+	}
+	props["nox_unevaluated"] = strings.Join(names, ",")
+	return props
+}
+
+// gapsFor resolves a competence profile ID. An ID naming no profile resolves to
+// nothing rather than to an empty gap list, because an empty gap list means
+// every question was answered — the one claim an unresolvable reference must
+// never be turned into.
+func (r *Reporter) gapsFor(id string) []capability.Gap {
+	if id == "" {
+		return nil
+	}
+	for i := range r.CompetenceProfiles {
+		if r.CompetenceProfiles[i].ID == id {
+			return r.CompetenceProfiles[i].Gaps
+		}
+	}
+	return nil
 }
 
 func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {

@@ -81,6 +81,19 @@ type Meta struct {
 	// built without a scan (a filtered re-render, a fixture) from claiming a
 	// capability matrix it never had.
 	Capabilities []CapabilityCoverage `json:"capabilities,omitempty"`
+	// CompetenceProfiles are the distinct sets of unanswered questions this
+	// scan holds. Each finding names the one it belongs to in its
+	// CompetenceProfile field.
+	//
+	// Capabilities above is the run-level summary and cannot answer the
+	// question a triager actually asks, which is about ONE finding: was
+	// reachability evaluated for THIS one? A run-level "reachability answered 4
+	// subjects" leaves every reader of the other forty-nine to guess, and the
+	// comfortable guess is the wrong one.
+	//
+	// Omitted when the scan recorded no coverage. Absent does not mean full
+	// competence.
+	CompetenceProfiles []capability.Profile `json:"competence_profiles,omitempty"`
 }
 
 // CapabilityCoverage is one analysis capability's standing in a scan: whether
@@ -256,6 +269,9 @@ type JSONReporter struct {
 	// CapabilitiesFrom(result.Capabilities, result.Coverage) — or, better, let
 	// core.ScanResult.JSONReporter set it, so no surface has to remember.
 	Capabilities []CapabilityCoverage
+	// CompetenceProfiles is the per-claim half of the same picture. Set from
+	// ScanResult.CompetenceProfiles, and likewise best left to the constructor.
+	CompetenceProfiles []capability.Profile
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -292,6 +308,8 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			SASTLanguages: r.SASTLanguages,
 			Degradations:  r.Degradations,
 			Capabilities:  r.Capabilities,
+
+			CompetenceProfiles: r.CompetenceProfiles,
 		},
 		Findings:    f,
 		Enrichments: r.Enrichments,

@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nox-hq/nox/core/capability"
+	"github.com/nox-hq/nox/core/reach"
 )
 
 // expectation is one case's declared ground truth: what the advisory scopes to,
@@ -81,6 +84,79 @@ func TestReachabilitySuiteMatchesGroundTruth(t *testing.T) {
 			}
 			if reachable != exp.WantReachable {
 				t.Errorf("reachable = %v, want %v — %s", reachable, exp.WantReachable, exp.Why)
+			}
+		})
+	}
+}
+
+// TestSuiteStatesReachTheCapabilityMatrix asserts the `want_state` field every
+// fixture in this suite has always declared and nothing has ever checked.
+//
+// The ground truth was written down, the struct field was defined to hold it,
+// and no assertion consumed it. That is the shape of gap this suite's own
+// README warns about — "the difference between them exists only if something
+// checks it" — reproduced inside the test file that says so.
+//
+// It matters because the state, not the boolean, is what the artifact and the
+// capability gate read. A case that answers (reachable=true, determined=false)
+// and a case nobody ever asked both produce a finding with no reachability
+// annotation. Only the state tells them apart.
+func TestSuiteStatesReachTheCapabilityMatrix(t *testing.T) {
+	for name, exp := range loadCases(t) {
+		t.Run(name, func(t *testing.T) {
+			if exp.WantState == "" {
+				t.Fatal("expect.json declares no want_state")
+			}
+			dir := filepath.Join(suiteDir(), name)
+			linked, linkedKnown := goImportedPackages(context.Background(), dir)
+			r, _ := goSymbolReferenced(exp.AdvisoryImports, linked, linkedKnown)
+
+			// unsupported_ecosystem never reaches the Go path at all: the
+			// analyzer gates on pkg.Ecosystem == "go", so no reach.Result is
+			// produced and the matrix answers from the registry. There is
+			// nothing here to map.
+			if exp.WantState == string(capability.Unsupported) {
+				return
+			}
+			if got := r.Outcome.CapabilityState(); string(got) != exp.WantState {
+				t.Errorf("capability state = %q, want %q — %s", got, exp.WantState, exp.Why)
+			}
+		})
+	}
+}
+
+// TestUndeterminedOutcomesReachTheFinding is the end of that chain.
+//
+// goSymbolReferenced returns (result, false) for EVERY undetermined outcome,
+// and the analyzer wrote the reach metadata only when the second value was
+// true. So an advisory with no import metadata — the common case, since only
+// the Go vulndb populates ecosystem_specific.imports — produced a finding with
+// no reach_outcome at all, and every downstream reader saw a question that was
+// never asked rather than one that was asked and came back empty.
+//
+// The suite's four cases were all checked at the function. None of them was
+// checked at the artifact, which is where the distinction is spent.
+func TestUndeterminedOutcomesReachTheFinding(t *testing.T) {
+	for name, exp := range loadCases(t) {
+		if exp.WantState != string(capability.Unknown) {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(suiteDir(), name)
+			linked, linkedKnown := goImportedPackages(context.Background(), dir)
+			r, _ := goSymbolReferenced(exp.AdvisoryImports, linked, linkedKnown)
+
+			meta := map[string]string{}
+			applyReachMetadata(meta, r)
+
+			if meta["reach_outcome"] != string(reach.Undetermined) {
+				t.Errorf("reach_outcome = %q, want %q — an undetermined result that records "+
+					"nothing is indistinguishable from one nobody asked for",
+					meta["reach_outcome"], reach.Undetermined)
+			}
+			if meta["reach_limitations"] == "" {
+				t.Error("reach_limitations is empty; an undetermined result that does not say " +
+					"what defeated it cannot be acted on")
 			}
 		})
 	}

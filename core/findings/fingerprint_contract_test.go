@@ -53,8 +53,14 @@ var fingerprintIngredients = map[string]fingerprintRole{
 	"Status":               notAnIngredient,
 	"Exploitability":       notAnIngredient,
 	"EvidenceConfidence":   notAnIngredient,
-	"RetiredRuleIDs":       notAnIngredient,
-	"AliasFingerprints":    notAnIngredient,
+	// Competence describes what nox did NOT establish about a finding. It must
+	// never move the fingerprint: installing a plugin that provides call graphs
+	// changes this field on every finding in the repository, and if that moved
+	// the hash it would un-waive every baseline entry and nox:ignore in one
+	// release that fixed nothing.
+	"CompetenceProfile": notAnIngredient,
+	"RetiredRuleIDs":    notAnIngredient,
+	"AliasFingerprints": notAnIngredient,
 }
 
 func contractBase() Finding {

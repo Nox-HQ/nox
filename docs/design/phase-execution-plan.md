@@ -100,13 +100,28 @@ that is not that workflow re-implements or omits it. And competence is
 per-scan, not per-claim: one scan cannot yet say "taint ran, but hit an
 unmodelled construct on *this* path".
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **2.1** | Move degradation/baseline-drift/capability-loss gating into `core/policy`; the workflow calls it | all consumers inherit identical semantics; the bash shrinks to an invocation |
-| **2.2** | Per-claim competence: attach `capability.State` + `reach.Limitation` to the claim, not the run | one scan legitimately holds different competence states for different findings |
-| **2.3** | A negative claim that met an unmodelled construct cannot render unqualified | reports and API expose scope on every negative |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **2.1** | Move degradation/baseline-drift/capability-loss gating into `core/policy`; the workflow calls it | all consumers inherit identical semantics; the bash shrinks to an invocation | |
+| **2.2** | Per-claim competence: `capability.State` + `reach.Limitation` on the claim, not the run | one scan legitimately holds different competence states for different findings | ✅ #604 |
+| **2.3** | A negative claim that met an unmodelled construct cannot render unqualified | reports and API expose scope on every negative | |
 
-**Size:** medium. 2.2 touches every refiner that records a claim.
+2.2 landed as competence **profiles**: every finding names the set of questions
+that went unanswered about it, and the sets are grouped because competence
+varies by (language × analyses) class rather than by finding — measured, 53
+findings resolve to 4 profiles and 62 to 3.
+
+It also surfaced a live defect (#603). `goSymbolReferenced` returns `ok=false` for
+every UNDETERMINED outcome, and the deps analyzer wrote its reach metadata only
+when `ok` was true. So an advisory with no `ecosystem_specific.imports` — the
+common case, since only the Go vulndb populates it — produced a finding with no
+reach annotation at all, the capability matrix read it as never-evaluated, and
+the `Undetermined` arm of the switch that maps it was unreachable code. The
+reachability suite had declared `want_state` in every fixture since it was
+written, and nothing asserted it.
+
+**Size:** medium. 2.2 touched the deps analyzer, `core/capability`, the finding
+schema and both reporters.
 
 **Gate:** B, and D for 2.3 — an unqualified negative is how absence of evidence
 becomes evidence of absence.
@@ -347,7 +362,7 @@ reads an adjudicated finding.
 
 ```
 1.2  artifact carries capability coverage        DONE     unblocks 2.x
- └─ 2.2  per-claim competence                    medium   unblocks 3.3, 4.2
+ └─ 2.2  per-claim competence                    DONE     unblocks 3.3, 4.2
      └─ 3.2  ledger authoritative for one family medium   unblocks 4.1
          └─ 4.1  adjudicator authoritative       large    THE FLIP
              ├─ 4.2  safe PREVENTED              medium

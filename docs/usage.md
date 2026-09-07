@@ -1130,6 +1130,53 @@ This is why the matrix is emitted even when everything worked: a report listing
 only the capabilities that succeeded is one a reader will take for the complete
 set of questions nox asks.
 
+#### Per finding, not per scan
+
+The matrix above is a run-level summary, and it cannot answer the question
+somebody triaging one finding actually asks: was reachability evaluated for
+**this** one? "reachability answered 4 subjects" leaves the reader of the other
+forty-nine to guess, and the comfortable guess is the wrong one.
+
+So every finding names its own competence profile:
+
+```json
+{
+  "RuleID": "DATA-001",
+  "Location": {"FilePath": "values.yaml"},
+  "CompetenceProfile": "c3"
+}
+```
+
+resolved against `meta.competence_profiles`:
+
+```json
+{"id": "c3", "subjects": 5, "gaps": [
+  {"capability": "lexical_context", "state": "unsupported",
+   "reason": "unsupported — this analysis cannot apply here"},
+  {"capability": "constant_evaluation", "state": "unsupported", "reason": "..."},
+  {"capability": "taint", "state": "not_evaluated", "reason": "..."}
+]}
+```
+
+That YAML finding was **not** lexically analysed — nox has no YAML lexer, so it
+could not tell a match in a comment from one in a value. A Go finding in the
+same scan was, and resolves to a different profile. One scan, different
+competence for different findings, which is the fact a run-level matrix
+structurally cannot express.
+
+It is an ID rather than an inline list because competence varies by class and
+not by finding: measured, 53 findings on the precision suite resolve to 4
+distinct profiles, and 62 on nox's own tree to 3. Profile IDs are stable within
+a scan and assigned in sorted order, so identical runs number them identically —
+but they are **not** stable across scans and must not be stored as if they were.
+
+In `results.sarif` the same information is resolved inline on each result, as
+`properties.nox_unevaluated`, because a SARIF consumer has no way to look a nox
+profile ID up.
+
+An empty `CompetenceProfile` means the scan recorded no coverage. It does not
+mean everything was evaluated.
+
 #### Via MCP
 
 The evidence surface is on the MCP server too, because an agent triaging a scan

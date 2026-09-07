@@ -104,6 +104,17 @@ type ScanResult struct {
 	Capabilities *capability.Registry
 	Coverage     *capability.Coverage
 
+	// CompetenceProfiles are the distinct sets of unanswered questions this
+	// scan holds, referenced by Finding.CompetenceProfile.
+	//
+	// Competence is a property of the CLAIM, not of the run. The run-level
+	// matrix on Coverage can say that constant evaluation ran; only this can
+	// say it ran for the Go findings and could not apply to the YAML ones. A
+	// consumer that has only the run-level view has to assume the best case for
+	// every finding, and the best case is precisely the reading this model
+	// exists to withhold.
+	CompetenceProfiles []capability.Profile
+
 	// Reasoning holds the claims for and against each candidate this scan
 	// considered: why a finding was reported, and why a dropped one was not.
 	//
@@ -849,6 +860,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
+	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)
 	recordAnalysisLimitations(allFindings, target, reasons)
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
 
@@ -861,20 +873,21 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
 	return &ScanResult{
-		Capabilities: capabilities,
-		Coverage:     coverage,
-		Reasoning:    reasons,
-		Divergences:  divergences,
-		Conflicts:    conflicts,
-		Findings:     allFindings,
-		Enrichments:  pluginEnrichments,
-		Graphs:       pluginGraphs,
-		Inventory:    inventory,
-		AIInventory:  aiInventory,
-		PolicyResult: policyResult,
-		Rules:        allRules,
-		Degradations: degradations.Items(),
-		SASTProfile:  cfg.Scan.SAST.ResolvedProfile(),
+		Capabilities:       capabilities,
+		Coverage:           coverage,
+		CompetenceProfiles: competenceProfiles,
+		Reasoning:          reasons,
+		Divergences:        divergences,
+		Conflicts:          conflicts,
+		Findings:           allFindings,
+		Enrichments:        pluginEnrichments,
+		Graphs:             pluginGraphs,
+		Inventory:          inventory,
+		AIInventory:        aiInventory,
+		PolicyResult:       policyResult,
+		Rules:              allRules,
+		Degradations:       degradations.Items(),
+		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
 	}, nil
 }
 
@@ -2123,6 +2136,41 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adju
 	return out, conflicts
 }
 
+// assignCompetenceProfiles groups findings by what was NOT answered about them
+// and stamps each finding with its profile's ID.
+//
+// This is where per-claim competence becomes readable. The run-level matrix can
+// say constant evaluation ran; only this can say it ran for the Go findings and
+// could not apply to the YAML ones — and a consumer holding only the run-level
+// view has to assume the best case for every finding, which is exactly the
+// reading the capability model exists to withhold.
+//
+// Grouping rather than inlining is a measurement, not a preference: 53 findings
+// on the precision suite resolve to 4 distinct profiles and 62 on nox's own
+// tree to 3, because competence varies by (language × analyses) class. Writing
+// the same five-entry gap list onto every finding would spend the artifact on
+// repetition, which is the shape ledger-budget.md already ruled out once.
+func assignCompetenceProfiles(cov *capability.Coverage, fs *findings.FindingSet) []capability.Profile {
+	if cov == nil || fs == nil {
+		return nil
+	}
+	items := fs.Findings()
+	subjects := make([]evidence.Subject, 0, len(items))
+	for _, f := range items {
+		subjects = append(subjects, SubjectForFinding(f))
+	}
+	profiles, assignment := capability.Profiles(cov, subjects)
+	if len(profiles) == 0 {
+		return nil
+	}
+	for i, f := range items {
+		if id, ok := assignment[SubjectForFinding(f)]; ok {
+			fs.SetCompetenceProfile(i, id)
+		}
+	}
+	return profiles
+}
+
 // recordCapabilityCoverage records, per reported finding, what the analyses
 // that ran actually concluded about it.
 //
@@ -2189,14 +2237,13 @@ func recordCapabilityCoverage(cov *capability.Coverage, fs *findings.FindingSet)
 		// a call graph, so call_path_exists is unevaluated for every finding,
 		// and saying nothing is what makes `nox why` and the capability gate
 		// report it as unevaluated rather than as answered.
-		switch reach.Outcome(f.Metadata["reach_outcome"]) {
-		case reach.Established:
-			cov.Record(subject, capability.SymbolResolution, capability.Positive)
-		case reach.Refuted:
-			cov.Record(subject, capability.SymbolResolution, capability.Negative)
-		case reach.Undetermined:
-			cov.Record(subject, capability.SymbolResolution, capability.Unknown)
-		}
+		// The mapping lives on reach.Outcome so this switch and the
+		// reachability suite's own expectations cannot drift apart. It used to
+		// be written out here, and its Undetermined arm was unreachable for as
+		// long as the deps analyzer wrote no metadata for an undetermined
+		// result — a dead branch that looked live.
+		cov.Record(subject, capability.SymbolResolution,
+			reach.Outcome(f.Metadata["reach_outcome"]).CapabilityState())
 	}
 }
 
