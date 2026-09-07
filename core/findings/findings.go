@@ -192,6 +192,26 @@ type Finding struct {
 	// resolved — see ScanResult.Divergences.
 	EvidenceConfidence string `json:",omitempty"`
 
+	// CompetenceProfile names the set of analysis questions that were NOT
+	// answered about this finding, resolved against meta.competence_profiles in
+	// the report.
+	//
+	// Competence is per-claim, not per-run. One scan legitimately holds
+	// different states for different findings: a match in a Go file had its
+	// constants evaluated and a match in a YAML file did not, because there is
+	// no evaluator for YAML — and neither fact is visible from a run-level
+	// summary, which can only report that constant evaluation ran at all.
+	//
+	// It is an ID rather than an inline list because competence varies by CLASS
+	// and not by finding. Measured: 53 findings on the precision suite resolve
+	// to 4 distinct profiles, and 62 on nox's own tree to 3. Inlining would
+	// repeat one of a handful of values once per finding, which is the shape
+	// docs/benchmarks/2026-Q3/ledger-budget.md ruled out for the ledger itself.
+	//
+	// Empty means the scan recorded no coverage, not that everything was
+	// evaluated. Consumers must not read an absent value as full competence.
+	CompetenceProfile string `json:",omitempty"`
+
 	// RetiredRuleIDs are the IDs of retired rules that reported THIS finding's
 	// condition at THIS location before they were retired, and AliasFingerprints
 	// are the fingerprints those rules would have produced here.
@@ -788,6 +808,13 @@ func (fs *FindingSet) SetExploitability(i int, state string) {
 func (fs *FindingSet) SetEvidenceConfidence(i int, level string) {
 	if i >= 0 && i < len(fs.items) {
 		fs.items[i].EvidenceConfidence = level
+	}
+}
+
+// SetCompetenceProfile records which competence profile finding i belongs to.
+func (fs *FindingSet) SetCompetenceProfile(i int, id string) {
+	if i >= 0 && i < len(fs.items) {
+		fs.items[i].CompetenceProfile = id
 	}
 }
 
