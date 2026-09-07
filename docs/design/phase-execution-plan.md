@@ -242,19 +242,41 @@ corpus, every edge evidence-backed. `core/attack/graph.go` has a typed security
 graph with path search.
 
 **Missing.** The graph is confined to `core/attack`; the scan pipeline has no
-graph identity beyond `FlowID`. Structural deduplication is partial — the
-2026-09 self-scan still shows **7 duplicate fingerprints out of 62 findings**.
+graph identity beyond `FlowID`.
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **5.1** | Bind findings to symbols/nodes/edges/paths, not just flows | a finding can reference the path that established it |
-| **5.2** | Structural dedup over flow identity | TRIAGE-002 solved by identity, never by deleting a detector |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **5.1** | Bind findings to symbols/nodes/edges/paths, not just flows | a finding can reference the path that established it | |
+| **5.2** | Identity, not deletion, decides what is one finding | TRIAGE-002 solved by identity, never by deleting a detector | ✅ #610 |
 
-**Size:** medium. 5.2 has a measurable target already: 7 → 0 duplicates on the
-self-scan.
+**5.2's stated target was a mismeasurement, and chasing it would have deleted
+real findings.** "7 duplicate fingerprints out of 62 findings" counts
+**suppressed** findings — 60 of the 62 on the self-scan are waived. Among active
+findings there are **zero** duplicates. And of the seven, four are IAC-018 on
+four *different* workflow steps: genuinely distinct findings sharing one digest,
+because the v2 fingerprint is `sha256(rule_id, path, message)` and that rule's
+message is a static description. Deduplicating them to zero would have deleted
+three real findings — the exact failure the milestone's own exit criterion
+names.
+
+`FindingSet.Deduplicate` already implements the right rule and documents this
+hazard: it keys on fingerprint **plus position**, because "two findings at
+different positions are never duplicates".
+
+What the measurement did surface is that the same hazard was unfixed one layer
+over, where it is worse. `Baseline.Match` looked up by fingerprint alone, so
+accepting one finding accepted every other occurrence in that file — including
+ones added *after* the baseline was written. A newly introduced problem was born
+baselined and `nox scan` reported `0 findings`. Fixed in #610 by consuming one
+entry per finding, which keeps what v2 bought: a finding that moves still
+matches.
+
+**Size:** small, once measured. The lesson is the plan's, not the code's — the
+number had never been read past its total.
 
 **Gate:** A — `r5_two_distinct.py` exists precisely because two sinks sharing a
-source are two vulnerabilities.
+source are two vulnerabilities. 5.2 ADDED findings rather than removing them, so
+Gate A was not the binding constraint; the release note is.
 
 ---
 
@@ -413,7 +435,7 @@ reads an adjudicated finding.
      └─ 3.2  subject-scoped adjudication         DONE     unblocks 4.1
          └─ 4.1  adjudicator authoritative       DONE     small, not large
              ├─ 4.2  safe PREVENTED              DONE
-             ├─ 5.2  structural dedup (7 → 0)    medium   independent now
+             ├─ 5.2  identity, not deletion      DONE     target was a mismeasurement
              └─ 11.1 replay holds post-promotion small
 ```
 

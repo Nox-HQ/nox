@@ -2028,13 +2028,17 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.De
 		return
 	}
 
+	// A consuming matcher, not bl.Match. One entry accepts one finding, so a
+	// baseline written when a file had two continue-on-error steps does not
+	// silently accept the third somebody adds later — see baseline.Matcher.
+	m := bl.NewMatcher()
 	items := fs.Findings()
 	for i := range items {
 		f := items[i]
 		if f.Status != "" && f.Status != findings.StatusNew {
 			continue // already suppressed
 		}
-		if bl.Match(&f) != nil {
+		if m.Match(&f) != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
 		}
 	}

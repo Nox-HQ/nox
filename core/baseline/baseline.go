@@ -33,7 +33,13 @@ type Entry struct {
 type Baseline struct {
 	SchemaVersion string  `json:"schema_version"`
 	Entries       []Entry `json:"entries"`
-	index         map[string]*Entry
+	// index holds EVERY entry per fingerprint, not the last one written.
+	//
+	// It used to hold one, and that quietly made a baseline unable to express
+	// "two of these were accepted" — which matters because two genuinely
+	// distinct findings share a fingerprint whenever a rule's message is a
+	// static description. See Matcher.
+	index map[string][]*Entry
 }
 
 // Load reads a baseline file from path. If the file does not exist, an empty
@@ -44,7 +50,7 @@ func Load(path string) (*Baseline, error) {
 		if os.IsNotExist(err) {
 			return &Baseline{
 				SchemaVersion: schemaVersion,
-				index:         make(map[string]*Entry),
+				index:         make(map[string][]*Entry),
 			}, nil
 		}
 		return nil, fmt.Errorf("reading baseline %s: %w", path, err)
@@ -104,14 +110,28 @@ func (b *Baseline) lookup(fingerprint string) *Entry {
 	if fingerprint == "" {
 		return nil
 	}
-	e, ok := b.index[fingerprint]
-	if !ok {
+	for _, e := range b.index[fingerprint] {
+		if e.ExpiresAt != nil && time.Now().After(*e.ExpiresAt) {
+			continue
+		}
+		return e
+	}
+	return nil
+}
+
+// live returns the unexpired entries for a fingerprint, in file order.
+func (b *Baseline) live(fingerprint string) []*Entry {
+	if fingerprint == "" {
 		return nil
 	}
-	if e.ExpiresAt != nil && time.Now().After(*e.ExpiresAt) {
-		return nil
+	out := make([]*Entry, 0, len(b.index[fingerprint]))
+	for _, e := range b.index[fingerprint] {
+		if e.ExpiresAt != nil && time.Now().After(*e.ExpiresAt) {
+			continue
+		}
+		out = append(out, e)
 	}
-	return e
+	return out
 }
 
 // Add appends an entry to the baseline and updates the index.
@@ -120,25 +140,32 @@ func (b *Baseline) Add(e *Entry) {
 		return
 	}
 	b.Entries = append(b.Entries, *e)
-	if b.index == nil {
-		b.index = make(map[string]*Entry)
-	}
-	b.index[e.Fingerprint] = &b.Entries[len(b.Entries)-1]
+	// Appending can reallocate the slice, which invalidates every pointer the
+	// index holds. Rebuilding is O(n) per Add and this is not a hot path;
+	// keeping stale pointers would be a bug that only appears past the
+	// slice's initial capacity, which is the hardest kind to find.
+	b.buildIndex()
 }
 
 // Prune removes entries whose fingerprints are not present in the current
 // findings slice. Returns the number of entries removed.
 func (b *Baseline) Prune(current []findings.Finding) int {
-	active := make(map[string]struct{}, len(current))
+	// Counted, not a presence set. Entries are consumed one per finding now, so
+	// a baseline holding four entries for a fingerprint that only two findings
+	// still match is carrying two spares — and a spare is exactly what absorbs
+	// the next occurrence without anyone accepting it. Pruning to the live
+	// count keeps the file honest about how many were accepted.
+	active := make(map[string]int, len(current))
 	for i := range current {
-		active[current[i].Fingerprint] = struct{}{}
+		active[current[i].Fingerprint]++
 	}
 
 	kept := make([]Entry, 0, len(b.Entries))
 	removed := 0
 	for i := range b.Entries {
 		entry := b.Entries[i]
-		if _, ok := active[entry.Fingerprint]; ok {
+		if active[entry.Fingerprint] > 0 {
+			active[entry.Fingerprint]--
 			kept = append(kept, entry)
 		} else {
 			removed++
@@ -217,8 +244,92 @@ func FromFindings(ff []findings.Finding) []Entry {
 }
 
 func (b *Baseline) buildIndex() {
-	b.index = make(map[string]*Entry, len(b.Entries))
+	b.index = make(map[string][]*Entry, len(b.Entries))
 	for i := range b.Entries {
-		b.index[b.Entries[i].Fingerprint] = &b.Entries[i]
+		fp := b.Entries[i].Fingerprint
+		b.index[fp] = append(b.index[fp], &b.Entries[i])
 	}
+}
+
+// Matcher applies a baseline to ONE scan's findings, consuming an entry per
+// finding it suppresses.
+//
+// Baseline.Match answers "is this fingerprint accepted?", which sounds like the
+// right question and is not. Under fingerprint v2 the digest is
+// sha256(rule_id || path || message), and FindingSet.Add passes the finding's
+// Message as content — so a rule whose message is a static description produces
+// ONE fingerprint for every occurrence in a file. Four workflow steps with
+// continue-on-error are four real findings and one digest.
+//
+// With a fingerprint-only lookup, accepting one of them accepted all four, and
+// — the part that makes this a false negative rather than an inconvenience — it
+// accepted the fifth somebody added a month later. That finding was born
+// baselined. `nox scan` printed "0 findings (3 suppressed)" for a file whose
+// problems had grown by half.
+//
+// Counting fixes it without giving back what v2 bought. An entry records that
+// ONE instance was accepted:
+//
+//   - the code moves — one finding, one entry, still matched, which is the
+//     whole reason the line was dropped from the digest
+//   - a second instance appears — no entry left to consume, so it is reported
+//   - an instance is removed — a spare entry remains, and Prune clears it
+//
+// A Matcher is single-use and not safe for concurrent use: the scan applies a
+// baseline in one pass over an already-sorted finding set, so the assignment is
+// deterministic without any ordering rule of its own.
+type Matcher struct {
+	b         *Baseline
+	remaining map[string]int
+}
+
+// NewMatcher returns a consuming matcher over b. A nil Baseline yields a
+// matcher that suppresses nothing.
+func (b *Baseline) NewMatcher() *Matcher {
+	m := &Matcher{b: b, remaining: map[string]int{}}
+	if b == nil {
+		return m
+	}
+	for fp := range b.index {
+		m.remaining[fp] = len(b.live(fp))
+	}
+	return m
+}
+
+// Match returns the entry accepting f, consuming it, or nil when the baseline
+// has no unconsumed entry for this finding.
+//
+// The alias fallback is preserved: a finding that inherited a retired rule ID
+// is looked up under the fingerprint that rule would have produced, so retiring
+// a duplicate rule ID does not un-baseline every finding accepted under it.
+func (m *Matcher) Match(f *findings.Finding) *Entry {
+	if m == nil || m.b == nil || f == nil {
+		return nil
+	}
+	if e := m.consume(f.Fingerprint); e != nil {
+		return e
+	}
+	for _, fp := range f.AliasFingerprints {
+		if e := m.consume(fp); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// consume takes one entry for fingerprint if any remain.
+func (m *Matcher) consume(fingerprint string) *Entry {
+	if fingerprint == "" || m.remaining[fingerprint] <= 0 {
+		return nil
+	}
+	live := m.b.live(fingerprint)
+	if len(live) == 0 {
+		return nil
+	}
+	// Which entry is handed back does not affect suppression — they share a
+	// fingerprint — but taking them in file order keeps the reported reason
+	// stable across runs.
+	e := live[len(live)-m.remaining[fingerprint]]
+	m.remaining[fingerprint]--
+	return e
 }
