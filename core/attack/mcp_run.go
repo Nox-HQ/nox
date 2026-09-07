@@ -153,10 +153,15 @@ func inspectScenario(sc Scenario, manifests []MCPManifest, controlSound bool, cf
 	violated := winner != nil
 	didReproduce := violated && reproduced >= samples
 
+	// The proposition is this scenario's invariant violation on the inspected
+	// manifest — see the note in Replay for why every claim in this package is
+	// attributed now rather than the run path's alone.
+	subject := evidence.Subject{Kind: evidence.SubjectInvariantViolation, ID: sc.ID}
 	ledger := &evidence.Ledger{}
 	if violated && didReproduce && controlSound {
 		ledger.Add(evidence.Claim{
 			Kind:      mcpLedgerKind,
+			Subject:   subject,
 			Statement: mcpEvidenceStatement(*winner),
 			Provenance: evidence.Provenance{
 				Source:     "nox-attack-mcp",
@@ -174,7 +179,7 @@ func inspectScenario(sc Scenario, manifests []MCPManifest, controlSound bool, cf
 		Reproduced:            didReproduce,
 		ControlSound:          controlSound,
 	}
-	exploitability := evidence.DeriveExploitability(outcome, ledger)
+	exploitability := evidence.DeriveExploitabilityAbout(outcome, ledger, subject)
 
 	tr := Trace{
 		ID:                  mcpTraceID(sc.ID, winner),
@@ -222,7 +227,8 @@ func inspectScenario(sc Scenario, manifests []MCPManifest, controlSound bool, cf
 func mcpErrorResult(res *Result, cfg MCPRunConfig, note string) *Result {
 	for _, sc := range MCPScenarios() {
 		outcome := evidence.RunOutcome{HypothesisConstructed: true, Executed: true, TargetErrors: 1, ControlSound: true}
-		exploitability := evidence.DeriveExploitability(outcome, &evidence.Ledger{})
+		subject := evidence.Subject{Kind: evidence.SubjectInvariantViolation, ID: sc.ID}
+		exploitability := evidence.DeriveExploitabilityAbout(outcome, &evidence.Ledger{}, subject)
 		res.Traces = append(res.Traces, Trace{
 			ID:             mcpTraceID(sc.ID, nil),
 			ScenarioID:     sc.ID,

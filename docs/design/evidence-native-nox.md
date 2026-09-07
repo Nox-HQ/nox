@@ -353,8 +353,10 @@ The seam already exists: `core/scan.go` Stage 3, `refineFindings`
   and never will: the missing strength comes from executing something or from
   somebody else reporting it, not from analysing harder.
 
-  Measured on the precision suite: 15 of 37 findings demoted, none promoted,
-  and `--min-confidence high` goes from **11 findings to zero**. Not "fewer" —
+  Measured on the precision suite (re-measured 2026-09-07: 16 of 53 findings
+  demoted, one promoted — the earlier reading of "15 of 37, none promoted"
+  predates three PRs that changed IaC output), and `--min-confidence high` goes
+  from **11 findings to zero**. Not "fewer" —
   zero, on every project, permanently. A filter that always returns nothing is
   indistinguishable from a clean repository, which is the single outcome this
   programme exists to prevent. The plan would have built it into the tool.
@@ -607,7 +609,7 @@ from an output flip the measurement ruled out.
 | **B** | `Subject`, `Relation`, `Polarity`, `Status`, `Authority` | nox-core v0.2.0; v0.2.1 added `SubjectCandidate` |
 | **E1** | six secrets refiners record why they drop a candidate | 5 of 6 covered end to end; the sixth is unreachable and says so |
 | **C1** | out-of-band shadow ledger, subject derived not stored | 0 bytes per finding; output byte-identical |
-| **C2** | `core/adjudicate`, shadow only, divergence report | 15 of 37 findings diverge, all over-claimed |
+| **C2** | `core/adjudicate`, shadow only, divergence report | 17 of 53 diverge; 16 over-claimed, 1 under (2026-09-07) |
 | **D1–D4** | nine analysis capabilities, six evaluation states, `nox analysis-capabilities` | 3 capabilities have no implementation and say so |
 | **D5** | `policy.uncertainty`, `policy.require_capabilities` | clean scan + missing required capability = exit 1 |
 | **E2/E3** | four AI refiners record; secrets records what it verified | 37 → 61 supporting claims; divergence unchanged |
