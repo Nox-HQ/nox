@@ -72,16 +72,25 @@ var costs = []struct {
 func MissingEvidence(cov *capability.Coverage, reg *capability.Registry, s evidence.Subject) []Gap {
 	var out []Gap
 	for _, c := range costs {
-		switch cov.State(s, c.AnalysisCapability) {
+		state := cov.State(s, c.AnalysisCapability)
+		switch state {
 		case capability.Positive, capability.Negative:
 			// Answered. Not a gap, whichever way it went.
 			continue
 		}
+		// Available is about THIS subject, not only about the installation.
+		//
+		// Registry.Provided answers "does an implementation exist anywhere",
+		// and taking that as the whole answer overstates it the moment an
+		// implementation covers one language. core/callgraph provides
+		// call_graph for Go; for a Python finding the per-subject state is
+		// Unsupported, and telling a reader the question is answerable would
+		// send them looking for a way to ask it that does not exist.
 		out = append(out, Gap{
 			Capability: c.AnalysisCapability,
 			Question:   c.question,
 			Cost:       c.cost,
-			Available:  reg.Provided(c.AnalysisCapability),
+			Available:  reg.Provided(c.AnalysisCapability) && state != capability.Unsupported,
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Cost < out[j].Cost })

@@ -155,14 +155,14 @@ func TestUnknownCapabilitiesAreNeverTreatedAsCoverage(t *testing.T) {
 func TestBuiltinsAreHonestAboutWhatIsMissing(t *testing.T) {
 	r := capability.DefaultRegistry()
 
-	for _, c := range []capability.AnalysisCapability{
-		capability.CallGraph, capability.EntryPoint,
-	} {
-		if r.Provided(c) {
-			t.Errorf("%q is declared as built-in; nox has no such analysis, and "+
-				"claiming one turns a limit into a false assurance", c)
-		}
-	}
+	// call_graph and entry_point moved into the provided list when
+	// core/callgraph was built, on the same terms as Reachability and
+	// ConstantEvaluation before them: Go only, and answering existentially.
+	//
+	// What must stay true is the per-finding half. A declaration at the
+	// installation level says the question CAN be put; it must not make a
+	// Python finding read "provided but nobody asked" when nothing could have
+	// asked. TestCallGraphIsUnsupportedOutsideGo in core is where that is held.
 	// ConstantEvaluation moved into the list below when core/consteval was
 	// built. It is declared on the same terms as Reachability, which has always
 	// been here and has always answered for Go alone: Provided() is an
@@ -172,16 +172,24 @@ func TestBuiltinsAreHonestAboutWhatIsMissing(t *testing.T) {
 	// the matrix is what says which were.
 	for _, c := range []capability.AnalysisCapability{
 		capability.LexicalContext, capability.Taint, capability.Reachability,
-		capability.ConstantEvaluation,
+		capability.ConstantEvaluation, capability.CallGraph, capability.EntryPoint,
 	} {
 		if !r.Provided(c) {
 			t.Errorf("%q is not declared but nox does provide it; an undeclared "+
 				"capability reads as Unsupported when it is really available", c)
 		}
 	}
-	if len(r.Missing()) == 0 {
-		t.Error("the registry claims nox is missing nothing, which cannot be true " +
-			"of a scanner that never executes the code it reads")
+	// Every defined capability now has an implementation, which is a true
+	// statement about the INSTALLATION and a dangerous one to leave standing
+	// alone. A scan still executes nothing, still reads one language for call
+	// graphs, and still cannot refute a path in any of them.
+	//
+	// So the assertion moves rather than disappears: with nothing missing,
+	// `nox analysis-capabilities` must still say what nox cannot do, or an
+	// operator reading a full matrix will take it for a full answer.
+	// TestAFullMatrixStillStatesItsLimits in cli holds that.
+	if len(r.Missing()) != 0 {
+		t.Logf("capabilities with no implementation: %v", r.Missing())
 	}
 }
 

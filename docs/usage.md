@@ -1150,6 +1150,41 @@ This is why the matrix is emitted even when everything worked: a report listing
 only the capabilities that succeeded is one a reader will take for the complete
 set of questions nox asks.
 
+#### Call paths, for Go
+
+A Go finding can carry the chain of calls that reaches it:
+
+```json
+{
+  "RuleID": "SEC-330",
+  "Location": {"FilePath": "core/attack/graph.go", "StartLine": 818},
+  "Metadata": {
+    "call_path": "cli.main -> cli.run -> cli.runAttack -> core/attack.BuildPlan -> ...",
+    "entry_kind": "concrete"
+  }
+}
+```
+
+`entry_kind` says what the path starts at, and the three are different claims:
+
+| kind | means |
+|---|---|
+| `concrete` | `main` or `init` — execution genuinely begins here when the program runs |
+| `test` | the test runner reaches it; real execution, of the test suite |
+| `exported` | an outside caller *could* reach it. Not evidence that anybody does |
+
+**It never reports that no path exists.** A syntactic call graph cannot see
+interface dispatch, function values, generics, embedding, reflection or
+generated code — each is a call it does not have, and each is a place a path
+could hide. So a finding with no `call_path` is one nox did not find a route to,
+never one it showed unreachable, and nothing here can suppress a finding.
+
+Go only. For every other language a finding's own capability matrix reads
+`unsupported` for `call_graph` and `entry_point` — nothing could have asked, as
+distinct from nobody having asked. A Go project with no `go.mod` is also
+`unsupported`: without the module path the cross-package edges cannot be
+resolved, and a mostly-disconnected graph's silence would mean nothing.
+
 #### Asking what would settle it: `--emit-hypotheses`
 
 A scan can write the active-testing questions its findings raise:

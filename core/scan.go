@@ -37,6 +37,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
+	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/consteval"
 	"github.com/nox-hq/nox/core/discovery"
@@ -868,6 +869,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
+	recordCallGraphCoverage(coverage, allFindings, target)
 	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)
 	recordAnalysisLimitations(allFindings, target, reasons)
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
@@ -2168,6 +2170,103 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adju
 		})
 	}
 	return out, conflicts
+}
+
+// recordCallGraphCoverage answers, per finding, whether a call path reaches it
+// and whether one starts where execution actually begins.
+//
+// Two capabilities that nothing provided until core/callgraph existed, so every
+// finding used to carry "nothing on this installation can answer it" for both.
+//
+// The states are chosen to make a wrong answer impossible in the direction that
+// matters. Positive when a path was found — existential, and the witness is a
+// real chain of call expressions. NEVER Negative: a syntactic graph cannot see
+// interface dispatch, function values or reflection, so "no path found" is
+// Unknown, and Unknown cannot suppress a finding. Unsupported outside Go,
+// because there the question genuinely cannot be put and NotEvaluated would
+// read as a gap somebody could close.
+//
+// The graph is built once per scan and only when the target holds a Go module.
+// On nox's own tree that is ~0.2s for 7,600 functions; a repository with no
+// go.mod pays nothing.
+func recordCallGraphCoverage(cov *capability.Coverage, fs *findings.FindingSet, target string) {
+	if cov == nil || fs == nil {
+		return
+	}
+	items := fs.Findings()
+
+	// Non-Go findings first, and unconditionally: they are Unsupported whether
+	// or not a graph was built, and saying so is the whole reason declaring
+	// these capabilities at installation level stays honest.
+	var anyGo bool
+	for _, f := range items {
+		if strings.HasSuffix(f.Location.FilePath, ".go") {
+			anyGo = true
+			continue
+		}
+		subject := SubjectForFinding(f)
+		cov.Record(subject, capability.CallGraph, capability.Unsupported)
+		cov.Record(subject, capability.EntryPoint, capability.Unsupported)
+	}
+	if !anyGo {
+		return
+	}
+
+	root := scanRootDir(target)
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		// Go files with no module: the import paths cannot be resolved, so a
+		// graph would be mostly disconnected. Unsupported rather than a bad
+		// answer.
+		for _, f := range items {
+			if !strings.HasSuffix(f.Location.FilePath, ".go") {
+				continue
+			}
+			subject := SubjectForFinding(f)
+			cov.Record(subject, capability.CallGraph, capability.Unsupported)
+			cov.Record(subject, capability.EntryPoint, capability.Unsupported)
+		}
+		return
+	}
+
+	g := callgraph.BuildGo(root)
+	for i := range items {
+		f := items[i]
+		if !strings.HasSuffix(f.Location.FilePath, ".go") {
+			continue
+		}
+		subject := SubjectForFinding(f)
+		key, ok := g.FuncAt(filepath.Join(root, f.Location.FilePath), f.Location.StartLine)
+		if !ok {
+			// The line is outside any function — a package-level declaration,
+			// an import. There is no call path to a var.
+			cov.Record(subject, capability.CallGraph, capability.Unknown)
+			cov.Record(subject, capability.EntryPoint, capability.Unknown)
+			continue
+		}
+		path, reached := g.PathToFunc(key)
+		// A path of one is the function itself, reached from nothing. It means
+		// no caller was resolved, which is the opposite of establishing that a
+		// call path exists — reach.CallPathExists is "a call path reaches the
+		// symbol FROM somewhere". Recording Positive for it would turn "we
+		// found no caller" into "we found a route".
+		if len(path) > 1 {
+			cov.Record(subject, capability.CallGraph, capability.Positive)
+			fs.SetMetadata(i, "call_path", strings.Join(path, " -> "))
+		} else {
+			cov.Record(subject, capability.CallGraph, capability.Unknown)
+		}
+		// EntryPoint is the stronger question and gets the stricter answer.
+		// Reaching an exported function establishes that an outside caller
+		// COULD arrive, not that execution begins anywhere — so only a
+		// concrete or test entry counts as answered.
+		switch reached {
+		case callgraph.EntryConcrete, callgraph.EntryTest:
+			cov.Record(subject, capability.EntryPoint, capability.Positive)
+			fs.SetMetadata(i, "entry_kind", reached.String())
+		default:
+			cov.Record(subject, capability.EntryPoint, capability.Unknown)
+		}
+	}
 }
 
 // assignCompetenceProfiles groups findings by what was NOT answered about them

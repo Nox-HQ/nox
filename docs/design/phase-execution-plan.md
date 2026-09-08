@@ -311,21 +311,53 @@ never scored a true positive on any corpus.
 (`testdata/reachability-suite`, exactly one suppressible case, asserted by
 name).
 
-**Missing.** One implementation, Go-only (`goVulnReachable`). No other
-ecosystem has an equivalent, and `call_graph` / `entry_point` are the two
-capabilities the installation reports as **not provided**.
+**Missing.** 7.2 and 7.3.
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **7.1** | Implement `call_graph` and `entry_point` for one more ecosystem | `analysis-capabilities` reports 9 of 9 for that language |
-| **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" |
-| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **7.1** | Implement `call_graph` and `entry_point` | `analysis-capabilities` reports 9 of 9 for that language | ✅ #613 |
+| **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" | already met |
+| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | |
 
-**Size:** large per ecosystem. This is the phase with the most build and the
-most product value — it is the SCA differentiator.
+**The plan's premise for 7.1 was wrong.** It read "one *more* ecosystem", but
+`call_graph` and `entry_point` were provided by **nothing** — there was no
+first. `core/callgraph` is it, for Go, in `core/callgraph`.
 
-**Gate:** B, and each new ecosystem arrives with its unsupported case converted
-to a determined one (the reachability-suite's own rule 4).
+The design decision that matters is what it refuses to do. A syntactic graph
+cannot see interface dispatch, function values, generics, embedding, reflection
+or generated code, so **it never refutes**. Every `reach.Scope` it builds carries
+a limitation, which makes `reach.Refute` decline to construct a negative from it.
+Reporting "no call path" from a graph like that would be reporting a blind spot
+as an all-clear — the one failure this whole model exists to prevent.
+
+Measured on nox's own tree: 7,655 functions, **6** concrete entry points, and
+witness paths that are real chains of call expressions, verified edge by edge
+against the source. Two earlier versions were wrong and the measurement caught
+both: counting every exported function as an entry point made 5,088 of 7,652
+functions "entries" and every answer a trivial length-1 path; and treating a
+length-1 path as `CallPathExists` turned "no caller found" into "a route
+exists".
+
+7.2 is met by construction rather than by new work: this analysis produces no
+negative reachability claims at all, and the one that exists (`goSymbolReferenced`)
+already refuses an incomplete scope and records `reach_limitations` since #605.
+
+**Consequence to watch.** Every defined capability now has an implementation, so
+`Registry.Missing()` is empty. That is true of the *installation* and misleading
+alone — seven tests asserted "something must be missing" and each had to move to
+asserting the property it actually cared about. `nox analysis-capabilities` now
+prints its standing limits unconditionally, guarded by
+`TestAFullMatrixStillStatesItsLimits`, because a full matrix with no caveat
+reads as a full answer.
+
+**Size:** large. This is the phase with the most build and the most product
+value — it is the SCA differentiator.
+
+**Gate:** B. `TestCallGraphNeverSuppressesAFinding` is the scan-level form: the
+call graph may never reach a state that hides a finding, in any language. Per
+finding, a language it cannot read reports `unsupported` rather than
+`not_evaluated` — declaring a capability at installation level must not make a
+Python finding read as a gap somebody could close.
 
 ---
 

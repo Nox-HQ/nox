@@ -28,9 +28,10 @@ func (b builtin) Provides() []AnalysisCapability { return b.provides }
 //
 // The list is deliberately short, and its shortness is the honest reading of
 // what a pattern scanner is. nox lexes, it resolves constants where a language
-// engine exists, and it tracks taint. It does not build a call graph, does not
-// know entry points, and cannot establish reachability or attacker
-// reachability — those come from plugins, or from nowhere.
+// engine exists, it tracks taint, and — for Go only — it builds a syntactic
+// call graph and names entry points. It cannot establish attacker reachability,
+// and it cannot refute a call path in any language: those come from plugins, or
+// from nowhere.
 //
 // Stating that plainly is the point. An operator running nox with no plugins
 // should be able to see that reachability was never on the table, rather than
@@ -57,6 +58,15 @@ func Builtins() []Provider {
 		// `go list -deps`, and answers it with (reachable, determined) so an
 		// undetermined result never reads as unreachable.
 		builtin{"core/analyzers/deps", []AnalysisCapability{Reachability}},
+		// core/callgraph relates callers to callees across function boundaries
+		// in a Go module, and names where execution begins. It answers
+		// EXISTENTIALLY only: it can produce a call path with a witness, and it
+		// never reports that no path exists, because a syntactic graph cannot
+		// see interface dispatch, function values or reflection. Listing it
+		// here says the questions can be put, not that every answer will be
+		// conclusive — which is the distinction between Unsupported and
+		// NotEvaluated that this whole registry exists to draw.
+		builtin{"core/callgraph", []AnalysisCapability{CallGraph, EntryPoint}},
 		// core/attack constructs and executes exploit hypotheses. It is listed
 		// because it exists, NOT because a scan uses it: `nox scan` never
 		// executes anything, so DynamicVerification is NotEvaluated on every

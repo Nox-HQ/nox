@@ -60,11 +60,10 @@ func TestAnAgentCanLearnWhatWasNotEvaluated(t *testing.T) {
 	// describe an unasked question as "no issues found" and the test still
 	// passed — a guard reading the reassurance instead of the claim. Found by
 	// falsifying it and watching nothing fail.
-	var sawUnprovided, sawUnasked bool
+	var sawUnasked bool
 	for _, row := range report.Capabilities {
 		switch {
 		case !row.Provided:
-			sawUnprovided = true
 			if !strings.Contains(row.Meaning, "Nothing on this installation can establish it") {
 				t.Errorf("%s is unprovided but its meaning reads %q", row.Capability, row.Meaning)
 			}
@@ -76,9 +75,13 @@ func TestAnAgentCanLearnWhatWasNotEvaluated(t *testing.T) {
 			}
 		}
 	}
-	if !sawUnprovided || !sawUnasked {
-		t.Errorf("the corpus exercised unprovided=%v unasked=%v; both must appear or "+
-			"the assertions above are vacuous", sawUnprovided, sawUnasked)
+	// The unprovided branch is no longer reachable through a real scan —
+	// core/callgraph filled the last capability nothing implemented — so it is
+	// exercised directly in TestEveryCapabilityMeaningIsDistinct rather than
+	// left as an arm that happens never to run. Only the branch a scan can
+	// still reach is required here.
+	if !sawUnasked {
+		t.Error("the corpus exercised no unasked capability, so the assertion above is vacuous")
 	}
 	// Never a clearance. An agent summarising this must not be handed a word
 	// that lets it write "no issues".
@@ -209,5 +212,45 @@ func decode(t *testing.T, r, into any) {
 	}
 	if err := json.Unmarshal(b, into); err != nil {
 		t.Fatalf("could not decode structured result: %v\n%s", err, b)
+	}
+}
+
+// Every branch of capabilityMeaning, exercised directly.
+//
+// The scan-driven test above can no longer reach the unprovided arm, and an
+// assertion inside a branch that never runs is not an assertion. The wording is
+// what an agent reads when summarising a scan, so each case has to say
+// something different — and none of them may say a gap was a clean result.
+func TestEveryCapabilityMeaningIsDistinct(t *testing.T) {
+	cases := []struct {
+		name         string
+		provided     bool
+		answered     int
+		inconclusive int
+		want         string
+	}{
+		{"unprovided", false, 0, 0, "Nothing on this installation can establish it"},
+		{"answered", true, 3, 0, "Established for some findings"},
+		{"inconclusive", true, 0, 2, "ran and could not determine anything"},
+		{"unasked", true, 0, 0, "nothing in this scan put the question"},
+	}
+	seen := map[string]string{}
+	for _, tc := range cases {
+		got := capabilityMeaning(tc.provided, tc.answered, tc.inconclusive)
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: meaning %q does not contain %q", tc.name, got, tc.want)
+		}
+		if prev, dup := seen[got]; dup {
+			t.Errorf("%s and %s render the same sentence %q; two different states an "+
+				"operator must respond to differently are being reported identically",
+				tc.name, prev, got)
+		}
+		seen[got] = tc.name
+		for _, banned := range []string{"safe", "no issues", "not vulnerable", "clean"} {
+			if strings.Contains(strings.ToLower(got), banned) {
+				t.Errorf("%s: meaning %q contains %q, which reads as a clearance",
+					tc.name, got, banned)
+			}
+		}
 	}
 }

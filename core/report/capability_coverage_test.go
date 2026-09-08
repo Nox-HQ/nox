@@ -39,22 +39,41 @@ func TestCapabilityMatrixListsEveryCapability(t *testing.T) {
 // omitted. On a stock installation that is call_graph and entry_point, and an
 // operator reading a clean scan has no other way to learn it.
 func TestUnprovidedCapabilitiesAreReportedNotOmitted(t *testing.T) {
-	got := report.CapabilitiesFrom(capability.DefaultRegistry(), nil)
-	want := map[string]bool{"call_graph": true, "entry_point": true}
-	seen := map[string]bool{}
+	// A registry that genuinely lacks something, constructed rather than
+	// borrowed. This used DefaultRegistry and named call_graph and entry_point,
+	// which core/callgraph now provides — at which point the test was asserting
+	// a property of the installation rather than of the matrix. An installation
+	// can gain a plugin at any time; the fixture has to own its gap.
+	reg := capability.NewRegistry()
+	reg.Register(lexOnly{})
+
+	got := report.CapabilitiesFrom(reg, nil)
+	if len(got) != len(capability.All()) {
+		t.Fatalf("matrix has %d rows, want one per capability", len(got))
+	}
+	var unprovided int
 	for _, row := range got {
-		if !row.Provided {
-			seen[row.Capability] = true
-			if len(row.Providers) != 0 {
-				t.Errorf("%s: unprovided but names providers %v", row.Capability, row.Providers)
-			}
+		if row.Provided {
+			continue
+		}
+		unprovided++
+		if len(row.Providers) != 0 {
+			t.Errorf("%s: unprovided but names providers %v", row.Capability, row.Providers)
 		}
 	}
-	for c := range want {
-		if !seen[c] {
-			t.Errorf("%s is not provided by any builtin, but the matrix does not say so", c)
-		}
+	if unprovided != len(capability.All())-1 {
+		t.Errorf("%d capabilities reported unprovided; the fixture registry offers exactly "+
+			"one, and every other row must say so rather than being omitted", unprovided)
 	}
+}
+
+// lexOnly provides a single capability, so every other row in the matrix is a
+// genuine, fixture-owned gap.
+type lexOnly struct{}
+
+func (lexOnly) Name() string { return "test/lex-only" }
+func (lexOnly) Provides() []capability.AnalysisCapability {
+	return []capability.AnalysisCapability{capability.LexicalContext}
 }
 
 // THE EXIT CRITERION for milestone 1.2: two scans differing only in what could
