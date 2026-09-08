@@ -287,16 +287,49 @@ secrets refiners that record why they drop a candidate. #599 extended lexical
 refinement to the IaC path.
 
 **Missing.** Stage accounting. Nobody can currently say how many candidates a
-rule family generated, how many were refuted, and at what cost.
+rule family generated, how many were refuted, and at what cost — which is both
+the milestone and, as it turns out, the prerequisite for choosing a family to
+reclassify at all.
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **6.1** | Reclassify the noisiest regex families as candidate generators | a rule at precision 0.000 is not carried as a detector |
-| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family |
-| **6.3** | Stage accounting: candidates in, refuted, promoted, unknown, latency | precision improves with no refutation-caused recall loss |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **6.1** | Reclassify the noisiest regex families as candidate generators | a rule at precision 0.000 is not carried as a detector | blocked, see below |
+| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | blocked with 6.1 |
+| **6.3** | Stage accounting: candidates in, refuted, promoted, unknown, latency | precision improves with no refutation-caused recall loss | actionable |
 
-**Size:** medium. 6.1 has a named first target: `api-abuse` API-ABUSE-001 has
-never scored a true positive on any corpus.
+**6.1's named target is not in this repository, and there is no core substitute
+to reach for.** Both halves of that matter.
+
+`api-abuse` is `nox-plugin-api-abuse`, a separate repo, and
+`docs/design/rule-family-migration.md` already records the boundary: its
+API-ABUSE-001 sits at precision 0.000 and "cannot be fixed from this
+repository". Naming it as the first target of a milestone in this plan was an
+error — the work belongs to that repo, or to the plugin contract that decides
+what a plugin may emit.
+
+Nor can a core family be substituted by picking one. Core scores **231 TP / 0 FP
+/ 0 FN** across the detection corpora and 37/0/0 on refutation; the only two FPs
+in the 2026-09 benchmark are artefacts of pointing `bench --precision` at
+corpora that are deliberately not fire-rate scored, and that page already says
+so. **No core rule is measurably a non-detector on any data nox currently
+has.** Choosing one anyway would be choosing by intuition, which is the thing
+this programme replaced.
+
+So 6.1 is blocked on a measurement rather than on implementation, and the
+measurement is named: per-rule precision on real repositories. `scripts/rule-diff.sh`
+already scans ten pinned repos and reports per-rule counts, but counts are
+density, not precision — nothing there says which of those findings are true.
+Item 3 of the 2026-09 gap list makes the same point about the plugin matrix:
+"it should be re-measured, not re-quoted".
+
+**What is actionable now is 6.3.** Stage accounting — how many candidates a
+family generated, how many were refuted, at what cost — needs no precision
+labels, because it counts what the pipeline did rather than judging it. It is
+also the instrument that would make 6.1 answerable: a family generating a
+thousand candidates and refuting none is visible without anybody labelling a
+single finding.
+
+**Size:** 6.3 medium. 6.1 and 6.2 are unsized until something can measure them.
 
 **Gate:** A on every family reclassified.
 
@@ -500,7 +533,9 @@ reads an adjudicated finding.
 
 Independent of that path, and startable now:
 
-- **6.1** reclassify `api-abuse` — measured, self-contained, immediate precision gain
+- ~~**6.1** reclassify `api-abuse`~~ — **not in this repository.** It is
+  `nox-plugin-api-abuse`, and no core family is measurably noisy on any data nox
+  has. Start at 6.3, which is the instrument that would identify one
 - **7.1** `call_graph` + `entry_point` for a second ecosystem — the largest product value, no dependency on the flip
 - **8.1** emit hypotheses from scan — read-only, additive
 
