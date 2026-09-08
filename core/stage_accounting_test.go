@@ -158,3 +158,33 @@ func TestNoTimingInTheAccounting(t *testing.T) {
 		}
 	}
 }
+
+// TAINT refutes, and the number is what caught it not doing so.
+//
+// The engine performs the most sophisticated refinement in nox — class-precise
+// sanitizer clearing, argument-shape analysis — and recorded none of it. The
+// accounting reported TAINT as 30 candidates and 0 refuted, which was true of
+// the ledger and false of the engine.
+//
+// The gap has cost real defects: an argv exemption that silenced shell sinks in
+// five of six cases, a same-statement sanitizer invisible in every language but
+// Go. In each, the evidence needed to notice was computed and discarded.
+func TestTaintRecordsItsSanitizerDecisions(t *testing.T) {
+	res, err := RunScanWithOptions(filepath.Join("..", "testdata", "precision-suite"),
+		ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, s := range res.Stages {
+		if s.Family != "TAINT" {
+			continue
+		}
+		if s.Refuted == 0 {
+			t.Error("TAINT refuted nothing while the engine clears sanitized flows on " +
+				"every scan; a recognizer that clears the wrong thing then looks " +
+				"exactly like one that had nothing to clear")
+		}
+		return
+	}
+	t.Fatal("no TAINT family in the accounting")
+}

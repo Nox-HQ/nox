@@ -153,6 +153,50 @@ type Flow struct {
 	SinkRole string
 }
 
+// Suppression is a flow the engine REFUSED to report, and why.
+//
+// A tainted value reached a catalog sink and something cleared it: a sanitizer
+// in a prior assignment, one wrapping the value at the call, or an argument
+// shape that makes the call safe (a parameterized query, an exec with no
+// shell). Each is a refutation, each is correct, and each used to be a bare
+// `continue` — the flow and the reason for dropping it discarded in the same
+// statement.
+//
+// That is survivable while refinement is a handful of hand-checked cases and
+// stops being survivable once it is the architecture, because a sanitizer
+// recognizer that clears the WRONG thing produces a result indistinguishable
+// from one that had nothing to clear. Both show no finding. nox has shipped
+// that defect more than once — an argv exemption that silenced shell sinks in
+// five of six cases, a same-statement sanitizer invisible in every language but
+// Go — and in each the evidence needed to notice was computed and thrown away.
+//
+// Reported, never acted on: a Suppression is a record of a decision the engine
+// already made, not an input to it.
+type Suppression struct {
+	// Sink is the catalog sink the value reached, and RuleID the rule it would
+	// have been reported under. The rule ID is what makes a suppression
+	// attributable to a family in the stage accounting.
+	Sink   string
+	RuleID string
+	// SinkCall is the call as written.
+	SinkCall string
+	// SinkLine and FilePath locate it.
+	SinkLine int
+	FilePath string
+	// FuncName is the enclosing function, when known.
+	FuncName string
+	// Language is the source language.
+	Language string
+	// SourceVar is the tainted variable, empty for an inline source expression.
+	SourceVar string
+	// Class is the vulnerability class that was cleared. A sanitizer clears one
+	// class and not others — shell-quoting makes a value safe to re-parse as
+	// shell and leaves it an attacker's URL — so the class is part of the claim.
+	Class string
+	// Reason states what cleared it, in words.
+	Reason string
+}
+
 // TaintEngine analyzes one intraprocedural Unit and returns the taint flows that
 // reach an un-sanitized sink. Implementations must be deterministic: the same
 // Unit must always yield the same Flows in the same order.
