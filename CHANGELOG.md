@@ -5,6 +5,133 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.35.0] - 2026-09-08
+
+Seven changes and three defects, all one theme: a scan now says what it did not
+establish, per finding, instead of leaving silence to be read as an all-clear.
+
+The largest is that every finding carries the questions nobody answered about
+it. A YAML finding and a Go finding in the same scan are not equally well
+understood — nox has no YAML lexer, so it cannot tell a match in a comment from
+one in a value — and until now nothing in the output said so. Competence is
+grouped rather than repeated: measured, 53 findings on the precision suite
+resolve to 4 distinct profiles and 62 on nox's own tree to 3, because it varies
+by language and analyses rather than by finding.
+
+`call_graph` and `entry_point` were provided by nothing at all. They are now
+answered for Go, with a witness that is a real chain of call expressions. What
+that analysis refuses to do is the design: a syntactic graph cannot see
+interface dispatch, function values, generics, reflection or generated code, so
+it never reports that no path exists. Every scope it builds carries a
+limitation, which makes `reach.Refute` decline to build a negative from it.
+
+Three defects were found by writing the measurements rather than by reading the
+code, and one of them was hiding findings.
+
+### ⚠️ Behaviour changes
+
+- **A baseline entry now accepts one finding, not every finding sharing its
+  fingerprint.** Two genuinely distinct findings can share a digest: the v2
+  fingerprint is `sha256(rule_id, path, message)`, and a rule whose message is a
+  static description — most IaC rules — produces one digest for every occurrence
+  in a file. Accepting one of four `continue-on-error` steps accepted all four,
+  and accepted the fifth added a month later: born baselined, with `nox scan`
+  reporting `0 findings (3 suppressed)`.
+
+  **If your baseline has fewer entries than there are findings sharing a
+  fingerprint, the surplus will start appearing.** They were suppressed without
+  anyone having accepted them. Run `nox baseline update .` to accept the ones
+  you want and prune the rest. A baselined finding that MOVES in its file still
+  matches, which is what the v2 fingerprint was designed for and what a fix
+  keyed on position would have cost.
+
+- **`Exploitability` is now on every finding**, not only on scans that recorded
+  reasoning. It is `POTENTIAL` for every static finding, always — the state
+  comes from the run outcome, and a scan executes nothing. Saying so is the
+  point: a finding silent about never having been validated reads as a stronger
+  claim than it is. `EvidenceConfidence` stays conditional, because that one IS
+  derived from the ledger and an empty ledger aggregates to `LOW`.
+
+- **A waived finding no longer grounds an attack hypothesis.** A `nox:ignore`, a
+  baseline entry or a VEX statement did not stop `nox attack plan` building one,
+  so `nox attack run --authorize` would fire real payloads at a live target for
+  something explicitly accepted. Waived findings now appear in the plan's
+  `skipped` list saying so.
+
+### Added
+
+- `findings.json` carries `meta.capabilities`: what each analysis can establish
+  on this installation, and how many subjects it actually concluded about.
+  `provided` and `answered` are separate fields because they answer different
+  questions and come apart the moment something fails at runtime.
+- `results.sarif` carries the same as `invocations[].toolExecutionNotifications`
+  at level `note`. SARIF has no other slot for a statement about the run rather
+  than the code, and without it Code Scanning renders a scan that could not look
+  and one that looked and found nothing identically.
+- Every finding names a competence profile: the set of questions unanswered
+  about it, resolved through `meta.competence_profiles`. In SARIF the list is
+  resolved inline as `properties.nox_unevaluated`, because a profile ID is a nox
+  concept a SARIF consumer cannot look up.
+- `core/callgraph` answers `call_graph` and `entry_point` for Go. A finding can
+  carry `call_path` and `entry_kind`, which distinguishes `concrete` (main or
+  init), `test` and `exported` — an exported function is reachable by somebody,
+  which is not evidence that anybody does.
+- `nox scan --emit-hypotheses <file>` writes the active-testing questions a scan
+  raises: subject, entry point, attacker input, trigger condition, expected
+  oracle, assumptions, and the open questions about that finding. Nothing is
+  tested; running them stays behind `nox attack run --plan ... --authorize`.
+- `nox analysis-capabilities` states its standing limits unconditionally. They
+  used to print only alongside a missing capability, which became a silent
+  regression the moment the last one was implemented: a full matrix with no
+  caveat reads as a full answer.
+- `reach_limitations` on a finding: the machine-readable half of `reach_scope`,
+  which is prose. Parsing English back out is not a contract.
+
+### Fixed
+
+- **Undetermined reachability was recorded as never-evaluated** (#603).
+  `goSymbolReferenced` returns `ok=false` for every undetermined outcome and the
+  analyzer gated its whole metadata block on that value, so "asked and could not
+  tell" arrived looking exactly like "nobody asked" — and the `Undetermined` arm
+  of the switch that maps it was unreachable code. The common path is an
+  advisory with no `ecosystem_specific.imports`; only the Go vulndb populates
+  that field, so every GHSA-sourced Go advisory landed there. No vulnerability
+  was hidden — both states are non-conclusive and neither may suppress a finding
+  — but the two call for different responses and the operator was told the wrong
+  one. The suite had declared `want_state` in every fixture since it was written
+  and nothing asserted it.
+- **A baseline entry absorbed every future finding sharing its fingerprint**
+  (#609). See the behaviour change above.
+- **`attack plan` built hypotheses from waived findings** (#611). See above.
+- Adjudication is scoped to the subject being decided, in the scan and across
+  every path in `core/attack`. The run path already was; replay, regress and the
+  MCP path were not, and were safe only by accident of each building a fresh
+  single-purpose ledger.
+- A plan with nothing to attempt serialises as `[]` rather than `null`.
+- An unnamed entry point no longer renders as "the entry point  is reachable by
+  an attacker" — a hole where a value should be, rather than the assumption it
+  is.
+
+### Changed
+
+- The Phase 4.1 divergence measurement was re-run. "15 of 37 findings diverge,
+  all over-claimed" was measured on 2026-08-30, quoted in four documents, and
+  carried through three PRs that changed IaC output. It is **17 of 53**, and the
+  "all over-claimed" half stopped being true: IaC rules author `LOW` while their
+  static evidence aggregates to `MEDIUM`, so 1 of 17 here and 14 of 19 on the
+  refutation suite run the other way. Pinned by a deliberately brittle test whose
+  failure says to re-measure rather than edit the constant.
+- Two documented claims were corrected in place: `Finding.Exploitability` said
+  `POTENTIAL` meant "static evidence exists and no attack path was constructed"
+  (the first half was never carried by the value), and
+  `ScanOptions.RecordReasoning` said a scan with it off is byte-identical to one
+  with it on (already untrue when written).
+
+### Unchanged
+
+Detection **231 TP / 0 FP / 0 FN** and refutation **37 / 0 / 0** across all
+nine changes. Every one adds output or corrects a state; none removes a finding.
+
 ## [1.34.0] - 2026-09-05
 
 Ten changes, eight of them defects nox found in itself. The theme is one shape:

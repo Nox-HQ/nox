@@ -99,7 +99,14 @@ it is recorded here so the next person does not rediscover it as a defect.
 
 ## Capability coverage
 
-`nox analysis-capabilities` declares nine and provides seven:
+> **Superseded for this section by v1.35.0.** As measured here,
+> `nox analysis-capabilities` declared nine and provided seven, and nothing about
+> capabilities reached `findings.json` at all. Both are now closed — 1.2 put the
+> matrix in the artifact, and #613 implemented `call_graph` and `entry_point` for
+> Go — so the numbers below are the historical baseline they were taken as, not
+> the current state. The rest of this page still stands.
+
+`nox analysis-capabilities` declared nine and provided seven:
 
 ```
 call_graph             — not provided
@@ -107,9 +114,9 @@ entry_point            — not provided
 ```
 
 Both are prerequisites for the reachability propositions in Phase 7. Neither
-appears in `findings.json`: the scan's `meta` block carries `degradations` and
+appeared in `findings.json`: the scan's `meta` block carried `degradations` and
 `sast_languages`, and nothing about which capabilities were unavailable. A
-consumer reading only the canonical output cannot tell that two of nine
+consumer reading only the canonical output could not tell that two of nine
 questions were never asked — which is Milestone 1.2, stated as a measurement
 rather than as an intention.
 
