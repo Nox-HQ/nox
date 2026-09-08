@@ -52,6 +52,17 @@ code, and one of them was hiding findings.
   claim than it is. `EvidenceConfidence` stays conditional, because that one IS
   derived from the ledger and an empty ledger aggregates to `LOW`.
 
+- **`policy.uncertainty` defaults to `fail` where a requirement is declared.**
+  With no `require_capabilities` listed nothing changes — that is every existing
+  repository. With one listed, an unmet requirement now exits non-zero rather
+  than warning: declaring the requirement is itself the deliberate act, and
+  answering it with a warning nobody gates on is how a project stops finding out
+  that what it relies on stopped being answered. Set `uncertainty: warn`
+  explicitly to keep the signal without the gate.
+
+  §1.5.3 specified this default moving "only after a release where the warning
+  names the flag". That was 1.32.0; 1.33.0 and 1.34.0 have shipped since.
+
 - **A waived finding no longer grounds an attack hypothesis.** A `nox:ignore`, a
   baseline entry or a VEX statement did not stop `nox attack plan` building one,
   so `nox attack run --authorize` would fire real payloads at a live target for

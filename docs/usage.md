@@ -1471,10 +1471,21 @@ can go unmet, worded apart because each needs a different response:
 | `ran but could not determine anything` | The analysis ran and came back empty | Look at why — a slow or partial source, a timeout |
 | `provided, but nothing in this scan put the question` | The capability exists and this scan never used it | Check the scan reached the code you think it did |
 
-**`uncertainty`** — what an unmet requirement does. `warn` (the default) prints
-and does not change the exit code; `fail` exits non-zero; `ignore` skips the
-check. A mistyped value is rejected rather than resolved to the permissive
-default.
+**`uncertainty`** — what an unmet requirement does. `fail` exits non-zero;
+`warn` prints and does not change the exit code; `ignore` skips the check. A
+mistyped value is rejected rather than resolved to the permissive default.
+
+**The default follows the declaration.** With no `require_capabilities` listed
+there is nothing to gate on and the mode is immaterial. With one listed, the
+default is `fail`: declaring a requirement is itself the deliberate act, and
+answering it with a warning nobody gates on is how a project stops finding out
+that what it relies on stopped being answered. Set `warn` explicitly to keep the
+signal without the gate.
+
+> **Changed in 1.35.0.** This defaulted to `warn` in both cases. §1.5.3 of the
+> design specified `fail` becoming the default "only after a release where the
+> warning names the flag" — that was 1.32.0, and two releases have shipped
+> since. Only projects that already list `require_capabilities` are affected.
 
 Worth knowing what this does *not* cover: `require_capabilities` speaks about
 analyses, not about every check completing. For "fail if any part of the scan
