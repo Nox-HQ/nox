@@ -123,6 +123,43 @@ func BuildPlan(in PlanInput) (*Plan, error) {
 	var hyps []Hypothesis
 	grounded := map[string]bool{} // fingerprints that grounded a hypothesis
 
+	// A finding the operator waived does not ground an attack.
+	//
+	// `nox attack run --authorize` fires real payloads at a live target, and it
+	// was doing so for findings somebody had explicitly accepted — a
+	// nox:ignore, a baseline entry, a VEX statement. report.ActiveFindings
+	// already names `attack` as a consumer that needs this rule; nothing
+	// applied it, and no comment recorded a decision not to.
+	//
+	// There is a real argument for testing a waiver — dynamic validation is how
+	// you learn one is wrong — but that is an argument for an opt-in. As it
+	// stood the plan gave no signal either way, so an operator could not tell
+	// deliberate re-testing from nox having ignored them.
+	//
+	// The filter lives HERE and not in the loader, because a plan is meant to
+	// be a complete account of what was considered: SkipNote exists so that "a
+	// finding either grounds a hypothesis or appears here". Filtering upstream
+	// would drop waived findings out of Skipped too, trading one silent
+	// behaviour for another.
+	considered := make([]findings.Finding, 0, len(in.Findings))
+	var waived []SkipNote
+	for i := range in.Findings {
+		f := in.Findings[i]
+		if f.Status.IsActive() {
+			considered = append(considered, f)
+			continue
+		}
+		waived = append(waived, SkipNote{
+			Fingerprint: f.Fingerprint,
+			RuleID:      f.RuleID,
+			Reason: fmt.Sprintf("the finding is %s, so it grounds no attack; "+
+				"active verification of a waived finding is a deliberate act, not a default",
+				f.Status),
+		})
+	}
+	in.Findings = considered
+	plan.Skipped = append(plan.Skipped, waived...)
+
 	// Injection findings → PI-DIRECT + PI-INDIRECT. Dedupe shared sinks the way
 	// core/confirm does: two rules pointing at the same handler are one sink.
 	type sinkKey struct {
@@ -199,7 +236,17 @@ func BuildPlan(in PlanInput) (*Plan, error) {
 	plan.Boundaries = sortedBoundaries(boundaries)
 	plan.Scenarios = selectedScenarios(usedScenarios)
 	sort.Slice(hyps, func(i, j int) bool { return hyps[i].ID < hyps[j].ID })
+	// Non-nil, so a plan with nothing to attempt serialises as [] rather than
+	// null. The same reasoning the SARIF reporter applies to locations: a
+	// consumer that can iterate an empty list cannot iterate a null, and a plan
+	// with no hypotheses is a normal, common result rather than an error.
+	if hyps == nil {
+		hyps = []Hypothesis{}
+	}
 	plan.Hypotheses = hyps
+	if plan.Skipped == nil {
+		plan.Skipped = []SkipNote{}
+	}
 	sort.Slice(plan.Skipped, func(i, j int) bool {
 		if plan.Skipped[i].Fingerprint != plan.Skipped[j].Fingerprint {
 			return plan.Skipped[i].Fingerprint < plan.Skipped[j].Fingerprint
@@ -315,8 +362,18 @@ func triggerConditionOf(f findings.Finding, scen Scenario) string {
 // Naming them is what lets a reader disagree with the hypothesis rather than
 // only with its result. Every entry here is something nox did NOT establish.
 func assumptionsOf(f findings.Finding, entry string) []string {
+	// An unnamed entry point is the weaker assumption and must read as one.
+	// Most findings carry no route — nothing in a scan identifies entry points,
+	// which is why entry_point is one of the capabilities nox reports as not
+	// provided — and the previous wording rendered as "the entry point  is
+	// reachable by an attacker", which reads like a value went missing rather
+	// than like the assumption it is.
+	reachable := "some entry point reaches this code and an attacker can reach that entry point"
+	if entry != "" {
+		reachable = "the entry point " + entry + " is reachable by an attacker"
+	}
 	out := []string{
-		"the entry point " + entry + " is reachable by an attacker",
+		reachable,
 		"the code path observed statically is the one that executes",
 	}
 	if f.Metadata["reach_level"] == "" {
