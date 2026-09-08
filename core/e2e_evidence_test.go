@@ -142,8 +142,18 @@ func TestEndToEndEvidenceChain(t *testing.T) {
 	if res.Coverage.Len() == 0 {
 		t.Error("no capability results recorded")
 	}
-	if len(res.Capabilities.Missing()) == 0 {
-		t.Error("the scan claims to be missing no capability, which cannot be true " +
+	// Missing() is empty now that every defined capability has an
+	// implementation — true of the INSTALLATION, and misleading alone. The
+	// property that must survive is about the SCAN: it executes nothing and
+	// reads one language for call graphs, so questions stay unanswered.
+	var unanswered int
+	for _, c := range capability.All() {
+		if answered, _ := res.Coverage.Answered(c); answered == 0 {
+			unanswered++
+		}
+	}
+	if unanswered == 0 {
+		t.Error("this scan answered every capability for something, which cannot be true " +
 			"of a scanner that never executes the code it reads")
 	}
 	for _, f := range all {

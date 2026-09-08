@@ -74,6 +74,25 @@ func runAnalysisCapabilities(args []string) int {
 		return 2
 	}
 
+	// The standing limits, printed whether or not anything is missing.
+	//
+	// They used to print only alongside a missing capability, which was fine
+	// while two were missing and became a silent regression the moment
+	// core/callgraph filled the last of them: a full matrix with no caveat
+	// under it reads as a full answer. None of these limits is a gap an
+	// operator can close by installing something — they are properties of what
+	// a scanner is — so they belong here unconditionally.
+	fmt.Println("\nWhat a full matrix still does not mean:")
+	fmt.Println("  - a scan executes nothing, so dynamic_verification is never")
+	fmt.Println("    answered by `nox scan` however it is listed above")
+	fmt.Println("  - call_graph and entry_point are answered for Go only; for every")
+	fmt.Println("    other language a finding's own matrix reads `unsupported`")
+	fmt.Println("  - the call graph answers EXISTENTIALLY. It can show a path and")
+	fmt.Println("    name the calls; it never reports that no path exists, because")
+	fmt.Println("    interface dispatch, function values and reflection are calls")
+	fmt.Println("    it cannot see")
+	fmt.Println("\nRun `nox why <finding>` for what was actually established about one finding.")
+
 	missing := registry.Missing()
 	if len(missing) == 0 {
 		return 0

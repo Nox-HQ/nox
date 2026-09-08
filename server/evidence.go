@@ -62,23 +62,37 @@ func (s *Server) handleAnalysisCapabilities(_ context.Context, _ emptyInput) (mc
 			ProvidedBy: pc.result.Capabilities.ProvidedBy(c),
 			Answered:   answered, Inconclusive: inconclusive,
 		}
-		switch {
-		case !provided:
-			row.Meaning = "Nothing on this installation can establish it. Findings that " +
-				"depend on it are unevaluated, not cleared."
-		case answered > 0:
-			row.Meaning = "Established for some findings in this scan."
-		case inconclusive > 0:
-			row.Meaning = "The analysis ran and could not determine anything."
-		default:
-			row.Meaning = "Available, but nothing in this scan put the question."
-		}
+		row.Meaning = capabilityMeaning(provided, answered, inconclusive)
 		out.Capabilities = append(out.Capabilities, row)
 	}
 	sort.Slice(out.Capabilities, func(i, j int) bool {
 		return out.Capabilities[i].Capability < out.Capabilities[j].Capability
 	})
 	return structured(out)
+}
+
+// capabilityMeaning states, in words, what a row implies for a reader.
+//
+// Extracted so every branch is directly testable. The unprovided branch cannot
+// be reached through a real scan any more — core/callgraph filled the last
+// capability nothing implemented — and a test that could only exercise it by
+// accident of the installation was one plugin away from becoming vacuous.
+//
+// The wording carries the weight here. An agent summarising a scan reads this
+// string, and the difference between "nothing looked" and "nothing was found"
+// is the difference between a gap and a clearance.
+func capabilityMeaning(provided bool, answered, inconclusive int) string {
+	switch {
+	case !provided:
+		return "Nothing on this installation can establish it. Findings that " +
+			"depend on it are unevaluated, not cleared."
+	case answered > 0:
+		return "Established for some findings in this scan."
+	case inconclusive > 0:
+		return "The analysis ran and could not determine anything."
+	default:
+		return "Available, but nothing in this scan put the question."
+	}
 }
 
 // whyInput selects the finding to explain.

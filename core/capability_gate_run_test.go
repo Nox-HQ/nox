@@ -162,14 +162,24 @@ func TestScanAlwaysSuppliesARunView(t *testing.T) {
 		t.Fatal("the scan produced no coverage, so the policy gate fell back to the " +
 			"installation-only answer that Track H replaced")
 	}
-	// call_graph has no implementation at all, so this is the unsupported
-	// branch — the one case where the installation answer is the whole story.
+	// call_graph is now implemented for Go, and this project is Python — so the
+	// gate must still fail, but for the OTHER reason: the analysis exists and
+	// nothing in this scan reached a conclusion with it.
+	//
+	// That distinction is the point of the whole run-level view. An operator
+	// told "not provided" installs a plugin; one told "nothing put the
+	// question" checks whether the scan reached the code they meant. Before
+	// Track H both came out as the same silence.
 	if res.PolicyResult == nil || res.PolicyResult.Pass {
-		t.Error("a capability nothing implements satisfied a requirement for it")
+		t.Error("a capability that concluded nothing satisfied a requirement for it")
 	}
-	if !strings.Contains(strings.Join(res.PolicyResult.Warnings, " "),
-		"not provided by this installation") {
-		t.Errorf("an unimplemented capability was not reported as unprovided: %v",
+	warnings := strings.Join(res.PolicyResult.Warnings, " ")
+	if !strings.Contains(warnings, "nothing in this scan put the question") {
+		t.Errorf("a provided-but-unexercised capability was not reported as such: %v",
+			res.PolicyResult.Warnings)
+	}
+	if strings.Contains(warnings, "not provided by this installation") {
+		t.Errorf("call_graph was reported as unprovided; core/callgraph implements it: %v",
 			res.PolicyResult.Warnings)
 	}
 }

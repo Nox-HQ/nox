@@ -152,6 +152,15 @@ func TestUndeterminedIsNotNo(t *testing.T) {
 // different places, and collapsing them wastes the answer.
 func TestWhatWasNotEvaluatedSeparatesALimitFromAGap(t *testing.T) {
 	in := baseInputs()
+	// A registry that genuinely lacks something, constructed rather than
+	// borrowed. This used DefaultRegistry and depended on nox having a
+	// capability nothing implemented; core/callgraph filled the last of those,
+	// and the test started asserting a property of the installation instead of
+	// one of the code. An installation can gain a plugin at any time, so the
+	// fixture has to own the gap it is about.
+	partial := capability.NewRegistry()
+	partial.Register(cheapOnly{})
+	in.Coverage = capability.NewCoverage(partial)
 	in.Coverage.Record(subject(), capability.Taint, capability.Unknown)
 	lines := strings.Join(explain.Explain(in).NotEvaluated, "\n")
 
@@ -226,5 +235,16 @@ func TestTheMatchedValueIsNeverPrinted(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// cheapOnly provides the cheap capabilities and none of the expensive ones, so
+// a limit nothing can fill is guaranteed to exist in the fixture.
+type cheapOnly struct{}
+
+func (cheapOnly) Name() string { return "test/cheap-only" }
+func (cheapOnly) Provides() []capability.AnalysisCapability {
+	return []capability.AnalysisCapability{
+		capability.LexicalContext, capability.ConstantEvaluation, capability.Taint,
 	}
 }

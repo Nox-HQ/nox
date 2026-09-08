@@ -421,8 +421,20 @@ func TestCapabilityCoverageIsReportedOnEveryScan(t *testing.T) {
 	if res.Capabilities == nil || res.Coverage == nil {
 		t.Fatal("a scan without reasoning reported no capability registry or coverage")
 	}
-	if len(res.Capabilities.Missing()) == 0 {
-		t.Error("the scan claims nox is missing no capability, which cannot be true " +
+	// Every defined capability now has an implementation, so Missing() is
+	// empty — a true statement about the INSTALLATION and a misleading one on
+	// its own. What must remain true is that a SCAN still leaves questions
+	// unanswered, because it executes nothing and reads one language for call
+	// graphs. That is the property worth asserting, and it does not evaporate
+	// when somebody implements a capability.
+	var unanswered int
+	for _, c := range capability.All() {
+		if answered, _ := res.Coverage.Answered(c); answered == 0 {
+			unanswered++
+		}
+	}
+	if unanswered == 0 {
+		t.Error("this scan answered every capability for something, which cannot be true " +
 			"of a scanner that never executes the code it reads")
 	}
 

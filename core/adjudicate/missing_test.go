@@ -82,7 +82,14 @@ func TestAnInconclusiveAnswerLeavesTheQuestionOpen(t *testing.T) {
 // stops where it does — but recommending it would send a reader to do something
 // they cannot.
 func TestTheRecommendationIsSomethingTheReaderCanDo(t *testing.T) {
-	reg := capability.DefaultRegistry()
+	// A registry that genuinely lacks something, constructed rather than
+	// borrowed. This used to use DefaultRegistry and relied on nox having a
+	// capability nothing implemented; core/callgraph filled the last of those,
+	// and the test began asserting a property of the installation instead of a
+	// property of the code. An operator's installation can gain a plugin at any
+	// time, so the fixture has to own the gap.
+	reg := capability.NewRegistry()
+	reg.Register(partialProvider{})
 	cov := capability.NewCoverage(reg)
 
 	gaps := adjudicate.MissingEvidence(cov, reg, subj())
@@ -93,8 +100,8 @@ func TestTheRecommendationIsSomethingTheReaderCanDo(t *testing.T) {
 		}
 	}
 	if unavailable == 0 {
-		t.Fatal("every capability is available on this installation, so the " +
-			"distinction this test is about cannot be exercised")
+		t.Fatal("the fixture registry provides everything, so the distinction this " +
+			"test is about cannot be exercised")
 	}
 
 	next, ok := adjudicate.CheapestAvailable(gaps)
@@ -121,5 +128,16 @@ func TestGapsAreNamedAsQuestions(t *testing.T) {
 		if g.Question == "" {
 			t.Errorf("%s is an open question with no question", g.Capability)
 		}
+	}
+}
+
+// partialProvider offers the cheap capabilities and none of the expensive ones,
+// so a gap that nothing can fill is guaranteed to exist in the fixture.
+type partialProvider struct{}
+
+func (partialProvider) Name() string { return "test/partial" }
+func (partialProvider) Provides() []capability.AnalysisCapability {
+	return []capability.AnalysisCapability{
+		capability.LexicalContext, capability.ConstantEvaluation,
 	}
 }
