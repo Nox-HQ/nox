@@ -65,7 +65,7 @@ are provided (`call_graph` and `entry_point` are not). `ScanResult` carries
 |---|---|---|---|
 | **1.1** | Nothing — the states exist and are used | already met | ✅ |
 | **1.2** | `capabilities` on `report.Meta` from `ScanResult.Coverage`; SARIF `invocations[].toolExecutionNotifications` for the same | two scans differing only by analyzer availability are not byte-identical | ✅ #602 |
-| **1.3** | Default `policy.uncertainty` to a value that does not treat unevaluated as clean | uninstalling an analyzer cannot turn a failing scan green **by default**, not only when configured | |
+| **1.3** | Default `policy.uncertainty` to a value that does not treat unevaluated as clean | uninstalling an analyzer cannot turn a failing scan green **by default**, not only when configured | ⚠️ partial #618 |
 
 1.2 landed larger than "a struct field and a serializer" for one reason worth
 carrying forward: the four adapter sites each set `Degradations` by hand, and
@@ -79,8 +79,29 @@ pins the constructor rather than the assignments.
 **Size:** 1.3 is a default flip and needs a deprecation note — it can fail scans
 that pass today.
 
-**Gate:** B (unevaluated honesty). 1.3 must ship with a corpus case where a
-capability is removed and the scan goes from pass to fail. 1.2's own Gate B case
+**1.3 shipped the half that is defensible, and its stated exit is not met.**
+
+`policy.uncertainty` now defaults to `fail` where a requirement is declared,
+which §1.5.3 specified as legitimate "only after a release where the warning
+names the flag" — that was 1.32.0, and two releases have shipped since. The
+premise the code gave for waiting is also gone: it named three capabilities with
+no implementation, and `core/callgraph` filled the last of them.
+
+**It does not meet the exit, and cannot.** The exit says "by default, not only
+when configured", and this gate reads `require_capabilities`, which is empty by
+default — so flipping the mode is a no-op for every repository that has not
+opted in. Meeting the exit literally needs something that acts with no
+configuration at all, and the code argues persuasively against the obvious
+version: "fail on any gap" turns every build red, and a gate everybody disables
+protects nothing.
+
+What would meet it is a comparison against history — a capability that answered
+last time and does not now — which nox has nowhere to keep except the baseline.
+That is a design, not a default, and it is not this milestone.
+
+**Gate:** B (unevaluated honesty). The corpus case 1.3 asked for —
+a capability removed, the scan going pass to fail — exists as
+`TestUnmetRequirementFailsByDefaultAndNamesTheFlag` for the declared case only. 1.2's own Gate B case
 is `TestLosingAProviderChangesTheArtifact`: an installation without the taint
 engine used to write a byte-identical `findings.json` to one that had it and
 found nothing.

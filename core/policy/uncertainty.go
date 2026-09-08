@@ -21,8 +21,8 @@ type Uncertainty string
 // Uncertainty modes.
 const (
 	// UncertaintyWarn reports what was not evaluated and does not gate. The
-	// default, and deliberately so — see RequireCapabilities for why the
-	// stricter setting cannot be the default yet.
+	// default when a project has declared no requirement — see
+	// Uncertainty.Effective for why declaring one changes it.
 	UncertaintyWarn Uncertainty = "warn"
 	// UncertaintyFail treats an unmet capability requirement as a failure.
 	UncertaintyFail Uncertainty = "fail"
@@ -44,12 +44,33 @@ func (u Uncertainty) Valid() bool {
 	return false
 }
 
-// Effective resolves the zero value to the default.
-func (u Uncertainty) Effective() Uncertainty {
-	if u == "" {
-		return UncertaintyWarn
+// Effective resolves the zero value to the default, which depends on whether
+// the project declared a requirement.
+//
+// With no requirement declared there is nothing to gate on, so the mode is
+// immaterial and warn is the honest resting state.
+//
+// With one declared, the default is FAIL. Declaring `require_capabilities` is
+// itself the deliberate act — a repository listing reachability is asserting
+// that its triage depends on reachability being answered — and answering that
+// assertion with a warning under-serves it. A warning in a CI log that nobody
+// gates on is how "nox stopped knowing something this project relies on"
+// becomes something nobody finds out about. An operator who wants the signal
+// without the gate still has `warn`, explicitly.
+//
+// This was previously warn in both cases, with a note that the stricter setting
+// "cannot be the default yet" because three capabilities had no implementation
+// and failing on any gap would turn every build red. That premise is gone:
+// core/callgraph filled the last of them, and this gate never failed on "any
+// gap" in the first place — it fails on a DECLARED requirement going unmet.
+func (u Uncertainty) Effective(declaredRequirements bool) Uncertainty {
+	if u != "" {
+		return u
 	}
-	return u
+	if declaredRequirements {
+		return UncertaintyFail
+	}
+	return UncertaintyWarn
 }
 
 // CapabilityGate is the capability half of a policy decision.
@@ -120,7 +141,7 @@ func EvaluateCapabilities(cfg Config, gate CapabilityGate, run CapabilityRun, r 
 	if r == nil {
 		r = &Result{Pass: true, ExitCode: 0}
 	}
-	mode := cfg.Uncertainty.Effective()
+	mode := cfg.Uncertainty.Effective(len(cfg.RequireCapabilities) > 0)
 	if mode == UncertaintyIgnore || len(cfg.RequireCapabilities) == 0 {
 		return r
 	}

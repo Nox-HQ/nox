@@ -71,18 +71,33 @@ func TestNoAdoptionCliff(t *testing.T) {
 	}
 }
 
-// TestUnmetRequirementWarnsByDefaultAndNamesTheFlag. §1.5 of the design doc
-// requires a release in which the stricter behaviour is announced by the
-// warning that precedes it, so switching the default later surprises nobody.
-func TestUnmetRequirementWarnsByDefaultAndNamesTheFlag(t *testing.T) {
+// A declared requirement that goes unmet fails the build, and the warning still
+// names the flag.
+//
+// §1.5.3 of the design doc specifies `fail` "available immediately and becoming
+// the default only after a release where the warning names the flag". That
+// release was v1.32.0, and v1.33.0 and v1.34.0 have shipped since, so the
+// condition is met and the default has moved.
+//
+// It moves only where a requirement was DECLARED. Declaring
+// `require_capabilities` is itself the deliberate act — a repository listing
+// reachability is asserting its triage depends on that question being answered
+// — and answering that assertion with a warning under-serves it. A project that
+// wants the signal without the gate still has `warn`, explicitly.
+//
+// The warning's content is asserted unchanged, because it is what the operator
+// reads either way and it is what the deprecation contract was about.
+func TestUnmetRequirementFailsByDefaultAndNamesTheFlag(t *testing.T) {
 	cfg := policy.Config{
 		FailOn:              findings.SeverityCritical,
 		RequireCapabilities: []string{"reachability"},
 	}
 	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
 
-	if !r.Pass {
-		t.Error("the default mode failed the build; warn must not gate")
+	if r.Pass {
+		t.Error("a declared requirement went unmet and the build passed. Declaring the " +
+			"requirement is the opt-in; a warning nobody gates on is how a project " +
+			"stops being told that what it relies on stopped being answered.")
 	}
 	if len(r.Warnings) == 0 {
 		t.Fatal("an unmet requirement produced no warning")
@@ -328,5 +343,59 @@ func assertUnmet(t *testing.T, r *policy.Result, capName, want string) {
 	if !strings.Contains(got, want) {
 		t.Errorf("the warning does not say %q, so the reader cannot tell which of the "+
 			"three ways this went unmet: %q", want, got)
+	}
+}
+
+// The escape hatch still works, and it is what makes moving the default
+// acceptable. A project that wants the signal without the gate says so.
+func TestExplicitWarnStillDoesNotGate(t *testing.T) {
+	cfg := policy.Config{
+		FailOn:              findings.SeverityCritical,
+		RequireCapabilities: []string{"reachability"},
+		Uncertainty:         policy.UncertaintyWarn,
+	}
+	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
+	if !r.Pass {
+		t.Error("an explicit warn gated the build; the escape hatch is what makes the " +
+			"stricter default acceptable")
+	}
+	if len(r.Warnings) == 0 {
+		t.Error("explicit warn produced no warning, so it is now indistinguishable " +
+			"from ignore")
+	}
+}
+
+// A project that declared nothing is untouched, which is every existing
+// repository. The default moved for the opted-in case only.
+func TestNoDeclarationMeansNoChange(t *testing.T) {
+	cfg := policy.Config{FailOn: findings.SeverityCritical}
+	r := policy.EvaluateCapabilities(cfg, gate{}, gate{}, policy.Evaluate(cfg, nil))
+	if !r.Pass {
+		t.Error("a project that declared no requirement was failed by the capability gate")
+	}
+	if len(r.Warnings) != 0 {
+		t.Errorf("a project that declared no requirement heard %d warning(s)", len(r.Warnings))
+	}
+}
+
+// Effective is the whole of the change, so it is asserted directly.
+func TestEffectiveDependsOnWhetherAnythingWasDeclared(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		set      policy.Uncertainty
+		declared bool
+		want     policy.Uncertainty
+	}{
+		{"unset, nothing declared", "", false, policy.UncertaintyWarn},
+		{"unset, something declared", "", true, policy.UncertaintyFail},
+		{"explicit warn wins", policy.UncertaintyWarn, true, policy.UncertaintyWarn},
+		{"explicit ignore wins", policy.UncertaintyIgnore, true, policy.UncertaintyIgnore},
+		{"explicit fail with nothing declared", policy.UncertaintyFail, false, policy.UncertaintyFail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.set.Effective(tc.declared); got != tc.want {
+				t.Errorf("Effective(%v) = %q, want %q", tc.declared, got, tc.want)
+			}
+		})
 	}
 }
