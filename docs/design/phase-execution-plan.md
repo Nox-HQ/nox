@@ -295,7 +295,7 @@ reclassify at all.
 |---|---|---|---|
 | **6.1** | Reclassify the noisiest regex families as candidate generators | a rule at precision 0.000 is not carried as a detector | blocked, see below |
 | **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | blocked with 6.1 |
-| **6.3** | Stage accounting: candidates in, refuted, promoted, unknown, latency | precision improves with no refutation-caused recall loss | actionable |
+| **6.3** | Stage accounting: candidates in, refuted, promoted, unknown | precision improves with no refutation-caused recall loss | ✅ #615 |
 
 **6.1's named target is not in this repository, and there is no core substitute
 to reach for.** Both halves of that matter.
@@ -322,14 +322,41 @@ density, not precision — nothing there says which of those findings are true.
 Item 3 of the 2026-09 gap list makes the same point about the plugin matrix:
 "it should be re-measured, not re-quoted".
 
-**What is actionable now is 6.3.** Stage accounting — how many candidates a
-family generated, how many were refuted, at what cost — needs no precision
-labels, because it counts what the pipeline did rather than judging it. It is
-also the instrument that would make 6.1 answerable: a family generating a
-thousand candidates and refuting none is visible without anybody labelling a
-single finding.
+**6.3 landed, and it named the families 6.2 is about.** Stage accounting needs
+no precision labels, because it counts what the pipeline did rather than judging
+it. On the precision suite:
 
-**Size:** 6.3 medium. 6.1 and 6.2 are unsized until something can measure them.
+| family | candidates | promoted | refuted | withheld |
+|---|---:|---:|---:|---:|
+| SEC | 52 | 12 | 8 | 32 |
+| IAC | 6 | 3 | 3 | 0 |
+| AI | 2 | 1 | 1 | 0 |
+| TAINT | 30 | 30 | **0** | 0 |
+| DATA / SLOP / VARIANT | 7 | 7 | **0** | 0 |
+
+So **6.2's list is measured rather than guessed**: TAINT, DATA, SLOP and
+VARIANT record no refutations at all. TAINT is the interesting one — the engine
+does refine, via sanitizer recognition, so either a sanitized flow never becomes
+a candidate or the refinement is not recorded. That is a question the accounting
+poses and does not answer.
+
+The first thing it found was in IaC, and it was mine. Three filters added in
+#599 and #600 — comments, kind references, artifacts-always — dropped findings
+with a bare `continue`, which is exactly the pattern `core/reasoning` was built
+to end: "the finding and the reason for dropping it both discarded in the same
+statement". They removed findings on every scan while the accounting reported
+IaC as refuting nothing. Fixed by handing each filter a recorder rather than
+letting it reach for the store, so the recording cannot be present at one call
+site and forgotten at another.
+
+**Latency was dropped from the milestone deliberately.** It cannot go in the
+artifact: `findings.json` is byte-identical across runs by contract, and a
+duration is different every time. Cost belongs on stderr or in a benchmark, and
+`TestNoTimingInTheAccounting` keeps it out.
+
+**Size:** 6.1 remains unsized — it needs per-rule precision on real repositories,
+which nothing yet produces. 6.2 is now sized by the table above: four families,
+each needing its refinement recorded or its absence explained.
 
 **Gate:** A on every family reclassified.
 
@@ -533,9 +560,10 @@ reads an adjudicated finding.
 
 Independent of that path, and startable now:
 
-- ~~**6.1** reclassify `api-abuse`~~ — **not in this repository.** It is
-  `nox-plugin-api-abuse`, and no core family is measurably noisy on any data nox
-  has. Start at 6.3, which is the instrument that would identify one
+- ~~**6.1** reclassify `api-abuse`~~ — **not in this repository**, and no core
+  family is measurably noisy on any data nox has. 6.3 landed as the instrument;
+  **6.2 is the actionable successor**, with its four families now named by
+  measurement
 - **7.1** `call_graph` + `entry_point` for a second ecosystem — the largest product value, no dependency on the flip
 - **8.1** emit hypotheses from scan — read-only, additive
 

@@ -94,6 +94,31 @@ type Meta struct {
 	// Omitted when the scan recorded no coverage. Absent does not mean full
 	// competence.
 	CompetenceProfiles []capability.Profile `json:"competence_profiles,omitempty"`
+	// StageAccounting records what each rule family produced and what became of
+	// it: candidates in, promoted, refuted on evidence, withheld by
+	// configuration.
+	//
+	// It answers a question a finding count cannot. A family that generates a
+	// thousand candidates and refutes none is doing no refinement; one that
+	// refutes nine in ten is doing most of its work after the match. Both
+	// produce findings, and only this tells them apart.
+	//
+	// Present only when the scan recorded reasoning, because a refuted
+	// candidate never becomes a finding and the ledger is the only place it
+	// exists. Deliberately carries no timing: this artifact is byte-identical
+	// across runs by contract and a duration is not.
+	StageAccounting []StageCount `json:"stage_accounting,omitempty"`
+}
+
+// StageCount is one rule family's account, as recorded in the artifact. It
+// mirrors core.StageCount, which owns the derivation.
+type StageCount struct {
+	Family     string `json:"family"`
+	Candidates int    `json:"candidates"`
+	Promoted   int    `json:"promoted"`
+	Refuted    int    `json:"refuted"`
+	Withheld   int    `json:"withheld"`
+	Unresolved int    `json:"unresolved"`
 }
 
 // CapabilityCoverage is one analysis capability's standing in a scan: whether
@@ -272,6 +297,9 @@ type JSONReporter struct {
 	// CompetenceProfiles is the per-claim half of the same picture. Set from
 	// ScanResult.CompetenceProfiles, and likewise best left to the constructor.
 	CompetenceProfiles []capability.Profile
+	// StageAccounting is what each rule family produced and what became of it.
+	// Set from ScanResult.Stages, and likewise best left to the constructor.
+	StageAccounting []StageCount
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -310,6 +338,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			Capabilities:  r.Capabilities,
 
 			CompetenceProfiles: r.CompetenceProfiles,
+			StageAccounting:    r.StageAccounting,
 		},
 		Findings:    f,
 		Enrichments: r.Enrichments,

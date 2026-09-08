@@ -141,6 +141,17 @@ type ScanResult struct {
 	// direction, is a decision.
 	Divergences []adjudicate.Divergence
 
+	// Stages accounts for what each rule family produced and what became of it:
+	// candidates in, promoted, refuted on evidence, withheld by configuration.
+	// Empty unless the scan recorded reasoning, because a refuted candidate
+	// never becomes a finding and the ledger is the only place it exists.
+	//
+	// It is the instrument Phase 6 needs before any family can be reclassified.
+	// The first thing it reported was that IaC refuted nothing while three of
+	// its filters were removing findings on every scan — they dropped with a
+	// bare `continue`, which is the pattern core/reasoning exists to end.
+	Stages []StageCount
+
 	// Conflicts lists the findings whose evidence contradicts itself at equal
 	// strength. Empty unless the scan recorded reasoning.
 	//
@@ -873,6 +884,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)
 	recordAnalysisLimitations(allFindings, target, reasons)
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
+	stages := StageAccounting(reasons, allFindings)
 
 	// Stage 4: Evaluate policy gates.
 	policyResult := evaluatePolicy(cfg, allFindings, capabilities, coverage)
@@ -889,6 +901,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Reasoning:          reasons,
 		Divergences:        divergences,
 		Conflicts:          conflicts,
+		Stages:             stages,
 		Findings:           allFindings,
 		Enrichments:        pluginEnrichments,
 		Graphs:             pluginGraphs,

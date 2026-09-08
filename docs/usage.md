@@ -1150,6 +1150,35 @@ This is why the matrix is emitted even when everything worked: a report listing
 only the capabilities that succeeded is one a reader will take for the complete
 set of questions nox asks.
 
+#### What each rule family did with its candidates
+
+A scan that records reasoning (`--evidence-out`, `--emit-hypotheses`, `nox why`,
+MCP) carries `meta.stage_accounting`:
+
+```json
+{"family": "SEC", "candidates": 52, "promoted": 12, "refuted": 8,
+ "withheld": 32, "unresolved": 0}
+```
+
+A finding count cannot tell a family that refines from one that does not — both
+produce findings. This can:
+
+- **promoted** became a reported finding
+- **refuted** was removed by *evidence*: a match inside a comment, a placeholder
+  value, a companion found in another file
+- **withheld** was removed by *configuration* or deduplication, which says
+  nothing about whether the finding was true
+- **unresolved** was considered and neither reported nor removed
+
+`refuted` and `withheld` are separate on purpose. Collapsing them would make a
+family that only deduplicates look like one that reasons.
+
+The four counts partition `candidates` exactly, so an accounting that does not
+add up is a bug rather than a judgement call.
+
+It carries **no timing**. `findings.json` is byte-identical across runs by
+contract and a duration is not.
+
 #### Call paths, for Go
 
 A Go finding can carry the chain of calls that reaches it:
