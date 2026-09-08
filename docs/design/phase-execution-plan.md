@@ -337,16 +337,43 @@ to a determined one (the reachability-suite's own rule 4).
 **Missing.** `nox scan` cannot emit a hypothesis. The handoff exists inside
 `attack`, not across the passive/active boundary.
 
-| Milestone | Work | Exit |
-|---|---|---|
-| **8.1** | `nox scan --emit-hypotheses`: subject, entry point, flow, attacker input, trigger condition, assumptions, oracle, missing evidence | a scan produces a structured active-testing question |
-| **8.2** | Reproduction hierarchy: trigger / invariant / crash / security effect / exploit | a reproduced overflow does not claim RCE |
-| **8.3** | Controlled-reproduction contract | removing any of the five conditions prevents `CONFIRMED` |
+| Milestone | Work | Exit | |
+|---|---|---|---|
+| **8.1** | `nox scan --emit-hypotheses`: subject, entry point, flow, attacker input, trigger condition, assumptions, oracle, missing evidence | a scan produces a structured active-testing question | ✅ #612 |
+| **8.2** | Reproduction hierarchy: trigger / invariant / crash / security effect / exploit | a reproduced overflow does not claim RCE | already met |
+| **8.3** | Controlled-reproduction contract | removing any of the five conditions prevents `CONFIRMED` | already met |
 
-**Size:** medium. 8.3 is mostly assertion work over the existing evidence
-kernel, which already enforces the deterministic gate.
+8.2 and 8.3 were already in the tree before this milestone started. The
+hierarchy is enforced per subject by `evidence.DeriveExploitabilityAbout` and
+audited across all thirteen kinds by #607; the five-condition contract is
+`TestFailClosed_ConfirmedOnlyFromTheExactIntendedCombination` in the kernel plus
+`TestACompletedRunIsSubsumedByReproduction` at the producer, with the PREVENTED
+half added in #608.
 
-**Gate:** E (active consent) — `nox scan` stays read-only throughout.
+8.1's value turned out not to be the fields — `nox attack plan` already built
+every one of them — but **where** they come from. Getting the scan's evidence
+onto a hypothesis previously meant `nox scan --evidence-out`, then
+`nox attack plan --evidence`, rejoined by fingerprint. The artifact records
+capability counts per SCAN, so `unknownsFromArtifact` hands every hypothesis the
+same scan-wide list and says so in its own comment. In-process the coverage is
+per-subject — what 2.2 built — so each hypothesis states the questions open
+about ITS OWN subject. "Nothing established taint for this finding" is
+actionable; "taint answered 30 subjects somewhere in this scan" is not.
+
+**Gate E held, and cost a redesign.** The first implementation put the method on
+`ScanResult`, which made `core` import `core/attack` — the exact thing
+`TestTheScanCannotReachTheAttackPackage` forbids, in the same change that added
+a test asserting Gate E. The guard caught it. The wiring moved to
+`core/hypothesize`, a package ABOVE the pipeline that takes a finished
+`ScanResult`, and the guard was extended to reject importing that from `core/`
+too — otherwise it would have been a transitive route past a check that reads
+only direct imports.
+
+**Size:** small, given what existed.
+
+**Gate:** E (active consent) — `nox scan` stays read-only throughout, and the
+guarantee is structural: the pipeline cannot import the code that touches a
+target, so it cannot execute one by accident.
 
 ---
 

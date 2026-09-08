@@ -1150,6 +1150,48 @@ This is why the matrix is emitted even when everything worked: a report listing
 only the capabilities that succeeded is one a reader will take for the complete
 set of questions nox asks.
 
+#### Asking what would settle it: `--emit-hypotheses`
+
+A scan can write the active-testing questions its findings raise:
+
+```bash
+nox scan . --emit-hypotheses hypotheses.json
+```
+
+Each hypothesis states the subject it is about, the entry point and attacker
+input, what would have to hold for it to succeed, what oracle would settle it,
+the assumptions it makes without evidence, and — the reason it is a hypothesis
+rather than a conclusion — the questions still open about that finding:
+
+```
+unknowns:
+  - symbol_resolution: does the build actually reference the affected symbol?
+  - taint: does untrusted input reach this location?
+  - call_graph: is there any call path that reaches this code?
+      (nothing on this installation can answer it)
+  - reachability: is this code reachable from an entry point?
+```
+
+Those are **per finding**, not per scan. A YAML finding and a Go finding in the
+same scan carry different open questions, because different analyses applied to
+them.
+
+**Nothing is tested.** `nox scan` executes nothing, ever — the guarantee is
+structural, not a check: the scan pipeline cannot even import the code that
+touches a target. This writes a file. Running it is a separate, explicit act:
+
+```bash
+nox attack run --plan hypotheses.json --authorize
+```
+
+A finding you have waived — `nox:ignore`, a baseline entry, a VEX statement —
+raises no hypothesis, and appears in the plan's `skipped` list saying so.
+Actively verifying something you accepted is a deliberate act, not a default.
+
+The flag implies `--evidence-out`'s recording, because a hypothesis carries what
+the scan established about its subject and there would otherwise be nothing to
+carry.
+
 #### Every finding says whether it was validated
 
 Every finding a scan reports carries an `Exploitability` state, and for a scan

@@ -117,7 +117,15 @@ func TestTheScanCannotReachTheAttackPackage(t *testing.T) {
 		}
 		checked++
 		for _, imp := range f.Imports {
-			if strings.Contains(imp.Path.Value, "nox/core/attack") {
+			// core/hypothesize is listed alongside core/attack because it
+			// imports it. It exists so the scan-to-attack handoff has one
+			// implementation, and it sits ABOVE the pipeline deliberately: it
+			// takes a finished ScanResult and computes over it, so nothing in a
+			// scan can reach it. Importing it from core/ would hand the
+			// pipeline a transitive route to attack code and defeat this guard
+			// without tripping it.
+			if strings.Contains(imp.Path.Value, "nox/core/attack") ||
+				strings.Contains(imp.Path.Value, "nox/core/hypothesize") {
 				t.Errorf("%s imports core/attack. The scan pipeline must not be able "+
 					"to reach code that touches a target; a scanner that can "+
 					"unknowingly attack what it is pointed at is unsafe to run in most "+

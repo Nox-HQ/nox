@@ -12,6 +12,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/hypothesize"
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
 	htmlreport "github.com/nox-hq/nox/core/report/html"
@@ -453,6 +454,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		failOnDegraded        bool
 		sortFlag              string
 		evidenceOutFlag       string
+		hypothesesOutFlag     string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -479,6 +481,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// operator who wants to ask, later, why nox said what it said asks for the
 	// artifact now. A scan that does not ask is byte-identical to before.
 	scanFS.StringVar(&evidenceOutFlag, "evidence-out", "", "write the replayable evidence behind this scan to a JSON file (see `nox replay`)")
+	scanFS.StringVar(&hypothesesOutFlag, "emit-hypotheses", "", "write the active-testing questions this scan raises to a JSON file (see `nox attack run --plan`). Emits only; the scan stays read-only.")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
 	scanFS.Usage = func() {
@@ -598,6 +601,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if evidenceOutFlag != "" {
 			opts.RecordReasoning = true
 		}
+		// Same reason as --evidence-out. A hypothesis carries what the scan
+		// established about its subject, and without recording there is nothing
+		// to carry — the plan would still be written, with every ledger empty,
+		// which reads as "nox established nothing" rather than "nobody asked".
+		if hypothesesOutFlag != "" {
+			opts.RecordReasoning = true
+		}
 		result, err = nox.RunScanWithOptions(target, opts)
 	}
 	if err != nil {
@@ -622,6 +632,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			fmt.Fprintf(os.Stderr, "evidence: wrote %s (%d subject(s), %d verdict(s)) — replay with `nox replay %s`\n",
 				evidenceOutFlag, len(art.Subjects), len(art.Findings), evidenceOutFlag)
 		}
+	}
+
+	if hypothesesOutFlag != "" {
+		emitHypotheses(result, target, hypothesesOutFlag, quiet)
 	}
 
 	activeFindings := result.Findings.ActiveFindings()
@@ -869,4 +883,44 @@ func parseFormats(fmtFlag string) []string {
 		return []string{"json"}
 	}
 	return formats
+}
+
+// emitHypotheses writes the active-testing questions a scan raises.
+//
+// Failure is a warning, never fatal — the same rule --evidence-out follows. The
+// scan's own results are complete and already computed, and failing the run
+// because an optional artifact could not be written would turn a convenience
+// into a way to break CI.
+//
+// It emits and stops. Nothing here contacts the target: `nox scan` is
+// read-only, and every verb that touches a running system stays behind
+// `nox attack ... --authorize`. The file this writes is an input to that,
+// not a substitute for the consent it requires.
+func emitHypotheses(result *nox.ScanResult, target, path string, quiet bool) {
+	plan, err := hypothesize.From(result, target, report.GeneratedAt())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not build hypotheses: %v\n", err)
+		return
+	}
+	raw, err := plan.JSON()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not marshal hypotheses: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil { //nolint:gosec // plan artifact, not a secret
+		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", path, err)
+		return
+	}
+	if quiet {
+		return
+	}
+	if len(plan.Hypotheses) == 0 {
+		fmt.Fprintf(os.Stderr, "hypotheses: wrote %s — no finding in this scan raises a "+
+			"testable question; %d were considered and the reasons are in `skipped`\n",
+			path, len(plan.Skipped))
+		return
+	}
+	fmt.Fprintf(os.Stderr, "hypotheses: wrote %s (%d question(s) from %d scenario(s)) — "+
+		"nothing was tested; run them with `nox attack run --plan %s --authorize`\n",
+		path, len(plan.Hypotheses), len(plan.Scenarios), path)
 }

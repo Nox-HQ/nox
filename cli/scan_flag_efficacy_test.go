@@ -54,6 +54,7 @@ var scanFlagBindings = []scanFlagBinding{
 	{"sort", "sortFlag"},
 	{"fingerprint-version", "fingerprintVersionFlag"},
 	{"evidence-out", "evidenceOutFlag"},
+	{"emit-hypotheses", "hypothesesOutFlag"},
 }
 
 // inertScanFlags are flags that deliberately do nothing. An entry is a promise
