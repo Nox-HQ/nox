@@ -16,8 +16,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -54,7 +56,23 @@ type Analyzer struct {
 	// the pipeline can report that CVE-variant detection did not run, rather
 	// than emitting zero findings and calling it clean.
 	loadErr error
+
+	// reasoning receives the refutations. Nil until asked for, and every
+	// recording call is nil-safe.
+	reasoning *reasoning.Store
 }
+
+// RecordReasoningTo directs this analyzer's refutations at store.
+//
+// One signature refinement exists here and it was invisible: a counter-pattern
+// that drops a match the CVE pattern found. Stage accounting reported VARIANT
+// as refuting nothing, which was true of the ledger and false of the analyzer.
+//
+// The other `continue`s in this file are scope, not refinement — an extension
+// that does not match, an artifact type not scanned, a file that would not
+// read. None of them says anything about a candidate, because none of them
+// produced one.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
 
 // LoadErr reports a whole-database load failure, or nil when the signature
 // database parsed. A non-nil value means no VARIANT-* rule can match.
@@ -150,6 +168,13 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, content []byte
 				continue
 			}
 			if s.exclude != nil && s.exclude.MatchString(line) {
+				// The signature's counter-pattern matched: this line has the
+				// shape of the CVE and also the shape of its fixed form.
+				a.reasoning.Refute(
+					reasoning.Candidate(s.ID, path, ln+1, 1),
+					evidence.KindStatic, "nox-scan", "variants",
+					"the signature's exclusion pattern matched this line, which is the "+
+						"shape of the fix rather than of the vulnerability")
 				continue
 			}
 			meta := map[string]string{"cve": s.CVE}

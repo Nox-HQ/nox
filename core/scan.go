@@ -519,11 +519,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
+	slopAnalyzer.RecordReasoningTo(reasons)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	filepermsAnalyzer := fileperms.NewAnalyzer()
 	hardeningAnalyzer := hardening.NewAnalyzer()
 	memsafeAnalyzer := memsafe.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
+	variantsAnalyzer.RecordReasoningTo(reasons)
 	// A signature database that fails to parse leaves every VARIANT-* rule
 	// unable to match. The scan would otherwise report zero variant findings
 	// and look clean.
