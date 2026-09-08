@@ -104,19 +104,28 @@ const maxFixpointIterations = 64
 // summaries converge to a fixpoint independent of iteration count, and flows are
 // sorted by the shared sortFlows ordering before return.
 func (e *StructuralEngine) AnalyzeFile(units []taint.Unit) []taint.Flow {
+	flows, _ := e.AnalyzeFileWithSuppressions(units)
+	return flows
+}
+
+// AnalyzeFileWithSuppressions is AnalyzeFile plus the flows it refused to
+// report. See taint.Suppression.
+func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]taint.Flow, []taint.Suppression) {
 	if len(units) == 0 {
-		return nil
+		return nil, nil
 	}
 	lang := units[0].Language
 
 	summaries := e.computeSummaries(lang, units)
 
 	var flows []taint.Flow
+	var suppressed []taint.Suppression
 	seen := map[flowKey]struct{}{}
 	for i := range units {
-		unitFlows := e.analyzeUnitInterproc(lang, &units[i], summaries)
-		for j := range unitFlows {
-			f := &unitFlows[j]
+		res := e.forwardPass(lang, &units[i], nil, summaries)
+		suppressed = append(suppressed, res.suppressed...)
+		for j := range res.flows {
+			f := &res.flows[j]
 			k := flowKey{f.SinkLine, f.SinkCall, f.SourceLine, f.SourceVar, f.Sink.RuleID}
 			if _, dup := seen[k]; dup {
 				continue
@@ -126,7 +135,8 @@ func (e *StructuralEngine) AnalyzeFile(units []taint.Unit) []taint.Flow {
 		}
 	}
 	sortFlows(flows)
-	return flows
+	sortSuppressions(suppressed)
+	return flows, suppressed
 }
 
 // flowKey de-duplicates flows that the intraprocedural and interprocedural

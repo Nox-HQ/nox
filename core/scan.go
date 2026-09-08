@@ -533,6 +533,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			"no VARIANT-* detection ran; known CVE variants in this codebase would not be reported")
 	}
 	taintflowAnalyzer := taintflow.NewAnalyzer()
+	taintflowAnalyzer.RecordReasoningTo(reasons)
 	agentflowAnalyzer := agentflow.NewAnalyzer()
 	provenanceAnalyzer := provenance.NewAnalyzer()
 

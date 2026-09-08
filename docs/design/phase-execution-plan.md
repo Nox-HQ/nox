@@ -294,7 +294,7 @@ reclassify at all.
 | Milestone | Work | Exit | |
 |---|---|---|---|
 | **6.1** | Reclassify the noisiest regex families as candidate generators | a rule at precision 0.000 is not carried as a detector | blocked, see below |
-| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | blocked with 6.1 |
+| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | TAINT ✅ #616; DATA/SLOP/VARIANT open |
 | **6.3** | Stage accounting: candidates in, refuted, promoted, unknown | precision improves with no refutation-caused recall loss | ✅ #615 |
 
 **6.1's named target is not in this repository, and there is no core substitute
@@ -335,10 +335,27 @@ it. On the precision suite:
 | DATA / SLOP / VARIANT | 7 | 7 | **0** | 0 |
 
 So **6.2's list is measured rather than guessed**: TAINT, DATA, SLOP and
-VARIANT record no refutations at all. TAINT is the interesting one — the engine
-does refine, via sanitizer recognition, so either a sanitized flow never becomes
-a candidate or the refinement is not recorded. That is a question the accounting
-poses and does not answer.
+VARIANT recorded no refutations at all.
+
+**TAINT is answered (#616), and it was the second half of the question.** The
+engine refines and recorded none of it — true of the ledger, false of the
+engine. It now files a refutation for every sanitized flow it clears: 30
+candidates and 0 refuted became **36 and 6** on the precision suite.
+
+That change also cost a claim, which is the more useful half of the story. Three
+sites suppress a flow, and only two of them are refutations. A sanitizer acting
+on the VALUE is positive evidence that travels with it. An argument SHAPE that
+is not dangerous — an argv exec, a parameterized query — says only that THIS
+CALL is safe; the value is untouched and just as tainted. Recording the second
+as a refutation conflated them, and
+`TestNoUnearnedNegativeOnTheHardCorpus` caught it on `h2_dynamic_dispatch.go`:
+an argv `exec.Command("echo", s)` on one line, an `sh -c` on another, and the
+choice made by data the engine cannot follow. Refuting the first reads as
+resolving the file. Only the two value-clearing sites record.
+
+DATA, SLOP and VARIANT remain. Each needs its refinement recorded or its absence
+explained — a family that genuinely refines nothing is a fine answer, and saying
+so is what the accounting is for.
 
 The first thing it found was in IaC, and it was mine. Three filters added in
 #599 and #600 — comments, kind references, artifacts-always — dropped findings
@@ -355,8 +372,7 @@ duration is different every time. Cost belongs on stderr or in a benchmark, and
 `TestNoTimingInTheAccounting` keeps it out.
 
 **Size:** 6.1 remains unsized — it needs per-rule precision on real repositories,
-which nothing yet produces. 6.2 is now sized by the table above: four families,
-each needing its refinement recorded or its absence explained.
+which nothing yet produces. 6.2 is three families short of done.
 
 **Gate:** A on every family reclassified.
 

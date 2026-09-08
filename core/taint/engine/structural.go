@@ -165,9 +165,13 @@ type taintInfo struct {
 // passResult is the output of a forward pass: the flows found, the final taint
 // state (for summary observation), and the variables returned by the unit.
 type passResult struct {
-	flows    []taint.Flow
-	state    map[string]taintInfo
-	returned []string
+	flows []taint.Flow
+	// suppressed are the flows the pass refused to report, with the reason.
+	// They are the refutations this engine performs and used to discard — see
+	// taint.Suppression.
+	suppressed []taint.Suppression
+	state      map[string]taintInfo
+	returned   []string
 }
 
 // Analyze implements taint.TaintEngine: intraprocedural, straight-line dataflow
@@ -179,18 +183,50 @@ type passResult struct {
 //
 //nolint:gocritic // Analyze(unit taint.Unit) is the TaintEngine interface signature; the value parameter cannot be a pointer.
 func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
-	res := e.forwardPass(unit.Language, &unit, nil, nil)
-	sortFlows(res.flows)
-	return res.flows
+	flows, _ := e.AnalyzeWithSuppressions(unit)
+	return flows
 }
 
-// analyzeUnitInterproc runs the forward pass over one unit WITH interprocedural
-// summary resolution enabled, so calls to locally-defined functions apply their
-// summaries (sink-in-helper, return-taint). Flows are returned unsorted; the
-// caller dedups and sorts.
-func (e *StructuralEngine) analyzeUnitInterproc(lang string, unit *taint.Unit, summaries map[string]*funcSummary) []taint.Flow {
-	res := e.forwardPass(lang, unit, nil, summaries)
-	return res.flows
+// AnalyzeWithSuppressions is Analyze plus the flows it refused to report.
+//
+// A separate method rather than a wider Analyze, because Analyze is the
+// TaintEngine interface and every implementation would have to grow a return
+// value most of them have nothing to put in. A caller that wants the
+// refutations asks for them.
+//
+// The suppressions are what the engine established and used to discard. See
+// taint.Suppression for why that matters more here than anywhere else in nox:
+// a sanitizer recognizer that clears the wrong thing produces a result
+// identical to one that had nothing to clear.
+//
+//nolint:gocritic // mirrors the Analyze signature, which the interface fixes.
+func (e *StructuralEngine) AnalyzeWithSuppressions(unit taint.Unit) ([]taint.Flow, []taint.Suppression) {
+	res := e.forwardPass(unit.Language, &unit, nil, nil)
+	sortFlows(res.flows)
+	sortSuppressions(res.suppressed)
+	return res.flows, res.suppressed
+}
+
+// sortSuppressions orders them deterministically. They reach the artifact
+// through the stage accounting, and findings.json is byte-identical across runs
+// by contract.
+func sortSuppressions(ss []taint.Suppression) {
+	sort.Slice(ss, func(i, j int) bool {
+		a, b := ss[i], ss[j]
+		if a.FilePath != b.FilePath {
+			return a.FilePath < b.FilePath
+		}
+		if a.SinkLine != b.SinkLine {
+			return a.SinkLine < b.SinkLine
+		}
+		if a.SinkCall != b.SinkCall {
+			return a.SinkCall < b.SinkCall
+		}
+		if a.Class != b.Class {
+			return a.Class < b.Class
+		}
+		return a.SourceVar < b.SourceVar
+	})
 }
 
 // stmtFlowKey identifies a flow within ONE statement: the rule it violates and
@@ -227,6 +263,7 @@ func (e *StructuralEngine) forwardPass(
 		tainted[k] = cloneTaintInfo(v)
 	}
 	var flows []taint.Flow
+	var suppressed []taint.Suppression
 	var returned []string
 
 	for i := range unit.Stmts {
@@ -273,7 +310,24 @@ func (e *StructuralEngine) forwardPass(
 			// Unknown shape (no SinkArgInfo at all) is dangerous — we never suppress
 			// on missing evidence.
 			if hasInfo && !e.sinkArgShapeDangerous(&sink, info) {
-				continue // argument shape makes this call safe (parameterized, no shell)
+				// Argument shape makes this call safe: a parameterized query, an
+				// exec form that spawns no shell.
+				//
+				// Deliberately NOT recorded as a refutation, and the distinction
+				// is worth the paragraph. The two sites below observe a
+				// SANITIZER acting on the VALUE — a neutralising operation ran,
+				// which is positive evidence about the value wherever it goes
+				// next. This one observes only that THIS CALL is not the
+				// dangerous form. The value is untouched and just as tainted.
+				//
+				// Filing it as a refutation conflates "this call is safe" with
+				// "this value is safe", and refutation-hard's h2_dynamic_dispatch
+				// is what that costs: an argv `exec.Command("echo", s)` at one
+				// line, an `sh -c` at another, and the choice made by data the
+				// engine cannot follow. Refuting the first reads as resolving
+				// the file. TestNoUnearnedNegativeOnTheHardCorpus caught exactly
+				// that, which is what it is for.
+				continue
 			}
 
 			argVars := info.TaintedArgVars
@@ -293,10 +347,18 @@ func (e *StructuralEngine) forwardPass(
 					continue
 				}
 				if ti.cleared[sink.VulnClass] || ti.src.Excludes(sink.VulnClass) {
-					continue // sanitized for this exact class (prior assignment / inline wrap), or a class the source's value cannot reach
+					// Sanitized for this exact class by a prior assignment, or a
+					// class this source's value cannot reach at all.
+					suppressed = append(suppressed, suppression(lang, unit, st, &sink, rawCall, sourceVar,
+						"a sanitizer cleared this value for "+string(sink.VulnClass)+
+							", or the source cannot reach that class"))
+					continue
 				}
 				if inlineCleared[v][sink.VulnClass] {
-					continue // sanitized inline at the sink call
+					suppressed = append(suppressed, suppression(lang, unit, st, &sink, rawCall, sourceVar,
+						"a sanitizer wrapping the value at the call cleared it for "+
+							string(sink.VulnClass)))
+					continue
 				}
 				// Role-aware gating for LLM prompt sinks: reaching an LLM is necessary
 				// but not sufficient. Determine the chat role the tainted value lands
@@ -435,7 +497,7 @@ func (e *StructuralEngine) forwardPass(
 		tainted[st.Assigns] = taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via}
 	}
 
-	return passResult{flows: flows, state: tainted, returned: returned}
+	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
 }
 
 // interprocSinkFlows returns cross-function flows for a statement's calls to
@@ -1312,4 +1374,26 @@ func sortFlows(flows []taint.Flow) {
 		}
 		return a.SinkCall < b.SinkCall
 	})
+}
+
+// suppression builds the record of a flow the engine refused to report.
+//
+// One constructor rather than a literal at each drop site, so every suppression
+// carries the same fields. A record missing its location or class is one nobody
+// can check, and the sites that build these are the sites least likely to be
+// looked at again.
+func suppression(lang string, unit *taint.Unit, st *taint.Statement, sink *taint.Sink,
+	rawCall, sourceVar, reason string) taint.Suppression {
+	return taint.Suppression{
+		Sink:      sink.Call,
+		RuleID:    sink.RuleID,
+		SinkCall:  rawCall,
+		SinkLine:  st.Line,
+		FilePath:  unit.FilePath,
+		FuncName:  unit.FuncName,
+		Language:  lang,
+		SourceVar: sourceVar,
+		Class:     string(sink.VulnClass),
+		Reason:    reason,
+	}
 }

@@ -21,9 +21,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/taint"
 	"github.com/nox-hq/nox/core/taint/engine"
@@ -33,7 +35,23 @@ import (
 type Analyzer struct {
 	cat *taint.Catalog
 	eng *engine.StructuralEngine
+	// reasoning receives the refutations. Nil until asked for, and every
+	// recording call is nil-safe, so the scan path below never branches on
+	// whether anybody wanted them.
+	reasoning *reasoning.Store
 }
+
+// RecordReasoningTo directs this analyzer's refutations at store.
+//
+// The taint engine performs the most sophisticated refinement in nox —
+// class-precise sanitizer clearing, argument-shape analysis — and recorded none
+// of it. The stage accounting reported TAINT as refuting nothing on every
+// corpus, which was true of the ledger and false of the engine.
+//
+// That gap has cost real defects: an argv exemption that silenced shell sinks
+// in five of six cases, a same-statement sanitizer invisible in every language
+// but Go. In each, the evidence needed to notice was computed and thrown away.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
 
 // NewAnalyzer returns a taintflow analyzer backed by the embedded catalog.
 func NewAnalyzer() *Analyzer {
@@ -153,9 +171,24 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.La
 	// interprocedural flow via function summaries), in addition to the
 	// intraprocedural flows Analyze finds. It de-duplicates a source→sink pair
 	// reachable both ways, so a purely intraprocedural bug is still reported once.
-	flows := a.eng.AnalyzeFile(units)
+	flows, suppressed := a.eng.AnalyzeFileWithSuppressions(units)
 	for j := range flows {
 		fs.Add(a.toFinding(&flows[j]))
+	}
+	a.recordSuppressions(path, suppressed)
+}
+
+// recordSuppressions files what the engine refused to report.
+//
+// The subject is the candidate the flow WOULD have been reported as, so a
+// refutation and the finding it prevented land in the same ledger — which is
+// what lets the stage accounting count them against the same family, and what
+// would let a reader ask why a sink they expected to see is absent.
+func (a *Analyzer) recordSuppressions(path string, ss []taint.Suppression) {
+	for i := range ss {
+		s := &ss[i]
+		subject := reasoning.Candidate(s.RuleID, path, s.SinkLine, 1)
+		a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "taint", s.Reason)
 	}
 }
 
