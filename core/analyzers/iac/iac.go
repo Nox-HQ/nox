@@ -103,9 +103,19 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	if err != nil {
 		return nil, err
 	}
-	out := dropArtifactsWhenAlways(results, content)
-	out = dropMatchesInComments(path, out, content)
-	out = dropKindReferences(path, out, content)
+	// Each filter is handed a recorder rather than dropping silently.
+	//
+	// These three shipped as bare `continue`s, which is exactly the pattern
+	// core/reasoning was built to end — "the finding and the reason for
+	// dropping it both discarded in the same statement". A refiner that drops
+	// the wrong thing then produces a result indistinguishable from one that
+	// had nothing to drop, and the stage accounting that found this reported
+	// IaC as refuting nothing while it was quietly removing findings on every
+	// scan.
+	drop := a.refuter(path)
+	out := dropArtifactsWhenAlways(results, content, drop)
+	out = dropMatchesInComments(path, out, content, drop)
+	out = dropKindReferences(path, out, content, drop)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
@@ -146,7 +156,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 // comment — so a match that begins in code and runs into a trailing comment is
 // kept. That asymmetry is deliberate: this filter removes findings, and the
 // direction it must never fail in is dropping one that is partly real.
-func dropMatchesInComments(path string, in []findings.Finding, content []byte) []findings.Finding {
+func dropMatchesInComments(path string, in []findings.Finding, content []byte, drop refuteFunc) []findings.Finding {
 	if len(in) == 0 {
 		return in
 	}
@@ -163,6 +173,8 @@ func dropMatchesInComments(path string, in []findings.Finding, content []byte) [
 			end = start + 1
 		}
 		if lexctx.WithinComments(lang, content, start, end) {
+			drop(f, "the match lies entirely inside a comment, which is prose about "+
+				"configuration rather than configuration")
 			continue
 		}
 		kept = append(kept, f)
@@ -215,7 +227,7 @@ var kindReferenceFields = map[string]bool{
 // `kind:` mapping entry are considered, and only when the nearest enclosing key
 // is a known reference field. A rule that matched something else on that line
 // is untouched.
-func dropKindReferences(path string, in []findings.Finding, content []byte) []findings.Finding {
+func dropKindReferences(path string, in []findings.Finding, content []byte, drop refuteFunc) []findings.Finding {
 	if len(in) == 0 || configLang(path) != lexctx.LangYAML {
 		return in
 	}
@@ -227,6 +239,8 @@ func dropKindReferences(path string, in []findings.Finding, content []byte) []fi
 			lines = strings.Split(string(content), "\n")
 		}
 		if isKindReference(lines, f.Location.StartLine) {
+			drop(f, "the `kind:` on this line sits under a reference field, so it names "+
+				"another object rather than declaring this one")
 			continue
 		}
 		kept = append(kept, f)
@@ -296,7 +310,7 @@ func configLang(path string) lexctx.Lang {
 // Block membership is decided by indentation — the nearest enclosing key at a
 // shallower indent — which is enough for the mapping shapes CI files use and
 // needs no YAML parser on this path.
-func dropArtifactsWhenAlways(in []findings.Finding, content []byte) []findings.Finding {
+func dropArtifactsWhenAlways(in []findings.Finding, content []byte, drop refuteFunc) []findings.Finding {
 	if len(in) == 0 {
 		return in
 	}
@@ -311,6 +325,8 @@ func dropArtifactsWhenAlways(in []findings.Finding, content []byte) []findings.F
 			lines = strings.Split(string(content), "\n")
 		}
 		if enclosingKey(lines, f.Location.StartLine) == "artifacts" {
+			drop(f, "`if: always()` inside an artifacts block uploads diagnostics on "+
+				"failure, which is the intended use rather than a skipped gate")
 			continue
 		}
 		kept = append(kept, f)
@@ -469,6 +485,28 @@ func (a *Analyzer) refuteCompanionsFoundInOtherFiles(index *structural.Index, co
 		a.refuteCrossFile(f, hit)
 	}
 	return out
+}
+
+// refuteFunc records why one finding was dropped. A refiner takes it rather
+// than reaching for the store, so the recording cannot be forgotten at one call
+// site and present at another — the shape that let three filters ship silent.
+type refuteFunc func(f findings.Finding, reason string)
+
+// refuter returns the recorder for findings dropped in path.
+//
+// It returns a working function even when nothing is recording, so a refiner
+// never branches on whether anybody asked for reasoning. That is the same
+// property that makes a nil reasoning.Store safe to call: a guard written the
+// wrong way at one site is how a refiner silently stops recording.
+func (a *Analyzer) refuter(path string) refuteFunc {
+	return func(f findings.Finding, reason string) {
+		if a.reasoning == nil {
+			return
+		}
+		subject := reasoning.Candidate(f.RuleID, path,
+			f.Location.StartLine, f.Location.StartColumn)
+		a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "iac", reason)
+	}
 }
 
 // refuteCrossFile records why a finding was dropped by the cross-file pass.

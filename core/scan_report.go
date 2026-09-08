@@ -31,7 +31,25 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
+	rep.StageAccounting = stageAccountingFor(r)
 	return rep
+}
+
+// stageAccountingFor converts the scan's stage counts into their report form.
+// Nil when the scan recorded no reasoning, which keeps an absent block meaning
+// "no ledger" rather than "every family refuted nothing".
+func stageAccountingFor(r *ScanResult) []report.StageCount {
+	if len(r.Stages) == 0 {
+		return nil
+	}
+	out := make([]report.StageCount, 0, len(r.Stages))
+	for _, s := range r.Stages {
+		out = append(out, report.StageCount{
+			Family: s.Family, Candidates: s.Candidates, Promoted: s.Promoted,
+			Refuted: s.Refuted, Withheld: s.Withheld, Unresolved: s.Unresolved,
+		})
+	}
+	return out
 }
 
 // SARIFReporter returns a results.sarif reporter carrying this scan's
