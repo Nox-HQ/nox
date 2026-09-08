@@ -199,7 +199,7 @@ func argument(l evidence.Ledger, s evidence.Subject) (supports, against []string
 		}
 		switch {
 		case c.Refutes():
-			against = append(against, line)
+			against = append(against, qualify(line, c))
 		case c.Supports():
 			supports = append(supports, line)
 		default:
@@ -374,4 +374,34 @@ func whatToDo(rule catalog.RuleMeta) string {
 	}
 	return "This rule carries no remediation guidance. Treat the evidence above as the " +
 		"input to your own judgement rather than waiting for nox to make it."
+}
+
+// qualify makes a refutation say what it holds within.
+//
+// A refutation is a UNIVERSAL claim — "this does not hold" — and it is only as
+// good as the search behind it. reach.Result has always rendered its negatives
+// this way ("does not hold within the scope searched (...). Nothing here rules
+// out another build or another path"); a ledger refutation rendered as a bare
+// sentence, which reads as settled.
+//
+// A claim recorded through Store.RefuteWithin names its analysis and what that
+// analysis cannot see, and those are what a reader needs to decide whether the
+// blind spot matters to their code. One recorded without a scope still gets a
+// qualifier — generic, because that is all there is to say — so that no path
+// through this function can render a negative unqualified. That is the point:
+// not that every refutation is well described, but that none of them can be
+// mistaken for a universal one.
+func qualify(line string, c evidence.Claim) string {
+	analysis := c.Attributes["scope"]
+	limits := c.Attributes["limits"]
+	switch {
+	case analysis != "" && limits != "":
+		return line + " — established by " + analysis + ", which cannot see " + limits
+	case analysis != "":
+		return line + " — established by " + analysis + ", within what it could see"
+	case limits != "":
+		return line + " — within what that analysis could see; it cannot see " + limits
+	default:
+		return line + " — within what that analysis could see"
+	}
 }

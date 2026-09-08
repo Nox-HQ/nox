@@ -101,6 +101,56 @@ func (s *Store) Refute(subject evidence.Subject, kind evidence.Kind, source, too
 	})
 }
 
+// Scope names what an analysis covered when it refuted something, and what it
+// could not see.
+//
+// A refutation is a UNIVERSAL claim — "this does not hold" — and it is only as
+// good as the search behind it. `reach.Result` has carried a scope since it
+// existed, and its rendering is careful for exactly this reason: "does not hold
+// within the scope searched (...). Nothing here rules out another build or
+// another path." A ledger refutation carried a bare sentence.
+//
+// Both fields are prose, deliberately. They are read by a person deciding
+// whether to trust a negative, and a structured limitation vocabulary already
+// exists for the one analysis that needs it (reach.Limitation). Duplicating it
+// here would put two spellings of "this analysis could not see X" in the tree.
+type Scope struct {
+	// Analysis names what produced the refutation, so a reader can weigh it:
+	// "intraprocedural taint over one statement", "YAML comment lexing".
+	Analysis string
+	// Limits states what that analysis cannot see. Empty means the refiner
+	// claims no blind spot, which is a strong claim and should be rare.
+	Limits string
+}
+
+// RefuteWithin is Refute plus the scope the refutation holds within.
+//
+// Prefer it. A negative with no scope renders qualified anyway — see
+// core/explain — but qualified generically, which tells the reader that some
+// limit exists without saying which. Naming the limit is what lets them decide
+// whether it matters to their code.
+func (s *Store) RefuteWithin(subject evidence.Subject, kind evidence.Kind,
+	source, tool, statement string, scope Scope) {
+	attrs := map[string]string{}
+	if scope.Analysis != "" {
+		attrs["scope"] = scope.Analysis
+	}
+	if scope.Limits != "" {
+		attrs["limits"] = scope.Limits
+	}
+	if len(attrs) == 0 {
+		attrs = nil
+	}
+	s.Record(evidence.Claim{
+		Kind:       kind,
+		Statement:  statement,
+		Polarity:   evidence.PolarityRefutes,
+		Subject:    subject,
+		Attributes: attrs,
+		Provenance: evidence.Provenance{Source: source, Tool: tool},
+	})
+}
+
 // About returns the ledger for one subject. The zero Ledger is returned for a
 // subject nothing was recorded about, and for a nil Store.
 func (s *Store) About(subject evidence.Subject) evidence.Ledger {
