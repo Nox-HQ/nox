@@ -188,7 +188,18 @@ func (a *Analyzer) recordSuppressions(path string, ss []taint.Suppression) {
 	for i := range ss {
 		s := &ss[i]
 		subject := reasoning.Candidate(s.RuleID, path, s.SinkLine, 1)
-		a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "taint", s.Reason)
+		// Scoped, not bare. A sanitizer refutation is a universal claim about
+		// this value at this sink, and it is only as good as the analysis
+		// behind it — which here is syntactic and per-file. Naming the blind
+		// spots is what lets a reader decide whether they matter: a value that
+		// arrives through an interface, a function value or reflection is a
+		// value this engine did not follow, and the sanitizer it saw may not be
+		// the one that ran.
+		a.reasoning.RefuteWithin(subject, evidence.KindStatic, "nox-scan", "taint",
+			s.Reason, reasoning.Scope{
+				Analysis: "the " + s.Language + " taint engine, over this file",
+				Limits:   "interface dispatch, function values, reflection, or a sanitizer applied in another file",
+			})
 	}
 }
 
