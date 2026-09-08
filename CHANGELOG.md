@@ -87,6 +87,15 @@ code, and one of them was hiding findings.
 - `reach_limitations` on a finding: the machine-readable half of `reach_scope`,
   which is prose. Parsing English back out is not a contract.
 
+- `meta.stage_accounting`: what each rule family produced and what became of it —
+  candidates in, promoted, refuted on evidence, withheld by configuration. A
+  finding count cannot tell a family that refines from one that does not; both
+  produce findings. The four counts partition the candidates exactly, and
+  `refuted` is kept apart from `withheld` because a deduplication is not a
+  judgement about whether a finding was true. Present only when the scan records
+  reasoning, and deliberately carrying no timing: this artifact is
+  byte-identical across runs by contract and a duration is not.
+
 ### Fixed
 
 - **Undetermined reachability was recorded as never-evaluated** (#603).
@@ -107,6 +116,18 @@ code, and one of them was hiding findings.
   every path in `core/attack`. The run path already was; replay, regress and the
   MCP path were not, and were safe only by accident of each building a fresh
   single-purpose ledger.
+- **Four analyzer families dropped findings without recording why**, which is the
+  pattern `core/reasoning` exists to end. Stage accounting reported each as
+  refuting nothing — true of the ledger, false of the analyzer. IaC's comment,
+  kind-reference and artifacts-always filters (added in 1.34.0's successors) now
+  record; the taint engine records the sanitized flows it clears, going from 0
+  refutations to 6 on the precision suite; SLOP records why an import resolved,
+  and refutes 18 against 3 reported. DATA refines nothing and reporting zero for
+  it is correct.
+
+  Nothing reported changes: these are recordings of decisions the analyzers
+  already made. What changes is that a recognizer clearing the WRONG thing no
+  longer looks identical to one that had nothing to clear.
 - A plan with nothing to attempt serialises as `[]` rather than `null`.
 - An unnamed entry point no longer renders as "the entry point  is reachable by
   an attacker" — a hole where a value should be, rather than the assumption it

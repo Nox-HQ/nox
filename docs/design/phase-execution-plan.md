@@ -294,7 +294,7 @@ reclassify at all.
 | Milestone | Work | Exit | |
 |---|---|---|---|
 | **6.1** | Reclassify the noisiest regex families as candidate generators | a rule at precision 0.000 is not carried as a detector | blocked, see below |
-| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | TAINT ✅ #616; DATA/SLOP/VARIANT open |
+| **6.2** | Extend cheap refutation to the families that lack it | measured precision gain per family | ✅ #616, #617 |
 | **6.3** | Stage accounting: candidates in, refuted, promoted, unknown | precision improves with no refutation-caused recall loss | ✅ #615 |
 
 **6.1's named target is not in this repository, and there is no core substitute
@@ -353,9 +353,32 @@ an argv `exec.Command("echo", s)` on one line, an `sh -c` on another, and the
 choice made by data the engine cannot follow. Refuting the first reads as
 resolving the file. Only the two value-clearing sites record.
 
-DATA, SLOP and VARIANT remain. Each needs its refinement recorded or its absence
-explained — a family that genuinely refines nothing is a fine answer, and saying
-so is what the accounting is for.
+**The other three are done, and one of them by explanation rather than by code
+(#617).**
+
+**SLOP refutes six times more often than it reports.** SLOP-001 fires on an
+import that resolves to nothing, so every check that RESOLVES one — standard
+library, first-party module, private module, declared in a manifest — is a
+refutation. Precision suite: 3 promoted, **18 refuted**. Refutation suite: 0
+promoted, 5 refuted. None of it was recorded, so a family doing almost nothing
+but refining looked like one doing none.
+
+**VARIANT has exactly one refinement** — a signature's counter-pattern, which
+drops a line carrying the shape of the fix rather than of the CVE. No committed
+corpus exercises it, so it is asserted directly rather than from a corpus that
+would report zero either way.
+
+**DATA refines nothing, and that is the answer.** It is a pass-through to the
+rules engine: every match becomes a finding, with no filter, exclusion or
+counter-pattern anywhere in the analyzer. A family that genuinely refines
+nothing SHOULD report zero, and the accounting reporting zero for it is the
+instrument working rather than a family still to instrument. Pinned, so that if
+DATA ever grows a refinement it fails rather than dropping silently.
+
+The distinction that ran through all four: a `continue` for SCOPE — an
+extension that does not match, a vendored path, an ecosystem with no extractor —
+produced no candidate and refutes nothing. Only a drop that acts on a candidate
+is a refutation.
 
 The first thing it found was in IaC, and it was mine. Three filters added in
 #599 and #600 — comments, kind references, artifacts-always — dropped findings
@@ -372,7 +395,7 @@ duration is different every time. Cost belongs on stderr or in a benchmark, and
 `TestNoTimingInTheAccounting` keeps it out.
 
 **Size:** 6.1 remains unsized — it needs per-rule precision on real repositories,
-which nothing yet produces. 6.2 is three families short of done.
+which nothing yet produces. 6.2 and 6.3 are done.
 
 **Gate:** A on every family reclassified.
 

@@ -17,9 +17,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -32,6 +34,30 @@ type Analyzer struct {
 	// imported name that matches a feed entry additionally raises a distinct
 	// SLOP-002 predictive finding; the SLOP-001 baseline is never altered.
 	feed *feed.Loaded
+
+	// reasoning receives the refutations. Nil until asked for, and every
+	// recording call is nil-safe.
+	reasoning *reasoning.Store
+}
+
+// RecordReasoningTo directs this analyzer's refutations at store.
+//
+// SLOP-001 fires on an import that resolves to nothing, so every check that
+// RESOLVES one is a refutation: it is in the standard library, it is a
+// first-party module, it is a private module no registry can hold, it is
+// declared in a manifest. Stage accounting reported SLOP as refuting nothing,
+// which was true of the ledger and false of the analyzer — and this family
+// refutes more often than it reports.
+//
+// The other `continue`s here are scope: a vendored path, an ecosystem with no
+// extractor, a relative specifier. None produced a candidate, so none refutes
+// one.
+func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
+
+// refute files why an import did not become a slopsquat candidate.
+func (a *Analyzer) refute(path string, line int, reason string) {
+	a.reasoning.Refute(reasoning.Candidate("SLOP-001", path, line, 1),
+		evidence.KindStatic, "nox-scan", "slop", reason)
 }
 
 // Option configures an Analyzer.
@@ -181,11 +207,15 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 			continue // relative/local specifier
 		}
 		if isStdlib(eco, pkg) {
+			a.refute(path, imp.line, "\""+pkg+"\" is in the "+string(eco)+
+				" standard library, so it resolves without a registry package")
 			continue
 		}
 		if eco == ecoPyPI {
 			if _, isLocal := local[pkg]; isLocal {
-				continue // first-party Python module
+				a.refute(path, imp.line, "\""+pkg+"\" is a first-party module in this "+
+					"repository, not a package anybody could squat")
+				continue
 			}
 			// PEP 508 requires a distribution name to start with a letter or
 			// digit, so an underscore-led import (_ssl, _typeshed, _pytest,
@@ -193,6 +223,9 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 			// private module of CPython or of an installed package, and there
 			// is nothing here for a squatter to register.
 			if strings.HasPrefix(pkg, "_") {
+				a.refute(path, imp.line, "\""+pkg+"\" starts with an underscore, and PEP 508 "+
+					"requires a distribution name to start with a letter or digit — no "+
+					"registry package can carry this name")
 				continue
 			}
 		}
@@ -207,9 +240,17 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 		a.emitPredictive(fs, eco, path, pkg, imp, seenPred)
 
 		if declaredHas(declared, eco, pkg) {
+			a.refute(path, imp.line, "\""+pkg+"\" is declared in a dependency manifest, so "+
+				"the import resolves to a package this project already depends on")
 			continue
 		}
 		if _, dup := seen[pkg]; dup {
+			// Deduplication, not evidence: the second import of the same
+			// unresolved package is the same finding. Withheld weighs nothing,
+			// which is the only honest weight — the candidate was not wrong.
+			a.reasoning.Withheld(reasoning.Candidate("SLOP-001", path, imp.line, 1),
+				"nox-scan", "slop",
+				"already reported for \""+pkg+"\" elsewhere in this file")
 			continue
 		}
 		seen[pkg] = struct{}{}

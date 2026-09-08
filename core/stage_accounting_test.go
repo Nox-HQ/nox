@@ -188,3 +188,67 @@ func TestTaintRecordsItsSanitizerDecisions(t *testing.T) {
 	}
 	t.Fatal("no TAINT family in the accounting")
 }
+
+// SLOP refutes more often than it reports, and that is the shape of the family.
+//
+// SLOP-001 fires on an import that resolves to nothing, so every check that
+// RESOLVES one — standard library, first-party module, private module, declared
+// in a manifest — is a refutation. On the precision suite it promotes 3 and
+// refutes 18; on the refutation suite it promotes nothing and refutes 5.
+//
+// None of that was recorded. A family doing six times more refuting than
+// reporting looked, in the ledger, like one doing none.
+func TestSlopRecordsWhyAnImportResolved(t *testing.T) {
+	res, err := RunScanWithOptions(filepath.Join("..", "testdata", "precision-suite"),
+		ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, s := range res.Stages {
+		if s.Family != "SLOP" {
+			continue
+		}
+		if s.Refuted == 0 {
+			t.Error("SLOP refuted nothing while resolving imports against the standard " +
+				"library, the manifest and the local tree on every scan")
+		}
+		if s.Refuted <= s.Promoted {
+			t.Errorf("SLOP refuted %d and promoted %d; this family resolves far more "+
+				"imports than it flags, and a ledger that does not show it is not "+
+				"describing the analyzer", s.Refuted, s.Promoted)
+		}
+		return
+	}
+	t.Fatal("no SLOP family in the accounting")
+}
+
+// DATA refines nothing, and that is the correct answer rather than a gap.
+//
+// core/analyzers/data is a pass-through to the rules engine: every rule match
+// becomes a finding, with no filter, exclusion or counter-pattern anywhere in
+// the analyzer. A family that genuinely refines nothing SHOULD report zero
+// refutations, and the accounting reporting zero for it is the instrument
+// working rather than a family still to be instrumented.
+//
+// Pinned so that if DATA ever grows a refinement, this fails and somebody
+// records it rather than adding a silent drop.
+func TestDataRefinesNothingAndSaysSo(t *testing.T) {
+	res, err := RunScanWithOptions(filepath.Join("..", "testdata", "precision-suite"),
+		ScanOptions{Offline: true, RecordReasoning: true})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, s := range res.Stages {
+		if s.Family != "DATA" {
+			continue
+		}
+		if s.Candidates != s.Promoted {
+			t.Errorf("DATA has %d candidates and promoted %d. It gained a refinement "+
+				"since this was measured — record why it drops, rather than dropping "+
+				"silently, which is what every other family in this file had to fix.",
+				s.Candidates, s.Promoted)
+		}
+		return
+	}
+	t.Fatal("no DATA family in the accounting")
+}
