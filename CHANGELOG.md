@@ -97,6 +97,16 @@ code, and one of them was hiding findings.
   caveat reads as a full answer.
 - `reach_limitations` on a finding: the machine-readable half of `reach_scope`,
   which is prose. Parsing English back out is not a contract.
+- Every negative `nox why` renders says what it holds within. A refutation is a
+  universal claim — "this does not hold" — and only as good as the search behind
+  it, and a ledger refutation used to render as a bare sentence that reads as
+  settled. Where a refiner named its blind spot, the blind spot is shown: a
+  taint refutation now reads "established by the python taint engine, over this
+  file, which cannot see interface dispatch, function values, reflection, or a
+  sanitizer applied in another file". Where none was recorded, the negative is
+  still qualified generically, so no path through the renderer can produce an
+  unqualified one. Supporting claims are deliberately not hedged the same way:
+  one witness settles an existential claim however narrow the search was.
 
 - `meta.stage_accounting`: what each rule family produced and what became of it —
   candidates in, promoted, refuted on evidence, withheld by configuration. A
@@ -159,10 +169,28 @@ code, and one of them was hiding findings.
   `ScanOptions.RecordReasoning` said a scan with it off is byte-identical to one
   with it on (already untrue when written).
 
+### Guarantees now under test
+
+Behaviour that was already intended and is now asserted, so a future change
+cannot quietly lose it:
+
+- A **retracted claim stops contributing** everywhere nox adjudicates, not only
+  in intel: it does not move the confidence, the rationale never cites it, and a
+  retracted *refutation* stops suppressing — so withdrawing an argument restores
+  the finding rather than leaving it hidden behind something nobody stands
+  behind any more.
+- **Missing evidence is never a refutation.** Deduplication, a disabled rule, an
+  excluded path and a construct the analysis cannot follow are all recorded with
+  no polarity. An entropy rule that matched a real credential matched a real
+  credential; it is gone because five reports of one secret is noise, and
+  recording that as evidence against it would be a fabrication.
+- The **call graph never reports that no path exists**, in any language.
+
 ### Unchanged
 
-Detection **231 TP / 0 FP / 0 FN** and refutation **37 / 0 / 0** across all
-nine changes. Every one adds output or corrects a state; none removes a finding.
+Detection **231 TP / 0 FP / 0 FN** and refutation **37 / 0 / 0** across every
+change in this release. Every one adds output or corrects a state; none removes
+a finding.
 
 ## [1.34.0] - 2026-09-05
 
