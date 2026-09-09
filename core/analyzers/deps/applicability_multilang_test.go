@@ -40,7 +40,7 @@ func TestApplicabilityClimbsForNonGoEcosystems(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			src := tree(t, map[string]string{c.file: c.src})
 			v := applicabilityFor(Package{Name: c.pkg, Ecosystem: c.eco},
-				goAdvisory(c.pkg), nil, false, src)
+				goAdvisory(c.pkg), nil, false, src, nil, "")
 
 			if v.Reached != applicability.SymbolUsed {
 				t.Errorf("reached %q, want %q — the project imports the package by name",
@@ -61,7 +61,7 @@ func TestApplicabilityClimbsForNonGoEcosystems(t *testing.T) {
 func TestNotImportedIsNeverARefutation(t *testing.T) {
 	src := tree(t, map[string]string{"a.js": `const x = require("express");`})
 	v := applicabilityFor(Package{Name: "lodash", Ecosystem: "npm"},
-		goAdvisory("lodash"), nil, false, src)
+		goAdvisory("lodash"), nil, false, src, nil, "")
 
 	if v.Outcome == applicability.NotImpacting {
 		t.Fatal("a package absent from the source may be reached through a dependency; refuting it would hide a real vulnerability")
@@ -76,7 +76,7 @@ func TestNotImportedIsNeverARefutation(t *testing.T) {
 func TestUnsupportedEcosystemIsUnchanged(t *testing.T) {
 	src := tree(t, map[string]string{"A.java": "import com.fasterxml.jackson.databind.ObjectMapper;\n"})
 	v := applicabilityFor(Package{Name: "jackson-databind", Ecosystem: "maven"},
-		goAdvisory("jackson-databind"), nil, false, src)
+		goAdvisory("jackson-databind"), nil, false, src, nil, "")
 
 	if v.Reached != applicability.AffectedVersion {
 		t.Errorf("reached %q, want %q", v.Reached, applicability.AffectedVersion)
@@ -90,7 +90,7 @@ func TestSourceIsNotReadUntilAsked(t *testing.T) {
 	if src.index != nil {
 		t.Fatal("index built before any finding asked")
 	}
-	_ = applicabilityFor(Package{Name: "lodash", Ecosystem: "npm"}, goAdvisory("lodash"), nil, false, src)
+	_ = applicabilityFor(Package{Name: "lodash", Ecosystem: "npm"}, goAdvisory("lodash"), nil, false, src, nil, "")
 	if src.index == nil {
 		t.Error("index should have been built on first use")
 	}

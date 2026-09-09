@@ -23,6 +23,7 @@ import (
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/applicability"
+	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
@@ -655,6 +656,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if goModDir != "" {
 				linkedGoPkgs, linkedGoKnown = goImportedPackages(ctx, goModDir)
 			}
+			// Built once per scan and only when there is a Go module to build
+			// it over, so a repository with no go.mod pays nothing. It answers
+			// applicability.CallReachable — see goCallReachable.
+			var goGraph *callgraph.Graph
+			if goModDir != "" && linkedGoKnown {
+				goGraph = callgraph.BuildGo(goModDir)
+			}
 
 			for pkgIdx, osvVulns := range vulnMap {
 				pkg := pkgs[pkgIdx]
@@ -736,7 +744,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// including — especially — the ones where it got nowhere,
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
-					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports)
+					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
 					if verdict.StoppedAt != "" {
@@ -803,12 +811,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 // applicabilityFor climbs the applicability ladder as far as the evidence
 // actually supports, and records where it stopped.
 //
-// Every rung above SymbolUsed is currently out of reach: nox has no call-graph
-// analysis, so CallReachable cannot be established for anything. Saying so is
-// the point. A scanner that stops climbing and stays silent leaves the reader
-// to assume it stopped because there was nothing above; this says it stopped
-// because nobody has built the thing that would look.
-func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, linkedKnown bool, src *sourceImports) applicability.Verdict {
+// CallReachable is reachable for Go since core/callgraph existed: the advisory
+// names an import path, `go list -deps` says the build links it, and the graph
+// says which of this module's functions reach for it and whether execution can
+// get to them. Above that, AttackerReachable stays out of reach — nothing here
+// knows which entry points an attacker controls.
+//
+// A rung that cannot be climbed says so rather than staying silent. A scanner
+// that stops and says nothing leaves the reader to assume it stopped because
+// there was nothing above.
+func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, linkedKnown bool,
+	src *sourceImports, graph *callgraph.Graph, root string) applicability.Verdict {
 	// Present and AffectedVersion are established by the fact of the finding:
 	// the package is in the lockfile, and OSV matched its version.
 	const reached = applicability.AffectedVersion
@@ -839,8 +852,27 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 			[]string{"the build links no package under " + strings.Join(affected, ", ")})
 	}
 
-	// The affected package IS linked. That is SymbolUsed established — and the
-	// next rung, whether anything calls it, is one nox cannot climb at all.
+	// The affected package IS linked. That is SymbolUsed established. The next
+	// rung — does anything in this build actually reach for it, from somewhere
+	// that runs — is one core/callgraph can now answer for Go.
+	if path, ok := goCallReachable(graph, root, affected); ok {
+		return applicability.Established(applicability.CallReachable, path)
+	}
+	// Two different answers, kept apart.
+	//
+	// No graph means the analysis could not run here — no module, or a linked
+	// set the toolchain could not enumerate — which is UNSUPPORTED: a limit,
+	// and one an operator cannot act on by scanning differently.
+	//
+	// A graph that ran and found no path is UNKNOWN. It is not "nothing calls
+	// it": a syntactic call graph cannot see interface dispatch, function
+	// values or reflection, so the search came up empty rather than establishing
+	// a negative. Collapsing the two would tell an operator to install
+	// something that is already installed.
+	if graph == nil {
+		return applicability.Undeterminable(applicability.SymbolUsed,
+			applicability.CallReachable, capability.Unsupported)
+	}
 	return applicability.Undeterminable(applicability.SymbolUsed,
-		applicability.CallReachable, capability.Unsupported)
+		applicability.CallReachable, capability.Unknown)
 }

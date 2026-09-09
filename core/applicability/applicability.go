@@ -108,6 +108,16 @@ const (
 	// a finding, and it requires the same evidence Gate B requires: an analysis
 	// that ran and established the negative.
 	NotImpacting Outcome = "not_impacting"
+	// Impacting — a rung was positively established with a witness, and the
+	// argument continues upward. It exists because the ladder previously had no
+	// way to say "yes, and here is why": a climb could stop on an absence or on
+	// a refutation, and rising was only ever the absence of a reason not to.
+	//
+	// It de-emphasises nothing and may never be read as a clearance's opposite
+	// number. Reaching CallReachable says a path exists, not that an attacker
+	// can take it — AttackerReachable is a separate rung for exactly that
+	// reason.
+	Impacting Outcome = "impacting"
 )
 
 // Verdict is how far the applicability argument got, and why it stopped.
@@ -146,12 +156,36 @@ func (v Verdict) Describe() string {
 	case NotImpacting:
 		return fmt.Sprintf("present, but not currently impacting this application: %s",
 			refutedAt(v.StoppedAt))
+	case Impacting:
+		// Names the rung and the witness length rather than declaring the
+		// finding exploitable. CallReachable means a path exists; whether an
+		// attacker can take it is the rung above, and this sentence must not
+		// be readable as having climbed it.
+		return fmt.Sprintf("%s, reached through %d call(s) from an entry point. "+
+			"That a path exists is not that an attacker can take it — "+
+			"%q was not established.",
+			reachedAt(v.Reached), len(v.Path), AttackerReachable)
 	default:
 		if v.StoppedAt == "" {
 			return fmt.Sprintf("established as far as %q", v.Reached)
 		}
 		return fmt.Sprintf("established as far as %q; %s was not established (%s)",
 			v.Reached, v.StoppedAt, v.Because.Describe())
+	}
+}
+
+// reachedAt explains what a positively established rung means, in the same
+// register refutedAt uses for the other direction.
+func reachedAt(r Rung) string {
+	switch r {
+	case SymbolUsed:
+		return "the affected package is linked by this build"
+	case CallReachable:
+		return "code in this build calls into the affected package"
+	case AttackerReachable:
+		return "an attacker can cause the affected code to run"
+	default:
+		return fmt.Sprintf("%q holds", r)
 	}
 }
 
@@ -179,6 +213,26 @@ func refutedAt(r Rung) string {
 // probably has no business claiming the climb stopped at all.
 func Undeterminable(reached, stoppedAt Rung, because capability.State) Verdict {
 	return Verdict{Reached: reached, Outcome: Undetermined, StoppedAt: stoppedAt, Because: because}
+}
+
+// Established builds a verdict for a rung positively reached, with the witness
+// that reached it.
+//
+// The witness is required, not optional, and for the same reason Refuted
+// requires capability.Negative: a claim that a rung was climbed with nothing to
+// point at is an assertion. A caller with no path to show has not established
+// the rung and should be reporting that the search came up empty.
+func Established(reached Rung, witness []string) Verdict {
+	if len(witness) == 0 {
+		// No witness, no climb. The rung below is what was actually shown.
+		return Undeterminable(reached, reached, capability.Unknown)
+	}
+	return Verdict{
+		Reached: reached,
+		Outcome: Impacting,
+		Because: capability.Positive,
+		Path:    append([]string(nil), witness...),
+	}
 }
 
 // Refuted builds a verdict for a rung deterministically established not to hold.
