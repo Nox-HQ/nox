@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/applicability"
+	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/depimports"
 	"github.com/nox-hq/nox/core/reach"
@@ -283,4 +284,48 @@ func importApplicability(pkg Package, reached applicability.Rung, src *sourceImp
 	// whether anything calls it is the rung nox cannot climb at all.
 	return applicability.Undeterminable(applicability.SymbolUsed,
 		applicability.CallReachable, capability.Unsupported), true
+}
+
+// goCallReachable asks whether execution can reach a function in THIS module
+// that calls into one of the advisory's affected import paths.
+//
+// It is milestone 7.3's composition: `go list -deps` establishes that the build
+// LINKS the affected package (applicability.SymbolUsed), and the call graph
+// answers the next rung — whether anything in this build actually reaches for
+// it from somewhere that runs.
+//
+// Only positive answers are returned, and that is the whole design. A syntactic
+// call graph cannot see interface dispatch, function values or reflection, so
+// "no path found" is not "no path exists" — it is the search coming up empty,
+// which leaves the rung unclimbed rather than refuted. core/callgraph never
+// refutes for the same reason.
+//
+// The witness is the real chain of calls, so a reader can follow it rather than
+// take the rung on trust.
+func goCallReachable(g *callgraph.Graph, root string, affected []string) (path []string, ok bool) {
+	if g == nil || len(affected) == 0 {
+		return nil, false
+	}
+	var best []string
+	for _, imp := range affected {
+		for _, caller := range g.CallersOfPackage(imp) {
+			p, kind := g.PathToFunc(caller)
+			// Only a CONCRETE entry establishes that execution reaches this.
+			// An exported function is reachable by somebody in principle, which
+			// is the weaker claim reach.AttackerEntryPathExists exists to keep
+			// separate — and a test entry establishes that the test suite runs
+			// it, not the program.
+			if kind != callgraph.EntryConcrete {
+				continue
+			}
+			if best == nil || len(p) < len(best) {
+				best = p
+			}
+		}
+	}
+	_ = root
+	if best == nil {
+		return nil, false
+	}
+	return best, true
 }

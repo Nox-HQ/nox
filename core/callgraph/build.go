@@ -26,11 +26,12 @@ const maxSourceBytes = 4 << 20
 // unparseable file cost the answer for the whole module.
 func BuildGo(root string) *Graph {
 	g := &Graph{
-		funcs:   map[string]*Func{},
-		callers: map[string][]string{},
-		limits:  map[reach.Limitation]bool{},
-		root:    root,
-		module:  modulePath(root),
+		funcs:       map[string]*Func{},
+		callers:     map[string][]string{},
+		intoPackage: map[string][]string{},
+		limits:      map[reach.Limitation]bool{},
+		root:        root,
+		module:      modulePath(root),
 	}
 
 	fset := token.NewFileSet()
@@ -94,6 +95,10 @@ func BuildGo(root string) *Graph {
 	for target, cs := range g.callers {
 		sort.Strings(cs)
 		g.callers[target] = cs
+	}
+	for pkg, cs := range g.intoPackage {
+		sort.Strings(cs)
+		g.intoPackage[pkg] = cs
 	}
 	for _, f := range g.funcs {
 		sort.Strings(f.Calls)
@@ -268,6 +273,11 @@ func (g *Graph) resolveCall(caller *Func, call *ast.CallExpr, dir, pkg string, i
 					return
 				}
 			}
+			// A call OUT of the module. The callee's source is not here, so
+			// there is no edge to build — but which of this module's functions
+			// reaches for it is exactly the question a dependency advisory
+			// poses, so the caller is recorded against the import path.
+			g.intoPackage[importPath] = appendUnique(g.intoPackage[importPath], caller.Key)
 			g.external++
 			return
 		}
@@ -353,4 +363,16 @@ func (g *Graph) moduleDir(importPath string) (string, bool) {
 		return "", false
 	}
 	return rest, true
+}
+
+// appendUnique adds s to out if it is not already present. The lists are short
+// — the functions in one module that call into one package — so a linear scan
+// beats carrying a set alongside every slice.
+func appendUnique(out []string, s string) []string {
+	for _, v := range out {
+		if v == s {
+			return out
+		}
+	}
+	return append(out, s)
 }
