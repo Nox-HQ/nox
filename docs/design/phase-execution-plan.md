@@ -437,7 +437,7 @@ name).
 |---|---|---|---|
 | **7.1** | Implement `call_graph` and `entry_point` | `analysis-capabilities` reports 9 of 9 for that language | ✅ #613 |
 | **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" | already met |
-| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | ✅ #621 |
+| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | ✅ #622 |
 
 **The plan's premise for 7.1 was wrong.** It read "one *more* ecosystem", but
 `call_graph` and `entry_point` were provided by **nothing** — there was no
