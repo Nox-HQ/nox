@@ -437,7 +437,7 @@ name).
 |---|---|---|---|
 | **7.1** | Implement `call_graph` and `entry_point` | `analysis-capabilities` reports 9 of 9 for that language | ✅ #613 |
 | **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" | already met |
-| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | |
+| **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | ✅ #621 |
 
 **The plan's premise for 7.1 was wrong.** It read "one *more* ecosystem", but
 `call_graph` and `entry_point` were provided by **nothing** — there was no
@@ -472,6 +472,37 @@ reads as a full answer.
 
 **Size:** large. This is the phase with the most build and the most product
 value — it is the SCA differentiator.
+
+7.3 is the composition 7.1 made possible. `applicabilityFor` carried a comment
+saying CallReachable "is one nox cannot climb at all" because "nobody has built
+the thing that would look" — core/callgraph is that thing.
+
+The join is `Graph.CallersOfPackage`: an advisory names an import path,
+`go list -deps` says the build links it, and the graph says which of this
+module's functions reach for it and whether execution gets to them. The edge
+into a dependency cannot be built — the callee's source is elsewhere — but the
+CALLER is here, and that is what the question is actually about.
+
+**Both halves of the exit are demonstrated.** A CVE in called code climbs to
+`call_reachable` with the chain from `main` as its witness. A CVE in an unlinked
+package is `not_impacting` on scope-sound evidence: the toolchain enumerated the
+whole closure, which is a universal claim it can actually make — and is why
+`go list -deps` may refute where the call graph may not.
+
+Two distinctions the implementation had to keep, and nearly lost:
+
+- **No graph and no path found are different answers.** No graph is
+  `unsupported` — a limit nobody can act on. A graph that ran and found nothing
+  is `unknown`. Collapsing them tells an operator to install something already
+  installed. The first version collapsed them; an existing test caught it.
+- **Only a CONCRETE entry climbs the rung.** An exported function is reachable
+  by somebody in principle, which is the rung above; conflating them turns "the
+  code exists" into "the code runs".
+
+`applicability.Established` is new, and required a witness for the same reason
+`Refuted` requires `capability.Negative`: a rung climbed with nothing to point
+at is an assertion. The ladder previously had no way to say "yes, and here is
+why" — rising was only ever the absence of a reason not to.
 
 **Gate:** B. `TestCallGraphNeverSuppressesAFinding` is the scan-level form: the
 call graph may never reach a state that hides a finding, in any language. Per

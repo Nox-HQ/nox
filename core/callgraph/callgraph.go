@@ -116,8 +116,14 @@ type Graph struct {
 	// kind of not-knowing: the callee is real and its source is simply not
 	// here, which does not make a path inside this module invisible.
 	external int
-	root     string
-	module   string
+	// intoPackage maps an import path outside this module to the functions in
+	// it that call into that package. The edge cannot be built — the callee's
+	// source is elsewhere — but the caller is here, and "does anything in this
+	// build reach for the affected package, and can execution get there" is
+	// exactly what a dependency advisory asks.
+	intoPackage map[string][]string
+	root        string
+	module      string
 }
 
 // Len returns the number of functions in the graph.
@@ -307,4 +313,22 @@ func (g *Graph) Files() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// CallersOfPackage returns the functions in this module that call into the
+// given import path, sorted.
+//
+// It is the join between a dependency advisory and this module's own code. An
+// advisory names an import path; `go list -deps` says whether the build links
+// it; this says which of your functions actually reaches for it — and
+// PathToFunc then says whether execution can get to those functions.
+//
+// Empty means no call was resolved to that path, which is NOT evidence that
+// none exists. A call through an interface, a function value or reflection is
+// invisible here, as everywhere in this package.
+func (g *Graph) CallersOfPackage(importPath string) []string {
+	if g == nil {
+		return nil
+	}
+	return append([]string(nil), g.intoPackage[importPath]...)
 }
