@@ -83,6 +83,19 @@ code, and one of them was hiding findings.
   about it, resolved through `meta.competence_profiles`. In SARIF the list is
   resolved inline as `properties.nox_unevaluated`, because a profile ID is a nox
   concept a SARIF consumer cannot look up.
+- **A dependency finding can say whether your code actually calls the affected
+  package.** The applicability ladder climbs from `symbol_used` — the build
+  links it, which is as far as `go list -deps` reaches — to `call_reachable`,
+  with the chain of calls from an entry point as the witness:
+  `main -> digest -> crypto/md5`. Only a *concrete* entry point (`main`, `init`)
+  climbs the rung: an exported function is reachable by somebody in principle,
+  which is the rung above, and conflating them turns "the code exists" into
+  "the code runs".
+
+  Not finding a path leaves the rung unclimbed rather than refuting it. A
+  syntactic call graph cannot see interface dispatch, function values or
+  reflection, so an empty search is `unknown` — and a project with no Go module
+  is `unsupported`, which is a different answer and stays a different one.
 - `core/callgraph` answers `call_graph` and `entry_point` for Go. A finding can
   carry `call_path` and `entry_kind`, which distinguishes `concrete` (main or
   init), `test` and `exported` — an exported function is reachable by somebody,
