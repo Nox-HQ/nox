@@ -114,16 +114,33 @@ found nothing.
 `core/capability` are both core-owned, so CLI, MCP and LSP already inherit the
 same semantics for "did not run".
 
-**Missing.** The *gate* logic still lives in workflow YAML — the shared
-`klarlabs-studio/.github` gate computes degradation checks, net-new
-critical/high, and baseline-present-but-dead detection in bash. Every consumer
-that is not that workflow re-implements or omits it. And competence is
-per-scan, not per-claim: one scan cannot yet say "taint ran, but hit an
-unmodelled construct on *this* path".
+**Missing.** The workflow's own bash still has to be replaced — a cross-repo
+change to shared CI, and not one to make from here. The logic itself is ported:
+`policy.EvaluateCI` and `nox ci-gate`.
+
+The claim was verified before acting on it, and it was exact.
+`klarlabs-studio/.github/workflows/go-ci.yml` computes all four checks with jq,
+with the reasoning that makes each one right living in YAML comments where no
+test could reach it.
+
+**Porting it found a live defect in the bash, filed as
+klarlabs-studio/.github#80.** The gate counts `.meta.degradations | length` and
+fails on any entry, on the stated premise that "repos that have not opted in
+produce no degradations and are unaffected". That premise is false: nox raises a
+plugin degradation listing installed plugins that are NOT in `plugins.required`
+— the opposite case — so a runner with an undeclared plugin fails the gate
+having asked for nothing. Reproduced on nox's own tree during the port: fifteen
+undeclared plugins, exit 1, no required analyzer involved. `policy.EvaluateCI`
+distinguishes advisory from blocking; the bash cannot.
+
+The check with a body count is the dead baseline. A committed baseline matching
+NOTHING is not the same as no baseline, and treating them alike silently deletes
+the gate — four repositories sat that way with the security check REQUIRED, one
+hiding two net-new critical/high, because the symptom is a green check.
 
 | Milestone | Work | Exit | |
 |---|---|---|---|
-| **2.1** | Move degradation/baseline-drift/capability-loss gating into `core/policy`; the workflow calls it | all consumers inherit identical semantics; the bash shrinks to an invocation | |
+| **2.1** | Move degradation/baseline-drift/capability-loss gating into `core/policy`; the workflow calls it | all consumers inherit identical semantics; the bash shrinks to an invocation | ✅ core side #624 |
 | **2.2** | Per-claim competence: `capability.State` + `reach.Limitation` on the claim, not the run | one scan legitimately holds different competence states for different findings | ✅ #605 |
 | **2.3** | A negative claim that met an unmodelled construct cannot render unqualified | reports and API expose scope on every negative | |
 

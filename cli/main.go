@@ -171,6 +171,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  analysis-capabilities  Report what this installation can establish, and what it cannot\n")
 		fmt.Fprintf(os.Stderr, "  bench            Scan a corpus directory; report rule fire-rates (--precision <dir> scores P/R/F1 against a labeled corpus)\n")
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
+		fmt.Fprintf(os.Stderr, "  ci-gate          Decide whether a scan should fail a build (degradations, dead baseline, net-new)\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n")
@@ -263,6 +264,8 @@ func run(args []string) int {
 		return runAnalysisCapabilities(remaining[1:])
 	case "bench":
 		return runBench(remaining[1:])
+	case "ci-gate":
+		return runCIGate(remaining[1:])
 	case "calibrate":
 		return runCalibrate(remaining[1:])
 	case "install":
