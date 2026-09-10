@@ -600,13 +600,28 @@ Largely built: `nox attack` is the authorized half and `core/confirm` is the
 earlier narrow loop. The work is joining it to Phase 8's hypothesis and keeping
 one ledger.
 
-| Milestone | Exit |
-|---|---|
-| **10.1** | passive/active boundary preserved — already true, keep it true |
-| **10.2** | `nox attack` consumes a scan-emitted hypothesis |
-| **10.3** | verification evidence enters the same ledger; no separate attack truth |
+| Milestone | Exit | |
+|---|---|---|
+| **10.1** | passive/active boundary preserved — already true, keep it true | ✅ #627 |
+| **10.2** | `nox attack` consumes a scan-emitted hypothesis | ✅ #627 |
+| **10.3** | verification evidence enters the same ledger; no separate attack truth | ✅ #627 |
 
-**Size:** small-medium, and mostly plumbing once 8.1 lands.
+**All three were met the moment 8.1 landed, and nothing asserted it.** The two
+sides were built at different times against the same type, and "the same type"
+is exactly the assumption that stops being true quietly.
+
+Verified end to end: `nox scan --emit-hypotheses` writes a plan,
+`nox attack run --plan` reads it, and the trace's ledger holds **2 claims
+carried from the scan under `candidate` subjects and 1 filed by the attack under
+`invariant_violation`**. One ledger, no separate attack truth, and the subject
+distinction preserved — which is what stops a deterministic scan claim
+satisfying the CONFIRMED precondition for a proposition nobody validated.
+
+10.1 holds while 10.2 is exercised: the run used a SimTarget under the safe
+profile, so nothing was sent anywhere and no state above PLAUSIBLE was
+reachable.
+
+**Size:** it was already done. What was missing was the assertion.
 
 ---
 
