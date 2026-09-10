@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.35.0] - 2026-09-08
+## [1.35.0] - 2026-09-10
 
 Seven changes and three defects, all one theme: a scan now says what it did not
 establish, per finding, instead of leaving silence to be read as an all-clear.
