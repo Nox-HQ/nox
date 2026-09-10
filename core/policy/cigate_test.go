@@ -166,13 +166,16 @@ func TestCountsAreReportedOnAPass(t *testing.T) {
 // plugin failed the gate having asked for nothing.
 //
 // Reproduced on nox's own tree during the port: fifteen undeclared plugins,
-// exit 1, no required analyzer involved. Filed as klarlabs-studio/.github#80.
+// exit 1, no required analyzer involved. Filed as klarlabs-studio/.github#80,
+// and fixed at the type in nox-core v0.3.1 — this asserts the FIELD, not the
+// impact-text match it replaced.
 func TestAnAdvisoryDegradationDoesNotGate(t *testing.T) {
 	in := base()
 	in.Degradations = []policy.Degradation{{
-		Kind:   "plugin",
-		Detail: "15 installed plugin(s) are not listed in plugins.required and did not run",
-		Impact: "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
+		Kind:     "plugin",
+		Detail:   "15 installed plugin(s) are not listed in plugins.required and did not run",
+		Impact:   "their findings are absent from this scan; add the ones you want",
+		Advisory: true,
 	}}
 	r := policy.EvaluateCI(in)
 	if !r.Pass {
@@ -203,7 +206,7 @@ func TestABlockingDegradationStillGates(t *testing.T) {
 func TestAnAdvisoryDoesNotMaskABlockingDegradation(t *testing.T) {
 	in := base()
 	in.Degradations = []policy.Degradation{
-		{Kind: "plugin", Detail: "undeclared", Impact: "add the ones you want to plugins.required in .nox.yaml"},
+		{Kind: "plugin", Detail: "undeclared", Impact: "add the ones you want", Advisory: true},
 		{Kind: "osv_lookup", Detail: "OSV unreachable", Impact: "cannot confirm the absence of known CVEs"},
 	}
 	r := policy.EvaluateCI(in)
@@ -212,5 +215,38 @@ func TestAnAdvisoryDoesNotMaskABlockingDegradation(t *testing.T) {
 	}
 	if len(r.Warnings) == 0 {
 		t.Error("the advisory was dropped rather than reported")
+	}
+}
+
+// The advisory flag survives from the analyzer that set it to the gate that
+// reads it.
+//
+// It did not, at first. core/scan re-added each hook degradation through
+// degradations.Add(kind, detail, impact) — three positional arguments that
+// cannot carry a fourth field — so Advisory was dropped between the hook that
+// set it and the artifact. Silently, and in the dangerous direction: a lost
+// bool defaults to blocking, which is what the old behaviour was, so nothing
+// looked wrong. It surfaced only because the gate started failing a scan it had
+// just passed.
+//
+// Asserted here at the gate rather than at the collector, because the collector
+// was not where it broke — the seam between them was.
+func TestAdvisorySurvivesTheArtifactRoundTrip(t *testing.T) {
+	in := base()
+	in.Degradations = []policy.Degradation{{
+		Kind:     "plugin",
+		Detail:   "15 installed plugin(s) are not listed in plugins.required",
+		Impact:   "their findings are absent from this scan; add the ones you want",
+		Advisory: true,
+	}}
+	if !policy.EvaluateCI(in).Pass {
+		t.Error("an advisory degradation gated the build; the flag did not reach the gate")
+	}
+
+	// And the same degradation without the flag still blocks, so the test above
+	// is not passing because the gate stopped checking.
+	in.Degradations[0].Advisory = false
+	if policy.EvaluateCI(in).Pass {
+		t.Error("clearing Advisory did not restore blocking; the gate is ignoring the field")
 	}
 }

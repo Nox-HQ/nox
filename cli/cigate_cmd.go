@@ -67,7 +67,7 @@ func runCIGate(args []string) int {
 		in.Findings = rep.Findings
 		for _, d := range rep.Meta.Degradations {
 			in.Degradations = append(in.Degradations, policy.Degradation{
-				Kind: d.Kind, Detail: d.Detail, Impact: d.Impact,
+				Kind: d.Kind, Detail: d.Detail, Impact: d.Impact, Advisory: d.Advisory,
 			})
 		}
 	}

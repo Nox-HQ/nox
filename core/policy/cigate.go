@@ -49,27 +49,12 @@ type Degradation struct {
 	Kind   string
 	Detail string
 	Impact string
+	// Advisory marks a degradation reporting capability the operator did NOT
+	// ask for, as opposed to something they rely on that did not run. Set from
+	// degrade.Degradation.Advisory, whose zero value blocks — a degradation
+	// nobody classified is one nobody thought about.
+	Advisory bool
 }
-
-// advisoryMarker identifies a degradation that reports something the repository
-// did NOT ask for, as opposed to something it relies on that did not run.
-//
-// The distinction was missing and the bash it replaced did not have it: the
-// shared workflow counts `.meta.degradations | length` and fails on any entry.
-// Its own comment says why that is meant to be safe — "plugins.required is
-// opt-in: the repo explicitly declared it needs that analyzer. Repos that have
-// not opted in produce no degradations and are unaffected."
-//
-// That premise is false. nox raises a Plugin degradation listing installed
-// plugins that are NOT in plugins.required — the exact opposite case — so any
-// runner with a plugin installed and undeclared fails the gate having asked for
-// nothing. Reproduced on nox's own tree: fifteen undeclared plugins, gate exit
-// 1, no required analyzer involved.
-//
-// Matching on the impact text is not where this belongs. The durable fix is a
-// field on degrade.Degradation in nox-core distinguishing advisory from
-// blocking, and this marker is the seam to replace when that lands.
-const advisoryMarker = "add the ones you want to plugins.required"
 
 // Blocks reports whether this degradation should fail a build.
 //
@@ -77,9 +62,20 @@ const advisoryMarker = "add the ones you want to plugins.required"
 // repository relies on is missing, and those gate. One means the opposite —
 // capability that exists and was not asked for — and gating on it punishes a
 // repository for what is installed on the machine that scanned it.
-func (d Degradation) Blocks() bool {
-	return !strings.Contains(d.Impact, advisoryMarker)
-}
+//
+// The distinction was missing, and the bash this replaced did not have it: the
+// shared workflow counted `.meta.degradations | length` and failed on any
+// entry, on the stated premise that "repos that have not opted in produce no
+// degradations and are unaffected". That premise was false — nox raises a
+// Plugin degradation listing installed plugins that are NOT in
+// plugins.required, the exact opposite case — so any runner with an undeclared
+// plugin failed the gate having asked for nothing.
+//
+// This read a substring of the impact sentence until nox-core v0.3.1 gave
+// Degradation a field for it. That worked and was a seam rather than a design:
+// the impact sentence is written for a person, and the first rewording would
+// have silently re-broken the gate.
+func (d Degradation) Blocks() bool { return !d.Advisory }
 
 // codeSecurityFamilies gate at ANY severity, not just critical/high.
 //

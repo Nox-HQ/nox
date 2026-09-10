@@ -824,6 +824,16 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			pluginEnrichments = out.Enrichments
 			pluginGraphs = out.Graphs
 			for _, d := range out.Degradations {
+				// Re-adding through the collector drops any field the three
+				// positional arguments do not carry — which is how Advisory
+				// was lost between the hook that set it and the artifact,
+				// silently, because a dropped bool defaults to the blocking
+				// side and a blocking degradation is what the old behaviour
+				// was anyway.
+				if d.Advisory {
+					degradations.AddAdvisory(d.Kind, d.Detail, d.Impact)
+					continue
+				}
 				degradations.Add(d.Kind, d.Detail, d.Impact)
 			}
 		}

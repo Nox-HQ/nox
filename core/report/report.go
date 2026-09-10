@@ -158,6 +158,17 @@ type Degradation struct {
 	// Impact states what may be missing from the results, in the operator's
 	// terms. It is the field that answers "should I trust this report?".
 	Impact string `json:"impact"`
+	// Advisory marks a degradation reporting capability the operator did NOT
+	// ask for, as opposed to something they rely on that did not run.
+	//
+	// It reaches the artifact because the consumer that most needs it is a CI
+	// gate reading findings.json, and without it that gate has to guess from
+	// the impact sentence. One did, org-wide, and failed builds on the inverse
+	// of the condition it existed for (klarlabs-studio/.github#80).
+	//
+	// Omitted when false, so a blocking degradation serialises exactly as it
+	// did before and only the advisory case carries the new key.
+	Advisory bool `json:"advisory,omitempty"`
 }
 
 // JSONReport is the top-level structure serialized to JSON. It pairs report
@@ -231,9 +242,10 @@ func DegradationsFrom(ds []degrade.Degradation) []Degradation {
 	out := make([]Degradation, 0, len(ds))
 	for _, d := range ds {
 		out = append(out, Degradation{
-			Kind:   string(d.Kind),
-			Detail: d.Detail,
-			Impact: d.Impact,
+			Kind:     string(d.Kind),
+			Detail:   d.Detail,
+			Impact:   d.Impact,
+			Advisory: d.Advisory,
 		})
 	}
 	return out
