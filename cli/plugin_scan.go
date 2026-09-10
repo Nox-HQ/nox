@@ -94,6 +94,12 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 			Detail: fmt.Sprintf("%d installed plugin(s) are not listed in plugins.required and did not run: %s",
 				len(undeclared), strings.Join(undeclared, ", ")),
 			Impact: "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
+			// ADVISORY. This reports capability the operator declined, not
+			// something they rely on that failed — the opposite of every other
+			// degradation here. A CI gate counting entries failed builds on it
+			// org-wide (klarlabs-studio/.github#80) until nox-core v0.3.1 gave
+			// the type a field to say so.
+			Advisory: true,
 		})
 	}
 
