@@ -580,15 +580,53 @@ target, so it cannot execute one by accident.
 ## Phase 9 — Directed verification R&D
 
 Nothing exists, and nothing should until Phase 8 emits hypotheses to direct.
+8.1 landed in #612, so that precondition is now met.
 
 | Milestone | Work | Exit |
 |---|---|---|
 | **9.1** | Lightweight trigger solving (input-to-state, taint-guided) | hypotheses resolved per unit compute, measured |
 | **9.2** | Property-based typed generation | measured against 9.1, not assumed better |
-| **9.3** | SMT spike **only** if a meaningful residual class survives | SMT demonstrates value over simpler techniques before becoming architecture |
+| **9.3** | SMT spike **only** if a meaningful residual class survives | SMT demonstrates value over simpler techniques before becoming architecture — **answered: do not adopt**, re-checked 2026-09-11 |
 
-**Size:** research. `core/smt_spike_measurement_test.go` already exists as the
-measurement harness for 9.3.
+**9.3 is answered, and the answer was re-checked on 2026-09-11.**
+`docs/research/smt-spike/RESULT.md` recommends **do not adopt SMT** — not
+because solving is weak, but because nox does not have the problem it solves.
+That result was measured on 2026-08-31 and rested on taint flows being 1% of
+findings, with its own re-run trigger: *"if the flow count rises by an order of
+magnitude, re-run this measurement."*
+
+Six taint-recall changes landed in the ten days after (#560, #561, #564, #566,
+#585, #616), so it was re-run rather than assumed. Flows rose **1.8×** (22 → 39,
+1.0% → 2.3% of findings), which is not the order of magnitude that would move
+the recommendation. The number that actually settles it did not move at all:
+**zero** guards needing string theory or regex reasoning, now across 3,834
+findings and two measurements ten days apart.
+
+The interesting movement is breadth. Flows came from two languages in August and
+seven now — Go 15, Python 12, Shell 4, Clojure 3, JavaScript 3, C# 1, Elixir 1 —
+with Go and Python barely changed in absolute terms. Every additional flow came
+from a language that previously produced none, which is the recall investment
+RESULT.md called for, landing.
+
+Re-running also found two defects in the instrument, neither changing the
+conclusion and both of which would have made the next re-run wrong: 59% of
+guards fell into `unclassified` (the write-up had been reclassifying them in
+prose, so the measurement could not answer its own question without a human
+pass), and a **comment** was counted as a guard — `condRe` matches `if` anywhere
+on a line, which is the mistake #599 fixed in nox's IaC rules, sitting in the
+instrument that measures them.
+
+**So 9.1 and 9.2 are what remains of Phase 9, and 9.3 stays deliberately last.**
+9.1's target class is now visible: 21 guards, of which 13 are equality, 4
+interval or length, 1 an interprocedural call, 1 a filesystem predicate. That is
+the ground "lightweight trigger solving" has to cover, and none of it needs a
+solver. What 9.1 does **not** have is an input — `taint.Flow` still records no
+path constraints — and producing one is path-sensitive analysis, a larger
+project than the stage it would feed.
+
+**Size:** research. `core/smt_spike_measurement_test.go` is the measurement
+harness, and its classifier is now asserted by `TestGuardClassificationIsExercised`
+so a future re-run reports what it found rather than what a reader reclassifies.
 
 **Gate:** F — agent or solver output creates hypotheses, never verdicts.
 
