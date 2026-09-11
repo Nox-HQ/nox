@@ -69,6 +69,20 @@ type Explanation struct {
 	// WhatToDo answers "what should I do?" — remediation, or an honest
 	// statement that the rule carries none.
 	WhatToDo string `json:"what_to_do"`
+	// WhatWouldChangeIt answers "what would move this conclusion?" — the
+	// cheapest open question something on this installation could actually
+	// answer, or a plain statement that nothing could.
+	//
+	// It used to be appended to WhatToDo, which conflated two questions with
+	// different readers. Remediation is for whoever fixes the finding; this is
+	// for whoever decides whether to trust the verdict, and a consumer reading
+	// the JSON could not get it without parsing prose off the end of another
+	// field.
+	//
+	// Always answered. When nothing on this installation could move the
+	// conclusion, saying so IS the answer — silence there reads as "there is
+	// nothing more to know", which is the opposite of true.
+	WhatWouldChangeIt string `json:"what_would_change_it"`
 }
 
 // Inputs are everything an explanation draws on.
@@ -97,7 +111,8 @@ func Explain(in Inputs) Explanation {
 	e.NotEvaluated = append(limitationLines(f), notEvaluated(in.Coverage, in.Subject)...)
 	e.PotentialImpact = potentialImpact(f, in.Rule)
 	e.AffectsThisApplication = affectsThisApplication(f)
-	e.WhatToDo = whatToDo(in.Rule) + nextEvidence(in)
+	e.WhatToDo = whatToDo(in.Rule)
+	e.WhatWouldChangeIt = whatWouldChangeIt(in)
 	return e
 }
 
@@ -345,23 +360,39 @@ func affectsThisApplication(f findings.Finding) string {
 }
 
 // nextEvidence names the cheapest open question something on this installation
-// could answer, appended to the remediation.
+// could answer.
 //
 // It is the actionable half of "what was not evaluated". That field says which
-// questions are open; this says which one to take first, and only ever
-// recommends something the reader can actually do — a gap nothing can fill is
-// worth naming as a limit but is not a next step.
-func nextEvidence(in Inputs) string {
+// questions are open; this says which one to take first.
+//
+// It answers in every case, including the two where there is nothing to
+// recommend. A gap nothing on this installation can fill is worth naming as a
+// limit and is not a next step — and a verdict with no open questions at all is
+// a different sentence again. Returning "" for either, as this did while it was
+// glued to the remediation, leaves the reader to supply their own answer, and
+// the comfortable one is that there is nothing more to know.
+func whatWouldChangeIt(in Inputs) string {
 	if in.Coverage == nil || in.Registry == nil {
-		return ""
+		return "Nothing was recorded about what this scan could and could not establish, " +
+			"so what would move this conclusion is itself unknown."
 	}
 	gaps := adjudicate.MissingEvidence(in.Coverage, in.Registry, in.Subject)
-	next, ok := adjudicate.CheapestAvailable(gaps)
-	if !ok {
-		return ""
+	if len(gaps) == 0 {
+		return "Every analysis this installation provides reached a conclusion about this " +
+			"finding. Moving it further needs evidence a scan cannot produce — executing " +
+			"it, or somebody else reporting it."
 	}
-	return " The cheapest thing that would move this conclusion is " +
-		string(next.Capability) + ": " + next.Question
+	if next, ok := adjudicate.CheapestAvailable(gaps); ok {
+		return "The cheapest thing that would move this conclusion is " +
+			string(next.Capability) + ": " + next.Question
+	}
+	names := make([]string, 0, len(gaps))
+	for _, g := range gaps {
+		names = append(names, string(g.Capability))
+	}
+	return "Nothing on this installation can answer the questions still open here (" +
+		strings.Join(names, ", ") + "). Those are limits rather than gaps, and the " +
+		"silence about them is not a clearance."
 }
 
 func whatToDo(rule catalog.RuleMeta) string {

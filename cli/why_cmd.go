@@ -31,7 +31,8 @@ func runWhy(args []string) int {
 
 Answers, for each matching finding: what was observed, why it matters, what
 supports it, what argues against it, what was not evaluated, the potential
-impact, whether it affects this application, and what to do.
+impact, whether it affects this application, what to do, and what would change
+the conclusion.
 
 Deterministic: it reads only what the scan established. For model-written
 prose, see `+"`nox explain`"+`.
@@ -153,6 +154,10 @@ func printExplanation(e explain.Explanation) {
 	section("Potential impact", []string{e.PotentialImpact})
 	section("Does it affect this application", []string{e.AffectsThisApplication})
 	section("What to do", []string{e.WhatToDo})
+	// Separate from "what to do", and deliberately after it. Remediation is
+	// for whoever fixes the finding; this is for whoever decides whether to
+	// trust the verdict, and the two were one paragraph until they were not.
+	section("What would change this", []string{e.WhatWouldChangeIt})
 }
 
 func section(title string, lines []string) {
