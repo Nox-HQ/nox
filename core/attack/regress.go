@@ -48,6 +48,14 @@ type Suite struct {
 	SchemaVersion string `json:"schema_version"`
 	// GeneratedAt is the caller-supplied timestamp.
 	GeneratedAt string `json:"generated_at"`
+	// Seed is the canary seed the recorded exploits were captured under.
+	//
+	// A suite run under a different seed mints different canary VALUES, so the
+	// oracle looks for a token the target does not hold and every case reports
+	// HELD. That is a green CI gate produced by a suite that tested nothing,
+	// which is worse than the same mistake in a one-off replay because nobody
+	// reads a passing build. RunSuite refuses rather than reports.
+	Seed string `json:"seed,omitempty"`
 	// Cases are the recorded exploits, sorted by ID.
 	Cases []Case `json:"cases"`
 }
@@ -61,6 +69,7 @@ func SuiteFromResult(r *Result, now string) *Suite {
 	if r == nil {
 		return s
 	}
+	s.Seed = r.Seed
 	for i := range r.Traces {
 		tr := r.Traces[i]
 		if tr.Evidence == nil || tr.Exploitability != evidence.Confirmed {
@@ -185,6 +194,14 @@ func RunSuite(ctx context.Context, s *Suite, t Target, cfg RunConfig) (*SuiteRes
 	}
 	if cfg.Profile.RequiresAuthorization() && !cfg.Authorized {
 		return nil, fmt.Errorf("attack: profile %q requires explicit authorization", cfg.Profile)
+	}
+
+	// Fail closed on a seed the suite was not recorded under: see Suite.Seed.
+	if s.Seed != "" && s.Seed != cfg.Seed {
+		return nil, fmt.Errorf("attack: suite seed %q differs from the seed %q it was recorded under. "+
+			"Canary values are minted from the seed, so no case could reproduce its recorded signal "+
+			"and the suite would pass without testing anything. Re-run with --seed %s",
+			cfg.Seed, s.Seed, s.Seed)
 	}
 
 	cs := MintCanaries(cfg.Seed)

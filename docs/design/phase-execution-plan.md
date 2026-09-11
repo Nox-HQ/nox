@@ -625,7 +625,7 @@ reachable.
 
 ---
 
-## Phase 11 — Replay and explainability
+## Phase 11 — Replay and explainability — complete
 
 **Exists.** `core/replay` (artifact, build, replay) and `nox why`. 37/37
 verdicts reproduced from the stored ledger.
@@ -637,7 +637,7 @@ snapshotted, and each is its own problem.
 | Milestone | Exit |
 |---|---|
 | **11.1** | adjudication replay — **already met** for the shadow ledger; must hold after Phase 4 promotion |
-| **11.2** | execution replay, best-effort, with environment assumptions stated | |
+| **11.2** | execution replay, best-effort, with environment assumptions stated | ✅ #629 |
 | **11.3** | every important result answers the six questions (observed / supports / refutes / not evaluated / means here / would change it) | ✅ #628 |
 
 **11.3 had five of six answered and the sixth in the wrong place.** "What would
@@ -657,7 +657,41 @@ Writing the test found that the sixth question had never been exercised at all:
 "" on the nil registry and every existing test saw an empty string it did not
 assert on. Both real callers — `nox why` and the MCP `why` tool — do pass one.
 
-**Size:** small, if Phase 4 keeps the ledger intact. 11.2 remains.
+**11.2 stated the assumptions and found that stating them was the smaller
+half.** An execution replay's negative has four readings — the bug was fixed,
+the target moved, its state changed, or no probe reached the code — and
+`attack.Replay` collapsed all four into "replay did not reproduce", exit 0.
+`nox attack regress` had separated them a release earlier; replay had not, so
+the same false all-clear sat one subcommand over from where it was fixed.
+
+Three defects fell out of writing the environment down, each falsified against
+the pre-fix code before the fix:
+
+- **The seed was an unverifiable contract.** `--seed` has always said "must
+  match the original run", and nothing could check it because the run never
+  recorded it. Canary VALUES are minted from the seed, so a replay under a
+  different one scores the target against tokens it does not hold: the recorded
+  signal cannot recur whatever the target does. `Result.Seed` and `Suite.Seed`
+  now carry it, and both `Replay` and `RunSuite` refuse a mismatch rather than
+  report it. The suite case is worse than the replay case — a green CI gate that
+  tested nothing, and nobody reads a passing build.
+- **`DefenseObserved` was inherited.** Replay copied the original run's outcome,
+  so a trace that had seen one probe refused carried that flag into a replay
+  where every probe failed to connect — and derived PREVENTED, "a defense was
+  observed", from connection refused. Only `ControlSound` crosses over now,
+  because a replay fires no benign control of its own, and the environment says
+  so rather than assuming it silently.
+- **A non-reproducing replay kept the original's claims.** Built by copying the
+  trace, it kept both the `ReplayCommand` — the Milestone H violation, in the
+  path Milestone H did not cover — and the CONFIRMED-grade severity, so a replay
+  that demonstrated nothing was scored as if it had.
+
+Verified end to end against a live target: reproduced → exit 1; seed mismatch →
+refused, exit 2; wrong route → "could not be exercised", exit 2; genuinely fixed
+under an identical environment → exit 0 and "this is not proof the target is
+secure". Four readings, four answers.
+
+**Size:** small, if Phase 4 keeps the ledger intact. **Phase 11 is complete.**
 
 ---
 

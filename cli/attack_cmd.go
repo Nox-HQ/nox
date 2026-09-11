@@ -512,9 +512,18 @@ Flags:
   --min-hits <k>      min reproductions of samples to CONFIRM (default = samples)
   --timeout <d>       per-request HTTP timeout (default 15s)
   --seed <s>          canary seed; must match the original run (default "nox")
+                      a mismatch is refused, not reported: canary values are
+                      minted from the seed, so the recorded signal cannot recur
   --authorize         REQUIRED
 
-Exit: 0 = did not reproduce, 1 = reproduced (still exploitable), 2 = error.
+Exit: 0 = did not reproduce, 1 = reproduced (still exploitable),
+      2 = error, or the target could not be exercised at all (nothing proven).
+
+  This is EXECUTION replay and it is best-effort: nox re-fires a recorded probe
+  at a target it does not control. The result prints the environment it assumed
+  so "did not reproduce" can be told apart from "never tested". For the
+  deterministic kind — re-deriving a verdict from its stored ledger — see
+  ` + "`nox replay`" + `.
 `
 
 func runAttackReplay(args []string) int {
@@ -620,10 +629,57 @@ func runAttackReplay(args []string) int {
 	if t.Outcome.Executed && t.ReproductionSamples > 0 {
 		fmt.Printf("    reproduced: %d / %d attempts\n", t.ReproductionHits, t.ReproductionSamples)
 	}
+	if t.Note != "" {
+		fmt.Printf("    note      : %s\n", t.Note)
+	}
+	printReplayEnvironment(t.ReplayEnvironment)
+
 	if t.Exploitability == evidence.Confirmed {
 		return 1
 	}
+	// Nothing was proven. A replay whose every probe failed has the same tally
+	// as a fix that held, and exiting 0 for it makes a misconfigured target
+	// indistinguishable from a clean bill of health — the failure `nox attack
+	// regress` already exits 2 for.
+	if t.ReplayUnexercised() {
+		fmt.Fprintln(os.Stderr, "\nerror: the target could not be exercised; this replay proves nothing.")
+		return 2
+	}
 	return 0
+}
+
+// printReplayEnvironment renders what the replay took for granted and where the
+// world it ran in differed from the one the run recorded. It prints even on a
+// clean reproduction: the conditions are what make the result readable, and a
+// reader who only sees them when something went wrong learns to read their
+// absence as a guarantee.
+func printReplayEnvironment(env *attack.ReplayEnvironment) {
+	if env == nil {
+		return
+	}
+	fmt.Printf("\n  environment (execution replay is best-effort)\n")
+	fmt.Printf("    recorded  : target=%s route=%s seed=%s\n",
+		orUnrecorded(env.Recorded.Target), orUnrecorded(env.Recorded.Route), orUnrecorded(env.Recorded.Seed))
+	fmt.Printf("    replayed  : target=%s route=%s seed=%s\n",
+		orUnrecorded(env.Actual.Target), orUnrecorded(env.Actual.Route), orUnrecorded(env.Actual.Seed))
+	for _, d := range env.Divergences {
+		fmt.Printf("    diverged  : %s\n", d)
+	}
+	for _, u := range env.Unverifiable {
+		fmt.Printf("    unchecked : %s\n", u)
+	}
+	for _, a := range env.Assumptions {
+		fmt.Printf("    assumed   : %s\n", a)
+	}
+}
+
+// orUnrecorded renders an empty environment field as what it is: something the
+// run never wrote down, not a value that happens to be blank.
+func orUnrecorded(v string) string {
+	if v == "" {
+		return "(unrecorded)"
+	}
+	return v
 }
 
 const attackRegressUsage = `Usage: nox attack regress [flags]

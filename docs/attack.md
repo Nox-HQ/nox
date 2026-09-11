@@ -67,10 +67,52 @@ nox attack regress --target http://127.0.0.1:8000 --authorize
 Artifacts: `attack.plan.json`, `attack.trace.json`, `attack.cases.json`,
 `attack.regress.json`. All are plain JSON, diffable, and reviewable in a PR.
 
-Exit codes: `run` and `replay` return `1` when something is CONFIRMED. `regress`
-returns `1` on a regression and `2` when no case could be exercised at all —
-a suite whose probes never reached the target has proven nothing, and returning
-`0` for it would turn a misconfigured endpoint into a green build.
+Exit codes: `run` and `replay` return `1` when something is CONFIRMED. `replay`
+and `regress` both return `2` when the target could not be exercised at all —
+probes that never reached the target have proven nothing, and returning `0` for
+that would turn a misconfigured endpoint into a green build.
+
+## Replay: two commands, two guarantees
+
+`nox replay` and `nox attack replay` are not the same kind of thing, and the
+difference is worth keeping in view.
+
+| | `nox replay` | `nox attack replay` |
+|---|---|---|
+| what it re-runs | adjudication, from a stored ledger | the recorded probe, against a live target |
+| guarantee | **deterministic** — the ledger is the whole input | **best-effort** — nox does not control the target |
+| what a negative means | the verdict does not follow from that evidence | one of four things (below) |
+
+A failed execution replay has at least four readings: the bug was fixed, the
+target moved, the target's state changed, or no probe reached the code at all.
+So every `nox attack replay` result prints the environment it ran in beside the
+one the run recorded, and names each place they differ:
+
+```
+  environment (execution replay is best-effort)
+    recorded  : target=http://127.0.0.1:8000 route=/chat seed=e2e-seed
+    replayed  : target=http://127.0.0.1:8000 route=/v2/chat seed=e2e-seed
+    diverged  : route: recorded "/chat", replayed against "/v2/chat"
+    assumed   : the target state the original run depended on ... is unchanged
+    assumed   : the benign control the original run fired is still sound ...
+```
+
+The same block is on the trace as `replay_environment`, with `recorded`,
+`actual`, `assumptions`, `divergences`, and `unverifiable` — the last naming
+assumptions that could not be checked because an older trace file did not record
+what to check them against.
+
+**The seed is not advisory.** Canary values are minted from `--seed`, so a
+replay under a seed the run did not use scores the target's answer against
+tokens the target does not hold: the recorded signal cannot recur, whatever the
+target does. `nox attack replay` and `nox attack regress` therefore **refuse** a
+seed mismatch rather than reporting "did not reproduce" — a fix that was never
+tested must not read like a fix that held. The run records its seed in
+`attack.trace.json` (and `attack.cases.json`) so the check is possible at all.
+
+A divergence is not an error. Overriding `--route` after a fix moved the
+endpoint is the right thing to do; it just changes what a non-reproduction
+means, so nox reports it instead of absorbing it.
 
 ## The finding lifecycle
 

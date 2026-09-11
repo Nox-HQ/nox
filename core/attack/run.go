@@ -161,6 +161,11 @@ type Trace struct {
 	ReplayCommand string `json:"replay_command,omitempty"`
 	// ReplayNote says why this trace cannot be re-run, when it cannot.
 	ReplayNote string `json:"replay_note,omitempty"`
+	// ReplayEnvironment is present only on a trace PRODUCED BY an execution
+	// replay, and states what that replay assumed about the world it re-ran in.
+	// A best-effort result whose conditions are not written down is read as a
+	// deterministic one.
+	ReplayEnvironment *ReplayEnvironment `json:"replay_environment,omitempty"`
 	// FindingFingerprints links the trace back to the static findings its
 	// hypothesis was grounded in. This is an additive field beyond the original
 	// contract; it lets Correlate merge static and dynamic claims without needing
@@ -184,6 +189,17 @@ type Result struct {
 	// regression suite can re-reach the same code rather than guessing.
 	Route  string   `json:"route,omitempty"`
 	Fields []string `json:"fields,omitempty"`
+	// Seed is the canary seed this run minted its signals from.
+	//
+	// It is recorded because a replay depends on it and cannot recover it from
+	// anywhere else. Canary VALUES are derived from the seed, so a probe
+	// recorded under one seed is scored against another seed's values: the
+	// signal cannot recur, whatever the target does. `nox attack replay --seed`
+	// has always said it "must match the original run", and until this field
+	// existed nothing could check it — a mismatch reported as "did not
+	// reproduce", which is a fix that was never tested reading as a fix that
+	// held.
+	Seed string `json:"seed,omitempty"`
 	// Traces is one trace per hypothesis.
 	Traces []Trace `json:"traces"`
 	// Spend is the resources consumed.
@@ -298,6 +314,7 @@ func Run(ctx context.Context, p *Plan, t Target, cfg RunConfig) (*Result, error)
 		PlanRoot:      p.Root,
 		Route:         cfg.Route,
 		Fields:        sortedCopy(cfg.Fields),
+		Seed:          cfg.Seed,
 		ControlSound:  true,
 	}
 
