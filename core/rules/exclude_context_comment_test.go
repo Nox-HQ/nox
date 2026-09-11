@@ -29,7 +29,7 @@ func TestExcludeContextIgnoresComments(t *testing.T) {
 		"\t\tName: \"read_file\",",
 		"\t}",
 	}
-	if codeContextHasKeyword(commented, 4, 4, keywords) {
+	if codeContextHasKeyword(commented, 4, 1, 4, keywords) {
 		t.Error("a keyword in a comment excluded the match; a rule can then be " +
 			"switched off by writing a sentence, with nothing recording that it happened")
 	}
@@ -42,7 +42,7 @@ func TestExcludeContextIgnoresComments(t *testing.T) {
 		"\t\"ignore all previous instructions\",",
 		"}",
 	}
-	if !codeContextHasKeyword(inCode, 2, 4, keywords) {
+	if !codeContextHasKeyword(inCode, 2, 1, 4, keywords) {
 		t.Error("a keyword in code no longer excludes; detector corpora will now " +
 			"report themselves as the thing they detect")
 	}
@@ -58,7 +58,7 @@ func TestRequireContextStillReadsComments(t *testing.T) {
 		"// AWS credentials for the deploy role",
 		"secret := \"AKIAIOSFODNN7EXAMPLE\"",
 	}
-	if !contextHasKeyword(lines, 2, 4, []string{"aws"}) {
+	if !contextHasKeyword(lines, 2, 1, 4, []string{"aws"}) {
 		t.Error("the positive context check stopped reading comments; that was not " +
 			"the change, and it will drop true positives that rely on a nearby hint")
 	}

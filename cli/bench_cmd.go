@@ -18,8 +18,31 @@ import (
 // curatedAutoCorpus is the default benchmark corpus when --autocorpus
 // is set. Each entry targets the AI app developer ICP: LLM client
 // SDKs (openai, anthropic), agent frameworks (langchain, llamaindex,
-// crewai, agent-go, vercel-ai), and the MCP reference SDK. Pinned to
-// specific refs so bench output is reproducible across runs.
+// crewai, agent-go, vercel-ai), and the MCP reference SDK.
+//
+// Pinned to immutable refs so bench output is reproducible across runs —
+// asserted by TestCuratedCorpusIsPinnedToImmutableRefs, because the comment
+// said this while half the list tracked `main`.
+//
+// LANGUAGE SPREAD IS PART OF THE POINT. nox ships source/sink catalogs for 21
+// languages, and every one of them scores precision 1.000 / recall 1.000 on its
+// own suite — a suite written to contain what nox detects cannot surface a gap.
+// Real repositories can, and the corpus was Python and TypeScript only, so the
+// four entries below were added to reach Java, Ruby, PHP and Rust. The first
+// scan of one of them found SEC-505 firing 3,040 times on a single line
+// (see contextCharWindow in core/rules/engine.go).
+//
+// Every entry was scanned before being added; a repo that reports nothing
+// measures nothing. Findings at the pinned ref, on 2026-09-11:
+//
+//	langchain4j   156 findings, 13 taint flows   (Java)
+//	ruby-openai   481 findings,  2 taint flows   (Ruby)
+//	async-openai  141 findings,  0 taint flows   (Rust)
+//	openai-php     21 findings,  0 taint flows   (PHP)
+//
+// openai/openai-dotnet was a candidate for C# and is deliberately absent: its
+// scan did not complete within ten minutes, which is worth understanding before
+// it becomes part of a benchmark rather than after.
 var curatedAutoCorpus = []struct {
 	Repo string
 	Ref  string
@@ -28,10 +51,16 @@ var curatedAutoCorpus = []struct {
 	{Repo: "run-llama/llama_index", Ref: "v0.12.0"},
 	{Repo: "openai/openai-python", Ref: "v1.54.0"},
 	{Repo: "anthropics/anthropic-sdk-python", Ref: "v0.40.0"},
-	{Repo: "felixgeelhaar/agent-go", Ref: "main"},
-	{Repo: "modelcontextprotocol/python-sdk", Ref: "main"},
-	{Repo: "vercel/ai", Ref: "main"},
-	{Repo: "joaomdmoura/crewai", Ref: "main"},
+	{Repo: "felixgeelhaar/agent-go", Ref: "v0.16.2"},
+	{Repo: "modelcontextprotocol/python-sdk", Ref: "v2.2.0"},
+	// vercel/ai is a monorepo; its tags are per-package, and this one names a
+	// commit like any other tag.
+	{Repo: "vercel/ai", Ref: "@ai-sdk/zai@3.0.10"},
+	{Repo: "joaomdmoura/crewai", Ref: "1.15.21"},
+	{Repo: "langchain4j/langchain4j", Ref: "1.20.0"},
+	{Repo: "alexrudall/ruby-openai", Ref: "v8.3.0"},
+	{Repo: "openai-php/client", Ref: "v0.20.1"},
+	{Repo: "64bit/async-openai", Ref: "async-openai-v0.42.0"},
 }
 
 // runBench scans every directory in --corpus and produces a fire-rate

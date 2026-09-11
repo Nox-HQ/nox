@@ -84,13 +84,13 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 					continue
 				}
 				if len(rule.ExcludeContextKeywords) > 0 &&
-					codeContextHasKeyword(lines, mr.Line, contextWindow, rule.ExcludeContextKeywords) {
+					codeContextHasKeyword(lines, mr.Line, mr.Column, contextWindow, rule.ExcludeContextKeywords) {
 					continue
 				}
 				// Positive context requirement: the vendor name must be near
 				// the match, not merely somewhere in the file.
 				if len(rule.RequireContextKeywords) > 0 &&
-					!contextHasKeyword(lines, mr.Line, contextWindow, rule.RequireContextKeywords) {
+					!contextHasKeyword(lines, mr.Line, mr.Column, contextWindow, rule.RequireContextKeywords) {
 					continue
 				}
 			}
@@ -217,15 +217,60 @@ func copyMetadata(src map[string]string) map[string]string {
 //
 // Suppression by prose already exists and is audited. It is spelled
 // nox:ignore.
-func codeContextHasKeyword(lines []string, line1, window int, keywords []string) bool {
+// contextCharWindow bounds proximity in CHARACTERS, because the line window
+// alone assumes a line is a short, human-authored unit of text.
+//
+// It is not, in the files scanners actually meet: minified JavaScript, a
+// base64 blob in a JSON or YAML fixture, a generated data table. Measured
+// 2026-09-11 on alexrudall/ruby-openai@v8.3.0, one VCR cassette holds a
+// base64-encoded PNG on a single line of 1,087,625 characters. The word
+// "maven" occurs once in that file — inside the base64 data, by coincidence —
+// and being on the same physical line as everything else there, it satisfied
+// SEC-505's context requirement for every 36-character run on the line: 3,040
+// HIGH-severity findings out of a 4,014-finding scan, all from one line of
+// test fixture data.
+//
+// 512 characters is generous for the thing the control is actually looking for
+// — `maven_token = "..."`, or a YAML key above its value — and three orders of
+// magnitude short of a blob.
+const contextCharWindow = 512
+
+// nearMatch returns the part of a context line close enough to the match to
+// count as context.
+//
+// For the matched line itself that is the text either side of the match column.
+// For a line above it is the tail, and for one below the head — the text
+// nearest the match in reading order. A short line is returned whole, which is
+// every ordinary case.
+func nearMatch(line string, lineOffset, col1 int) string {
+	if len(line) <= contextCharWindow {
+		return line
+	}
+	switch {
+	case lineOffset == 0:
+		col := col1 - 1
+		if col < 0 {
+			col = 0
+		}
+		return line[max(col-contextCharWindow, 0):min(col+contextCharWindow, len(line))]
+	case lineOffset < 0:
+		return line[len(line)-contextCharWindow:]
+	default:
+		return line[:contextCharWindow]
+	}
+}
+
+// keywordNear reports whether any keyword appears within the line AND character
+// windows around the match. skipComment, when set, is consulted per line.
+func keywordNear(lines []string, line1, col1, window int, keywords []string, skipComment bool) bool {
 	idx := line1 - 1
 	start := max(idx-window, 0)
 	end := min(idx+window, len(lines)-1)
 	for i := start; i <= end; i++ {
-		if lineIsComment(lines, i+1) {
+		if skipComment && lineIsComment(lines, i+1) {
 			continue
 		}
-		lower := strings.ToLower(lines[i])
+		lower := strings.ToLower(nearMatch(lines[i], i-idx, col1))
 		for _, kw := range keywords {
 			if strings.Contains(lower, strings.ToLower(kw)) {
 				return true
@@ -235,19 +280,20 @@ func codeContextHasKeyword(lines []string, line1, window int, keywords []string)
 	return false
 }
 
-func contextHasKeyword(lines []string, line1, window int, keywords []string) bool {
-	idx := line1 - 1
-	start := max(idx-window, 0)
-	end := min(idx+window, len(lines)-1)
-	for i := start; i <= end; i++ {
-		lower := strings.ToLower(lines[i])
-		for _, kw := range keywords {
-			if strings.Contains(lower, strings.ToLower(kw)) {
-				return true
-			}
-		}
-	}
-	return false
+// codeContextHasKeyword reports whether an EXCLUDE keyword sits near the match,
+// ignoring comment lines.
+//
+// The character bound matters more in this direction than in the positive one.
+// A stray "example" in a large minified file used to suppress every real
+// credential on that line, and a suppressed finding is silent by construction —
+// nobody reviews what was never reported.
+func codeContextHasKeyword(lines []string, line1, col1, window int, keywords []string) bool {
+	return keywordNear(lines, line1, col1, window, keywords, true)
+}
+
+// contextHasKeyword reports whether a REQUIRED keyword sits near the match.
+func contextHasKeyword(lines []string, line1, col1, window int, keywords []string) bool {
+	return keywordNear(lines, line1, col1, window, keywords, false)
 }
 
 // containsAnyKeyword returns true if content contains at least one of the
