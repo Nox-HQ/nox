@@ -28,8 +28,9 @@ import (
 // languages, and every one of them scores precision 1.000 / recall 1.000 on its
 // own suite — a suite written to contain what nox detects cannot surface a gap.
 // Real repositories can, and the corpus was Python and TypeScript only, so the
-// four entries below were added to reach Java, Ruby, PHP and Rust. The first
-// scan of one of them found SEC-505 firing 3,040 times on a single line
+// six entries below were added to reach Java, Ruby, PHP, Rust, Kotlin and
+// Swift. The first scan of one of them found SEC-505 firing 3,040 times on a
+// single line
 // (see contextCharWindow in core/rules/engine.go).
 //
 // Every entry was scanned before being added; a repo that reports nothing
@@ -37,12 +38,18 @@ import (
 //
 //	langchain4j   156 findings, 13 taint flows   (Java)
 //	ruby-openai   481 findings,  2 taint flows   (Ruby)
+//	MacPaw/OpenAI 411 findings,  3 taint flows   (Swift)
 //	async-openai  141 findings,  0 taint flows   (Rust)
+//	openai-kotlin  38 findings,  0 taint flows   (Kotlin)
 //	openai-php     21 findings,  0 taint flows   (PHP)
 //
-// openai/openai-dotnet was a candidate for C# and is deliberately absent: its
-// scan did not complete within ten minutes, which is worth understanding before
-// it becomes part of a benchmark rather than after.
+// openai/openai-dotnet was the C# candidate and is deliberately absent. Its scan
+// takes over ten minutes and reports 5,030 findings — 1,248 DATA-003, 766
+// SEC-161, 582 SEC-163 — which is a noise profile to understand before it
+// becomes a benchmark, not after. The same goes for the 268 IAC-254 in the Swift
+// entry: it is included because a corpus that only holds quiet repositories
+// measures nothing, and that count is a question the corpus now poses rather
+// than one it hides.
 var curatedAutoCorpus = []struct {
 	Repo string
 	Ref  string
@@ -61,6 +68,8 @@ var curatedAutoCorpus = []struct {
 	{Repo: "alexrudall/ruby-openai", Ref: "v8.3.0"},
 	{Repo: "openai-php/client", Ref: "v0.20.1"},
 	{Repo: "64bit/async-openai", Ref: "async-openai-v0.42.0"},
+	{Repo: "aallam/openai-kotlin", Ref: "4.1.0"},
+	{Repo: "MacPaw/OpenAI", Ref: "0.5.1"},
 }
 
 // runBench scans every directory in --corpus and produces a fire-rate
