@@ -9,6 +9,16 @@ import (
 	"testing"
 )
 
+// guardClasses names what DECIDING each kind of guard would require, coarsest
+// first. The order is the classification: the first pattern that matches wins,
+// so a cheap class listed above an expensive one must not be able to swallow it.
+//
+// Three classes were added on 2026-09-11, after the re-measurement showed 59% of
+// guards landing in "unclassified". RESULT.md had already reclassified the same
+// samples in prose — "`if i > 8` is an integer comparison; `switch`/`case` on a
+// string is equality" — which meant the instrument could not answer its own
+// question without a human pass, and a measurement kept executable so the
+// question can be re-asked rather than re-argued has to be able to answer it.
 var guardClasses = []struct {
 	name string
 	re   *regexp.Regexp
@@ -17,11 +27,113 @@ var guardClasses = []struct {
 	{"string", regexp.MustCompile(`(?i)\b(HasPrefix|HasSuffix|Contains|startswith|endswith|strings\.|\+\s*"|"\s*\+)`)},
 	{"membership", regexp.MustCompile(`(?i)(\[[a-zA-Z_][\w.]*\]|\bin\b\s|Contains\()`)},
 	{"length", regexp.MustCompile(`(?i)\b(len\(|\.length|\.size\(\))`)},
-	{"equality", regexp.MustCompile(`(==|!=|\bis\b|\bnot\b)`)},
+	// A shell test predicate asks the filesystem or the environment, not the
+	// string. It needs a model of the world outside the program, which is a
+	// different (and larger) problem from anything a solver addresses. Listed
+	// above "interval" because shell redirection puts a bare `>` on lines that
+	// have nothing to do with comparison.
+	{"environment", regexp.MustCompile(`(\[\s+-[a-z]{1,2}\b|\btest\s+-[a-z]{1,2}\b|-n\s+"|-z\s+")`)},
+	// An ordering comparison on a number: `if i > 8`. Interval reasoning, the
+	// same requirement as "length", kept separate because the two are found by
+	// different means and conflating them would hide which is which.
+	{"interval", regexp.MustCompile(`(<=|>=|[<>])`)},
+	// A switch or case on a string is equality, decided against a literal set.
+	{"equality", regexp.MustCompile(`(==|!=|\bis\b|\bnot\b|^\s*(switch|case)\b)`)},
 	{"call", regexp.MustCompile(`[a-zA-Z_][\w.]*\s*\(`)},
 }
 
+// classifyGuard names what deciding this guard would require, or "unclassified"
+// when nothing matches. Extracted so the classification can be asserted
+// directly — see TestGuardClassificationIsExercised — rather than only observed
+// through a 27-repository scan.
+func classifyGuard(line string) string {
+	for _, c := range guardClasses {
+		if c.re.MatchString(line) {
+			return c.name
+		}
+	}
+	return "unclassified"
+}
+
+// TestGuardClassificationIsExercised pins the classifier against the guards the
+// two measurements actually produced, including every sample RESULT.md had to
+// reclassify by hand.
+//
+// The instrument reports rather than asserts, which is right for a measurement
+// and wrong for the measuring device: an unasserted classifier drifts, and the
+// drift shows up as a shifting "unclassified" bucket that a reader attributes to
+// the corpus.
+func TestGuardClassificationIsExercised(t *testing.T) {
+	cases := []struct{ line, want string }{
+		// Reclassified by hand in the 2026-08-31 result; answered here now.
+		{"		if i > 8 {", "interval"},
+		{"	switch os.Args[1] {", "equality"},
+		{`	case "compute":`, "equality"},
+		// New in the 2026-09-11 re-measurement, once shell flows appeared.
+		{"if [ -f /secrets/forge_email ] && [ -f /secrets/forge_token ]; then", "environment"},
+		{`if [ -z "$TOKEN" ]; then`, "environment"},
+		// The classes that already worked must keep working, and must keep
+		// winning over the ones added below them.
+		{"	if len(x) > 8 {", "length"},
+		{`	if x == "" {`, "equality"},
+		{"	if isValid(x) {", "call"},
+		{"	if strings.HasPrefix(p, pfx) {", "string"},
+		{"	if re.MatchString(s) {", "regex"},
+		{"	if allowed[name] {", "membership"},
+		// A guard nothing models: the honest answer is still "unclassified".
+		{"	if {", "unclassified"},
+		// `if !ok` is a boolean from an earlier call the window cannot see.
+		// Deciding it needs whatever produced `ok`, which is not on this line,
+		// so unclassified is the honest answer rather than a guessed class.
+		{"	if !ok {", "unclassified"},
+	}
+	for _, tc := range cases {
+		if got := classifyGuard(tc.line); got != tc.want {
+			t.Errorf("classifyGuard(%q) = %q, want %q", strings.TrimSpace(tc.line), got, tc.want)
+		}
+	}
+}
+
+// TestProseAboutAConditionIsNotACondition. condRe's `\bif\s` alternative
+// matches the word anywhere on the line, so a comment discussing a condition
+// counted as a guard — inflating both the guard total and the share of flows
+// reported as guarded.
+func TestProseAboutAConditionIsNotACondition(t *testing.T) {
+	comments := []string{
+		"#   (b) Heuristic: if a Pod's env / configmap references another",
+		"// if the caller already validated this, skip",
+		"-- if the row is absent we insert",
+		" * if x is nil this returns early",
+	}
+	for _, c := range comments {
+		if !commentRe.MatchString(c) {
+			t.Errorf("not recognised as a comment, so it is counted as a guard: %q", c)
+		}
+	}
+	// A real conditional that carries a trailing comment is still a guard.
+	for _, code := range []string{
+		"if [ -f /etc/passwd ]; then # check",
+		"	if x == y { // equal",
+	} {
+		if commentRe.MatchString(code) {
+			t.Errorf("a conditional with a trailing comment was dropped: %q", code)
+		}
+		if !condRe.MatchString(code) {
+			t.Errorf("fixture: %q should match condRe", code)
+		}
+	}
+}
+
 var condRe = regexp.MustCompile(`^\s*(if|else if|elif|while|switch|case)\b|\bif\s`)
+
+// commentRe matches a line whose first non-space character opens a comment.
+//
+// The 2026-09-11 re-measurement counted `#   (b) Heuristic: if a Pod's env ...`
+// as a guard, because condRe's `\bif\s` alternative matches the word "if"
+// anywhere. Prose about a condition is not a condition — the same mistake nox
+// fixed in its own IaC rules (#599), found here in the instrument that measures
+// them.
+var commentRe = regexp.MustCompile(`^\s*(//|#|--|;;|\*|/\*)`)
 
 // TestSMTSpikeMeasureGuards is the measurement behind
 // docs/research/smt-spike/RESULT.md, kept executable so the question can be
@@ -90,24 +202,15 @@ func TestSMTSpikeMeasureGuards(t *testing.T) {
 			var found int
 			for i := lo; i < hi && i < len(lines); i++ {
 				line := lines[i]
-				if !condRe.MatchString(line) {
+				if commentRe.MatchString(line) || !condRe.MatchString(line) {
 					continue
 				}
 				found++
 				guardsTotal++
-				var hit bool
-				for _, c := range guardClasses {
-					if c.re.MatchString(line) {
-						classCount[c.name]++
-						hit = true
-						break
-					}
-				}
-				if !hit {
-					classCount["unclassified"]++
-					if len(unclassified) < 6 {
-						unclassified = append(unclassified, strings.TrimSpace(line))
-					}
+				class := classifyGuard(line)
+				classCount[class]++
+				if class == "unclassified" && len(unclassified) < 6 {
+					unclassified = append(unclassified, strings.TrimSpace(line))
 				}
 			}
 			if found > 0 {
