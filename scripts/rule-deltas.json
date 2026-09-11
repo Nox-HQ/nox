@@ -15,110 +15,21 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.34.0",
+  "nox_release": "v1.35.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
     "sanitizer-recognized": "the value reaching the sink is neutralized for this vulnerability class",
     "refined-away": "a cheaper semantic fact refutes the candidate the pattern generated",
-    "rule-removed": "the rule was deleted outright; no survivor reports the condition"
+    "rule-removed": "the rule was deleted outright; no survivor reports the condition",
+    "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context"
   },
   "entries": [
     {
-      "rule": "IAC-132",
-      "classification": "applicability-narrowed",
-      "pr": 582,
-      "reason": "A PodDisruptionBudget is meaningless on a workload that runs one replica: there is no availability to preserve. absence_subject_min_int on spec.replicas exempts single-replica Deployments and StatefulSets. An unreadable replicas value reports rather than exempts."
-    },
-    {
-      "rule": "IAC-142",
-      "classification": "applicability-narrowed",
-      "pr": 582,
-      "reason": "Pod anti-affinity spreads replicas across nodes. With one replica there is nothing to spread, so the same precondition applies as IAC-132."
-    },
-    {
-      "rule": "IAC-139",
-      "classification": "applicability-narrowed",
-      "pr": 583,
-      "reason": "A liveness probe restarts a container the kubelet believes is wedged. A Job or CronJob container is meant to run to completion and exit, so the probe restarts work that finished correctly. Narrowed to Deployment, StatefulSet, DaemonSet, ReplicaSet and Pod."
-    },
-    {
-      "rule": "IAC-140",
-      "classification": "applicability-narrowed",
-      "pr": 583,
-      "reason": "A readiness probe gates traffic to a container. Batch workloads receive none, so the probe gates nothing. Same workload kinds as IAC-139."
-    },
-    {
-      "rule": "IAC-183",
-      "classification": "duplicate-retired",
-      "pr": 591,
-      "reason": "Byte-identical absence configuration to IAC-132 \u2014 same anchor, same property, absence_span: file \u2014 without the subject precondition, so it re-reported exactly what IAC-132 refuted. Retired into IAC-132, which carries the alias. 17 of the removals across the corpus were HorizontalPodAutoscaler documents where the bare kind regex matched spec.scaleTargetRef; the rest were the single-replica workloads #582 exempted."
-    },
-    {
-      "rule": "IAC-176",
-      "classification": "duplicate-retired",
-      "pr": 591,
-      "reason": "Reported the same missing securityContext as IAC-145 from the weaker text path: one YAML document searched for the word, only on kind: Deployment. IAC-145 resolves seven workload kinds structurally with absence_require_all. Retired into IAC-145, which carries the alias. Every removal measured on podinfo was a HorizontalPodAutoscaler."
-    },
-    {
-      "rule": "IAC-286",
-      "classification": "duplicate-retired",
-      "pr": 591,
-      "reason": "The same NetworkPolicy advisory as IAC-131 over the same three kinds and the same file patterns, differing only by tolerating a space before the colon. Every workload manifest reported it twice. Retired into IAC-131, which carries the alias; per-file overlap on podinfo was 21 of 21, so nothing was removed that IAC-131 does not still report."
-    },
-    {
-      "rule": "IAC-034",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# type: LoadBalancer` in three guestbook manifests, so the Service is not a LoadBalancer. Issue #588."
-    },
-    {
-      "rule": "IAC-143",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# namespace: default` in Helm values files and archived PV examples. Issue #588."
-    },
-    {
-      "rule": "IAC-232",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: the same commented-out `# namespace: default` lines, matched by the kustomize rule. Issue #588."
-    },
-    {
-      "rule": "IAC-254",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: Cassandra's shipped cassandra.yaml, where every option is listed commented-out with its default: `# truststore_password: cassandra`. This is the assignment-shaped class the secrets analyzer already drops in comments (dropConfigFieldRuleInComment); a real credential in a comment is still reported there by the provider rules, verified \u2014 SEC-001/SEC-508 fire on an AWS key in a YAML comment before and after this change. Issue #588."
-    },
-    {
-      "rule": "IAC-306",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: `# and `id-token: write` for the OIDC keyless flow (see release.yml).` \u2014 a comment explaining the permission, matched as if it granted it. The real `id-token: write` on release.yml:20, which carries a TRAILING comment, is correctly kept. Issue #588."
-    },
-    {
-      "rule": "IAC-357",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `# type: Opaque` in an archived newrelic config. Issue #588."
-    },
-    {
-      "rule": "IAC-397",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: commented-out `#  maxUnavailable: 1` in a Helm values file. Issue #588."
-    },
-    {
-      "rule": "IAC-398",
-      "classification": "refined-away",
-      "pr": 599,
-      "reason": "A comment in a YAML manifest is prose ABOUT configuration, and prose configures nothing. Every dropped location on the corpus was checked by hand and every one is a comment: the words 'HorizontalPodAutoscaler (HPA)' inside a header comment explaining what the manifest does. Issue #588."
-    },
-    {
-      "rule": "IAC-131",
-      "classification": "refined-away",
-      "pr": 600,
-      "reason": "A kind: under a field that POINTS AT another object names that object; it does not declare this one. IAC-131 matched kind: Deployment anywhere in a YAML file, so every HorizontalPodAutoscaler reported \"workload detected\" because it names the Deployment it scales \u2014 a document with no pod template, no containers and nothing the rule is about. All 11 removals across the corpus were checked by hand and every one sits under scaleTargetRef: 9 on podinfo, 2 on kubernetes-examples. The test keys on the enclosing FIELD, not on depth, because a kind: List holds real objects under items: and a depth rule would delete every workload in one \u2014 pinned by r13_workloads_inside_a_list.yaml, since no corpus repo contains a List. Issue #590."
+      "rule": "SEC-696",
+      "classification": "context-narrowed",
+      "pr": 633,
+      "reason": "SEC-696's pattern is `[a-zA-Z0-9]{32}` with the keyword \"timber\", and its context requirement was measured in LINES (±4). reitit's dev-resources/json/json100k.json is minified JSON: one line of 101,941 characters. It contains the string \"2114 timber wolf trail\" — a fake street address in generated test data — and being on the same physical line as everything else in the file, that one word authorised the rule for every 32-character run on it: 421 HIGH-severity findings from one line of fixture JSON. Proximity is now bounded at 512 characters, which is generous for `timber_api_key = \"...\"` and three orders of magnitude short of a blob. The 3 remaining findings are matches that really do sit near the keyword. No corpus lost an expectation: all 20 precision corpora and the refutation suite are unchanged at 231/0/0 and 37/0/0, and the four real-repo taint controls (ring, certbot, shelljs, plug) are unchanged."
     }
   ]
 }
