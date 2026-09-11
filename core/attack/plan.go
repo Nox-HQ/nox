@@ -457,6 +457,16 @@ func toolMatrixHypotheses(matrix []ai.ToolPermissionSet, used map[string]bool) (
 }
 
 // toolHypothesis constructs one tool-abuse or exfiltration hypothesis.
+//
+// Its grounding is weaker than injectionHypothesis's and must read as weaker.
+// That one starts from a rule match on code; this one starts from a tool
+// DECLARED in a manifest, with nothing observed about whether untrusted input
+// ever reaches it. Milestone 8.1's exit is that a scan produces a structured
+// active-testing question — subject, entry point, attacker input, trigger
+// condition, assumptions, oracle, missing evidence — and this path used to
+// answer none of them, which made the weaker hypothesis the one that stated
+// fewer reservations. On nox's own repository it is the only path that produces
+// a hypothesis at all, so "none of them" was the whole artifact.
 func toolHypothesis(scenarioID, agent, path, idSeed string) Hypothesis {
 	scen, _ := ScenarioByID(scenarioID)
 	invIDs := make([]string, 0, len(scen.Invariants))
@@ -490,14 +500,69 @@ func toolHypothesis(scenarioID, agent, path, idSeed string) Hypothesis {
 			agent, path, scenarioID)
 	}
 	return Hypothesis{
-		ID:           "hyp-" + scenarioID + "-" + idSeed,
-		ScenarioID:   scenarioID,
-		Objective:    scen.Objective,
-		Rationale:    rationale,
-		EntryPoint:   "",
-		Path:         steps,
-		InvariantIDs: invIDs,
+		ID:         "hyp-" + scenarioID + "-" + idSeed,
+		ScenarioID: scenarioID,
+		Objective:  scen.Objective,
+		Rationale:  rationale,
+		// Empty, and said so in the assumptions. Nothing in an inventory
+		// identifies a route, and inventing one would read as knowledge.
+		EntryPoint:       "",
+		Path:             steps,
+		InvariantIDs:     invIDs,
+		TriggerCondition: toolTriggerConditionOf(scenarioID),
+		ExpectedOracle:   scen.Category,
+		Assumptions:      toolAssumptionsOf(scenarioID, agent, path),
 	}
+}
+
+// toolTriggerConditionOf states what would have to hold for the objective to be
+// reached, in words.
+//
+// A suspicion, not a constraint — the same contract as triggerConditionOf, and
+// prefixed the same way so no reader mistakes either for something solved. nox
+// records no path constraints at all (docs/research/smt-spike/RESULT.md,
+// re-measured 2026-09-11).
+func toolTriggerConditionOf(scenarioID string) string {
+	switch scenarioID {
+	case ScenarioToolUnauth:
+		return "suspected: attacker-controlled input reaches the agent's prompt and " +
+			"coerces an invocation of a privileged tool the request was not authorized to use"
+	case ScenarioExfilFSNet:
+		return "suspected: attacker-controlled input reaches the agent's prompt and " +
+			"chains the filesystem-read tool into the outbound network tool within one request"
+	}
+	return ""
+}
+
+// toolAssumptionsOf states what an inventory-derived hypothesis takes as true
+// without evidence. Every entry is something nox did NOT establish.
+//
+// The first two are the ones that matter, and they are why this path needs
+// assumptions more than the finding-derived path does: nox read a manifest, and
+// a manifest says what a tool is allowed to do, not that anything untrusted can
+// reach it.
+func toolAssumptionsOf(scenarioID, agent, path string) []string {
+	out := []string{
+		// Worded as the weaker assumption, matching assumptionsOf: no route was
+		// recorded, so a run that supplies none probes the base URL and every
+		// request misses — which would look like a defence rather than a
+		// misconfiguration.
+		"some entry point reaches agent " + agent + " and an attacker can reach that entry " +
+			"point; no route was recorded, so `nox attack run` must be given --route",
+		"the tool is declared in " + path + ", not observed being invoked; nothing " +
+			"established that untrusted input reaches it",
+		"the declared capabilities describe what the tool does; nox read the manifest, " +
+			"not the tool's implementation",
+	}
+	switch scenarioID {
+	case ScenarioToolUnauth:
+		out = append(out, "the tool performs a privileged action the request was not "+
+			"authorized to take, and no authorization check sits between the model and the tool")
+	case ScenarioExfilFSNet:
+		out = append(out, "the filesystem-read and network tools can be reached within a "+
+			"single request, so their capabilities can be chained")
+	}
+	return out
 }
 
 // sortedAssets returns the map's assets sorted by ID.

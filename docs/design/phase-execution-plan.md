@@ -257,6 +257,23 @@ becomes real when Phase 8 emits hypotheses (PLAUSIBLE) and Phase 10 runs them
 `policy.require_capabilities` and `--fail-on-degraded`, both shipped — is what
 stops a scan going greener by losing capability, which is 4.3's actual exit.
 
+**Re-measured 2026-09-11, because that blocker named two milestones that have
+since landed** — 8.1 in #612 and all of Phase 10 in #627. The blocker stands:
+
+| corpus | findings | POTENTIAL | anything else |
+|---|---|---|---|
+| precision suite | 53 | 53 | 0 |
+| precision suite, `--emit-hypotheses` | 53 | 53 | 0 |
+| nox self-scan | 62 | 62 | 0 |
+| `examples/ai-app` | 11 | 11 | 0 |
+
+Emitting a hypothesis does **not** move the grounding finding to PLAUSIBLE. The
+hypothesis is a separate artifact, and the state on the finding stays the
+constant it was. So a CI gate on adjudicated state would still fail every build
+or none, and 4.3 remains deferred on its own terms rather than on memory of
+them. What would change it is the reporting promotion named under Size below:
+the ledger becoming authoritative for what is REPORTED.
+
 **Size:** 4.1 and 4.2 were small. The promotion they were expected to require —
 the ledger becoming authoritative for what is REPORTED — is the part that
 changes findings and has not been done.
@@ -539,7 +556,7 @@ Python finding read as a gap somebody could close.
 
 | Milestone | Work | Exit | |
 |---|---|---|---|
-| **8.1** | `nox scan --emit-hypotheses`: subject, entry point, flow, attacker input, trigger condition, assumptions, oracle, missing evidence | a scan produces a structured active-testing question | ✅ #612 |
+| **8.1** | `nox scan --emit-hypotheses`: subject, entry point, flow, attacker input, trigger condition, assumptions, oracle, missing evidence | a scan produces a structured active-testing question | ✅ #612, completed for the inventory path #631 |
 | **8.2** | Reproduction hierarchy: trigger / invariant / crash / security effect / exploit | a reproduced overflow does not claim RCE | already met |
 | **8.3** | Controlled-reproduction contract | removing any of the five conditions prevents `CONFIRMED` | already met |
 
@@ -568,6 +585,28 @@ a test asserting Gate E. The guard caught it. The wiring moved to
 `ScanResult`, and the guard was extended to reject importing that from `core/`
 too — otherwise it would have been a transitive route past a check that reads
 only direct imports.
+
+**8.1's exit held on one of its two paths, and the measurement that found it was
+a check of 4.3's blocker.** A hypothesis is built either from a finding or from
+the AI inventory's tool matrix. The finding-derived path answers subject,
+trigger condition, oracle, assumptions and unknowns. The inventory-derived path
+answered **none** of them — it set ID, scenario, objective, rationale, path and
+invariants, and stopped.
+
+Measured 2026-09-11 on `examples/ai-app`: 6 hypotheses emitted, 4 complete, 2
+empty. On **nox's own repository the ratio is 0 of 2**, because every finding
+there is waived and the tool matrix is the only path that produces anything.
+
+The weaker grounding was the one stating fewer reservations, which is backwards.
+A finding-derived hypothesis starts from a rule match on code; a tool-matrix one
+starts from a tool **declared in a manifest**, with nothing observed about
+whether untrusted input can reach it. Both now carry a trigger condition
+(prefixed `suspected:`, like the other path, so neither reads as derived), an
+expected oracle, and assumptions that say what the grounding actually is —
+including that no route was recorded, so `nox attack run` must be given
+`--route` or every probe misses. `entry_point` stays empty, because nothing in
+an inventory identifies a route and inventing one would read as knowledge; the
+assumption is where that is said.
 
 **Size:** small, given what existed.
 
