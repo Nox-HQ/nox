@@ -470,7 +470,7 @@ name).
 | Milestone | Work | Exit | |
 |---|---|---|---|
 | **7.1** | Implement `call_graph` and `entry_point` | `analysis-capabilities` reports 9 of 9 for that language | ✅ #613 |
-| **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" | already met |
+| **7.2** | Every negative reachability claim records entry-point scope | no unqualified "unreachable" | already met — `TestUnreachableIsUniversalAndRefusesAnIncompleteScope`, `TestAScopeSaysWhatItSearchedAndWhatDefeatedIt` |
 | **7.3** | Applicability composition into the ladder, surfaced per finding | one dependency CVE demonstrated present-but-non-impacting with scope-sound evidence, and one genuinely impacting | ✅ #622 |
 
 **The plan's premise for 7.1 was wrong.** It read "one *more* ecosystem", but
@@ -704,8 +704,10 @@ reachable.
 
 ## Phase 11 — Replay and explainability — complete
 
-**Exists.** `core/replay` (artifact, build, replay) and `nox why`. 37/37
-verdicts reproduced from the stored ledger.
+**Exists.** `core/replay` (artifact, build, replay) and `nox why`. **53/53**
+verdicts reproduced from the stored ledger, 0 divergences and 0 missing, over
+121 subjects on the precision suite — re-measured 2026-09-11. The plan carried
+`37/37` until then, which was true when written and had not been read since.
 
 **Missing.** Full scan reproducibility (9.4 in the old plan) is explicitly out
 of scope: it needs the rule set, analyzer versions and advisory data
@@ -713,7 +715,7 @@ snapshotted, and each is its own problem.
 
 | Milestone | Exit |
 |---|---|
-| **11.1** | adjudication replay — **already met** for the shadow ledger; must hold after Phase 4 promotion |
+| **11.1** | adjudication replay — **already met** for the shadow ledger (`TestAVerdictReproducesFromEvidenceAlone`); must hold after Phase 4 promotion |
 | **11.2** | execution replay, best-effort, with environment assumptions stated | ✅ #629 |
 | **11.3** | every important result answers the six questions (observed / supports / refutes / not evaluated / means here / would change it) | ✅ #628 |
 
@@ -835,3 +837,17 @@ Deliberately last: **9.3** (SMT), **12.2** (intel artifacts).
   constant.
 - Phases 9 and 12 are the least grounded sections here, because the least
   exists to check them against.
+- **Every ✅ and "already met" milestone was audited on 2026-09-11 for whether a
+  test names its exit.** The audit came back clean — 1.2, 7.2, 8.2, 8.3 and 11.1
+  each have one, now named in the table or the prose beside it so the next
+  reader does not repeat the search.
+
+  It was worth doing because two milestones had already failed this check. Phase
+  10 was met "the moment 8.1 landed, and nothing asserted it" (#627), and 8.1's
+  own exit held on the finding-derived path and not the inventory one (#631).
+  Both had the same shape: built on one path, asserted on none.
+
+  The audit found one defect, and it was in this document rather than in the
+  code — the `37/37` above. A number written once and quoted thereafter is a
+  claim, not a measurement, which is the same thing the SMT result and 4.3's
+  blocker each turned out to be when re-run.
