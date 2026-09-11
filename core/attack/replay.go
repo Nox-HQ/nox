@@ -12,6 +12,13 @@ import (
 // CONFIRMED verdict is independently checked and how a remediation is verified:
 // replaying a fixed target does NOT reproduce, and the returned trace derives to
 // something below CONFIRMED. The same safety gates as Run apply.
+//
+// This is EXECUTION replay, and it is best-effort by nature: nox re-fires a
+// recorded probe at a target it neither owns nor controls, so a non-reproduction
+// may mean the bug was fixed, the target moved, its state changed, or no probe
+// reached the code at all. The returned trace carries a ReplayEnvironment
+// stating which conditions held — see ReplayEnvironment for why reporting the
+// verdict without them turns four readings into one reassuring one.
 func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunConfig) (*Trace, error) {
 	if r == nil {
 		return nil, fmt.Errorf("attack: nil result")
@@ -44,15 +51,31 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 		fields = sortedCopy(defaultFields)
 	}
 
+	env := describeReplayEnvironment(r, t, cfg, route, fields)
+	env.noteDeterminismGate(orig.ReproductionHits, orig.ReproductionSamples)
+	// Fail closed rather than report. Under a seed the recorded run did not use,
+	// the canary values this replay scores against are not the ones the target
+	// holds, so the recorded signal cannot recur however the target behaves.
+	// Firing anyway would produce a confident "did not reproduce" from a probe
+	// that tested nothing — the false all-clear this package exists to prevent,
+	// and the one a reader is least equipped to doubt.
+	if env.seedIsIncompatible() {
+		return nil, fmt.Errorf("attack: replay seed %q differs from the seed %q the run recorded. "+
+			"Canary values are minted from the seed, so the recorded signal cannot recur under a "+
+			"different one and a replay would report 'did not reproduce' without testing anything. "+
+			"Re-run with --seed %s", cfg.Seed, r.Seed, r.Seed)
+	}
+
 	spec := payloadSpec{
 		category: categoryForPayload(orig),
 		id:       orig.Evidence.PayloadID,
 		text:     orig.Evidence.Payload,
 	}
 	oracles := []Oracle{CanaryOracle(cs), ToolTraceOracle(scenarioForbiddenTools(orig.ScenarioID))}
+	defenseOracle := RefusalOracle()
 
 	// Re-fire the winning probe Samples times, requiring the SAME signal.
-	hits, samples := 0, 0
+	hits, samples, errs, refusals := 0, 0, 0, 0
 	var lastReply string
 	for i := 0; i < cfg.Samples; i++ {
 		obs, err := t.Send(ctx, makeProbe(route, fields, orig.Evidence.Field, spec))
@@ -61,21 +84,44 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 		}
 		samples++
 		lastReply = obs.Reply
+		// A transport failure and an HTTP error status both mean the probe never
+		// reached the code under test. Neither is evidence that a fix held —
+		// this is the same rule runCase enforces for a regression suite, and it
+		// was missing here.
+		if obs.Err != "" || (obs.Status != 0 && obs.Status >= 400) {
+			errs++
+			continue
+		}
 		if v, hit := firstViolation(oracles, obs); hit && v.Signal == orig.Evidence.Signal {
 			hits++
+			continue
+		}
+		if defenseOracle.Evaluate(obs).Violated {
+			refusals++
 		}
 	}
 
 	reproduced := hits >= cfg.MinHits
-	outcome := orig.Outcome
-	outcome.Executed = !isSimTarget(t)
-	outcome.Violated = hits > 0
-	outcome.Reproduced = reproduced
+	// Built fresh, not inherited. Copying the original outcome carried its
+	// DefenseObserved forward, so a replay whose every probe failed to connect
+	// could derive PREVENTED — "a defense was observed" — from connection
+	// refused. Only ControlSound crosses over, because a replay fires no benign
+	// control of its own; the environment states that it was carried.
+	outcome := evidence.RunOutcome{
+		HypothesisConstructed: true,
+		ControlSound:          orig.Outcome.ControlSound,
+		Executed:              samples > 0 && !isSimTarget(t),
+		Violated:              hits > 0,
+		Reproduced:            reproduced,
+		DefenseObserved:       refusals > 0,
+		TargetErrors:          errs,
+	}
 
 	newTrace := *orig
 	newTrace.ReproductionHits = hits
 	newTrace.ReproductionSamples = samples
 	newTrace.Outcome = outcome
+	newTrace.ReplayEnvironment = env
 
 	// The proposition a replay re-establishes is the same one the original run
 	// tested: this hypothesis's invariant, and nothing above it.
@@ -125,12 +171,65 @@ func Replay(ctx context.Context, r *Result, traceID string, t Target, cfg RunCon
 		ev.Samples = samples
 		ev.Response = lastReply
 		newTrace.Evidence = &ev
-		newTrace.Note = fmt.Sprintf("replay reproduced the exploit (%d/%d)", hits, samples)
+		newTrace.ReplayCommand = "nox attack replay " + orig.ID
+		newTrace.ReplayNote = ""
 	} else {
+		// Milestone H, applied to the replay path: a trace with no reproduced
+		// violation must not advertise a re-run, and this one used to inherit
+		// the original's replay command by copying the struct.
 		newTrace.Evidence = nil
-		newTrace.Note = fmt.Sprintf("replay did not reproduce (%d/%d < %d)", hits, samples, cfg.MinHits)
+		newTrace.ReplayCommand = ""
+		newTrace.ReplayNote = "this replay reproduced no violation, so it records no " +
+			"winning probe to re-run; the ORIGINAL trace is still replayable, and " +
+			"`nox replay` re-derives this verdict from its evidence"
 	}
-	return &newTrace, nil
+	newTrace.Note = replayNote(hits, samples, errs, refusals, cfg.MinHits, reproduced, env)
+	// Re-score from what this replay demonstrated. Copying the original trace
+	// carried its CONFIRMED-grade severity onto a replay that reproduced
+	// nothing.
+	out := classified(newTrace)
+	return &out, nil
+}
+
+// replayNote explains the outcome in the reader's terms, keeping apart the four
+// things a non-reproduction can mean. "Did not reproduce" covered all of them.
+func replayNote(hits, samples, errs, refusals, minHits int, reproduced bool, env *ReplayEnvironment) string {
+	var note string
+	switch {
+	case reproduced:
+		note = fmt.Sprintf("replay reproduced the exploit (%d/%d)", hits, samples)
+	case samples > 0 && errs == samples:
+		note = fmt.Sprintf("the target could not be exercised: %d/%d probe(s) failed or returned an "+
+			"error status, so the recorded exploit was never re-tested. This proves nothing about "+
+			"the fix — check --target and --route", errs, samples)
+	case errs > 0:
+		note = fmt.Sprintf("replay did not reproduce (%d/%d < %d), but %d probe(s) never reached the "+
+			"target; treat this as inconclusive", hits, samples, minHits, errs)
+	case refusals > 0:
+		note = fmt.Sprintf("replay did not reproduce (%d/%d < %d); the target refused the recorded payload",
+			hits, samples, minHits)
+	default:
+		note = fmt.Sprintf("replay did not reproduce (%d/%d < %d) under the recorded probe; this is not "+
+			"proof the target is secure", hits, samples, minHits)
+	}
+	if !reproduced && env != nil && len(env.Divergences) > 0 {
+		note += fmt.Sprintf("; the replay environment differed from the recorded run in %d respect(s) "+
+			"(see replay_environment)", len(env.Divergences))
+	}
+	return note
+}
+
+// ReplayUnexercised reports whether every probe of an execution replay failed to
+// reach the target, so the replay demonstrated nothing either way. It is false
+// on a trace that was not produced by a replay.
+//
+// A caller gating CI needs this to be a distinct answer from "did not
+// reproduce": zero reproductions out of zero real attempts is a misconfigured
+// target, not a fix that held, and reporting it as a pass is the same failure
+// mode as a skipped gate.
+func (t *Trace) ReplayUnexercised() bool {
+	return t != nil && t.ReplayEnvironment != nil &&
+		t.ReproductionSamples > 0 && t.Outcome.TargetErrors == t.ReproductionSamples
 }
 
 // categoryForPayload recovers the payload category for a replayed trace from its
