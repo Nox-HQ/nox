@@ -637,10 +637,27 @@ snapshotted, and each is its own problem.
 | Milestone | Exit |
 |---|---|
 | **11.1** | adjudication replay — **already met** for the shadow ledger; must hold after Phase 4 promotion |
-| **11.2** | execution replay, best-effort, with environment assumptions stated |
-| **11.3** | every important result answers the six questions (observed / supports / refutes / not evaluated / means here / would change it) |
+| **11.2** | execution replay, best-effort, with environment assumptions stated | |
+| **11.3** | every important result answers the six questions (observed / supports / refutes / not evaluated / means here / would change it) | ✅ #628 |
 
-**Size:** small, if Phase 4 keeps the ledger intact.
+**11.3 had five of six answered and the sixth in the wrong place.** "What would
+move this conclusion" was appended to the remediation string, which conflates
+two questions with different readers: remediation is for whoever fixes the
+finding, this is for whoever decides whether to trust the verdict. A consumer
+reading the JSON could not get it without parsing prose off the end of another
+field.
+
+It also went silent in two cases — nothing recorded, and nothing available —
+and silence there reads as "there is nothing more to know", which is the
+opposite of true. Both now answer, and the second warns that a limit is not a
+clearance.
+
+Writing the test found that the sixth question had never been exercised at all:
+`baseInputs` carries a `Coverage` and no `Registry`, so `nextEvidence` returned
+"" on the nil registry and every existing test saw an empty string it did not
+assert on. Both real callers — `nox why` and the MCP `why` tool — do pass one.
+
+**Size:** small, if Phase 4 keeps the ledger intact. 11.2 remains.
 
 ---
 
