@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/nox-hq/nox/core/discovery"
@@ -670,8 +671,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // and the hyphens fall outside the class.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 909 {
-		t.Fatalf("expected 909 built-in secret rules, got %d", len(rules))
+	if len(rules) != 907 {
+		t.Fatalf("expected 907 built-in secret rules, got %d", len(rules))
 	}
 }
 
@@ -1220,15 +1221,24 @@ func TestBroadPatternRules_DetectRealCredential(t *testing.T) {
 	cases := []struct {
 		ruleID  string
 		content string
+		// alias, when set, is a retired rule ID the finding must still answer
+		// to, so a waiver written against it keeps matching.
+		alias string
 	}{
-		{"SEC-616", `fcm_server_key = "Fcm3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
-		{"SEC-692", `elk_api_key = "Elk3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
-		{"SEC-664", `heap_api_key = "Heap3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`},
-		{"SEC-590", `wave_api_key = "Wave3r9X2lK7vQ4bP8mZ1dN6cY5h30aB"`},
-		{"SEC-455", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`},
-		{"SEC-659", `split_api_key = "Spl3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
-		{"SEC-661", `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`},
-		{"SEC-697", `literal_api_key = "Lit3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`},
+		{"SEC-616", `fcm_server_key = "Fcm3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, ""},
+		// SEC-692 and SEC-697 are retired into SEC-005 (their keyword is an
+		// ordinary English word, which was their only discriminator). The case
+		// stays, asserting the SURVIVOR reports the credential and carries the
+		// retired ID — which is a stronger statement than deleting the case
+		// would be, because it is the one that proves the coverage moved rather
+		// than went away.
+		{"SEC-005", `elk_api_key = "Elk3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, "SEC-692"},
+		{"SEC-664", `heap_api_key = "Heap3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`, ""},
+		{"SEC-590", `wave_api_key = "Wave3r9X2lK7vQ4bP8mZ1dN6cY5h30aB"`, ""},
+		{"SEC-455", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`, ""},
+		{"SEC-659", `split_api_key = "Spl3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, ""},
+		{"SEC-661", `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`, ""},
+		{"SEC-005", `literal_api_key = "Lit3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, "SEC-697"},
 	}
 	for _, tc := range cases {
 		results, err := a.ScanFile("config.env", []byte(tc.content))
@@ -1237,10 +1247,16 @@ func TestBroadPatternRules_DetectRealCredential(t *testing.T) {
 		}
 		var found bool
 		for _, r := range results {
-			if r.RuleID == tc.ruleID {
-				found = true
-				break
+			if r.RuleID != tc.ruleID {
+				continue
 			}
+			found = true
+			if tc.alias != "" && !slices.Contains(r.RetiredRuleIDs, tc.alias) {
+				t.Errorf("%s reported the credential but does not answer to %s; every "+
+					"waiver written against %s would silently stop matching",
+					tc.ruleID, tc.alias, tc.alias)
+			}
+			break
 		}
 		if !found {
 			t.Errorf("%s: did not fire on a real credential-shaped value; results=%+v", tc.ruleID, results)
