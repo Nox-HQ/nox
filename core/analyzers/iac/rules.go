@@ -25,6 +25,11 @@ type iacRule struct {
 	// Used e.g. by IAC-013 to declare a trusted-publisher allowlist that the
 	// regex matcher consumes via a post-filter.
 	extraMetadata map[string]string
+	// validate, when set, vetoes individual matches after the pattern has
+	// accepted them (see rules.Rule.ValidateMatch). It carries the part of a
+	// rule's meaning a regex cannot express in one pass — for IAC-225, that an
+	// unquoted YAML scalar is a password and not `omit`, `false` or `null`.
+	validate func(string) bool
 	// retires lists rule IDs this rule absorbed, with the pattern each of them
 	// carried at retirement. It is what keeps baselines, VEX statements and
 	// nox:ignore comments written against the retired ID matching — see
@@ -2342,20 +2347,21 @@ func (d iacRule) toRule() rules.Rule {
 	md := map[string]string{"cwe": d.cwe}
 	maps.Copy(md, d.extraMetadata)
 	r := rules.Rule{
-		ID:           d.id,
-		Version:      "1.0",
-		Description:  d.description,
-		Severity:     d.severity,
-		Confidence:   d.confidence,
-		MatcherType:  "regex",
-		Pattern:      d.pattern,
-		FilePatterns: d.filePatterns,
-		Keywords:     d.keywords,
-		Tags:         d.tags,
-		Metadata:     md,
-		Remediation:  d.remediation,
-		References:   d.references,
-		Retires:      d.retires,
+		ID:            d.id,
+		Version:       "1.0",
+		Description:   d.description,
+		Severity:      d.severity,
+		Confidence:    d.confidence,
+		MatcherType:   "regex",
+		Pattern:       d.pattern,
+		FilePatterns:  d.filePatterns,
+		Keywords:      d.keywords,
+		Tags:          d.tags,
+		Metadata:      md,
+		Remediation:   d.remediation,
+		References:    d.references,
+		Retires:       d.retires,
+		ValidateMatch: d.validate,
 	}
 	if d.absenceAnchor != "" {
 		r.MatcherType = "absence"
