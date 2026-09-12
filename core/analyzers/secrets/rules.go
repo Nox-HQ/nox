@@ -721,6 +721,42 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     `(?i)(api[_-]?key|apikey|api[_-]?secret)\s*[=:]\s*['"][A-Za-z0-9]{16,}['"]`,
 			description: "Generic API key assignment detected",
 			cwe:         "CWE-798", keywords: []string{"api_key", "apikey", "api-key", "api_secret", "api-secret"},
+			// SEC-696 ("Detected Timber API Key") is retired here.
+			//
+			// It was one of 69 rules imported from Gitleaks with the shape
+			// `[a-zA-Z0-9]{32}` plus a single vendor keyword, and the only one
+			// of the 69 whose keyword is an ordinary English word AND which
+			// carries no secret-shape post-filter. (SEC-692 "elk" and SEC-697
+			// "literal" have the same problem with the keyword; both set
+			// secretShape with a minimum entropy.) So its entire discriminating
+			// signal was the word "timber" appearing near a 32-character run.
+			//
+			// Measured, and the measurement is what decides it. On the shape
+			// the rule exists for —
+			//
+			//	timber_api_key = "<32 alphanumerics>"
+			//
+			// SEC-696 does not reach the output at all: this rule wins the
+			// dedup contest and reports it. On the shape it gets wrong —
+			//
+			//	see timber docs: <32 alphanumerics>
+			//
+			// SEC-696 is the ONLY rule that fires. It was suppressed exactly
+			// where it was right and was the sole reporter exactly where it was
+			// wrong, which is not a threshold that needs tuning but a rule with
+			// no unique correct output. In reitit it produced 421 findings from
+			// one fake street address ("2114 timber wolf trail") in generated
+			// JSON, and after #633 and #638 it produces none anywhere in the
+			// corpus.
+			//
+			// The alias keeps waivers resolving on the api_key form. A Timber
+			// key written some other way is reported by SEC-161 instead, which
+			// does not carry the alias — a retired ID may have only one host
+			// (rules_dedup_test.go), and this is the host that covers the form
+			// the rule was named for.
+			retires: []rules.RetiredRule{
+				{ID: "SEC-696", Pattern: `[a-zA-Z0-9]{32}`},
+			},
 			remediation: "Move API keys to environment variables or a secrets manager. Avoid committing credentials to version control.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -3490,7 +3526,8 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-693", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Splunk API Key", cwe: "CWE-798", keywords: []string{"splunk"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-694", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected CloudWatch Logs API Key", cwe: "CWE-798", keywords: []string{"cloudwatch"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-695", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Stackify API Key", cwe: "CWE-798", keywords: []string{"stackify"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-696", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Timber API Key", cwe: "CWE-798", keywords: []string{"timber"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-696 ("Detected Timber API Key") is retired into SEC-005. See the
+		// `retires` there for the measurement.
 		{id: "SEC-697", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Literal API Key", cwe: "CWE-798", keywords: []string{"literal"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-698", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Honeybadger API Key", cwe: "CWE-798", keywords: []string{"honeybadger"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-699", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected TrackJS API Key", cwe: "CWE-798", keywords: []string{"trackjs"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3948,8 +3985,31 @@ func builtinEntropyRules() []*rules.Rule {
 			FilePatterns:       entropySourceFilePatterns,
 			IgnoreFilePatterns: generatedFileIgnorePatterns,
 			Tags:               []string{"secrets", "entropy"},
+			// SEC-163 ("High-entropy hex string detected") is folded in here as
+			// the `hex` kind, with the threshold and context requirement it
+			// carried. It could not simply be deleted into this rule's 5.0,
+			// because a threshold is only meaningful against its alphabet:
+			// Shannon entropy cannot exceed log2(16) = 4.0 bits over hex, so
+			// 5.0 rejects every hex string that exists — which is exactly the
+			// defect #467 fixed when the rule shipped at 4.5 and could never
+			// match the thing it was named for.
+			//
+			// The reason it is folded in rather than kept is that its entropy
+			// test decided nothing. At 3.5 with require_context also granting
+			// the -0.5 discount it ran at 3.0 against a 4.0 maximum, and the
+			// 122 real candidates measured across the rule-diff corpus spanned
+			// 3.33 to 3.89 — digests, gist ids and one real token in the same
+			// band. What separates them is the label, which is the analyzer's
+			// job (see hexlabel.go), not a bit count. So "a hex run, where the
+			// line names something a secret, that the document does not call a
+			// digest" is a CONTEXT rule, and this is the contextual rule.
 			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0",
-				"candidate_kinds": "assignment,quoted"},
+				"candidate_kinds":       "assignment,quoted,hex",
+				"entropy_threshold_hex": "3.5",
+				"require_context_hex":   "true"},
+			Retires: []rules.RetiredRule{
+				{ID: "SEC-163", Pattern: `[0-9a-fA-F]{32,}`},
+			},
 			Remediation: "Move high-entropy values to environment variables or a secrets manager. Never hard-code secrets in source files.",
 			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -3969,26 +4029,8 @@ func builtinEntropyRules() []*rules.Rule {
 			Remediation: "Inspect this base64-encoded value. If it contains a secret, move it to a secrets manager.",
 			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
-		{
-			ID:                 "SEC-163",
-			Version:            "1.2",
-			Description:        "High-entropy hex string detected (possible secret key)",
-			Severity:           findings.SeverityMedium,
-			Confidence:         findings.ConfidenceLow,
-			MatcherType:        "entropy",
-			Keywords:           []string{"key", "secret", "token", "password", "credential", "private", "auth"},
-			FilePatterns:       entropySourceFilePatterns,
-			IgnoreFilePatterns: generatedFileIgnorePatterns,
-			Tags:               []string{"secrets", "entropy"},
-			// entropy_threshold must stay below 4.0: Shannon entropy over a
-			// 16-symbol alphabet cannot exceed log2(16) = 4.0 bits per
-			// character, so the previous 4.5 made this rule unable to match the
-			// thing it is named for while candidate_kinds was absent and it
-			// happily matched non-hex candidates instead (#467).
-			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "3.5",
-				"require_context": "true", "candidate_kinds": "hex"},
-			Remediation: "Review this hex string. If it represents a cryptographic key or secret, move it to a secrets manager.",
-			References:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
+		// SEC-163 ("High-entropy hex string detected (possible secret key)") is
+		// retired into SEC-161, which now reports the hex kind with the threshold
+		// and context requirement SEC-163 carried. See the `retires` there.
 	}
 }

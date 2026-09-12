@@ -57,8 +57,17 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1531 -> 1530 retired IAC-214 into IAC-211: a Galaxy requirements entry
 	// spells its dependency `src:` or `name:`, never both, so the two rules
 	// partitioned one condition by spelling. IAC-211 carries the alias.
-	if got := len(cat); got != 1530 {
-		t.Errorf("Catalog() returned %d rules, want 1530", got)
+	// 1530 -> 1529 retired SEC-696 ("Detected Timber API Key") into SEC-005:
+	// its whole discriminating signal was the ordinary English word "timber"
+	// near a 32-character run, and it was suppressed by SEC-005 on the shape it
+	// existed for while being the sole reporter on the shape it got wrong.
+	// 1529 -> 1528 retired SEC-163 ("High-entropy hex string detected") into
+	// SEC-161, which now carries the hex candidate kind under its own
+	// threshold. A threshold is meaningful only against its alphabet — hex
+	// cannot exceed 4.0 bits — so the fold needed the matcher to hold a policy
+	// per kind first.
+	if got := len(cat); got != 1528 {
+		t.Errorf("Catalog() returned %d rules, want 1528", got)
 	}
 }
 

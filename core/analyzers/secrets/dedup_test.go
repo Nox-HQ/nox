@@ -29,7 +29,6 @@ func TestDedupBySpecificity(t *testing.T) {
 		"SEC-455": specKeywordGeneric,  // loose 32-char secret_shape rule
 		"SEC-161": specGenericEntropy,
 		"SEC-162": specGenericEntropy,
-		"SEC-163": specGenericEntropy,
 	}
 
 	tests := []struct {
@@ -180,7 +179,7 @@ func TestClassifyRuleSpecificity(t *testing.T) {
 		want   int
 	}{
 		{"SEC-161", specGenericEntropy}, // entropy floor
-		{"SEC-163", specGenericEntropy},
+		{"SEC-162", specGenericEntropy},
 		{"SEC-003", specProviderDefault}, // GitHub provider regex
 		{"SEC-023", specProviderDefault}, // Slack provider regex
 		{"SEC-007", specProviderDefault}, // GCP provider regex

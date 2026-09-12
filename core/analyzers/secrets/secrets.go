@@ -107,11 +107,14 @@ func NewAnalyzer() *Analyzer {
 type EntropyOverrides struct {
 	// Threshold overrides SEC-161 entropy_threshold.
 	Threshold float64
-	// HexThreshold overrides SEC-163 entropy_threshold.
+	// HexThreshold overrides the hex-kind entropy threshold. SEC-163 carried
+	// it until that rule was folded into SEC-161 as the `hex` kind; the
+	// user-facing setting is unchanged and now writes the per-kind key.
 	HexThreshold float64
 	// Base64Threshold overrides SEC-162 entropy_threshold.
 	Base64Threshold float64
-	// RequireContext overrides the require_context metadata on SEC-162/163.
+	// RequireContext overrides the context requirement for the base64 kind
+	// (SEC-162) and the hex kind (SEC-161's `hex` policy, formerly SEC-163).
 	// nil means keep rule defaults.
 	RequireContext *bool
 }
@@ -133,16 +136,18 @@ func (a *Analyzer) ApplyEntropyOverrides(o EntropyOverrides) {
 			if o.Threshold > 0 {
 				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.Threshold, 'f', -1, 64)
 			}
+			// The hex settings live here since SEC-163 was folded in. They are
+			// written to the PER-KIND keys, so raising the generic threshold
+			// does not silently raise the hex one past its 4.0 ceiling.
+			if o.HexThreshold > 0 {
+				r.Metadata["entropy_threshold_hex"] = strconv.FormatFloat(o.HexThreshold, 'f', -1, 64)
+			}
+			if o.RequireContext != nil {
+				r.Metadata["require_context_hex"] = strconv.FormatBool(*o.RequireContext)
+			}
 		case "SEC-162":
 			if o.Base64Threshold > 0 {
 				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.Base64Threshold, 'f', -1, 64)
-			}
-			if o.RequireContext != nil {
-				r.Metadata["require_context"] = strconv.FormatBool(*o.RequireContext)
-			}
-		case "SEC-163":
-			if o.HexThreshold > 0 {
-				r.Metadata["entropy_threshold"] = strconv.FormatFloat(o.HexThreshold, 'f', -1, 64)
 			}
 			if o.RequireContext != nil {
 				r.Metadata["require_context"] = strconv.FormatBool(*o.RequireContext)
