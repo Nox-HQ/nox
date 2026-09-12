@@ -60,6 +60,7 @@ func NewAnalyzer() *Analyzer {
 		cat.Add(r)
 	}
 	cat.Add(composeImageRule())
+	cat.Add(pullPolicyRule())
 
 	a := &Analyzer{engine: rules.NewEngine(rs), catalog: cat}
 	// A second engine holding only the absence rules, for manifests embedded
@@ -141,6 +142,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// Compose resolves `${VAR:-default}` before it reads an image reference,
 	// so this one is decided by parsing the document rather than by a pattern.
 	out = append(out, scanComposeImages(path, content)...)
+	// `imagePullPolicy: Always` is only a finding against an image reference
+	// that can change, which means reading the container. See pull_policy.go.
+	out = append(out, scanPullPolicies(path, content)...)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
