@@ -18,8 +18,47 @@ import (
 // curatedAutoCorpus is the default benchmark corpus when --autocorpus
 // is set. Each entry targets the AI app developer ICP: LLM client
 // SDKs (openai, anthropic), agent frameworks (langchain, llamaindex,
-// crewai, agent-go, vercel-ai), and the MCP reference SDK. Pinned to
-// specific refs so bench output is reproducible across runs.
+// crewai, agent-go, vercel-ai), and the MCP reference SDK.
+//
+// Pinned to immutable refs so bench output is reproducible across runs —
+// asserted by TestCuratedCorpusIsPinnedToImmutableRefs, because the comment
+// said this while half the list tracked `main`.
+//
+// LANGUAGE SPREAD IS PART OF THE POINT. nox ships source/sink catalogs for 21
+// languages, and every one of them scores precision 1.000 / recall 1.000 on its
+// own suite — a suite written to contain what nox detects cannot surface a gap.
+// Real repositories can, and the corpus was Python and TypeScript only, so the
+// six entries below were added to reach Java, Ruby, PHP, Rust, Kotlin and
+// Swift. The first scan of one of them found SEC-505 firing 3,040 times on a
+// single line
+// (see contextCharWindow in core/rules/engine.go).
+//
+// Every entry was scanned before being added; a repo that reports nothing
+// measures nothing. Findings at the pinned ref, measured 2026-09-12 on a fresh
+// clone with `--output` pointed OUTSIDE the scanned tree:
+//
+//	langchain4j   156 findings, 13 taint flows   (Java)
+//	ruby-openai   481 findings,  2 taint flows   (Ruby)
+//	MacPaw/OpenAI 411 findings,  3 taint flows   (Swift)
+//	async-openai  100 findings,  0 taint flows   (Rust)
+//	openai-kotlin  38 findings,  0 taint flows   (Kotlin)
+//	openai-php     20 findings,  0 taint flows   (PHP)
+//
+// The "outside the tree" part is load-bearing and was learned the hard way.
+// `nox scan <dir> --output <dir>` writes findings.json and ai.inventory.json
+// INTO the directory it just scanned, so a second scan reports on the first
+// one's output: an earlier pass of this table had Rust at 141 rather than 100,
+// the extra 41 being findings on nox's own artifacts. `--output` defaults to
+// `.`, which makes the contaminating invocation the obvious one.
+//
+// openai/openai-dotnet was the C# candidate and is deliberately absent. It is
+// also where this fix shows largest: 496,141 findings before the character
+// bound and 5,030 after, both on clean trees. Even at 5,030 — 1,248 DATA-003,
+// 766 SEC-161, 582 SEC-163, 503 SEC-629 — it is a noise profile to understand
+// before it becomes a benchmark, not after, and the scan takes over ten
+// minutes. The same reasoning keeps the 268 IAC-254 in the Swift entry: a
+// corpus holding only quiet repositories measures nothing, so that count is a
+// question the corpus now poses rather than one it hides.
 var curatedAutoCorpus = []struct {
 	Repo string
 	Ref  string
@@ -28,10 +67,18 @@ var curatedAutoCorpus = []struct {
 	{Repo: "run-llama/llama_index", Ref: "v0.12.0"},
 	{Repo: "openai/openai-python", Ref: "v1.54.0"},
 	{Repo: "anthropics/anthropic-sdk-python", Ref: "v0.40.0"},
-	{Repo: "felixgeelhaar/agent-go", Ref: "main"},
-	{Repo: "modelcontextprotocol/python-sdk", Ref: "main"},
-	{Repo: "vercel/ai", Ref: "main"},
-	{Repo: "joaomdmoura/crewai", Ref: "main"},
+	{Repo: "felixgeelhaar/agent-go", Ref: "v0.16.2"},
+	{Repo: "modelcontextprotocol/python-sdk", Ref: "v2.2.0"},
+	// vercel/ai is a monorepo; its tags are per-package, and this one names a
+	// commit like any other tag.
+	{Repo: "vercel/ai", Ref: "@ai-sdk/zai@3.0.10"},
+	{Repo: "joaomdmoura/crewai", Ref: "1.15.21"},
+	{Repo: "langchain4j/langchain4j", Ref: "1.20.0"},
+	{Repo: "alexrudall/ruby-openai", Ref: "v8.3.0"},
+	{Repo: "openai-php/client", Ref: "v0.20.1"},
+	{Repo: "64bit/async-openai", Ref: "async-openai-v0.42.0"},
+	{Repo: "aallam/openai-kotlin", Ref: "4.1.0"},
+	{Repo: "MacPaw/OpenAI", Ref: "0.5.1"},
 }
 
 // runBench scans every directory in --corpus and produces a fire-rate
