@@ -42,8 +42,11 @@ func TestRetired_OneFindingPerCondition(t *testing.T) {
 		{"hostIPC", "pod.yaml", "spec:\n  hostIPC: true\n", "IAC-027", "IAC-292"},
 		{"automount token", "pod.yaml", "spec:\n  automountServiceAccountToken: true\n", "IAC-030", "IAC-287"},
 		{"privileged", "pod.yaml", "        privileged: true\n", "IAC-007", "IAC-237"},
-		{"set-output", "ci.yml", "      - run: echo \"::set-output name=v::1\"\n", "IAC-017", "IAC-312"},
-		{"continue-on-error", "ci.yml", "      - continue-on-error: true\n", "IAC-018", "IAC-310"},
+		// Complete workflows, not step fragments: a GitHub Actions rule now
+		// fires only where the document IS a workflow (document_kind.go), and a
+		// lone step line in an arbitrary YAML file is not one.
+		{"set-output", "ci.yml", ghaWorkflow("      - run: echo \"::set-output name=v::1\""), "IAC-017", "IAC-312"},
+		{"continue-on-error", "ci.yml", ghaWorkflow("      - continue-on-error: true"), "IAC-018", "IAC-310"},
 		{"publicly accessible", "rds.tf", "  publicly_accessible = true\n", "IAC-036", "IAC-283"},
 		{"azure http", "storage.tf", "  enable_https_traffic_only = false\n", "IAC-042", "IAC-321"},
 		{"secure boot", "vm.tf", "  enable_secure_boot = false\n", "IAC-111", "IAC-333"},
@@ -205,4 +208,11 @@ func scanWithPattern(t *testing.T, ruleID, pattern, path, content string) findin
 		t.Fatalf("the pre-change %s produced %d findings, want 1", ruleID, len(got))
 	}
 	return got[0]
+}
+
+// ghaWorkflow wraps one or more step lines in the smallest complete GitHub
+// Actions workflow, so a fixture testing a step's PATTERN is still a document
+// the rule applies to.
+func ghaWorkflow(steps string) string {
+	return "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n" + steps + "\n"
 }

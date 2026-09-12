@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"strings"
+
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -21,6 +23,12 @@ type aiRule struct {
 	tags                   []string
 	remediation            string
 	references             []string
+	// validate, when set, vetoes individual matches after the pattern has
+	// accepted them (see rules.Rule.ValidateMatch). It carries the part of a
+	// rule's meaning RE2 cannot express — for MCP-005, "and no description()
+	// call anywhere in the chain", which is a negative a regex without
+	// lookahead can only fake by enumerating what IS allowed.
+	validate func(string) bool
 }
 
 // builtinAIRules returns all built-in AI security rules.
@@ -811,12 +819,16 @@ func builtinAIRules() []*rules.Rule {
 			// `.ReadOnly().Handler(…)` — a registration with no description,
 			// exactly what this rule is for — did not match.
 			//
-			// (?i) covers the Go spelling, and the builder calls that are not a
-			// description are allowed to sit in between. `Description` is
-			// deliberately absent from that list: a chain carrying one is the
-			// case where the rule must stay silent, and leaving the name out is
-			// what keeps it silent.
-			pattern:     `(?is)\.tool\s*\(\s*["'][a-zA-Z_][a-zA-Z0-9_-]*["']\s*\)\s*(?:\.\s*(?:readonly|destructive|idempotent|openworld|title|inputschema|outputschema)\s*\([^)]*\)\s*)*\.\s*handler`,
+			// The pattern finds the registration and the handler; the predicate
+			// decides. An earlier version enumerated the builder calls ALLOWED
+			// between them and left `description` out of the list, which works
+			// until someone adds a method: a new `.annotations()` would put the
+			// handler out of reach and silently narrow the rule to nothing,
+			// with no test able to notice. RE2 has no negative lookahead, so
+			// "no description anywhere in the chain" cannot be a regex — it is
+			// a predicate, and mcpRegistrationLacksDescription is it.
+			pattern:     `(?is)\.tool\s*\(\s*["'][a-zA-Z_][a-zA-Z0-9_-]*["']\s*\)[^;{}]*?\.\s*handler\s*\(`,
+			validate:    mcpRegistrationLacksDescription,
 			description: "MCP tool registration missing description metadata",
 			// The keyword gates the FILE, and `server.tool` excluded every Go
 			// server before the pattern was ever consulted — which is why
@@ -1170,6 +1182,7 @@ func builtinAIRules() []*rules.Rule {
 			Metadata:               map[string]string{"cwe": defs[i].cwe},
 			Remediation:            defs[i].remediation,
 			References:             defs[i].references,
+			ValidateMatch:          defs[i].validate,
 		}
 	}
 
@@ -1308,4 +1321,14 @@ func applyMCPProsePrecision(out []*rules.Rule) {
 			r.ExcludeContextKeywords = ssrfDenyContext
 		}
 	}
+}
+
+// mcpRegistrationLacksDescription reports whether a matched MCP tool
+// registration chain carries no description.
+//
+// The match runs from `.tool("name")` to the `.handler(` that closes the chain,
+// so everything the registration declares about itself is inside it. A chain
+// naming a description is the case the rule must stay silent on.
+func mcpRegistrationLacksDescription(matchText string) bool {
+	return !strings.Contains(strings.ToLower(matchText), "description")
 }

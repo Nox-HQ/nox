@@ -955,9 +955,16 @@ func TestDetect_KubernetesRunAsNonRootFalse(t *testing.T) {
 // GitHub Actions rules (IAC-011 to IAC-018)
 // ---------------------------------------------------------------------------
 
+// The fixtures below are complete workflows rather than the single lines they
+// used to be. A GitHub Actions rule now fires only where the document IS a
+// workflow (see document_kind.go), and a bare `continue-on-error: true` in an
+// arbitrary YAML file is not one — which is the point of the gate, not a
+// limitation of it. Each test's subject is unchanged: the pattern still has to
+// match, it just has to match inside a document the rule applies to.
+
 func TestDetect_GHAPullRequestTarget(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("on:\n  pull_request_target:\n    branches: [main]\n")
+	content := []byte("on:\n  pull_request_target:\n    branches: [main]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -978,7 +985,7 @@ func TestDetect_GHAPullRequestTarget(t *testing.T) {
 
 func TestDetect_GHAScriptInjection(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("run: echo ${{ github.event.issue.title }}\n")
+	content := []byte("on: issues\njobs:\n  triage:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ github.event.issue.title }}\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1000,7 +1007,7 @@ func TestDetect_GHAScriptInjection(t *testing.T) {
 func TestDetect_GHAUnpinnedAction(t *testing.T) {
 	a := NewAnalyzer()
 	// Third-party action (not in the trusted-publisher allowlist).
-	content := []byte("uses: someuser/myaction@v4\n")
+	content := []byte("on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: someuser/myaction@v4\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1047,7 +1054,7 @@ jobs:
 
 func TestDetect_GHAWriteAllPermissions(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("permissions: write-all\n")
+	content := []byte("on: push\npermissions: write-all\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1068,7 +1075,7 @@ func TestDetect_GHAWriteAllPermissions(t *testing.T) {
 
 func TestDetect_GHASecretsInLogs(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("run: echo ${{ secrets.MY_TOKEN }}\n")
+	content := []byte("on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.MY_TOKEN }}\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1089,7 +1096,7 @@ func TestDetect_GHASecretsInLogs(t *testing.T) {
 
 func TestDetect_GHASelfHostedRunner(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("runs-on: self-hosted\n")
+	content := []byte("on: push\njobs:\n  build:\n    runs-on: self-hosted\n    steps:\n      - run: make\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1110,7 +1117,7 @@ func TestDetect_GHASelfHostedRunner(t *testing.T) {
 
 func TestDetect_GHADeprecatedSetOutput(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte(`run: echo "::set-output name=result::value"` + "\n")
+	content := []byte("on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"::set-output name=result::value\"\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1131,7 +1138,7 @@ func TestDetect_GHADeprecatedSetOutput(t *testing.T) {
 
 func TestDetect_GHAContinueOnError(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("- name: test\n  continue-on-error: true\n  run: make test\n")
+	content := []byte("on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - name: test\n        continue-on-error: true\n        run: make test\n")
 
 	results, err := a.ScanFile("ci.yml", content)
 	if err != nil {
@@ -1560,9 +1567,11 @@ func TestDetect_HelmRBACDisabled(t *testing.T) {
 
 func TestDetect_SecurityChecksDisabled(t *testing.T) {
 	a := NewAnalyzer()
-	content := []byte("security_enabled: false\n")
+	// A pipeline, not a bare line: IAC-050 describes a CI/CD configuration, and
+	// it now fires only where the document is one (see document_kind.go).
+	content := []byte("stages:\n  - test\nvariables:\n  security_enabled: false\n")
 
-	results, err := a.ScanFile("config.yml", content)
+	results, err := a.ScanFile(".gitlab-ci.yml", content)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
