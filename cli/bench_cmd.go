@@ -34,22 +34,31 @@ import (
 // (see contextCharWindow in core/rules/engine.go).
 //
 // Every entry was scanned before being added; a repo that reports nothing
-// measures nothing. Findings at the pinned ref, on 2026-09-11:
+// measures nothing. Findings at the pinned ref, measured 2026-09-12 on a fresh
+// clone with `--output` pointed OUTSIDE the scanned tree:
 //
 //	langchain4j   156 findings, 13 taint flows   (Java)
 //	ruby-openai   481 findings,  2 taint flows   (Ruby)
 //	MacPaw/OpenAI 411 findings,  3 taint flows   (Swift)
-//	async-openai  141 findings,  0 taint flows   (Rust)
+//	async-openai  100 findings,  0 taint flows   (Rust)
 //	openai-kotlin  38 findings,  0 taint flows   (Kotlin)
-//	openai-php     21 findings,  0 taint flows   (PHP)
+//	openai-php     20 findings,  0 taint flows   (PHP)
 //
-// openai/openai-dotnet was the C# candidate and is deliberately absent. Its scan
-// takes over ten minutes and reports 5,030 findings — 1,248 DATA-003, 766
-// SEC-161, 582 SEC-163 — which is a noise profile to understand before it
-// becomes a benchmark, not after. The same goes for the 268 IAC-254 in the Swift
-// entry: it is included because a corpus that only holds quiet repositories
-// measures nothing, and that count is a question the corpus now poses rather
-// than one it hides.
+// The "outside the tree" part is load-bearing and was learned the hard way.
+// `nox scan <dir> --output <dir>` writes findings.json and ai.inventory.json
+// INTO the directory it just scanned, so a second scan reports on the first
+// one's output: an earlier pass of this table had Rust at 141 rather than 100,
+// the extra 41 being findings on nox's own artifacts. `--output` defaults to
+// `.`, which makes the contaminating invocation the obvious one.
+//
+// openai/openai-dotnet was the C# candidate and is deliberately absent. It is
+// also where this fix shows largest: 496,141 findings before the character
+// bound and 5,030 after, both on clean trees. Even at 5,030 — 1,248 DATA-003,
+// 766 SEC-161, 582 SEC-163, 503 SEC-629 — it is a noise profile to understand
+// before it becomes a benchmark, not after, and the scan takes over ten
+// minutes. The same reasoning keeps the 268 IAC-254 in the Swift entry: a
+// corpus holding only quiet repositories measures nothing, so that count is a
+// question the corpus now poses rather than one it hides.
 var curatedAutoCorpus = []struct {
 	Repo string
 	Ref  string
