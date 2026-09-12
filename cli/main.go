@@ -579,6 +579,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		NoRespectGitignore: noRespectGitignoreFlg,
 		TrackedOnly:        trackedOnlyFlag,
 		BaselinePath:       baselineFlag,
+		// Where this run will write its reports, so the scan does not read the
+		// ones the last run left behind. --output defaults to ".", which puts
+		// findings.json inside the tree being scanned.
+		OutputDir: outputDir,
 	}
 
 	var result *nox.ScanResult

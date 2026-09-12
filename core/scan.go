@@ -298,6 +298,22 @@ type ScanOptions struct {
 	// target. The CLI --baseline flag sets this; an explicit override always
 	// takes precedence over the config value.
 	BaselinePath string
+
+	// OutputDir is where this scan's report artifacts will be written, when the
+	// caller intends to write any. The scan excludes exactly those paths from
+	// discovery, because a report of a finding contains the evidence for the
+	// finding and would otherwise be read back as source on the next run.
+	//
+	// Measured on 64bit/async-openai, scanning one clean tree three times with
+	// `--output .`: 100 findings, then 141, then 182 — AI-036 ("Using deprecated
+	// GPT-3.5 model") going 41 -> 82 -> 123 because the report names the model
+	// it is reporting on. It grows without bound, and `--output` defaults to
+	// `.`, so the contaminating invocation is the obvious one.
+	//
+	// Empty means the caller writes nothing and nothing is excluded. Only the
+	// exact artifact paths under this directory are skipped: a findings.json
+	// somewhere else in the tree is a real file and is still scanned.
+	OutputDir string
 }
 
 // RunScan executes the full scan pipeline against the given target path.
@@ -1132,6 +1148,9 @@ func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]disc
 	// tracked file the user excluded (e.g. a rule-definition file) stays
 	// excluded, including under --changed-since.
 	walker.ExcludePatterns = cfg.Scan.Exclude
+	// A scan must not read the report it is about to overwrite. See
+	// ScanOptions.OutputDir.
+	walker.ExcludePatterns = append(walker.ExcludePatterns, outputArtifactPatterns(target, opts.OutputDir)...)
 	walker.IncludePatterns = cfg.Scan.Include
 	if opts.NoRespectGitignore {
 		walker.RespectGitignore = false
@@ -2562,4 +2581,71 @@ func recordFlowIdentity(store *reasoning.Store, fs *findings.FindingSet) {
 			From: candidate, Kind: evidence.RelConcerns, To: flow, Ledger: ledger,
 		})
 	}
+}
+
+// outputArtifactNames are the report files a scan writes. They are listed in
+// core rather than in the CLI so every adapter that runs a scan — CLI, MCP,
+// LSP — excludes the same set; a list maintained per adapter is a list that
+// drifts, and the one that forgets an entry reintroduces the amplification for
+// whichever rule matches that format.
+// It lists only what a scan WRITES. `vex.json` and `mcp.json` were in an
+// earlier draft of this list and are not here: both are INPUTS a project
+// supplies, and excluding them would skip real files to suppress artifacts nox
+// never created — trading a false positive for a false negative, which is the
+// worse of the two.
+var outputArtifactNames = []string{
+	"findings.json",
+	"results.sarif",
+	"sbom.cdx.json",
+	"sbom.spdx.json",
+	"ai.inventory.json",
+	"report.html",
+}
+
+// OutputArtifactNames returns the report files a scan writes.
+func OutputArtifactNames() []string {
+	out := make([]string, len(outputArtifactNames))
+	copy(out, outputArtifactNames)
+	return out
+}
+
+// outputArtifactPatterns returns walker exclude patterns for this scan's own
+// report artifacts, relative to the scan target.
+//
+// It excludes PATHS, not basenames. A project that ships its own findings.json
+// under fixtures/ is shipping a real file, and skipping it because of its name
+// would be a false negative introduced to fix a false positive.
+//
+// An output directory outside the target contributes nothing: the walker never
+// reaches it, so there is nothing to exclude.
+func outputArtifactPatterns(target, outputDir string) []string {
+	if outputDir == "" {
+		return nil
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return nil
+	}
+	absOut, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil
+	}
+	rel, err := filepath.Rel(absTarget, absOut)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	out := make([]string, 0, len(outputArtifactNames))
+	for _, name := range outputArtifactNames {
+		p := name
+		if rel != "." {
+			p = filepath.ToSlash(filepath.Join(rel, name))
+		}
+		// Root-anchored. A gitignore pattern without a slash matches ANY path
+		// component, so a bare "findings.json" would also skip
+		// fixtures/findings.json — a real file a project ships, dropped to fix
+		// an artifact nox wrote. The leading "/" is what confines the exclusion
+		// to the exact path this scan will overwrite.
+		out = append(out, "/"+p)
+	}
+	return out
 }
