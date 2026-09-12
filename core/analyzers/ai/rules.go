@@ -804,9 +804,26 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-005", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?s)server\.tool\s*\(\s*"[a-zA-Z_][a-zA-Z0-9_]*"\s*\)\s*\.handler`,
+			// The same probe that condemned MCP-008 found this one covering a
+			// third of the idiom it names. `server\.tool` is lower-case and the
+			// Go fluent builder spells it `Tool`, and `\)\s*\.handler` requires
+			// the handler to follow the name IMMEDIATELY, so
+			// `.ReadOnly().Handler(…)` — a registration with no description,
+			// exactly what this rule is for — did not match.
+			//
+			// (?i) covers the Go spelling, and the builder calls that are not a
+			// description are allowed to sit in between. `Description` is
+			// deliberately absent from that list: a chain carrying one is the
+			// case where the rule must stay silent, and leaving the name out is
+			// what keeps it silent.
+			pattern:     `(?is)\.tool\s*\(\s*["'][a-zA-Z_][a-zA-Z0-9_-]*["']\s*\)\s*(?:\.\s*(?:readonly|destructive|idempotent|openworld|title|inputschema|outputschema)\s*\([^)]*\)\s*)*\.\s*handler`,
 			description: "MCP tool registration missing description metadata",
-			cwe:         "CWE-1059", keywords: []string{"server.tool"},
+			// The keyword gates the FILE, and `server.tool` excluded every Go
+			// server before the pattern was ever consulted — which is why
+			// widening the pattern alone changed nothing. `.tool(` is the part
+			// both spellings share, and the gate lower-cases content before
+			// comparing, so it covers `srv.Tool(` too.
+			cwe: "CWE-1059", keywords: []string{".tool("},
 			filePatterns: []string{"*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "audit"},
 			remediation:  "Add a Description() call to every tool registration. The description is what the operator and the LLM see when reasoning about whether to invoke the tool. Missing descriptions are an auditability gap.",
@@ -832,16 +849,24 @@ func builtinAIRules() []*rules.Rule {
 			remediation:  "Pin the MCP server to a specific version installed locally. Fetching at runtime turns every host start into a supply-chain attack surface — a compromised registry can ship arbitrary code to every operator's machine.",
 			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
 		},
-		{
-			id: "MCP-008", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?s)server\.tool\s*\([^)]*\)[^.]*\.handler\s*\([^)]*\)\s*$`,
-			description: "MCP tool handler appears unbounded (no rate limit / scope guard)",
-			cwe:         "CWE-770", keywords: []string{"server.tool", "handler"},
-			filePatterns: []string{"*.go", "*.ts", "*.js"},
-			tags:         []string{"ai", "mcp", "abuse"},
-			remediation:  "Wrap tool handlers in a rate-limited / scope-checked middleware. An LLM or compromised host can invoke handlers in tight loops; without a guard, a single bug becomes denial-of-service or quota exhaustion.",
-			references:   []string{"https://modelcontextprotocol.io/docs/concepts/security"},
-		},
+		// MCP-008 ("MCP tool handler appears unbounded (no rate limit / scope
+		// guard)") is REMOVED, not retired: nothing else reports the condition,
+		// because the condition cannot be established where it was looking.
+		//
+		// A rate limiter or scope check is middleware, declared away from the
+		// registration site and often in another file entirely, so no pattern
+		// anchored on `server.tool(...)` can see whether one exists. The rule
+		// made an absence claim from a presence pattern and would have been
+		// wrong on every well-guarded server the moment it could fire.
+		//
+		// It never could. Three independent things stopped it, the same shape
+		// the Serverless family carried: `$` with no (?m) meant end of TEXT, so
+		// only a handler ending the file qualified; `server\.tool` is lower-case
+		// while the Go fluent builder spells it `Tool`; and `[^.]*` between the
+		// two calls cannot cross a `.`, so any chain — `.Description(…)`,
+		// `.ReadOnly()` — broke the match. Measured against nox's own
+		// server/server.go and against both TypeScript SDK spellings, it
+		// matched nothing. It had no test of any kind.
 
 		// -----------------------------------------------------------------
 		// MCP tool poisoning (MCP-009..014). OWASP MCP03: an MCP server can
