@@ -266,6 +266,20 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// comment found prose describing a field, not a field being
 			// assigned. Provider rules are untouched — a full token in a
 			// comment is a real leak.
+			// A hex value the document labels as a digest is a digest, and a
+			// hex run inside a URL path is how that URL names something. See
+			// hexlabel.go: between them they account for 121 of the 122
+			// SEC-163 findings measured across the rule-diff corpus.
+			if isLabelledDigest(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the value is labelled as a digest by the field or variable it sits under, so it is the output of a hash function rather than key material; entropy cannot tell the two apart because both are uniform over the same 16 symbols")
+				continue
+			}
+			if inURLPath(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the hex run is a path segment of a URL, so it is how that URL names a resource rather than a credential the repository holds")
+				continue
+			}
 			if dropConfigFieldRuleInComment(lang, content, &results[i]) {
 				a.refute(candidate, evidence.KindStatic,
 					"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
