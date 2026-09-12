@@ -443,13 +443,18 @@ func (g GeneratedPathsConfig) ResolveGeneratedPaths() []string {
 type EntropyConfig struct {
 	// Threshold overrides the default entropy threshold for SEC-161.
 	Threshold float64 `yaml:"threshold"`
-	// HexThreshold overrides the entropy threshold for SEC-163 (hex detection).
+	// HexThreshold overrides the entropy threshold for hex detection. SEC-163
+	// carried it until that rule was folded into SEC-161 as the `hex` candidate
+	// kind; the setting is unchanged and now writes SEC-161's per-kind key, so
+	// raising `threshold` cannot silently push the hex one past the 4.0 ceiling
+	// a 16-symbol alphabet imposes.
 	HexThreshold float64 `yaml:"hex_threshold"`
 	// Base64Threshold overrides the entropy threshold for SEC-162 (base64 detection).
 	Base64Threshold float64 `yaml:"base64_threshold"`
-	// RequireContext when true forces SEC-162/SEC-163 to only fire when a
-	// secret-suggestive keyword appears on the same line. Default is true
-	// (set in rule metadata); setting this to false disables that check.
+	// RequireContext when true forces the base64 kind (SEC-162) and the hex
+	// kind (SEC-161, formerly SEC-163) to only fire when a secret-suggestive
+	// keyword appears on the same line. Default is true (set in rule metadata);
+	// setting this to false disables that check.
 	RequireContext *bool `yaml:"require_context"`
 }
 

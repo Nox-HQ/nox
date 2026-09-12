@@ -108,22 +108,69 @@ func parseCandidateKinds(rule *Rule) map[candidateKind]bool {
 // threshold.
 type EntropyMatcher struct{}
 
-// Match scans content line by line, extracts candidate strings using
-// multiple tokenizers, calculates Shannon entropy for each candidate, and
-// returns matches that exceed the threshold. The threshold can be
-// customised via rule.Metadata["entropy_threshold"]. When
-// rule.Metadata["require_context"] is "true", candidates are only
-// reported if the line also contains a secret-suggestive keyword.
-func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
-	threshold := defaultEntropyThreshold
-	if v, ok := rule.Metadata["entropy_threshold"]; ok {
+// kindPolicy is the threshold and context requirement that apply to one
+// candidate kind.
+//
+// A threshold is only meaningful against the alphabet it is measured over.
+// Shannon entropy cannot exceed log2(|alphabet|): 5.95 bits for the 62 symbols
+// a base64-ish blob draws on, but 4.0 for the 16 a hex string draws on. A
+// single number therefore cannot serve both — 5.0 rejects every hex string
+// that exists, and 3.5 accepts almost every base64 one. That is why the
+// high-entropy hex detector had to be a separate rule with a separate
+// threshold, and why it stops having to be one now that a rule can state a
+// policy per kind.
+type kindPolicy struct {
+	threshold      float64
+	requireContext bool
+}
+
+// policyFor reads the policy for one candidate kind. `entropy_threshold` and
+// `require_context` set the default; `entropy_threshold_<kind>` and
+// `require_context_<kind>` override it for that kind alone.
+func policyFor(rule *Rule, kind candidateKind, base kindPolicy) kindPolicy {
+	p := base
+	if v, ok := rule.Metadata["entropy_threshold_"+string(kind)]; ok {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			threshold = parsed
+			p.threshold = parsed
 		}
 	}
+	if v, ok := rule.Metadata["require_context_"+string(kind)]; ok {
+		p.requireContext = v == "true"
+	}
+	return p
+}
 
-	requireContext := rule.Metadata["require_context"] == "true"
+// Match scans content line by line, extracts candidate strings using
+// multiple tokenizers, calculates Shannon entropy for each candidate, and
+// returns matches that exceed the threshold for the kind that produced them.
+// The threshold can be customised via rule.Metadata["entropy_threshold"], and
+// per kind via rule.Metadata["entropy_threshold_<kind>"]. When
+// rule.Metadata["require_context"] (or its per-kind form) is "true", candidates
+// of that kind are only reported if the line also contains a secret-suggestive
+// keyword.
+func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
+	base := kindPolicy{threshold: defaultEntropyThreshold}
+	if v, ok := rule.Metadata["entropy_threshold"]; ok {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			base.threshold = parsed
+		}
+	}
+	base.requireContext = rule.Metadata["require_context"] == "true"
+
 	wantKinds := parseCandidateKinds(rule)
+	// Resolved once per rule rather than once per candidate.
+	policies := map[candidateKind]kindPolicy{}
+	for _, k := range []candidateKind{candidateQuoted, candidateAssignment, candidateBase64, candidateHex} {
+		policies[k] = policyFor(rule, k, base)
+	}
+	// A rule whose kinds all demand context can still skip a context-free line
+	// wholesale, which is what the line-level check used to do for every rule.
+	allRequireContext := true
+	for k, p := range policies {
+		if (wantKinds == nil || wantKinds[k]) && !p.requireContext {
+			allRequireContext = false
+		}
+	}
 
 	lines := bytes.Split(content, []byte("\n"))
 	var results []MatchResult
@@ -135,16 +182,12 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		// Determine whether this line has secret-suggestive context.
 		boost := hasSecretContext(lineLower)
 
-		// When require_context is set, skip lines without secret context
-		// entirely. This prevents low-confidence rules from firing on
-		// lines that contain no secret-suggestive keywords.
-		if requireContext && !boost {
+		// A line with no secret context is skipped wholesale only when every
+		// kind this rule reports on demands context. Otherwise the requirement
+		// is applied per candidate below, because one rule can now hold kinds
+		// that differ on it.
+		if allRequireContext && !boost {
 			continue
-		}
-
-		effective := threshold
-		if boost {
-			effective -= contextBoostReduction
 		}
 
 		// Collect unique candidates from all tokenizers, tracking their
@@ -189,6 +232,32 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 
 		for _, c := range candidates {
 			if !candidateMatchesKinds(c.kinds, wantKinds) {
+				continue
+			}
+			// The lowest threshold among the kinds this rule accepts for this
+			// candidate, skipping any kind whose context requirement the line
+			// does not meet. A candidate genuinely belongs to several kinds —
+			// `secret_key = "aF3..."` is an assignment RHS and a base64-shaped
+			// blob at once — and reporting it if ANY accepted kind accepts it
+			// is what the separate rules did between them.
+			effective, ok := 0.0, false
+			for k := range c.kinds {
+				if wantKinds != nil && !wantKinds[k] {
+					continue
+				}
+				p := policies[k]
+				if p.requireContext && !boost {
+					continue
+				}
+				t := p.threshold
+				if boost {
+					t -= contextBoostReduction
+				}
+				if !ok || t < effective {
+					effective, ok = t, true
+				}
+			}
+			if !ok {
 				continue
 			}
 			if len(c.text) < minCandidateLen {

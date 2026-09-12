@@ -17,6 +17,11 @@ import (
 // Measured 2026-09-12 across the rule-diff corpus, SEC-163 produced 122
 // findings and 117 of them were the value of a JSON field named `md5` in two
 // generated test fixtures in metosin/reitit.
+//
+// The hex kind now belongs to SEC-161, which is why these tests name that ID:
+// SEC-163 was retired into it once the entropy matcher could hold a threshold
+// per candidate kind. What the tests assert is unchanged — a digest is not
+// reported, a real hex secret is.
 
 // scanRuleIDs runs the full analyzer — engine, dedup and every refiner — over
 // one file. It goes through ScanArtifacts rather than ScanFile because the
@@ -64,16 +69,16 @@ const gistURL = "UserData:\n  Fn::Sub: \"curl -o gg.sh " +
 
 // TestADigestLabelledHexValueIsNotAKey is the measured case, 117 of the 122.
 func TestADigestLabelledHexValueIsNotAKey(t *testing.T) {
-	if ids := scanRuleIDs(t, "users.json", userRecord); hasRule(ids, "SEC-163") {
-		t.Errorf("SEC-163 reported an md5 digest as a possible secret key; the "+
+	if ids := scanRuleIDs(t, "users.json", userRecord); hasRule(ids, "SEC-161") {
+		t.Errorf("an md5 digest was reported as a possible secret key; the "+
 			"`password` field four keys to its left authorised it. got %v", ids)
 	}
 }
 
 // TestAHexRunInAURLPathIsNotAKey is the other measured case, 4 of the 122.
 func TestAHexRunInAURLPathIsNotAKey(t *testing.T) {
-	if ids := scanRuleIDs(t, "cfn.yaml", gistURL); hasRule(ids, "SEC-163") {
-		t.Errorf("SEC-163 reported a gist id inside a URL as a possible secret key; "+
+	if ids := scanRuleIDs(t, "cfn.yaml", gistURL); hasRule(ids, "SEC-161") {
+		t.Errorf("a gist id inside a URL was reported as a possible secret key; "+
 			"got %v", ids)
 	}
 }
@@ -117,8 +122,8 @@ func TestARealHexKeyStillFires(t *testing.T) {
 			"proxy_set_header X-Api-Key 0c39ef1320ec7f799065f3b3385a2f4e;\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if ids := scanRuleIDs(t, tc.path, tc.body); !hasRule(ids, "SEC-163") {
-				t.Errorf("SEC-163 stopped reporting a hex secret written as %s; the "+
+			if ids := scanRuleIDs(t, tc.path, tc.body); !hasRule(ids, "SEC-161") {
+				t.Errorf("the hex kind stopped reporting a secret written as %s; the "+
 					"refutation is wider than the false positives it was measured on. got %v",
 					tc.name, ids)
 			}
@@ -204,5 +209,51 @@ func TestARefutationNeedsTheValueToBeHex(t *testing.T) {
 	if isLabelledDigest([]byte(line), f) {
 		t.Error("a non-hex value labelled md5 was refuted as a digest; the hex gate " +
 			"is what keeps this off the provider rules")
+	}
+}
+
+// SEC-696 ("Detected Timber API Key") is retired into SEC-005.
+//
+// It was one of 69 rules imported from Gitleaks with the shape
+// `[a-zA-Z0-9]{32}` plus one vendor keyword, and the only one of the 69 whose
+// keyword is an ordinary English word AND which carries no secret-shape
+// post-filter. The two tests below are the measurement that decided it, kept so
+// the reasoning survives the commit message.
+
+// TestARealTimberKeyIsStillReported is the recall half. Retiring a rule is only
+// safe if something still reports what it reported.
+func TestARealTimberKeyIsStillReported(t *testing.T) {
+	const leak = "timber_api_key = \"Zq8Wm2Nx7Cv5Bk1Lp9Rt4Hy6Jf3Ds0Gx\"\n"
+	if ids := scanRuleIDs(t, "config.py", leak); !hasRule(ids, "SEC-005") {
+		t.Errorf("a hardcoded Timber-shaped API key is no longer reported by anything; "+
+			"got %v", ids)
+	}
+}
+
+// TestSEC696IsRetiredIntoSEC005 keeps the waiver alias honest: deleting the ID
+// outright would un-waive, in every consuming repo, findings an operator
+// accepted against it.
+func TestSEC696IsRetiredIntoSEC005(t *testing.T) {
+	set := NewAnalyzer().Rules()
+	if _, ok := set.ByID("SEC-696"); ok {
+		t.Error("SEC-696 is still a live rule")
+	}
+	r, ok := set.ByID("SEC-005")
+	if !ok {
+		t.Fatal("SEC-005 not found")
+	}
+	var found bool
+	for _, ret := range r.Retires {
+		if ret.ID == "SEC-696" {
+			found = true
+			if ret.Pattern == "" {
+				t.Error("SEC-696's retirement carries no pattern, so a waiver written " +
+					"against it cannot reproduce its fingerprint")
+			}
+		}
+	}
+	if !found {
+		t.Error("SEC-005 does not carry the SEC-696 alias; every waiver written against " +
+			"SEC-696 would silently stop matching")
 	}
 }
