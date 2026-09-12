@@ -106,6 +106,12 @@
       "url": "https://github.com/shelljs/shelljs",
       "sha": "f364da6625945414440bb15210f102ba5fc10ed9",
       "why": "The only JavaScript in the corpus, and all 6 of its taint findings are in .js (checked -- see the note above on node-gyp). Deliberately a repo that shells out, because child_process is the JS surface the taint engine models. Measured when import resolution landed: TAINT-002 went 0 -> 2, a rule that fired ZERO times here before, through `var child = require('child_process')` -- so this entry demonstrably sees the alias path rather than only the one idiom that always worked. 1.2M and 1.2s, second only to kubernetes/examples"
+    },
+    {
+      "name": "ansible-for-devops",
+      "url": "https://github.com/geerlingguy/ansible-for-devops",
+      "sha": "86e1bf80098239cd995d54217585e8d61117d2e7",
+      "why": "The only ANSIBLE in the corpus. 45 rules (IAC-186 to IAC-230) were modelled and unwitnessed by this gate, which is how two of them could sit unable to fire while the diff stayed green. 162 of its 178 findings land in .yml playbooks and roles and the rest in four Dockerfiles -- judged by where findings LAND, per the note above: ansible/ansible-examples puts 48 of 88 in synthetic language_features/ demos, and molecule puts 115 of 121 in its own Python test fixtures. Measured on the commit that added it: IAC-243 went 23 -> 0, a Kustomize rule reporting every `vars:` block in every playbook as 'deprecated vars feature', and no other repository here could witness that drop. It also controls both Ansible rules anchored to end-of-text (IAC-211 `src:`, IAC-214 `name:` FQCN) and carries the `${MOLECULE_DISTRO:-rockylinux9}-ansible:latest` form that no latest-tag rule resolves. 1.5M, 43 distinct rules fire, 0.3s -- the second cheapest entry here."
     }
   ]
 }
