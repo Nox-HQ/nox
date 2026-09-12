@@ -655,7 +655,27 @@ pass), and a **comment** was counted as a guard — `condRe` matches `if` anywhe
 on a line, which is the mistake #599 fixed in nox's IaC rules, sitting in the
 instrument that measures them.
 
-**So 9.1 and 9.2 are what remains of Phase 9, and 9.3 stays deliberately last.**
+**Decided 2026-09-12: taint recall gets roadmap priority; path constraints
+remain research until the measured residual problem justifies promotion.**
+
+That settles the fork 9.1 had been sitting on. Building path constraints into
+`taint.Flow` is path-sensitive analysis — a larger project than the stage it
+would feed, for a stage operating on 2.3% of findings — and the evidence points
+the other way: flows rose 1.8x and their language spread went 2 to 7 purely from
+recall work, while the guards that exist remain equality and interval with zero
+string-theory or regex instances across 3,834 findings.
+
+So 9.1 and 9.2 are not scheduled. They become promotable when a measured
+residual class survives cheap techniques, which is the same bar 9.3 already
+had to clear and did not. `core/smt_spike_measurement_test.go` is the
+instrument that would show it, and RESULT.md's re-run trigger is the signal.
+
+The corpus expansion in #633 is the first instalment of the recall priority, and
+it earned its place immediately: adding Java, Ruby, PHP, Rust, Kotlin and Swift
+found a rule firing 3,040 times on one line, and 496,141 findings on a single C#
+SDK.
+
+**9.1 and 9.2 are what remains of Phase 9 on paper, and 9.3 stays deliberately last.**
 9.1's target class is now visible: 21 guards, of which 13 are equality, 4
 interval or length, 1 an interprocedural call, 1 a filesystem predicate. That is
 the ground "lightweight trigger solving" has to cover, and none of it needs a
