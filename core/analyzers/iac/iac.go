@@ -116,6 +116,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	out := dropArtifactsWhenAlways(results, content, drop)
 	out = dropMatchesInComments(path, out, content, drop)
 	out = dropKindReferences(path, out, content, drop)
+	// Applicability is decided by the document, not by its name. See
+	// document_kind.go.
+	out = dropRulesOutsideTheirDocumentKind(path, out, content, a.engine.Rules(), drop)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
