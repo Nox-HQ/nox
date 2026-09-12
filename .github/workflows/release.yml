@@ -26,6 +26,22 @@ jobs:
         with:
           syft-version: v1.22.0
 
+      # The delta ledger's lifecycle belongs to the release that moves the
+      # baseline it is written against.
+      #
+      # scripts/rule-diff.sh already refuses a stale ledger, but it runs only
+      # when a pull request touches rule definitions — so the cost of forgetting
+      # lands on whichever unrelated change is next. v1.35.0 shipped with
+      # sixteen entries still explaining drops from v1.34.0, and the PR that
+      # tripped over it two days later had nothing to do with any of them.
+      #
+      # Cheap, and deliberately before anything is published: a release that
+      # fails here has built nothing and signed nothing.
+      - name: Delta ledger is rolled for this release
+        env:
+          NOX_RELEASE_TAG: ${{ github.ref_name }}
+        run: go test ./core/ruleledger/ -run TestTheReleaseInvariant -v
+
       # Probe the Homebrew tap credential BEFORE running goreleaser.
       #
       # WHY: publishing the tap formula is a packaging convenience, but it ran
