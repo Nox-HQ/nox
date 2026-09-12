@@ -88,6 +88,247 @@ func isServerlessManifest(path string, content []byte) bool {
 	return service
 }
 
+// kustomizeFamilyTag marks a rule as belonging to the Kustomize family, and
+// carries the same shape of defect the Serverless family carried:
+//
+//	{"kustomization.yaml", "kustomization.yml", "*.yaml", "*.yml"}
+//
+// Measured 2026-09-12 across the rule-diff corpus, 37 of the family's 40
+// findings were on documents that are not kustomizations at all: `Count: 1` in
+// a CloudFormation ResourceSignal and `InstanceCount: 1` on an EMR cluster
+// reported as "Kustomize sets replica count to 1 (no HA)", `replicaCount: 1`
+// in a Helm values file reported the same way, `secretNamespace: "default"` in
+// a GlusterFS StorageClass reported as "Kustomize deploys to default
+// namespace", and `image: ...:latest` in a docker-compose service reported as
+// "Kustomize uses latest image tag".
+const kustomizeFamilyTag = "kustomize"
+
+// kustomizeOnlyTopLevelKeys are fields that only a kustomization declares at
+// the top level.
+//
+// The ambiguous ones are deliberately absent. `resources`, `labels`, `images`,
+// `replicas`, `patches` and `namespace` are all kustomization fields AND
+// ordinary keys elsewhere — podinfo's charts/podinfo/values.yaml, a Helm
+// values file, declares a top-level `resources:` — so admitting them by name
+// would re-open the family onto exactly the documents this gate exists to
+// close it against. `openapi` and `components` are absent for the sharper
+// reason that they are the top-level keys of an OpenAPI specification, the
+// document that produced the Serverless family's 268 findings.
+var kustomizeOnlyTopLevelKeys = map[string]bool{
+	"bases": true, "patchesStrategicMerge": true, "patchesJson6902": true,
+	"configMapGenerator": true, "secretGenerator": true, "generatorOptions": true,
+	"namePrefix": true, "nameSuffix": true, "commonLabels": true,
+	"commonAnnotations": true, "helmCharts": true, "helmGlobals": true,
+	"transformers": true, "buildMetadata": true, "sortOptions": true,
+	"crds": true, "configurations": true,
+}
+
+// isKustomization reports whether content is a Kustomize kustomization.
+//
+// Three things can say so, in order of how much they prove:
+//
+//   - `kind: Kustomization` (or `Component`), or an apiVersion under
+//     kustomize.config.k8s.io. All eight kustomizations in the corpus declare
+//     both.
+//   - a top-level field only a kustomization has.
+//   - a top-level `resources:` introducing a LIST. Kustomize's `resources` is
+//     a sequence of paths; the `resources:` in a Helm values file or a pod
+//     spec is a mapping of limits and requests, and the first character after
+//     the key is what separates them. Without this branch a kustomization
+//     written before apiVersion/kind were conventional — `resources:` and
+//     nothing else — would be missed, and a missed finding costs more than a
+//     false one.
+//
+// One thing is decisive against: a top-level `kind:` naming anything else. A
+// StorageClass is a StorageClass whatever else it contains, and that single
+// negative is what keeps every Kubernetes manifest in a repository out of the
+// family.
+//
+// The file name is deliberately not consulted, including the canonical
+// `kustomization.yaml`. The instruction this gate exists to enforce is that a
+// name is a discovery hint, and a gate that exempts the one name the family is
+// built around does not enforce it.
+func isKustomization(_ string, content []byte) bool {
+	// A YAML stream may hold several documents. A kustomization is a single
+	// document, but a file that bundles one with its output should still be
+	// treated as carrying a kustomization: the gate errs toward applying.
+	for _, doc := range splitYAMLDocuments(string(content)) {
+		if documentIsKustomization(doc) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitYAMLDocuments splits a YAML stream on its `---` document separators.
+func splitYAMLDocuments(content string) []string {
+	var docs []string
+	var cur []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimRight(line, " \t\r") == "---" {
+			docs = append(docs, strings.Join(cur, "\n"))
+			cur = nil
+			continue
+		}
+		cur = append(cur, line)
+	}
+	return append(docs, strings.Join(cur, "\n"))
+}
+
+// documentIsKustomization applies the decision to a single YAML document.
+func documentIsKustomization(doc string) bool {
+	var qualifies bool
+	lines := strings.Split(doc, "\n")
+	for i, line := range lines {
+		key, value, ok := topLevelKey(line)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "kind":
+			if v := unquote(value); v == "Kustomization" || v == "Component" {
+				return true
+			}
+			// Some other Kubernetes resource. Decisive, and returned rather
+			// than recorded, because nothing later in the document can make a
+			// StorageClass a kustomization.
+			if value != "" {
+				return false
+			}
+		case "apiVersion":
+			if strings.Contains(value, "kustomize.config.k8s.io") {
+				return true
+			}
+		case "resources":
+			// A sequence, not a mapping: `resources:` followed by `- path`.
+			if value == "" && nextLineIsSequenceItem(lines[i+1:]) {
+				qualifies = true
+			}
+		default:
+			if kustomizeOnlyTopLevelKeys[key] {
+				qualifies = true
+			}
+		}
+	}
+	return qualifies
+}
+
+// nextLineIsSequenceItem reports whether the next meaningful line opens a YAML
+// sequence.
+func nextLineIsSequenceItem(rest []string) bool {
+	for _, line := range rest {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		return strings.HasPrefix(trimmed, "- ") || trimmed == "-"
+	}
+	return false
+}
+
+// topLevelKey splits a document-level `key: value` line. A line that is
+// indented, blank, commented, or not a mapping entry yields ok == false —
+// indentation is what keeps a `kind:` nested inside some unrelated structure
+// from speaking for the document.
+func topLevelKey(line string) (key, value string, ok bool) {
+	if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '#' || line[0] == '-' {
+		return "", "", false
+	}
+	idx := strings.Index(line, ":")
+	if idx <= 0 {
+		return "", "", false
+	}
+	key = strings.TrimSpace(line[:idx])
+	value = strings.TrimSpace(line[idx+1:])
+	if i := strings.Index(value, " #"); i >= 0 {
+		value = strings.TrimSpace(value[:i])
+	}
+	if key == "" || strings.ContainsAny(key, " \t") {
+		return "", "", false
+	}
+	return key, value, true
+}
+
+// unquote strips one layer of YAML quoting from a scalar.
+func unquote(v string) string {
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		return v[1 : len(v)-1]
+	}
+	return v
+}
+
+// documentFormatTags is the vocabulary of tags that name a DOCUMENT FORMAT,
+// as opposed to the severity, theme or cloud provider a rule is also tagged
+// with. A rule carrying more than one of these describes a condition that
+// several formats express, and no single format's document kind can speak for
+// it.
+//
+// This is not hypothetical. IAC-007 ("Container runs in privileged mode",
+// CRITICAL) absorbed IAC-065 (CloudFormation) and IAC-237 (Kustomize) and
+// carries all three tags so their waivers keep resolving. Gating on the
+// `kustomize` tag alone therefore switched it off wherever the document was
+// not a kustomization — measured as 9 findings lost on Kubernetes manifests in
+// kubernetes/examples, on a rule that has nothing to do with Kustomize beyond
+// having inherited its retired ID.
+var documentFormatTags = map[string]bool{
+	"kubernetes": true, "kustomize": true, "serverless": true,
+	"cloudformation": true, "terraform": true, "ansible": true,
+	"github-actions": true, "arm": true, "docker": true,
+	"docker-compose": true, "helm": true,
+}
+
+// scopedToOneFormat reports whether tag is the ONLY document format the rule
+// names. A rule that names several is out of scope for every document-kind
+// gate: absorbing a second format's rule is precisely what makes a rule apply
+// more widely, not less.
+func scopedToOneFormat(r *rules.Rule, tag string) bool {
+	var formats int
+	var saw bool
+	for _, t := range r.Tags {
+		if documentFormatTags[t] {
+			formats++
+			if t == tag {
+				saw = true
+			}
+		}
+	}
+	return saw && formats == 1
+}
+
+// documentKindGate binds a rule family to the question of whether the document
+// in hand is of that family's kind.
+//
+// The table is the point. Two families carried the same defect, and a third
+// added tomorrow inherits the gate by declaring a row here rather than by
+// anyone remembering to edit a filter.
+type documentKindGate struct {
+	tag string
+	is  func(path string, content []byte) bool
+	// why states, in the finding's own record, what the document would have
+	// had to say for the rule to apply.
+	why string
+}
+
+var documentKindGates = []documentKindGate{
+	{
+		tag: serverlessFamilyTag,
+		is:  isServerlessManifest,
+		why: "this rule describes a Serverless Framework manifest, and this " +
+			"document declares neither `service` nor `provider`, so it is not one. " +
+			"The file name is a hint about what to parse, not evidence that the " +
+			"rule applies",
+	},
+	{
+		tag: kustomizeFamilyTag,
+		is:  isKustomization,
+		why: "this rule describes a Kustomize kustomization, and this document " +
+			"declares no `kind: Kustomization`, no kustomize.config.k8s.io " +
+			"apiVersion and no kustomization-only field, so it is not one. " +
+			"The file name is a hint about what to parse, not evidence that the " +
+			"rule applies",
+	},
+}
+
 // dropRulesOutsideTheirDocumentKind removes findings from a rule family whose
 // document is not of that family's kind.
 //
@@ -99,38 +340,35 @@ func dropRulesOutsideTheirDocumentKind(path string, in []findings.Finding, conte
 	if len(in) == 0 || set == nil {
 		return in
 	}
-	// Computed once per file, and only when a family rule actually matched.
-	var checked, serverless bool
+	// Each detector is run at most once per file, and only when a rule of its
+	// family actually matched.
+	type memo struct{ checked, is bool }
+	seen := make([]memo, len(documentKindGates))
 
 	kept := in[:0]
 	for _, f := range in {
 		rule, ok := set.ByID(f.RuleID)
-		if !ok || !hasTag(rule, serverlessFamilyTag) {
+		if !ok {
 			kept = append(kept, f)
 			continue
 		}
-		if !checked {
-			serverless = isServerlessManifest(path, content)
-			checked = true
+		dropped := false
+		for i, gate := range documentKindGates {
+			if !scopedToOneFormat(rule, gate.tag) {
+				continue
+			}
+			if !seen[i].checked {
+				seen[i] = memo{checked: true, is: gate.is(path, content)}
+			}
+			if !seen[i].is {
+				drop(f, gate.why)
+				dropped = true
+				break
+			}
 		}
-		if !serverless {
-			drop(f, "this rule describes a Serverless Framework manifest, and this "+
-				"document declares neither `service` nor `provider`, so it is not one. "+
-				"The file name is a hint about what to parse, not evidence that the "+
-				"rule applies")
-			continue
+		if !dropped {
+			kept = append(kept, f)
 		}
-		kept = append(kept, f)
 	}
 	return kept
-}
-
-// hasTag reports whether a rule carries the given tag.
-func hasTag(r *rules.Rule, tag string) bool {
-	for _, t := range r.Tags {
-		if t == tag {
-			return true
-		}
-	}
-	return false
 }
