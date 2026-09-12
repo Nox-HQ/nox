@@ -409,7 +409,13 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-031", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)image\s*:\s*["']?[a-zA-Z0-9._/-]+:latest["']?\s*$`,
+			// (?m) is load-bearing. Go's `$` matches end of TEXT unless the
+			// multi-line flag is set, so as shipped this rule could only fire
+			// where the image line was the last line of the file. It matched
+			// zero times across every YAML file in the rule-diff corpus while
+			// `image: mysql:latest`, `image: minio/minio:latest` (twice) sat
+			// in kubernetes/examples unreported.
+			pattern:     `(?im)image\s*:\s*["']?[a-zA-Z0-9._/-]+:latest["']?\s*$`,
 			description: "Container image uses latest tag in Kubernetes manifest",
 			cwe:         "CWE-829", keywords: []string{":latest"},
 			filePatterns: []string{"*.yaml", "*.yml"},
