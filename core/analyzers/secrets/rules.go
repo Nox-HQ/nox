@@ -754,8 +754,26 @@ func builtinSecretRules() []*rules.Rule {
 			// does not carry the alias — a retired ID may have only one host
 			// (rules_dedup_test.go), and this is the host that covers the form
 			// the rule was named for.
+			// SEC-692 ("ELK Stack") and SEC-697 ("Literal") are retired here too,
+			// measured the same way and with the same result. Both carry a
+			// secret-shape post-filter that SEC-696 lacked, and it does not
+			// save them: that filter rejects identifiers and dictionary words,
+			// not the random 32-character runs these rules are looking at.
+			//
+			//	elk_api_key = "<32 alphanumerics>"        -> SEC-005 reports it,
+			//	                                            the vendor rule does not
+			//	see elk migration docs: <32 alnum>       -> the vendor rule is
+			//	                                            the ONLY reporter
+			//	the literal build hash is <32 alnum>     -> likewise
+			//
+			// These three are the only rules of the 69 whose single keyword is
+			// an ordinary English word, which is what makes the prose case
+			// reachable at all. `datadog`, `adyen`, `sentry` and the rest do not
+			// appear beside a 32-character run by accident.
 			retires: []rules.RetiredRule{
 				{ID: "SEC-696", Pattern: `[a-zA-Z0-9]{32}`},
+				{ID: "SEC-692", Pattern: `\b[a-zA-Z0-9]{32}\b`},
+				{ID: "SEC-697", Pattern: `\b[a-zA-Z0-9]{32}\b`},
 			},
 			remediation: "Move API keys to environment variables or a secrets manager. Avoid committing credentials to version control.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
@@ -3522,13 +3540,15 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-689", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected LogDNA API Key", cwe: "CWE-798", keywords: []string{"logdna"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-690", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Papertrail API Key", cwe: "CWE-798", keywords: []string{"papertrail"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-691", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Sumo Logic API Key", cwe: "CWE-798", keywords: []string{"sumologic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-692", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected ELK Stack API Key", cwe: "CWE-798", keywords: []string{"elk"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
+		// SEC-692 ("Detected ELK Stack API Key") is retired into SEC-005, for the
+		// reason SEC-696 was. See the `retires` there.
 		{id: "SEC-693", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Splunk API Key", cwe: "CWE-798", keywords: []string{"splunk"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-694", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected CloudWatch Logs API Key", cwe: "CWE-798", keywords: []string{"cloudwatch"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-695", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Stackify API Key", cwe: "CWE-798", keywords: []string{"stackify"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		// SEC-696 ("Detected Timber API Key") is retired into SEC-005. See the
 		// `retires` there for the measurement.
-		{id: "SEC-697", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Literal API Key", cwe: "CWE-798", keywords: []string{"literal"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
+		// SEC-697 ("Detected Literal API Key") is retired into SEC-005, for the
+		// reason SEC-696 was. See the `retires` there.
 		{id: "SEC-698", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Honeybadger API Key", cwe: "CWE-798", keywords: []string{"honeybadger"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-699", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected TrackJS API Key", cwe: "CWE-798", keywords: []string{"trackjs"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-700", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Airbrake API Key", cwe: "CWE-798", keywords: []string{"airbrake"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

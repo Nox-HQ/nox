@@ -76,8 +76,14 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// anchored there can see whether one exists. It never fired — `$` with no
 	// (?m), a lower-case `server\.tool` against Go's `Tool`, and a `[^.]*` that
 	// cannot cross the `.` of a fluent chain — and it had no test.
-	if got := len(cat); got != 1528 {
-		t.Errorf("Catalog() returned %d rules, want 1528", got)
+	// 1528 -> 1526 retired SEC-692 ("ELK Stack") and SEC-697 ("Literal") into
+	// SEC-005, alongside SEC-696. These three are the only rules of the 69
+	// sharing that Gitleaks shape whose single keyword is an ordinary English
+	// word, which is what makes the prose case reachable: measured, each is
+	// suppressed by SEC-005 on the assignment it exists for and is the sole
+	// reporter on a 32-character run sitting near the word in prose.
+	if got := len(cat); got != 1526 {
+		t.Errorf("Catalog() returned %d rules, want 1526", got)
 	}
 }
 
