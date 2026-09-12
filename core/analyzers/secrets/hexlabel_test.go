@@ -230,6 +230,61 @@ func TestARealTimberKeyIsStillReported(t *testing.T) {
 	}
 }
 
+// TestTheThreeEnglishWordVendorRulesAreRetired. SEC-692 ("elk") and SEC-697
+// ("literal") measure exactly like SEC-696, and their secret-shape post-filter
+// — which SEC-696 lacked — does not save them: that filter rejects identifiers
+// and dictionary words, not the random 32-character runs these rules look at.
+//
+//	elk_api_key = "<32 alnum>"          SEC-005 reports it, the vendor rule does not
+//	see elk migration docs: <32 alnum>  the vendor rule is the ONLY reporter
+//
+// They are the only three of the 69 rules sharing this Gitleaks shape whose
+// single keyword is an ordinary English word, which is what makes the prose
+// case reachable at all.
+func TestTheThreeEnglishWordVendorRulesAreRetired(t *testing.T) {
+	set := NewAnalyzer().Rules()
+	for _, id := range []string{"SEC-692", "SEC-696", "SEC-697"} {
+		if _, ok := set.ByID(id); ok {
+			t.Errorf("%s is still a live rule", id)
+		}
+	}
+	r, ok := set.ByID("SEC-005")
+	if !ok {
+		t.Fatal("SEC-005 not found")
+	}
+	have := map[string]bool{}
+	for _, ret := range r.Retires {
+		have[ret.ID] = ret.Pattern != ""
+	}
+	for _, id := range []string{"SEC-692", "SEC-696", "SEC-697"} {
+		withPattern, listed := have[id]
+		if !listed {
+			t.Errorf("SEC-005 does not carry the %s alias; every waiver written against "+
+				"%s would silently stop matching", id, id)
+			continue
+		}
+		if !withPattern {
+			t.Errorf("%s's retirement carries no pattern, so a waiver written against it "+
+				"cannot reproduce its fingerprint", id)
+		}
+	}
+}
+
+// TestTheProseCaseIsNowSilent is the measured false positive each of the three
+// was the sole reporter of.
+func TestTheProseCaseIsNowSilent(t *testing.T) {
+	for _, body := range []string{
+		"see elk migration docs: Zq8Wm2Nx7Cv5Bk1Lp9Rt4Hy6Jf3Ds0Gx\n",
+		"the literal build hash is aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY\n",
+		"# 2114 timber wolf trail, ref Zq8Wm2Nx7Cv5Bk1Lp9Rt4Hy6Jf3Ds0Gx\n",
+	} {
+		if ids := scanRuleIDs(t, "notes.py", body); len(ids) != 0 {
+			t.Errorf("a 32-character run beside an ordinary English word still reports "+
+				"%v for %q", ids, body)
+		}
+	}
+}
+
 // TestSEC696IsRetiredIntoSEC005 keeps the waiver alias honest: deleting the ID
 // outright would un-waive, in every consuming repo, findings an operator
 // accepted against it.

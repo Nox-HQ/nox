@@ -1,6 +1,8 @@
 package iac
 
 import (
+	"strings"
+
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -491,12 +493,57 @@ func builtinAnsibleRules() []rules.Rule {
 		},
 		{
 			id: "IAC-225", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)password\s*:\s*['"][^{$'"]+['"]`,
-			description:  "Ansible variable with hardcoded password",
+			// The quotes used to be mandatory, and that was the whole gap.
+			// Measured on geerlingguy/ansible-for-devops:
+			// `MYSQL_ROOT_PASSWORD: root` and `MYSQL_PASSWORD: flask` in a
+			// docker_container env block were reported by NOTHING once the
+			// Serverless family stopped applying to every YAML file (#636) —
+			// IAC-351 is scoped to CI files, and this rule wanted a quote.
+			// YAML does not require one, and an unquoted password is not less
+			// hardcoded for it.
+			//
+			// The second branch is deliberately narrow: no `{`, no `$`, no
+			// quote, no whitespace. That is what keeps `{{ vault_password }}`,
+			// `$DB_PASSWORD` and an empty value out, which the quoted branch
+			// already excluded through `[^{$'"]`. What a charset cannot exclude
+			// is a scalar that is a keyword rather than a secret, so `validate`
+			// does that in Go where the list is readable.
+			// `^[ \t]*` and `[ \t]*` rather than `\s*`, both load-bearing, both
+			// measured:
+			//
+			//   - `\s*` crosses newlines, and the rule engine matches whole-file
+			//     content. `DomainJoinUserPassword:` with its value on the NEXT
+			//     line was reported as a hardcoded password whose value was
+			//     whatever the following line began with. IAC-351 carries the
+			//     same note for the same reason.
+			//   - unanchored, `password` matched inside a longer token:
+			//     `'{{resolve:secretsmanager:aurora-source-endpoint-password:SecretString:…}}'`
+			//     is CloudFormation's dynamic reference — the CORRECT way to
+			//     avoid hardcoding one — and the rule read `password:` out of
+			//     the secret's NAME and `SecretString` as its value. Anchoring
+			//     to the start of a line makes the match a YAML mapping key,
+			//     which is the only thing this rule is about.
+			pattern:  `(?im)^[ \t]*["']?[A-Za-z0-9_.-]*password[ \t]*:[ \t]*(?:['"][^{$'"]+['"]|[A-Za-z0-9_./+=-]+)[ \t]*$`,
+			validate: passwordValueIsLiteral,
+			// Named for what it detects rather than for where it was written.
+			// The rule's subject is a YAML mapping key whose name ends in
+			// `password` and whose value is a literal — which is not an Ansible
+			// concept, and the measurement says so: widening it reported an
+			// iSCSI CHAP password and a StorageOS API password in Kubernetes
+			// Secrets and Cassandra's default keystore password in a shipped
+			// config, all of them real and none of them Ansible. Calling those
+			// "Ansible variable with hardcoded password" is the wrong-family
+			// reporting #636 and #637 exist to remove.
+			//
+			// The `ansible` tag goes with the name. It was the only document
+			// format this rule claimed, so dropping it also takes the rule out
+			// of scope for any future Ansible document-kind gate — correctly,
+			// because it is not an Ansible rule.
+			description:  "Hardcoded password in a YAML configuration value",
 			cwe:          "CWE-798",
 			keywords:     []string{"password"},
 			filePatterns: []string{"*.yml", "*.yaml"},
-			tags:         []string{"iac", "ansible", "secrets"},
+			tags:         []string{"iac", "secrets"},
 			remediation:  "Use Ansible Vault to encrypt passwords. Run 'ansible-vault encrypt_string' for inline encryption or store all passwords in a vault-encrypted vars file. Never commit plaintext passwords to version control.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.ansible.com/ansible/latest/vault_guide/index.html"},
 		},
@@ -573,4 +620,38 @@ func builtinAnsibleRules() []rules.Rule {
 		out[i] = defs[i].toRule()
 	}
 	return out
+}
+
+// nonSecretScalars are YAML scalars that answer "what password?" with
+// something other than a password.
+//
+// `omit` is Ansible's explicit "leave this parameter out"; the booleans and
+// nulls are how a task says a password is not set at all. Reporting any of them
+// as a hardcoded credential is the false positive that the quoted-value
+// requirement used to prevent by accident, and that a charset cannot prevent on
+// purpose — they are made of exactly the characters a password is made of.
+var nonSecretScalars = map[string]bool{
+	"omit": true, "null": true, "none": true, "nil": true, "~": true,
+	"true": true, "false": true, "yes": true, "no": true, "on": true, "off": true,
+	"absent": true, "present": true, "undefined": true,
+}
+
+// passwordValueIsLiteral reports whether a `password:` match carries a literal
+// value rather than a keyword.
+//
+// It receives the matched text only — `PASSWORD: root`, quotes included when
+// the document wrote them — so it re-splits on the colon rather than being
+// handed the value. That is the contract of rules.Rule.ValidateMatch: a pure
+// function of the match, which is what keeps it from smuggling in line state.
+func passwordValueIsLiteral(matchText string) bool {
+	_, value, ok := strings.Cut(matchText, ":")
+	if !ok {
+		return false
+	}
+	value = strings.TrimSpace(value)
+	value = strings.Trim(value, `"'`)
+	if value == "" {
+		return false
+	}
+	return !nonSecretScalars[strings.ToLower(value)]
 }
