@@ -1,7 +1,9 @@
 package iac
 
 import (
+	"bytes"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -257,6 +259,200 @@ func unquote(v string) string {
 	return v
 }
 
+// cloudformationFamilyTag marks a rule as belonging to the CloudFormation
+// family, which scopes itself with
+//
+//	{"*.template", "*.json", "*.yaml", "*.yml"}
+//
+// on 31 of its 31 single-format rules — the widest catch-all in the catalogue.
+// A CloudFormation rule therefore applied to every YAML and every JSON file in
+// any repository.
+const cloudformationFamilyTag = "cloudformation"
+
+// awsResourceType matches the `Type:` of a CloudFormation resource in either
+// serialisation: `Type: AWS::S3::Bucket` in YAML, `"Type": "AWS::S3::Bucket"`
+// in JSON. The `AWS::`, `Alexa::` and `Custom::` namespaces are CloudFormation's
+// own and appear nowhere else, which is what makes this a document test rather
+// than a keyword.
+var awsResourceType = regexp.MustCompile(`["']?Type["']?\s*:\s*["']?(?:AWS|Alexa|Custom)::`)
+
+// isCloudFormationTemplate reports whether content is a CloudFormation (or SAM)
+// template.
+//
+// Unlike the other detectors here this one does not read top-level keys, because
+// the family covers JSON as well as YAML and a JSON template indents everything.
+// It asks instead for the two things a template cannot omit and nothing else
+// writes: the format-version declaration, or a resource in an AWS type
+// namespace. SAM templates are covered by the `Transform` line they must carry.
+//
+// It errs toward applying: any ONE of the three is enough.
+func isCloudFormationTemplate(_ string, content []byte) bool {
+	if bytes.Contains(content, []byte("AWSTemplateFormatVersion")) {
+		return true
+	}
+	if awsResourceType.Match(content) {
+		return true
+	}
+	if bytes.Contains(content, []byte("AWS::Serverless")) {
+		// SAM: `Transform: AWS::Serverless-2016-10-31`.
+		return true
+	}
+	// A top-level `Resources:` — capital R, which is CloudFormation's own
+	// section name. The Serverless Framework spells its raw-CFN block
+	// `resources:` and an ARM template spells its array `resources:`, both
+	// lower-case, so the capital is load-bearing and this check is
+	// case-sensitive on purpose.
+	//
+	// It is here because the first two tests were stricter than the format:
+	// a reduced template, a macro fragment or an included snippet carries the
+	// section without necessarily carrying a `Type:` line in the same file.
+	for _, doc := range splitYAMLDocuments(string(content)) {
+		for _, line := range strings.Split(doc, "\n") {
+			if key, value, ok := topLevelKey(line); ok && key == "Resources" && value == "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// githubActionsFamilyTag and ciPipelineFamilyTag mark the two CI families.
+// Between them 38 of their 39 single-format rules were scoped by a YAML
+// catch-all — ghaFilePatterns and ciFilePatterns both list the specific name
+// AND `*.yml`/`*.yaml`, which is the shape that made the specific name
+// decoration in the Serverless family.
+const (
+	githubActionsFamilyTag = "github-actions"
+	ciPipelineFamilyTag    = "ci-cd"
+)
+
+// isGitHubActionsWorkflow reports whether content is a GitHub Actions workflow.
+//
+// A workflow declares `jobs:` at the top level and nothing else in common use
+// does. The second test is what a job is made of: `runs-on`, `steps` or `uses`.
+// Requiring both keeps a document that merely has a `jobs:` key — a Nomad spec,
+// an arbitrary config — out of the family.
+//
+// `on:` is deliberately NOT required. YAML 1.1 reads a bare `on` as the boolean
+// true, so workflows in the wild write it quoted, unquoted, or not at all when
+// the workflow is only ever called; keying on it would make the gate depend on
+// a quoting accident.
+func isGitHubActionsWorkflow(_ string, content []byte) bool {
+	var hasJobs bool
+	for _, doc := range splitYAMLDocuments(string(content)) {
+		for _, line := range strings.Split(doc, "\n") {
+			if key, _, ok := topLevelKey(line); ok && key == "jobs" {
+				hasJobs = true
+			}
+		}
+	}
+	if !hasJobs {
+		return false
+	}
+	return bytes.Contains(content, []byte("runs-on")) ||
+		bytes.Contains(content, []byte("steps:")) ||
+		bytes.Contains(content, []byte("uses:"))
+}
+
+// isGitLabPipeline reports whether content is a GitLab CI pipeline.
+//
+// GitLab has no single mandatory key, so the test is the shape: a pipeline-level
+// keyword at the top level, or a top-level job — a mapping entry whose own block
+// declares `script:` or `trigger:`, which is what makes a GitLab job a job.
+func isGitLabPipeline(content []byte) bool {
+	lines := strings.Split(string(content), "\n")
+	for i, line := range lines {
+		key, value, ok := topLevelKey(line)
+		if !ok {
+			continue
+		}
+		switch key {
+		// GitLab's pipeline-level keywords. `variables`, `image`, `services`,
+		// `before_script`, `after_script` and `cache` are here because a
+		// pipeline may consist of nothing else — a fixture or an `include`d
+		// fragment often does — and because Azure Pipelines spells its
+		// variables block the same way, which is also a CI pipeline.
+		case "stages", "stage", "workflow", "default", "include", "variables",
+			"image", "services", "before_script", "after_script", "cache":
+			return true
+		}
+		if value != "" {
+			continue // A scalar cannot be a job.
+		}
+		if blockDeclares(lines[i+1:], "script", "trigger") {
+			return true
+		}
+	}
+	return false
+}
+
+// blockDeclares reports whether the indented block beginning at rest opens with
+// one of the given keys at its own level.
+func blockDeclares(rest []string, keys ...string) bool {
+	for _, line := range rest {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if line == trimmed {
+			return false // Back at the top level: the block ended.
+		}
+		for _, k := range keys {
+			if strings.HasPrefix(trimmed, k+":") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isCIPipeline accepts either CI dialect.
+//
+// The ci-cd rules are named for the concern rather than the vendor — "CI script
+// pipes curl to shell", "CI uses Docker-in-Docker", "CI service uses latest tag"
+// — and three of the eleven are GitLab-specific only in their wording. A
+// GitHub Actions workflow is a CI pipeline, so the gate admits one.
+func isCIPipeline(path string, content []byte) bool {
+	return isGitHubActionsWorkflow(path, content) || isGitLabPipeline(content)
+}
+
+// ansibleFamilyTag marks the Ansible family, 42 of whose 43 single-format rules
+// were scoped by `{"*.yml", "*.yaml"}` alone.
+const ansibleFamilyTag = "ansible"
+
+// ansibleMarkers are keys and tokens that only an Ansible document writes.
+//
+// They are matched anywhere rather than at the top level because an Ansible
+// playbook's top level is a SEQUENCE — `- hosts: all` — so its keys are one
+// indent in by construction, and a task file's keys are deeper still.
+var ansibleMarkers = [][]byte{
+	[]byte("hosts:"), []byte("tasks:"), []byte("roles:"), []byte("handlers:"),
+	[]byte("become:"), []byte("become_user:"), []byte("gather_facts:"),
+	[]byte("vars_files:"), []byte("include_tasks:"), []byte("import_tasks:"),
+	[]byte("include_role:"), []byte("import_playbook:"), []byte("delegate_to:"),
+	[]byte("with_items:"), []byte("galaxy_info:"), []byte("ansible.builtin."),
+	[]byte("ansible.posix."), []byte("community."), []byte("ansible_"),
+	[]byte("collections:"),
+}
+
+// isAnsibleDocument reports whether content is an Ansible playbook, task file,
+// role file or requirements file.
+//
+// It errs toward applying, and further than the other detectors here do: ONE
+// marker anywhere is enough. That is deliberate. Ansible has no format
+// declaration, no `apiVersion`, no mandatory key — a role's defaults/main.yml is
+// an ordinary mapping of arbitrary names — so a strict test would silently take
+// the family off exactly the files it is meant to read. A generous test costs a
+// false finding; a strict one costs a missed credential.
+func isAnsibleDocument(_ string, content []byte) bool {
+	for _, m := range ansibleMarkers {
+		if bytes.Contains(content, m) {
+			return true
+		}
+	}
+	return false
+}
+
 // documentFormatTags is the vocabulary of tags that name a DOCUMENT FORMAT,
 // as opposed to the severity, theme or cloud provider a rule is also tagged
 // with. A rule carrying more than one of these describes a condition that
@@ -274,25 +470,55 @@ var documentFormatTags = map[string]bool{
 	"kubernetes": true, "kustomize": true, "serverless": true,
 	"cloudformation": true, "terraform": true, "ansible": true,
 	"github-actions": true, "arm": true, "docker": true,
-	"docker-compose": true, "helm": true,
+	"docker-compose": true, "helm": true, "ci-cd": true,
 }
 
-// scopedToOneFormat reports whether tag is the ONLY document format the rule
-// names. A rule that names several is out of scope for every document-kind
-// gate: absorbing a second format's rule is precisely what makes a rule apply
-// more widely, not less.
-func scopedToOneFormat(r *rules.Rule, tag string) bool {
-	var formats int
-	var saw bool
+// detectorCanDecide reports whether the detectors in this file can read the
+// document at path at all. See the note in dropRulesOutsideTheirDocumentKind.
+func detectorCanDecide(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".yml", ".yaml", ".json", ".template", ".ts", ".js":
+		return true
+	}
+	return false
+}
+
+// gatesFor returns the document-kind gates that can speak for a rule, and
+// whether every document format the rule names has one.
+//
+// A rule that names several formats describes a condition several formats
+// express, and the question is whether ANY of them fits the document in hand.
+// Two cases fall out of that, and both matter:
+//
+//   - IAC-007 ("Container runs in privileged mode", CRITICAL) names kubernetes,
+//     cloudformation and kustomize, because it absorbed IAC-065 and IAC-237 and
+//     carries their tags so their waivers keep resolving. Kubernetes has no
+//     gate — a Kubernetes rule legitimately applies to any document declaring
+//     Kubernetes resources, including an Ansible task that embeds one — so no
+//     gate can speak for IAC-007 and it is left alone. Keying on the kustomize
+//     tag alone once switched it off across 9 manifests.
+//   - IAC-011, IAC-155 and IAC-159 name github-actions AND ci-cd. Both have
+//     gates, and a document that is a GitHub Actions workflow satisfies either,
+//     so the rule is dropped only where the document is neither dialect.
+//
+// This is the general form of the "exactly one format" rule it replaces, and it
+// behaves identically for a rule naming one.
+func gatesFor(r *rules.Rule) ([]documentKindGate, bool) {
+	var named, found int
+	var out []documentKindGate
 	for _, t := range r.Tags {
-		if documentFormatTags[t] {
-			formats++
-			if t == tag {
-				saw = true
+		if !documentFormatTags[t] {
+			continue
+		}
+		named++
+		for _, g := range documentKindGates {
+			if g.tag == t {
+				out = append(out, g)
+				found++
 			}
 		}
 	}
-	return saw && formats == 1
+	return out, named > 0 && named == found
 }
 
 // documentKindGate binds a rule family to the question of whether the document
@@ -319,6 +545,37 @@ var documentKindGates = []documentKindGate{
 			"rule applies",
 	},
 	{
+		tag: cloudformationFamilyTag,
+		is:  isCloudFormationTemplate,
+		why: "this rule describes a CloudFormation template, and this document " +
+			"declares no AWSTemplateFormatVersion, no resource in an AWS:: type " +
+			"namespace and no Serverless transform, so it is not one. The file name " +
+			"is a hint about what to parse, not evidence that the rule applies",
+	},
+	{
+		tag: githubActionsFamilyTag,
+		is:  isGitHubActionsWorkflow,
+		why: "this rule describes a GitHub Actions workflow, and this document " +
+			"declares no top-level `jobs:` with steps in it, so it is not one. The " +
+			"file name is a hint about what to parse, not evidence that the rule applies",
+	},
+	{
+		tag: ciPipelineFamilyTag,
+		is:  isCIPipeline,
+		why: "this rule describes a CI pipeline, and this document is neither a " +
+			"GitHub Actions workflow nor a GitLab pipeline: it declares no top-level " +
+			"`jobs:` with steps, no pipeline-level keyword and no job with a `script:`. " +
+			"The file name is a hint about what to parse, not evidence that the rule applies",
+	},
+	{
+		tag: ansibleFamilyTag,
+		is:  isAnsibleDocument,
+		why: "this rule describes an Ansible playbook, task file or role, and this " +
+			"document carries no Ansible marker at all — no `hosts:`, no `tasks:`, no " +
+			"`become:`, no collection-qualified module name. The file name is a hint " +
+			"about what to parse, not evidence that the rule applies",
+	},
+	{
 		tag: kustomizeFamilyTag,
 		is:  isKustomization,
 		why: "this rule describes a Kustomize kustomization, and this document " +
@@ -340,10 +597,18 @@ func dropRulesOutsideTheirDocumentKind(path string, in []findings.Finding, conte
 	if len(in) == 0 || set == nil {
 		return in
 	}
+	// "I cannot read this" is not "this is not one". Every detector here reads
+	// YAML, JSON or a JS/TS config; handed a .toml or .cfg it would answer no
+	// for the wrong reason and silently take the family off a format it never
+	// examined. IAC-050 is the case that found this: it is a CI rule and its
+	// file patterns include *.toml and *.cfg.
+	if !detectorCanDecide(path) {
+		return in
+	}
 	// Each detector is run at most once per file, and only when a rule of its
 	// family actually matched.
 	type memo struct{ checked, is bool }
-	seen := make([]memo, len(documentKindGates))
+	seen := make(map[string]memo, len(documentKindGates))
 
 	kept := in[:0]
 	for _, f := range in {
@@ -352,23 +617,30 @@ func dropRulesOutsideTheirDocumentKind(path string, in []findings.Finding, conte
 			kept = append(kept, f)
 			continue
 		}
-		dropped := false
-		for i, gate := range documentKindGates {
-			if !scopedToOneFormat(rule, gate.tag) {
-				continue
+		gates, allGated := gatesFor(rule)
+		if !allGated {
+			kept = append(kept, f)
+			continue
+		}
+		var fits bool
+		var why []string
+		for _, gate := range gates {
+			m, done := seen[gate.tag]
+			if !done {
+				m = memo{checked: true, is: gate.is(path, content)}
+				seen[gate.tag] = m
 			}
-			if !seen[i].checked {
-				seen[i] = memo{checked: true, is: gate.is(path, content)}
-			}
-			if !seen[i].is {
-				drop(f, gate.why)
-				dropped = true
+			if m.is {
+				fits = true
 				break
 			}
+			why = append(why, gate.why)
 		}
-		if !dropped {
+		if fits {
 			kept = append(kept, f)
+			continue
 		}
+		drop(f, strings.Join(why, "; and "))
 	}
 	return kept
 }

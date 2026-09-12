@@ -96,6 +96,18 @@
       "classification": "duplicate-retired",
       "pr": 640,
       "reason": "IAC-214 (\"Ansible collection without version pin\") and IAC-211 (\"Ansible Galaxy role without version pin\") report one condition split by spelling: a Galaxy requirements entry names its dependency with `src:` OR with `name:`, never both, so each rule was blind to half of the condition. IAC-211 now accepts either and carries the IAC-214 alias with the pattern that rule held at retirement, so a waiver written against IAC-214 keeps matching exactly what it used to cover. Every dropped line was read: 13 in geerlingguy/ansible-for-devops, and 12 of them are reported by IAC-211 at exactly the same line — `- name: geerlingguy.apache`, `- name: community.kubernetes` and ten more, all unpinned entries in a requirements.yml. The 13th, https-self-signed/provisioning/vars/main.yml:19, is `server_hostname: https.test`: the last line of a vars file, matched only because `$` meant end of TEXT and the hostname happens to look like a dotted Galaxy name. That is a false positive and it is gone; the file is the one that went from flagged to clean. IAC-211 rises 0 -> 65 in the same repository, every one an unpinned Galaxy requirement in a requirements.yml — it could not fire at all before, being anchored to end of text."
+    },
+    {
+      "rule": "IAC-351",
+      "classification": "applicability-narrowed",
+      "pr": 644,
+      "reason": "IAC-351 (\"CI variable with hardcoded secret\", CRITICAL) is a ci-cd rule scoped by ciFilePatterns = {\".gitlab-ci.yml\", \"*.yml\", \"*.yaml\"} — the shape #636 removed from the Serverless family, where the catch-all makes the specific name decoration. Applicability is now decided by the document: a CI rule fires only where the document is a GitHub Actions workflow or a GitLab pipeline. Every dropped finding was read: 8 across two repositories, 2 on Kubernetes Secret manifests in kubernetes/examples (quobyte-admin-secret.yaml, scaleio/secret.yaml) and 6 in Ansible playbooks and task files in ansible-for-devops. None is a CI pipeline. Nothing is lost: IAC-225 (\"Hardcoded password in a YAML configuration value\") reports all 8 at exactly the same line, which is the right name for the condition — a base64 password in a Kubernetes Secret is not a CI variable. No file went from flagged to clean."
+    },
+    {
+      "rule": "IAC-307",
+      "classification": "applicability-narrowed",
+      "pr": 644,
+      "reason": "IAC-307 (\"GHA workflow targets production environment\") is a github-actions rule scoped by ghaFilePatterns = {\".github/workflows/*.yml\", \".github/workflows/*.yaml\", \"*.yml\", \"*.yaml\"} — again the catch-all making the specific path decoration. A GitHub Actions rule now fires only where the document declares a top-level `jobs:` with steps in it. The single dropped finding was read: podinfo's deploy/overlays/production/labels.yaml:6, a Kustomize LabelTransformer whose `app.kubernetes.io/environment: production` label the rule read as a workflow environment. That file goes from flagged to clean, correctly: it is a label transformer and the finding was its only one."
     }
   ]
 }

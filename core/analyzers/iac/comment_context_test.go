@@ -54,8 +54,11 @@ func TestCommentedOutConfigurationIsNotConfiguration(t *testing.T) {
 // findings, and the direction it must never fail in is dropping one that is
 // partly real.
 func TestCodeWithATrailingCommentIsKept(t *testing.T) {
+	// A complete workflow: the `jobs:` block is what makes this a document the
+	// GitHub Actions family applies to at all (see document_kind.go).
 	ids := scan(t, "release.yml",
-		"on: push\npermissions:\n  contents: read\n  id-token: write # cosign keyless signing (OIDC)\n")
+		"on: push\npermissions:\n  contents: read\n  id-token: write # cosign keyless signing (OIDC)\n"+
+			"jobs:\n  release:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make release\n")
 	if !has(ids, "IAC-306") {
 		t.Errorf("a real `id-token: write` with a trailing comment was dropped: %v", ids)
 	}

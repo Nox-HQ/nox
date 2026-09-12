@@ -118,7 +118,11 @@ func isKustomizeRuleID(t *testing.T, id string) bool {
 	if !ok {
 		return false
 	}
-	return scopedToOneFormat(r, kustomizeFamilyTag)
+	gates, allGated := gatesFor(r)
+	if !allGated || len(gates) != 1 {
+		return false
+	}
+	return gates[0].tag == kustomizeFamilyTag
 }
 
 // assertNoKustomizeRule fails naming the rule that escaped.
@@ -215,9 +219,9 @@ func TestARuleNamingSeveralFormatsIsNotGatedByOne(t *testing.T) {
 	if !ok {
 		t.Fatal("IAC-007 not found")
 	}
-	if scopedToOneFormat(r, kustomizeFamilyTag) {
-		t.Error("IAC-007 is tagged kubernetes, cloudformation and kustomize; no single " +
-			"format's document kind may decide whether it applies")
+	if _, allGated := gatesFor(r); allGated {
+		t.Error("IAC-007 is tagged kubernetes, cloudformation and kustomize; kubernetes " +
+			"has no gate, so no gate may decide whether it applies")
 	}
 }
 
@@ -226,7 +230,7 @@ func TestARuleNamingSeveralFormatsIsNotGatedByOne(t *testing.T) {
 func TestTheWholeKustomizeFamilyIsGatedAtOnce(t *testing.T) {
 	var family int
 	for _, r := range NewAnalyzer().Rules().Rules() {
-		if scopedToOneFormat(r, kustomizeFamilyTag) {
+		if isKustomizeRuleID(t, r.ID) {
 			family++
 		}
 	}
