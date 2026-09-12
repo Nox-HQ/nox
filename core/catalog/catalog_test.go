@@ -70,8 +70,14 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// a version". It is evaluated by parsing rather than by a matcher — Compose
 	// resolves `${VAR:-default}` before it reads an image reference, so a
 	// pattern looking for `:latest` at the end of the value sees a `}`.
-	if got := len(cat); got != 1529 {
-		t.Errorf("Catalog() returned %d rules, want 1529", got)
+	// 1529 -> 1528 REMOVED MCP-008 ("MCP tool handler appears unbounded").
+	// Not retired: nothing else reports the condition, because a rate limiter
+	// is middleware declared away from the registration site and no pattern
+	// anchored there can see whether one exists. It never fired — `$` with no
+	// (?m), a lower-case `server\.tool` against Go's `Tool`, and a `[^.]*` that
+	// cannot cross the `.` of a fluent chain — and it had no test.
+	if got := len(cat); got != 1528 {
+		t.Errorf("Catalog() returned %d rules, want 1528", got)
 	}
 }
 

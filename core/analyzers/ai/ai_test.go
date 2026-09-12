@@ -1465,8 +1465,8 @@ func TestThing(t *testing.T) {
 
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 88 {
-		t.Errorf("expected 88 AI rules, got %d", got)
+	if got := len(rules); got != 87 {
+		t.Errorf("expected 87 AI rules, got %d", got)
 	}
 }
 
