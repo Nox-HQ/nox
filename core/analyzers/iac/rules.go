@@ -2303,16 +2303,9 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Set user to a non-root UID (e.g., user: \"1000:1000\") in Compose services. Running as root increases the blast radius of container escapes.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html"},
 		},
-		{
-			id: "IAC-185", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^image\s*:\s*\n?\s+pullPolicy\s*:\s*["']?Always["']?|imagePullPolicy\s*:\s*["']?Always["']?`,
-			description: "Helm values or template uses Always image pull policy without pinned tag",
-			cwe:         "CWE-829", keywords: []string{"pullPolicy", "imagePullPolicy", "Always"},
-			filePatterns: []string{"values.yaml", "values.yml", "values*.yaml", "values*.yml", "*.yaml", "*.yml"},
-			tags:         []string{"iac", "helm", "supply-chain"},
-			remediation:  "Use imagePullPolicy: IfNotPresent with pinned image tags and digests. Always pull policy with mutable tags can silently deploy different image versions.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
-		},
+		// IAC-185 is evaluated by parsing now, not by a pattern: its claim is
+		// "Always pull policy WITHOUT PINNED TAG" and the pattern never looked at
+		// a tag. See pull_policy.go.
 	}
 
 	return convertIaCRules(defs)

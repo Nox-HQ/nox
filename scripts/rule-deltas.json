@@ -108,6 +108,12 @@
       "classification": "applicability-narrowed",
       "pr": 644,
       "reason": "IAC-307 (\"GHA workflow targets production environment\") is a github-actions rule scoped by ghaFilePatterns = {\".github/workflows/*.yml\", \".github/workflows/*.yaml\", \"*.yml\", \"*.yaml\"} — again the catch-all making the specific path decoration. A GitHub Actions rule now fires only where the document declares a top-level `jobs:` with steps in it. The single dropped finding was read: podinfo's deploy/overlays/production/labels.yaml:6, a Kustomize LabelTransformer whose `app.kubernetes.io/environment: production` label the rule read as a workflow environment. That file goes from flagged to clean, correctly: it is a label transformer and the finding was its only one."
+    },
+    {
+      "rule": "IAC-185",
+      "classification": "refined-away",
+      "pr": 645,
+      "reason": "IAC-185 shipped as \"Helm values or template uses Always image pull policy WITHOUT PINNED TAG\" with a pattern that never looked at a tag — it matched `imagePullPolicy: Always` and nothing else. Every dropped finding was read: 3 in kubernetes/examples, and ALL THREE are pinned — `gcr.io/google-samples/cassandra:v14`, `quay.io/pires/hazelcast-kubernetes:3.8_1` and `registry.k8s.io/example-dns-frontend:v1` — so the rule was wrong by its own description on everything it reported. It also called all three \"Helm values or template\" while every one is a plain Kubernetes manifest, which is the wrong-family naming #636/#637/#644 exist to remove. Always is frequently the RIGHT setting: against a pinned digest it is harmless, and on a mutable tag it is what makes a rollout pick up a changed image. The finding is the PAIR, so the rule now parses the document and reports a container only where an Always policy meets a reference that can change — reusing the reference parser written for IAC-501, which resolves digests, tags and registry ports. The ID is kept, so baselines, VEX statements and nox:ignore comments written against IAC-185 go on resolving. No file went from flagged to clean. The corpus contains no Always-on-unpinned pair, so the rule is now unwitnessed by this gate and rests on its fixtures: five containers across a Deployment, a Pod and a StatefulSet, two reported and three not."
     }
   ]
 }

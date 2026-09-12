@@ -181,3 +181,127 @@ func TestTheComposeRuleIsPublished(t *testing.T) {
 			"reach a matcher", composeLatestRuleID, r.MatcherType)
 	}
 }
+
+// IAC-185 shipped as "Helm values or template uses Always image pull policy
+// WITHOUT PINNED TAG" with a pattern that never looked at a tag. Measured on
+// kubernetes/examples it fired three times and all three images are pinned —
+// `cassandra:v14`, `hazelcast-kubernetes:3.8_1`, `example-dns-frontend:v1` — so
+// it was wrong by its own description on everything it reported, and called
+// every one of them a Helm template while all three are plain Kubernetes
+// manifests.
+//
+// `imagePullPolicy: Always` is frequently the right setting. The pair is the
+// finding: a policy that re-resolves the reference on every start, against a
+// reference that can change underneath it.
+
+const pullPolicyManifests = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinned
+spec:
+  template:
+    spec:
+      containers:
+        - name: cassandra
+          image: gcr.io/google-samples/cassandra:v14
+          imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untagged
+spec:
+  containers:
+    - name: frontend
+      image: gcr.io/example/dns-frontend
+      imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mixed
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: init
+          image: busybox:latest
+          imagePullPolicy: Always
+      containers:
+        - name: digest
+          image: acme/app@sha256:aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999
+          imagePullPolicy: Always
+        - name: ifnotpresent
+          image: acme/app
+          imagePullPolicy: IfNotPresent
+`
+
+// TestPullPolicyReportsOnlyTheUnpinnedPairs is both directions across five
+// containers: two are the pair, three are not.
+func TestPullPolicyReportsOnlyTheUnpinnedPairs(t *testing.T) {
+	fs := scanPullPolicies("manifests.yaml", []byte(pullPolicyManifests))
+	got := map[string]bool{}
+	for _, f := range fs {
+		got[f.Metadata["image"]] = true
+	}
+	for _, want := range []string{"gcr.io/example/dns-frontend", "busybox:latest"} {
+		if !got[want] {
+			t.Errorf("%s is pulled Always and cannot be pinned; it was not reported", want)
+		}
+	}
+	for _, unwanted := range []string{
+		"gcr.io/google-samples/cassandra:v14",                                              // pinned tag
+		"acme/app@sha256:aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999", // digest
+	} {
+		if got[unwanted] {
+			t.Errorf("%s is pinned; Always against it is not a finding", unwanted)
+		}
+	}
+	if n := len(fs); n != 2 {
+		t.Errorf("reported %d containers, want 2; got %v", n, got)
+	}
+}
+
+// TestPullPolicyFindsContainersWhereverTheKindPutsThem. A Pod holds them at
+// spec.containers, a Deployment at spec.template.spec.containers, a CronJob one
+// level deeper — and initContainers count. Walking for the field name rather
+// than enumerating kinds is what makes a kind added tomorrow work.
+func TestPullPolicyFindsContainersWhereverTheKindPutsThem(t *testing.T) {
+	const cronJob = `apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: acme/backup
+              imagePullPolicy: Always
+`
+	if n := len(scanPullPolicies("cronjob.yaml", []byte(cronJob))); n != 1 {
+		t.Errorf("reported %d containers in a CronJob's nested pod template, want 1", n)
+	}
+}
+
+// TestPullPolicyKeepsItsID. IAC-185 is corrected, not replaced: baselines hash
+// the rule ID, and VEX statements and nox:ignore comments name it directly.
+func TestPullPolicyKeepsItsID(t *testing.T) {
+	r, ok := NewAnalyzer().Rules().ByID("IAC-185")
+	if !ok {
+		t.Fatal("IAC-185 is not in the published rule set")
+	}
+	if r.MatcherType != "" {
+		t.Errorf("IAC-185 declares matcher_type %q; it is evaluated by parsing and must "+
+			"not reach a matcher", r.MatcherType)
+	}
+	for _, tag := range r.Tags {
+		if tag == "helm" {
+			t.Error("IAC-185 still claims the helm format; every finding it produced in " +
+				"the corpus was on a plain Kubernetes manifest")
+		}
+	}
+}
