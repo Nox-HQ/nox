@@ -66,8 +66,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// threshold. A threshold is meaningful only against its alphabet — hex
 	// cannot exceed 4.0 bits — so the fold needed the matcher to hold a policy
 	// per kind first.
-	if got := len(cat); got != 1528 {
-		t.Errorf("Catalog() returned %d rules, want 1528", got)
+	// 1528 -> 1529 adds IAC-501, "Docker Compose service image is not pinned to
+	// a version". It is evaluated by parsing rather than by a matcher — Compose
+	// resolves `${VAR:-default}` before it reads an image reference, so a
+	// pattern looking for `:latest` at the end of the value sees a `}`.
+	if got := len(cat); got != 1529 {
+		t.Errorf("Catalog() returned %d rules, want 1529", got)
 	}
 }
 

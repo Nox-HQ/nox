@@ -33,6 +33,16 @@ type Analyzer struct {
 	// parsing the document rather than by matching text. Nil unless a caller
 	// asked for evidence, which keeps recording free when nobody did.
 	reasoning *reasoning.Store
+	// catalog is what Rules() publishes: the engine's rules plus the ones this
+	// analyzer evaluates by parsing and therefore never hands to a matcher.
+	//
+	// They are kept apart deliberately. The engine refuses a rule with no
+	// matcher type, and it is right to: a rule reaching a matcher that cannot
+	// run it is the silent-detector failure this package keeps finding. So a
+	// parse-evaluated rule is published for its metadata — `nox rules`, the
+	// remediation text on its findings, any join by rule ID — without being
+	// offered to a matcher at all.
+	catalog *rules.RuleSet
 }
 
 // NewAnalyzer creates an Analyzer with built-in IaC security rules loaded
@@ -43,7 +53,15 @@ func NewAnalyzer() *Analyzer {
 	for i := range iacRules {
 		rs.Add(&iacRules[i])
 	}
-	a := &Analyzer{engine: rules.NewEngine(rs)}
+	// Published but never matched: evaluated by parsing. See compose_image.go
+	// and the `catalog` field.
+	cat := rules.NewRuleSet()
+	for _, r := range rs.Rules() {
+		cat.Add(r)
+	}
+	cat.Add(composeImageRule())
+
+	a := &Analyzer{engine: rules.NewEngine(rs), catalog: cat}
 	// A second engine holding only the absence rules, for manifests embedded
 	// in YAML block scalars. See extractEmbeddedManifests for why the pattern
 	// rules must not be re-run over them.
@@ -53,8 +71,9 @@ func NewAnalyzer() *Analyzer {
 	return a
 }
 
-// Rules returns the analyzer's RuleSet for catalog aggregation.
-func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
+// Rules returns the analyzer's RuleSet for catalog aggregation. It includes the
+// rules this analyzer evaluates by parsing, which the engine never sees.
+func (a *Analyzer) Rules() *rules.RuleSet { return a.catalog }
 
 // RecordReasoningTo directs this analyzer's claims at store.
 //
@@ -119,6 +138,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// Applicability is decided by the document, not by its name. See
 	// document_kind.go.
 	out = dropRulesOutsideTheirDocumentKind(path, out, content, a.engine.Rules(), drop)
+	// Compose resolves `${VAR:-default}` before it reads an image reference,
+	// so this one is decided by parsing the document rather than by a pattern.
+	out = append(out, scanComposeImages(path, content)...)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err
