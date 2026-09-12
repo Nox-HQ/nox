@@ -30,6 +30,36 @@
       "classification": "context-narrowed",
       "pr": 633,
       "reason": "SEC-696's pattern is `[a-zA-Z0-9]{32}` with the keyword \"timber\", and its context requirement was measured in LINES (±4). reitit's dev-resources/json/json100k.json is minified JSON: one line of 101,941 characters. It contains the string \"2114 timber wolf trail\" — a fake street address in generated test data — and being on the same physical line as everything else in the file, that one word authorised the rule for every 32-character run on it: 421 HIGH-severity findings from one line of fixture JSON. Proximity is now bounded at 512 characters, which is generous for `timber_api_key = \"...\"` and three orders of magnitude short of a blob. The 3 remaining findings are matches that really do sit near the keyword. No corpus lost an expectation: all 20 precision corpora and the refutation suite are unchanged at 231/0/0 and 37/0/0, and the four real-repo taint controls (ring, certbot, shelljs, plug) are unchanged."
+    },
+    {
+      "rule": "IAC-246",
+      "classification": "applicability-narrowed",
+      "pr": 636,
+      "reason": "The Serverless Framework family scoped itself with `*.yml`/`*.yaml` alongside the specific names, which made the specific names decoration: every rule in the family applied to every YAML file in any repository. Applicability is now decided by the document — a Serverless rule fires only where the document declares `service`/`provider` — so the filename is a hint about what to parse rather than evidence that the rule applies. Every dropped finding was read: 2 findings on ECS/*/clusters/private-vpc.yaml in aws-cloudformation-templates — CloudFormation templates, not Serverless manifests. No affected file went from flagged to clean: the Kubernetes Secret manifests keep SEC-254/IAC-351/IAC-356 and chronos's workflow keeps IAC-013/IAC-309/SEC-073, so what was removed is the wrong framework's rule reporting on a smell that the right rules still report."
+    },
+    {
+      "rule": "IAC-247",
+      "classification": "applicability-narrowed",
+      "pr": 636,
+      "reason": "The Serverless Framework family scoped itself with `*.yml`/`*.yaml` alongside the specific names, which made the specific names decoration: every rule in the family applied to every YAML file in any repository. Applicability is now decided by the document — a Serverless rule fires only where the document declares `service`/`provider` — so the filename is a hint about what to parse rather than evidence that the rule applies. Every dropped finding was read: 63 findings on AWSSupplyChain/SapPrivateLink/*.yaml in aws-cloudformation-templates — CloudFormation templates, not Serverless manifests. The largest single drop, and every one of them a CFN IAM policy scored against the wrong framework's rule. No affected file went from flagged to clean: the Kubernetes Secret manifests keep SEC-254/IAC-351/IAC-356 and chronos's workflow keeps IAC-013/IAC-309/SEC-073, so what was removed is the wrong framework's rule reporting on a smell that the right rules still report."
+    },
+    {
+      "rule": "IAC-248",
+      "classification": "applicability-narrowed",
+      "pr": 636,
+      "reason": "The Serverless Framework family scoped itself with `*.yml`/`*.yaml` alongside the specific names, which made the specific names decoration: every rule in the family applied to every YAML file in any repository. Applicability is now decided by the document — a Serverless rule fires only where the document declares `service`/`provider` — so the filename is a hint about what to parse rather than evidence that the rule applies. Every dropped finding was read: 2 findings on AWSSupplyChain/SapPrivateLink/*.yaml — CloudFormation, not Serverless. No affected file went from flagged to clean: the Kubernetes Secret manifests keep SEC-254/IAC-351/IAC-356 and chronos's workflow keeps IAC-013/IAC-309/SEC-073, so what was removed is the wrong framework's rule reporting on a smell that the right rules still report."
+    },
+    {
+      "rule": "IAC-254",
+      "classification": "applicability-narrowed",
+      "pr": 636,
+      "reason": "The Serverless Framework family scoped itself with `*.yml`/`*.yaml` alongside the specific names, which made the specific names decoration: every rule in the family applied to every YAML file in any repository. Applicability is now decided by the document — a Serverless rule fires only where the document declares `service`/`provider` — so the filename is a hint about what to parse rather than evidence that the rule applies. Every dropped finding was read: 21 findings across three repositories: 7 on CloudFormation templates, 12 on Kubernetes Secret manifests in kubernetes/examples, and 2 on chronos's .github/workflows/ci.yml. None is a Serverless manifest. Measured separately on MacPaw/OpenAI@0.5.1, this rule fired 268 times at CRITICAL on openapi.yaml against Ruby documentation samples reading `api_key: \"My API Key\"`, advising ${ssm:/path/to/secret} for a file with no such concept. No affected file went from flagged to clean: the Kubernetes Secret manifests keep SEC-254/IAC-351/IAC-356 and chronos's workflow keeps IAC-013/IAC-309/SEC-073, so what was removed is the wrong framework's rule reporting on a smell that the right rules still report."
+    },
+    {
+      "rule": "IAC-257",
+      "classification": "applicability-narrowed",
+      "pr": 636,
+      "reason": "The Serverless Framework family scoped itself with `*.yml`/`*.yaml` alongside the specific names, which made the specific names decoration: every rule in the family applied to every YAML file in any repository. Applicability is now decided by the document — a Serverless rule fires only where the document declares `service`/`provider` — so the filename is a hint about what to parse rather than evidence that the rule applies. Every dropped finding was read: 4 findings on Config/Config.yaml and ElastiCache/Elasticache-snapshot.yaml — CloudFormation, not Serverless. No affected file went from flagged to clean: the Kubernetes Secret manifests keep SEC-254/IAC-351/IAC-356 and chronos's workflow keeps IAC-013/IAC-309/SEC-073, so what was removed is the wrong framework's rule reporting on a smell that the right rules still report."
     }
   ]
 }
