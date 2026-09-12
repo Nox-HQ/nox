@@ -166,7 +166,10 @@ func builtinServerlessRules() []rules.Rule {
 		},
 		{
 			id: "IAC-260", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)apiKeys:\s*$`,
+			// (?m): without it this matched only at end of file. The anchor is
+			// the point of the rule — `apiKeys:` with nothing after it on the
+			// line is the block opener — so it needs the flag to mean that.
+			pattern:      `(?im)apiKeys:\s*$`,
 			description:  "Serverless API keys configured (verify rotation)",
 			cwe:          "CWE-798",
 			keywords:     []string{"apiKeys"},
@@ -177,8 +180,16 @@ func builtinServerlessRules() []rules.Rule {
 		},
 		{
 			id: "IAC-261", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)onError:\s*$`,
-			description:  "Serverless function without dead letter queue",
+			// (?m): without it this matched only at end of file.
+			//
+			// The description used to read "function without dead letter
+			// queue", which is the opposite of what the pattern finds: an
+			// `onError:` key with no value is a DLQ target DECLARED and left
+			// empty. Restoring the anchor made the mismatch visible, so the
+			// description now says what the rule detects. Absence of a DLQ
+			// needs a block-scoped absence matcher, not this.
+			pattern:      `(?im)onError:\s*$`,
+			description:  "Serverless dead letter target declared with no value",
 			cwe:          "CWE-693",
 			keywords:     []string{"deadLetter", "onError"},
 			filePatterns: serverlessFilePatterns,
@@ -188,7 +199,8 @@ func builtinServerlessRules() []rules.Rule {
 		},
 		{
 			id: "IAC-262", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)kmsKeyArn:\s*$`,
+			// (?m): without it this matched only at end of file.
+			pattern:      `(?im)kmsKeyArn:\s*$`,
 			description:  "Serverless empty KMS key ARN (no encryption)",
 			cwe:          "CWE-311",
 			keywords:     []string{"kmsKeyArn"},
@@ -232,23 +244,16 @@ func builtinServerlessRules() []rules.Rule {
 		},
 	}
 
+	// toRule, not a copy of it. Each of these three families carried its own
+	// inline conversion that set MatcherType to "regex" unconditionally and
+	// never read absenceAnchor, extraMetadata or retires — so a rule in one of
+	// them declaring any of those loaded with the field silently discarded, and
+	// an absence rule would have loaded with an empty pattern and matched
+	// nothing. That is the failure this repository keeps meeting: a rule that
+	// loads, lists, and finds nothing looks exactly like a rule that ran.
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
-		}
+		out[i] = defs[i].toRule()
 	}
 	return out
 }

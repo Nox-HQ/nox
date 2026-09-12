@@ -54,8 +54,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// IAC-286 into IAC-131 (same NetworkPolicy advisory, same kinds, same file
 	// patterns). Each survivor carries the alias, so the drop is in rule COUNT
 	// only, not in coverage.
-	if got := len(cat); got != 1531 {
-		t.Errorf("Catalog() returned %d rules, want 1531", got)
+	// 1531 -> 1530 retired IAC-214 into IAC-211: a Galaxy requirements entry
+	// spells its dependency `src:` or `name:`, never both, so the two rules
+	// partitioned one condition by spelling. IAC-211 carries the alias.
+	if got := len(cat); got != 1530 {
+		t.Errorf("Catalog() returned %d rules, want 1530", got)
 	}
 }
 

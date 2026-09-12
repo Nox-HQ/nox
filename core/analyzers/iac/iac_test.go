@@ -621,10 +621,13 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// declared a byte-identical pattern. IAC-183 (into IAC-132) and IAC-176
 	// (into IAC-145) followed those: the first carried a byte-identical
 	// absence configuration WITHOUT the subject precondition, so it went on
-	// reporting what IAC-132 refuted. Each lives on as an alias on the rule
-	// that absorbed it, so the drop is in rule COUNT only, not in coverage.
-	if got := len(rules); got != 486 {
-		t.Errorf("expected 486 IaC rules, got %d", got)
+	// reporting what IAC-132 refuted. IAC-214 followed, into IAC-211: a Galaxy
+	// requirements entry spells its dependency `src:` or `name:`, never both,
+	// so the two rules partitioned one condition by spelling and each was
+	// blind to half of it. Each lives on as an alias on the rule that absorbed
+	// it, so the drop is in rule COUNT only, not in coverage.
+	if got := len(rules); got != 485 {
+		t.Errorf("expected 485 IaC rules, got %d", got)
 	}
 }
 

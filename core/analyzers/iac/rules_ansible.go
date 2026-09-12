@@ -304,14 +304,47 @@ func builtinAnsibleRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-211", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)src:\s*['"]?[a-zA-Z0-9_.-]+\s*$`,
-			description:  "Ansible Galaxy role without version pin",
-			cwe:          "CWE-829",
-			keywords:     []string{"src"},
-			filePatterns: []string{"*.yml", "*.yaml"},
-			tags:         []string{"iac", "ansible", "supply-chain"},
-			remediation:  "Pin Ansible Galaxy roles to a specific version using the 'version' field in requirements.yml. Unpinned roles can silently update to compromised or incompatible versions.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/829.html", "https://docs.ansible.com/ansible/latest/galaxy/user_guide.html"},
+			// "without version pin" is a statement about absence, and the
+			// pattern this shipped with could not make it. `src:\s*[\w.-]+\s*$`
+			// says only that a src value exists, and with `$` meaning end of
+			// TEXT in Go it could say even that only on a file's last line: it
+			// matched nothing in any corpus repository.
+			//
+			// Restoring the anchor alone would have been worse than leaving it
+			// dead. `src:` in an Ansible TASK is a copy or template source
+			// path, and every one of them would have been reported as an
+			// unpinned Galaxy role. Three things now have to hold instead: the
+			// file is a Galaxy requirements file, the entry is a SEQUENCE ITEM
+			// (`- src: …`, which a task never writes), and the item's own block
+			// carries no `version`. The span is that one list item, so a
+			// `version` belonging to the NEXT entry cannot satisfy this one.
+			//
+			// The file pattern narrows; it does not decide. That is the
+			// opposite of the `*.yaml` catch-alls removed from the Serverless
+			// and Kustomize families, where a glob made the specific names
+			// decoration. Measured: without it the anchor reported
+			// `- name: dcgm.rules`, a Prometheus rule GROUP, in
+			// kubernetes/examples.
+			absenceAnchor:   `(?im)^[ \t]*-[ \t]+(?:src|name):[ \t]*['"]?[A-Za-z0-9_.-]+['"]?[ \t]*$`,
+			absenceProperty: `(?im)^[ \t]*version[ \t]*:`,
+			absenceSpan:     "yaml-block",
+			description:     "Ansible Galaxy requirement without version pin",
+			cwe:             "CWE-829",
+			keywords:        []string{"src"},
+			filePatterns:    []string{"requirements.yml", "requirements.yaml", "requirements-*.yml", "requirements-*.yaml"},
+			tags:            []string{"iac", "ansible", "supply-chain"},
+			// IAC-214 reported the same condition written the other way: a
+			// requirements entry spells its dependency `src:` OR `name:`, never
+			// both, so the two rules partitioned one condition by spelling and
+			// each was blind to half of it. The anchor above accepts either.
+			// The frozen pattern is the one IAC-214 carried at retirement, so a
+			// waiver written against that ID keeps matching exactly what it
+			// used to cover.
+			retires: []rules.RetiredRule{
+				{ID: "IAC-214", Pattern: `(?i)name:\s*['"]?[a-z_]+\.[a-z_]+['"]?\s*$`},
+			},
+			remediation: "Pin every Ansible Galaxy requirement to a specific version using the 'version' field. Unpinned roles and collections silently update to whatever is newest, including a compromised release.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/829.html", "https://docs.ansible.com/ansible/latest/galaxy/user_guide.html"},
 		},
 		{
 			id: "IAC-212", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
@@ -335,17 +368,9 @@ func builtinAnsibleRules() []rules.Rule {
 			remediation:  "Use git+https:// or git+ssh:// for role sources. Fetching roles over plain HTTP allows man-in-the-middle attacks that can inject malicious code into the role.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
-		{
-			id: "IAC-214", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)name:\s*['"]?[a-z_]+\.[a-z_]+['"]?\s*$`,
-			description:  "Ansible collection without version pin",
-			cwe:          "CWE-829",
-			keywords:     []string{"name", "collections"},
-			filePatterns: []string{"*.yml", "*.yaml"},
-			tags:         []string{"iac", "ansible", "supply-chain"},
-			remediation:  "Pin Ansible collections to a specific version in requirements.yml. Use 'version: \">=1.0.0,<2.0.0\"' to constrain updates while allowing patch releases.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
-		},
+		// IAC-214 ("Ansible collection without version pin") is retired into
+		// IAC-211, which reports the same condition for both the `src:` and
+		// the `name:` spelling. See its `retires` above.
 		{
 			id: "IAC-215", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)galaxy_server:\s*['"]?http://`,
@@ -536,23 +561,16 @@ func builtinAnsibleRules() []rules.Rule {
 		},
 	}
 
+	// toRule, not a copy of it. Each of these three families carried its own
+	// inline conversion that set MatcherType to "regex" unconditionally and
+	// never read absenceAnchor, extraMetadata or retires — so a rule in one of
+	// them declaring any of those loaded with the field silently discarded, and
+	// an absence rule would have loaded with an empty pattern and matched
+	// nothing. That is the failure this repository keeps meeting: a rule that
+	// loads, lists, and finds nothing looks exactly like a rule that ran.
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
-		}
+		out[i] = defs[i].toRule()
 	}
 	return out
 }

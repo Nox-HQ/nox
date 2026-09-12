@@ -70,3 +70,70 @@ func TestIAC031IsAnchoredPerLine(t *testing.T) {
 			"match on the last line of a file: %s", r.Pattern)
 	}
 }
+
+// TestNoIaCRuleIsAnchoredToEndOfText is the general form, and it is absolute:
+// every `$` in the IaC catalogue is now per-line.
+//
+// Eight rules carried the defect. Seven are fixed here and in the preceding
+// commit; the eighth, MCP-008, is in the AI analyzer, has no test of any kind,
+// and the corpus contains no MCP server, so fixing it would be unmeasurable —
+// it is named in the commit message instead of being changed unwitnessed.
+//
+// A per-rule fixture cannot replace this. The defect is invisible in a fixture
+// written to exercise one pattern, because such a fixture tends to end with the
+// interesting line; only asking the whole catalogue the question finds them.
+func TestNoIaCRuleIsAnchoredToEndOfText(t *testing.T) {
+	multiline := regexp.MustCompile(`\(\?[a-zA-Z]*m[a-zA-Z]*\)`)
+	for _, r := range NewAnalyzer().Rules().Rules() {
+		p := r.Pattern
+		if p == "" || !strings.HasSuffix(p, "$") || strings.HasSuffix(p, `\$`) {
+			continue
+		}
+		if !multiline.MatchString(p) {
+			t.Errorf("%s ends in `$` without (?m), so it can only match on the last "+
+				"line of a file: %s", r.ID, p)
+		}
+	}
+}
+
+// TestTheFourMechanicalAnchorsFire. Each fixture carries content AFTER the line
+// the rule is about, which is the whole test: with the shipped anchor every one
+// of these produces nothing.
+func TestTheFourMechanicalAnchorsFire(t *testing.T) {
+	const compose = `services:
+  web:
+    image: nginx:1.25
+    user: root
+    ports:
+      - "8080:80"
+`
+	// The Serverless fixtures must declare service/provider or the document-kind
+	// gate correctly refuses them before the anchor is ever consulted.
+	const serverless = `service: my-api
+provider:
+  name: aws
+  runtime: nodejs18.x
+  apiKeys:
+    - myKey
+functions:
+  hello:
+    handler: handler.hello
+    onError:
+    kmsKeyArn:
+    events:
+      - http: GET /hello
+`
+	for _, tc := range []struct{ rule, path, body string }{
+		{"IAC-184", "docker-compose.yml", compose},
+		{"IAC-260", "serverless.yml", serverless},
+		{"IAC-261", "serverless.yml", serverless},
+		{"IAC-262", "serverless.yml", serverless},
+	} {
+		t.Run(tc.rule, func(t *testing.T) {
+			if ids := scanIDs(t, tc.path, tc.body); !contains(ids, tc.rule) {
+				t.Errorf("%s did not fire on a document that declares exactly what it "+
+					"describes, because the line is not the file's last; got %v", tc.rule, ids)
+			}
+		})
+	}
+}
