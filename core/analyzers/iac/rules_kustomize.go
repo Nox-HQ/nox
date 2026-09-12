@@ -92,14 +92,23 @@ func builtinKustomizeRules() []rules.Rule {
 		},
 		{
 			id: "IAC-239", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)commonLabels:\s*$`,
-			description:  "Kustomize commonLabels missing standard labels",
-			cwe:          "CWE-693",
-			keywords:     []string{"commonLabels"},
-			filePatterns: kustomizeFilePatterns,
-			tags:         []string{"iac", "kustomize", "best-practice"},
-			remediation:  "Include recommended Kubernetes labels (app.kubernetes.io/name, app.kubernetes.io/version, app.kubernetes.io/managed-by) in commonLabels for consistent resource identification.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
+			// An absence rule, because the description is one: "missing
+			// standard labels" is a statement about what the block does NOT
+			// contain, and `commonLabels:\s*$` only ever said that a block
+			// exists. Restoring the end-of-text anchor it shipped with would
+			// have made it fire on every commonLabels block in every
+			// kustomization, correctly declared and all — a rule that is
+			// finally able to fire and wrong every time it does.
+			absenceAnchor:   `(?im)^[ \t]*commonLabels:[ \t]*$`,
+			absenceProperty: `(?i)app\.kubernetes\.io/`,
+			absenceSpan:     "yaml-block",
+			description:     "Kustomize commonLabels missing standard labels",
+			cwe:             "CWE-693",
+			keywords:        []string{"commonLabels"},
+			filePatterns:    kustomizeFilePatterns,
+			tags:            []string{"iac", "kustomize", "best-practice"},
+			remediation:     "Include recommended Kubernetes labels (app.kubernetes.io/name, app.kubernetes.io/version, app.kubernetes.io/managed-by) in commonLabels for consistent resource identification.",
+			references:      []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
 			id: "IAC-240", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
@@ -169,23 +178,16 @@ func builtinKustomizeRules() []rules.Rule {
 		},
 	}
 
+	// toRule, not a copy of it. Each of these three families carried its own
+	// inline conversion that set MatcherType to "regex" unconditionally and
+	// never read absenceAnchor, extraMetadata or retires — so a rule in one of
+	// them declaring any of those loaded with the field silently discarded, and
+	// an absence rule would have loaded with an empty pattern and matched
+	// nothing. That is the failure this repository keeps meeting: a rule that
+	// loads, lists, and finds nothing looks exactly like a rule that ran.
 	out := make([]rules.Rule, len(defs))
 	for i := range defs {
-		out[i] = rules.Rule{
-			ID:           defs[i].id,
-			Version:      "1.0",
-			Description:  defs[i].description,
-			Severity:     defs[i].severity,
-			Confidence:   defs[i].confidence,
-			MatcherType:  "regex",
-			Pattern:      defs[i].pattern,
-			FilePatterns: defs[i].filePatterns,
-			Keywords:     defs[i].keywords,
-			Tags:         defs[i].tags,
-			Metadata:     map[string]string{"cwe": defs[i].cwe},
-			Remediation:  defs[i].remediation,
-			References:   defs[i].references,
-		}
+		out[i] = defs[i].toRule()
 	}
 	return out
 }

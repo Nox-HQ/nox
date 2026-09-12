@@ -11,9 +11,13 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestAnsibleRules_Count(t *testing.T) {
+	// 45 -> 44: IAC-214 is retired into IAC-211. A requirements entry spells
+	// its dependency `src:` OR `name:`, never both, so the two rules
+	// partitioned one condition by spelling and each was blind to half of it.
+	// IAC-211 carries the alias, so the drop is in rule COUNT only.
 	rules := builtinAnsibleRules()
-	if got := len(rules); got != 45 {
-		t.Errorf("expected 45 Ansible rules, got %d", got)
+	if got := len(rules); got != 44 {
+		t.Errorf("expected 44 Ansible rules, got %d", got)
 	}
 }
 

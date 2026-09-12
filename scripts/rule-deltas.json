@@ -90,6 +90,12 @@
       "classification": "applicability-narrowed",
       "pr": 639,
       "reason": "IAC-243 is \"Kustomize uses deprecated vars feature\", pattern `vars:\\s*\\n`, scoped by the family's `*.yaml`/`*.yml` catch-all. An Ansible playbook opens a `vars:` block as a matter of course, so the rule reported 23 of them across geerlingguy/ansible-for-devops -- every `vars:` in every playbook and every test -- as a deprecated Kustomize feature. The document-kind gate added in #637 removes them: none of these files declares `kind: Kustomization`, a kustomize.config.k8s.io apiVersion, a kustomization-only field or a `resources:` list. Every dropped line was read; all 23 are the literal token `vars:` opening an Ansible variable block. This drop appears only now because the repo that witnesses it was added in the same change -- no other entry in the corpus contains an Ansible playbook, which is the reason it was added. 11 files went from flagged to clean (collection/main.yml, jenkins/provision.yml, nodejs-role/playbook.yml, test-plugin/main.yml and 7 under tests/); in each the only finding was this one, and none of them is a kustomization."
+    },
+    {
+      "rule": "IAC-214",
+      "classification": "duplicate-retired",
+      "pr": 640,
+      "reason": "IAC-214 (\"Ansible collection without version pin\") and IAC-211 (\"Ansible Galaxy role without version pin\") report one condition split by spelling: a Galaxy requirements entry names its dependency with `src:` OR with `name:`, never both, so each rule was blind to half of the condition. IAC-211 now accepts either and carries the IAC-214 alias with the pattern that rule held at retirement, so a waiver written against IAC-214 keeps matching exactly what it used to cover. Every dropped line was read: 13 in geerlingguy/ansible-for-devops, and 12 of them are reported by IAC-211 at exactly the same line — `- name: geerlingguy.apache`, `- name: community.kubernetes` and ten more, all unpinned entries in a requirements.yml. The 13th, https-self-signed/provisioning/vars/main.yml:19, is `server_hostname: https.test`: the last line of a vars file, matched only because `$` meant end of TEXT and the hostname happens to look like a dotted Galaxy name. That is a false positive and it is gone; the file is the one that went from flagged to clean. IAC-211 rises 0 -> 65 in the same repository, every one an unpinned Galaxy requirement in a requirements.yml — it could not fire at all before, being anchored to end of text."
     }
   ]
 }

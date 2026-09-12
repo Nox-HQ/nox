@@ -2288,7 +2288,9 @@ func builtinBaseIaCRules() []rules.Rule {
 		// against IAC-183 matching.
 		{
 			id: "IAC-184", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)user\s*:\s*["']?(root|0)["']?\s*$`,
+			// (?m): `$` is end of TEXT in Go unless the flag is set, so this
+			// matched only where the `user:` line ended the compose file.
+			pattern:     `(?im)user\s*:\s*["']?(root|0)["']?\s*$`,
 			description: "Docker Compose service runs as root user",
 			cwe:         "CWE-250", keywords: []string{"user", "root"},
 			filePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
