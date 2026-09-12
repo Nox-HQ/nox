@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCosignVerifyBlob_NoBinary(t *testing.T) {
@@ -82,14 +83,54 @@ func fakeCosignVersion(t *testing.T, gitVersion string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+// TestCosignVersion_Parses tests the parsing and nothing else.
+//
+// It used to install a shell shim on PATH and exec it, which made a pure string
+// question depend on a fork completing inside a fixed 10-second window.
+// Measured on a loaded machine, this package ran in 21-23 seconds against 0.9
+// idle, and this test failed once in six runs — for a reason that had nothing
+// to do with parsing. The exec path keeps one test of its own below.
 func TestCosignVersion_Parses(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		out          string
+		major, minor int
+		ok           bool
+	}{
+		{"GitVersion with v prefix", "GitVersion:    v3.0.6\n", 3, 0, true},
+		{"GitVersion without prefix", "GitVersion:    2.2.4\n", 2, 2, true},
+		{"among other lines", "GoVersion: go1.23\nGitVersion:    v2.4.1\nPlatform: darwin\n", 2, 4, true},
+		{"no GitVersion line", "Platform: darwin/arm64\n", 0, 0, false},
+		{"empty", "", 0, 0, false},
+		{"not a number", "GitVersion:    vX.Y\n", 0, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			maj, minr, ok := parseCosignVersion(tc.out)
+			if ok != tc.ok || maj != tc.major || minr != tc.minor {
+				t.Errorf("parseCosignVersion(%q) = (%d, %d, %v), want (%d, %d, %v)",
+					tc.out, maj, minr, ok, tc.major, tc.minor, tc.ok)
+			}
+		})
+	}
+}
+
+// TestCosignVersion_RunsTheBinary is the one test that still forks, because
+// something has to prove the plumbing — that cosignVersion really invokes
+// `cosign version` and feeds its output to the parser. It raises the budget
+// first: the timeout is a property of the machine, and a saturated one is not a
+// finding about this code.
+func TestCosignVersion_RunsTheBinary(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cosign shim uses a POSIX shell script")
 	}
+	restore := cosignVersionTimeout
+	cosignVersionTimeout = 2 * time.Minute
+	t.Cleanup(func() { cosignVersionTimeout = restore })
+
 	fakeCosignVersion(t, "v3.0.6")
 	majVal, minVal, ok := cosignVersion(context.Background())
 	if !ok {
-		t.Fatal("expected version parse to succeed")
+		t.Fatal("cosignVersion did not run the binary on PATH and parse its output")
 	}
 	if majVal != 3 || minVal != 0 {
 		t.Errorf("cosignVersion = v%d.%d, want v3.0", majVal, minVal)
@@ -100,6 +141,10 @@ func TestCosignVerifyBlob_RejectsOldCosignForBundle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cosign shim uses a POSIX shell script")
 	}
+	restore := cosignVersionTimeout
+	cosignVersionTimeout = 2 * time.Minute
+	t.Cleanup(func() { cosignVersionTimeout = restore })
+
 	fakeCosignVersion(t, "v2.2.4") // pre --new-bundle-format
 	err := CosignVerifyBlob(context.Background(), CosignVerifyParams{
 		ArtifactPath:              filepath.Join(t.TempDir(), "checksums.txt"),

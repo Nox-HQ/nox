@@ -131,14 +131,31 @@ func cosignVersion(ctx context.Context) (major, minor int, ok bool) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	vctx, cancel := context.WithTimeout(ctx, cosignVersionTimeout)
 	defer cancel()
 
 	out, err := exec.CommandContext(vctx, "cosign", "version").CombinedOutput()
 	if err != nil {
 		return 0, 0, false
 	}
-	m := cosignVersionRe.FindStringSubmatch(string(out))
+	return parseCosignVersion(string(out))
+}
+
+// cosignVersionTimeout bounds the `cosign version` call.
+//
+// It is a variable so a test can raise it. The budget is a property of the
+// MACHINE, not of the code under test, and a unit test that asserts parsing
+// while depending on a fork finishing inside a fixed wall-clock window fails
+// for a reason that has nothing to do with what it is checking: measured on a
+// loaded machine, this package ran in 21-23 seconds against 0.9 idle, and the
+// version test failed once in six runs. The parsing is now tested through
+// parseCosignVersion, which needs no clock at all.
+var cosignVersionTimeout = 10 * time.Second
+
+// parseCosignVersion extracts the major and minor version from the output of
+// `cosign version`. Pure: no exec, no clock, no environment.
+func parseCosignVersion(out string) (major, minor int, ok bool) {
+	m := cosignVersionRe.FindStringSubmatch(out)
 	if len(m) != 3 {
 		return 0, 0, false
 	}

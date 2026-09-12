@@ -116,6 +116,25 @@ func TestTheKeywordGateAdmitsBothDialects(t *testing.T) {
 	}
 }
 
+// TestAnUnknownBuilderCallDoesNotNarrowTheRule is the reason MCP-005 decides
+// with a predicate rather than by enumerating the builder calls allowed between
+// the name and the handler. Enumeration works until someone adds a method: a
+// new `.annotations()` would put the handler out of reach and silently narrow
+// the rule to nothing, with no test able to notice.
+func TestAnUnknownBuilderCallDoesNotNarrowTheRule(t *testing.T) {
+	const withNewMethod = `func register(srv *Server) {
+	srv.Tool("undescribed").
+		Annotations(someFutureThing).
+		ReadOnly().
+		Handler(handleB)
+}
+`
+	if got := ruleLines(t, "server.go", withNewMethod, "MCP-005"); len(got) != 1 {
+		t.Errorf("MCP-005 reported %v; a builder call it has never heard of must not "+
+			"stop it seeing that the chain names no description", got)
+	}
+}
+
 // TestMCP008IsGone states the removal, so a later edit that reintroduces the
 // rule has to argue with this instead of quietly restoring an unfireable one.
 func TestMCP008IsGone(t *testing.T) {

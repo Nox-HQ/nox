@@ -1,8 +1,6 @@
 package iac
 
 import (
-	"strings"
-
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -620,38 +618,4 @@ func builtinAnsibleRules() []rules.Rule {
 		out[i] = defs[i].toRule()
 	}
 	return out
-}
-
-// nonSecretScalars are YAML scalars that answer "what password?" with
-// something other than a password.
-//
-// `omit` is Ansible's explicit "leave this parameter out"; the booleans and
-// nulls are how a task says a password is not set at all. Reporting any of them
-// as a hardcoded credential is the false positive that the quoted-value
-// requirement used to prevent by accident, and that a charset cannot prevent on
-// purpose — they are made of exactly the characters a password is made of.
-var nonSecretScalars = map[string]bool{
-	"omit": true, "null": true, "none": true, "nil": true, "~": true,
-	"true": true, "false": true, "yes": true, "no": true, "on": true, "off": true,
-	"absent": true, "present": true, "undefined": true,
-}
-
-// passwordValueIsLiteral reports whether a `password:` match carries a literal
-// value rather than a keyword.
-//
-// It receives the matched text only — `PASSWORD: root`, quotes included when
-// the document wrote them — so it re-splits on the colon rather than being
-// handed the value. That is the contract of rules.Rule.ValidateMatch: a pure
-// function of the match, which is what keeps it from smuggling in line state.
-func passwordValueIsLiteral(matchText string) bool {
-	_, value, ok := strings.Cut(matchText, ":")
-	if !ok {
-		return false
-	}
-	value = strings.TrimSpace(value)
-	value = strings.Trim(value, `"'`)
-	if value == "" {
-		return false
-	}
-	return !nonSecretScalars[strings.ToLower(value)]
 }
