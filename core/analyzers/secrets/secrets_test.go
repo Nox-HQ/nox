@@ -670,8 +670,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // and the hyphens fall outside the class.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 911 {
-		t.Fatalf("expected 911 built-in secret rules, got %d", len(rules))
+	if len(rules) != 909 {
+		t.Fatalf("expected 909 built-in secret rules, got %d", len(rules))
 	}
 }
 
@@ -763,16 +763,17 @@ func TestApplyEntropyOverrides_AllFields(t *testing.T) {
 		t.Errorf("SEC-162 require_context: expected 'true', got %q", r162.Metadata["require_context"])
 	}
 
-	// Verify SEC-163 threshold and require_context.
-	r163, ok := a.Rules().ByID("SEC-163")
+	// The hex settings moved to SEC-161's per-kind keys when SEC-163 was folded
+	// in. The user-facing config is unchanged; what it writes is not.
+	r161, ok = a.Rules().ByID("SEC-161")
 	if !ok {
-		t.Fatal("SEC-163 not found")
+		t.Fatal("SEC-161 not found")
 	}
-	if r163.Metadata["entropy_threshold"] != "5.5" {
-		t.Errorf("SEC-163 threshold: expected '5.5', got %q", r163.Metadata["entropy_threshold"])
+	if r161.Metadata["entropy_threshold_hex"] != "5.5" {
+		t.Errorf("hex threshold: expected '5.5', got %q", r161.Metadata["entropy_threshold_hex"])
 	}
-	if r163.Metadata["require_context"] != "true" {
-		t.Errorf("SEC-163 require_context: expected 'true', got %q", r163.Metadata["require_context"])
+	if r161.Metadata["require_context_hex"] != "true" {
+		t.Errorf("hex require_context: expected 'true', got %q", r161.Metadata["require_context_hex"])
 	}
 }
 
@@ -809,7 +810,8 @@ func TestApplyEntropyOverrides_PartialFields(t *testing.T) {
 		t.Errorf("SEC-161 threshold: expected '7', got %q", r161.Metadata["entropy_threshold"])
 	}
 
-	// SEC-162 and SEC-163 thresholds should remain at their built-in defaults.
+	// SEC-162's threshold and the hex kind's must remain at their built-in
+	// defaults: setting the generic threshold must not move either.
 	r162, ok := a.Rules().ByID("SEC-162")
 	if !ok {
 		t.Fatal("SEC-162 not found")

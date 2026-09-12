@@ -17,6 +17,11 @@ import (
 // A rule that cannot fire is the silent-detector failure this repository keeps
 // finding: it loads, it lists in `nox rules`, it runs on every file, and its
 // absence of findings reads exactly like a clean scan.
+//
+// SEC-163 is now retired into SEC-161, which carries the hex kind under a
+// per-kind threshold. The guard follows it there: a threshold is meaningful
+// only against the alphabet it is measured over, so it has to be read per kind
+// or the check asks the wrong number.
 
 // alphabetCeilings is the maximum Shannon entropy attainable by a candidate of
 // each kind, in bits per character. A threshold at or above the ceiling
@@ -40,14 +45,23 @@ func TestEntropyRuleThresholdsAreReachable(t *testing.T) {
 			continue
 		}
 		kinds := strings.Split(r.Metadata["candidate_kinds"], ",")
-		threshold, ok := parseThreshold(r.Metadata["entropy_threshold"])
-		if !ok {
-			continue // the default threshold is exercised by the rules that use it
-		}
 		for _, k := range kinds {
-			ceiling, known := alphabetCeilings[strings.TrimSpace(k)]
+			k = strings.TrimSpace(k)
+			ceiling, known := alphabetCeilings[k]
 			if !known {
 				continue // quoted/assignment candidates have no fixed alphabet
+			}
+			// The PER-KIND threshold is the one that governs, falling back to
+			// the rule's default. Reading only the default would have called
+			// SEC-161 unreachable the moment the hex kind moved into it under
+			// its own 3.5 — and, worse, would have passed a rule that set the
+			// per-kind value above the ceiling.
+			threshold, ok := parseThreshold(r.Metadata["entropy_threshold_"+k])
+			if !ok {
+				threshold, ok = parseThreshold(r.Metadata["entropy_threshold"])
+			}
+			if !ok {
+				continue // the default threshold is exercised by the rules that use it
 			}
 			checked++
 			if threshold >= ceiling {
