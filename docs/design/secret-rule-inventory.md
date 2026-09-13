@@ -15,17 +15,18 @@ quoting any number here.
 The class states the evidence a rule requires before it will fire. It is derived
 from the **built** rule set, not from rule source text.
 
-- **A — pattern-discriminative (662 rules).** The matched text is
+- **A — pattern-discriminative (674 rules).** The matched text is
   self-identifying: a vendor-issued prefix (`ghp_`, `sk-ant-`, `AKIA`), a
   structural URL or ARN, or a vendor key name bound by an assignment. A match is
   evidence on its own.
-- **B — contextual entropy (29 rules).** High entropy, reported only where a
-  nearby line names a secret.
-- **C — bare token + proximity keyword (156 rules).** A generic character run
-  (`[a-zA-Z0-9]{32}` and similar) with no prefix, gated by
-  `RequireContextKeywords`: the vendor word must appear within 4 lines **and**
-  512 characters of the match.
-- **D — bare token + file-level keyword only (60 rules).** The same generic run,
+- **B — contextual (23 rules).** High entropy over declared candidate kinds at a
+  stated bit floor, reported only where a nearby line names a secret. The
+  threshold is a floor; the context is the evidence.
+- **C — bare token + proximity keyword (155 rules).** A generic character run
+  (`[a-zA-Z0-9]{32}` and similar) carrying nothing of the vendor's own
+  credential format, gated by `RequireContextKeywords`: the vendor word must
+  appear within 4 lines **and** 512 characters of the match.
+- **D — bare token + file-level keyword only (55 rules).** The same generic run,
   gated only by `Keywords`, which asks whether the word appears *anywhere in the
   file*. One incidental occurrence licenses every token in the file.
 
@@ -36,6 +37,15 @@ There is no class with no gate at all.
 The first version of this inventory reported that 214 rules gated only at file
 level and produced 79.6% of all findings. Both halves were wrong, and the
 errors compounded:
+
+0. **The rule dump omitted `Metadata`.** A rule's entropy thresholds, its
+   declared candidate kinds and its per-kind context requirements all live
+   there. Without it SEC-161 — an entropy rule running at 5.0 bits over
+   assignment/quoted/hex candidates, with the hex kind requiring context at 3.5
+   — was filed as a bare token behind a file-level keyword, and named in this
+   document as the weakest rule in the set and the place to start retiring. It
+   is class B. The 57 rules it was to lead are class D, and they produce **9
+   findings between them**.
 
 1. **The rule dump omitted `RequireContextKeywords`.** Classifying without it,
    every proximity-gated rule looked file-gated. In fact **156 of those rules,
@@ -64,9 +74,18 @@ has a test enforcing it. What was missing was narrower — the *report* recorded
 no resolved commit and no engine version, which is why its numbers could be
 read four months later as though they were current.
 
-All four are the same failure in different clothes — reasoning about a system
+All of them are the same failure in different clothes — reasoning about a system
 from a description of it rather than from the system, and comparing numbers
-without checking that their inputs match. The dump test now committed at
+without checking that their inputs match. Three separate wrong conclusions came
+from a dump missing one field each time. A partial dump does not produce a
+partial answer; it produces a confident wrong one, and each time the wrongness
+pointed at a different rule to retire.
+
+`TestDumpRuleSet` now dumps every field that can change what a rule matches, and
+the governing rule for this work is that no rule is retired or redesigned from a
+lossy inventory. Establish the proposition the rule encodes, compare it against
+the vendor's real credential format and against real-repo behaviour, and only
+then decide. The dump test now committed at
 `core/analyzers/secrets/dump_rules_test.go` exists so the rule set is read from
 the engine that runs it, and `nox bench` now records `nox_version` per report
 and `repo` / `ref` / `commit` per project, so a fire-rate number carries the
@@ -159,17 +178,19 @@ in the 2026-Q2 report.
 
 Per class, and this is what the inventory is for:
 
-| class | rules | fired | findings | per firing rule |
-|---|---:|---:|---:|---:|
-| A pattern-discriminative | 662 | 31 | 817 | 26.4 |
-| B contextual entropy | 29 | 3 | 24 | 8.0 |
-| C bare token + proximity | 156 | 23 | 2,349 | 102.1 |
-| D bare token + file-level only | 60 | 3 | 683 | **227.7** |
+| class | rules | findings | share of all |
+|---|---:|---:|---:|
+| A pattern-discriminative | 674 | 826 | 9.03% |
+| B contextual | 23 | 689 | 7.54% |
+| C bare token + proximity | 155 | **2,349** | **25.69%** |
+| D bare token + file-level only | 55 | 9 | 0.10% |
 
-Class D is now the weakest shape by a clear margin: three rules firing, 683
-findings, the highest rate per firing rule in the set. That is the expected
-consequence of a file-level gate, and it is the one class the character-bounded
-proximity fix could not help, because those rules ask for no proximity at all.
+**Class C is the whole problem, and class D is not a problem at all.** 55 rules
+produce 9 findings between them; 155 produce 2,349.
+
+An earlier revision of this document had those two the other way round, and
+named class D as the place to start retiring. That was an artifact of a dump
+that omitted `Metadata` — see below.
 
 **Concentration — top 10 rules = 71.56% of all findings.** The composition has
 changed completely, and only three of the ten are secret rules:
@@ -192,6 +213,77 @@ PII and AI rules hold six of the top ten. Whether those are correct at that
 volume is a question for their own families, and this inventory does not answer
 it.
 
+
+## The format-mismatch class
+
+A vendor-named rule that encodes nothing of the vendor's credential format is
+not a vendor rule. It is a generic token matcher wearing a vendor's name, and
+the name is what makes its findings look credible.
+
+SEC-661, "Detected PostHog API Key", is the worked example. Its pattern is
+`\b[a-zA-Z0-9]{32}\b` with the keyword `posthog`. Run against a file holding
+both real PostHog key formats and one unrelated token:
+
+| line | content | reported by |
+|---|---|---|
+| `POSTHOG_PROJECT_KEY = "phc_PHQDA5Kwzti…"` | real project key | SEC-161 only |
+| `POSTHOG_PERSONAL_KEY = "phx_kL9mR3pZ…"` | real personal key | SEC-161, SEC-162 |
+| `unrelated = "abcdefghijklmnopqrstuvwxyz012345"` | not a PostHog key | **SEC-661** |
+
+The rule misses both real formats and fires on the string that is not a
+credential at all.
+
+PostHog's key types, from their documentation:
+
+| prefix | type | status |
+|---|---|---|
+| `phc_` | project API key | **public** — write-only, safe in client-side code |
+| `phx_` | personal API key | secret; GitHub secret scanning auto-rolls it |
+| `phs_` | project secret key (beta) | secret |
+| `pha_` / `phr_` | OAuth access / refresh | secret |
+
+So SEC-661 is inverted twice over: the format it should report (`phx_`, `phs_`)
+it cannot match, and the one value of that family it might plausibly meet in the
+wild (`phc_`) should not be reported at all.
+
+This also settles SEC-161's verdict. Its single candidate true positive across
+578 findings was a `phc_` key in crewAI's recorded cassettes — a public key by
+design. **SEC-161 has zero true positives on this corpus.** It is not retired:
+it is class B, it carries real constraints, and the argument for retiring a rule
+cannot be "it found nothing on seven repositories" alone.
+
+### How widespread it is
+
+The cross-reference asked a narrower question than expected and got a worse
+answer. Searching the whole rule set for prefix literals nox encodes *anywhere*,
+and matching them to the vendors of bare-token rules:
+
+**All 155 remaining class-C rules encode nothing of their vendor's credential
+format.** SEC-661 was the 156th until it was redesigned below; it is now class A.
+Only two vendors in the entire catalogue have a prefix encoded at all — mailgun
+(`key-`, `pubkey-`) and sendinblue (`xkeys-`).
+
+Ranked by real-repo fire count, with what they actually match:
+
+| rule | vendor keyword | findings | what it matches |
+|---|---|---:|---|
+| SEC-569 | `gemini` | 1,097 | 24-char runs in Google API response fixtures |
+| SEC-533 | `ibm` | 448 | base64 and cookies — `ibm` occurs inside `…IBMki` |
+| SEC-446 | `cloudflare` | 228 | `__cf_bm` bot-management cookies |
+| SEC-629 | `lob` | 211 | embedding vectors |
+| SEC-616 | `fcm` | 170 | base64 payload |
+
+SEC-533 is the shape at its clearest: a three-letter vendor keyword satisfied by
+a random substring of base64, licensing every 44-character run nearby.
+
+Two properties make this class distinct from ordinary imprecision. The keyword
+is a *word*, so short ones (`ibm`, `lob`, `fcm`, `wise`, `heap`, `split`) are
+satisfied by accident. And the rule's name asserts a vendor the evidence never
+establishes, so a reader triaging the finding starts from a false premise.
+
+Redesigning them requires each vendor's real credential format, which is
+external knowledge that has to be sourced per vendor — the PostHog answer above
+took two documentation lookups. That work is not attempted here.
 
 ## Method, and what this inventory cannot tell you
 
@@ -228,36 +320,27 @@ Limits worth stating:
 
 ## What follows
 
-The premise of Workstreams 2–5 has changed. The redesign was scoped against a
-noise profile that no longer exists, and the top-20 list it was to work through
-is gone — those rules now fire in the tens, not the hundred-thousands.
+The class-D retirement this document previously proposed is withdrawn. Those 55
+rules produce 9 findings; retiring them would be motion, not progress, and the
+list that named them was built from an inventory missing the field that decided
+the classification.
 
-The target list re-derived from current numbers is short and specific:
+The work that remains, in order:
 
-1. **SEC-161** — class D, 578 findings, fires in **7 of 7** repositories. No
-   proximity gate. The single highest-value rule to examine.
-2. **SEC-569** — class C, 1,097 findings, but in **1 of 7** repositories, so
-   this is one repository's shape rather than a general noise source. Sample it
-   before touching it.
-3. **SEC-533** — class C, 448 findings across 3 repositories.
-4. **The other 57 class-D rules** — dormant here, structurally identical to
-   SEC-161, and unreachable by the proximity fix by construction.
-5. **SEC-462** — it matched the string `smtp://` inside an ordinary English <!-- nox:ignore SEC-462 -- this sentence is the report OF the false positive -->
-   sentence in this document, during the pre-commit scan of this commit. A bare
-   URL scheme with no credential in it is not a secret. Found by accident, which
-   is the argument for the labelled benchmark in Workstream 7 rather than
-   against this rule in particular.
+1. **Source each vendor's real credential format** for the 156 class-C rules,
+   starting with the five above that account for 2,154 of their 2,349 findings.
+   This is external research, one vendor at a time, and it is the gate on
+   everything after it.
+2. ~~Redesign SEC-661 against PostHog's real formats.~~ **Done** — it reports
+   `phx_`, `phs_`, `pha_`, `phr_` and not `phc_`, and moved from class C to
+   class A. It is the template for the remaining 155.
+3. **Fix the short-keyword problem structurally.** `ibm`, `lob`, `fcm` are
+   satisfied by substrings of base64. Requiring a word boundary around the
+   keyword, or a minimum keyword length before a bare-token pattern is allowed
+   at all, is an abstraction-level fix rather than 156 individual ones.
+4. **Then** revisit retirement, against rules whose proposition is known.
 
-`docs/design/secret-rule-inventory.json` is excluded from nox's self-scan in
-`.nox.yaml`, with the reason recorded there: it is a catalogue of detectors, so
-it reports nox's own rule definitions back as nox's secrets. The markdown is not
-excluded — the SEC-462 match above is real output, and hiding it would remove
-the evidence for item 5.
-
-Each needs the Workstream 2 treatment that was never reached: sample real
-matches, classify TP / FP / ambiguous, decide, then rule-diff with every dropped
-line read and ledgered.
-
-Fewer findings is not the success criterion. The criterion is that every removed
-finding can be explained — and for the drops recorded here, the explanation is a
-specific commit with a ledger entry, not an absence of evidence.
+Fewer findings is not the success criterion. Every drop recorded here is
+attributable to a specific commit measured on one tree, and the two claims this
+document made that turned out to be wrong are recorded above rather than
+removed.

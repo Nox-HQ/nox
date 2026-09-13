@@ -75,27 +75,113 @@ def is_structural(p):
     q=strip_flags(p)
     return '://' in q or 'arn:' in q.lower()
 
+def entropy_floor(r):
+    """The entropy threshold a rule actually runs at, per candidate kind.
+
+    Lives in Metadata, which an earlier dump omitted entirely -- so SEC-161's
+    5.0-bit assignment threshold and its hex kind at 3.5-with-context were
+    invisible, and a rule with four constraints was filed as a bare token with
+    a file-level keyword. Read it from the built rule or do not classify.
+    """
+    md=r.get("metadata") or {}
+    out={}
+    for k,v in md.items():
+        if k=="entropy_threshold": out["default"]=v
+        elif k.startswith("entropy_threshold_"): out[k[len("entropy_threshold_"):]]=v
+        elif k=="min_entropy": out["min"]=v
+    return out
+
+def leading_alternation(p):
+    """Vendor prefixes written as a leading alternation.
+
+    AWS keys are `(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}`. Read as a
+    literal run that gave "3T", and the assignment test then described the rule
+    as binding a key NAMED 3T -- a sentence that explains nothing and is also
+    false. A leading alternation is a set of prefixes; say so.
+    """
+    q=strip_flags(p).lstrip()
+    m=re.match(r'^(?:\\b)?\(?\(\?:([^)]{2,120})\)', q)
+    if not m: return None
+    alts=[a for a in m.group(1).split("|") if a]
+    if len(alts)<2: return None
+    clean=[re.sub(r'\[[^\]]*\]','',a) for a in alts]
+    if not all(len(c)>=2 for c in clean): return None
+    return alts
+
+def leading_prefix(p):
+    """The vendor prefix a pattern requires before its variable part.
+
+    literals() returns the longest literal RUN, which for `\bph[xsar]_[A-Za-z0-9]{32,}`
+    is "ph" -- true but useless in a sentence meant to explain what identifies
+    the credential. The prefix is everything before the quantified class,
+    alternations included: `ph[xsar]_`.
+    """
+    q=strip_flags(p)
+    m=re.match(r'^(?:\\b)?((?:[A-Za-z0-9_.:/-]|\[[^\]]{1,40}\])+?)(?=\[[^\]]+\]\{)', q)
+    if not m: return None
+    pref=m.group(1)
+    return pref if len(re.sub(r'\[[^\]]*\]','',pref))>=2 else None
+
 def classify(r):
     p=r["Pattern"]; kws=r.get("Keywords") or []
     rck=r.get("require_context_keywords") or []
+    md=r.get("metadata") or {}
+    floors=entropy_floor(r)
+    kinds=md.get("candidate_kinds")
+
     if r["MatcherType"]=="entropy":
-        if rck:
-            return "B","an entropy rule gated by require_context_keywords: it reports a high-entropy value only where a nearby line names a secret"
-        return "D","an entropy rule with NO proximity gate: entropy alone cannot separate a credential from a long identifier"
+        detail=f"at {floors.get('default','?')} bits"
+        if kinds: detail+=f" over {kinds} candidates"
+        percontext=[k for k in md if k.startswith("require_context_")]
+        if rck or percontext or md.get("require_context")=="true":
+            return "B", (f"an entropy rule {detail}, reported only where a nearby line names "
+                         f"a secret; the threshold is a floor and the CONTEXT is the evidence")
+        return "D", (f"an entropy rule {detail} with no proximity requirement -- entropy alone "
+                     f"cannot separate a credential from a long identifier, measured: a Go test "
+                     f"identifier scored 4.118 where a real AWS key scored 3.684")
+
     lits=literals(p)
+    _alts_early=leading_alternation(p)
+    if _alts_early and not is_structural(p):
+        shown=", ".join(f"`{a}`" for a in _alts_early[:5])
+        return "A", (f"the pattern requires one of {len(_alts_early)} vendor-issued prefixes "
+                     f"({shown}) before its variable part, so a match identifies the "
+                     f"credential on its own")
     if is_structural(p):
-        return "A", f"the pattern requires the structural literal `{lits[0] if lits else p[:20]}` — a URL or ARN form that identifies itself without any keyword gate"
+        return "A", f"the pattern requires the structural literal `{lits[0] if lits else p[:20]}` -- a URL or ARN form that identifies itself without any keyword gate"
     if binds_assignment(p):
         return "B", f"the pattern binds the key name `{lits[0]}` to the value with an assignment, so the DESTINATION says the value is credential material"
+    alts=leading_alternation(p)
+    if alts:
+        shown=", ".join(f"`{a}`" for a in alts[:5])
+        return "A", (f"the pattern requires one of {len(alts)} vendor-issued prefixes "
+                     f"({shown}) before its variable part, so a match identifies the "
+                     f"credential on its own")
+    pref=leading_prefix(p)
+    if pref:
+        return "A", (f"the pattern requires the prefix `{pref}` before its variable part -- "
+                     f"a vendor-issued marker that identifies the credential on its own, "
+                     f"independently of the keyword gate")
     if lits:
         return "A", f"the pattern requires the literal `{lits[0]}`, which is discriminative on its own and does not depend on the keyword gate"
+
     tc=token_class(p)
+    shape = md.get("secret_shape")=="true"
+    guards=[]
+    if shape: guards.append("a secret-shape filter")
+    if floors.get("min"): guards.append(f"a {floors['min']}-bit entropy floor")
+    guardtext = (" It additionally requires " + " and ".join(guards) + ".") if guards else ""
+
     if tc and rck:
-        return "C", f"the pattern is a bare [{tc[0]}]{{{tc[1]}}} token; its discrimination is the word `{rck[0]}` appearing WITHIN 4 lines and 512 characters of the match"
+        return "C", (f"the pattern is a bare [{tc[0]}]{{{tc[1]}}} token carrying nothing of the "
+                     f"vendor's own credential format; its discrimination is the word `{rck[0]}` "
+                     f"appearing within 4 lines and 512 characters of the match.{guardtext}")
     if tc and kws:
-        return "D", f"the pattern is a bare [{tc[0]}]{{{tc[1]}}} token gated only by `{kws[0]}` appearing somewhere in the FILE — no proximity requirement, so one incidental occurrence licenses every token in the file"
+        return "D", (f"the pattern is a bare [{tc[0]}]{{{tc[1]}}} token gated only by `{kws[0]}` "
+                     f"appearing somewhere in the FILE -- no proximity requirement, so one "
+                     f"incidental occurrence licenses every token in the file.{guardtext}")
     if tc:
-        return "D", f"a bare [{tc[0]}]{{{tc[1]}}} token with no keyword and no literal — nothing ties it to credential material"
+        return "D", f"a bare [{tc[0]}]{{{tc[1]}}} token with no keyword and no literal -- nothing ties it to credential material"
     return "D","no literal, no assignment binding and no token class this inventory can identify"
 
 inv=[]
@@ -107,6 +193,10 @@ for r in rules:
         pattern=r["Pattern"], token_alphabet=(tc[0] if tc else None), token_len=(tc[1] if tc else None),
         literals=literals(r["Pattern"])[:3], secret_shape=md.get("secret_shape")=="true",
         require_context_keywords=r.get("require_context_keywords") or [],
+        metadata=r.get("metadata") or {}, entropy_floors=entropy_floor(r),
+        candidate_kinds=(r.get("metadata") or {}).get("candidate_kinds"),
+        file_patterns=r.get("file_patterns") or [],
+        encodes_vendor_format=bool(literals(r["Pattern"])),
         exclude_context_keywords=r.get("exclude_context_keywords") or [],
         min_entropy=md.get("min_entropy"), severity=r["Severity"],
         fire=fire.get(r["ID"],0), repos=repos.get(r["ID"],0)))
