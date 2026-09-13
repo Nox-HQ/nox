@@ -88,10 +88,28 @@ func TestEntropyRuleMatchesOnlyItsDeclaredKind(t *testing.T) {
 	t.Run("an unscoped rule keeps the previous behaviour", func(t *testing.T) {
 		// Rules that declare no kinds must be unaffected, or this change would
 		// silently alter every other entropy rule in the catalogue.
+		//
+		// This used to assert against useSite, the #467 line. It cannot any
+		// more: `domain.GitHubWebFlowKeys[:1]` is a member-access chain, and
+		// extractAssignmentRHS now declines those as references with no value
+		// at scan time -- which is the same reason it already declined
+		// `domain.PrePush.ConfigKey()`. useSite matching at all was the defect
+		// #467 described; this subtest was holding it in place as a proxy for
+		// "unscoped rules are untouched".
+		//
+		// So the guarantee is kept and the fixture is replaced with one that
+		// actually carries a value: an unquoted YAML literal, which is what the
+		// unquoted-RHS tokenizer exists for.
+		const unquotedLiteral = "api_key: xK9mR3pZqW7nL2vB8sT4yH6jF0dA5cE1"
 		unscoped := &Rule{ID: "TEST-ANY", MatcherType: "entropy",
 			Metadata: map[string]string{"entropy_threshold": "3.5", "require_context": "true"}}
-		if got := m.Match([]byte(useSite), unscoped); len(got) == 0 {
-			t.Error("an unscoped entropy rule stopped matching what it used to match")
+		if got := m.Match([]byte(unquotedLiteral), unscoped); len(got) == 0 {
+			t.Error("an unscoped entropy rule stopped matching an unquoted literal value")
+		}
+		// And the reference form must NOT match, for any rule.
+		if got := m.Match([]byte(useSite), unscoped); len(got) > 0 {
+			t.Errorf("an entropy rule matched %q, a member-access chain that has no "+
+				"value at scan time", got[0].MatchText)
 		}
 	})
 
