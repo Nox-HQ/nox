@@ -134,8 +134,19 @@ func runBench(args []string) int {
 	}
 
 	report := BenchReport{
-		StartedAt: time.Now().UTC().Format(time.RFC3339),
-		NoxBinary: exe,
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+		NoxBinary:  exe,
+		NoxVersion: version,
+	}
+
+	// Which upstream ref each cloned directory holds, for --autocorpus.
+	pins := map[string]struct{ Repo, Ref string }{}
+	for _, entry := range curatedAutoCorpus {
+		owner, repo := splitRepoSlug(entry.Repo)
+		if owner == "" {
+			continue
+		}
+		pins[owner+"--"+repo] = struct{ Repo, Ref string }{entry.Repo, entry.Ref}
 	}
 
 	for _, e := range entries {
@@ -151,6 +162,12 @@ func runBench(args []string) int {
 			report.Failed = append(report.Failed, FailedProject{Path: project, Error: err.Error()})
 			continue
 		}
+		if pin, ok := pins[e.Name()]; ok {
+			summary.Repo, summary.Ref = pin.Repo, pin.Ref
+		}
+		// Resolved from the tree actually scanned, so it is right for a
+		// hand-assembled --corpus too, and pins a moving tag to one commit.
+		summary.Commit = gitHeadSHA(project)
 		report.Projects = append(report.Projects, summary)
 	}
 
@@ -189,16 +206,31 @@ func runBench(args []string) int {
 // BenchReport is the top-level bench output. Stable JSON shape so
 // downstream tooling can join across runs.
 type BenchReport struct {
-	StartedAt    string           `json:"started_at"`
-	FinishedAt   string           `json:"finished_at"`
-	NoxBinary    string           `json:"nox_binary"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+	NoxBinary  string `json:"nox_binary"`
+	// NoxVersion is the engine that produced these numbers.
+	//
+	// Without it a fire-rate report is uninterpretable the moment the engine
+	// moves on, and it will be read anyway. The 2026-Q2 run recorded neither
+	// this nor a commit per project; four months later its numbers were quoted
+	// as current and used to argue for work that had already shipped -- the
+	// character-bounded proximity fix, which is the single largest change to
+	// these counts there has ever been. A benchmark that cannot say which
+	// engine it measured is evidence for whatever the reader already believes.
+	NoxVersion   string           `json:"nox_version"`
 	Projects     []ProjectSummary `json:"projects"`
 	Failed       []FailedProject  `json:"failed,omitempty"`
 	RuleFireRate map[string]int   `json:"rule_fire_rate,omitempty"`
 }
 
 type ProjectSummary struct {
-	Path     string         `json:"path"`
+	Path string `json:"path"`
+	// Repo, Ref and Commit identify WHAT was scanned. Path alone is a temp
+	// directory that no longer exists by the time anyone reads the report.
+	Repo     string         `json:"repo,omitempty"`
+	Ref      string         `json:"ref,omitempty"`
+	Commit   string         `json:"commit,omitempty"`
 	Findings int            `json:"findings"`
 	Duration string         `json:"duration"`
 	ByRule   map[string]int `json:"by_rule"`
@@ -344,6 +376,17 @@ func materialiseAutoCorpus(quiet bool) (string, error) {
 		}
 	}
 	return dir, nil
+}
+
+// gitHeadSHA returns the commit a scanned tree is at, or "" when it is not a
+// git checkout. Best-effort by design: a corpus directory need not be a repo,
+// and an unidentifiable project is worth reporting without its SHA.
+func gitHeadSHA(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func splitRepoSlug(slug string) (owner, repo string) {

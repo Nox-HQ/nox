@@ -54,7 +54,13 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			if contentLower == nil {
 				contentLower = bytes.ToLower(content)
 			}
-			if !containsAnyKeyword(contentLower, rule.Keywords) {
+			// A Rule built directly rather than through RuleSet.Add has no
+			// cached copy; lower on the fly so both paths behave identically.
+			kws := rule.keywordsLower
+			if len(kws) != len(rule.Keywords) {
+				kws = loweredKeywords(rule.Keywords)
+			}
+			if !containsAnyKeyword(contentLower, kws) {
 				continue
 			}
 		}
@@ -298,13 +304,26 @@ func contextHasKeyword(lines []string, line1, col1, window int, keywords []strin
 
 // containsAnyKeyword returns true if content contains at least one of the
 // keywords. Content must be lowercase; keywords are lowered automatically.
-func containsAnyKeyword(contentLower []byte, keywords []string) bool {
+func containsAnyKeyword(contentLower []byte, keywords [][]byte) bool {
 	for _, kw := range keywords {
-		if bytes.Contains(contentLower, []byte(strings.ToLower(kw))) {
+		if bytes.Contains(contentLower, kw) {
 			return true
 		}
 	}
 	return false
+}
+
+// loweredKeywords lower-cases a rule's keywords for the pre-filter. Called
+// once per rule by RuleSet.Add, never during a scan.
+func loweredKeywords(keywords []string) [][]byte {
+	if len(keywords) == 0 {
+		return nil
+	}
+	out := make([][]byte, len(keywords))
+	for i, kw := range keywords {
+		out[i] = []byte(strings.ToLower(kw))
+	}
+	return out
 }
 
 // fileMatchesRule returns true if the file path matches at least one of the

@@ -105,6 +105,6 @@ func FuzzContainsAnyKeyword(f *testing.F) {
 		if keyword == "" {
 			return
 		}
-		_ = containsAnyKeyword(content, []string{keyword})
+		_ = containsAnyKeyword(content, loweredKeywords([]string{keyword}))
 	})
 }
