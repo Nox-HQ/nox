@@ -34,6 +34,28 @@ import (
 // `handlers:`, `block:`, `rescue:` or `always:` — or, in a task file, at the
 // document's top level. That is a shape, and reading it is what the structural
 // parser is for.
+//
+// # What the rule asserts
+//
+// A task HANDLES A SECRET and does not suppress logging, so the secret reaches
+// the log, the console, and any CI artifact that captures them.
+//
+// A task handles a secret when either end of the flow says so:
+//
+//   - the DESTINATION is a module parameter whose name ends in a sensitive word
+//     — `mysql_user: {password: …}`. Whatever flows into a parameter called
+//     `password` is a password; that is the module's own vocabulary, not a
+//     guess about the value.
+//   - the SOURCE is a variable whose name ends in a sensitive word —
+//     `command: "pg_dump --password {{ vault_db_password }}"`. The destination
+//     is ordinary and the value is still a secret.
+//
+// Neither half is "a template is a secret". `msg: "{{ item.name }}"` is a
+// template, references nothing sensitive and goes to an ordinary parameter, and
+// it stays clean. The first version of this rule required a LITERAL value,
+// which was a safe narrowing and lost the distinctly Ansible risk: the reason
+// `no_log` exists is that Ansible prints the RESOLVED arguments, so a vaulted
+// secret is exactly the case that leaks.
 
 // noLogRuleID is the rule this file reports, keeping IAC-200's ID: baselines
 // hash it and waivers name it.
@@ -68,6 +90,49 @@ func noLogRule() *rules.Rule {
 // the fix rather than the finding.
 var sensitiveLiteral = regexp.MustCompile(`(?i)^(?:[a-z0-9]+_)*(?:password|passwd|secret|api_key|access_key|secret_key|private_key|auth_token|token)$`)
 
+// sensitiveVariable matches a Jinja expression that references a variable whose
+// name ENDS in a sensitive word: `{{ vault_db_password }}`, `{{ item.password }}`,
+// `{{ lookup('env', 'DB_PASSWORD') }}`, `{{ db_password | default(”) }}`.
+//
+// Ending is what keeps it honest, exactly as it does for a key. `token_bucket_size`
+// and `password_file` are not secrets and do not match, because the sensitive
+// word is followed by more identifier. `ssh_public_key` does not match either:
+// bare `key` is absent from the list, and `private_key` is not `public_key`.
+var sensitiveVariable = regexp.MustCompile(`(?i)(?:^|[^a-z0-9_])(?:[a-z0-9]+_)*(?:password|passwd|secret|api_key|access_key|secret_key|private_key|auth_token|token)(?:$|[^a-z0-9_])`)
+
+// jinjaExpr captures the inside of a `{{ … }}`.
+var jinjaExpr = regexp.MustCompile(`\{\{([^}]*)\}\}`)
+
+// valueIsSecret reports whether a scalar value is a secret, and says which half
+// of the proposition made it one.
+func valueIsSecret(keyIsSensitive bool, raw string) (why string, ok bool) {
+	val := strings.TrimSpace(raw)
+	if val == "" || nonSecretScalars[strings.ToLower(val)] {
+		return "", false
+	}
+	if exprs := jinjaExpr.FindAllStringSubmatch(val, -1); len(exprs) > 0 {
+		for _, e := range exprs {
+			if sensitiveVariable.MatchString(e[1]) {
+				return "a secret-named variable", true
+			}
+		}
+		// A template going to a secret-named parameter still resolves to a
+		// secret at run time, which is what gets printed.
+		if keyIsSensitive {
+			return "a templated value", true
+		}
+		return "", false
+	}
+	if !keyIsSensitive {
+		return "", false
+	}
+	if strings.HasPrefix(val, "$") {
+		// A shell/environment reference, not a value this document holds.
+		return "", false
+	}
+	return "a literal value", true
+}
+
 // scanAnsibleNoLog reports every Ansible task that passes a literal secret to a
 // module without setting no_log.
 func scanAnsibleNoLog(path string, content []byte) []findings.Finding {
@@ -89,20 +154,20 @@ func scanAnsibleNoLog(path string, content []byte) []findings.Finding {
 		if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
 			root = root.Content[0]
 		}
-		for _, task := range ansibleTaskNodes(root) {
-			key := taskSecretLiteral(task)
+		for _, task := range ansibleTaskNodes(root, false) {
+			key, why := taskSecret(task.node)
 			if key == nil {
 				continue
 			}
-			if mappingValue(task, "no_log") != nil {
+			if task.inheritedNoLog || noLogIsSet(task.node) {
 				continue
 			}
 			out = append(out, findings.Finding{
 				RuleID:     noLogRuleID,
 				Severity:   findings.SeverityMedium,
 				Confidence: findings.ConfidenceHigh,
-				Message: fmt.Sprintf("Ansible task passes a literal %s to a module and does not set no_log",
-					key.Value),
+				Message: fmt.Sprintf("Ansible task passes %s to %q and does not set no_log, "+
+					"so Ansible prints the resolved value", why, key.Value),
 				Location: findings.Location{
 					FilePath: path, StartLine: key.Line, EndLine: key.Line,
 					StartColumn: key.Column, EndColumn: key.Column + len(key.Value),
@@ -114,14 +179,27 @@ func scanAnsibleNoLog(path string, content []byte) []findings.Finding {
 	return out
 }
 
-// ansibleTaskNodes returns every task mapping in a document.
+// ansibleTask is one task and whether logging is already suppressed for it by
+// something above.
+type ansibleTask struct {
+	node *yaml.Node
+	// inheritedNoLog is true when a play or an enclosing block sets no_log.
+	// Ansible propagates no_log down from the play and from a block to the
+	// tasks inside, so a playbook that sets it once at the top has covered
+	// every task in it, and reporting those would be telling an operator who
+	// did the right thing that they did not.
+	inheritedNoLog bool
+}
+
+// ansibleTaskNodes returns every task in a document, with the no_log it
+// inherits.
 //
 // A playbook is a sequence of plays and the tasks are under a play's `tasks:`,
 // `pre_tasks:`, `post_tasks:` or `handlers:`; a task file is a sequence of
 // tasks directly; and `block:`/`rescue:`/`always:` nest tasks inside a task.
 // A play is told from a task by the keys it holds — a play has `hosts:`.
-func ansibleTaskNodes(root *yaml.Node) []*yaml.Node {
-	var out []*yaml.Node
+func ansibleTaskNodes(root *yaml.Node, inherited bool) []ansibleTask {
+	var out []ansibleTask
 	if root == nil || root.Kind != yaml.SequenceNode {
 		return nil
 	}
@@ -130,23 +208,41 @@ func ansibleTaskNodes(root *yaml.Node) []*yaml.Node {
 			continue
 		}
 		if mappingValue(item, "hosts") != nil {
-			// A play. Its tasks are in its task-holding keys.
+			// A play. Its no_log covers every task in it.
+			playNoLog := inherited || noLogIsSet(item)
 			for _, k := range []string{"tasks", "pre_tasks", "post_tasks", "handlers"} {
-				out = append(out, ansibleTaskNodes(mappingValue(item, k))...)
+				out = append(out, ansibleTaskNodes(mappingValue(item, k), playNoLog)...)
 			}
 			continue
 		}
-		out = append(out, item)
-		// block/rescue/always hold tasks inside a task.
+		out = append(out, ansibleTask{node: item, inheritedNoLog: inherited})
+		// block/rescue/always hold tasks inside a task, and a no_log on the
+		// task that carries the block covers them.
+		blockNoLog := inherited || noLogIsSet(item)
 		for _, k := range []string{"block", "rescue", "always"} {
-			out = append(out, ansibleTaskNodes(mappingValue(item, k))...)
+			out = append(out, ansibleTaskNodes(mappingValue(item, k), blockNoLog)...)
 		}
 	}
 	return out
 }
 
-// taskSecretLiteral returns the KEY node of a literal secret this task passes
-// to a module, or nil.
+// noLogIsSet reports whether a play, block or task suppresses logging.
+//
+// Presence is enough: `no_log: "{{ hide_secrets }}"` is a deliberate decision
+// whose value this cannot resolve, and treating an unresolvable one as "not
+// set" would report the operator for having thought about it.
+func noLogIsSet(n *yaml.Node) bool {
+	v := mappingValue(n, "no_log")
+	if v == nil {
+		return false
+	}
+	return !nonSecretScalars[strings.ToLower(strings.TrimSpace(v.Value))] ||
+		strings.EqualFold(strings.TrimSpace(v.Value), "true") ||
+		strings.EqualFold(strings.TrimSpace(v.Value), "yes")
+}
+
+// taskSecret returns the KEY node of a secret this task handles, and which half
+// of the proposition made it one.
 //
 // The search is a full walk of the task, because module arguments nest: a
 // docker_container's password sits at task → docker_container → env →
@@ -157,15 +253,15 @@ func ansibleTaskNodes(root *yaml.Node) []*yaml.Node {
 // passes and however a `with_items` list repeats them — one task, one thing to
 // fix. The nested task lists are skipped: block/rescue/always hold tasks of
 // their own, and ansibleTaskNodes already visits them.
-func taskSecretLiteral(task *yaml.Node) *yaml.Node {
+func taskSecret(task *yaml.Node) (key *yaml.Node, why string) {
 	if task == nil {
-		return nil
+		return nil, ""
 	}
 	switch task.Kind {
 	case yaml.SequenceNode:
 		for _, c := range task.Content {
-			if k := taskSecretLiteral(c); k != nil {
-				return k
+			if k, why := taskSecret(c); k != nil {
+				return k, why
 			}
 		}
 	case yaml.MappingNode:
@@ -174,27 +270,21 @@ func taskSecretLiteral(task *yaml.Node) *yaml.Node {
 			switch k.Value {
 			case "block", "rescue", "always":
 				continue
+			case "no_log", "when", "name", "tags", "register":
+				// Control keys, not module arguments. `when:` in particular
+				// often mentions a variable without passing it anywhere.
+				continue
 			}
-			if isLiteralSecretPair(k, v) {
-				return k
+			if v.Kind == yaml.ScalarNode {
+				if why, ok := valueIsSecret(sensitiveLiteral.MatchString(k.Value), v.Value); ok {
+					return k, why
+				}
+				continue
 			}
-			if nested := taskSecretLiteral(v); nested != nil {
-				return nested
+			if nested, why := taskSecret(v); nested != nil {
+				return nested, why
 			}
 		}
 	}
-	return nil
-}
-
-// isLiteralSecretPair reports whether a key names a secret and its value is a
-// literal rather than a template or a variable reference.
-func isLiteralSecretPair(k, v *yaml.Node) bool {
-	if v.Kind != yaml.ScalarNode || !sensitiveLiteral.MatchString(k.Value) {
-		return false
-	}
-	val := strings.TrimSpace(v.Value)
-	if val == "" || strings.Contains(val, "{{") || strings.HasPrefix(val, "$") {
-		return false
-	}
-	return !nonSecretScalars[strings.ToLower(val)]
+	return nil, ""
 }

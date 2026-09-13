@@ -20,6 +20,11 @@
     "branch: 4 CronJobs and a Job, and it moved IAC-139 13 -> 9 and IAC-140 13 -> 9",
     "on the commit that narrowed them.",
     "",
+    "",
+    "A control can be missing for a DIRECTION as well as a family. No entry sets",
+    "`no_log` anywhere, so IAC-200's suppression direction — a templated secret that",
+    "is correctly suppressed staying clean, and the play/block inheritance under it —",
+    "is verified only by the analyzer fixtures. A green diff cannot speak to it.",
     "Still uncovered: Azure ARM templates (IAC-084/086 and the ARM property rules)",
     "and Terraform. Those families remain verified only by testdata/precision-suite",
     "and the analyzer tests -- a green rule diff says nothing about them. The same",
@@ -112,6 +117,12 @@
       "url": "https://github.com/geerlingguy/ansible-for-devops",
       "sha": "86e1bf80098239cd995d54217585e8d61117d2e7",
       "why": "The only ANSIBLE in the corpus. 45 rules (IAC-186 to IAC-230) were modelled and unwitnessed by this gate, which is how two of them could sit unable to fire while the diff stayed green. 162 of its 178 findings land in .yml playbooks and roles and the rest in four Dockerfiles -- judged by where findings LAND, per the note above: ansible/ansible-examples puts 48 of 88 in synthetic language_features/ demos, and molecule puts 115 of 121 in its own Python test fixtures. Measured on the commit that added it: IAC-243 went 23 -> 0, a Kustomize rule reporting every `vars:` block in every playbook as 'deprecated vars feature', and no other repository here could witness that drop. It also controls both Ansible rules anchored to end-of-text (IAC-211 `src:`, IAC-214 `name:` FQCN) and carries the `${MOLECULE_DISTRO:-rockylinux9}-ansible:latest` form that no latest-tag rule resolves. 1.5M, 43 distinct rules fire, 0.3s -- the second cheapest entry here."
+    },
+    {
+      "name": "ansible-examples",
+      "url": "https://github.com/ansible/ansible-examples",
+      "sha": "b50586543c6c4be907fdc88f9f78a2b35d2a895f",
+      "why": "The only repository here that passes a SECRET THROUGH A VARIABLE. geerlingguy/ansible-for-devops uses Jinja in 41 files and never once for a credential — it hardcodes its demo passwords — so it cannot witness the half of IAC-200 that matters most: `no_log` exists because Ansible prints the RESOLVED arguments, which makes a vaulted secret exactly the case that leaks. Measured on the commit that broadened the rule: 18 findings, `access_key: \"{{ ec2_access_key }}\"` in four EC2 launch playbooks and `password: \"{{ upassword }}\"` in two database roles among them, and 16 of the 18 land in the real example playbooks (lamp_haproxy, lamp_simple, jboss-standalone, wordpress-nginx, windows) rather than in the synthetic language_features/ demos. That distribution is why this entry was rejected once and added now: it was measured for FAMILY breadth before, where 48 of 88 findings did land in the demos, and it is here for one control. What it does NOT control: the repository contains no `no_log` anywhere, so the suppression direction — a templated secret that IS suppressed staying clean, and the play/block inheritance under it — rests on the analyzer fixtures alone. 16M, 133 findings."
     }
   ]
 }
