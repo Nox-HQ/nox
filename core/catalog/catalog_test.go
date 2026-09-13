@@ -89,8 +89,14 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// check needs a per-type taggability table. The other five were given
 	// working detection and keep their IDs — IAC-179/180/182 are now evaluated
 	// per service by parsing, so they leave the engine's set and stay here.
-	if got := len(cat); got != 1523 {
-		t.Errorf("Catalog() returned %d rules, want 1523", got)
+	// 1523 -> 1522 retired IAC-002 into CONT-002. Container base-image
+	// semantics belong to the analyzer that PARSES the Dockerfile — which is
+	// what lets it know `scratch` is not an image and `FROM certbot` may name a
+	// build stage — rather than to a regex over the FROM line. CONT-002 carries
+	// the alias, and core.attachRetiredIdentities is what makes an alias reach a
+	// finding an analyzer built by hand.
+	if got := len(cat); got != 1522 {
+		t.Errorf("Catalog() returned %d rules, want 1522", got)
 	}
 }
 

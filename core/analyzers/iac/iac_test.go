@@ -73,37 +73,30 @@ func TestNoDetect_DockerfileNonRootUser(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// IAC-002: Unpinned base image
+// IAC-002 is retired into CONT-002
 // ---------------------------------------------------------------------------
 
-func TestDetect_DockerfileUnpinnedBaseImage(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-	}{
-		{"no tag", "FROM ubuntu\nRUN echo hello\n"},
-		{"latest tag", "FROM ubuntu:latest\nRUN echo hello\n"},
+// TestIAC002IsRetiredIntoCONT002. Container base-image semantics belong to the
+// container and dependency analyzer, which PARSES the Dockerfile: that is what
+// lets it know `scratch` is not an image, that `FROM certbot` may name a build
+// stage, and what the SBOM component is. This analyzer matched the FROM line
+// with a regex and could know none of it.
+//
+// The condition itself is covered by deps — container_test.go asserts CONT-002
+// on `node:latest` — and the handover is covered end to end by
+// TestARetiredIDSurvivesAnAnalyzerBoundary in core, which is the test that
+// matters: it proves a waiver written against IAC-002 still resolves.
+func TestIAC002IsRetiredIntoCONT002(t *testing.T) {
+	if _, ok := NewAnalyzer().Rules().ByID("IAC-002"); ok {
+		t.Error("IAC-002 is still a live IaC rule; CONT-002 reports the same condition " +
+			"from the analyzer that owns container base images")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := NewAnalyzer()
-			results, err := a.ScanFile("Dockerfile", []byte(tt.content))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			found := false
-			for _, f := range results {
-				if f.RuleID == "IAC-002" {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Fatalf("expected IAC-002 finding for %q", tt.name)
-			}
-		})
+	// And nothing in this analyzer reports an unpinned base image any more,
+	// which is the point of moving it rather than duplicating it.
+	for _, id := range scanIDs(t, "Dockerfile", "FROM ubuntu\nRUN echo hello\n") {
+		if id == "IAC-002" {
+			t.Error("IAC-002 fired")
+		}
 	}
 }
 
@@ -627,6 +620,9 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// blind to half of it. Each lives on as an alias on the rule that absorbed
 	// it, so the drop is in rule COUNT only, not in coverage.
 	//
+	// 477 -> 476: IAC-002 is retired into CONT-002. Container base-image
+	// semantics belong to the analyzer that parses the Dockerfile.
+	//
 	// 478 -> 477: IAC-200 joins them, evaluated per TASK by parsing.
 	//
 	// 484 -> 478: IAC-179, IAC-180 and IAC-182 joined IAC-185 outside the
@@ -637,8 +633,8 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// 485 -> 484 is not a retirement: IAC-185 moved out of the ENGINE's set
 	// because it is evaluated by parsing (pull_policy.go). It is still in the
 	// analyzer's published catalog, and TestCatalogContainsAllRules counts it.
-	if got := len(rules); got != 477 {
-		t.Errorf("expected 477 IaC rules, got %d", got)
+	if got := len(rules); got != 476 {
+		t.Errorf("expected 476 IaC rules, got %d", got)
 	}
 }
 

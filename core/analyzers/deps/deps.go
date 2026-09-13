@@ -328,7 +328,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	rs.Add(&rules.Rule{
 		ID:          "CONT-001",
 		Version:     "1.0",
-		Description: "Container base image not pinned to specific digest",
+		Description: "Container base image pinned to a mutable tag, not a digest",
 		Severity:    findings.SeverityMedium,
 		Confidence:  findings.ConfidenceHigh,
 		Tags:        []string{"container", "supply-chain", "pinning"},
@@ -338,7 +338,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	})
 	rs.Add(&rules.Rule{
 		ID:          "CONT-002",
-		Version:     "1.0",
+		Version:     "1.1",
 		Description: "Container base image uses 'latest' tag or no tag",
 		Severity:    findings.SeverityHigh,
 		Confidence:  findings.ConfidenceHigh,
@@ -346,6 +346,26 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Remediation: "Specify an explicit version tag for the base image instead of relying on 'latest' (e.g., FROM node:18-alpine).",
 		References:  []string{"https://docs.docker.com/develop/develop-images/dockerfile_best-practices/"},
 		Metadata:    map[string]string{"cwe": "CWE-829"},
+		// IAC-002 ("Dockerfile uses unpinned base image (latest or no tag)")
+		// reported this condition from the IaC analyzer, by matching the FROM
+		// line with a regex. Container base-image semantics belong here: this
+		// analyzer PARSES the Dockerfile, which is what lets it know that
+		// `scratch` is not an image, that `FROM certbot` may name a build stage
+		// rather than a registry reference, and what the SBOM component is.
+		//
+		// Measured before the retirement, on identical file scopes — isDockerfile
+		// covers exactly IAC-002's {Dockerfile, Dockerfile.*, *.dockerfile} — the
+		// two agreed on 6 findings and each had ONE false positive the other did
+		// not, both since fixed (#649).
+		//
+		// The frozen pattern is IAC-002's as it stood at retirement, so a waiver
+		// written against that ID reproduces its fingerprint and keeps matching.
+		// Attaching that alias to a finding this analyzer BUILDS rather than
+		// matches is what core.attachRetiredIdentities exists for; before it,
+		// this retirement would have silently un-waived every accepted IAC-002.
+		Retires: []rules.RetiredRule{
+			{ID: "IAC-002", Pattern: `(?im)^[ \t]*FROM\s+(?:--platform=\S+\s+)?(?:[a-zA-Z0-9._/-]+\s*$|\S+:latest\b)`},
+		},
 	})
 	return rs
 }
@@ -521,8 +541,21 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				})
 			}
 
-			// CONT-001: image not pinned to digest.
-			if !imageIsPinnedToDigest(img.Version) {
+			// CONT-001: image pinned to a TAG but not to a digest.
+			//
+			// The `latest` exclusion is what makes this a distinct proposition
+			// rather than a superset of CONT-002. Both are real and they are not
+			// the same advice:
+			//
+			//	FROM ubuntu              no version at all      CONT-002
+			//	FROM ubuntu:22.04        a version, but mutable CONT-001
+			//	FROM ubuntu@sha256:…     immutable              neither
+			//
+			// Without the exclusion every CONT-002 finding was also a CONT-001
+			// finding, so `FROM ubuntu` reported one line twice and the second
+			// report added nothing an operator could act on that the first did
+			// not already say more urgently.
+			if !imageIsPinnedToDigest(img.Version) && !imageUsesLatestTag(img.Version) {
 				fs.Add(findings.Finding{
 					RuleID:     "CONT-001",
 					Severity:   findings.SeverityMedium,
@@ -531,7 +564,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						FilePath:  art.Path,
 						StartLine: line,
 					},
-					Message: fmt.Sprintf("Container base image %s:%s not pinned to specific digest", img.Name, img.Version),
+					Message: fmt.Sprintf("Container base image %s:%s is pinned to a tag, which is mutable; a digest is not", img.Name, img.Version),
 					Metadata: map[string]string{
 						"image":     img.Name,
 						"version":   img.Version,

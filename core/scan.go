@@ -810,6 +810,12 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// Finding identity belongs to core, not to whichever analyzer emitted the
+	// finding. Every finding that answers to a retired rule ID gets that
+	// identity here, once, whether the rules engine matched it or an analyzer
+	// built it by hand. See aliases.go.
+	attachRetiredIdentities(allFindings, allRules, artifacts)
+
 	// Phase 2c: Run installed analysis plugins (taint, SAST, …) and merge their
 	// findings in BEFORE refinement,
 	// so plugin findings are fingerprinted and baseline-matched like any other.

@@ -61,6 +61,19 @@ func compiledRetiredPattern(pattern string) *regexp.Regexp {
 	return re
 }
 
+// RetiredIdentities returns the retired rule IDs a finding at loc also answers
+// to, and the fingerprints those rules would have produced there.
+//
+// Exported because attaching an alias is not the rules engine's private
+// business. A finding an analyzer constructs directly — the container rules in
+// deps, the parse-evaluated IaC rules — is as entitled to its aliases as one the
+// engine matched, and until this was callable from outside it could not have
+// them. See core.attachRetiredIdentities, which does it for every analyzer's
+// output in one place.
+func RetiredIdentities(rule *Rule, line string, loc findings.Location) (ids, fingerprints []string) {
+	return retiredIdentities(rule, line, loc)
+}
+
 // retiredIdentities returns the retired rule IDs that also matched on line, and
 // the fingerprints those rules would have produced at loc. Both slices are
 // index-aligned and nil when the rule retires nothing.
