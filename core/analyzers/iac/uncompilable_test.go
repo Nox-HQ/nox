@@ -327,3 +327,27 @@ func TestNoLogSilencesTheTask(t *testing.T) {
 		t.Errorf("reported %d findings on a task that sets no_log: true", n)
 	}
 }
+
+// TestIAC002DoesNotReportScratch. `FROM scratch` names Docker's EMPTY
+// pseudo-image: no registry, no tag, no digest. "Unpinned" is not a thing it
+// can be and "pin it" is not advice anyone can take.
+//
+// It was found by comparing IAC-002 with CONT-002, which report the same
+// condition from two analyzers: each had a false positive the other did not —
+// this one, and a build-stage reference. Neither guard could see the other,
+// because the duplicate-rule test compares IaC rules only.
+func TestIAC002DoesNotReportScratch(t *testing.T) {
+	if n := countRule(t, "Dockerfile", "FROM scratch\nCOPY app /app\n", "IAC-002"); n != 0 {
+		t.Errorf("IAC-002 fired %d times on `FROM scratch`", n)
+	}
+	// The controls, or the above passes by the rule never firing at all.
+	if n := countRule(t, "Dockerfile", "FROM ubuntu\nRUN true\n", "IAC-002"); n != 1 {
+		t.Errorf("IAC-002 fired %d times on an untagged image; want 1", n)
+	}
+	if n := countRule(t, "Dockerfile", "FROM ubuntu:latest\nRUN true\n", "IAC-002"); n != 1 {
+		t.Errorf("IAC-002 fired %d times on `:latest`; want 1", n)
+	}
+	if n := countRule(t, "Dockerfile", "FROM ubuntu:22.04\nRUN true\n", "IAC-002"); n != 0 {
+		t.Errorf("IAC-002 fired %d times on a pinned tag; want 0", n)
+	}
+}
