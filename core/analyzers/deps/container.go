@@ -18,14 +18,30 @@ import (
 //	FROM registry.example.com/myimage:v1.2
 //	FROM node@sha256:abc123def456
 var reFromInstruction = regexp.MustCompile(
-	`(?i)^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+\S+)?\s*$`,
+	`(?i)^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?\s*$`,
 )
 
 // ParseDockerfile extracts base image references from Dockerfile content.
 // Each FROM line produces a Package with Ecosystem "docker". Special images
-// like "scratch" and variable references (e.g., ${BASE_IMAGE}) are skipped.
+// like "scratch", variable references (e.g., ${BASE_IMAGE}) and references to
+// an earlier BUILD STAGE are skipped.
+//
+// The build-stage case is the one that matters most, because this feeds the
+// SBOM. In
+//
+//	FROM python:3.14-alpine3.23 AS certbot
+//	…
+//	FROM certbot AS certbot-plugin
+//
+// the second FROM names a stage of THIS build, not an image anyone publishes.
+// Measured on certbot@2b817be1, it became a container component called
+// "certbot" at version "latest": a dependency the project does not have, in the
+// CycloneDX and SPDX documents downstream consumers trust, and a name handed to
+// OSV where it can match an advisory for an unrelated image. It also produced a
+// CONT-002 "uses latest tag" against it.
 func ParseDockerfile(content []byte) ([]Package, error) {
 	var pkgs []Package
+	stages := map[string]bool{}
 
 	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
@@ -43,14 +59,14 @@ func ParseDockerfile(content []byte) ([]Package, error) {
 		}
 
 		imageRef := matches[1]
-
-		// Skip the special "scratch" base image.
-		if strings.EqualFold(imageRef, "scratch") {
-			continue
+		// Record the stage this FROM declares before deciding about the image,
+		// so a later FROM can recognise a reference to it. Stage names are
+		// case-insensitive to Docker.
+		if alias := matches[2]; alias != "" {
+			stages[strings.ToLower(alias)] = true
 		}
 
-		// Skip variable references like ${BASE_IMAGE} or $BASE_IMAGE.
-		if strings.Contains(imageRef, "$") {
+		if skipImageRef(imageRef, stages) {
 			continue
 		}
 
@@ -71,6 +87,20 @@ func ParseDockerfile(content []byte) ([]Package, error) {
 	}
 
 	return pkgs, nil
+}
+
+// skipImageRef reports whether a FROM reference names something other than a
+// published image: the empty `scratch` pseudo-image, a variable this parser
+// cannot resolve, or a stage declared earlier in the same Dockerfile.
+func skipImageRef(imageRef string, stages map[string]bool) bool {
+	if strings.EqualFold(imageRef, "scratch") {
+		return true
+	}
+	// Variable references like ${BASE_IMAGE} or $BASE_IMAGE.
+	if strings.Contains(imageRef, "$") {
+		return true
+	}
+	return stages[strings.ToLower(imageRef)]
 }
 
 // parseImageRef splits a Docker image reference into name and version.
@@ -148,6 +178,7 @@ func imageUsesLatestTag(version string) bool {
 func dockerfileFromLines(content []byte) []int {
 	var lines []int
 	lineNum := 0
+	stages := map[string]bool{}
 
 	scanner := newLineScanner(bytes.NewReader(content))
 	for scanner.Scan() {
@@ -165,12 +196,16 @@ func dockerfileFromLines(content []byte) []int {
 		}
 
 		imageRef := matches[1]
-
-		// Mirror the skip logic from ParseDockerfile.
-		if strings.EqualFold(imageRef, "scratch") {
-			continue
+		if alias := matches[2]; alias != "" {
+			stages[strings.ToLower(alias)] = true
 		}
-		if strings.Contains(imageRef, "$") {
+
+		// The SAME skip logic as ParseDockerfile, not a copy of it. These two
+		// walks are index-aligned — fromLines[i] is the line of packages[i] —
+		// so a skip in one and not the other silently attaches every later
+		// finding to the wrong line. The build-stage skip was added to
+		// ParseDockerfile first, and this is where that would have shown up.
+		if skipImageRef(imageRef, stages) {
 			continue
 		}
 

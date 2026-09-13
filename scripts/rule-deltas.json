@@ -114,6 +114,24 @@
       "classification": "refined-away",
       "pr": 645,
       "reason": "IAC-185 shipped as \"Helm values or template uses Always image pull policy WITHOUT PINNED TAG\" with a pattern that never looked at a tag — it matched `imagePullPolicy: Always` and nothing else. Every dropped finding was read: 3 in kubernetes/examples, and ALL THREE are pinned — `gcr.io/google-samples/cassandra:v14`, `quay.io/pires/hazelcast-kubernetes:3.8_1` and `registry.k8s.io/example-dns-frontend:v1` — so the rule was wrong by its own description on everything it reported. It also called all three \"Helm values or template\" while every one is a plain Kubernetes manifest, which is the wrong-family naming #636/#637/#644 exist to remove. Always is frequently the RIGHT setting: against a pinned digest it is harmless, and on a mutable tag it is what makes a rollout pick up a changed image. The finding is the PAIR, so the rule now parses the document and reports a container only where an Always policy meets a reference that can change — reusing the reference parser written for IAC-501, which resolves digests, tags and registry ports. The ID is kept, so baselines, VEX statements and nox:ignore comments written against IAC-185 go on resolving. No file went from flagged to clean. The corpus contains no Always-on-unpinned pair, so the rule is now unwitnessed by this gate and rests on its fixtures: five containers across a Deployment, a Pod and a StatefulSet, two reported and three not."
+    },
+    {
+      "rule": "CONT-001",
+      "classification": "refined-away",
+      "pr": 649,
+      "reason": "A Dockerfile build-stage reference is not a base image. certbot/tools/docker/Dockerfile:54 reads `FROM certbot AS certbot-plugin`, and `certbot` is a BUILD STAGE declared on line 2 (`FROM python:3.14-alpine3.23 AS certbot`), not an image anyone publishes. ParseDockerfile skipped `scratch` and `${VAR}` references but tracked no stage names, so it emitted the stage as a container component called \"certbot\" at version \"latest\" — a dependency the project does not have, in the CycloneDX and SPDX documents downstream consumers trust, and a name handed to OSV where it can match an advisory for an unrelated image. The finding was the visible half of that; the SBOM was the serious half. The parser now records each `AS <name>` before deciding about the image, and dockerfileFromLines shares the same skip predicate rather than copying it: the two walks are index-aligned, so a skip in one and not the other would attach every later finding to the wrong line. Every dropped line was read: 1, the line above. certbot's other 2 CONT-001 findings are real images and are unchanged."
+    },
+    {
+      "rule": "CONT-002",
+      "classification": "refined-away",
+      "pr": 649,
+      "reason": "A Dockerfile build-stage reference is not a base image, and it does not use the `latest` tag — it has no tag because it is not an image. certbot/tools/docker/Dockerfile:54 reads `FROM certbot AS certbot-plugin`, and `certbot` is a BUILD STAGE declared on line 2 (`FROM python:3.14-alpine3.23 AS certbot`), not an image anyone publishes. ParseDockerfile skipped `scratch` and `${VAR}` references but tracked no stage names, so it emitted the stage as a container component called \"certbot\" at version \"latest\" — a dependency the project does not have, in the CycloneDX and SPDX documents downstream consumers trust, and a name handed to OSV where it can match an advisory for an unrelated image. The finding was the visible half of that; the SBOM was the serious half. The parser now records each `AS <name>` before deciding about the image, and dockerfileFromLines shares the same skip predicate rather than copying it: the two walks are index-aligned, so a skip in one and not the other would attach every later finding to the wrong line. Every dropped line was read: 1, the same line."
+    },
+    {
+      "rule": "IAC-002",
+      "classification": "refined-away",
+      "pr": 649,
+      "reason": "`FROM scratch` names Docker's EMPTY pseudo-image: no registry, no tag, no digest. \"Unpinned\" is not a thing it can be and \"pin it\" is not advice anyone can take. Every dropped line was read: 2, both the literal line `FROM scratch`, in kubernetes/examples' _archived/explorer/Dockerfile and web/guestbook-go/Dockerfile. Neither file went from flagged to clean. The exclusion was found by comparing IAC-002 with CONT-002, which report the same condition from two analyzers: each had a false positive the other did not — this one, and a build-stage reference — and neither guard could see the other, because the duplicate-rule test compares IaC rules only."
     }
   ]
 }

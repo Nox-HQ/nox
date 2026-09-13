@@ -42,3 +42,25 @@ func passwordValueIsLiteral(matchText string) bool {
 	}
 	return !nonSecretScalars[strings.ToLower(value)]
 }
+
+// dockerBaseImageIsPinnable vetoes an IAC-002 match whose base image cannot be
+// pinned at all.
+//
+// `FROM scratch` names Docker's empty pseudo-image: no registry, no tag, no
+// digest. Reporting it as an unpinned base image states something that cannot
+// be true and gives advice nobody can take. It was 2 of the rule's 8 findings
+// on kubernetes/examples.
+//
+// The predicate receives only the matched text — the whole FROM line — which is
+// all this needs.
+func dockerBaseImageIsPinnable(matchText string) bool {
+	fields := strings.Fields(matchText)
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if strings.EqualFold(f, "FROM") || strings.HasPrefix(strings.ToLower(f), "--platform=") {
+			continue
+		}
+		return !strings.EqualFold(f, "scratch")
+	}
+	return true
+}

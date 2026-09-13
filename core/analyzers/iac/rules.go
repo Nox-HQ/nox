@@ -91,7 +91,17 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-002", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?im)^[ \t]*FROM\s+[a-zA-Z0-9._/-]+\s*$|(?im)^[ \t]*FROM\s+\S+:latest\b`,
+			// `scratch` is excluded, and it is not a special case so much as the
+			// rule's own claim applied honestly: scratch is Docker's EMPTY
+			// pseudo-image. It has no registry, no tag and no digest, so
+			// "unpinned" is not a thing it can be and "pin it" is not advice
+			// anyone can take. Measured on kubernetes/examples, it was 2 of the
+			// rule's 8 findings. The deps analyzer's ParseDockerfile has always
+			// skipped it, which is how the divergence was found: the two rules
+			// report the same condition and each had a false positive the other
+			// did not.
+			pattern:     `(?im)^[ \t]*FROM\s+(?:--platform=\S+\s+)?(?:[a-zA-Z0-9._/-]+\s*$|\S+:latest\b)`,
+			validate:    dockerBaseImageIsPinnable,
 			description: "Dockerfile uses unpinned base image (latest or no tag)",
 			cwe:         "CWE-829", keywords: []string{"from"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
