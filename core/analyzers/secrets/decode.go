@@ -2,9 +2,11 @@
 package secrets
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -94,6 +96,19 @@ func isPrintable(data []byte) bool {
 // DecodeAndScan decodes base64/hex segments in content and scans the decoded
 // content against the provided rules engine. Findings reference the original
 // file position and note the encoding in Metadata.
+//
+// The location remap is the whole reason StartOffset is recorded. The engine
+// scans the DECODED bytes, so every match comes back positioned inside the
+// decoded string -- which for a single-line payload means line 1, at a column
+// that indexes the plaintext. Reported unchanged, those coordinates name a
+// place in the file that has nothing to do with the finding: measured on
+// crewAI's recorded cassettes, 95 of 578 SEC-161 findings pointed at line 1,
+// columns 9-41, of a file whose line 1 is `interactions:` -- 13 characters
+// long. An operator following that location finds nothing, and cannot tell
+// whether the finding is wrong or they are looking in the wrong place.
+//
+// So each match is moved onto the span of the ENCODED segment in the source,
+// which is the text someone actually has to go and look at.
 func DecodeAndScan(content []byte, path string, engine *rules.Engine) []findings.Finding {
 	var results []findings.Finding
 
@@ -123,12 +138,44 @@ func DecodeAndScan(content []byte, path string, engine *rules.Engine) []findings
 			}
 			meta["encoding"] = seg.Encoding
 			meta["encoded_value"] = truncateString(seg.Original, 80)
+			// Where the match sat inside the decoded plaintext. Kept because
+			// it is the only way back to the matched bytes once the location
+			// points at the encoded span instead.
+			meta["decoded_line"] = strconv.Itoa(matches[j].Location.StartLine)
+			meta["decoded_column"] = strconv.Itoa(matches[j].Location.StartColumn)
 			matches[j].Metadata = meta
+			relocateToSegment(&matches[j], content, seg)
 			results = append(results, matches[j])
 		}
 	}
 
 	return results
+}
+
+// relocateToSegment moves a finding from decoded coordinates onto the encoded
+// segment it came from, in the source file.
+func relocateToSegment(f *findings.Finding, content []byte, seg DecodedSegment) {
+	startLine, startCol := offsetToPosition(content, seg.StartOffset)
+	endLine, endCol := offsetToPosition(content, seg.StartOffset+len(seg.Original))
+	f.Location.StartLine = startLine
+	f.Location.StartColumn = startCol
+	f.Location.EndLine = endLine
+	f.Location.EndColumn = endCol
+}
+
+// offsetToPosition converts a byte offset into 1-based line and column. An
+// offset past the end clamps to the end, so a malformed segment cannot produce
+// a location outside the file.
+func offsetToPosition(content []byte, off int) (line, col int) {
+	if off < 0 {
+		off = 0
+	}
+	if off > len(content) {
+		off = len(content)
+	}
+	line = 1 + bytes.Count(content[:off], []byte{'\n'})
+	lineStart := bytes.LastIndexByte(content[:off], '\n') + 1
+	return line, off - lineStart + 1
 }
 
 // entropyRuleIDs are the entropy-based secret rules (Shannon-entropy matcher,

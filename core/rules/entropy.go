@@ -287,6 +287,49 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	return results
 }
 
+// isMemberAccessChain reports whether an unquoted token is a member-access
+// expression such as `process.env.API_KEY` rather than a literal value.
+//
+// Every dot-separated segment must be identifier-shaped, and none may be long
+// enough to be a credential in its own right. That length bound is what keeps
+// an unquoted JWT -- three base64url segments, the first typically 36 or more
+// characters -- on the reporting side of the line, since a YAML or .env value
+// is allowed to be an unquoted literal and a JWT is exactly that.
+func isMemberAccessChain(token string) bool {
+	const credentialSegment = 32
+	segments := strings.Split(token, ".")
+	if len(segments) < 2 {
+		return false
+	}
+	for _, seg := range segments {
+		if seg == "" || len(seg) >= credentialSegment {
+			return false
+		}
+		if !isIdentifierSegment(seg) {
+			return false
+		}
+	}
+	return true
+}
+
+// isIdentifierSegment reports whether s is shaped like a program identifier:
+// a leading letter or underscore, then letters, digits or underscores.
+func isIdentifierSegment(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c == '_':
+		case c >= '0' && c <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return s != ""
+}
+
 // ShannonEntropy calculates the Shannon entropy of a string in bits per
 // character. Higher values indicate more randomness. Exported for testing.
 func ShannonEntropy(s string) float64 {
@@ -399,6 +442,25 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 		// which has no value at scan time. A literal secret is never followed by
 		// an open paren, so skipping calls costs no recall.
 		if rhsEnd < len(line) && line[rhsEnd] == '(' {
+			i = rhsEnd
+			continue
+		}
+		// The same argument, one step further: a member-access chain has no
+		// value at scan time either, with or without a trailing call.
+		//
+		//	const apiKey = process.env.ANTHROPIC_MICROSOFT_API_KEY;
+		//	'x-api-key': sandboxEnvironment.ANTHROPIC_API_KEY,
+		//
+		// Both were reported as high-entropy secrets. They are the opposite:
+		// they are the remediation this rule recommends -- "move high-entropy
+		// values to environment variables" -- and the rule was flagging the
+		// code that does it. Measured on the pinned corpus, 8 of SEC-161's 22
+		// non-test findings were reads of an environment variable.
+		//
+		// What makes them references rather than values is syntax, not
+		// likelihood: an unquoted dotted chain of identifier-shaped segments is
+		// a selector in every language that writes one.
+		if isMemberAccessChain(token) {
 			i = rhsEnd
 			continue
 		}
