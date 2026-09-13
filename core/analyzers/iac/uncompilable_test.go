@@ -112,34 +112,127 @@ jobs:
 	}
 }
 
-// TestIAC200ReportsOnlySensitiveLiterals is the measurement that tightened it.
-// Before the anchor required the key to END in a sensitive word, to carry a
-// VALUE, and not to be a bare `key`, 6 of 11 findings on
-// geerlingguy/ansible-for-devops were false.
-func TestIAC200ReportsOnlySensitiveLiterals(t *testing.T) {
-	const playbook = `- hosts: all
+// The four controls for IAC-200, plus the two the reasoning implies.
+//
+// The rule asserts that a task HANDLES A SECRET and does not suppress logging.
+// A task handles a secret when either END of the flow says so: the destination
+// is a module parameter whose name ends in a sensitive word, or the source is a
+// variable whose name does. Neither half is "a template is a secret".
+//
+// An earlier version required a LITERAL value. That was a safe narrowing and it
+// lost the distinctly Ansible risk: `no_log` exists because Ansible prints the
+// RESOLVED arguments, so a vaulted secret is exactly the case that leaks.
+const noLogControls = `- hosts: all
   tasks:
-    - name: real leak
+    - name: literal secret
       mysql_user:
         password: hunter2
-    - name: logged deliberately
+    - name: templated sensitive variable
       mysql_user:
-        password: hunter2
+        password: "{{ vault_db_password }}"
+    - name: ordinary templated value
+      debug:
+        msg: "deploying {{ app_name }} to {{ item.host }}"
+    - name: templated sensitive variable, suppressed
+      mysql_user:
+        password: "{{ vault_db_password }}"
       no_log: true
-    - name: git checkout
-      git:
-        accept_hostkey: true
-    - name: import a public gpg key
-      rpm_key:
-        key: "https://rpms.remirepo.net/RPM-GPG-KEY-remi2018"
-    - name: from the vault
+    - name: secret in a command line
+      command: pg_dump --password {{ vault_db_password }}
+    - name: a public key is not a secret
+      authorized_key:
+        key: "{{ ssh_public_key }}"
+`
+
+func TestIAC200Controls(t *testing.T) {
+	byLine := map[int]string{}
+	for _, f := range scanAnsibleNoLog("playbook.yml", []byte(noLogControls)) {
+		byLine[f.Location.StartLine] = f.Message
+	}
+	for _, tc := range []struct {
+		line int
+		want bool
+		name string
+	}{
+		{5, true, "literal secret, no_log absent"},
+		{8, true, "templated SENSITIVE variable, no_log absent"},
+		{11, false, "ordinary templated value, no_log absent"},
+		{15, false, "templated sensitive variable WITH no_log"},
+		{17, true, "secret-named variable under an ORDINARY parameter"},
+		{20, false, "a public key is not a secret"},
+	} {
+		if _, got := byLine[tc.line]; got != tc.want {
+			t.Errorf("%s: reported=%v want=%v (line %d)", tc.name, got, tc.want, tc.line)
+		}
+	}
+	// The first control is also the one that must carry BOTH rules: IAC-225
+	// says do not hardcode it, IAC-200 says do not log it. Different fixes.
+	if !contains(scanIDs(t, "playbook.yml", noLogControls), "IAC-225") {
+		t.Error("the literal secret is not also reported by IAC-225")
+	}
+}
+
+// TestNoLogIsInherited. Ansible propagates no_log from a play and from a block
+// to the tasks inside, so a playbook that sets it once at the top has covered
+// every task in it. Reporting those would tell an operator who did the right
+// thing that they did not.
+func TestNoLogIsInherited(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"play", `- hosts: all
+  no_log: true
+  tasks:
+    - name: covered by the play
+      mysql_user:
+        password: "{{ vault_db_password }}"
+`},
+		{"block", `- hosts: all
+  tasks:
+    - name: block sets no_log
+      no_log: true
+      block:
+        - name: inside the block
+          mysql_user:
+            password: "{{ vault_db_password }}"
+`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if n := len(scanAnsibleNoLog("playbook.yml", []byte(tc.body))); n != 0 {
+				t.Errorf("reported %d findings where no_log is set on the %s", n, tc.name)
+			}
+		})
+	}
+	// The control for the control: without the inherited no_log the same task
+	// IS reported, or the two tests above would pass by excluding everything.
+	const bare = `- hosts: all
+  tasks:
+    - name: not covered
       mysql_user:
         password: "{{ vault_db_password }}"
 `
-	if n := countRule(t, "playbook.yml", playbook, "IAC-200"); n != 1 {
-		t.Errorf("IAC-200 fired %d times; want 1 — the hardcoded password with no no_log. "+
-			"`accept_hostkey` is a key SUFFIX inside a word, `rpm_key:` opens a block, the "+
-			"GPG key is public and the vault value is the fix rather than the finding", n)
+	if n := len(scanAnsibleNoLog("playbook.yml", []byte(bare))); n != 1 {
+		t.Errorf("reported %d findings on the same task with no no_log anywhere; want 1", n)
+	}
+}
+
+// TestASensitiveWordMustEndTheName, for a variable as for a key.
+// `token_bucket_size` and `password_file` are not secrets.
+func TestASensitiveWordMustEndTheName(t *testing.T) {
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"vault_db_password", true},
+		{"item.password", true},
+		{"lookup('env', 'DB_PASSWORD')", true},
+		{"db_password | default('')", true},
+		{"token_bucket_size", false},
+		{"password_file", false},
+		{"ssh_public_key", false},
+		{"app_name", false},
+	} {
+		if got := sensitiveVariable.MatchString(tc.expr); got != tc.want {
+			t.Errorf("sensitiveVariable(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
 	}
 }
 
