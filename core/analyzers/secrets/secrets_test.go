@@ -1212,6 +1212,14 @@ func TestBroadPatternRules_NoSVGBase64FalsePositives(t *testing.T) {
 	}
 }
 
+// NOTE: several cases below still use invented tokens for vendors whose real
+// credential format nox does not encode (SEC-616 fcm, SEC-664 heap, SEC-590
+// wave, SEC-455 segment, SEC-659 split). Those fixtures certify that a bare
+// 32-character matcher matches a bare 32-character string, which is true and
+// says nothing about the vendor. They can only be fixed the way SEC-661 was:
+// by sourcing the vendor's real format first. See the format-mismatch section
+// of docs/design/secret-rule-inventory.md.
+//
 // TestBroadPatternRules_DetectRealCredential verifies the word-boundary fix
 // does not suppress a real key presented in a typical config assignment.
 // Each 32-char token has >30% digits so isCamelOrPascalCase returns false,
@@ -1237,7 +1245,14 @@ func TestBroadPatternRules_DetectRealCredential(t *testing.T) {
 		{"SEC-590", `wave_api_key = "Wave3r9X2lK7vQ4bP8mZ1dN6cY5h30aB"`, ""},
 		{"SEC-455", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`, ""},
 		{"SEC-659", `split_api_key = "Spl3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, ""},
-		{"SEC-661", `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`, ""},
+		// This case used to read `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`
+		// -- an invented 32-character string, asserted as "a real credential".
+		// It was credential-SHAPED, which is not the same thing: PostHog issues
+		// prefixed keys, and no PostHog key is a bare 32-character run. The
+		// fixture had been written to match the rule, so it certified a rule
+		// that could not match any real key of the vendor it was named for.
+		// Now it is a real personal-API-key format. See posthog_test.go.
+		{"SEC-661", `posthog_api_key = "phx_kL9mR3pZqW7nL2vB8sT4yH6jF0dA5cE1xY2zQ4wV6bN"`, ""},
 		{"SEC-005", `literal_api_key = "Lit3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, "SEC-697"},
 	}
 	for _, tc := range cases {
