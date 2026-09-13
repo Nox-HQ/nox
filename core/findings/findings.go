@@ -871,6 +871,22 @@ func (fs *FindingSet) Findings() []Finding {
 	return fs.items
 }
 
+// SetAliases records the retired rule identities a finding also answers to.
+//
+// It exists so alias attachment can happen ONCE, centrally, over every
+// analyzer's output — see core.attachRetiredIdentities. The rules engine used
+// to be the only thing that set these, which meant a finding constructed
+// directly by an analyzer (the container rules in deps, the parse-evaluated IaC
+// rules) could never carry an alias, and a waiver written against a rule those
+// absorbed would silently stop matching.
+func (fs *FindingSet) SetAliases(i int, ids, fingerprints []string) {
+	if i < 0 || i >= len(fs.items) {
+		return
+	}
+	fs.items[i].RetiredRuleIDs = ids
+	fs.items[i].AliasFingerprints = fingerprints
+}
+
 // RemoveByRuleIDsAndPaths removes findings that match both the given rule IDs
 // AND any of the given path patterns. This enables granular exclusion based on
 // rule + path combinations (e.g., disable VULN rules only for node_modules).

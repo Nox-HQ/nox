@@ -526,15 +526,26 @@ FROM alpine@sha256:abcdef1234567890
 		ruleCount[f.RuleID]++
 	}
 
-	// CONT-001: ubuntu:22.04 (not pinned to digest) and node:latest (not pinned to digest).
-	// alpine@sha256:... IS pinned, so no CONT-001 for it.
-	if ruleCount["CONT-001"] != 2 {
-		t.Errorf("expected 2 CONT-001 findings, got %d", ruleCount["CONT-001"])
+	// The two rules are DISJOINT, and this fixture is the reason that matters:
+	//
+	//	alpine@sha256:…   immutable                 neither
+	//	ubuntu:22.04      a version, but mutable    CONT-001
+	//	node:latest       no version at all         CONT-002
+	//
+	// CONT-001 used to count node:latest too, because "not pinned to a digest"
+	// is true of everything "uses latest" is true of. One line, two findings,
+	// and the second said nothing the first did not already say more urgently.
+	if ruleCount["CONT-001"] != 1 {
+		t.Errorf("expected 1 CONT-001 finding (ubuntu:22.04), got %d", ruleCount["CONT-001"])
 	}
-
-	// CONT-002: node:latest uses latest tag.
 	if ruleCount["CONT-002"] != 1 {
-		t.Errorf("expected 1 CONT-002 finding, got %d", ruleCount["CONT-002"])
+		t.Errorf("expected 1 CONT-002 finding (node:latest), got %d", ruleCount["CONT-002"])
+	}
+	// Neither may report the digest-pinned image.
+	for _, f := range allFindings {
+		if (f.RuleID == "CONT-001" || f.RuleID == "CONT-002") && f.Metadata["image"] == "alpine" {
+			t.Errorf("%s reported a digest-pinned image", f.RuleID)
+		}
 	}
 }
 

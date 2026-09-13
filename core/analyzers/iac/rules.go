@@ -89,26 +89,12 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Create a non-root user and switch to it with USER directive. Example: RUN adduser --disabled-password appuser && USER appuser.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/250.html", "https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#user"},
 		},
-		{
-			id: "IAC-002", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			// `scratch` is excluded, and it is not a special case so much as the
-			// rule's own claim applied honestly: scratch is Docker's EMPTY
-			// pseudo-image. It has no registry, no tag and no digest, so
-			// "unpinned" is not a thing it can be and "pin it" is not advice
-			// anyone can take. Measured on kubernetes/examples, it was 2 of the
-			// rule's 8 findings. The deps analyzer's ParseDockerfile has always
-			// skipped it, which is how the divergence was found: the two rules
-			// report the same condition and each had a false positive the other
-			// did not.
-			pattern:     `(?im)^[ \t]*FROM\s+(?:--platform=\S+\s+)?(?:[a-zA-Z0-9._/-]+\s*$|\S+:latest\b)`,
-			validate:    dockerBaseImageIsPinnable,
-			description: "Dockerfile uses unpinned base image (latest or no tag)",
-			cwe:         "CWE-829", keywords: []string{"from"},
-			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
-			tags:         []string{"iac", "docker", "supply-chain"},
-			remediation:  "Pin base images to a specific version and digest. Get the digest with: docker inspect --format='{{index .RepoDigests 0}}' <image:tag>. Replace tag references (e.g., FROM nginx:1.25) with digest references (e.g., FROM nginx@sha256:abc123...). Document the source tag in a comment for maintainability. Consider tools like crane or skopeo for automated digest pinning.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
-		},
+		// IAC-002 ("Dockerfile uses unpinned base image") is retired into
+		// CONT-002. Container base-image semantics belong to the container and
+		// dependency analyzer, which parses the Dockerfile rather than matching
+		// it: that is where stage tracking, digest handling and the SBOM
+		// component already live. See CONT-002's Retires in
+		// core/analyzers/deps/deps.go.
 		{
 			id: "IAC-003", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
 			pattern:     `(?im)^[ \t]*ADD\s+`,
