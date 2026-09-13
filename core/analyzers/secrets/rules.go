@@ -3510,7 +3510,30 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-658", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{24}`, description: "Detected LaunchDarkly API Key", cwe: "CWE-798", keywords: []string{"launchdarkly"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-659", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Split API Key", cwe: "CWE-798", keywords: []string{"split"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-660", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Detected Statsig API Key", cwe: "CWE-798", keywords: []string{"statsig"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-661", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected PostHog API Key", cwe: "CWE-798", keywords: []string{"posthog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
+		// PostHog issues five prefixed key types, and only one of them is a
+		// secret to report:
+		//
+		//	phc_  project API key     PUBLIC -- write-only, documented as safe
+		//	                          to ship in client-side code
+		//	phx_  personal API key    secret; GitHub secret scanning rolls it
+		//	phs_  project secret key  secret
+		//	pha_  OAuth access token  secret
+		//	phr_  OAuth refresh token secret
+		//
+		// This rule used to be `\b[a-zA-Z0-9]{32}\b` keyed on the word
+		// "posthog", which matched none of them: every PostHog key is prefixed
+		// and longer than 32 characters, so no key is a bare 32-character run.
+		// What it did match was any 32-character token near the word -- 22,543
+		// findings on the 2026-Q2 benchmark, none of them a PostHog key.
+		//
+		// A vendor-named rule that encodes nothing of the vendor's format is a
+		// generic token matcher wearing the vendor's name, and the name is what
+		// makes its findings look credible. Keyed on the prefixes themselves,
+		// the way the GitHub and Anthropic rules are.
+		//
+		// phc_ is deliberately absent: reporting a key the vendor documents as
+		// publishable trains people to ignore the rule.
+		{id: "SEC-661", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh, pattern: `\bph[xsar]_[A-Za-z0-9]{32,}\b`, description: "Detected PostHog secret key (personal, project-secret or OAuth token)", cwe: "CWE-798", keywords: []string{"phx_", "phs_", "pha_", "phr_"}, remediation: "Rotate the exposed credential immediately. PostHog personal and project-secret keys grant API access; the public phc_ project key does not and is not reported.", references: []string{"https://cwe.mitre.org/data/definitions/798.html", "https://posthog.com/docs/api"}},
 		{id: "SEC-662", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Amplitude API Key", cwe: "CWE-798", keywords: []string{"amplitude"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-663", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{20}`, description: "Detected Mixpanel API Key", cwe: "CWE-798", keywords: []string{"mixpanel"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-664", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Heap API Key", cwe: "CWE-798", keywords: []string{"heap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
