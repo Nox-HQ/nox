@@ -42,10 +42,10 @@ type Rule struct {
 	// by RuleSet.Add; nil for a Rule built directly, which falls back to
 	// lowering on the fly so behaviour is identical either way.
 	keywordsLower [][]byte
-	Tags               []string            `yaml:"tags"`
-	Metadata           map[string]string   `yaml:"metadata"`
-	Remediation        string              `yaml:"remediation"`
-	References         []string            `yaml:"references"`
+	Tags          []string          `yaml:"tags"`
+	Metadata      map[string]string `yaml:"metadata"`
+	Remediation   string            `yaml:"remediation"`
+	References    []string          `yaml:"references"`
 
 	// IgnoreInComments drops matches that land on a source comment line.
 	// Used by prose rules (e.g. MCP tool-poisoning) that would otherwise fire
