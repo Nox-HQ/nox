@@ -6,50 +6,35 @@ import (
 	"testing"
 )
 
-// knownUncompilableIaCRules are IaC rules whose patterns use RE2-incompatible
-// negative lookahead (?!...) to express "resource present but hardening
-// property absent". Go's regexp is RE2, which rejects lookahead, and the rule
-// matcher silently swallows the compile error — so these rules NEVER fired.
+// knownUncompilableIaCRules is EMPTY, and the guard below is now absolute.
 //
-// 57 of the original 65 have since been restored: they were rewritten to use
-// the block-scoped absence matcher (rules.Rule.Absence* + matcher_type
-// "absence"), which locates the resource anchor, bounds its real structural
-// span (brace block, YAML block/document, or whole file), and fires only when
-// the hardening property is genuinely absent from that span. That is what RE2
-// lookahead could not express and what a line-windowed exclusion cannot do
-// safely (it flags hardened resources whose property sits outside the window).
+// It once held 65 IaC rules whose patterns used RE2-incompatible negative
+// lookahead to express "resource present but hardening property absent". Go's
+// regexp is RE2, it rejects lookahead, and RegexMatcher.compile returns the
+// error while Match answers nil — so every one of them loaded, listed in
+// `nox rules`, ran on every file and matched nothing.
 //
-// The 8 below remain: each needs per-item scoping that none of the current
-// spans model precisely, so leaving them dead is safer than shipping a noisy
-// approximation. They keep their (uncompilable) lookahead pattern and stay
-// tracked here so the gap is recorded and testable rather than accidental:
+// 57 were converted to the block-scoped absence matcher. The last 8 stayed,
+// each with a reason recorded here: they needed per-item scoping no span
+// modelled, and "leaving them dead is safer than shipping a noisy
+// approximation". That reasoning was right, and it was tested against:
 //
-//   - IAC-155 workflow_dispatch without environment — "environment" is a
-//     per-job key; a file-level or brace span cannot bind it to the trigger.
-//   - IAC-159 branch protection without required checks — spans a settings
-//     document structure the anchor cannot delimit.
-//   - IAC-170 S3 backend without versioning — an S3 backend block has no
-//     `versioning` argument (that lives on the bucket resource); the rule is
-//     semantically ill-posed and would only ever false-positive.
-//   - IAC-173 aws_* resource without tags — many AWS resource types cannot be
-//     tagged, so a blanket per-resource tags check needs a type allowlist.
-//   - IAC-179 compose service without resource limits — needs the per-service
-//     mapping span; the deploy/mem_limit/cpus alternatives sit at mixed depths.
-//   - IAC-180 compose volume without read-only — needs per-mount parsing of the
-//     `host:container[:mode]` string, not a line/block absence.
-//   - IAC-182 compose service without healthcheck — needs the per-service span,
-//     as IAC-179.
-//   - IAC-200 Ansible sensitive var without no_log — no_log is a task-level
-//     sibling key; correctly scoping it needs per-task (list-item) spans.
+//   - IAC-155, IAC-200 needed a span the absence matcher does have once the
+//     right one is chosen — "file" for a trigger and the environment that gates
+//     it on another job, "brace-enclosing" for a task-level `no_log` sibling,
+//     which falls back to the indentation-bounded enclosing span in YAML.
+//   - IAC-179, IAC-180, IAC-182 needed a per-SERVICE answer that names the
+//     service, which no span gives. They are parsed now, per service, reusing
+//     the walk IAC-501 already does (compose_service.go).
+//   - IAC-159, IAC-170, IAC-173 were removed. The note's reasons held up under
+//     test: branch protection is not in the workflow document, a `backend "s3"`
+//     block has no `versioning` argument, and a blanket tags check needs a
+//     per-type taggability table — converted without one, IAC-173 fired on
+//     TestNoFalsePositives_CleanTerraform's minimal, correct security group.
 //
-// Converting a rule out of this set means giving it a working detection; the
-// guard below then requires it to actually compile/fire. The set must only ever
-// SHRINK. TestNoNewUncompilableIaCRules fails the build if a rule outside it
-// fails to compile, so a new lookahead pattern cannot be added silently.
-var knownUncompilableIaCRules = map[string]bool{
-	"IAC-155": true, "IAC-159": true, "IAC-170": true, "IAC-173": true,
-	"IAC-179": true, "IAC-180": true, "IAC-182": true, "IAC-200": true,
-}
+// The set must stay empty. CheckCoherence now rejects an uncompilable pattern
+// outright, so this guard is the second of two.
+var knownUncompilableIaCRules = map[string]bool{}
 
 // TestNoNewUncompilableIaCRules is the structural guard for a whole class of
 // silently-dead rules. Every IaC rule pattern must compile, unless it is one of

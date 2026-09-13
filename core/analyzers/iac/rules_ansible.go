@@ -173,17 +173,9 @@ func builtinAnsibleRules() []rules.Rule {
 			remediation:  "Remove no_log: false or set it to true for tasks that handle sensitive data. Disabling no_log causes passwords, tokens, and other secrets to appear in Ansible output and logs.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/532.html", "https://docs.ansible.com/ansible/latest/reference_appendices/logging.html"},
 		},
-		{
-			id: "IAC-200", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)(?:password|secret|token|key)\s*:(?!.*no_log)`,
-			description:  "Ansible task with sensitive variable without no_log",
-			cwe:          "CWE-532",
-			keywords:     []string{"password", "secret", "token", "key"},
-			filePatterns: []string{"*.yml", "*.yaml"},
-			tags:         []string{"iac", "ansible", "logging"},
-			remediation:  "Add no_log: true to tasks that reference sensitive variables such as passwords, secrets, tokens, or keys. This prevents credential leakage in Ansible output.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/532.html"},
-		},
+		// IAC-200 is evaluated by parsing now, per TASK: `no_log` is a sibling
+		// of the module, and a task is not something a regex can identify. See
+		// ansible_no_log.go.
 		{
 			id: "IAC-201", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
 			pattern:      `ignore_errors:\s*(?:true|yes)`,

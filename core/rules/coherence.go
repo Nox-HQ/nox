@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -48,6 +49,37 @@ func (r *Rule) CheckCoherence() error {
 	var problems []string
 	add := func(format string, args ...any) {
 		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+
+	// A pattern that does not COMPILE is the purest form of the failure this
+	// function exists to police. RegexMatcher.compile returns the error and
+	// Match answers nil, so the rule loads, lists in `nox rules`, runs on every
+	// file and matches nothing — indistinguishable from a rule that ran and
+	// found nothing wrong.
+	//
+	// Eight IaC rules shipped this way, all of them spelling an absence with a
+	// negative lookahead that RE2 does not implement:
+	//
+	//	(?i)backend\s+"s3"\s*\{(?:[^}](?!versioning))*\}
+	//
+	// TestAllIaCRules_Compile existed the whole time and asserted that the
+	// pattern was non-EMPTY, which is not what its name promises. Checking it
+	// here instead makes the guarantee structural: a rule with an uncompilable
+	// pattern cannot reach a rule set through the loader, and the catalogue
+	// test that calls CheckCoherence fails on the built-in tables.
+	for label, pattern := range map[string]string{
+		"pattern":          r.Pattern,
+		"absence_anchor":   r.AbsenceAnchor,
+		"absence_property": r.AbsenceProperty,
+		"absence_require":  r.AbsenceRequire,
+	} {
+		if pattern == "" {
+			continue
+		}
+		if _, err := regexp.Compile(pattern); err != nil {
+			add("%s does not compile (%v), so the matcher gives up and the rule "+
+				"can never fire", label, err)
+		}
 	}
 
 	structuralOnly := r.structuralOnlyFields()
