@@ -49,7 +49,7 @@ errors compounded:
    described, as a pending opportunity, work that had already shipped.
 3. **A 21-40x performance regression, which does not exist.** Comparing
    2026-Q2's durations against fresh scans, I reported the engine had become
-   dramatically slower. Running both binaries over one tree put it at 1.37x.
+   dramatically slower. Running both binaries over one tree put it at 1.26x.
    The corpus had grown; I had attributed that to the engine.
 
 The second mistake was caused by the first: having concluded the proximity
@@ -110,19 +110,24 @@ is simply a bigger tree now.
 | agent-go | 11s → 18s (1.64×) | 211 → 35 | 150 → 7 | **-95.3%** |
 | mcp python-sdk | 32s → 39s (1.22×) | 1,601 → 103 | 1,331 → 21 | **-98.4%** |
 | openai-python | 65s → 97s (1.49×) | 17,056 → 370 | 10,817 → 33 | **-99.7%** |
-| **total** | **147s → 202s (1.37×)** | **26,024 → 636** | **19,172 → 164** | **-99.1%** |
+| vercel/ai | 723s → 891s (1.23×) | 3,124,502 → 3,298 | 3,106,047 → 2,068 | **-99.93%** |
+| **total** | **870s → 1,093s (1.26×)** | **3,150,526 → 3,934** | **3,125,219 → 2,232** | **-99.93%** |
 
-The precision change is the point: **-99.1% SEC findings on identical input**,
+The precision change is the point: **-99.93% SEC findings on identical input**,
 and it is attributable to the engine because nothing else moved.
+
+vercel/ai is the clearest single case, because it is where the base64 fixture
+described above lives: 3,106,047 SEC findings from the May engine, 2,068 from
+the current one, on the same 3.1-million-finding tree.
 
 ### Scan cost
 
 The same A/B settles a claim I made and had wrong. Comparing 2026-Q2's recorded
 durations against fresh scans suggested a 21-40x slowdown. On identical input it
-is **1.37x** — 147s to 202s across these four repositories. The apparent
+is **1.26x** — 870s to 1,093s across these five repositories. The apparent
 regression was almost entirely the corpus having grown between the two dates.
 
-A 1.37x cost for a 99% reduction in output is a trade worth making, but it is
+A 1.26x cost for a 99.9% reduction in output is a trade worth making, but it is
 not free, and the profile says where it goes. Measured on
 anthropic-sdk-python, 54% of scan CPU is `rules.Engine.ScanFile`, nearly all of
 it inside `regexp`:
