@@ -1974,9 +1974,19 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-155", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)workflow_dispatch\s*:\s*$|workflow_dispatch\s*:\s*\n\s+(?!.*environment)`,
-			description: "GitHub Actions manual trigger without environment approval",
-			cwe:         "CWE-284", keywords: []string{"workflow_dispatch"},
+			// An absence rule, because the description is one, and because the
+			// negative lookahead it used to spell it with is not RE2 syntax:
+			// the pattern never compiled and the rule never fired.
+			//
+			// The span is the file. A `workflow_dispatch:` trigger and the
+			// `environment:` that gates it are in different places — the
+			// trigger is under `on:`, the environment on a job — so the
+			// question is whether the workflow declares one anywhere.
+			absenceAnchor:   `(?im)^[ \t]*workflow_dispatch[ \t]*:`,
+			absenceProperty: `(?im)^[ \t]*environment[ \t]*:`,
+			absenceSpan:     "file",
+			description:     "GitHub Actions manual trigger without environment approval",
+			cwe:             "CWE-284", keywords: []string{"workflow_dispatch"},
 			filePatterns: []string{"*.yml", "*.yaml"},
 			tags:         []string{"iac", "github-actions", "ci-cd"},
 			remediation:  "Require environment approval for workflow_dispatch triggers that perform sensitive operations. Use GitHub environments with required reviewers for deployment gates.",
@@ -2012,16 +2022,17 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Ensure CodeQL is configured for all supported languages in the repository. Add codeql-analysis.yml workflow if not present for automated security scanning.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
-		{
-			id: "IAC-159", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)branches\s*:\s*\n\s*-\s*(main|master)\s*$(?:[^}](?!required_status_checks|required_pull_request_reviews))*`,
-			description: "GitHub workflow triggers on main branch without branch protection indicators",
-			cwe:         "CWE-284", keywords: []string{"branches", "main", "master"},
-			filePatterns: []string{"*.yml", "*.yaml"},
-			tags:         []string{"iac", "github-actions", "ci-cd"},
-			remediation:  "Enable branch protection rules for main/master: require pull request reviews, status checks, signed commits, and linear history.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/284.html"},
-		},
+		// IAC-159 ("GitHub workflow triggers on main branch without branch
+		// protection indicators") is REMOVED, not retired: nothing else reports
+		// the condition, because the condition is not in the document.
+		//
+		// Branch protection is a repository SETTING. A workflow file cannot
+		// contain `required_status_checks` or `required_pull_request_reviews`,
+		// so the absence the rule looked for is universal: given a compiling
+		// pattern it would have fired on every workflow that runs on main, at
+		// MEDIUM, and been right about none of them. It never fired — the
+		// negative lookahead is not RE2 syntax — which is the only reason the
+		// noise was never seen.
 		{
 			id: "IAC-160", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(>>?\s*\$GITHUB_OUTPUT|>>?\s*\$GITHUB_ENV).*\$\{\{\s*secrets\.`,
@@ -2138,16 +2149,15 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Add required_version to the terraform block (e.g., required_version = \">= 1.5.0\"). This prevents running with incompatible Terraform versions.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
-		{
-			id: "IAC-170", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)backend\s+"s3"\s*\{(?:[^}](?!versioning))*\}`,
-			description: "Terraform S3 backend without state file versioning",
-			cwe:         "CWE-693", keywords: []string{"backend", "versioning"},
-			filePatterns: []string{"*.tf"},
-			tags:         []string{"iac", "terraform", "state"},
-			remediation:  "Enable versioning on the S3 bucket used for state storage. Versioning allows recovery from accidental state corruption or deletion.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-170 ("Terraform S3 backend without state file versioning") is
+		// REMOVED. Its claim is not merely unfireable, it is ill-posed: a
+		// Terraform `backend "s3"` block has no `versioning` argument. Versioning
+		// is a property of the BUCKET, declared on an aws_s3_bucket resource that
+		// is usually in another repository entirely. Converted to an absence rule
+		// it would have fired on every S3 backend ever written and been right
+		// about none of them — the noisy approximation the tracking note in
+		// pattern_compile_test.go declined to ship. A rule about bucket
+		// versioning is a different rule, anchored on the bucket.
 		{
 			id: "IAC-171", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			absenceAnchor:   `(?im)^output\s+"[^"]*(?:password|secret|token|key|credential)[^"]*"`,
@@ -2170,16 +2180,16 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Use a dedicated secrets manager (AWS Secrets Manager, HashiCorp Vault) with the corresponding Terraform provider instead of data sources for secret retrieval.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/312.html"},
 		},
-		{
-			id: "IAC-173", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)resource\s+"aws_[^"]+"\s+"[^"]+"\s*\{(?:[^}](?!tags\s*[={]))*\}`,
-			description: "Terraform AWS resource without tags",
-			cwe:         "CWE-1059", keywords: []string{"tags"},
-			filePatterns: []string{"*.tf"},
-			tags:         []string{"iac", "terraform", "best-practice"},
-			remediation:  "Add tags to all AWS resources for cost allocation, access control, and resource management. Use default_tags in the provider block for consistent tagging.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/1059.html"},
-		},
+		// IAC-173 ("Terraform AWS resource without tags") is REMOVED.
+		//
+		// The condition is real and checkable, but only against a table of which
+		// AWS resource types accept tags — aws_iam_role_policy_attachment,
+		// aws_security_group_rule, aws_lambda_permission and many more do not.
+		// Converted without one it fired on TestNoFalsePositives_CleanTerraform's
+		// minimal, correct security group. That table is large, I could not verify
+		// it, and the corpus carries no Terraform to measure a guess against, so
+		// shipping one would be asserting something unchecked. Removed rather than
+		// approximated; it can return with the table.
 		{
 			id: "IAC-174", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)resource\s+"aws_launch_configuration"|resource\s+"aws_autoscaling_attachment"|resource\s+"aws_iam_access_key"`,
@@ -2236,26 +2246,14 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Enable service account creation (serviceAccount.create: true) for each Helm release. Dedicated service accounts enable proper RBAC and pod identity.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/269.html"},
 		},
-		{
-			id: "IAC-179", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(services|version)\s*:(?:[^}](?!deploy\s*:\s*\n\s+resources|mem_limit|cpus))*`,
-			description: "Docker Compose service without resource limits",
-			cwe:         "CWE-770", keywords: []string{"deploy", "resources", "mem_limit"},
-			filePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
-			tags:         []string{"iac", "docker-compose", "resources"},
-			remediation:  "Add deploy.resources.limits (memory, cpus) or mem_limit/cpus to Compose services. Without limits, a single container can exhaust host resources.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/770.html"},
-		},
-		{
-			id: "IAC-180", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)volumes\s*:\s*\n(\s+-\s+(?!.*:ro\b|.*:readonly\b|.*read_only).*:\s*/[^\n]*\n)+`,
-			description: "Docker Compose volume mount without read-only flag",
-			cwe:         "CWE-732", keywords: []string{"volumes", "ro", "readonly"},
-			filePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
-			tags:         []string{"iac", "docker-compose", "filesystem"},
-			remediation:  "Add :ro suffix to volume mounts that do not need write access (e.g., ./config:/app/config:ro). Read-only mounts limit the damage from container compromise.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/732.html"},
-		},
+		// IAC-179 is evaluated by parsing now, per service, not by a pattern: its
+		// claim is a Compose service WITHOUT resource limits, and the negative
+		// lookahead it was spelled with is not RE2 syntax — it never compiled.
+		// See compose_service.go.
+		// IAC-180 is evaluated by parsing now, per service, not by a pattern: its
+		// claim is a Compose service WITHOUT read-only volume mounts, and the negative
+		// lookahead it was spelled with is not RE2 syntax — it never compiled.
+		// See compose_service.go.
 		{
 			id: "IAC-181", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)tmpfs\s*:\s*\n?\s*-?\s*/run/secrets|tmpfs\s*:\s*["']?/run/secrets["']?`,
@@ -2266,16 +2264,10 @@ func builtinBaseIaCRules() []rules.Rule {
 			remediation:  "Use Docker secrets (secrets: top-level key) instead of tmpfs for sensitive data. Docker secrets are encrypted at rest in Swarm mode and mounted read-only.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/312.html"},
 		},
-		{
-			id: "IAC-182", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(services\s*:\s*\n\s+\w+\s*:\s*\n(?:[^}](?!healthcheck))*){1}`,
-			description: "Docker Compose service without health check",
-			cwe:         "CWE-693", keywords: []string{"healthcheck"},
-			filePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
-			tags:         []string{"iac", "docker-compose", "availability"},
-			remediation:  "Add healthcheck to Compose services to enable automatic restart of unhealthy containers and proper dependency ordering with depends_on condition: service_healthy.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
+		// IAC-182 is evaluated by parsing now, per service, not by a pattern: its
+		// claim is a Compose service WITHOUT health checks, and the negative
+		// lookahead it was spelled with is not RE2 syntax — it never compiled.
+		// See compose_service.go.
 		// IAC-183 retired into IAC-132, which reported the same condition from
 		// a byte-identical absence configuration — same anchor, same property,
 		// absence_span: file. It called itself a Helm rule and matched every

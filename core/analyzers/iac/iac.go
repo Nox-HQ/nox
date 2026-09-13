@@ -61,6 +61,10 @@ func NewAnalyzer() *Analyzer {
 	}
 	cat.Add(composeImageRule())
 	cat.Add(pullPolicyRule())
+	for _, r := range composeServiceRules() {
+		cat.Add(r)
+	}
+	cat.Add(noLogRule())
 
 	a := &Analyzer{engine: rules.NewEngine(rs), catalog: cat}
 	// A second engine holding only the absence rules, for manifests embedded
@@ -145,6 +149,10 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// `imagePullPolicy: Always` is only a finding against an image reference
 	// that can change, which means reading the container. See pull_policy.go.
 	out = append(out, scanPullPolicies(path, content)...)
+	// Three per-service Compose absence questions. See compose_service.go.
+	out = append(out, scanComposeServices(path, content)...)
+	// A task is not something a regex can identify. See ansible_no_log.go.
+	out = append(out, scanAnsibleNoLog(path, content)...)
 	embedded, err := a.scanEmbedded(path, content, out)
 	if err != nil {
 		return nil, err

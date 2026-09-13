@@ -82,8 +82,15 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// word, which is what makes the prose case reachable: measured, each is
 	// suppressed by SEC-005 on the assignment it exists for and is the sole
 	// reporter on a 32-character run sitting near the word in prose.
-	if got := len(cat); got != 1526 {
-		t.Errorf("Catalog() returned %d rules, want 1526", got)
+	// 1526 -> 1523 removed IAC-159, IAC-170 and IAC-173, the three of the eight
+	// uncompilable-pattern rules whose claims cannot be established from the
+	// document: branch protection is a repository setting, a Terraform
+	// `backend "s3"` block has no `versioning` argument, and a blanket AWS tags
+	// check needs a per-type taggability table. The other five were given
+	// working detection and keep their IDs — IAC-179/180/182 are now evaluated
+	// per service by parsing, so they leave the engine's set and stay here.
+	if got := len(cat); got != 1523 {
+		t.Errorf("Catalog() returned %d rules, want 1523", got)
 	}
 }
 

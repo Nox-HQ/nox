@@ -339,11 +339,16 @@ func TestScan_CustomRulesInterspersedFlag(t *testing.T) {
 }
 
 func TestScan_CustomRuleInvalidRegex(t *testing.T) {
-	// A rule with a pattern field that is not a valid regex should cause
-	// a validation error at rule level (the engine silently skips invalid
-	// patterns when compiling, but the rule itself should still load).
-	// The rule engine gracefully handles invalid regex by returning no
-	// matches, so the scan should succeed with no findings from this rule.
+	// A custom rule whose pattern does not compile is a validation error, and
+	// exits 2 like every other malformed rule — a missing id, an unknown
+	// severity.
+	//
+	// It used to exit 0. The old comment here said why: "the engine silently
+	// skips invalid patterns when compiling", so the scan reported success and
+	// the rule the operator wrote never ran. That is the silent-detector
+	// failure this repository keeps finding, with the operator's own rule as
+	// the victim, and it was encoded as an expectation. CheckCoherence rejects
+	// the pattern at load now, so the loader says which rule and why.
 	scanDir := t.TempDir()
 	writeFile(t, scanDir, "main.go", "package main\nfunc main() {}\n")
 
@@ -362,9 +367,9 @@ func TestScan_CustomRuleInvalidRegex(t *testing.T) {
 
 	outDir := filepath.Join(scanDir, "output")
 	code := run([]string{"--quiet", "--rules", rulesFile, "--output", outDir, "scan", scanDir})
-	// The scan should succeed (bad regex is handled by the engine, returns no matches).
-	if code != 0 {
-		t.Fatalf("expected exit code 0 (invalid regex handled gracefully), got %d", code)
+	if code != 2 {
+		t.Fatalf("expected exit code 2 (a rule that cannot compile is a validation "+
+			"error, not a rule that found nothing), got %d", code)
 	}
 }
 

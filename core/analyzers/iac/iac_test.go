@@ -627,11 +627,18 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// blind to half of it. Each lives on as an alias on the rule that absorbed
 	// it, so the drop is in rule COUNT only, not in coverage.
 	//
+	// 478 -> 477: IAC-200 joins them, evaluated per TASK by parsing.
+	//
+	// 484 -> 478: IAC-179, IAC-180 and IAC-182 joined IAC-185 outside the
+	// ENGINE's set, evaluated per service by parsing, and IAC-159, IAC-170 and
+	// IAC-173 were removed outright — see pattern_compile_test.go. The first
+	// three are still in the analyzer's published catalog.
+	//
 	// 485 -> 484 is not a retirement: IAC-185 moved out of the ENGINE's set
 	// because it is evaluated by parsing (pull_policy.go). It is still in the
 	// analyzer's published catalog, and TestCatalogContainsAllRules counts it.
-	if got := len(rules); got != 484 {
-		t.Errorf("expected 484 IaC rules, got %d", got)
+	if got := len(rules); got != 477 {
+		t.Errorf("expected 477 IaC rules, got %d", got)
 	}
 }
 

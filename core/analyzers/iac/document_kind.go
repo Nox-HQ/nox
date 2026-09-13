@@ -420,38 +420,60 @@ func isCIPipeline(path string, content []byte) bool {
 // were scoped by `{"*.yml", "*.yaml"}` alone.
 const ansibleFamilyTag = "ansible"
 
-// ansibleMarkers are keys and tokens that only an Ansible document writes.
+// ansibleKeyMarkers are keys only an Ansible document writes, matched as KEYS
+// rather than as substrings.
 //
-// They are matched anywhere rather than at the top level because an Ansible
-// playbook's top level is a SEQUENCE — `- hosts: all` — so its keys are one
-// indent in by construction, and a task file's keys are deeper still.
-var ansibleMarkers = [][]byte{
-	[]byte("hosts:"), []byte("tasks:"), []byte("roles:"), []byte("handlers:"),
-	[]byte("become:"), []byte("become_user:"), []byte("gather_facts:"),
-	[]byte("vars_files:"), []byte("include_tasks:"), []byte("import_tasks:"),
-	[]byte("include_role:"), []byte("import_playbook:"), []byte("delegate_to:"),
-	[]byte("with_items:"), []byte("galaxy_info:"), []byte("ansible.builtin."),
-	[]byte("ansible.posix."), []byte("community."), []byte("ansible_"),
-	[]byte("collections:"),
-}
+// The line anchor is what the first version got wrong. Matching `tasks:`
+// anywhere in the content admitted a CloudFormation template whose Description
+// reads "This template accomplishes the following tasks: (1) applies a name
+// tag…" — prose, in a field, in a document that is not remotely Ansible. Six
+// files in the corpus outside the Ansible repository contain a bare `tasks:`
+// substring. A key is the thing the marker means, so a key is what it matches.
+//
+// The optional `- ` is because a playbook's top level is a SEQUENCE: its keys
+// are written `- hosts: all`.
+//
+// Case-SENSITIVE, and that is load-bearing too. YAML keys are case-sensitive
+// and every Ansible key is lower-case, while the capitalised schemas are full
+// of collisions: `Roles:` is a CloudFormation IAM property, and it admitted
+// MANAGEDAD.cfn.yaml to the Ansible family under a case-insensitive match.
+var ansibleKeyMarkers = regexp.MustCompile(`(?m)^[ \t]*-?[ \t]*(?:hosts|tasks|pre_tasks|post_tasks|roles|` +
+	`handlers|become|become_user|become_method|gather_facts|vars_files|vars_prompt|` +
+	`include_tasks|import_tasks|include_role|import_playbook|include_vars|` +
+	`delegate_to|with_items|with_dict|galaxy_info|collections|serial|any_errors_fatal)[ \t]*:`)
+
+// ansibleTokenMarkers are Ansible's own namespaces, which may appear anywhere:
+// a collection-qualified module name, or an `ansible_` fact or connection
+// variable. Each is anchored enough to be safe unanchored.
+var ansibleTokenMarkers = regexp.MustCompile(`(?i)\b(?:ansible|community|amazon|kubernetes|containers|google)\.` +
+	`[a-z0-9_]+\.[a-z0-9_]+|\bansible_[a-z0-9_]+`)
 
 // isAnsibleDocument reports whether content is an Ansible playbook, task file,
 // role file or requirements file.
 //
 // It errs toward applying, and further than the other detectors here do: ONE
-// marker anywhere is enough. That is deliberate. Ansible has no format
-// declaration, no `apiVersion`, no mandatory key — a role's defaults/main.yml is
-// an ordinary mapping of arbitrary names — so a strict test would silently take
-// the family off exactly the files it is meant to read. A generous test costs a
-// false finding; a strict one costs a missed credential.
+// marker is enough. That is deliberate. Ansible has no format declaration, no
+// `apiVersion`, no mandatory key — a role's defaults/main.yml is an ordinary
+// mapping of arbitrary names — so a strict test would silently take the family
+// off exactly the files it is meant to read. A generous test costs a false
+// finding; a strict one costs a missed credential.
 func isAnsibleDocument(_ string, content []byte) bool {
-	for _, m := range ansibleMarkers {
-		if bytes.Contains(content, m) {
-			return true
-		}
-	}
-	return false
+	return ansibleKeyMarkers.Match(content) || ansibleTokenMarkers.Match(content) ||
+		ansibleTaskFile.Match(content)
 }
+
+// ansibleTaskFile matches a TOP-LEVEL sequence of named items — `- name: …` at
+// column zero.
+//
+// A role's tasks/main.yml is exactly that and carries none of the keys above:
+// no `hosts:`, no `tasks:`, just tasks. Without this a task file was not
+// recognised as Ansible at all, which the per-task no_log rule found
+// immediately.
+//
+// Column zero is what makes it safe. A GitHub Actions workflow's `steps:` are a
+// sequence of `- name:` items too, but they are nested under a job, and no
+// other format this meets puts a named sequence at the document's top level.
+var ansibleTaskFile = regexp.MustCompile(`(?m)^-[ \t]+name[ \t]*:`)
 
 // documentFormatTags is the vocabulary of tags that name a DOCUMENT FORMAT,
 // as opposed to the severity, theme or cloud provider a rule is also tagged

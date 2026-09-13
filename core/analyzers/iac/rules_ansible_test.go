@@ -16,8 +16,8 @@ func TestAnsibleRules_Count(t *testing.T) {
 	// partitioned one condition by spelling and each was blind to half of it.
 	// IAC-211 carries the alias, so the drop is in rule COUNT only.
 	rules := builtinAnsibleRules()
-	if got := len(rules); got != 44 {
-		t.Errorf("expected 44 Ansible rules, got %d", got)
+	if got := len(rules); got != 43 {
+		t.Errorf("expected 43 Ansible rules, got %d", got)
 	}
 }
 
