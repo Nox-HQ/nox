@@ -3297,7 +3297,36 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-443", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `lin_api_[a-zA-Z0-9]{43}`, description: "Detected Linear API Key", cwe: "CWE-798", keywords: []string{"linear"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-444", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `vercel_[a-zA-Z0-9]{24,}`, description: "Detected Vercel API Key", cwe: "CWE-798", keywords: []string{"vercel"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-445", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `nf-[a-zA-Z0-9]{22,43}`, description: "Detected Netlify API Key", cwe: "CWE-798", keywords: []string{"netlify"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-446", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9_-]{37,43}`, description: "Detected Cloudflare API Key", cwe: "CWE-798", keywords: []string{"cloudflare"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// Cloudflare is the case where "no distinctive prefix" turned out to be
+		// false, and checking beat assuming.
+		//
+		// This rule held `[a-zA-Z0-9_-]{37,43}` gated on the word "cloudflare".
+		// Recorded HTTP cassettes carry a `server: cloudflare` header, so the
+		// keyword is legitimately present in every such file -- whole-token
+		// matching does not help -- and every 37-43 character run in the
+		// response then inherits it. Measured on the pinned corpus: 228
+		// findings, 201 of them `__cf_bm` / `_cfuvid` bot-management cookies,
+		// the rest NEL report endpoints and CHANGELOG package names such as
+		// `llama-index-embeddings-cloudflare-workersai`. Zero were credentials.
+		//
+		// Cloudflare's documented formats give two real discriminators:
+		//
+		//	cfk_  + 40 + checksum   Global API Key
+		//	cfut_ + 40 + checksum   User API Token
+		//	cfat_ + 40 + checksum   Account API Token
+		//	legacy Global API Key   37-45 LOWERCASE HEX (no prefix)
+		//	legacy API tokens       40 alphanumeric (no prefix) -- SEC-087
+		//
+		// The prefixed forms were introduced for secret scanning and identify
+		// themselves. The legacy global key has no prefix, so it is bound
+		// through context instead: a Cloudflare-specific key name and an
+		// assignment, which is the shape SEC-087 already uses for the legacy
+		// token. Hex is a real constraint here -- a bot cookie is base64url and
+		// contains uppercase, `.` and `-`, so it cannot satisfy it.
+		//
+		// SEC-087 keeps the legacy `cloudflare_api_token = <40 alphanumeric>`
+		// form; the two do not overlap, which is checked in cloudflare_test.go.
+		{id: "SEC-446", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh, pattern: `(?i)\b(?:cf(?:k|ut|at)_[A-Za-z0-9]{40,}|cloudflare[_-]?(?:global[_-]?)?api[_-]?key["']?\s*[=:]\s*["']?[0-9a-f]{37,45})`, description: "Detected Cloudflare API credential", cwe: "CWE-798", keywords: []string{"cfk_", "cfut_", "cfat_", "cloudflare"}, remediation: "Rotate the exposed credential immediately in the Cloudflare dashboard.", references: []string{"https://cwe.mitre.org/data/definitions/798.html", "https://developers.cloudflare.com/fundamentals/api/get-started/token-formats/"}},
 		{id: "SEC-447", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `DD[a-zA-Z]{20,}`, description: "Detected Datadog API Key", cwe: "CWE-798", keywords: []string{"datadog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-448", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `https://[a-z0-9]{32}@`, description: "Detected Sentry DSN", cwe: "CWE-798", keywords: []string{"sentry"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-449", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eu01xx[a-f0-9]{32}`, description: "Detected New Relic License Key", cwe: "CWE-798", keywords: []string{"newrelic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

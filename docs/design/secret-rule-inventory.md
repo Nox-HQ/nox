@@ -334,12 +334,22 @@ the classification.
 
 The work that remains, in order:
 
-1. **Source each vendor's real credential format** — but far fewer than the
-   class size suggests. Re-measured on current HEAD, only **13 of 154** class-C
-   rules fire at all, and SEC-446 (`cloudflare`) is 228 of the remaining 339.
-   Note that Cloudflare API tokens carry no distinctive prefix — 40 characters
-   of base64url — so unlike PostHog and Gemini there may be no format to encode,
-   and the honest options are a different discriminator or retirement.
+1. ~~Source each vendor's real credential format.~~ The three that mattered are
+   done. Re-measured on current HEAD, only **13 of 154** class-C rules fire at
+   all, and the top three were 94.7% of the class:
+
+   - **SEC-661** (posthog) → redesigned onto `phx_`/`phs_`/`pha_`/`phr_`, class A.
+   - **SEC-569** (gemini) → retired into SEC-007; a Gemini key is a Google key.
+   - **SEC-446** (cloudflare) → redesigned. I had recorded that Cloudflare
+     "carries no distinctive prefix"; that was wrong. Since 2026 the formats are
+     `cfk_`/`cfut_`/`cfat_` + 40 + checksum, and the legacy Global API Key is
+     37–45 **lowercase hex**. Both are real discriminators, and a `__cf_bm`
+     cookie is base64url so it satisfies neither. Bound the prefixed forms by
+     pattern and the legacy key by a Cloudflare-specific assignment.
+     Non-overlap with SEC-087 is asserted, so the pair stays rather than merges.
+
+   What remains are rules firing in the tens or not at all, where the research
+   cost exceeds the noise they cause.
 2. ~~Redesign SEC-661 against PostHog's real formats.~~ **Done** — it reports
    `phx_`, `phs_`, `pha_`, `phr_` and not `phc_`, and moved from class C to
    class A. It is the template for the remaining 155.
