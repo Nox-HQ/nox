@@ -60,6 +60,10 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b`,
 			description: "Credit card number (Visa/MC/Amex/Discover)",
 			cwe:         "CWE-311", keywords: []string{"4", "5", "3", "6"},
+			// The prefixes describe a card number's shape; the Luhn checksum is
+			// what makes a digit run a card. See isPaymentCardNumber, and
+			// isInsideDecimalLiteral in data.go for the other half.
+			validate:    isPaymentCardNumber,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/311.html"},
 		},
