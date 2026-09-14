@@ -334,10 +334,26 @@ The work that remains, in order:
 2. ~~Redesign SEC-661 against PostHog's real formats.~~ **Done** — it reports
    `phx_`, `phs_`, `pha_`, `phr_` and not `phc_`, and moved from class C to
    class A. It is the template for the remaining 155.
-3. **Fix the short-keyword problem structurally.** `ibm`, `lob`, `fcm` are
-   satisfied by substrings of base64. Requiring a word boundary around the
-   keyword, or a minimum keyword length before a bare-token pattern is allowed
-   at all, is an abstraction-level fix rather than 156 individual ones.
+3. ~~Fix the short-keyword problem structurally.~~ **Done.** A vendor keyword
+   was matched as a plain substring, so the only evidence a bare-token rule has
+   could be manufactured by coincidence — `iBm` inside a PEM certificate's own
+   base64, `fcm` inside a private key's. `contextHasKeyword` now requires the
+   keyword to appear as a token, where a boundary is "not a letter or digit":
+   `posthog` still matches `posthog_api_key`, and a keyword carrying a
+   separator is a structured prefix with no right boundary demanded (`ghp_`,
+   `key-`, `sk-ant-api`, which runs into the digits of `sk-ant-api03`).
+   `ExcludeContextKeywords` keep substring matching on purpose — a veto that
+   fires too readily suppresses, which is the direction that cannot invent
+   evidence.
+
+   Measured: vercel/ai 3,289 → 2,915 (−11.4%), SEC-533 alone 245 → 4; crewAI
+   3,200 → 3,186. Two release-relative drops on the rule-diff corpus, both
+   ledgered, both PEM test assets where the private key is still reported by
+   SEC-004 and SEC-299 — a wrong label removed, not coverage. The rises are
+   dedup unmasking: all 9 lines where SEC-161 gained are lines a suppressed
+   vendor rule vacated, so the same span is now reported as "high-entropy
+   string in assignment" instead of "IBM API key", which is what the evidence
+   actually supports.
 4. **Then** revisit retirement, against rules whose proposition is known.
 
 Fewer findings is not the success criterion. Every drop recorded here is
