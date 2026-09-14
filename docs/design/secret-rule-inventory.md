@@ -178,15 +178,22 @@ in the 2026-Q2 report.
 
 Per class, and this is what the inventory is for:
 
+Measured on `docs/benchmarks/2026-09-14/bench.json` — seven repositories at
+pinned commits, current engine:
+
 | class | rules | findings | share of all |
 |---|---:|---:|---:|
-| A pattern-discriminative | 674 | 826 | 9.03% |
-| B contextual | 23 | 689 | 7.54% |
-| C bare token + proximity | 155 | **2,349** | **25.69%** |
-| D bare token + file-level only | 55 | 9 | 0.10% |
+| A pattern-discriminative | 674 | 826 | 11.55% |
+| B contextual | 23 | 706 | 9.87% |
+| C bare token + proximity | 154 | 339 | 4.74% |
+| D bare token + file-level only | 55 | 9 | 0.13% |
 
-**Class C is the whole problem, and class D is not a problem at all.** 55 rules
-produce 9 findings between them; 155 produce 2,349.
+All SEC rules together are now **26.3%** of findings, down from 42.4% when this
+work started. The earlier revision of this table read 155 / **2,349** for class
+C, before the whole-token keyword gate and the SEC-569 retirement.
+
+**Class D is not a problem: 55 rules produce 9 findings between them.** Class C
+was the whole problem at 2,349, and is now 339.
 
 An earlier revision of this document had those two the other way round, and
 named class D as the place to start retiring. That was an artifact of a dump
@@ -327,10 +334,12 @@ the classification.
 
 The work that remains, in order:
 
-1. **Source each vendor's real credential format** for the 156 class-C rules,
-   starting with the five above that account for 2,154 of their 2,349 findings.
-   This is external research, one vendor at a time, and it is the gate on
-   everything after it.
+1. **Source each vendor's real credential format** — but far fewer than the
+   class size suggests. Re-measured on current HEAD, only **13 of 154** class-C
+   rules fire at all, and SEC-446 (`cloudflare`) is 228 of the remaining 339.
+   Note that Cloudflare API tokens carry no distinctive prefix — 40 characters
+   of base64url — so unlike PostHog and Gemini there may be no format to encode,
+   and the honest options are a different discriminator or retirement.
 2. ~~Redesign SEC-661 against PostHog's real formats.~~ **Done** — it reports
    `phx_`, `phs_`, `pha_`, `phr_` and not `phc_`, and moved from class C to
    class A. It is the template for the remaining 155.
