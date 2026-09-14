@@ -77,6 +77,23 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"aiza"},
 			remediation: "Restrict the API key in the GCP Console and use application default credentials instead.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://cloud.google.com/docs/authentication/api-keys"},
+			// SEC-569 ("Detected Gemini API Key") is retired here. A Gemini key
+			// IS a Google API key -- the same `AIza` + 35 format this rule
+			// already matches -- so the coverage it was named for was never
+			// missing. What SEC-569 actually held was `\b[a-zA-Z0-9]{24}\b`
+			// keyed on the word "gemini", which cannot match an AIza key (39
+			// characters, and the prefix is not in the class) and instead
+			// matched any 24-character run near the word. Measured on the
+			// pinned corpus: 1,097 findings, 78.9% of all remaining class-C
+			// volume, every one of them in Google API response fixtures where
+			// "gemini" is the MODEL NAME -- request ids, not credentials.
+			//
+			// Narrowing it to the real format would have made a fourth rule
+			// matching what SEC-007, SEC-415 and SEC-806 already match, so it
+			// is retired rather than redesigned.
+			retires: []rules.RetiredRule{
+				{ID: "SEC-569", Pattern: `\b[a-zA-Z0-9]{24}\b`},
+			},
 		},
 		{
 			id: "SEC-008", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
@@ -3410,7 +3427,6 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-566", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32,64}`, description: "Detected Kraken API Key", cwe: "CWE-798", keywords: []string{"kraken"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-567", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{40}`, description: "Detected Binance API Key", cwe: "CWE-798", keywords: []string{"binance"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-568", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{32}`, description: "Detected Bitfinex API Key", cwe: "CWE-798", keywords: []string{"bitfinex"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-569", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{24}\b`, description: "Detected Gemini API Key", cwe: "CWE-798", keywords: []string{"gemini"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-570", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `pub-[a-z0-9]{34}`, description: "Detected CoinGecko API Key", cwe: "CWE-798", keywords: []string{"coingecko"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-571", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9-]{36,}`, description: "Detected CoinMarketCap API Key", cwe: "CWE-798", keywords: []string{"coinmarketcap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-572", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `live_[a-zA-Z0-9]{32}`, description: "Detected Payoneer API Token", cwe: "CWE-798", keywords: []string{"payoneer"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
