@@ -164,10 +164,35 @@ func packageName(eco ecosystem, spec string) (name string, ok bool) {
 			return "", false
 		}
 		spec = strings.TrimPrefix(spec, "node:")
+		// `#name` is a Node.js subpath import: resolved through the importing
+		// package's own "imports" field, so it is package-internal by
+		// specification and can never name a registry package.
+		if strings.HasPrefix(spec, "#") {
+			return "", false
+		}
 		if strings.HasPrefix(spec, "@") { // scoped: @scope/name[/subpath]
 			parts := strings.SplitN(spec, "/", 3)
 			if len(parts) < 2 {
 				return spec, true
+			}
+			// An EMPTY scope is not a package name. npm requires
+			// `@scope/name` with a non-empty scope, so `@/components` cannot
+			// resolve to anything in any registry -- it is the near-universal
+			// tsconfig `paths` alias for the project's own source root, and
+			// SLOP-001's own proposition already excludes a first-party module.
+			//
+			// This was 793 of the family's 1,293 findings on the pinned corpus
+			// -- 61.3% -- led by `@/components` (251), `@/agent` (199) and
+			// `@/lib` (152). Reporting them said a developer had installed a
+			// hallucinated package, when what they had done was configure a
+			// path alias.
+			//
+			// Resolving tsconfig `paths` properly would additionally cover
+			// aliases with a non-empty scope (`@util/chat-store`), which this
+			// does not: those are a valid package shape and need the config
+			// read to tell them from a real dependency.
+			if parts[0] == "@" {
+				return "", false
 			}
 			return parts[0] + "/" + parts[1], true
 		}
