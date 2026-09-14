@@ -669,10 +669,18 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // was deleted outright: an Azure subscription ID is not a credential, and the
 // pattern could not have matched one anyway, since a subscription ID is a UUID
 // and the hyphens fall outside the class.
+// 907 -> 906 retired SEC-569 into SEC-007. A Gemini API key IS a Google API
+// key -- `AIza` plus 35 characters, which SEC-007 already matched -- so the
+// coverage was never missing. SEC-569 held `\b[a-zA-Z0-9]{24}\b` keyed on the
+// word "gemini", which cannot match that format and instead matched any
+// 24-character run near the word: 1,097 findings on the pinned corpus, 78.9%
+// of all remaining class-C volume, every one in Google API fixtures where
+// "gemini" is the model name. Narrowing it to `AIza` would have made a fourth
+// rule matching what SEC-007, SEC-415 and SEC-806 already match.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 907 {
-		t.Fatalf("expected 907 built-in secret rules, got %d", len(rules))
+	if len(rules) != 906 {
+		t.Fatalf("expected 906 built-in secret rules, got %d", len(rules))
 	}
 }
 

@@ -95,8 +95,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// build stage — rather than to a regex over the FROM line. CONT-002 carries
 	// the alias, and core.attachRetiredIdentities is what makes an alias reach a
 	// finding an analyzer built by hand.
-	if got := len(cat); got != 1522 {
-		t.Errorf("Catalog() returned %d rules, want 1522", got)
+	// 1522 -> 1521 retired SEC-569 into SEC-007: a Gemini API key is a Google
+	// API key, so the format SEC-569 was named for was already covered, while
+	// the pattern it actually held could not match it.
+	if got := len(cat); got != 1521 {
+		t.Errorf("Catalog() returned %d rules, want 1521", got)
 	}
 }
 
