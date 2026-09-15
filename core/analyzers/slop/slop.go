@@ -21,6 +21,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -152,6 +153,13 @@ func isManifest(base string) bool {
 	case "poetry.lock", "uv.lock", "pdm.lock", "pipfile.lock",
 		"pnpm-lock.yaml", "pnpm-lock.yml", "yarn.lock":
 		return true
+	// tsconfig is not a dependency manifest, but it declares which specifiers
+	// resolve to the repository's own source. Same two-list rule as above.
+	case "tsconfig.json", "jsconfig.json":
+		return true
+	}
+	if strings.HasPrefix(base, "tsconfig.") && strings.HasSuffix(base, ".json") {
+		return true
 	}
 	return base == "requirements.txt" ||
 		(strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"))
@@ -214,7 +222,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string, content []byte, declared *declaredSet, local map[string]struct{}) {
 	seen := make(map[string]struct{})
 	seenPred := make(map[string]struct{})
-	for _, imp := range extractImports(eco, content) {
+	for _, imp := range extractImports(eco, lexctx.LangFromPath(path), content) {
 		pkg, ok := packageName(eco, imp.spec)
 		if !ok {
 			continue // relative/local specifier
@@ -223,6 +231,19 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 			a.refute(path, imp.line, "\""+pkg+"\" is in the "+string(eco)+
 				" standard library, so it resolves without a registry package")
 			continue
+		}
+		if eco == ecoNPM {
+			// A tsconfig `paths` alias resolves to a path inside the repository,
+			// so no registry serves the specifier and there is nothing for a
+			// squatter to register. Matched against the raw SPECIFIER, because
+			// a pattern like `@util/*` is written against what the source says,
+			// not against the name this resolves it to.
+			if pattern, ok := declared.aliasFor(imp.spec); ok {
+				a.refute(path, imp.line, "\""+imp.spec+"\" is resolved by the tsconfig "+
+					"path alias \""+pattern+"\" to a location inside this repository, not "+
+					"to a registry package")
+				continue
+			}
 		}
 		if eco == ecoPyPI {
 			if _, isLocal := local[pkg]; isLocal {

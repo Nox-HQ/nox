@@ -1,6 +1,10 @@
 package slop
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/nox-hq/nox/core/lexctx"
+)
 
 func TestEcosystemForExt(t *testing.T) {
 	cases := map[string]ecosystem{
@@ -25,7 +29,7 @@ from flask import Flask
 import a.b.c  # trailing comment
 from requests.sessions import Session
 `)
-	got := extractImports(ecoPyPI, src)
+	got := extractImports(ecoPyPI, lexctx.LangPython, src)
 	specs := make(map[string]bool)
 	for _, r := range got {
 		specs[r.spec] = true
@@ -44,7 +48,7 @@ import './local.js';
 const lodash = require('lodash/fp');
 const x = await import("@scope/pkg/sub");
 `)
-	got := extractImports(ecoNPM, src)
+	got := extractImports(ecoNPM, lexctx.LangJavaScript, src)
 	specs := make(map[string]bool)
 	for _, r := range got {
 		specs[r.spec] = true
@@ -163,5 +167,67 @@ func TestRealPackageNamesStillResolve(t *testing.T) {
 		if !ok || got != want {
 			t.Errorf("packageName(npm, %q) = %q, %v — want %q, true", spec, got, ok, want)
 		}
+	}
+}
+
+// A documented import is not an import.
+//
+// vercel/ai's content/tools-registry/registry.ts holds code samples for its
+// docs site inside template literals. The specifiers in them are ordinary,
+// valid npm names, so nothing about the NAME separates them from a real
+// dependency — 17 SLOP-001 findings in that one file, each asserting the
+// project depended on a package it was only showing the reader how to install.
+//
+// What separates them is where the `import` keyword sits: code in a real
+// import, string inside a backtick. The same test covers a Python docstring,
+// where the identical mistake is available.
+func TestImportInsideAStringIsNotAnImport(t *testing.T) {
+	js := []byte("import { generateText } from 'ai';\n" +
+		"export const registry = [{\n" +
+		"  codeExample: `import { generateText, isStepCount } from 'ai';\n" +
+		"import { executeCode } from 'ai-sdk-tool-code-execution';`,\n" +
+		"}];\n")
+	specs := map[string]bool{}
+	for _, r := range extractImports(ecoNPM, lexctx.LangJavaScript, js) {
+		specs[r.spec] = true
+	}
+	if !specs["ai"] {
+		t.Errorf("the real import of \"ai\" was dropped; got %v", specs)
+	}
+	if specs["ai-sdk-tool-code-execution"] {
+		t.Errorf("a package named only inside a documentation code sample was "+
+			"reported as an import; got %v", specs)
+	}
+
+	py := []byte("import os\n" +
+		"def f():\n" +
+		"    \"\"\"Usage:\n" +
+		"    import nonexistent_demo_package\n" +
+		"    from another_demo_package import thing\n" +
+		"    \"\"\"\n")
+	pyspecs := map[string]bool{}
+	for _, r := range extractImports(ecoPyPI, lexctx.LangPython, py) {
+		pyspecs[r.spec] = true
+	}
+	if !pyspecs["os"] {
+		t.Errorf("the real import of \"os\" was dropped; got %v", pyspecs)
+	}
+	for _, shown := range []string{"nonexistent_demo_package", "another_demo_package"} {
+		if pyspecs[shown] {
+			t.Errorf("%q is named in a docstring, not imported; got %v", shown, pyspecs)
+		}
+	}
+}
+
+// The graceful-degrade contract, stated as a test. lexctx.Classify returns one
+// whole-file code region for a language it does not lex, so gating on it must
+// suppress nothing there rather than everything — the failure mode would be
+// silent, because a rule that finds nothing looks exactly like a clean repo.
+func TestUnknownLanguageSuppressesNothing(t *testing.T) {
+	src := []byte("import express from 'express';\nconst l = require('lodash');\n")
+	got := extractImports(ecoNPM, lexctx.LangUnknown, src)
+	if len(got) != 2 {
+		t.Errorf("LangUnknown returned %d imports, want 2 — an unlexed language "+
+			"must behave as it did before the gate, not report nothing", len(got))
 	}
 }

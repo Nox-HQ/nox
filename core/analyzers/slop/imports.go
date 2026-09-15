@@ -51,22 +51,47 @@ var (
 // each tagged with its line number. Specifiers are returned verbatim (not yet
 // resolved to package names); relative and builtin specifiers are filtered out
 // downstream by packageName / stdlib membership.
-func extractImports(eco ecosystem, content []byte) []importRef {
+func extractImports(eco ecosystem, lang lexctx.Lang, content []byte) []importRef {
+	// An import statement quoted inside a string or a comment is not an import.
+	//
+	// vercel/ai's content/tools-registry/registry.ts carries documentation code
+	// samples in template literals:
+	//
+	//	codeExample: `import { generateText } from 'ai';
+	//	import { executeCode } from 'ai-sdk-tool-code-execution';`
+	//
+	// Those are text to be displayed, not modules to be resolved, and the
+	// specifier inside them is a perfectly ordinary npm name -- so no check on
+	// the NAME can tell them apart from a real import. What tells them apart is
+	// where the `import` keyword sits: in a real import it is code, and in these
+	// it is inside a backtick string. 17 findings in that one file, each
+	// asserting the project depended on a package it was only documenting.
+	//
+	// lexctx already classifies JS template literals and Python docstrings, so
+	// this costs one pass and no new lexer. For LangUnknown it returns a single
+	// code region spanning the file, which degrades to exactly the old
+	// behaviour rather than to silence.
+	regions := lexctx.Classify(lang, content)
+	inCode := func(off int) bool { return lexctx.KindAt(regions, off) == lexctx.KindCode }
+
 	switch eco {
 	case ecoPyPI:
-		return extractPythonImports(content)
+		return extractPythonImports(content, inCode)
 	case ecoNPM:
-		return extractJSImports(content)
+		return extractJSImports(content, inCode)
 	}
 	return nil
 }
 
 // lineOf returns the 1-based line number of byte offset off within content.
 
-func extractPythonImports(content []byte) []importRef {
+func extractPythonImports(content []byte, inCode func(int) bool) []importRef {
 	var refs []importRef
 	// `import x.y as z, a.b` — split the tail on commas, take each module.
 	for _, m := range pyImportRe.FindAllSubmatchIndex(content, -1) {
+		if !inCode(m[0]) {
+			continue // an import inside a docstring or a comment
+		}
 		line := lexctx.LineForOffset(content, m[0])
 		tail := strings.TrimSpace(string(content[m[2]:m[3]]))
 		// Strip trailing comments.
@@ -92,6 +117,9 @@ func extractPythonImports(content []byte) []importRef {
 	}
 	// `from x import y` / `from . import y`.
 	for _, m := range pyFromRe.FindAllSubmatchIndex(content, -1) {
+		if !inCode(m[0]) {
+			continue
+		}
 		line := lexctx.LineForOffset(content, m[0])
 		spec := string(content[m[2]:m[3]])
 		refs = append(refs, importRef{spec: spec, line: line})
@@ -122,10 +150,16 @@ func isPyModulePath(s string) bool {
 	return true
 }
 
-func extractJSImports(content []byte) []importRef {
+func extractJSImports(content []byte, inCode func(int) bool) []importRef {
 	var refs []importRef
 	add := func(res []int) {
 		if res == nil {
+			return
+		}
+		// res[0] is the `import`/`from`/`require` keyword, which is code in a
+		// real import and string in a quoted code sample. The specifier itself
+		// is a string either way, so it cannot be what is tested.
+		if !inCode(res[0]) {
 			return
 		}
 		refs = append(refs, importRef{spec: string(content[res[2]:res[3]]), line: lexctx.LineForOffset(content, res[0])})

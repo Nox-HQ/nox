@@ -139,10 +139,54 @@ func normalizePyPI(name string) string {
 type declaredSet struct {
 	npm  map[string]struct{} // exact names (scoped kept as @scope/name)
 	pypi map[string]struct{} // normalized (normalizePyPI) names
+	// npmAliases are tsconfig/jsconfig `compilerOptions.paths` patterns, kept
+	// verbatim (`@util/*`, `~/*`). A specifier one of these matches is resolved
+	// by the bundler to a path inside the repository, so no registry serves it
+	// and SLOP-001's proposition does not apply.
+	npmAliases []string
 }
 
 func newDeclaredSet() *declaredSet {
 	return &declaredSet{npm: map[string]struct{}{}, pypi: map[string]struct{}{}}
+}
+
+// addNPMAlias records one tsconfig `paths` pattern.
+func (d *declaredSet) addNPMAlias(pattern string) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return
+	}
+	d.npmAliases = append(d.npmAliases, pattern)
+}
+
+// aliasFor reports the tsconfig `paths` pattern that resolves spec, if any.
+//
+// TypeScript allows at most one `*` per pattern and matches it greedily against
+// the rest of the specifier; a pattern without `*` matches exactly. That is the
+// whole of the matching rule, so this implements it rather than approximating
+// it with a prefix test -- `@util/*` must not claim `@utilities/thing`.
+//
+// The aliases are collected across every tsconfig in the tree, which is wider
+// than TypeScript's own scoping (a config applies to the files it includes).
+// The direction of that imprecision is deliberate: SLOP-001 asserts a developer
+// installed a package that does not exist, and a wrongly withheld finding costs
+// less than that accusation made wrongly.
+func (d *declaredSet) aliasFor(spec string) (string, bool) {
+	for _, p := range d.npmAliases {
+		star := strings.IndexByte(p, '*')
+		if star < 0 {
+			if spec == p {
+				return p, true
+			}
+			continue
+		}
+		prefix, suffix := p[:star], p[star+1:]
+		if len(spec) >= len(prefix)+len(suffix) &&
+			strings.HasPrefix(spec, prefix) && strings.HasSuffix(spec, suffix) {
+			return p, true
+		}
+	}
+	return "", false
 }
 
 func (d *declaredSet) addNPM(name string) {
@@ -235,6 +279,15 @@ func collectDeclared(files map[string][]byte) *declaredSet {
 			parsePnpmLock(content, d)
 		case base == "yarn.lock":
 			parseYarnLock(content, d)
+		// tsconfig `paths` is how a TypeScript project names its own source
+		// without a relative path. `@util/chat-store` is a valid npm package
+		// SHAPE, so unlike the empty-scope `@/components` case it cannot be
+		// rejected on the name alone -- the config has to be read. 15 findings
+		// in vercel/ai's examples/ai-e2e-next, whose tsconfig declares
+		// "@util/*": ["./util/*"].
+		case base == "tsconfig.json" || base == "jsconfig.json" ||
+			strings.HasPrefix(base, "tsconfig.") && strings.HasSuffix(base, ".json"):
+			parseTSConfigPaths(content, d)
 		case base == "requirements.txt" || strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"):
 			parseRequirements(content, d)
 		case base == "pyproject.toml":
@@ -533,5 +586,61 @@ func parseYarnLock(content []byte, d *declaredSet) {
 				d.addNPM(m[1])
 			}
 		}
+	}
+}
+
+// tsconfig is JSONC — it permits comments and trailing commas, which
+// encoding/json rejects — so the `paths` object is located textually and its
+// keys read, rather than the file being unmarshalled. A tsconfig nox cannot
+// parse must not become a tsconfig with no aliases: that silently restores the
+// false positives the aliases exist to prevent.
+var (
+	tsPathsStartRe = regexp.MustCompile(`"paths"\s*:\s*\{`)
+	tsPathsKeyRe   = regexp.MustCompile(`"([^"\n]+)"\s*:\s*\[`)
+)
+
+// parseTSConfigPaths records every `compilerOptions.paths` key as an alias.
+//
+// The object is delimited by brace matching, not by a regex for the closing
+// brace. The first attempt used `(?s)"paths"\s*:\s*\{(.*?)\n\s*\}`, which
+// needs the closing brace on its own line — true of every pretty-printed
+// tsconfig and false of a minified one, so it read nothing from a single-line
+// config and said nothing about it. Braces inside a string cannot be part of a
+// path pattern, but they can appear in a comment, so string and comment state
+// are both tracked.
+func parseTSConfigPaths(content []byte, d *declaredSet) {
+	loc := tsPathsStartRe.FindIndex(content)
+	if loc == nil {
+		return
+	}
+	depth, inStr, esc := 0, false, false
+	end := -1
+	for i := loc[1] - 1; i < len(content); i++ {
+		c := content[i]
+		switch {
+		case esc:
+			esc = false
+		case inStr && c == '\\':
+			esc = true
+		case c == '"':
+			inStr = !inStr
+		case inStr:
+		case c == '{':
+			depth++
+		case c == '}':
+			depth--
+			if depth == 0 {
+				end = i
+			}
+		}
+		if end >= 0 {
+			break
+		}
+	}
+	if end < 0 {
+		return
+	}
+	for _, m := range tsPathsKeyRe.FindAllSubmatch(content[loc[1]:end], -1) {
+		d.addNPMAlias(string(m[1]))
 	}
 }
