@@ -140,7 +140,22 @@ UUID is not.
    vendor's format. They need Square's and PayPal's real formats sourced, the
    way PostHog's and Cloudflare's were, and are deliberately untouched here
    rather than guessed at. The same applies to `live_` (SEC-562, SEC-572).
-3. **Lift dedup to the scanner.** The facility to generalise already exists and
+3. **The kubernetes family has no document gate.** Found by generalising the
+   invariant test, not by looking for it. `documentKindGates` has rows for
+   serverless, cloudformation, github-actions, ci-cd, ansible and kustomize —
+   six families that each carried a `*.yaml` catch-all and were gated on what
+   the DOCUMENT declares. There is no kubernetes row, so a rule tagged
+   `kubernetes` and scoped `*.yaml` applies to every YAML file in any
+   repository. IAC-031 ("Container image uses latest tag in Kubernetes
+   manifest") fires on `docker-compose.yml`, where IAC-501 owns the condition
+   and resolves `${VAR:-default}` the way Compose does.
+
+   IAC-031 is narrowed here with `ignoreFilePatterns` because it was making a
+   real duplicate. The family-wide gate is the actual fix and needs its own
+   corpus measurement — the rule-diff corpus contains kubernetes/examples, so
+   the evidence is available.
+
+4. **Lift dedup to the scanner.** The facility to generalise already exists and
    should not be rewritten; what it needs is to run over the merged finding set
    rather than inside one analyzer, and to key on the condition rather than on a
    provider prefix. `core/cross_analyzer_dedup_test.go` asks the boundary
