@@ -49,7 +49,21 @@
     "before committing it, or the corpus stops being a control.",
     "",
     "Keep this list small. It runs on every release; breadth matters more than",
-    "depth, and each entry costs a clone plus two full scans."
+    "depth, and each entry costs a clone plus two full scans.",
+    "",
+    "Entropy was the last family with NO control here. SEC-161/162/163 fire on",
+    "high-randomness strings rather than a vendor pattern, and not one entry above",
+    "carried them at volume -- so an entropy change could narrow or widen freely",
+    "with the diff staying green, the same pass-by-absence the IAC and ansible",
+    "notes describe. anthropics/anthropic-sdk-python was added for that.",
+    "",
+    "joaomdmoura/crewAI was measured for the same gap and REJECTED, on cost rather",
+    "than on coverage: 370M across 30,266 files, one scan 66x certbot on the same",
+    "machine (1704s, 527M peak RSS), and OOM-killed once under load. Two scans per",
+    "release against a script that treats a failed scan as FATAL means adding it",
+    "would not have slowed the gate, it would have broken it. Its 597 recorded",
+    "cassettes are still the only base64-blob surface measured anywhere, so the",
+    "decode path's blob suppression remains witnessed by the bench corpus alone."
   ],
   "repos": [
     {
@@ -123,6 +137,12 @@
       "url": "https://github.com/ansible/ansible-examples",
       "sha": "b50586543c6c4be907fdc88f9f78a2b35d2a895f",
       "why": "The only repository here that passes a SECRET THROUGH A VARIABLE. geerlingguy/ansible-for-devops uses Jinja in 41 files and never once for a credential — it hardcodes its demo passwords — so it cannot witness the half of IAC-200 that matters most: `no_log` exists because Ansible prints the RESOLVED arguments, which makes a vaulted secret exactly the case that leaks. Measured on the commit that broadened the rule: 18 findings, `access_key: \"{{ ec2_access_key }}\"` in four EC2 launch playbooks and `password: \"{{ upassword }}\"` in two database roles among them, and 16 of the 18 land in the real example playbooks (lamp_haproxy, lamp_simple, jboss-standalone, wordpress-nginx, windows) rather than in the synthetic language_features/ demos. That distribution is why this entry was rejected once and added now: it was measured for FAMILY breadth before, where 48 of 88 findings did land in the demos, and it is here for one control. What it does NOT control: the repository contains no `no_log` anywhere, so the suppression direction — a templated secret that IS suppressed staying clean, and the play/block inheritance under it — rests on the analyzer fixtures alone. 16M, 133 findings."
+    },
+    {
+      "name": "anthropic-sdk-python",
+      "url": "https://github.com/anthropics/anthropic-sdk-python",
+      "sha": "eb21a4352015686c30f5759e8c2f02d70f5371e2",
+      "why": "The only ENTROPY control in the corpus: 62 standing SEC-161 findings, a family (SEC-161/162/163) that no other entry witnesses at all. Added after the secret-rule work, and it paid for itself on the commit that added it -- four drops no other repository here could see, measured v1.35.0 -> b81c070: SEC-457 11 -> 0, SEC-659 2 -> 0, SEC-697 5 -> 0, SLOP-001 9 -> 4. SEC-457's eleven were git commit SHAs in CHANGELOG.md, matched because the word 'iterables' sat up to 180 characters away on the same physical line behind a markdown issue link; SEC-659's two were a multipart MIME boundary with `.split(` on the PRECEDING line. Both are the character-distance context narrowing, and neither chronos nor warden carries a long-line changelog or a form-encoding test to witness it. SEC-161 itself was UNCHANGED at 62 across that range, which is the point: this entry controls the entropy rules rather than explaining a move in them. What it does NOT control: the decode path's blob suppression -- this repo carries no recorded cassettes, so the base64 surface it exists for is unwitnessed here (see the crewAI note above). 7.4M, 1661 files, 18 rules fire, 119 findings, 4.7x certbot on the same machine."
     }
   ]
 }
