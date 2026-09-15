@@ -56,7 +56,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-002", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `(?i)aws_secret_access_key\s*[=:]\s*[A-Za-z0-9/+=]{40}`,
+			pattern:     `(?i)aws_secret_access_key\s*[=:]\s*["']?[A-Za-z0-9/+=]{40}`,
 			description: "AWS Secret Access Key detected",
 			cwe:         "CWE-798", keywords: []string{"aws_secret"},
 			remediation: "Use environment variables or AWS Secrets Manager. Remove the key from source and rotate it immediately via the AWS console.",
@@ -129,7 +129,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-012", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)heroku[a-z0-9_ .\-]*[=:]\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
+			pattern:     `(?i)heroku[a-z0-9_ .\-]*[=:]\s*["']?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
 			description: "Heroku API Key detected",
 			cwe:         "CWE-798", keywords: []string{"heroku"},
 			remediation: "Regenerate the API key via 'heroku authorizations:create' and store in environment variables.",
@@ -145,7 +145,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-014", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?i)ibm[a-z0-9_ .\-]*[=:]\s*[A-Za-z0-9_\-]{44}`,
+			pattern:     `(?i)ibm[a-z0-9_ .\-]*[=:]\s*["']?[A-Za-z0-9_\-]{44}`,
 			description: "IBM Cloud API Key detected",
 			cwe:         "CWE-798", keywords: []string{"ibm"},
 			remediation: "Rotate the API key in IBM Cloud IAM and use environment variables.",
