@@ -13,6 +13,12 @@ import "testing"
 // Measured on the pinned corpus: AI-022 reported `temperature=0.8` 224 times,
 // which is the same handful of authored lines multiplied by locale and version
 // copies; DATA-001 reported 969 findings over 177 distinct addresses.
+//
+// AI-022 has since been removed (docs/design/ai-rule-proposition.md), which is
+// itself the point: on the raw ranking it looked like the fourth-worst rule in
+// the scanner, and the corrected ranking put it twelfth. Its sample counts are
+// kept here as fixture data because they are the measurement that showed the
+// two rankings disagree.
 
 func TestNormaliseSitePathCollapsesLocaleAndVersion(t *testing.T) {
 	same := []string{

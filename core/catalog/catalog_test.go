@@ -105,8 +105,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1501 -> 1498 retired the `sk_live_` group into SEC-030 (see
 	// TestAllRules_Count): a prefix that belongs to Stripe, claimed by rules
 	// named for Square and PayPal.
-	if got := len(cat); got != 1498 {
-		t.Errorf("Catalog() returned %d rules, want 1498", got)
+	// 1498 -> 1486 removed twelve AI rules that report a model-configuration
+	// preference rather than a security condition (see
+	// docs/design/ai-rule-proposition.md and
+	// TestConfigurationPreferencesAreNotRules).
+	if got := len(cat); got != 1486 {
+		t.Errorf("Catalog() returned %d rules, want 1486", got)
 	}
 }
 

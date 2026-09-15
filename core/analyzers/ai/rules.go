@@ -344,33 +344,6 @@ func builtinAIRules() []*rules.Rule {
 		// More AI security rules (AI-022 to AI-040)
 		// -----------------------------------------------------------------
 		{
-			id: "AI-022", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(temperature\s*[:=]\s*(0\.[8-9]|1\.0|1))`,
-			description: "LLM temperature set too high, allowing hallucination",
-			cwe:         "CWE-754", keywords: []string{"temperature"},
-			tags:        []string{"ai", "reliability", "hallucination"},
-			remediation: "Set temperature to 0-0.3 for factual/structured tasks. Higher values (0.7-1.0) should only be used for creative tasks with explicit user consent.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
-			id: "AI-023", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(top_p\s*[:=]\s*0\.[0-6][0-9]?)`,
-			description: "LLM top_p set too low, reducing output diversity",
-			cwe:         "CWE-754", keywords: []string{"top_p"},
-			tags:        []string{"ai", "reliability", "diversity"},
-			remediation: "Use top_p of 0.7-0.95 for balanced output. Lower values (0.1-0.3) may cause repetitive responses and reduce response quality.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
-			id: "AI-024", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(stop\s*[:=]\s*\[\])`,
-			description: "LLM stop sequences disabled",
-			cwe:         "CWE-754", keywords: []string{"stop"},
-			tags:        []string{"ai", "safety", "boundaries"},
-			remediation: "Configure stop sequences to prevent the model from generating unwanted content types. Never disable them completely without careful consideration.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
 			id: "AI-025", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(api_key|api-key|apikey|secret|token)\s*[:=]\s*["'][^"']*process\.env`,
 			description: "API key exposed through environment variable in code",
@@ -398,40 +371,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "prompt-injection", "memory"},
 			remediation: "Sanitize and validate user input before adding to conversation history. Use message templates with role-based content separation.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/77.html"},
-		},
-		{
-			id: "AI-028", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			// Alternation must be grouped — the previous form
-			// `(seed\s*[:=]\s*None|null|undefined)` allowed bare `null` or
-			// `undefined` anywhere in the file (e.g. fuzz seed corpora like
-			// `f.Add([]byte(\`null\`))`). See issue #59.
-			pattern:     `(?i)\bseed\s*[:=]\s*(None|null|undefined)\b`,
-			description: "LLM seed not set, causing non-deterministic output",
-			cwe:         "CWE-754", keywords: []string{"seed"},
-			ignoreFilePatterns: []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
-			tags:               []string{"ai", "reproducibility", "testing"},
-			remediation:        "Set a seed value for reproducible outputs in testing and auditing. This ensures consistent behavior for the same inputs.",
-			references:         []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
-			id: "AI-029", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			// The zero must BE the value, not begin it. `...\s*0` with nothing
-			// after it matched `presence_penalty=0.1` as well as
-			// `presence_penalty=0`, so the rule reported "penalties disabled"
-			// on code that had explicitly enabled them -- the remediation it
-			// recommends, flagged as the defect. Measured on the pinned corpus,
-			// 446 findings of which the two most common were
-			// `frequency_penalty=0.1` (116) and `presence_penalty=0.1` (116).
-			//
-			// RE2 has no lookahead, so the value is terminated explicitly: a
-			// zero, optionally with zero decimals, followed by a delimiter or
-			// end of line.
-			pattern:     `(?im)(?:presence_penalty|frequency_penalty)["']?\s*[:=]\s*0(?:\.0+)?(?:[\s,)\]}]|$)`,
-			description: "LLM repetition penalties disabled",
-			cwe:         "CWE-754", keywords: []string{"presence_penalty", "frequency_penalty"},
-			tags:        []string{"ai", "reliability", "repetition"},
-			remediation: "Set presence_penalty (-2 to 0) and frequency_penalty (-2 to 0) to reduce repetitive token generation. Default values of 0 may allow excessive repetition.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
 			id: "AI-030", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
@@ -470,15 +409,6 @@ func builtinAIRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
-			id: "AI-034", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(function_call|tool_choice|force_tool)\s*[:=]\s*["']?(any|auto|required)`,
-			description: "AI agent forced to use tool calls without validation",
-			cwe:         "CWE-754", keywords: []string{"function_call", "tool_choice"},
-			tags:        []string{"ai", "agent", "tool-calling"},
-			remediation: "Implement tool call validation before execution. Review tool arguments and enforce schema validation on all function parameters.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
 			id: "AI-035", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(max_tool_calls|max_function_calls|max_iterations)\s*[:=]\s*(-1|0|null|None|undefined)`,
 			description: "AI agent tool call limit disabled",
@@ -486,26 +416,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "agent", "resource-exhaustion"},
 			remediation: "Set reasonable limits on tool calls per request (e.g., 5-10). This prevents runaway agent loops and unexpected costs.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/770.html"},
-		},
-		{
-			id: "AI-036", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			// Require the gpt- prefix; the old all-optional pattern matched a
-			// bare "35" anywhere (version strings, hashes, lockfiles).
-			pattern:     `(?i)gpt[-_]?3[._-]?5(?:[-_]?turbo)?`,
-			description: "Using deprecated GPT-3.5 model",
-			cwe:         "CWE-1104", keywords: []string{"gpt-3.5", "fallback"},
-			tags:        []string{"ai", "deprecation", "model-selection"},
-			remediation: "Upgrade to GPT-4 or later models for production. GPT-3.5 has known limitations and will be deprecated.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/1104.html"},
-		},
-		{
-			id: "AI-037", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(system|assistant)\s*[:=]\s*["'][^"']{1000}[^"']{1000,}`,
-			description: "Excessively long system prompt may cause inconsistency",
-			cwe:         "CWE-754", keywords: []string{"system", "prompt"},
-			tags:        []string{"ai", "reliability", "prompt-engineering"},
-			remediation: "Keep system prompts under 2000 tokens. Very long prompts can cause inconsistent model behavior and higher latency.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
 			id: "AI-038", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
@@ -537,19 +447,6 @@ func builtinAIRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/78.html"},
 		},
 		{
-			id: "AI-041", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			// Strictly greater than 0.9, which is what the description and the
-			// remediation both say. `0\.9[0-9]*` also matched exactly 0.9, and
-			// `top_p=0.9` is an ordinary nucleus-sampling value: 317 of this
-			// rule's 391 findings on the pinned corpus were that one line.
-			pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*[1-9]|1\.0+)`,
-			description: "AI model uses high temperature/top_p settings",
-			cwe:         "CWE-20", keywords: []string{"temperature", "top_p"},
-			tags:        []string{"ai", "reliability", "configuration"},
-			remediation: "High temperature (>0.9) increases randomness and reduces consistency. Use 0.1-0.3 for deterministic outputs.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/20.html"},
-		},
-		{
 			id: "AI-042", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:     `(?i)(api[_-]?key|token)\s*[:=]\s*["']sk-[a-zA-Z0-9]{20,}`,
 			description: "Hardcoded OpenAI API key detected",
@@ -566,15 +463,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "rag", "transport-security"},
 			remediation: "Always enable TLS verification for vector database connections. Disable only for local development.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/295.html"},
-		},
-		{
-			id: "AI-044", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(context|memory)\s*.*?\bwindow\s*[:=]\s*(?:\d{4,}|[1-9]\d{4,})`,
-			description: "AI context window set to very high value",
-			cwe:         "CWE-400", keywords: []string{"context", "window"},
-			tags:        []string{"ai", "performance", "configuration"},
-			remediation: "Very large context windows increase latency and cost. Use appropriate size for your use case (typically 2K-8K tokens).",
-			references:  []string{"https://cwe.mitre.org/data/definitions/400.html"},
 		},
 		{
 			id: "AI-045", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -604,15 +492,6 @@ func builtinAIRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/319.html"},
 		},
 		{
-			id: "AI-048", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(cache|cached)\s*.*?\b(enabled?|ttl)\s*[:=]\s*(?:false|0|none)`,
-			description: "AI response caching disabled",
-			cwe:         "CWE-693", keywords: []string{"cache", "enabled", "false"},
-			tags:        []string{"ai", "performance", "caching"},
-			remediation: "Enable response caching for deterministic queries to reduce API costs and improve latency.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/693.html"},
-		},
-		{
 			id: "AI-049", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			// \b avoids method-name matches (describeEval); AI-specific arg
 			// tokens avoid DB calls like tx.exec(query).
@@ -622,15 +501,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "injection", "code-execution"},
 			remediation: "Never pass AI-generated content to eval or exec. Use safe parsing methods like JSON.parse or AST parsers.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/95.html"},
-		},
-		{
-			id: "AI-050", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(retry|retries)\s*[:=]\s*(?:0|false|none)`,
-			description: "AI API retries disabled",
-			cwe:         "CWE-705", keywords: []string{"retry", "0"},
-			tags:        []string{"ai", "reliability", "error-handling"},
-			remediation: "Enable retries with exponential backoff to handle transient API failures gracefully.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/705.html"},
 		},
 
 		// -----------------------------------------------------------------

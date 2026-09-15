@@ -21,12 +21,21 @@ import (
 //	scan 2   141 findings   AI-036 = 82
 //	scan 3   182 findings   AI-036 = 123
 //
-// AI-036 is "Using deprecated GPT-3.5 model". The repository's openapi.yaml
-// legitimately contains 41 `gpt-3.5` strings; each becomes a finding, each
-// finding is written into findings.json carrying the string that produced it,
-// and the next scan finds all 41 again in the report. It grows without bound —
-// scan N reports 100 + 41(N-1) — and every added finding is a duplicate of one
-// nox already reported.
+// AI-036 was "Using deprecated GPT-3.5 model". The repository's openapi.yaml
+// legitimately contains 41 `gpt-3.5` strings; each became a finding, each
+// finding was written into findings.json carrying the string that produced it,
+// and the next scan found all 41 again in the report. It grew without bound —
+// scan N reported 100 + 41(N-1) — and every added finding duplicated one nox
+// had already reported.
+//
+// AI-036 itself was removed in the AI proposition review (see
+// docs/design/ai-rule-proposition.md): a deprecated model is a model-selection
+// question, not a security condition. The bug it exposed is unaffected, because
+// nothing about it was specific to that rule — any rule whose matched text
+// survives into the report reproduces it. The fixture below therefore uses
+// AI-004 (an MCP config exposing an unrestricted execute tool), which is
+// still live and, unlike AI-014, matches inside JSON: AI-014's pattern wants a
+// `:`/`=` immediately after the key, and in JSON a closing quote sits there.
 //
 // This is the same shape as a nox:ignore comment firing the rule it waives:
 // text ABOUT a finding causing the finding.
@@ -126,7 +135,7 @@ func TestAForeignArtifactIsStillScanned(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Same basename, different directory: not this scan's output.
-	body := "{\"model\": \"gpt-3.5-turbo\"}\n"
+	body := "{\"tool\": \"execute\"}\n"
 	if err := os.WriteFile(filepath.Join(sub, "findings.json"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

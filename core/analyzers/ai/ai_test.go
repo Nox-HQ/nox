@@ -1230,18 +1230,6 @@ func TestAI033_RequiresFilterContext(t *testing.T) {
 	}
 }
 
-func TestAI036_RequiresGPTPrefix(t *testing.T) {
-	a := NewAnalyzer()
-	for _, s := range []string{`version: "1.35.0"`, `const id = "abc35def"`, `count := 35`} {
-		if r, _ := a.ScanFile("app.go", []byte(s)); findingWithRule(r, "AI-036") != nil {
-			t.Errorf("AI-036 false-positive on %q", s)
-		}
-	}
-	if r, _ := a.ScanFile("app.go", []byte(`model = "gpt-3.5-turbo"`)); findingWithRule(r, "AI-036") == nil {
-		t.Error("AI-036 must fire on gpt-3.5-turbo")
-	}
-}
-
 // TestAI002_RequiresPromptContext asserts AI-002 fires on real prompt
 // concatenation but not on the same `%s … user_input` shape in a parameterised
 // SQL call (the clean_safe_db.py false positive).
@@ -1376,69 +1364,12 @@ var oauthDiscovery = "https://auth.example.com/.well-known/openid-configuration"
 }
 
 // ---------------------------------------------------------------------------
-// AI-028 / AI-006 false-positive regressions for issue #59
+// AI-006 false-positive regressions for issue #59
+//
+// The AI-028 cases that shared this section went with the rule: "LLM seed not
+// set" reports a reproducibility preference, not a security condition. See
+// docs/design/ai-rule-proposition.md.
 // ---------------------------------------------------------------------------
-
-// TestAI028_NoFalsePositiveOnFuzzCorpus ensures the rule does not fire on Go
-// fuzz-test corpus seeds whose payloads happen to be the literal `null` or
-// `undefined` (e.g. JSON parser fuzz inputs). Files matching *_test.go are
-// also excluded from the rule entirely.
-func TestAI028_NoFalsePositiveOnFuzzCorpus(t *testing.T) {
-	a := NewAnalyzer()
-	content := []byte(`package viz
-
-import "testing"
-
-func FuzzParseNativeJSON(f *testing.F) {
-	f.Add([]byte(` + "`" + `{"id":"m"}` + "`" + `))
-	f.Add([]byte(` + "`" + `{` + "`" + `))
-	f.Add([]byte(` + "`" + `` + "`" + `))
-	f.Add([]byte(` + "`" + `null` + "`" + `))
-}
-`)
-	results, err := a.ScanFile("viz/fuzz_test.go", content)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for _, f := range results {
-		if f.RuleID == "AI-028" {
-			t.Fatalf("AI-028 fired on fuzz corpus seed: %+v", f)
-		}
-	}
-}
-
-// TestAI028_NoBareNullMatch ensures the alternation precedence fix prevents
-// bare `null` / `undefined` literals (with no `seed = ` prefix) from
-// matching the rule, even outside test files.
-func TestAI028_NoBareNullMatch(t *testing.T) {
-	a := NewAnalyzer()
-	content := []byte(`config = { "value": null }
-state = undefined
-`)
-	results, err := a.ScanFile("config.py", content)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for _, f := range results {
-		if f.RuleID == "AI-028" {
-			t.Fatalf("AI-028 fired on bare null/undefined: %+v", f)
-		}
-	}
-}
-
-// TestAI028_StillFiresOnRealSeed ensures the tightened regex still flags
-// genuine `seed = None` / `seed: null` patterns.
-func TestAI028_StillFiresOnRealSeed(t *testing.T) {
-	a := NewAnalyzer()
-	content := []byte("response = openai.ChatCompletion.create(model='gpt-4', seed=None)\n")
-	results, err := a.ScanFile("client.py", content)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if findingWithRule(results, "AI-028") == nil {
-		t.Fatalf("AI-028 did not fire on `seed=None`; results=%+v", results)
-	}
-}
 
 // TestAI006_IgnoresGoTestFiles ensures the rule is skipped for Go test files
 // where prints of test state are expected and benign.
@@ -1465,8 +1396,8 @@ func TestThing(t *testing.T) {
 
 func TestAllAIRules_Count(t *testing.T) {
 	rules := builtinAIRules()
-	if got := len(rules); got != 87 {
-		t.Errorf("expected 87 AI rules, got %d", got)
+	if got := len(rules); got != 75 {
+		t.Errorf("expected 75 AI rules, got %d", got)
 	}
 }
 
