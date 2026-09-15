@@ -100,8 +100,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// the pattern it actually held could not match it.
 	// 1521 -> 1514 retired seven bare-token vendor duplicates into the bound
 	// rules that already reported the same credentials (see TestAllRules_Count).
-	if got := len(cat); got != 1514 {
-		t.Errorf("Catalog() returned %d rules, want 1514", got)
+	// 1514 -> 1501 merged twelve identical-pattern groups that described one
+	// condition with two rule IDs (see TestAllRules_Count).
+	if got := len(cat); got != 1501 {
+		t.Errorf("Catalog() returned %d rules, want 1501", got)
 	}
 }
 

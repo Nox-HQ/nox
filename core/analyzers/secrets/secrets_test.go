@@ -669,6 +669,17 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // was deleted outright: an Azure subscription ID is not a credential, and the
 // pattern could not have matched one anyway, since a subscription ID is a UUID
 // and the hyphens fall outside the class.
+// 899 -> 886 merged twelve groups of rules that described ONE condition with
+// two IDs, so one token produced two findings. Shopify's four token types were
+// each carried twice (SEC-321/318/319/320 into SEC-034/035/036/037); likewise
+// OpenSSH (SEC-428), PGP (SEC-429), Braintree (SEC-142), Mailchimp (SEC-378),
+// SendGrid (SEC-376), Bittrex (SEC-174), the `AIza` pair (SEC-115, SEC-415)
+// and the `AKIA` alternate (SEC-411). The Shopify and SendGrid prefixes are
+// absent from dedup.go's canonicalOwners, so nothing collapsed them at runtime
+// and both findings reached the report; `AIza` and `AKIA` were collapsed
+// already, so those retirements make the rule set say what the scanner did.
+// See docs/design/identical-pattern-audit.md.
+//
 // 906 -> 899 retired seven bare-token duplicates into the bound rules that
 // already reported the same credentials properly: SEC-454 and SEC-662
 // (Amplitude) into SEC-159, SEC-455 (Segment) into SEC-158, SEC-536 and
@@ -689,8 +700,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // rule matching what SEC-007, SEC-415 and SEC-806 already match.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 899 {
-		t.Fatalf("expected 899 built-in secret rules, got %d", len(rules))
+	if len(rules) != 886 {
+		t.Fatalf("expected 886 built-in secret rules, got %d", len(rules))
 	}
 }
 
