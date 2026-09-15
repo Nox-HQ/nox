@@ -120,12 +120,26 @@ UUID is not.
 
 ## What follows
 
-1. **Merge category B**, one canonical rule per condition, aliases preserved.
-2. **Category C needs an owner signal that is not a prefix.** For an unprefixed
-   shape the only evidence available is the binding — `heroku_api_key = <uuid>`
-   names Heroku and `coinbase_api_key = <uuid>` names Coinbase — which is the
-   same treatment category A needs. Bind first, then the collision disappears
-   because the two rules no longer match the same text.
+1. ~~Merge category B.~~ **Done.** Twelve groups, 13 rules retired into their
+   canonical rule with frozen patterns; 899 → 886.
+2. ~~Category C needs an owner signal that is not a prefix.~~ **Done for the
+   unprefixed groups.** Thirteen rules are now bound to their own vendor's key
+   name, so the two sides of each collision no longer match the same text and
+   there is nothing for dedup to arbitrate.
+
+   Two lessons came out of the binding itself. A rule's KEYWORD gates its
+   pattern, so a keyword narrower than the binding (`webflow_key` against a
+   `webflow…=` binding) stops the rule firing on the spellings it was just
+   bound for — five rules needed their keywords widened. And SEC-575 is bound
+   to `square_pos`, not `square`, because "squarespace" contains "square".
+
+   **The two prefixed groups are left, and they are a different problem.**
+   `sk_live_` belongs to Stripe; SEC-551 claims it as a Square access token and
+   SEC-554 as a PayPal key. Binding those would produce
+   `square_access… = sk_live_…`, which is still a rule looking for the wrong
+   vendor's format. They need Square's and PayPal's real formats sourced, the
+   way PostHog's and Cloudflare's were, and are deliberately untouched here
+   rather than guessed at. The same applies to `live_` (SEC-562, SEC-572).
 3. **Lift dedup to the scanner.** The facility to generalise already exists and
    should not be rewritten; what it needs is to run over the merged finding set
    rather than inside one analyzer, and to key on the condition rather than on a
