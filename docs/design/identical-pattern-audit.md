@@ -140,20 +140,27 @@ UUID is not.
    vendor's format. They need Square's and PayPal's real formats sourced, the
    way PostHog's and Cloudflare's were, and are deliberately untouched here
    rather than guessed at. The same applies to `live_` (SEC-562, SEC-572).
-3. **The kubernetes family has no document gate.** Found by generalising the
-   invariant test, not by looking for it. `documentKindGates` has rows for
-   serverless, cloudformation, github-actions, ci-cd, ansible and kustomize —
-   six families that each carried a `*.yaml` catch-all and were gated on what
-   the DOCUMENT declares. There is no kubernetes row, so a rule tagged
-   `kubernetes` and scoped `*.yaml` applies to every YAML file in any
-   repository. IAC-031 ("Container image uses latest tag in Kubernetes
-   manifest") fires on `docker-compose.yml`, where IAC-501 owns the condition
-   and resolves `${VAR:-default}` the way Compose does.
+3. **Kubernetes is ungated on purpose — a claim I got wrong and checked.**
 
-   IAC-031 is narrowed here with `ignoreFilePatterns` because it was making a
-   real duplicate. The family-wide gate is the actual fix and needs its own
-   corpus measurement — the rule-diff corpus contains kubernetes/examples, so
-   the evidence is available.
+   An earlier revision of this document called the missing kubernetes row in
+   `documentKindGates` "the seventh instance of a defect fixed six times" and
+   proposed adding it. That is wrong, and the rule set already said so:
+   `TestKubernetesIsNotGated` exists *"so a later change that adds a Kubernetes
+   gate has to argue with this first"*, and its reason is measured — Kubernetes
+   rules legitimately apply to documents that are not manifests, an Ansible
+   `k8s_module` task among them, where IAC-143 on `namespace: default` was a
+   true positive.
+
+   I wrote the gate, and that test failed it, along with nine others. The gate
+   is reverted.
+
+   So IAC-031's `ignoreFilePatterns` is not a stopgap for a family fix that
+   never comes — it is the correct shape of the fix. A Compose service is not a
+   Kubernetes document and IAC-501 owns the condition there, which is a
+   statement about one format rather than about the family's scope. The six
+   gated families each had a rule scoped to a format it never belonged to;
+   kubernetes rules belong wherever Kubernetes resources are declared, which is
+   more places than "a Kubernetes manifest file".
 
 4. **Lift dedup to the scanner.** The facility to generalise already exists and
    should not be rewritten; what it needs is to run over the merged finding set
