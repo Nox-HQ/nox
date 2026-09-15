@@ -317,6 +317,25 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"sk_test", "sk_live", "rk_test", "rk_live"},
 			remediation: "Roll the API key in the Stripe dashboard and use environment variables.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://stripe.com/docs/keys"},
+			// SEC-548, SEC-551 and SEC-554 all carried `sk_live_[a-zA-Z0-9]{24}`
+			// -- a prefix that belongs to Stripe alone. SEC-548 was a second
+			// Stripe rule; the other two claimed it for vendors that do not use
+			// it. Square's real access tokens are `EAAA` (production, 64 chars)
+			// or `sq0atp-` (sandbox), which SEC-336 already matches; PayPal
+			// issues a client id and secret exchanged for a bearer token and has
+			// no such prefix at all.
+			//
+			// So neither had any correct output: on the only input they could
+			// match they named the wrong vendor, which is worse than silence --
+			// it sends an operator to rotate a credential that does not exist
+			// while the Stripe key that does goes unnamed. dedup.go already made
+			// SEC-030 the sole owner of this prefix, so all three were being
+			// dropped at runtime; this makes the rule set say so.
+			retires: []rules.RetiredRule{
+				{ID: "SEC-548", Pattern: `sk_live_[a-zA-Z0-9]{24}`},
+				{ID: "SEC-551", Pattern: `sk_live_[a-zA-Z0-9]{24}`},
+				{ID: "SEC-554", Pattern: `sk_live_[a-zA-Z0-9]{24}`},
+			},
 		},
 		{
 			id: "SEC-031", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -3427,17 +3446,14 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-544", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)\bnew[_-]?relic[a-z0-9_ .\-]*[=:][ \t]*["\x27]?[a-f0-9]{32}`, description: "Detected New Relic License Key (alternate)", cwe: "CWE-798", keywords: []string{"new_relic", "newrelic", "new-relic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-545", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{20}\b`, description: "Detected PagerDuty API Key (alternate)", cwe: "CWE-798", keywords: []string{"pagerduty"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-547", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_test_[a-zA-Z0-9]{24}`, description: "Detected Stripe Test API Key", cwe: "CWE-798", keywords: []string{"stripe_test"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-548", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_[a-zA-Z0-9]{24}`, description: "Detected Stripe Live API Key", cwe: "CWE-798", keywords: []string{"stripe_live"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-549", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `rk_live_[a-zA-Z0-9]{24}`, description: "Detected Stripe Restricted Key", cwe: "CWE-798", keywords: []string{"stripe_restricted"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 
 		// -----------------------------------------------------------------
 		// More payment, financial, and crypto services (SEC-550 to SEC-600)
 		// -----------------------------------------------------------------
 		{id: "SEC-550", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sq0atp-[A-Za-z0-9_-]{22}`, description: "Detected Square OAuth Secret", cwe: "CWE-798", keywords: []string{"square_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-551", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_[a-zA-Z0-9]{24}`, description: "Detected Square Access Token", cwe: "CWE-798", keywords: []string{"square_access"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-552", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `rz_live_[a-zA-Z0-9]{24}`, description: "Detected Razorpay API Key", cwe: "CWE-798", keywords: []string{"razorpay"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-553", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{20,32}`, description: "Detected Paystack API Key", cwe: "CWE-798", keywords: []string{"paystack"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-554", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sk_live_[a-zA-Z0-9]{24}`, description: "Detected PayPal API Key", cwe: "CWE-798", keywords: []string{"paypal"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-555", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[A-Z0-9]{16,32}`, description: "Detected Braintree Merchant ID", cwe: "CWE-798", keywords: []string{"braintree_merchant"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-556", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)mobicents[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Mobicents secret", cwe: "CWE-798", keywords: []string{"mobicents"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-557", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)twilio[_-]?account[_-]?sid[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Twilio account sid", cwe: "CWE-798", keywords: []string{"twilio"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

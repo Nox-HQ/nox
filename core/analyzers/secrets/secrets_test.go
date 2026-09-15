@@ -669,6 +669,13 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // was deleted outright: an Azure subscription ID is not a credential, and the
 // pattern could not have matched one anyway, since a subscription ID is a UUID
 // and the hyphens fall outside the class.
+// 886 -> 883 retired the `sk_live_` group into SEC-030. That prefix belongs to
+// Stripe alone: SEC-548 was a second Stripe rule, while SEC-551 claimed it as a
+// Square access token and SEC-554 as a PayPal key. Square's real tokens are
+// `EAAA` or `sq0atp-` (SEC-336 matches them); PayPal has no such prefix. Both
+// had no correct output -- on the only input they could match they named the
+// wrong vendor. dedup.go already owned the prefix to SEC-030.
+//
 // 899 -> 886 merged twelve groups of rules that described ONE condition with
 // two IDs, so one token produced two findings. Shopify's four token types were
 // each carried twice (SEC-321/318/319/320 into SEC-034/035/036/037); likewise
@@ -700,8 +707,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // rule matching what SEC-007, SEC-415 and SEC-806 already match.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 886 {
-		t.Fatalf("expected 886 built-in secret rules, got %d", len(rules))
+	if len(rules) != 883 {
+		t.Fatalf("expected 883 built-in secret rules, got %d", len(rules))
 	}
 }
 
