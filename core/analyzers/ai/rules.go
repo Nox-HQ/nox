@@ -348,6 +348,12 @@ func builtinAIRules() []*rules.Rule {
 			pattern:     `(?i)(temperature\s*[:=]\s*(0\.[8-9]|1\.0|1))`,
 			description: "LLM temperature set too high, allowing hallucination",
 			cwe:         "CWE-754", keywords: []string{"temperature"},
+			// Suppress in two known-safe contexts identified by nearby keys:
+			// (1) reasoning_effort: the model is an o1/o3 reasoning model where
+			//     temperature=1.0 is the documented default, not a misconfiguration.
+			// (2) name: replay: the config belongs to a test-replay driver that
+			//     never calls an LLM; recorded temperature metadata is not risk.
+			excludeContextKeywords: []string{"reasoning_effort", "name: replay"},
 			tags:        []string{"ai", "reliability", "hallucination"},
 			remediation: "Set temperature to 0-0.3 for factual/structured tasks. Higher values (0.7-1.0) should only be used for creative tasks with explicit user consent.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
