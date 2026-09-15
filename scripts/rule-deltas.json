@@ -156,6 +156,30 @@
       "classification": "refined-away",
       "pr": 651,
       "reason": "DATA-003's pattern describes the SHAPE of a payment card — an issuer prefix and a length — and nothing more. What makes a digit run a card is the Luhn checksum, which every issued card satisfies and a random run satisfies about one time in ten. isPaymentCardNumber now applies it. The single dropped finding is plug lib/plug/conn.ex:1500, the URL `https://www.chromestatus.com/feature/4981025180483584` — a Chrome feature id, 16 digits beginning with 4, reported at HIGH severity as a Visa card. It fails Luhn. A second filter was needed alongside it: measured on the pinned fire-rate corpus DATA-003 produced 560 findings and ALL 560 were floating-point numbers in embedding vectors and notebook output, such as `Similarity: 0.6522269248962402`. The pattern is anchored with `\\b` and `.` is not a word character, so the digits after a decimal point are word-bounded. Luhn removes 90.7% of those; the 52 that pass it by chance are still floats, so dropDigitsInsideDecimals removes a match whose preceding byte is a `.` following a digit. Neither half is a heuristic — a real card is written \"4111111111111111\", never 0.4111111111111111 — and recall on the four card networks' published test numbers is guarded by TestRealCardNumbersAreReported."
+    },
+    {
+      "rule": "SEC-457",
+      "classification": "context-narrowed",
+      "pr": 651,
+      "reason": "SEC-457 ('Detected Iterable API Key', pattern `[a-z0-9]{32}`, keyword 'iterable') matched git commit SHAs in anthropic-sdk-python's CHANGELOG.md because the word 'iterables' appeared elsewhere on the same physical LINE -- up to 180 characters away, separated by a markdown issue link. All 11 dropped findings are in CHANGELOG.md and every one is the commit SHA in a release-note bullet; none is an Iterable credential. Verified by fixture rather than inferred: the same bullet with the SHA adjacent to the keyword still fires in the candidate build, and only the long real line (227 chars) stops, so recall for a genuine key near its vendor word is unchanged."
+    },
+    {
+      "rule": "SEC-659",
+      "classification": "context-narrowed",
+      "pr": 651,
+      "reason": "SEC-659 ('Detected Split API Key') matched the multipart MIME boundary `b\"--6b7ba517decee4a450543ea6ae821c82\"` in tests/test_client.py, twice, because `.split(b\"\\r\\n\")` sat on the PRECEDING line and supplied the 'split' keyword. Both dropped findings are that boundary inside a form-encoding assertion; neither is a Split.io key. Verified by fixture: the four-line excerpt alone reproduces base=1, candidate=0."
+    },
+    {
+      "rule": "SEC-697",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "SEC-697 ('Detected Literal API Key', pattern `\\b[a-zA-Z0-9]{32}\\b`) is retired into SEC-005, which carries the alias. Its five findings in anthropic-sdk-python were Python type names that happen to be exactly 32 characters -- `BetaToolComputerUse20241022Param` and `ToolSearchToolRegex20251119Param`, in `__all__` and class declarations -- matched on length alone with no vendor evidence of any kind."
+    },
+    {
+      "rule": "SLOP-001",
+      "classification": "refined-away",
+      "pr": 651,
+      "reason": "SLOP-001 went 9 -> 4 on anthropic-sdk-python once the analyzer reads lockfiles for TRANSITIVE dependencies. The five dropped imports are `pydantic_core` (x3), `tomli` and `http_snapshot`; all three are declared in requirements-dev.lock under their PEP 503 normalised names (`pydantic-core`, `tomli`, `http-snapshot`), which is why the underscore import form read as undeclared. The four survivors are all `google`, a namespace package genuinely absent from every manifest, so the recall direction is intact: the rule still reports an import nothing declares."
     }
   ]
 }
