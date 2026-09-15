@@ -109,8 +109,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// preference rather than a security condition (see
 	// docs/design/ai-rule-proposition.md and
 	// TestConfigurationPreferencesAreNotRules).
-	if got := len(cat); got != 1486 {
-		t.Errorf("Catalog() returned %d rules, want 1486", got)
+	// 1486 -> 1485 removed SEC-572, whose pattern encoded a Payoneer credential
+	// format Payoneer does not publish (see TestSEC572IsGone).
+	if got := len(cat); got != 1485 {
+		t.Errorf("Catalog() returned %d rules, want 1485", got)
 	}
 }
 

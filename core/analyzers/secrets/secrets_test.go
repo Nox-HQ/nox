@@ -705,10 +705,17 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // of all remaining class-C volume, every one in Google API fixtures where
 // "gemini" is the model name. Narrowing it to `AIza` would have made a fourth
 // rule matching what SEC-007, SEC-415 and SEC-806 already match.
+//
+// 883 -> 882 removed SEC-572 "Payoneer API Token". It shared SEC-562's pattern
+// `live_[a-zA-Z0-9]{32}`, and neither vendor issues a credential of that shape.
+// SEC-562 was redesigned onto Checkout.com's documented `sk_`/`sk_sbox_`
+// prefixes; SEC-572 had nothing to be redesigned onto, because Payoneer
+// authenticates with OAuth2 client_id/client_secret and publishes no token
+// format at all. See TestSEC572IsGone.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 883 {
-		t.Fatalf("expected 883 built-in secret rules, got %d", len(rules))
+	if len(rules) != 882 {
+		t.Fatalf("expected 882 built-in secret rules, got %d", len(rules))
 	}
 }
 

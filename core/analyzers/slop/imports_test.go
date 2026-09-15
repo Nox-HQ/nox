@@ -114,3 +114,54 @@ func TestIsStdlib(t *testing.T) {
 		t.Error("express is not a node builtin")
 	}
 }
+
+// A generated import statement is not an import.
+//
+// vercel/ai writes source files from template literals, and the generated text
+// contains an ordinary quoted specifier:
+//
+//	await import('${moduleName}');
+//	import transformer from '${toRelativeImportPath(paths.test, paths.codemod)}';
+//
+// The extractor matches quoted specifiers, which is right for a real import and
+// also right for the quoted specifier inside the generated text — it cannot
+// tell the two apart from the quote alone. What tells them apart is the name:
+// no registry can serve a package containing `$`, `{` or `}`. SLOP-001 reports
+// "this import resolves to no declared dependency" as evidence of a
+// hallucinated package, and that inference needs a package name to start from.
+func TestGeneratedImportSpecifierIsNotAPackage(t *testing.T) {
+	for _, spec := range []string{
+		"${moduleName}",
+		"@ai-sdk/${pkgName}",
+		"${toRelativeImportPath(paths.test, paths.codemod)}",
+		"@${scope}/thing",
+		"pkg name with spaces",
+	} {
+		if name, ok := packageName(ecoNPM, spec); ok {
+			t.Errorf("packageName(npm, %q) = %q, true — no registry can serve that "+
+				"name, so reporting it as an undeclared dependency asserts a "+
+				"hallucinated package on the strength of a code generator", spec, name)
+		}
+	}
+}
+
+// The control. Every shape above is rejected for containing a character npm
+// forbids, so the check has to keep accepting the names that do not — including
+// the awkward legacy ones, where a false negative is silent.
+func TestRealPackageNamesStillResolve(t *testing.T) {
+	for spec, want := range map[string]string{
+		"react":                           "react",
+		"@ai-sdk/openai":                  "@ai-sdk/openai",
+		"@ai-sdk/openai/internal":         "@ai-sdk/openai",
+		"lodash.debounce":                 "lodash.debounce",
+		"node-fetch":                      "node-fetch",
+		"JSONStream":                      "JSONStream",
+		"@babel/plugin-transform-runtime": "@babel/plugin-transform-runtime",
+		"zod/v4":                          "zod",
+	} {
+		got, ok := packageName(ecoNPM, spec)
+		if !ok || got != want {
+			t.Errorf("packageName(npm, %q) = %q, %v — want %q, true", spec, got, ok, want)
+		}
+	}
+}

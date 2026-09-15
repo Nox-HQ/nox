@@ -194,15 +194,55 @@ func packageName(eco ecosystem, spec string) (name string, ok bool) {
 			if parts[0] == "@" {
 				return "", false
 			}
-			return parts[0] + "/" + parts[1], true
+			name := parts[0] + "/" + parts[1]
+			if !isNPMPackageName(name) {
+				return "", false
+			}
+			return name, true
 		}
 		if i := strings.IndexByte(spec, '/'); i >= 0 {
 			spec = spec[:i]
 		}
-		if spec == "" {
+		if spec == "" || !isNPMPackageName(spec) {
 			return "", false
 		}
 		return spec, true
 	}
 	return "", false
+}
+
+// npmNameSegment is the character set an npm package name segment can hold. The
+// registry accepts URL-safe characters only, so a specifier carrying anything
+// else is not a name any registry could serve.
+var npmNameSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]*$`)
+
+// isNPMPackageName reports whether name could be a package on a registry.
+//
+// SLOP-001 says "this import resolves to no declared dependency", and reads
+// that as evidence of a hallucinated package. That inference needs the
+// specifier to be a package name in the first place. It is not, when the import
+// statement is being GENERATED rather than executed:
+//
+//	await import('${moduleName}');                                   // load-time.ts
+//	import transformer from '${toRelativeImportPath(paths.test, …)}'; // scaffold-codemod.ts
+//
+// Those lines sit inside a template literal that writes a source file. The
+// extractor's regexes match single and double quotes, which is correct for real
+// imports and also matches the quoted specifier inside the generated text, so
+// `${moduleName}` was reported as a dependency the project had failed to
+// declare. No registry can serve a name containing `$`, `{` or `}`, so the
+// check is exact rather than heuristic: it excludes what cannot exist, not what
+// looks unusual.
+//
+// Scoped names are checked per segment by the caller, which has already split
+// `@scope/name` — so this sees `@scope/name` whole and validates both halves.
+func isNPMPackageName(name string) bool {
+	if name == "" || len(name) > 214 {
+		return false
+	}
+	if strings.HasPrefix(name, "@") {
+		scope, rest, ok := strings.Cut(name[1:], "/")
+		return ok && npmNameSegment.MatchString(scope) && npmNameSegment.MatchString(rest)
+	}
+	return npmNameSegment.MatchString(name)
 }
