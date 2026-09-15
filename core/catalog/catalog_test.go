@@ -102,8 +102,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// rules that already reported the same credentials (see TestAllRules_Count).
 	// 1514 -> 1501 merged twelve identical-pattern groups that described one
 	// condition with two rule IDs (see TestAllRules_Count).
-	if got := len(cat); got != 1501 {
-		t.Errorf("Catalog() returned %d rules, want 1501", got)
+	// 1501 -> 1498 retired the `sk_live_` group into SEC-030 (see
+	// TestAllRules_Count): a prefix that belongs to Stripe, claimed by rules
+	// named for Square and PayPal.
+	if got := len(cat); got != 1498 {
+		t.Errorf("Catalog() returned %d rules, want 1498", got)
 	}
 }
 

@@ -133,13 +133,19 @@ UUID is not.
    bound for — five rules needed their keywords widened. And SEC-575 is bound
    to `square_pos`, not `square`, because "squarespace" contains "square".
 
-   **The two prefixed groups are left, and they are a different problem.**
-   `sk_live_` belongs to Stripe; SEC-551 claims it as a Square access token and
-   SEC-554 as a PayPal key. Binding those would produce
-   `square_access… = sk_live_…`, which is still a rule looking for the wrong
-   vendor's format. They need Square's and PayPal's real formats sourced, the
-   way PostHog's and Cloudflare's were, and are deliberately untouched here
-   rather than guessed at. The same applies to `live_` (SEC-562, SEC-572).
+   **The `sk_live_` group is now resolved, by sourcing the formats.** That
+   prefix belongs to Stripe alone. Square's real access tokens are `EAAA`
+   (production, 64 characters) or `sq0atp-` (sandbox, 22+), which SEC-336
+   already matched; PayPal issues a client id and secret exchanged for a bearer
+   token and has no such prefix at all. So SEC-551 and SEC-554 had no correct
+   output: on the only input they could match they named the wrong vendor,
+   which is worse than silence because it sends an operator to rotate a
+   credential that does not exist while the Stripe key that does goes unnamed.
+   SEC-548 was simply a second Stripe rule. All three retired into SEC-030,
+   which dedup.go had already made the sole owner of the prefix.
+
+   **`live_` (SEC-562 Checkout.com, SEC-572 Payoneer) is still open.** Same
+   shape of question, formats not yet sourced, and not guessed at.
 3. **Kubernetes is ungated on purpose — a claim I got wrong and checked.**
 
    An earlier revision of this document called the missing kubernetes row in

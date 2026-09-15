@@ -86,3 +86,33 @@ func TestSquarePosDoesNotClaimSquarespace(t *testing.T) {
 		t.Error("SEC-575 (Square POS) claimed a Squarespace credential")
 	}
 }
+
+// TestSquareIsReportedByItsOwnFormat. SEC-551 claimed `sk_live_` -- Stripe's
+// prefix -- as a Square access token. Square's real tokens are `EAAA`
+// (production, 64 characters) or `sq0atp-` (sandbox), and SEC-336 already
+// matched them, so retiring SEC-551 removed a misattribution without removing
+// any Square coverage.
+func TestSquareIsReportedByItsOwnFormat(t *testing.T) {
+	for _, line := range []string{
+		`SQUARE_TOKEN = "EAAAl` + strings.Repeat("aB3cD4eF5g", 5) + `"`,
+		`SQUARE_TOKEN = "sq0atp-aB3cD4eF5gH6iJ7kL8mN9oP"`,
+	} {
+		if got := idsFor(t, "cfg.py", line+"\n"); !slices.Contains(got, "SEC-336") {
+			t.Errorf("a real Square access token is not reported: %s\n   ids=%v", line, got)
+		}
+	}
+}
+
+// TestAStripeKeyIsNotSquareOrPayPal is the misattribution itself.
+func TestAStripeKeyIsNotSquareOrPayPal(t *testing.T) {
+	ids := idsFor(t, "pay.py",
+		"# stripe_live, square_access and paypal\nK = \"sk_live_aBcDeFgHiJkLmNoPqRsTuVwX\"\n")
+	for _, gone := range []string{"SEC-551", "SEC-554", "SEC-548"} {
+		if slices.Contains(ids, gone) {
+			t.Errorf("%s still fires on a Stripe key", gone)
+		}
+	}
+	if !slices.Contains(ids, "SEC-030") {
+		t.Errorf("the Stripe key itself is no longer reported; ids=%v", ids)
+	}
+}
