@@ -156,6 +156,108 @@
       "classification": "refined-away",
       "pr": 651,
       "reason": "DATA-003's pattern describes the SHAPE of a payment card — an issuer prefix and a length — and nothing more. What makes a digit run a card is the Luhn checksum, which every issued card satisfies and a random run satisfies about one time in ten. isPaymentCardNumber now applies it. The single dropped finding is plug lib/plug/conn.ex:1500, the URL `https://www.chromestatus.com/feature/4981025180483584` — a Chrome feature id, 16 digits beginning with 4, reported at HIGH severity as a Visa card. It fails Luhn. A second filter was needed alongside it: measured on the pinned fire-rate corpus DATA-003 produced 560 findings and ALL 560 were floating-point numbers in embedding vectors and notebook output, such as `Similarity: 0.6522269248962402`. The pattern is anchored with `\\b` and `.` is not a word character, so the digits after a decimal point are word-bounded. Luhn removes 90.7% of those; the 52 that pass it by chance are still floats, so dropDigitsInsideDecimals removes a match whose preceding byte is a `.` following a digit. Neither half is a heuristic — a real card is written \"4111111111111111\", never 0.4111111111111111 — and recall on the four card networks' published test numbers is guarded by TestRealCardNumbersAreReported."
+    },
+    {
+      "rule": "SEC-161",
+      "classification": "applicability-narrowed",
+      "pr": 651,
+      "reason": "The response block of a recorded HTTP exchange is data the server returned, not a credential the repository holds — and nobody can rotate it. Measured on crewAI 1.15.21, all 540 SEC-161/SEC-162 findings were inside vcrpy cassettes: 202 __cf_bm and 32 _cfuvid Cloudflare cookies, 148 continuation lines of base64 response bodies, 58 response ids, 44 embedding vectors up to 8,193 characters, 32 Gemini thought signatures, and 8 occurrences of PostHog's phc_ project key, which the vendor publishes and SEC-661 deliberately excludes. The request block is untouched: an unredacted authorization header in a cassette is a real leak, and SEC-082 was fixed in the same change so that nox can finally see one."
+    },
+    {
+      "rule": "SEC-162",
+      "classification": "applicability-narrowed",
+      "pr": 651,
+      "reason": "Same gate as SEC-161: the response block of a recorded HTTP exchange is server data. See that entry for the measured breakdown."
+    },
+    {
+      "rule": "SLOP-001",
+      "classification": "applicability-narrowed",
+      "pr": 651,
+      "reason": "Three classes, each a specifier that is not a package reference. (1) An import statement inside a template literal or docstring is text being generated or displayed, not a module being resolved — vercel/ai's content/tools-registry/registry.ts alone carried 17. (2) A specifier containing $, { or } cannot name a package on any registry, which covers the generated `await import('${moduleName}')` form. (3) A tsconfig `paths` alias resolves to a path inside the repository; `@util/chat-store` is a valid npm package SHAPE, so only reading the config distinguishes it, and that was 15 findings in examples/ai-e2e-next. Measured on vercel/ai: 79 -> 36."
+    },
+    {
+      "rule": "AI-022",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported temperature >= 0.8. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-023",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported top_p <= 0.69, which contradicts AI-041. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-024",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported an empty stop-sequence list. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-028",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported no seed set. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-029",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported presence/frequency penalty == 0, the vendor default, and the value its own remediation recommends. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-034",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported tool_choice in {any, auto, required} — the complete set of values the parameter accepts. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-036",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported the string gpt-3.5 anywhere in the file. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-037",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported a system prompt longer than 2000 characters. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-041",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported temperature/top_p > 0.9, which contradicts AI-023. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-044",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported a context window above a threshold whose remediation still says 2K-8K tokens. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-048",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported response caching disabled, which is frequently the security-conscious choice. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "AI-050",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed as a model-configuration preference rather than a security condition. A configuration parameter is a security finding only when the value creates a consequence an attacker can reach; divergence from a recommendation is not one, and a vendor default is not one by construction. This rule reported retries disabled. See docs/design/ai-rule-proposition.md."
+    },
+    {
+      "rule": "SEC-572",
+      "classification": "rule-removed",
+      "pr": 651,
+      "reason": "Removed: SEC-572 \"Payoneer API Token\" matched `live_[a-zA-Z0-9]{32}`, and Payoneer issues no credential of that shape — it authenticates with OAuth2 client_id/client_secret and publishes no token prefix, length or charset at all. A rule cannot encode a format the vendor does not have. It shared the pattern with SEC-562, so one token near either vendor name produced a finding named for the other; SEC-562 was redesigned onto Checkout.com's documented sk_/sk_sbox_ prefixes."
+    },
+    {
+      "rule": "SEC-562",
+      "classification": "context-narrowed",
+      "pr": 651,
+      "reason": "Re-keyed from `live_[a-zA-Z0-9]{32}` near the word \"checkout\" onto Checkout.com's documented prefixes `sk_` and `sk_sbox_`. The old pattern matched no Checkout.com key and did match any `live_` token near a word that appears in e-commerce code constantly. pk_ is deliberately absent: the vendor publishes the public key."
     }
   ]
 }

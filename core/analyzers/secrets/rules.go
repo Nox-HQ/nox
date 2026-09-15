@@ -871,9 +871,27 @@ func builtinSecretRules() []*rules.Rule {
 			remediation: "Use environment variables or a secrets manager for secrets and credentials.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
+		// The `(?:[-\[]\s*)?` is a YAML sequence indicator — block form `- x`
+		// and flow form `[x]` — and it is the difference between reading an HTTP
+		// header map and not.
+		//
+		// Go's `\s` matches a newline, so `authorization:\n  Bearer x` already
+		// worked. What did not is the form every recorded HTTP exchange and most
+		// header maps actually use, because a header may repeat and so is a
+		// LIST:
+		//
+		//	    headers:
+		//	      authorization:
+		//	      - Bearer sk-proj-…
+		//
+		// `\s*` cannot cross the `-`. Measured: a credential written inline was
+		// reported and the identical credential written as a one-element YAML
+		// sequence was not — which is the shape a vcrpy cassette records when
+		// `filter_headers` was never configured, the single most valuable thing
+		// there is to find in one.
 		{
 			id: "SEC-082", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(authorization|auth)\s*[=:]\s*['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
+			pattern:     `(?i)(authorization|auth)\s*[=:]\s*(?:[-\[]\s*)?['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
 			description: "Bearer token detected",
 			cwe:         "CWE-798", keywords: []string{"bearer"},
 			remediation: "Do not hard-code bearer tokens. Use environment variables or a token refresh mechanism.",
@@ -881,7 +899,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-083", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(authorization|auth)\s*[=:]\s*['"]?Basic\s+[A-Za-z0-9+/=]{10,}['"]?`,
+			pattern:     `(?i)(authorization|auth)\s*[=:]\s*(?:[-\[]\s*)?['"]?Basic\s+[A-Za-z0-9+/=]{10,}['"]?`,
 			description: "Basic auth header detected",
 			cwe:         "CWE-798", keywords: []string{"basic"},
 			remediation: "Do not hard-code Basic auth credentials. Use environment variables or a credentials provider.",

@@ -218,6 +218,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// masks) — these are not live credentials and mirror the
 		// gitleaks/trufflehog/detect-secrets example allowlists.
 		lang := lexctx.LangFromPath(artifact.Path)
+		// Computed once per file, and only for a file that is one: the marker
+		// scan reads at most the first 64 KB and returns nil for everything
+		// else, so a repository with no cassettes pays a substring search.
+		var credentialSpans []byteSpan
+		isRecording := isHTTPRecording(artifact.Path, content)
+		if isRecording {
+			credentialSpans = credentialBearingSpans(content)
+		}
 		for i := range results {
 			// Every drop below records WHY before it drops. The reason is known
 			// only here, and a refiner that discards it produces a result
@@ -227,6 +235,23 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
 				results[i].Location.StartLine, results[i].Location.StartColumn)
 
+			// Almost all of a recorded HTTP exchange is traffic rather than
+			// credential material: response headers and bodies, request
+			// bodies, cookies in either direction. The part that is not is a
+			// request header that authenticates the request, and the request
+			// URI. So an ENTROPY rule — whose whole claim is that some bytes
+			// are random, and a recording is full of random bytes that are not
+			// credentials — is confined to those. Every rule that encodes a
+			// vendor's credential format has established what it found and is
+			// left to fire anywhere in the recording, including a request body,
+			// which is where an OAuth client_secret would sit.
+			if isRecording && entropyOnlyRules[results[i].RuleID] &&
+				!inSpan(credentialSpans, lexctx.LineColToOffset(content,
+					results[i].Location.StartLine, results[i].Location.StartColumn)) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match is high-entropy bytes in a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear — recorded traffic is full of random bytes that are not credentials")
+				continue
+			}
 			if inEmbeddedBlob(lang, content, &results[i]) {
 				a.refute(candidate, evidence.KindStatic,
 					"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
@@ -295,8 +320,34 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 
 		// Scan decoded base64/hex content for encoded secrets.
+		//
+		// NOTE, because it is wider than the one filter applied here: a decoded
+		// finding goes through NONE of the refiners above. Not the placeholder
+		// check, not the embedded-blob check, not the comment checks. Each
+		// reasons about the file's own bytes, and a decoded finding's location
+		// has been relocated back onto the encoding segment, so applying them
+		// unchanged would ask questions about the wrong text. That is a real
+		// gap and it is not closed here.
+		//
+		// The recording gate is applied, because it is the one filter that asks
+		// a question the relocation preserves the answer to: the encoding
+		// segment's position in the document is exactly what decides whether
+		// this is a request header or recorded traffic.
+		//
+		// It found 107 findings the gate had missed on crewAI — base64
+		// OpenTelemetry payloads in request bodies, decoded, scanned, and
+		// relocated back onto the body they came from.
 		decodedResults := DecodeAndScan(content, artifact.Path, a.engine)
 		for i := range decodedResults {
+			if isRecording && entropyOnlyRules[decodedResults[i].RuleID] &&
+				!inSpan(credentialSpans, lexctx.LineColToOffset(content,
+					decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn)) {
+				a.refute(reasoning.Candidate(decodedResults[i].RuleID, artifact.Path,
+					decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn),
+					evidence.KindStatic,
+					"the match is high-entropy bytes decoded out of a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear")
+				continue
+			}
 			fs.Add(decodedResults[i])
 		}
 	}

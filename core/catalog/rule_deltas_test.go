@@ -83,6 +83,18 @@ func TestRuleDeltaLedgerIsWellFormed(t *testing.T) {
 // unexplained-narrowing check and surfaces only as a STALE entry — with a
 // message blaming a reverted change rather than the typo it is. Every entry
 // must name a rule that still exists, or one a surviving rule retired.
+//
+// With one exception, and it is the case that showed the rule above had a hole.
+// A `rule-removed` entry names an ID that is deliberately in neither set: the
+// rule is gone and nothing absorbed it. It still matches a drop, because the
+// harness diffs the BASELINE binary against the candidate and the baseline
+// still has the rule — the drop is its count falling to zero. So the premise
+// "belongs to no rule, therefore can never match a drop" is false precisely for
+// a removal, and the classification is what distinguishes the two.
+//
+// The check is therefore run in both directions: a `rule-removed` entry must
+// name an ID that is NOT live, because an entry claiming a removal of a rule
+// still in the catalog is as wrong as a typo and fails the same way.
 func TestRuleDeltaLedgerNamesRealRules(t *testing.T) {
 	l := loadLedger(t)
 
@@ -103,13 +115,19 @@ func TestRuleDeltaLedgerNamesRealRules(t *testing.T) {
 		if e.Rule == "" {
 			continue
 		}
-		if _, ok := live[e.Rule]; ok {
+		_, isLive := live[e.Rule]
+		if e.Classification == "rule-removed" {
+			if isLive {
+				t.Errorf("%s is classified rule-removed but is still in the catalog; either "+
+					"the removal did not land or the classification is wrong", e.Rule)
+			}
 			continue
 		}
-		if retired[e.Rule] {
+		if isLive || retired[e.Rule] {
 			continue
 		}
 		t.Errorf("%s names no live rule and no retired ID; a drop can never match it, so the entry "+
-			"explains nothing and will surface as a stale entry rather than as the typo it is", e.Rule)
+			"explains nothing and will surface as a stale entry rather than as the typo it is. "+
+			"If the rule was removed outright, classify the entry rule-removed.", e.Rule)
 	}
 }
