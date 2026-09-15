@@ -98,8 +98,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1522 -> 1521 retired SEC-569 into SEC-007: a Gemini API key is a Google
 	// API key, so the format SEC-569 was named for was already covered, while
 	// the pattern it actually held could not match it.
-	if got := len(cat); got != 1521 {
-		t.Errorf("Catalog() returned %d rules, want 1521", got)
+	// 1521 -> 1514 retired seven bare-token vendor duplicates into the bound
+	// rules that already reported the same credentials (see TestAllRules_Count).
+	if got := len(cat); got != 1514 {
+		t.Errorf("Catalog() returned %d rules, want 1514", got)
 	}
 }
 
