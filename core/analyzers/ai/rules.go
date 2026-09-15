@@ -415,7 +415,18 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-029", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(presence_penalty\s*[:=]\s*0| frequency_penalty\s*[:=]\s*0)`,
+			// The zero must BE the value, not begin it. `...\s*0` with nothing
+			// after it matched `presence_penalty=0.1` as well as
+			// `presence_penalty=0`, so the rule reported "penalties disabled"
+			// on code that had explicitly enabled them -- the remediation it
+			// recommends, flagged as the defect. Measured on the pinned corpus,
+			// 446 findings of which the two most common were
+			// `frequency_penalty=0.1` (116) and `presence_penalty=0.1` (116).
+			//
+			// RE2 has no lookahead, so the value is terminated explicitly: a
+			// zero, optionally with zero decimals, followed by a delimiter or
+			// end of line.
+			pattern:     `(?im)(?:presence_penalty|frequency_penalty)["']?\s*[:=]\s*0(?:\.0+)?(?:[\s,)\]}]|$)`,
 			description: "LLM repetition penalties disabled",
 			cwe:         "CWE-754", keywords: []string{"presence_penalty", "frequency_penalty"},
 			tags:        []string{"ai", "reliability", "repetition"},
@@ -527,7 +538,11 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-041", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*|1\.0+)`,
+			// Strictly greater than 0.9, which is what the description and the
+			// remediation both say. `0\.9[0-9]*` also matched exactly 0.9, and
+			// `top_p=0.9` is an ordinary nucleus-sampling value: 317 of this
+			// rule's 391 findings on the pinned corpus were that one line.
+			pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*[1-9]|1\.0+)`,
 			description: "AI model uses high temperature/top_p settings",
 			cwe:         "CWE-20", keywords: []string{"temperature", "top_p"},
 			tags:        []string{"ai", "reliability", "configuration"},

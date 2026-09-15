@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -134,8 +135,19 @@ func runBench(args []string) int {
 	}
 
 	report := BenchReport{
-		StartedAt: time.Now().UTC().Format(time.RFC3339),
-		NoxBinary: exe,
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+		NoxBinary:  exe,
+		NoxVersion: version,
+	}
+
+	// Which upstream ref each cloned directory holds, for --autocorpus.
+	pins := map[string]struct{ Repo, Ref string }{}
+	for _, entry := range curatedAutoCorpus {
+		owner, repo := splitRepoSlug(entry.Repo)
+		if owner == "" {
+			continue
+		}
+		pins[owner+"--"+repo] = struct{ Repo, Ref string }{entry.Repo, entry.Ref}
 	}
 
 	for _, e := range entries {
@@ -151,6 +163,12 @@ func runBench(args []string) int {
 			report.Failed = append(report.Failed, FailedProject{Path: project, Error: err.Error()})
 			continue
 		}
+		if pin, ok := pins[e.Name()]; ok {
+			summary.Repo, summary.Ref = pin.Repo, pin.Ref
+		}
+		// Resolved from the tree actually scanned, so it is right for a
+		// hand-assembled --corpus too, and pins a moving tag to one commit.
+		summary.Commit = gitHeadSHA(project)
 		report.Projects = append(report.Projects, summary)
 	}
 
@@ -189,20 +207,43 @@ func runBench(args []string) int {
 // BenchReport is the top-level bench output. Stable JSON shape so
 // downstream tooling can join across runs.
 type BenchReport struct {
-	StartedAt    string           `json:"started_at"`
-	FinishedAt   string           `json:"finished_at"`
-	NoxBinary    string           `json:"nox_binary"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+	NoxBinary  string `json:"nox_binary"`
+	// NoxVersion is the engine that produced these numbers.
+	//
+	// Without it a fire-rate report is uninterpretable the moment the engine
+	// moves on, and it will be read anyway. The 2026-Q2 run recorded neither
+	// this nor a commit per project; four months later its numbers were quoted
+	// as current and used to argue for work that had already shipped -- the
+	// character-bounded proximity fix, which is the single largest change to
+	// these counts there has ever been. A benchmark that cannot say which
+	// engine it measured is evidence for whatever the reader already believes.
+	NoxVersion   string           `json:"nox_version"`
 	Projects     []ProjectSummary `json:"projects"`
 	Failed       []FailedProject  `json:"failed,omitempty"`
 	RuleFireRate map[string]int   `json:"rule_fire_rate,omitempty"`
+	// RulePrevalence carries findings, repos and collapsed sites together.
+	// Ranking on findings alone ranks the corpus, not the rule.
+	RulePrevalence map[string]*RulePrevalence `json:"rule_prevalence,omitempty"`
 }
 
 type ProjectSummary struct {
-	Path     string         `json:"path"`
+	Path string `json:"path"`
+	// Repo, Ref and Commit identify WHAT was scanned. Path alone is a temp
+	// directory that no longer exists by the time anyone reads the report.
+	Repo     string         `json:"repo,omitempty"`
+	Ref      string         `json:"ref,omitempty"`
+	Commit   string         `json:"commit,omitempty"`
 	Findings int            `json:"findings"`
 	Duration string         `json:"duration"`
 	ByRule   map[string]int `json:"by_rule"`
-	BySev    map[string]int `json:"by_severity"`
+	// BySite counts DISTINCT sites per rule, after collapsing the locale and
+	// version segments of a path. A documentation page carried in four
+	// languages across two released versions is one condition an author can
+	// fix, not eight, and raw counts rank it as eight.
+	BySite map[string]int `json:"by_site"`
+	BySev  map[string]int `json:"by_severity"`
 }
 
 type FailedProject struct {
@@ -243,9 +284,20 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 
 	byRule := map[string]int{}
 	bySev := map[string]int{}
+	sites := map[string]map[string]struct{}{}
 	for i := range doc.Findings {
-		byRule[doc.Findings[i].RuleID]++
-		bySev[string(doc.Findings[i].Severity)]++
+		f := &doc.Findings[i]
+		byRule[f.RuleID]++
+		bySev[string(f.Severity)]++
+		key := fmt.Sprintf("%s:%d", normaliseSitePath(f.Location.FilePath), f.Location.StartLine)
+		if sites[f.RuleID] == nil {
+			sites[f.RuleID] = map[string]struct{}{}
+		}
+		sites[f.RuleID][key] = struct{}{}
+	}
+	bySite := make(map[string]int, len(sites))
+	for rule, set := range sites {
+		bySite[rule] = len(set)
 	}
 
 	return ProjectSummary{
@@ -253,6 +305,7 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 		Findings: len(doc.Findings),
 		Duration: duration.String(),
 		ByRule:   byRule,
+		BySite:   bySite,
 		BySev:    bySev,
 	}, nil
 }
@@ -263,12 +316,96 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 // which fire universally and should be downgraded (every project = noise).
 func aggregateRuleFireRates(report *BenchReport) {
 	counts := map[string]int{}
+	prev := map[string]*RulePrevalence{}
 	for i := range report.Projects {
-		for rule := range report.Projects[i].ByRule {
+		for rule, n := range report.Projects[i].ByRule {
 			counts[rule]++
+			p := prev[rule]
+			if p == nil {
+				p = &RulePrevalence{}
+				prev[rule] = p
+			}
+			p.Repos++
+			p.Findings += n
+			p.Sites += report.Projects[i].BySite[rule]
 		}
 	}
 	report.RuleFireRate = counts
+	report.RulePrevalence = prev
+}
+
+// RulePrevalence is the three numbers a rule has to be judged on together.
+//
+// Raw findings measure user-visible noise and nothing else: they are a property
+// of the corpus as much as of the rule. Measured here, crewAI carries its
+// documentation in four languages across two released versions, so one matched
+// line in one page counts eight times, and a docs-matching rule outranks a
+// rule that fires once in every repository scanned.
+//
+// So three numbers, and they answer different questions:
+//
+//	Findings  how much output an operator sees          (noise)
+//	Repos     in how many projects the rule fires at all (prevalence)
+//	Sites     distinct conditions, locale/version copies collapsed
+//
+// A rule with high Findings and Repos of 1 is one repository's shape. A rule
+// with Repos across the corpus and few Sites each is a broad, quiet rule. Only
+// the pair tells you which detector is worst on real software; neither number
+// does it alone.
+type RulePrevalence struct {
+	Repos    int `json:"repos"`
+	Findings int `json:"findings"`
+	Sites    int `json:"sites"`
+}
+
+// docLocales is a LIST, not a shape.
+//
+// The shape `^[a-z]{2}(-[A-Za-z]{2,4})?$` was tried first and collapsed `ui`,
+// `db`, `io` and `ai-ml` -- ordinary source directories -- because it describes
+// the form of a language tag rather than membership of the set. `io` is even a
+// real tag (Ido), so no refinement of the shape separates it from `pkg/io`.
+// Language tags are a closed set; a list is the correct resolution and an
+// over-collapse here would silently under-count a rule.
+var docLocales = map[string]bool{
+	"en": true, "es": true, "fr": true, "de": true, "it": true, "pt": true,
+	"pt-BR": true, "pt-PT": true, "ru": true, "ja": true, "ko": true,
+	"zh": true, "zh-Hans": true, "zh-Hant": true, "zh-CN": true, "zh-TW": true,
+	"ar": true, "hi": true, "tr": true, "nl": true, "pl": true, "vi": true,
+	"th": true, "id": true, "cs": true, "sv": true, "da": true, "fi": true,
+	"he": true, "uk": true, "ro": true, "hu": true, "el": true, "fa": true,
+	"bn": true, "ms": true, "nb": true, "sk": true, "bg": true, "hr": true,
+	"en-US": true, "en-GB": true, "es-ES": true, "fr-FR": true, "de-DE": true,
+}
+
+// versionSegment matches a released-docs directory: `v1.14.4`, `1.10.0`,
+// `edge`, `latest`, `stable`.
+//
+// `main` and `next` are deliberately absent. Both are ordinary directory names
+// -- `src/main/java` in every Maven project, `next` in a Next.js tree -- and
+// collapsing them would merge unrelated files.
+var versionSegment = regexp.MustCompile(`^(?:v?\d+(?:\.\d+){1,3}|edge|latest|stable)$`)
+
+// normaliseSitePath collapses the locale and version directories that make one
+// authored line appear as many.
+//
+// It drops only a segment that is a known documentation locale or a version,
+// so `docs/edge/ko/tools/x.mdx` and `docs/v1.14.4/en/tools/x.mdx` become the
+// same site while `src/ui`, `internal/db` and `pkg/io` are untouched. Erring
+// towards keeping a segment costs a little collapse; erring the other way
+// under-counts a rule, which is the direction that hides a problem.
+func normaliseSitePath(p string) string {
+	parts := strings.Split(filepath.ToSlash(p), "/")
+	kept := parts[:0]
+	for _, seg := range parts {
+		if docLocales[seg] || versionSegment.MatchString(seg) {
+			continue
+		}
+		kept = append(kept, seg)
+	}
+	if len(kept) == 0 {
+		return p
+	}
+	return strings.Join(kept, "/")
 }
 
 func renderBenchMarkdown(report *BenchReport) string {
@@ -344,6 +481,17 @@ func materialiseAutoCorpus(quiet bool) (string, error) {
 		}
 	}
 	return dir, nil
+}
+
+// gitHeadSHA returns the commit a scanned tree is at, or "" when it is not a
+// git checkout. Best-effort by design: a corpus directory need not be a repo,
+// and an unidentifiable project is worth reporting without its SHA.
+func gitHeadSHA(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func splitRepoSlug(slug string) (owner, repo string) {

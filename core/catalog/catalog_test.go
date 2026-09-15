@@ -95,8 +95,18 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// build stage — rather than to a regex over the FROM line. CONT-002 carries
 	// the alias, and core.attachRetiredIdentities is what makes an alias reach a
 	// finding an analyzer built by hand.
-	if got := len(cat); got != 1522 {
-		t.Errorf("Catalog() returned %d rules, want 1522", got)
+	// 1522 -> 1521 retired SEC-569 into SEC-007: a Gemini API key is a Google
+	// API key, so the format SEC-569 was named for was already covered, while
+	// the pattern it actually held could not match it.
+	// 1521 -> 1514 retired seven bare-token vendor duplicates into the bound
+	// rules that already reported the same credentials (see TestAllRules_Count).
+	// 1514 -> 1501 merged twelve identical-pattern groups that described one
+	// condition with two rule IDs (see TestAllRules_Count).
+	// 1501 -> 1498 retired the `sk_live_` group into SEC-030 (see
+	// TestAllRules_Count): a prefix that belongs to Stripe, claimed by rules
+	// named for Square and PayPal.
+	if got := len(cat); got != 1498 {
+		t.Errorf("Catalog() returned %d rules, want 1498", got)
 	}
 }
 

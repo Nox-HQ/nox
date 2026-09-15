@@ -145,3 +145,38 @@ func isReportableEmailMatch(matchText string) bool {
 	}
 	return true
 }
+
+// DATA-003 — payment card numbers
+//
+// The issuer prefixes (4.., 51-55.., 34/37.., 6011/65..) describe the SHAPE of
+// a card number and nothing more. What makes a 16-digit run an actual card is
+// the Luhn checksum, which every issued card satisfies and a random digit run
+// satisfies about one time in ten.
+//
+// Measured on the pinned corpus, DATA-003 produced 560 findings and 52 of them
+// (9.3%) passed Luhn -- which is the rate you would expect from chance, because
+// all 560 were floating-point numbers in embedding vectors and notebook output.
+// Luhn alone is therefore necessary and not sufficient; see
+// isInsideDecimalLiteral, which removes the rest.
+func isPaymentCardNumber(matchText string) bool {
+	digits := strings.TrimFunc(matchText, func(r rune) bool { return r < '0' || r > '9' })
+	if len(digits) < 13 || len(digits) > 19 {
+		return false
+	}
+	sum, alt := 0, false
+	for i := len(digits) - 1; i >= 0; i-- {
+		c := digits[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+		d := int(c - '0')
+		if alt {
+			if d *= 2; d > 9 {
+				d -= 9
+			}
+		}
+		sum += d
+		alt = !alt
+	}
+	return sum%10 == 0
+}

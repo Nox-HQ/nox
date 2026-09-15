@@ -54,7 +54,13 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			if contentLower == nil {
 				contentLower = bytes.ToLower(content)
 			}
-			if !containsAnyKeyword(contentLower, rule.Keywords) {
+			// A Rule built directly rather than through RuleSet.Add has no
+			// cached copy; lower on the fly so both paths behave identically.
+			kws := rule.keywordsLower
+			if len(kws) != len(rule.Keywords) {
+				kws = loweredKeywords(rule.Keywords)
+			}
+			if !containsAnyKeyword(contentLower, kws) {
 				continue
 			}
 		}
@@ -262,7 +268,7 @@ func nearMatch(line string, lineOffset, col1 int) string {
 
 // keywordNear reports whether any keyword appears within the line AND character
 // windows around the match. skipComment, when set, is consulted per line.
-func keywordNear(lines []string, line1, col1, window int, keywords []string, skipComment bool) bool {
+func keywordNear(lines []string, line1, col1, window int, keywords []string, skipComment, wholeToken bool) bool {
 	idx := line1 - 1
 	start := max(idx-window, 0)
 	end := min(idx+window, len(lines)-1)
@@ -272,12 +278,74 @@ func keywordNear(lines []string, line1, col1, window int, keywords []string, ski
 		}
 		lower := strings.ToLower(nearMatch(lines[i], i-idx, col1))
 		for _, kw := range keywords {
-			if strings.Contains(lower, strings.ToLower(kw)) {
+			kw = strings.ToLower(kw)
+			if wholeToken {
+				if keywordAsToken(lower, kw) {
+					return true
+				}
+				continue
+			}
+			if strings.Contains(lower, kw) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// keywordAsToken reports whether kw appears in s as a token of its own rather
+// than embedded inside a longer alphanumeric run.
+//
+// A vendor keyword is the ONLY evidence a bare-token rule has, and plain
+// substring matching let that evidence be manufactured by coincidence. SEC-533
+// is gated on "ibm"; measured on the pinned corpus it produced 448 findings,
+// many of them licensed by base64 in which `IBM` happens to occur -- e.g. the
+// Cloudflare cookie value `...Fszr_Msw0B1.IBMki`. `lob`, `fcm`, `wise`, `heap`
+// and `split` have the same problem: they are short enough to turn up inside
+// random data, and then every token nearby inherits a vendor's name.
+//
+// A boundary here is "not a letter or digit", so `_` and `-` separate tokens:
+// `posthog` still matches `posthog_api_key`, which is how these keywords are
+// meant to be found. The checks are applied per end and only where the keyword
+// itself is alphanumeric there, so a prefix keyword written to sit directly
+// against its value -- `ghp_`, `key-`, `sk-ant-api` -- keeps matching, and so
+// do the punctuation keywords `=` and `:`.
+func keywordAsToken(s, kw string) bool {
+	if kw == "" {
+		return false
+	}
+	checkLeft := isAlphanumericByte(kw[0])
+	checkRight := isAlphanumericByte(kw[len(kw)-1])
+	// A keyword carrying a separator is a structured PREFIX, not a word:
+	// `ghp_`, `key-`, `sk-ant-api`. Those are written to sit directly against
+	// the value they introduce, and `sk-ant-api` runs straight into the version
+	// digits of `sk-ant-api03-...`, so there is no right boundary to demand.
+	// Only a bare word -- `ibm`, `posthog`, `heap` -- must end at one.
+	if strings.ContainsAny(kw, "_-.:/") {
+		checkRight = false
+	}
+	if !checkLeft && !checkRight {
+		return strings.Contains(s, kw)
+	}
+	for from := 0; from+len(kw) <= len(s); {
+		j := strings.Index(s[from:], kw)
+		if j < 0 {
+			return false
+		}
+		at := from + j
+		end := at + len(kw)
+		leftOK := !checkLeft || at == 0 || !isAlphanumericByte(s[at-1])
+		rightOK := !checkRight || end == len(s) || !isAlphanumericByte(s[end])
+		if leftOK && rightOK {
+			return true
+		}
+		from = at + 1
+	}
+	return false
+}
+
+func isAlphanumericByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
 // codeContextHasKeyword reports whether an EXCLUDE keyword sits near the match,
@@ -288,23 +356,42 @@ func keywordNear(lines []string, line1, col1, window int, keywords []string, ski
 // credential on that line, and a suppressed finding is silent by construction —
 // nobody reviews what was never reported.
 func codeContextHasKeyword(lines []string, line1, col1, window int, keywords []string) bool {
-	return keywordNear(lines, line1, col1, window, keywords, true)
+	// Substring matching, deliberately. This drives ExcludeContextKeywords: a
+	// veto that fires too readily suppresses a finding, which is the direction
+	// that cannot invent evidence. Only the POSITIVE gate below is tightened.
+	return keywordNear(lines, line1, col1, window, keywords, true, false)
 }
 
 // contextHasKeyword reports whether a REQUIRED keyword sits near the match.
 func contextHasKeyword(lines []string, line1, col1, window int, keywords []string) bool {
-	return keywordNear(lines, line1, col1, window, keywords, false)
+	// Whole-token matching: this is the positive evidence path, and the keyword
+	// is the only thing standing between a bare token pattern and every string
+	// of that length in the file.
+	return keywordNear(lines, line1, col1, window, keywords, false, true)
 }
 
 // containsAnyKeyword returns true if content contains at least one of the
 // keywords. Content must be lowercase; keywords are lowered automatically.
-func containsAnyKeyword(contentLower []byte, keywords []string) bool {
+func containsAnyKeyword(contentLower []byte, keywords [][]byte) bool {
 	for _, kw := range keywords {
-		if bytes.Contains(contentLower, []byte(strings.ToLower(kw))) {
+		if bytes.Contains(contentLower, kw) {
 			return true
 		}
 	}
 	return false
+}
+
+// loweredKeywords lower-cases a rule's keywords for the pre-filter. Called
+// once per rule by RuleSet.Add, never during a scan.
+func loweredKeywords(keywords []string) [][]byte {
+	if len(keywords) == 0 {
+		return nil
+	}
+	out := make([][]byte, len(keywords))
+	for i, kw := range keywords {
+		out[i] = []byte(strings.ToLower(kw))
+	}
+	return out
 }
 
 // fileMatchesRule returns true if the file path matches at least one of the
