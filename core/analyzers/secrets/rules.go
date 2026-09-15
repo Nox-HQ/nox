@@ -93,6 +93,14 @@ func builtinSecretRules() []*rules.Rule {
 			// is retired rather than redesigned.
 			retires: []rules.RetiredRule{
 				{ID: "SEC-569", Pattern: `\b[a-zA-Z0-9]{24}\b`},
+				// SEC-115 ("Gemini / GCP API key") and SEC-415 ("Detected GCP
+				// API Key") carried this rule's exact pattern. dedup.go already
+				// named SEC-007 the sole canonical owner of the `AIza` prefix,
+				// so both were being dropped at runtime on every span this rule
+				// matched; retiring them makes the rule set say what the
+				// scanner already did.
+				{ID: "SEC-115", Pattern: `AIza[0-9A-Za-z\-_]{35}`},
+				{ID: "SEC-415", Pattern: `AIza[0-9A-Za-z\-_]{35}`},
 			},
 		},
 		{
@@ -341,6 +349,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"shpss_"},
 			remediation: "Rotate the shared secret in Shopify app settings.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-321", Pattern: `shpss_[a-fA-F0-9]{32}`},
+			},
 		},
 		{
 			id: "SEC-035", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -349,6 +360,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"shpat_"},
 			remediation: "Revoke the access token in Shopify admin and generate a new one.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-318", Pattern: `shpat_[a-fA-F0-9]{32}`},
+			},
 		},
 		{
 			id: "SEC-036", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -357,6 +371,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"shpca_"},
 			remediation: "Revoke and regenerate the custom app token in Shopify admin.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-319", Pattern: `shpca_[a-fA-F0-9]{32}`},
+			},
 		},
 		{
 			id: "SEC-037", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -365,6 +382,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"shppa_"},
 			remediation: "Revoke and regenerate the private app token in Shopify admin.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-320", Pattern: `shppa_[a-fA-F0-9]{32}`},
+			},
 		},
 		{
 			id: "SEC-038", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
@@ -373,6 +393,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"access_token$production$"},
 			remediation: "Revoke the access token in the Braintree control panel.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-142", Pattern: `access_token\$production\$[a-z0-9]{16}\$[a-f0-9]{32}`},
+			},
 		},
 
 		// -----------------------------------------------------------------
@@ -563,6 +586,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"mailchimp", "-us"},
 			remediation: "Regenerate the API key in Mailchimp account settings.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-378", Pattern: `[a-f0-9]{32}-us[0-9]{1,2}`},
+			},
 		},
 		{
 			id: "SEC-060", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
@@ -1129,14 +1155,6 @@ func builtinSecretRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			id: "SEC-115", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `AIza[0-9A-Za-z\-_]{35}`,
-			description: "Gemini / GCP API key detected",
-			cwe:         "CWE-798", keywords: []string{"aiza"},
-			remediation: "Rotate the exposed key immediately. Restrict the API key in the GCP Console.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-		{
 			id: "SEC-116", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(mistral[_-]?api[_-]?key|MISTRAL_API_KEY)\s*[=:]\s*['"]?[A-Za-z0-9]{32,}['"]?`,
 			description: "Mistral API Key detected",
@@ -1353,14 +1371,6 @@ func builtinSecretRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			id: "SEC-142", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `access_token\$production\$[a-z0-9]{16}\$[a-f0-9]{32}`,
-			description: "Braintree Access Token detected",
-			cwe:         "CWE-798", keywords: []string{"access_token$production$"},
-			remediation: "Revoke the access token in the Braintree control panel immediately.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-		{
 			id: "SEC-143", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:     `sq0atp-[A-Za-z0-9_-]{22}|sq0csp-[A-Za-z0-9_-]{43}|EAAAE[A-Za-z0-9_-]{50,}`,
 			description: "Square Access Token detected",
@@ -1447,6 +1457,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"sg."},
 			remediation: "Rotate the exposed key immediately. Use environment variables or a secrets manager.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-376", Pattern: `SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}`},
+			},
 		},
 		{
 			id: "SEC-154", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
@@ -1615,15 +1628,9 @@ func builtinSecretRules() []*rules.Rule {
 			cwe:         "CWE-798", keywords: []string{"bittrex"},
 			remediation: "Imported from Gitleaks: bittrex-access-key",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-
-		{
-			id: "SEC-174", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)[\w.-]{0,50}?(?:bittrex)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-z0-9]{32})(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Detected a Bittrex Secret Key, potentially compromising cryptocurrency transactions and financial security.",
-			cwe:         "CWE-798", keywords: []string{"bittrex"},
-			remediation: "Imported from Gitleaks: bittrex-secret-key",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			retires: []rules.RetiredRule{
+				{ID: "SEC-174", Pattern: `(?i)[\w.-]{0,50}?(?:bittrex)(?:[ \t\w.-]{0,20})[\s'\"]{0,3}(?:=|>|:{1,3}=|\|\||:|<=|=>|:=)[\s'\"]{0,3}[\w.=-]{8,}`},
+			},
 		},
 
 		{
@@ -2905,42 +2912,6 @@ func builtinSecretRules() []*rules.Rule {
 		},
 
 		{
-			id: "SEC-318", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `shpat_[a-fA-F0-9]{32}`,
-			description: "Uncovered a Shopify access token, which could lead to unauthorized e-commerce platform access and data breaches.",
-			cwe:         "CWE-798", keywords: []string{"shpat_"},
-			remediation: "Imported from Gitleaks: shopify-access-token",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-
-		{
-			id: "SEC-319", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `shpca_[a-fA-F0-9]{32}`,
-			description: "Detected a Shopify custom access token, potentially compromising custom app integrations and e-commerce data security.",
-			cwe:         "CWE-798", keywords: []string{"shpca_"},
-			remediation: "Imported from Gitleaks: shopify-custom-access-token",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-
-		{
-			id: "SEC-320", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `shppa_[a-fA-F0-9]{32}`,
-			description: "Identified a Shopify private app access token, risking unauthorized access to private app data and store operations.",
-			cwe:         "CWE-798", keywords: []string{"shppa_"},
-			remediation: "Imported from Gitleaks: shopify-private-app-access-token",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-
-		{
-			id: "SEC-321", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `shpss_[a-fA-F0-9]{32}`,
-			description: "Found a Shopify shared secret, posing a risk to application authentication and e-commerce platform security.",
-			cwe:         "CWE-798", keywords: []string{"shpss_"},
-			remediation: "Imported from Gitleaks: shopify-shared-secret",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-		},
-
-		{
 			id: "SEC-322", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)[\w.-]{0,50}?(?:BUNDLE_ENTERPRISE__CONTRIBSYS__COM|BUNDLE_GEMS__CONTRIBSYS__COM)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-f0-9]{8}:[a-f0-9]{8})(?:[\x60'"\s;]|\\[nr]|$)`,
 			description: "Discovered a Sidekiq Secret, which could lead to compromised background job processing and application data breaches.",
@@ -3254,9 +3225,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-373", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "Detected S3 bucket URL", cwe: "CWE-798", keywords: []string{"s3_bucket"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Detected Google Cloud Storage URL", cwe: "CWE-798", keywords: []string{"gcs"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-375", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `blob\.core\.windows\.net/[^\s]+`, description: "Detected Azure Blob Storage URL", cwe: "CWE-798", keywords: []string{"azure_blob"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-376", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}`, description: "Detected SendGrid API key", cwe: "CWE-798", keywords: []string{"sendgrid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-377", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `key-[A-Za-z0-9]{32}`, description: "Detected Mailgun API key", cwe: "CWE-798", keywords: []string{"mailgun"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-378", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{32}-us[0-9]{1,2}`, description: "Detected Mailchimp API key", cwe: "CWE-798", keywords: []string{"mailchimp"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-379", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AC[a-z0-9]{32}`, description: "Detected Twilio Account SID", cwe: "CWE-798", keywords: []string{"twilio_sid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-380", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{16}`, description: "Detected Nexmo API key", cwe: "CWE-798", keywords: []string{"nexmo"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-381", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `plaid[_-]?key[_-]?[^\s]{20,40}`, description: "Detected Plaid API key", cwe: "CWE-798", keywords: []string{"plaid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3269,8 +3238,8 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-388", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `bearer\s+[A-Za-z0-9_-]{20,}`, description: "Detected Bearer Token", cwe: "CWE-798", keywords: []string{"bearer_token"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-389", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `authorization\s*:\s*[A-Za-z0-9_-]{20,}`, description: "Detected Authorization Header", cwe: "CWE-798", keywords: []string{"authorization"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-390", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----`, description: "Detected Private Key", cwe: "CWE-798", keywords: []string{"private_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-391", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`, description: "Detected OpenSSH Private Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-392", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`, description: "Detected PGP Private Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-391", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`, description: "Detected OpenSSH Private Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-428", Pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`}}},
+		{id: "SEC-392", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`, description: "Detected PGP Private Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-429", Pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`}}},
 		{id: "SEC-393", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `dd_api_key=[a-z0-9]{32}`, description: "Detected Datadog API Key", cwe: "CWE-798", keywords: []string{"datadog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-394", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `dd_app_key=[a-z0-9]{40}`, description: "Detected Datadog App Key", cwe: "CWE-798", keywords: []string{"datadog_app"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-395", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{40}`, description: "Detected New Relic API Key", cwe: "CWE-798", keywords: []string{"newrelic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3293,11 +3262,9 @@ func builtinSecretRules() []*rules.Rule {
 		// -----------------------------------------------------------------
 		// Extended rules (SEC-411 to SEC-441) - AWS, GCP, Azure, OAuth, Keys
 		// -----------------------------------------------------------------
-		{id: "SEC-411", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AKIA[0-9A-Z]{16}`, description: "Detected AWS Access Key", cwe: "CWE-798", keywords: []string{"aws_access"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-412", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `aws.{0,20}?["'][0-9a-zA-Z\/+]{40}["']`, description: "Detected AWS Secret", cwe: "CWE-798", keywords: []string{"aws_secret"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-413", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws`, description: "Detected AWS S3", cwe: "CWE-798", keywords: []string{"aws_s3"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-414", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `arn:aws:rds`, description: "Detected AWS RDS", cwe: "CWE-798", keywords: []string{"aws_rds"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-415", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AIza[0-9A-Za-z\-_]{35}`, description: "Detected GCP API Key", cwe: "CWE-798", keywords: []string{"gcp_api"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-416", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `service_account`, description: "Detected GCP Service Account", cwe: "CWE-798", keywords: []string{"gcp_sa"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-417", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `gs://`, description: "Detected GCP Bucket", cwe: "CWE-798", keywords: []string{"gcp_bucket"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-418", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `clusters/`, description: "Detected GKE Cluster", cwe: "CWE-798", keywords: []string{"gke"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3310,8 +3277,6 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-425", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `login\.microsoftonline`, description: "Detected Microsoft OAuth", cwe: "CWE-798", keywords: []string{"ms_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-426", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN RSA PRIVATE KEY-----`, description: "Detected RSA Private Key", cwe: "CWE-798", keywords: []string{"rsa_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-427", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN EC PRIVATE KEY-----`, description: "Detected EC Private Key", cwe: "CWE-798", keywords: []string{"ec_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-428", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`, description: "Detected OpenSSH Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-429", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`, description: "Detected PGP Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-434", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `bootstrap\.servers`, description: "Detected Kafka", cwe: "CWE-798", keywords: []string{"kafka"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		// The pattern carried a single body character (`gh[pousr]_[A-Za-z0-9_]`),
 		// so any five-character run beginning `ghs_` was a high-severity GitHub
@@ -3414,7 +3379,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-505", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{36}`, description: "Detected Maven Repository Token", cwe: "CWE-798", keywords: []string{"maven"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-506", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected NuGet API Key", cwe: "CWE-798", keywords: []string{"nuget"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		// SEC-507 removed: pattern too generic (matched comment separators)
-		{id: "SEC-508", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AKIA[0-9A-Z]{16}`, description: "Detected AWS Access Key ID (alternate)", cwe: "CWE-798", keywords: []string{"aws"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-508", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AKIA[0-9A-Z]{16}`, description: "Detected AWS Access Key ID (alternate)", cwe: "CWE-798", keywords: []string{"aws"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-411", Pattern: `AKIA[0-9A-Z]{16}`}}},
 		{id: "SEC-509", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `ASIA[0-9A-Z]{16}`, description: "Detected AWS Temporary Access Key ID", cwe: "CWE-798", keywords: []string{"aws"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-510", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[0-9a-zA-Z/+]{40}`, description: "Detected AWS Secret Access Key (alternate)", cwe: "CWE-798", keywords: []string{"aws_secret"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-511", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `arn:aws:ecs:`, description: "Detected AWS ECS Task Definition ARN", cwe: "CWE-798", keywords: []string{"aws_ecs"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
