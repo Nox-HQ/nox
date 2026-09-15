@@ -215,6 +215,26 @@ func collectDeclared(files map[string][]byte) *declaredSet {
 			parsePackageJSON(content, d)
 		case base == "package-lock.json":
 			parsePackageLock(content, d)
+		// Lockfiles carry the TRANSITIVE closure; a manifest carries only what
+		// the project asked for directly. SLOP-001 reports an import that
+		// resolves to nothing declared, so reading manifests alone makes every
+		// transitive dependency a phantom import.
+		//
+		// Measured on the pinned corpus: `typing_extensions` was SLOP-001's
+		// single largest name at 104 findings, `pydantic_core` 29, `botocore` 6
+		// -- all real, all installed, all present in a lockfile nox was not
+		// reading. `typing-extensions` appears 25 times in llama_index's
+		// uv.lock alone. npm was already covered by package-lock.json; the
+		// Python ecosystem had no lockfile reader at all, and pnpm and yarn
+		// were missing on the npm side.
+		case base == "poetry.lock" || base == "uv.lock" || base == "pdm.lock":
+			parsePyLockTOML(content, d)
+		case base == "pipfile.lock":
+			parsePipfileLock(content, d)
+		case base == "pnpm-lock.yaml" || base == "pnpm-lock.yml":
+			parsePnpmLock(content, d)
+		case base == "yarn.lock":
+			parseYarnLock(content, d)
 		case base == "requirements.txt" || strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"):
 			parseRequirements(content, d)
 		case base == "pyproject.toml":
@@ -445,6 +465,73 @@ func parseSetupCfg(content []byte, d *declaredSet) {
 		// A value on the key line itself is the first requirement.
 		if n := pyReqNameRe.FindStringSubmatch(strings.TrimSpace(value)); n != nil {
 			d.addPyPI(n[1])
+		}
+	}
+}
+
+// pyLockPackageName matches the `name = "x"` line of a `[[package]]` table.
+// poetry.lock, uv.lock and pdm.lock all use that shape.
+var pyLockPackageName = regexp.MustCompile(`(?m)^\s*name\s*=\s*["']([A-Za-z0-9._-]+)["']`)
+
+// parsePyLockTOML reads the package names out of a Python lockfile.
+//
+// It takes every `name = "..."` inside the file rather than tracking which
+// table it is in. A lockfile's only named entities are its packages, and the
+// alternative -- a TOML parser for three subtly different schemas -- buys
+// precision this does not need: a name that is not a package still only ever
+// makes a declared set LARGER, which suppresses a finding rather than inventing
+// one. Erring that way is right here because the finding being suppressed is
+// "this import resolves to nothing", and a wrong suppression is a missed
+// phantom while a wrong report is an accusation of slopsquatting.
+func parsePyLockTOML(content []byte, d *declaredSet) {
+	for _, m := range pyLockPackageName.FindAllStringSubmatch(string(content), -1) {
+		d.addPyPI(m[1])
+	}
+}
+
+// parsePipfileLock reads Pipfile.lock, which is JSON with the package names as
+// keys under "default" and "develop".
+func parsePipfileLock(content []byte, d *declaredSet) {
+	var lock map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(content, &lock); err != nil {
+		return
+	}
+	for section, pkgs := range lock {
+		if section == "_meta" {
+			continue
+		}
+		for name := range pkgs {
+			d.addPyPI(name)
+		}
+	}
+}
+
+// pnpmLockEntry matches a pnpm package key: two-space-indented
+// `name@version:` or `'@scope/name@version':`, with or without pnpm v6's
+// leading slash.
+var pnpmLockEntry = regexp.MustCompile(`(?m)^ {2}'?/?((?:@[^/'@]+/)?[^'@\s/][^'@\s]*)@\d[^'\s]*'?:`)
+
+// parsePnpmLock reads package names from a pnpm-lock.yaml.
+func parsePnpmLock(content []byte, d *declaredSet) {
+	for _, m := range pnpmLockEntry.FindAllStringSubmatch(string(content), -1) {
+		d.addNPM(m[1])
+	}
+}
+
+// yarnLockEntry matches the specifier heading of a yarn.lock stanza:
+// `name@^1.0.0:` or `"@scope/name@^1.0.0":`, possibly several per line.
+var yarnLockEntry = regexp.MustCompile(`(?m)^"?((?:@[^/"@]+/)?[^"@\s,]+)@[^"\s,]+`)
+
+// parseYarnLock reads package names from a yarn.lock.
+func parseYarnLock(content []byte, d *declaredSet) {
+	for _, line := range strings.Split(string(content), "\n") {
+		if line == "" || line[0] == ' ' || line[0] == '#' {
+			continue // only a stanza heading starts at column 0
+		}
+		for _, part := range strings.Split(line, ", ") {
+			if m := yarnLockEntry.FindStringSubmatch(strings.TrimSpace(part)); m != nil {
+				d.addNPM(m[1])
+			}
 		}
 	}
 }
