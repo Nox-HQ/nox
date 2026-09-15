@@ -298,15 +298,34 @@ func builtinAIRules() []*rules.Rule {
 			// [^.a-zA-Z0-9_] before "pipeline" excludes those method-call sites
 			// while still catching standalone `pipeline("task")` invocations.
 			// Go RE2 has no negative lookbehind, so this character-class guard
-			// is the RE2-safe equivalent.
-			pattern:      `(?i)(?:from_pretrained|load_model|AutoModel|download_model|[^.a-zA-Z0-9_]pipeline)\s*\(`,
-			description:  "Model loaded without hash verification",
-			cwe:          "CWE-494",
-			keywords:     []string{"from_pretrained", "load_model", "automodel", "download_model", "pipeline"},
-			filePatterns: []string{"*.py", "*.ipynb"},
-			tags:         []string{"ai", "supply-chain", "integrity"},
-			remediation:  "Pin model references with a hash digest (e.g., revision='sha256:...') or verify checksums after download. This prevents tampered or substituted models from being loaded silently.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/494.html", "https://huggingface.co/docs/hub/security"},
+			// is the RE2-safe equivalent. `(?:^|...)` with the `m` flag is the
+			// other half: a character class needs a character, so a bare
+			// `pipeline("sentiment-analysis")` as the first token on a line --
+			// the ordinary notebook idiom -- matched nothing at all.
+			//
+			// The comment above used to end by claiming the absence of a pin was
+			// "the signal", because "lines with revision= or sha256 are unlikely
+			// to match". They match: the pattern stops at the opening paren and
+			// never sees the arguments, so a pinned load was reported exactly
+			// like an unpinned one and the rule's name asserted something it had
+			// not established. excludeContextKeywords is what establishes it.
+			//
+			// This changes nothing on the pinned corpus, and that is the
+			// measurement rather than an excuse: of 99 model loads across all
+			// fourteen repositories, ZERO carry a pin of any kind. The rule was
+			// right about every one of them for a reason it could not give. What
+			// the gate buys is that a project which does pin stops being told it
+			// has not — the behaviour the remediation asks for, no longer
+			// reported as the defect.
+			pattern:                `(?im)(?:from_pretrained|load_model|AutoModel|download_model|(?:^|[^.a-zA-Z0-9_])pipeline)\s*\(`,
+			description:            "Model loaded without hash verification",
+			cwe:                    "CWE-494",
+			keywords:               []string{"from_pretrained", "load_model", "automodel", "download_model", "pipeline"},
+			excludeContextKeywords: []string{"revision=", "revision =", "sha256", "commit_hash", "local_files_only"},
+			filePatterns:           []string{"*.py", "*.ipynb"},
+			tags:                   []string{"ai", "supply-chain", "integrity"},
+			remediation:            "Pin model references with a hash digest (e.g., revision='sha256:...') or verify checksums after download. This prevents tampered or substituted models from being loaded silently.",
+			references:             []string{"https://cwe.mitre.org/data/definitions/494.html", "https://huggingface.co/docs/hub/security"},
 		},
 		{
 			id: "AI-020", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,

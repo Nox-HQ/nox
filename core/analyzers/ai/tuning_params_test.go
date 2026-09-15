@@ -21,6 +21,21 @@ import (
 // The test below is what remains: the removal has to stay removed, and anyone
 // re-adding one of these IDs should have to read why it went.
 
+// aiFired reports whether rule fired on body.
+func aiFired(t *testing.T, rule, body string) bool {
+	t.Helper()
+	got, err := NewAnalyzer().ScanFile("agent.py", []byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range got {
+		if f.RuleID == rule {
+			return true
+		}
+	}
+	return false
+}
+
 // removedAsConfigurationPreference lists the AI rule IDs removed because they
 // report a configuration choice, not an attacker-reachable consequence.
 var removedAsConfigurationPreference = []string{
@@ -73,6 +88,45 @@ func TestSurvivingConfigRulesReportARemovedProtection(t *testing.T) {
 		if !live[id] {
 			t.Errorf("%s was removed, but it is on the keep side of the line in "+
 				"docs/design/ai-rule-proposition.md: %s", id, why)
+		}
+	}
+}
+
+// AI-019 is the other kind of defect in this family, and it is a fix rather
+// than a removal: a real supply-chain proposition expressed badly.
+//
+// "Model loaded without hash verification" matched `from_pretrained(` and
+// stopped at the paren, so it never saw the arguments — a pinned load was
+// reported exactly like an unpinned one, and the rule's name asserted
+// something its pattern had not established. Of 99 model loads across the
+// fourteen pinned repositories, zero carry a pin, so the rule was right about
+// every one of them for a reason it could not give.
+func TestAI019ReportsAnUnpinnedLoad(t *testing.T) {
+	for _, line := range []string{
+		`model = AutoModel.from_pretrained("bert-base-uncased")`,
+		`pipeline("sentiment-analysis")`,
+		`m = load_model("weights")`,
+	} {
+		if !aiFired(t, "AI-019", line+"\n") {
+			t.Errorf("AI-019 stopped reporting an unpinned model load: %s", line)
+		}
+	}
+}
+
+// The half the rule could not previously express. A project that does what the
+// remediation asks must stop being told it has not.
+func TestAI019AcceptsAPinnedLoad(t *testing.T) {
+	for name, src := range map[string]string{
+		"same line": `m = AutoModel.from_pretrained("bert-base-uncased", revision="a1b2c3d4e5f6")` + "\n",
+		"multi line": "m = AutoModel.from_pretrained(\n" +
+			"    \"bert-base-uncased\",\n" +
+			"    revision=\"a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\",\n" +
+			")\n",
+		"digest":   `m = load_model("weights", checksum="sha256:deadbeef")` + "\n",
+		"no fetch": `m = AutoModel.from_pretrained("./local", local_files_only=True)` + "\n",
+	} {
+		if aiFired(t, "AI-019", src) {
+			t.Errorf("AI-019 reported a pinned load (%s) as unverified:\n%s", name, src)
 		}
 	}
 }
