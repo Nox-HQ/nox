@@ -414,26 +414,6 @@ func builtinAIRules() []*rules.Rule {
 			references:         []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
-			id: "AI-029", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			// The zero must BE the value, not begin it. `...\s*0` with nothing
-			// after it matched `presence_penalty=0.1` as well as
-			// `presence_penalty=0`, so the rule reported "penalties disabled"
-			// on code that had explicitly enabled them -- the remediation it
-			// recommends, flagged as the defect. Measured on the pinned corpus,
-			// 446 findings of which the two most common were
-			// `frequency_penalty=0.1` (116) and `presence_penalty=0.1` (116).
-			//
-			// RE2 has no lookahead, so the value is terminated explicitly: a
-			// zero, optionally with zero decimals, followed by a delimiter or
-			// end of line.
-			pattern:     `(?im)(?:presence_penalty|frequency_penalty)["']?\s*[:=]\s*0(?:\.0+)?(?:[\s,)\]}]|$)`,
-			description: "LLM repetition penalties disabled",
-			cwe:         "CWE-754", keywords: []string{"presence_penalty", "frequency_penalty"},
-			tags:        []string{"ai", "reliability", "repetition"},
-			remediation: "Set presence_penalty (-2 to 0) and frequency_penalty (-2 to 0) to reduce repetitive token generation. Default values of 0 may allow excessive repetition.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
 			id: "AI-030", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(tools?|functions?)\s*[:=]\s*\[.*?(admin|root|sudo|delete|drop|truncate)`,
 			description: "AI agent has excessive tool permissions",
@@ -535,19 +515,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "injection", "shell"},
 			remediation: "Remove dangerous shell commands from system prompts. These can be exploited for command injection attacks.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/78.html"},
-		},
-		{
-			id: "AI-041", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			// Strictly greater than 0.9, which is what the description and the
-			// remediation both say. `0\.9[0-9]*` also matched exactly 0.9, and
-			// `top_p=0.9` is an ordinary nucleus-sampling value: 317 of this
-			// rule's 391 findings on the pinned corpus were that one line.
-			pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*[1-9]|1\.0+)`,
-			description: "AI model uses high temperature/top_p settings",
-			cwe:         "CWE-20", keywords: []string{"temperature", "top_p"},
-			tags:        []string{"ai", "reliability", "configuration"},
-			remediation: "High temperature (>0.9) increases randomness and reduces consistency. Use 0.1-0.3 for deterministic outputs.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/20.html"},
 		},
 		{
 			id: "AI-042", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,

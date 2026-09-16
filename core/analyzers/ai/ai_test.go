@@ -1464,9 +1464,11 @@ func TestThing(t *testing.T) {
 }
 
 func TestAllAIRules_Count(t *testing.T) {
+	// 87 -> 85 retired AI-029 and AI-041, which reported LLM tuning values as
+	// security findings (see tuning_params_retired_test.go).
 	rules := builtinAIRules()
-	if got := len(rules); got != 87 {
-		t.Errorf("expected 87 AI rules, got %d", got)
+	if got := len(rules); got != 85 {
+		t.Errorf("expected 85 AI rules, got %d", got)
 	}
 }
 
