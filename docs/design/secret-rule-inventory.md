@@ -20,15 +20,48 @@ from the **built** rule set, not from rule source text.
   structural URL or ARN, or a vendor key name bound by an assignment. A match is
   evidence on its own.
 - **B — contextual (23 rules).** High entropy over declared candidate kinds at a
-  stated bit floor, reported only where a nearby line names a secret. The
-  threshold is a floor; the context is the evidence.
-- **C — bare token + proximity keyword (155 rules).** A generic character run
-  (`[a-zA-Z0-9]{32}` and similar) carrying nothing of the vendor's own
-  credential format, gated by `RequireContextKeywords`: the vendor word must
-  appear within 4 lines **and** 512 characters of the match.
-- **D — bare token + file-level keyword only (55 rules).** The same generic run,
-  gated only by `Keywords`, which asks whether the word appears *anywhere in the
-  file*. One incidental occurrence licenses every token in the file.
+  stated bit floor. Context is required PER KIND, not by the class, and the
+  original wording here ("reported only where a nearby line names a secret")
+  was wrong about the biggest rule in it:
+
+  - SEC-162 (base64, 5.2 bits) does require context.
+  - SEC-161's `hex` kind requires it, at 3.5 — it has to, because Shannon
+    entropy over 16 symbols cannot exceed 4.0 and a bit count cannot separate a
+    digest from a token inside that range.
+  - SEC-161's `assignment` and `quoted` kinds require NONE. They run at 5.0
+    bits and nothing else, so `banana = "<32 random chars>"` is a finding.
+
+  That last one is deliberate rather than an oversight: a 5-bit value
+  hard-coded in source is worth reporting whatever the variable is called, and
+  the name is not evidence either way. It is recorded here because reading this
+  section and expecting a context requirement on every class-B rule is how the
+  measurement error described below happened in the first place — a description
+  of the system standing in for the system.
+
+  What "names a secret" means also changed. The hints matched as bare
+  substrings, so `input_tokens` supplied "token" and `monkey` supplied "key";
+  on recorded API cassettes that lowered the threshold on every line and let
+  message IDs through. They are matched as words now, split on punctuation and
+  camelCase.
+- **C and D — bare token + keyword. THESE NO LONGER EXIST.** They were 155
+  rules gated by proximity (`RequireContextKeywords`: the vendor word within 4
+  lines and 512 characters) and 55 gated only at file level. Both are now one
+  class of **126 bound rules**, marked `vendor_bound` in metadata, and the
+  invariant that none may return is enforced by
+  `TestEveryVendorKeywordRuleIsBound`. Re-measured after the change: **0** rules
+  in the built set are a bare character class gated by a keyword.
+
+  Proximity was not enough, and the corpus is what said so rather than an
+  argument. On crewAI's recorded cassettes a Content-Security-Policy header
+  listing CDN domains sat three lines above an HTTP ETag, and five separate
+  vendor rules reported that one ETag as their vendor's credential. Generalised
+  into a corpus of adversarial HTTP traffic — ETags, request and trace ids,
+  cache keys, CDN ids, session cookies — **116 of 151** fired on something that
+  is not a credential and never was. The vendor name now has to BIND the value
+  through an assignment: `<vendor>… = "<shape>"`.
+
+  Rebuilding this inventory will therefore not reproduce the C/D split. That is
+  the change, not a measurement error.
 
 There is no class with no gate at all.
 
