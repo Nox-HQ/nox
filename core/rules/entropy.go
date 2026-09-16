@@ -22,6 +22,24 @@ const contextBoostReduction = 0.5
 // shorter than this are ignored to avoid false positives on short tokens.
 const minCandidateLen = 12
 
+// maxCandidateLen is the length past which a high-entropy run stops being a
+// plausible credential and starts being a payload.
+//
+// There was no ceiling at all, and on crewAI's recorded cassettes that meant
+// entropy findings with spans of 8,192 and 37,392 characters -- base64 response
+// bodies reported as "possible secret". 89 of 540 entropy findings there ran
+// past 1,024 characters.
+//
+// The number is derived, not chosen: the longest credential ANY rule in the set
+// models is 1,000 characters (SEC-302), and the 99th percentile across all
+// 1,423 length quantifiers is 135. 2,048 is twice the longest format anyone has
+// written down, so no credential the catalogue knows about can reach it, and a
+// candidate that does is something else.
+//
+// It is a ceiling on the CANDIDATE, not on the file: a 40-character key inside
+// a 2MB cassette is still found. Only the run itself has to be credential-sized.
+const maxCandidateLen = 2048
+
 // secretHints are lowercase substrings that, when present in the same line
 // as a candidate, lower the entropy threshold to increase detection
 // sensitivity.
@@ -260,7 +278,7 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 			if !ok {
 				continue
 			}
-			if len(c.text) < minCandidateLen {
+			if len(c.text) < minCandidateLen || len(c.text) > maxCandidateLen {
 				continue
 			}
 			if isLikelyNotSecret(c.text) {
@@ -380,7 +398,7 @@ func extractQuoted(line string, addFn func(col int, text string)) {
 			}
 			end += start + 1 // absolute position of closing quote
 			value := line[start+1 : end]
-			if len(value) >= minCandidateLen {
+			if len(value) >= minCandidateLen && len(value) <= maxCandidateLen {
 				addFn(start+2, value) // 1-based column of value start
 			}
 			i = end + 1
