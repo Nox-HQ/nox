@@ -24,9 +24,10 @@ import (
 // tight stops detecting real credentials, which is far worse than noise. These
 // tests bound that risk from both sides.
 
-// degenerateRule reports whether a rule's pattern is a bare character class
-// plus a length quantifier, carrying no literal anchor text of its own.
-var degeneratePattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d+)?\}(\\b)?$`)
+// The pattern form this family used to have now lives in
+// vendor_binding_family_test.go as `bareShape`, where the invariant that no
+// rule may still HAVE that form is asserted. Selecting the family by pattern
+// here would select nothing: binding them is the point.
 
 // degenerateRules returns the family that USED to be degenerate: a bare
 // character class and a length, gated by a vendor keyword. Its members are now
