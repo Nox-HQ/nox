@@ -138,3 +138,69 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "…"
 }
+
+// TestABoundRuleIsNotBlindToTheOtherSpelling is the recall half of the family
+// invariant, and it exists because binding alone did not give it.
+//
+// A rule keyed on the literal `runpod_key` bound that one spelling. Measured
+// across seven vendors after the binding landed, `<vendor>_key` was reported
+// and `<vendor>_token` and `<vendor>_api_token` were reported by NOTHING --
+// not by the vendor's own rule, not by the generic assignment rules. A
+// credential does not stop being one because the variable holding it was named
+// `token` rather than `key`.
+//
+// Widening the PATTERN did not fix it either, which is the part worth keeping:
+// Keywords gate at file level, so the rule was filtered out before its pattern
+// ever ran. Both halves had to move.
+func TestABoundRuleIsNotBlindToTheOtherSpelling(t *testing.T) {
+	t.Parallel()
+
+	// The token is generated from each rule's OWN shape. A fixed 32-character
+	// token reported 21 spellings as uncovered that were nothing of the kind:
+	// SEC-479 requires 42 characters and SEC-473 requires 36, so the fixture was
+	// too short and the rule was blamed. The same fixture error, in the other
+	// direction, earlier reported 29 rules in this family as dead.
+	// SEC-510 is excluded, with a reason rather than by convenience. Its stem is
+	// `aws`, and AWS credential variables are named by the SDK convention --
+	// `aws_access_key_id`, `aws_secret_access_key`, `aws_session_token`. The
+	// spellings this test generates (`aws_key`, `aws_token`) are not AWS
+	// credential names, and the ones that are get reported by the dedicated AWS
+	// rules: `aws_secret` here is caught by SEC-081 and SEC-412. Widening `aws`
+	// to cover invented spellings would bind a three-letter stem that prefixes a
+	// great deal of ordinary configuration.
+	skip := map[string]string{
+		"SEC-510": "aws: credential names are SDK-conventional; covered by SEC-081/SEC-412",
+	}
+
+	analyzer := NewAnalyzer()
+	var blind []string
+
+	for _, rule := range degenerateRules(t) {
+		if len(rule.Keywords) == 0 {
+			continue
+		}
+		if _, ok := skip[rule.ID]; ok {
+			continue
+		}
+		stem := credentialStem(rule.Keywords[0])
+		if stem == "" {
+			continue // keyword is already a bare vendor name
+		}
+		token := realisticSecret(boundShape(rule))
+		for _, suffix := range []string{"_key", "_token", "_api_key", "_api_token"} {
+			content := fmt.Sprintf("%s%s = %q\n", stem, suffix, token)
+			matches, err := analyzer.ScanFile("config.py", []byte(content))
+			if err != nil {
+				t.Fatalf("%s: %v", rule.ID, err)
+			}
+			if len(matches) == 0 {
+				blind = append(blind, fmt.Sprintf("%s: nothing reports %s%s", rule.ID, stem, suffix))
+			}
+		}
+	}
+
+	if len(blind) > 0 {
+		t.Errorf("%d vendor credential spelling(s) are reported by no rule at all:\n  %s",
+			len(blind), strings.Join(blind, "\n  "))
+	}
+}
