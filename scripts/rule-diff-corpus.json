@@ -63,7 +63,14 @@
     "release against a script that treats a failed scan as FATAL means adding it",
     "would not have slowed the gate, it would have broken it. Its 597 recorded",
     "cassettes are still the only base64-blob surface measured anywhere, so the",
-    "decode path's blob suppression remains witnessed by the bench corpus alone."
+    "decode path's blob suppression remains witnessed by the bench corpus alone.",
+    "",
+    "An entry may set \"path\" to scan ONE subdirectory instead of the whole",
+    "checkout, and it is fetched with a sparse checkout so the rest is never",
+    "materialised. That exists for a surface worth gating whose repository is",
+    "not. It is deliberately the only selection this file supports: a pinned",
+    "subdirectory is still a real tree at a real commit, which an include/exclude",
+    "language would stop being."
   ],
   "repos": [
     {
@@ -143,6 +150,13 @@
       "url": "https://github.com/anthropics/anthropic-sdk-python",
       "sha": "eb21a4352015686c30f5759e8c2f02d70f5371e2",
       "why": "The only ENTROPY control in the corpus: 62 standing SEC-161 findings, a family (SEC-161/162/163) that no other entry witnesses at all. Added after the secret-rule work, and it paid for itself on the commit that added it -- four drops no other repository here could see, measured v1.35.0 -> b81c070: SEC-457 11 -> 0, SEC-659 2 -> 0, SEC-697 5 -> 0, SLOP-001 9 -> 4. SEC-457's eleven were git commit SHAs in CHANGELOG.md, matched because the word 'iterables' sat up to 180 characters away on the same physical line behind a markdown issue link; SEC-659's two were a multipart MIME boundary with `.split(` on the PRECEDING line. Both are the character-distance context narrowing, and neither chronos nor warden carries a long-line changelog or a form-encoding test to witness it. SEC-161 itself was UNCHANGED at 62 across that range, which is the point: this entry controls the entropy rules rather than explaining a move in them. What it does NOT control: the decode path's blob suppression -- this repo carries no recorded cassettes, so the base64 surface it exists for is unwitnessed here (see the crewAI note above). 7.4M, 1661 files, 18 rules fire, 119 findings, 4.7x certbot on the same machine."
+    },
+    {
+      "name": "crewai-cassettes",
+      "url": "https://github.com/joaomdmoura/crewAI",
+      "sha": "894898f84c4ac0a89f24bf7bee6c381eb0e67f51",
+      "path": "lib/crewai/tests/cassettes",
+      "why": "The OPAQUE BASE64 surface, and the only entry that pins a subdirectory. Recorded VCR cassettes: 19.9M across 589 files, sparse-checked-out in 3.4s out of a 370M repository that takes 4-5 minutes to clone whole and 28 minutes to scan. It is here because the vendor-keyword rules are a family of generic length patterns (`[a-zA-Z0-9]{32}` and friends) gated only by a vendor word, and nothing else in this corpus carries data in which a vendor word can appear BY ACCIDENT. Measured on the commit that added it (v1.35.0 -> b81c070): 19 rules changed and TWELVE were unexplained narrowings, every one invisible to the other thirteen entries. SEC-583 alone went 6160 -> 0: the letters `zUOrA` occur by chance at byte 50087 inside a base64-encoded PDF, and that one accident turned every 20-character run in a 1.2M file into a High-severity Zuora API key. SEC-446 188 -> 0 (Cloudflare bot-management cookies), SEC-692 105 -> 0 (`elk` inside base64), SEC-629 93 -> 0 (`lob`), SEC-574 63 -> 0 (`wise` inside the word \"Otherwise\" in crewAI's own agent prompts), and five more from a single Content-Security-Policy header vouching for an HTTP ETag. The cassette is kept whole and NOT reduced to a fixture on purpose: a handcrafted file containing `zUOrA` proves the bug already known, while the recorded payload keeps testing the detector against accidental structure nobody anticipated -- which is how all twelve were found at once. It also controls entropy in the direction the other entries cannot: SEC-161 rose 281 -> 492 here, and a rise is reported but never gated. What it does NOT control: anything outside the pinned tree. AI-029 (446 findings) and AI-041 (385) drop on crewAI as a whole and are invisible here, because they sit in docs/v1.15.x/en/concepts -- roughly 74 versioned copies of the same authored lines, a documentation-multiplication artifact rather than a rule defect. 15x certbot to scan, the most expensive entry here, and the only one whose cost was argued rather than assumed."
     }
   ]
 }
