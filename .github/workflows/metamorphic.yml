@@ -16,8 +16,11 @@ name: Metamorphic rule-robustness gate
 
 on:
   pull_request:
-    branches:
-      - main
+    # No `branches` filter, for the reason spelled out in ci.yml: a pull request
+    # targeting anything but main ran none of this. A four-PR stack that
+    # rewrote the matcher for 126 secret rules merged without this gate
+    # evaluating once -- and "a semantics-preserving edit must not change the
+    # finding set" is precisely the property a matcher rewrite threatens.
 
 permissions:
   contents: read
