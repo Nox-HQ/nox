@@ -3922,6 +3922,13 @@ func builtinSecretRules() []*rules.Rule {
 		var requireContext []string
 		if isAnchorlessPattern(d.pattern) {
 			if len(d.keywords) > 0 {
+				// Widen the keyword set to the vendor stem BEFORE it is used as
+				// a prefilter. Keywords gate at file level, so a rule keyed on
+				// the literal `runpod_key` never runs at all on a file that
+				// spells it `runpod_token` -- the pattern could have matched and
+				// never got the chance. Found by measuring the spelling matrix
+				// after the pattern alone was widened and the gap did not move.
+				d.keywords = withCredentialStems(d.keywords)
 				requireContext = d.keywords
 				// Proximity was not enough, and the corpus proved it rather
 				// than argued it. On crewAI's recorded cassettes a single
@@ -4015,6 +4022,50 @@ var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d*)?\}(\\b)
 
 // isAnchorlessPattern reports whether a rule pattern relies entirely on shape
 // and length, with no literal anchor of its own.
+// withCredentialStems appends the vendor stem of each keyword, so a rule named
+// for one spelling of a credential variable is not blind to the others.
+func withCredentialStems(keywords []string) []string {
+	out := make([]string, 0, len(keywords)*2)
+	seen := map[string]bool{}
+	for _, k := range keywords {
+		for _, cand := range []string{k, credentialStem(k)} {
+			if cand == "" || seen[cand] {
+				continue
+			}
+			seen[cand] = true
+			out = append(out, cand)
+		}
+	}
+	return out
+}
+
+// credentialSuffixes are the words a variable holding a credential ends with.
+// Stripping one leaves the vendor stem, which is what the rule is really named
+// for.
+var credentialSuffixes = []string{
+	"_api_key", "_api_token", "_apikey", "_api_secret",
+	"_access_token", "_access_key", "_secret_key", "_client_secret",
+	"_key", "_token", "_secret", "_password", "_pat", "_dsn",
+}
+
+// credentialStem strips a trailing credential word from a keyword, returning ""
+// when there is nothing to strip or nothing useful would be left. The 3-rune
+// floor keeps a stem like "s" or "ai" out of the alternation: a two-letter stem
+// bound to an assignment still matches far too much.
+func credentialStem(k string) string {
+	lower := strings.ToLower(k)
+	for _, suf := range credentialSuffixes {
+		if strings.HasSuffix(lower, suf) {
+			stem := lower[:len(lower)-len(suf)]
+			if len(stem) >= 3 {
+				return stem
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 // bindVendorKeyword rewrites an anchorless pattern so the vendor's own name has
 // to bind the value through an assignment, rather than merely appear near it.
 //
@@ -4026,12 +4077,30 @@ var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d*)?\}(\\b)
 // already found once, in 874ce7a.
 func bindVendorKeyword(keywords []string, shape string) string {
 	alts := make([]string, 0, len(keywords))
+	seen := map[string]bool{}
 	for _, k := range keywords {
 		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
-		alts = append(alts, regexp.QuoteMeta(k))
+		// Bind on the vendor STEM, not on the one spelling the keyword happens
+		// to use. SEC-821's keyword is `runpod_key`, so it bound that literal
+		// and nothing else: measured across seven vendors, `<vendor>_key` was
+		// reported and `<vendor>_token` and `<vendor>_api_token` were reported
+		// by NOTHING -- not by the vendor rule, not by the generic ones. A
+		// credential does not become undetectable because its variable was
+		// named `token` instead of `key`.
+		//
+		// Widening stops at the binding: `[=:]` still has to follow on the
+		// SAME line, so `x-runpod-trace-id:` with a value on the next line is
+		// no more a match than it was before.
+		for _, cand := range []string{k, credentialStem(k)} {
+			if cand == "" || seen[cand] {
+				continue
+			}
+			seen[cand] = true
+			alts = append(alts, regexp.QuoteMeta(cand))
+		}
 	}
 	if len(alts) == 0 {
 		return shape
