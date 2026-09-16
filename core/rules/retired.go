@@ -74,6 +74,28 @@ func RetiredIdentities(rule *Rule, line string, loc findings.Location) (ids, fin
 	return retiredIdentities(rule, line, loc)
 }
 
+// A retirement is NOT a way to merge two rules that match different text.
+//
+// This runs only on a line the SURVIVING rule already matched: the alias
+// pattern decides which retired IDs and fingerprints to attach to that finding,
+// and never produces a match of its own. So retiring B into A keeps A's
+// findings answering to B's waivers, and silently drops everything only B
+// matched.
+//
+// That distinction was nearly lost on a real change. 29 vendors are covered by
+// two rules apiece -- one spelling the credential variable out
+// (`ai21[_-]?api[_-]?key`, floor 16) and one bound to the vendor stem (`ai21`,
+// floor 32) -- and the pairs read as obvious duplicates to retire into each
+// other. Measured, neither subsumes the other:
+//
+//	ai21_api_key = "<32>"   only the spelled-out rule matches
+//	ai21_key     = "<32>"   only the stem-bound rule matches
+//	ai21_token   = "<32>"   only the stem-bound rule matches
+//
+// Retiring either direction deletes real coverage. A correct merge is a pattern
+// union per vendor -- stem binding at the lower floor -- and is not expressible
+// as a retirement at all.
+//
 // retiredIdentities returns the retired rule IDs that also matched on line, and
 // the fingerprints those rules would have produced at loc. Both slices are
 // index-aligned and nil when the rule retires nothing.
