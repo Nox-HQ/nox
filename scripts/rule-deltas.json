@@ -24,7 +24,8 @@
     "rule-removed": "the rule was deleted outright; no survivor reports the condition",
     "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context",
     "keyword-tokenized": "the rule's vendor keyword must now be a token; it used to match as a bare substring, so it could be supplied by an accident inside opaque data or by an ordinary English word",
-    "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential"
+    "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
+    "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
   "entries": [
     {
@@ -254,6 +255,12 @@
       "classification": "duplicate-retired",
       "pr": 651,
       "reason": "On the pinned crewAI cassette surface, 105 -> 0. SEC-692 ('Detected ELK Stack API Key') is retired into SEC-005 ('Generic API key assignment detected'). Its keyword was the three letters \"elk\", which occur by chance inside base64 payloads (`R4nO3dd3RU5fr+//ek90CAJJTQpXelKQoIBBBBFKUEF`); all 105 findings are in recorded cassettes. Both halves apply here and both are needed to explain the count: the ID is retired, AND the survivor does not inherit the findings because SEC-005 requires an assignment, which a byte inside a base64 blob is not. Recall is SEC-005's, verified by fixture."
+    },
+    {
+      "rule": "SEC-604",
+      "classification": "binding-required",
+      "pr": 651,
+      "reason": "SEC-604 ('Detected Mattermost API Key', `[a-zA-Z0-9]{32}`, keyword \"mattermost\") reported all five of certbot's pinned GitHub Actions references: `- uses: mattermost/action-mattermost-notify@ae31bb6f9e26a54336e79696f108a2c91cf55b4e`. The 32 characters are the first 32 of a 40-character git commit SHA, and the vendor word is the action's own name. Pinning an action to a commit SHA is the supply-chain practice this scanner recommends elsewhere (IAC-013), so the rule was reporting the correct behaviour as a leaked credential. Unlike the cassette cases this one needs no proximity argument at all -- the vendor name and the token are on the same line, touching -- which is why adjacency had to stop being evidence and binding had to replace it. Recall: a bound `mattermost_api_key = \"<32>\"` is still reported, verified by the family recall test."
     }
   ]
 }
