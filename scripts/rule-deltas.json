@@ -261,6 +261,18 @@
       "classification": "binding-required",
       "pr": 651,
       "reason": "SEC-604 ('Detected Mattermost API Key', `[a-zA-Z0-9]{32}`, keyword \"mattermost\") reported all five of certbot's pinned GitHub Actions references: `- uses: mattermost/action-mattermost-notify@ae31bb6f9e26a54336e79696f108a2c91cf55b4e`. The 32 characters are the first 32 of a 40-character git commit SHA, and the vendor word is the action's own name. Pinning an action to a commit SHA is the supply-chain practice this scanner recommends elsewhere (IAC-013), so the rule was reporting the correct behaviour as a leaked credential. Unlike the cassette cases this one needs no proximity argument at all -- the vendor name and the token are on the same line, touching -- which is why adjacency had to stop being evidence and binding had to replace it. Recall: a bound `mattermost_api_key = \"<32>\"` is still reported, verified by the family recall test."
+    },
+    {
+      "rule": "SEC-161",
+      "classification": "refined-away",
+      "pr": 651,
+      "reason": "The entropy matcher had a minimum candidate length (12) and no maximum at all, so a high-entropy run of any size was a credential candidate. The ceiling is 2048, derived rather than chosen: the longest credential ANY rule in the set models is 1000 characters (SEC-302) and the 99th percentile across all 1423 length quantifiers is 135, so 2048 is twice the longest format anyone has written down. It bounds the CANDIDATE, not the file -- a 40-character key inside a 2MB cassette is still reported. Measured on the two repositories that moved: anthropic-sdk-python drops 4, all in tests/lib/tools/__inline_snapshot__/.../32da0815-….json, a recorded test snapshot whose matched field is `\"encrypted_content\"` -- spans 2680, 3512, 4104 and 4244 characters. On the crewAI cassettes SEC-161 RISES 281 -> 434 over the same range, because SEC-163 retires into it; the ceiling's effect there is visible only against the pre-ceiling build, where it removes 67 findings whose shortest span is 2580 and longest 37392. Verified on the real surface rather than a fixture: re-scanning with the ceiling dropped 67, added 0, and NOT ONE dropped finding had a span at or under 2048."
+    },
+    {
+      "rule": "SEC-162",
+      "classification": "refined-away",
+      "pr": 651,
+      "reason": "The entropy matcher had a minimum candidate length (12) and no maximum at all, so a high-entropy run of any size was a credential candidate. The ceiling is 2048, derived rather than chosen: the longest credential ANY rule in the set models is 1000 characters (SEC-302) and the 99th percentile across all 1423 length quantifiers is 135, so 2048 is twice the longest format anyone has written down. It bounds the CANDIDATE, not the file -- a 40-character key inside a 2MB cassette is still reported. Same change as SEC-161. It drops 1 finding in anthropic-sdk-python (span 4104, the same `\"encrypted_content\"` blob) and 3 on the crewAI cassettes. No dropped finding anywhere has a span at or under the ceiling."
     }
   ]
 }
