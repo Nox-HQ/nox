@@ -69,7 +69,7 @@ func classifyRuleSpecificity(r *rules.Rule) int {
 	if r.MatcherType == "entropy" {
 		return specGenericEntropy
 	}
-	if r.Metadata != nil && r.Metadata["secret_shape"] == "true" {
+	if r.Metadata != nil && (r.Metadata["secret_shape"] == "true" || r.Metadata["vendor_bound"] == "true") {
 		// Loose vendor patterns (e.g. `\b[a-z0-9]{32}\b`) gated only by an
 		// entropy/shape post-filter: more specific than raw entropy but they
 		// still match many unrelated 32-char blobs, so they lose to an
