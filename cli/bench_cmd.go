@@ -408,6 +408,63 @@ func normaliseSitePath(p string) string {
 	return strings.Join(kept, "/")
 }
 
+// renderPrevalence prints the tiers of counting side by side, because reading
+// any one of them alone has already produced a wrong conclusion here.
+//
+// Tier 1, RAW FINDINGS, is what an operator sees and is a property of the
+// corpus as much as of the rule. Tier 2, AUTHORED OCCURRENCES, collapses the
+// locale and version copies of one file, so a line someone actually wrote is
+// counted once. The distance between them is not a detail: AI-029 measured
+// 446 raw findings on crewAI and 26 authored occurrences, and the raw number
+// ranked it among the worst rules in the set while the authored number showed
+// it was one documentation page.
+//
+// Tier 3, DISTINCT SECURITY CONDITIONS, is NOT measured, and is printed as
+// unmeasured rather than omitted so nobody reads tier 2 as if it were tier 3.
+// Two authored occurrences can still be one condition -- `frequency_penalty=0.0`
+// and `presence_penalty=0.0` on consecutive lines of one code sample were two
+// occurrences and one decision -- and collapsing them needs the finding's
+// semantic identity, which path normalisation cannot supply.
+func renderPrevalence(b *strings.Builder, report *BenchReport) {
+	if len(report.RulePrevalence) == 0 {
+		return
+	}
+	b.WriteString("\n## Rule prevalence\n\n")
+	b.WriteString("Raw findings are what an operator sees. Authored occurrences collapse the\n")
+	b.WriteString("locale and version copies of a file, so one written line counts once.\n")
+	b.WriteString("Distinct security conditions are not measured yet; see renderPrevalence.\n\n")
+
+	type row struct {
+		rule                   string
+		repos, findings, sites int
+	}
+	rows := make([]row, 0, len(report.RulePrevalence))
+	for r, p := range report.RulePrevalence {
+		rows = append(rows, row{r, p.Repos, p.Findings, p.Sites})
+	}
+	// Ranked by authored occurrences, then by repos: the pair that says which
+	// detector is actually worst on real software.
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].sites != rows[j].sites {
+			return rows[i].sites > rows[j].sites
+		}
+		if rows[i].repos != rows[j].repos {
+			return rows[i].repos > rows[j].repos
+		}
+		return rows[i].rule < rows[j].rule
+	})
+	b.WriteString("| Rule | Repos | Raw findings | Authored occurrences | Copy factor | Distinct conditions |\n")
+	b.WriteString("|---|---|---|---|---|---|\n")
+	for _, r := range rows {
+		factor := "—"
+		if r.sites > 0 && r.findings > r.sites {
+			factor = fmt.Sprintf("%.1fx", float64(r.findings)/float64(r.sites))
+		}
+		fmt.Fprintf(b, "| %s | %d | %d | %d | %s | not measured |\n",
+			r.rule, r.repos, r.findings, r.sites, factor)
+	}
+}
+
 func renderBenchMarkdown(report *BenchReport) string {
 	var b strings.Builder
 	b.WriteString("# Nox bench report\n\n")
@@ -442,6 +499,8 @@ func renderBenchMarkdown(report *BenchReport) string {
 	for _, p := range pairs {
 		fmt.Fprintf(&b, "| %s | %d |\n", p.rule, p.count)
 	}
+	renderPrevalence(&b, report)
+
 	if len(report.Failed) > 0 {
 		b.WriteString("\n## Failed projects\n\n")
 		for _, f := range report.Failed {
