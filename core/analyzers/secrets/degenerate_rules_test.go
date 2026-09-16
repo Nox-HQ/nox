@@ -28,16 +28,29 @@ import (
 // plus a length quantifier, carrying no literal anchor text of its own.
 var degeneratePattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d+)?\}(\\b)?$`)
 
+// degenerateRules returns the family that USED to be degenerate: a bare
+// character class and a length, gated by a vendor keyword. Its members are now
+// identified by the `vendor_bound` marker the rule builder sets when it binds
+// them, not by their pattern -- the whole point of the fix is that the pattern
+// is no longer bare. `bound_shape` carries what the pattern was.
 func degenerateRules(t *testing.T) []*rules.Rule {
 	t.Helper()
 
 	var out []*rules.Rule
 	for _, r := range builtinSecretRules() {
-		if degeneratePattern.MatchString(r.Pattern) {
+		if r.Metadata["vendor_bound"] == "true" {
 			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// boundShape returns the credential shape a bound rule was built from.
+func boundShape(r *rules.Rule) string {
+	if s := r.Metadata["bound_shape"]; s != "" {
+		return s
+	}
+	return r.Pattern
 }
 
 // realisticSecret builds a token that satisfies a rule's pattern and looks like
@@ -118,7 +131,7 @@ func TestDegenerateRules_StillDetectRealSecrets(t *testing.T) {
 
 	var missed, redundant []string
 	for _, rule := range defs {
-		secret := realisticSecret(rule.Pattern)
+		secret := realisticSecret(boundShape(rule))
 		keyword := "secret"
 		if len(rule.Keywords) > 0 {
 			keyword = rule.Keywords[0]
@@ -143,7 +156,7 @@ func TestDegenerateRules_StillDetectRealSecrets(t *testing.T) {
 			}
 		}
 		if !detected {
-			missed = append(missed, fmt.Sprintf("%s (pattern %s, token %q)", rule.ID, rule.Pattern, secret))
+			missed = append(missed, fmt.Sprintf("%s (shape %s, token %q)", rule.ID, boundShape(rule), secret))
 		} else if !byOwnRule {
 			redundant = append(redundant, rule.ID)
 		}
