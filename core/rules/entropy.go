@@ -195,10 +195,9 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 
 	for lineIdx, line := range lines {
 		lineStr := string(line)
-		lineLower := strings.ToLower(lineStr)
 
 		// Determine whether this line has secret-suggestive context.
-		boost := hasSecretContext(lineLower)
+		boost := hasSecretContext(lineStr)
 
 		// A line with no secret context is skipped wholesale only when every
 		// kind this rule reports on demands context. Otherwise the requirement
@@ -369,15 +368,76 @@ func ShannonEntropy(s string) float64 {
 	return entropy
 }
 
-// hasSecretContext returns true if the line contains any secret-suggestive
-// variable names. The line must already be lowercased.
-func hasSecretContext(lineLower string) bool {
-	for _, hint := range secretHints {
-		if strings.Contains(lineLower, hint) {
-			return true
+// hasSecretContext returns true if the line names something secret-suggestive.
+// The line must already be lowercased.
+//
+// The hint has to be a WORD of an identifier, not a substring of the line.
+// strings.Contains was the whole test, and it made the context boost fire on
+// text that names nothing secret at all:
+//
+//	{"id":"msg_01DV…","monkey":1}          -> "key" inside "monkey"
+//	{"id":"msg_01DV…","input_tokens":12}   -> "token" inside "input_tokens"
+//
+// The second is the one that mattered. `input_tokens` and `output_tokens` are
+// in every Anthropic API response, so every recorded cassette line got its
+// entropy threshold lowered from 5.0 to 4.5, and message IDs came through as
+// possible secrets. That is the same defect the vendor rules had, where a
+// vendor keyword matched inside opaque base64; a hint list is no more exempt
+// from it than a keyword list.
+//
+// Words are split on the separators identifiers use, so `secret_key` still
+// hints on both halves while `monkey` hints on nothing. Matching is exact, so
+// `input_tokens` does not hint via the plural. That costs sensitivity on
+// `access_tokens = …` -- the threshold stays at 5.0 instead of 4.5 -- and
+// costs no detection, because the boost was never the thing that decided
+// whether a real credential was reported.
+func hasSecretContext(line string) bool {
+	for _, word := range identifierWords(line) {
+		for _, hint := range secretHints {
+			if word == hint {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// identifierWords splits a line into the words an identifier is built from,
+// lowercased. It splits on punctuation AND on camelCase boundaries, because
+// both spell the same name: `api_key`, `apiKey` and `API_KEY` all have to yield
+// `api` and `key`, while `monkey` yields only `monkey`.
+//
+// Case is why this takes the raw line rather than a lowercased one. Lowercasing
+// first turns `apiKey` into `apikey`, one word, and the hint is lost -- caught
+// by TestARealHexKeyStillFires/json_field, which is exactly that spelling.
+func identifierWords(line string) []string {
+	var out []string
+	var cur []rune
+	flush := func() {
+		if len(cur) > 0 {
+			out = append(out, strings.ToLower(string(cur)))
+			cur = cur[:0]
+		}
+	}
+	prev := rune(0)
+	for _, r := range line {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			cur = append(cur, r)
+		case r >= 'A' && r <= 'Z':
+			// A capital starts a new word after a lowercase letter or a digit
+			// (`apiKey`, `v2Token`), and continues a run of capitals (`API_KEY`).
+			if prev >= 'a' && prev <= 'z' || prev >= '0' && prev <= '9' {
+				flush()
+			}
+			cur = append(cur, r)
+		default:
+			flush()
+		}
+		prev = r
+	}
+	flush()
+	return out
 }
 
 // extractQuoted finds single- and double-quoted strings in line that are
