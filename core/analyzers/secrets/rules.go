@@ -3,6 +3,7 @@ package secrets
 import (
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/rules"
@@ -3922,13 +3923,52 @@ func builtinSecretRules() []*rules.Rule {
 		if isAnchorlessPattern(d.pattern) {
 			if len(d.keywords) > 0 {
 				requireContext = d.keywords
+				// Proximity was not enough, and the corpus proved it rather
+				// than argued it. On crewAI's recorded cassettes a single
+				// Content-Security-Policy header listing CDN domains vouched
+				// for an HTTP ETag three lines below it, and FIVE vendor rules
+				// reported the same ETag as their vendor's credential. Against
+				// a generated corpus of adversarial HTTP traffic -- ETags,
+				// request and trace ids, cache keys, base64 bodies -- 116 of
+				// the 151 rules in this family fired on something that is not
+				// a credential and never was.
+				//
+				// So the vendor name now has to BIND the value, not sit near
+				// it: `<vendor>… = "<shape>"`. That is the idiom SEC-053,
+				// SEC-158 and SEC-159 already use, and the one every rule from
+				// SEC-936 down was written with.
+				shape := d.pattern
+				d.pattern = bindVendorKeyword(d.keywords, shape)
+				// The binding IS the evidence now, so the secret-shape
+				// post-filter is not merely redundant, it is wrong: it scores
+				// the WHOLE match, and the whole match has just grown a
+				// `nexmo = "` prefix. Measured: with the filter still applied,
+				// 54 of these rules stopped reporting their own vendor's
+				// bound credential -- the binding fixed precision and the
+				// stale filter ate the recall.
+				//
+				// `vendor_bound` replaces it so dedup still ranks these below
+				// an anchored provider regex (see classifyRuleSpecificity).
+				// Dropping the key entirely would promote 149 loose rules
+				// above the anchored ones on a shared span.
+				md["vendor_bound"] = "true"
+				// The shape filter still runs -- placeholders like
+				// "0000000000000000" and "ExampleConfigurationValue123" are
+				// exactly what it exists to drop -- but scoped to the captured
+				// credential rather than the whole `nexmo = "…"` match.
+				md["secret_shape"] = "true"
+				md["shape_group"] = "1"
+				// The value shape, before the binding prefix was prepended.
+				// Kept because anything generating a token for this rule --
+				// the family recall test does exactly that -- has to draw from
+				// the alphabet the CREDENTIAL permits, not from the binding
+				// prefix's `[a-z0-9_ .\-]*`, which contains every letter and
+				// would silently produce tokens the rule cannot match.
+				md["bound_shape"] = shape
+			} else {
+				// No keywords to bind with, so shape is all there is.
+				md["secret_shape"] = "true"
 			}
-			// Layered with the context requirement: proximity establishes that
-			// the value is in the right place, shape establishes that it looks
-			// like a credential at all. Neither alone is sufficient — a
-			// hostname sits right next to `jenkins_url`, and a real key can
-			// score lower entropy than a Go identifier.
-			md["secret_shape"] = "true"
 		}
 
 		out = append(out, &rules.Rule{
@@ -3975,6 +4015,30 @@ var anchorlessPattern = regexp.MustCompile(`^(\\b)?\[[^\]]+\]\{\d+(,\d*)?\}(\\b)
 
 // isAnchorlessPattern reports whether a rule pattern relies entirely on shape
 // and length, with no literal anchor of its own.
+// bindVendorKeyword rewrites an anchorless pattern so the vendor's own name has
+// to bind the value through an assignment, rather than merely appear near it.
+//
+// The separator is `[ \t]*`, never `\s*`: Go's `\s` matches a newline, and a
+// YAML or HTTP header (`x-vendor-trace-id:`) would then vouch for whatever
+// value sat on the following line -- which is most of the defect this exists to
+// close. The optional quote before the separator admits the JSON spelling
+// (`"vendor_api_key": "…"`), which a bound rule otherwise misses; that was
+// already found once, in 874ce7a.
+func bindVendorKeyword(keywords []string, shape string) string {
+	alts := make([]string, 0, len(keywords))
+	for _, k := range keywords {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		alts = append(alts, regexp.QuoteMeta(k))
+	}
+	if len(alts) == 0 {
+		return shape
+	}
+	return `(?i)\b(?:` + strings.Join(alts, "|") + `)[a-z0-9_ .\-]*["']?[ \t]*[=:][ \t]*["']?(` + shape + `)`
+}
+
 func isAnchorlessPattern(pattern string) bool {
 	return anchorlessPattern.MatchString(pattern)
 }
