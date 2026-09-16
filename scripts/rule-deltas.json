@@ -22,7 +22,9 @@
     "sanitizer-recognized": "the value reaching the sink is neutralized for this vulnerability class",
     "refined-away": "a cheaper semantic fact refutes the candidate the pattern generated",
     "rule-removed": "the rule was deleted outright; no survivor reports the condition",
-    "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context"
+    "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context",
+    "keyword-tokenized": "the rule's vendor keyword must now be a token; it used to match as a bare substring, so it could be supplied by an accident inside opaque data or by an ordinary English word",
+    "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential"
   },
   "entries": [
     {
@@ -180,6 +182,78 @@
       "classification": "refined-away",
       "pr": 651,
       "reason": "SLOP-001 went 9 -> 4 on anthropic-sdk-python once the analyzer reads lockfiles for TRANSITIVE dependencies. The five dropped imports are `pydantic_core` (x3), `tomli` and `http_snapshot`; all three are declared in requirements-dev.lock under their PEP 503 normalised names (`pydantic-core`, `tomli`, `http-snapshot`), which is why the underscore import form read as undeclared. The four survivors are all `google`, a namespace package genuinely absent from every manifest, so the recall direction is intact: the rule still reports an import nothing declares."
+    },
+    {
+      "rule": "SEC-583",
+      "classification": "keyword-tokenized",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 6160 -> 0. SEC-583 ('Detected Zuora API Key') is `[a-zA-Z0-9]{20}` gated only by the keyword \"zuora\". Exactly ONE file in crewAI contains that string: lib/crewai/tests/cassettes/TestCrewMultimodalFileUpload.test_pdf_upload_anthropic.yaml, a 1.2M recorded cassette holding a base64-encoded PDF, in which the letters `zUOrA` occur by chance at byte 50087 INSIDE the payload. Case-insensitive substring matching accepted that as the vendor keyword, and every 20-character alphanumeric run in the file -- a base64 PDF has thousands -- became a High-severity Zuora API key. All 6,160 findings are that one file. The rule text is byte-identical between the two builds; only the keyword matcher changed. Recall verified by fixture: `zuora_api_key = \"<20 alnum>\"` is still reported."
+    },
+    {
+      "rule": "SEC-629",
+      "classification": "keyword-tokenized",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 93 -> 0. SEC-629 ('Detected LOB API Key') is `[a-zA-Z0-9]{32}` gated by the three-letter keyword \"lob\", which occurs inside base64 runs (`...SPWulobz874887yvFPK...`) and inside ordinary words such as \"global\". All 93 findings are in recorded cassettes. Recall is not merely preserved but IMPROVED: measured by fixture, the candidate reports `lob_api_key = \"<32 alnum>\"`, the genuinely bound spelling, which the baseline did NOT report -- the rule was firing on accidents and missing the real thing."
+    },
+    {
+      "rule": "SEC-574",
+      "classification": "keyword-tokenized",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 63 -> 0. SEC-574 ('Detected Wise API Key') is `[a-zA-Z0-9]{32}` gated by the keyword \"wise\", which matched inside the ordinary English word \"Otherwise\" -- specifically crewAI's own agent prompt text, `...provide the Final Answer. Otherwise, call the...`, recorded verbatim in the cassettes. All 63 findings sit in files containing that prompt. No Wise credential is involved in any of them."
+    },
+    {
+      "rule": "SEC-446",
+      "classification": "format-bound",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 188 -> 0. SEC-446 ('Detected Cloudflare API Key', `[a-zA-Z0-9_-]{37,43}`) matched Cloudflare BOT-MANAGEMENT COOKIES in recorded HTTP response headers -- `__cf_bm=J_xe1AP.B5P6D2GVMCesyioeS5E9DnYT34rbwQUefFc-...` and `_cfuvid=0rTD8RMpxBQQy42jzmum16_...` -- with the `server: cloudflare` response header supplying the keyword. These are genuinely Cloudflare-issued, which is why keyword tokenisation does not touch them: the keyword is a real token and the value really is Cloudflare's. They are simply not credentials. The rule is now bound to Cloudflare's real key formats. Recall: a bound Cloudflare token is still reported, by SEC-087, in both builds."
+    },
+    {
+      "rule": "SEC-665",
+      "classification": "context-narrowed",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 14 -> 0. SEC-665 ('Detected FullStory API Key') took its keyword from a Content-Security-Policy response header listing `https://edge.fullstory.com`, and its 32 characters from an HTTP ETag three lines away: `- W/\"9e9becfaa0607314159093ffcadb0713\"`. One 10K cassette (TestAgentEvaluator.test_failed_evaluation.yaml) reproduces the whole class -- in the baseline it trips SIX vendor rules at that single ETag position, and zero in the candidate. A CDN allow-list is not evidence about an unrelated hash on another line. Recall verified by fixture: `fullstory_api_key = \"<32 alnum>\"` is still reported."
+    },
+    {
+      "rule": "SEC-635",
+      "classification": "context-narrowed",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 1 -> 0. SEC-635 ('Detected Salesforce API Key') took its keyword from scraped webpage prose recorded in a cassette -- `* [Salesforce Integration Services]`, a company's list of offerings -- and its 32 characters from elsewhere in the same document. Recall verified by fixture: `salesforce_api_key = \"<32 alnum>\"` is still reported."
+    },
+    {
+      "rule": "SEC-454",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 12 -> 0. SEC-454 ('Detected Amplitude API Key') is retired into SEC-159, which carries the alias. Its 12 findings were the CSP-header/ETag class described under SEC-665: `https://cdn.amplitude.com` in a Content-Security-Policy allow-list vouching for an unrelated HTTP ETag. The survivor does not re-report them -- no rule in this diff rises by 12 -- because SEC-159 requires the key to be bound, which a CSP allow-list never is. Recall verified by fixture: `amplitude_api_key = \"<32 alnum>\"` is reported by SEC-159."
+    },
+    {
+      "rule": "SEC-662",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 12 -> 0. SEC-662 was the SECOND rule describing 'Detected Amplitude API Key', with the same keyword and a case-insensitive variant of SEC-454's pattern; one token was being reported as two findings. It is retired into SEC-159 alongside SEC-454. Its 12 findings are the same CSP-header/ETag class, at the same positions, which is what made the duplication visible. Recall is SEC-159's, verified by fixture."
+    },
+    {
+      "rule": "SEC-455",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 10 -> 0. SEC-455 ('Detected Segment API Key') is retired into SEC-158 ('Segment Write Key detected'), which carries the alias. Its 10 findings were `https://cdn.segment.com` in a CSP allow-list vouching for an HTTP ETag -- the class described under SEC-665. The survivor requires a bound write key, which the ETag is not. Recall verified by fixture: `segment_write_key = \"<32 alnum>\"` is reported by SEC-158."
+    },
+    {
+      "rule": "SEC-546",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 17 -> 0. SEC-546 ('Detected Sentry DSN (alternate)') is retired into SEC-109 ('Sentry DSN detected'). Its 17 findings were `https://browser.sentry-cdn.com` in a CSP allow-list vouching for an HTTP ETag. The survivor requires an actual DSN (`https://<key>@<host>/<project>`), which is the form a leaked Sentry credential takes; a bare 32-character hash near the word 'sentry' is not one. That is a deliberate narrowing of what this ID claimed, not only a rename."
+    },
+    {
+      "rule": "SEC-536",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 14 -> 0. SEC-536 ('Detected Fastly API Token (alternate)') is retired into SEC-053 ('Fastly API Key detected'), which carries the alias. Its 14 findings were `fastly-insights.com` and `pypi-camo.freetls.fastly.net` in CSP allow-lists vouching for unrelated 32-character values. Recall verified by fixture: `fastly_api_token = \"<32 alnum>\"` is reported by SEC-053."
+    },
+    {
+      "rule": "SEC-692",
+      "classification": "duplicate-retired",
+      "pr": 651,
+      "reason": "On the pinned crewAI cassette surface, 105 -> 0. SEC-692 ('Detected ELK Stack API Key') is retired into SEC-005 ('Generic API key assignment detected'). Its keyword was the three letters \"elk\", which occur by chance inside base64 payloads (`R4nO3dd3RU5fr+//ek90CAJJTQpXelKQoIBBBBFKUEF`); all 105 findings are in recorded cassettes. Both halves apply here and both are needed to explain the count: the ID is retired, AND the survivor does not inherit the findings because SEC-005 requires an assignment, which a byte inside a base64 blob is not. Recall is SEC-005's, verified by fixture."
     }
   ]
 }
