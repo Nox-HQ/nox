@@ -438,9 +438,17 @@ func normaliseSitePath(p string) string {
 //   - `structural_claim` is the only subject-like field a finding carries, and
 //     it is IaC-only: set in core/analyzers/iac/iac.go and nowhere else. It
 //     names a parsed resource ("the cloudformation resource \"LogBucket\"").
-//     For those rules a condition IS the resource, so tier 3 is already
-//     expressible there; for a regex match in a Python file nothing analogous
-//     exists.
+//     The obvious cheap implementation is to count distinct claims per rule and
+//     call that tier 3. Measured on geerlingguy/ansible-for-devops before
+//     writing it: 17 of 245 findings carry a claim at all (7%), and for every
+//     rule that has one the count of claims EQUALS the count of findings --
+//     IAC-139 is 6 findings over 6 subjects, IAC-140 the same. It collapses
+//     nothing. A tier-3 column built on it would be blank for 93% of findings
+//     and a copy of tier 1 for the rest: something that looks like a
+//     measurement and measures nothing, which is worse than the honest blank.
+//   - core/lexctx classifies regions as code, comment, string or data blob
+//     across 21 languages, and ident.go is byte predicates. Neither yields a
+//     named construct.
 //
 // So tier 3 needs a notion of SUBJECT that spans analyzers -- the thing a
 // finding is about, as distinct from where it was found -- and that is a design
