@@ -4234,6 +4234,29 @@ func builtinEntropyRules() []*rules.Rule {
 			// job (see hexlabel.go), not a bit count. So "a hex run, where the
 			// line names something a secret, that the document does not call a
 			// digest" is a CONTEXT rule, and this is the contextual rule.
+			// Why `assignment` and `quoted` require NO context, while `hex`
+			// does. The asymmetry looks like an oversight and is not.
+			//
+			// Requiring a secret-suggestive word on the line was measured
+			// across anthropic-sdk-python, certbot and ansible-for-devops: 65
+			// of 81 entropy findings have one, 16 rest on entropy alone. Those
+			// 16 are 8 `"encrypted_content"` payloads in a recorded snapshot,
+			// one test assertion -- and SEVEN hits on certbot's
+			// private_key.json:
+			//
+			//	{"e": "AQAB", "d": "W410Wny96RO4qJ207KGQ3RSn0KAwqb93JBMHWU1yS9H3…"}
+			//
+			// `d` is an RSA private exponent. The line names nothing: "private
+			// key" is the FILE name, not text the matcher sees. A context
+			// requirement here would trade a real private key for some noise,
+			// which is the wrong direction for a rule whose whole job is to
+			// find the key.
+			//
+			// So the cost is accepted knowingly: `banana = "<32 random>"` is a
+			// finding, and that is the price of the JWK above. The hex kind is
+			// different because entropy cannot arbitrate there at all -- 4.0
+			// bits is the ceiling over 16 symbols and digests sit in the same
+			// band as tokens -- so for hex the context IS the evidence.
 			Metadata: map[string]string{"cwe": "CWE-798", "entropy_threshold": "5.0",
 				"candidate_kinds":       "assignment,quoted,hex",
 				"entropy_threshold_hex": "3.5",
