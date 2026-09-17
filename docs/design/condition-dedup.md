@@ -120,6 +120,53 @@ Nothing carries that today. Checked, in the order a reader would try them:
 | `core/lexctx/ident.go` | byte predicates for identifier characters |
 
 So tier 3 is **condition × subject**, this document specifies the first half,
-and the second half is unspecified and unbacked by anything in the tree. Until
-it is, the column stays printed as `not measured` rather than filled with
+and the second half is unspecified and unbacked by anything in the tree.
+
+### The subject cannot be derived from the finding
+
+The tempting shortcut is to compute a subject from where the finding landed.
+Measured on geerlingguy/ansible-for-devops, 245 findings:
+
+| candidate subject | subjects | collapse |
+|---|---|---|
+| `(rule, file)` | 125 | 49% |
+| `(rule, file, line)` — today | 245 | 0% |
+| `(rule, file, blank-line block)` | 144 | 41% |
+| `(rule, file, bound key)` | 129 | 47% |
+
+The collapse rates are close enough to be useless as a guide, which is the
+first lesson: a subject is not the definition that collapses most, it is the
+one that is right. Two cases from the same corpus settle it, and they point in
+opposite directions.
+
+**AI-029 wants the construct.** Two consecutive lines of one documentation
+sample, `frequency_penalty=0.0` and `presence_penalty=0.0`, are one decision.
+The values differ, so a value-keyed subject counts two. Correct answer: 1.
+
+**IAC-211 wants the value.** One `requirements.yml` block holds three unpinned
+Galaxy roles — `geerlingguy.apache`, `geerlingguy.firewall`,
+`geerlingguy.haproxy` — each needing its own version pin. They share a
+construct, so a construct-keyed subject counts one. Correct answer: 3. (26
+blocks in that repo hold more than one finding of the same rule, so this is the
+common shape, not a corner.)
+
+No location-derived definition satisfies both. The construct rule merges three
+real pins into one; the value rule splits one decision into two.
+
+### So it is declared, like the condition
+
+The subject has to come from the rule, because only the rule knows what its
+finding is *about*: for IAC-211 that is the role reference it matched, for
+AI-029 it would have been the configuration call containing it. The shape that
+fits alongside Option 1 is a second declaration — `subject: value` or
+`subject: construct` — read by whatever computes tier 3, with the same property
+that makes Option 1 attractive: it is arguable in the rule definition, where a
+reviewer can disagree with it, rather than inferred by a heuristic nobody can
+see.
+
+Verification has the same shape as Option 1's, and the fixtures already exist:
+IAC-211 on `requirements.yml` must report 3, and any rule matching the AI-029
+pattern must report 1. Both are measurable the day the declaration lands.
+
+Until then the column stays printed as `not measured` rather than filled with
 something that looks like an answer.
