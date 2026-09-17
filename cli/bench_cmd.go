@@ -243,7 +243,12 @@ type ProjectSummary struct {
 	// languages across two released versions is one condition an author can
 	// fix, not eight, and raw counts rank it as eight.
 	BySite map[string]int `json:"by_site"`
-	BySev  map[string]int `json:"by_severity"`
+	// BySubject counts DISTINCT SUBJECTS per rule -- tier 3. Present only for
+	// rules that DECLARE what their finding is about (rules.SubjectKindKey); a
+	// rule that has not said does not get a guess, and its entry is absent
+	// rather than zero, so "no subjects" and "not declared" stay distinguishable.
+	BySubject map[string]int `json:"by_subject,omitempty"`
+	BySev     map[string]int `json:"by_severity"`
 }
 
 type FailedProject struct {
@@ -285,6 +290,11 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 	byRule := map[string]int{}
 	bySev := map[string]int{}
 	sites := map[string]map[string]struct{}{}
+	// Tier 3. Keyed on (normalised path, subject) because a subject is
+	// FILE-LOCAL: `- name: geerlingguy.apache` unpinned in two requirements.yml
+	// files is two pins to add, and keying on the subject alone reported
+	// IAC-211's 65 findings as 26 conditions for exactly that reason.
+	subjects := map[string]map[string]struct{}{}
 	for i := range doc.Findings {
 		f := &doc.Findings[i]
 		byRule[f.RuleID]++
@@ -294,19 +304,30 @@ func scanProject(noxPath, project string) (ProjectSummary, error) {
 			sites[f.RuleID] = map[string]struct{}{}
 		}
 		sites[f.RuleID][key] = struct{}{}
+		if sub := f.Metadata["subject_id"]; sub != "" {
+			if subjects[f.RuleID] == nil {
+				subjects[f.RuleID] = map[string]struct{}{}
+			}
+			subjects[f.RuleID][normaliseSitePath(f.Location.FilePath)+"\x00"+sub] = struct{}{}
+		}
 	}
 	bySite := make(map[string]int, len(sites))
 	for rule, set := range sites {
 		bySite[rule] = len(set)
 	}
+	bySubject := make(map[string]int, len(subjects))
+	for rule, set := range subjects {
+		bySubject[rule] = len(set)
+	}
 
 	return ProjectSummary{
-		Path:     project,
-		Findings: len(doc.Findings),
-		Duration: duration.String(),
-		ByRule:   byRule,
-		BySite:   bySite,
-		BySev:    bySev,
+		Path:      project,
+		Findings:  len(doc.Findings),
+		Duration:  duration.String(),
+		ByRule:    byRule,
+		BySite:    bySite,
+		BySubject: bySubject,
+		BySev:     bySev,
 	}, nil
 }
 
@@ -328,6 +349,7 @@ func aggregateRuleFireRates(report *BenchReport) {
 			p.Repos++
 			p.Findings += n
 			p.Sites += report.Projects[i].BySite[rule]
+			p.Subjects += report.Projects[i].BySubject[rule]
 		}
 	}
 	report.RuleFireRate = counts
@@ -356,6 +378,10 @@ type RulePrevalence struct {
 	Repos    int `json:"repos"`
 	Findings int `json:"findings"`
 	Sites    int `json:"sites"`
+	// Subjects is tier 3, and is 0 for a rule that has not declared what its
+	// finding is about. Zero therefore means "not declared", not "none found":
+	// a rule with findings always has at least one subject once it declares.
+	Subjects int `json:"subjects,omitempty"`
 }
 
 // docLocales is a LIST, not a shape.
@@ -419,14 +445,22 @@ func normaliseSitePath(p string) string {
 // ranked it among the worst rules in the set while the authored number showed
 // it was one documentation page.
 //
-// Tier 3, DISTINCT SECURITY CONDITIONS, is NOT measured. It is printed as
-// unmeasured rather than omitted so nobody reads tier 2 as if it were tier 3.
-// Two authored occurrences can still be one condition: `frequency_penalty=0.0`
-// and `presence_penalty=0.0` on consecutive lines of one code sample were two
-// occurrences and one decision.
+// Tier 3, DISTINCT SECURITY CONDITIONS, is counted for rules that DECLARE what
+// their finding is about (rules.SubjectKindKey) and printed as `not declared`
+// for the rest -- never as 0, so "none found" and "never asked" stay apart.
 //
-// It is unmeasured because nothing in the codebase currently carries the
-// identity it would need, which was checked rather than assumed:
+// It is declared and not derived because no location-derived definition is
+// right for both measured cases: IAC-211's three unpinned roles in one block
+// are three pins, and two tuning parameters on consecutive lines are one
+// decision. A construct-keyed subject merges the first, a value-keyed subject
+// splits the second. See docs/design/condition-dedup.md.
+//
+// The keying is on (path, subject) because a subject is FILE-LOCAL. Keyed on
+// the subject alone, IAC-211's 65 findings read as 26 conditions -- the same
+// role is unpinned in several requirements.yml files, and each is its own pin.
+//
+// The history below is kept because it is why this is a declaration rather
+// than a heuristic. Nothing already in the tree carried the identity:
 //
 //   - Fingerprints cannot do it. V2 hashes rule ID, normalised path and the
 //     MATCHED CONTENT (core/findings/fingerprint.go). It drops the line number,
@@ -473,15 +507,16 @@ func renderPrevalence(b *strings.Builder, report *BenchReport) {
 	b.WriteString("\n## Rule prevalence\n\n")
 	b.WriteString("Raw findings are what an operator sees. Authored occurrences collapse the\n")
 	b.WriteString("locale and version copies of a file, so one written line counts once.\n")
-	b.WriteString("Distinct security conditions are not measured yet; see renderPrevalence.\n\n")
+	b.WriteString("Distinct security conditions are counted only for rules that DECLARE what their\n")
+	b.WriteString("finding is about; the rest read `not declared`. See renderPrevalence.\n\n")
 
 	type row struct {
-		rule                   string
-		repos, findings, sites int
+		rule                             string
+		repos, findings, sites, subjects int
 	}
 	rows := make([]row, 0, len(report.RulePrevalence))
 	for r, p := range report.RulePrevalence {
-		rows = append(rows, row{r, p.Repos, p.Findings, p.Sites})
+		rows = append(rows, row{r, p.Repos, p.Findings, p.Sites, p.Subjects})
 	}
 	// Ranked by authored occurrences, then by repos: the pair that says which
 	// detector is actually worst on real software.
@@ -501,8 +536,12 @@ func renderPrevalence(b *strings.Builder, report *BenchReport) {
 		if r.sites > 0 && r.findings > r.sites {
 			factor = fmt.Sprintf("%.1fx", float64(r.findings)/float64(r.sites))
 		}
-		fmt.Fprintf(b, "| %s | %d | %d | %d | %s | not measured |\n",
-			r.rule, r.repos, r.findings, r.sites, factor)
+		conditions := "not declared"
+		if r.subjects > 0 {
+			conditions = fmt.Sprintf("%d", r.subjects)
+		}
+		fmt.Fprintf(b, "| %s | %d | %d | %d | %s | %s |\n",
+			r.rule, r.repos, r.findings, r.sites, factor, conditions)
 	}
 }
 
