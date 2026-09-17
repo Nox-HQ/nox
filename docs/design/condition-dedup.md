@@ -86,3 +86,40 @@ two rules that genuinely must both exist and genuinely report one condition —
 rather than now, against no measured delta. Building it now would mean shipping
 a collapse whose only measurable effect on the current corpus is the risk of
 removing one of those 16 correct findings.
+
+## A second consumer has since appeared, and it needs more than this
+
+Bench reporting now separates raw findings from authored occurrences, and
+declares a third tier — *distinct security conditions* — as `not measured`. See
+`renderPrevalence` in cli/bench_cmd.go. That tier is this document's `condition`
+by another name, so the sequencing argument above has a new input: something
+does now want it, for reporting rather than for collapsing.
+
+It wants **more** than Option 1, though, and the gap is worth stating before
+anyone reads "a second consumer" as "build Option 1 now".
+
+A `condition` key answers *which rules report the same thing*. Tier 3 asks how
+many distinct conditions a rule found, which is a question about SUBJECTS — the
+things a finding is about. Within one rule the condition key is constant, so it
+counts one every time and answers nothing. The motivating case is AI-029, where
+
+    frequency_penalty=0.0,
+    presence_penalty=0.0,
+
+on consecutive lines of one documentation sample are two authored occurrences
+and one decision. Same rule, same condition, and what distinguishes them from
+two genuinely separate configurations is the construct they sit in.
+
+Nothing carries that today. Checked, in the order a reader would try them:
+
+| candidate | why it does not serve |
+|---|---|
+| Fingerprint (v2) | hashes rule ID, normalised path and the MATCHED CONTENT. The two lines are two strings, so they cannot collapse without making the fingerprint not a function of what matched — the property baselines and waivers rest on |
+| `structural_claim` | IaC-only, and measured on geerlingguy/ansible-for-devops it collapses nothing: 17 of 245 findings carry one (7%), and where present the subject count EQUALS the finding count (IAC-139: 6 and 6) |
+| `core/lexctx` | classifies regions as code, comment, string or data blob across 21 languages; no named constructs |
+| `core/lexctx/ident.go` | byte predicates for identifier characters |
+
+So tier 3 is **condition × subject**, this document specifies the first half,
+and the second half is unspecified and unbacked by anything in the tree. Until
+it is, the column stays printed as `not measured` rather than filled with
+something that looks like an answer.
