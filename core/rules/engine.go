@@ -129,6 +129,20 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				}
 				f.Metadata[StructuralClaimKey] = mr.Structural
 			}
+			// The subject, when the rule declared one. Computed here because
+			// this is where the matched text and the surrounding content are
+			// both in hand; bench only ever sees findings.json.
+			if kind := rule.Metadata[SubjectKindKey]; kind != "" {
+				if lines == nil {
+					lines = splitLines(content)
+				}
+				if id := subjectID(kind, mr, lines); id != "" {
+					if f.Metadata == nil {
+						f.Metadata = map[string]string{}
+					}
+					f.Metadata[SubjectIDKey] = id
+				}
+			}
 			// Fingerprint is computed by FindingSet.Add, but we also set it
 			// here so callers who do not use FindingSet still get a stable
 			// fingerprint.
@@ -463,4 +477,34 @@ func matchLocation(path string, mr MatchResult) findings.Location {
 		loc.EndColumn = len(mr.MatchText) - last
 	}
 	return loc
+}
+
+// subjectID computes the declared subject of a match.
+//
+//	"value"     the matched text itself -- three unpinned roles are three
+//	            subjects even though they share a block
+//	"construct" the enclosing blank-line-delimited block -- two tuning
+//	            parameters set on consecutive lines are one subject even
+//	            though the matched text differs
+//
+// A blank-line block is a crude construct and deliberately so: it needs no
+// parser, it is identical across the 21 languages the scanner handles, and it
+// is right for the case it is declared on. A rule whose construct is not
+// blank-line delimited should not declare "construct" until there is something
+// better to mean.
+func subjectID(kind string, mr MatchResult, lines []string) string {
+	switch kind {
+	case "value":
+		return strings.TrimSpace(mr.MatchText)
+	case "construct":
+		i := mr.Line - 1
+		if i < 0 || i >= len(lines) {
+			return ""
+		}
+		for i > 0 && strings.TrimSpace(lines[i-1]) != "" {
+			i--
+		}
+		return fmt.Sprintf("block:%d", i+1)
+	}
+	return ""
 }

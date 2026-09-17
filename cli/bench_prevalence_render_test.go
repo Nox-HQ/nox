@@ -20,13 +20,17 @@ func TestPrevalenceRenderSeparatesTheTiers(t *testing.T) {
 			// authored occurrences. The two orderings disagree here, which is
 			// the only way this test can tell which one the table used.
 			"SEC-001": {Repos: 7, Findings: 40, Sites: 40},
+			// Tier 3 present: a rule that declared what its finding is about.
+			// 65 findings over 65 pins to add, so conditions == findings here,
+			// which is the CORRECT answer and not a failure to collapse.
+			"IAC-211": {Repos: 1, Findings: 65, Sites: 65, Subjects: 65},
 		},
 	}
 	var b strings.Builder
 	renderPrevalence(&b, report)
 	out := b.String()
 
-	for _, want := range []string{"446", "26", "17.2x", "not measured"} {
+	for _, want := range []string{"446", "26", "17.2x", "not declared"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prevalence table is missing %q:\n%s", want, out)
 		}
@@ -37,6 +41,12 @@ func TestPrevalenceRenderSeparatesTheTiers(t *testing.T) {
 	if strings.Index(out, "| SEC-001 ") > strings.Index(out, "| AI-029 ") {
 		t.Errorf("AI-029 (446 raw, 26 authored) ranked above SEC-001 (40 raw, 40 authored) — "+
 			"the table is ranking on raw findings:\n%s", out)
+	}
+	// A rule that declared a subject prints its count; one that did not must
+	// print "not declared" rather than 0, so "none found" and "never asked"
+	// stay distinguishable.
+	if !strings.Contains(out, "| IAC-211 | 1 | 65 | 65 | — | 65 |") {
+		t.Errorf("IAC-211 declared a subject and should show its condition count:\n%s", out)
 	}
 	// A rule with no copies must not claim a copy factor.
 	if !strings.Contains(out, "| SEC-001 | 7 | 40 | 40 | — |") {
