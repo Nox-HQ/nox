@@ -168,5 +168,26 @@ Verification has the same shape as Option 1's, and the fixtures already exist:
 IAC-211 on `requirements.yml` must report 3, and any rule matching the AI-029
 pattern must report 1. Both are measurable the day the declaration lands.
 
-Until then the column stays printed as `not measured` rather than filled with
-something that looks like an answer.
+### Built, for the half that is settled
+
+The subject half is now implemented, because measurement settled its shape and
+the verification fixtures existed. `rules.SubjectKindKey` is the declaration;
+`rules.SubjectIDKey` is what the engine computes from it; bench counts distinct
+`(path, subject)` per rule and prints `not declared` — never `0` — for a rule
+that has not said. IAC-211 declares `value` and is the worked case.
+
+One error worth recording, caught by measuring rather than by review: the first
+version keyed the subject on the matched text alone, and IAC-211's 65 findings
+collapsed to 26. `- name: geerlingguy.apache` is unpinned in several
+requirements.yml files at once and each is its own pin, so a subject is
+FILE-LOCAL and anything counting them keys on `(path, subject)`.
+
+Note what the worked case does NOT show: IAC-211's tier 3 equals its tier 1, 65
+and 65. That is the correct answer — 65 pins to add — and not a failure to
+collapse. Tier 3 only diverges from tier 1 where a rule's subject is a
+construct, and no shipped rule declares `construct` yet; the one that motivated
+it, AI-029, was retired for having no security proposition. So the mechanism is
+live and honest, and currently has nothing to prove on the corpus.
+
+The `condition` half of Option 1 remains unbuilt, and its sequencing argument
+above still holds: nothing needs it yet.

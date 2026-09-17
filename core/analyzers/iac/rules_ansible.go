@@ -337,6 +337,13 @@ func builtinAnsibleRules() []rules.Rule {
 			},
 			remediation: "Pin every Ansible Galaxy requirement to a specific version using the 'version' field. Unpinned roles and collections silently update to whatever is newest, including a compromised release.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/829.html", "https://docs.ansible.com/ansible/latest/galaxy/user_guide.html"},
+			// Subject is the matched VALUE, not the block. One requirements.yml
+			// block holds many role entries and each unpinned one is its own
+			// pin to add: measured on geerlingguy/ansible-for-devops, a single
+			// block carries three (geerlingguy.apache, .firewall, .haproxy).
+			// A construct-keyed subject would report that as one condition.
+			// See docs/design/condition-dedup.md.
+			extraMetadata: map[string]string{rules.SubjectKindKey: "value"},
 		},
 		{
 			id: "IAC-212", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
