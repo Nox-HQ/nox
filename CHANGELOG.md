@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.0] - 2026-09-17
+
+One theme, found five times in different clothes: a keyword that matches as a
+substring is not evidence. Every instance below was measured on real
+repositories rather than argued from the code.
+
+The largest is that 151 secret rules matched nothing but a character class and
+a length, with the vendor's name as the only thing tying the value to a
+credential. Proximity was the previous defence — the vendor word within 4 lines
+and 512 characters — and crewAI's recorded cassettes showed it is not enough: a
+Content-Security-Policy header listing CDN domains sat three lines above an HTTP
+ETag, and five separate rules reported that one ETag as their vendor's
+credential. Against a corpus of adversarial HTTP traffic — ETags, request and
+trace ids, cache keys, session cookies — **116 of 151 fired on something that is
+not a credential and never was**. The vendor name now has to BIND the value:
+`<vendor>… = "<shape>"`.
+
+SEC-583 is the one worth reading. Its pattern is `[a-zA-Z0-9]{20}` gated only by
+the keyword "zuora". Exactly one file in crewAI contains that string: a 1.2M
+recorded cassette holding a base64-encoded PDF, in which the letters `zUOrA`
+occur by chance at byte 50087 *inside the payload*. Every 20-character run in
+that file — a base64 PDF has thousands — became a High-severity Zuora API key.
+**6,160 findings from one accident.** The rule text never changed.
+
+SEC-604 inverted the scanner against itself: it reported all five of certbot's
+pinned GitHub Actions — `uses: mattermost/action-mattermost-notify@ae31bb6f…` —
+as Mattermost API keys, because 32 characters of a git SHA sat next to the
+action's own name. Pinning an action to a SHA is the practice IAC-013
+recommends.
+
+### ⚠️ Behaviour changes
+
+- **AI-029 and AI-041 are retired.** Both reported LLM tuning values as security
+  findings. Repairing their matchers first is what made the question answerable:
+  AI-041 fell to zero once it stopped treating exactly 0.9 as "above 0.9", and
+  AI-029's residue was two lines of one documentation sample —
+  `frequency_penalty=0.0` and `presence_penalty=0.0`, which is the OpenAI
+  *default*, flagged by a rule whose own remediation advised setting it
+  "(-2 to 0)". Neither carries a security proposition. **If you pin either rule
+  ID in a baseline or waiver, it will no longer resolve** — they were retired
+  outright rather than into a survivor, so no alias carries them.
+- **Vendor secret rules require a binding, not a nearby name.** A credential
+  named for its vendor is still reported, and the vendor stem is matched as well
+  as the literal keyword, so `<vendor>_token` and `<vendor>_api_token` are caught
+  where they previously were not by anything. A vendor word merely *near* a
+  generic token no longer reports.
+- **Entropy candidates have an upper bound of 2048 characters.** There was none,
+  and recorded cassettes produced findings spanning 8,192 and 37,392 characters —
+  base64 response bodies reported as possible secrets. The bound is on the
+  candidate, not the file: a 40-character key inside a 2MB cassette is still
+  found. Derived rather than chosen: the longest credential any rule models is
+  1,000 characters.
+- **Secret-context hints match words, not substrings.** `input_tokens` supplied
+  "token" and `monkey` supplied "key", and since `input_tokens` appears in every
+  Anthropic API response, every recorded cassette line had its entropy threshold
+  lowered. Splitting is on punctuation and camelCase, so `apiKey`, `API_KEY` and
+  `signing_key` all still hint.
+
+### Fixed
+
+- **AI-015 joined two unrelated lines**, failing the corpus-wide metamorphic
+  audit on `main` since 2026-09-07. `\s` matches a newline in Go, so a comment
+  naming `innerHTML` above a docstring mentioning an LLM matched as
+  `'innerHTML\n\"\"\"A minimal LLM'`. Rendering happens on one line.
+- **Stacked pull requests ran no tests at all.** `ci.yml` and `metamorphic.yml`
+  filtered on `branches: [main]`, so a PR targeting any other branch ran neither
+  — not Lint, Test, Build, Security, nor the metamorphic invariance gate. A
+  green tick on a stacked PR stood for strictly less than the same tick on a PR
+  into main, and nothing said so.
+
+### Added
+
+- **The rule-diff corpus can pin a subdirectory**, fetched with a sparse
+  checkout. crewAI's recorded cassettes are 19.9M of a 370M repository: 3.4s to
+  fetch this way against 4–5 minutes to clone whole. Pinning them surfaced
+  **twelve narrowings the existing corpus was structurally unable to witness**.
+- **An entropy control in the rule-diff corpus.** `anthropic-sdk-python` carries
+  62 standing SEC-161 findings; no previous entry witnessed that family at all.
+- **Bench reporting separates raw findings from authored occurrences**, and
+  counts distinct security conditions for rules that declare what their finding
+  is about. AI-029 measured 446 raw findings and 26 authored occurrences on
+  crewAI — the raw figure ranked it among the worst rules in the set, the
+  authored figure showed it was one documentation page.
+
 ## [1.35.0] - 2026-09-10
 
 Seven changes and three defects, all one theme: a scan now says what it did not
