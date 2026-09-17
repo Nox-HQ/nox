@@ -185,7 +185,20 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AI-015", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			// nox:ignore AI-015 -- rule definition, not a real finding
-			pattern:     `(?i)(innerHTML|dangerouslySetInnerHTML|v-html|\.html\()\s*[=({]?\s*.*?(response|completion|output|generated|llm|ai_result|message\.content|chat_response)`,
+			// `[ \t]*`, never `\s*`: Go's `\s` matches a newline, so the rule
+			// could be satisfied by two unrelated lines. The corpus-wide
+			// metamorphic sweep has failed on exactly that since 2026-09-07 --
+			// adding the comment `# innerHTML` to the top of
+			// testdata/metamorphic-corpus/python/llm_agent.py made it fire,
+			// because `\s*` swallowed the newline and the docstring below
+			// supplied the second half:
+			//
+			//	match: 'innerHTML\n"""A minimal LLM'
+			//
+			// A comment naming innerHTML and a docstring mentioning an LLM is
+			// not LLM output rendered as raw HTML. Rendering happens on one
+			// line; requiring that costs nothing and closes the class.
+			pattern:     `(?i)(innerHTML|dangerouslySetInnerHTML|v-html|\.html\()[ \t]*[=({]?[ \t]*.*?(response|completion|output|generated|llm|ai_result|message\.content|chat_response)`,
 			description: "LLM output rendered as raw HTML without escaping",
 			cwe:         "CWE-79", keywords: []string{"innerhtml", "dangerouslysetinnerhtml", "v-html"},
 			tags:        []string{"ai", "output-handling", "xss"},
