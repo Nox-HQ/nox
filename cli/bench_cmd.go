@@ -419,12 +419,38 @@ func normaliseSitePath(p string) string {
 // ranked it among the worst rules in the set while the authored number showed
 // it was one documentation page.
 //
-// Tier 3, DISTINCT SECURITY CONDITIONS, is NOT measured, and is printed as
+// Tier 3, DISTINCT SECURITY CONDITIONS, is NOT measured. It is printed as
 // unmeasured rather than omitted so nobody reads tier 2 as if it were tier 3.
-// Two authored occurrences can still be one condition -- `frequency_penalty=0.0`
+// Two authored occurrences can still be one condition: `frequency_penalty=0.0`
 // and `presence_penalty=0.0` on consecutive lines of one code sample were two
-// occurrences and one decision -- and collapsing them needs the finding's
-// semantic identity, which path normalisation cannot supply.
+// occurrences and one decision.
+//
+// It is unmeasured because nothing in the codebase currently carries the
+// identity it would need, which was checked rather than assumed:
+//
+//   - Fingerprints cannot do it. V2 hashes rule ID, normalised path and the
+//     MATCHED CONTENT (core/findings/fingerprint.go). It drops the line number,
+//     so it already collapses a value that moved -- but two different matched
+//     strings hash differently by construction, and the two penalty lines are
+//     two different strings. Collapsing them would mean a fingerprint that is
+//     not a function of what matched, which is the one property baselines and
+//     waivers depend on.
+//   - `structural_claim` is the only subject-like field a finding carries, and
+//     it is IaC-only: set in core/analyzers/iac/iac.go and nowhere else. It
+//     names a parsed resource ("the cloudformation resource \"LogBucket\"").
+//     For those rules a condition IS the resource, so tier 3 is already
+//     expressible there; for a regex match in a Python file nothing analogous
+//     exists.
+//
+// So tier 3 needs a notion of SUBJECT that spans analyzers -- the thing a
+// finding is about, as distinct from where it was found -- and that is a design
+// change, not a reporting one.
+//
+// What is deliberately NOT done here: collapsing by proximity. "Same rule, same
+// file, within N lines" would merge the two penalty lines correctly and merge
+// two genuinely distinct credentials on adjacent lines just as happily, and a
+// count that is sometimes conditions and sometimes not is worse than a count
+// that is honestly occurrences.
 func renderPrevalence(b *strings.Builder, report *BenchReport) {
 	if len(report.RulePrevalence) == 0 {
 		return
