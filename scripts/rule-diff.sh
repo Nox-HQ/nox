@@ -48,12 +48,47 @@ command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
 # every entry describes a comparison nobody is making. Report that as a stale
 # ledger rather than letting entries silently match, or silently rot.
 ledger_release="$(jq -r '.nox_release // ""' "$LEDGER")"
+ledger_entries="$(jq -r '(.entries // []) | length' "$LEDGER")"
+
+# A ROLLED ledger -- empty, and naming a release ahead of the baseline -- means
+# this is the commit that cuts that release, and this check has nothing left to
+# ask.
+#
+# The two gates want opposite things of that one commit. rule-diff compares
+# against the LAST release and needs the entries present to explain the drops
+# since it. TestTheReleaseInvariant requires nox_release to equal the tag being
+# cut and entries to be EMPTY, because cutting the tag makes those drops part of
+# the new baseline. Both are right; they just cannot both hold at once here.
+#
+# It is answered by noticing that the question was already asked. Every drop the
+# ledger explained was gated on the pull request that introduced it, with the
+# entry written there and reviewed there. The roll archives those explanations
+# because the new baseline absorbs them. Re-asking on the release commit
+# re-litigates a decision already made, against a baseline that is about to stop
+# being the baseline.
+#
+# So this skips, loudly, and only for that exact shape: empty AND ahead. A
+# non-empty ledger naming the wrong release is still the stale ledger this was
+# written to catch, and still fails.
+#
+# Unnoticed until now because no release had ever rolled the ledger: v1.35.0
+# shipped with sixteen entries still explaining drops from v1.34.0 -- the
+# incident that caused the invariant to be written. v1.36.0 is the first release
+# to satisfy it and the first to meet this.
+if [ -n "$BASELINE_TAG" ] && [ -n "$ledger_release" ] \
+   && [ "$BASELINE_TAG" != "$ledger_release" ] && [ "$ledger_entries" -eq 0 ]; then
+  echo "::notice::rule-deltas.json is rolled for $ledger_release and the baseline is $BASELINE_TAG."
+  echo "This is the commit cutting $ledger_release. Every drop the cleared entries explained was"
+  echo "gated on the pull request that introduced it; the roll archives those explanations because"
+  echo "$ledger_release becomes the baseline. Nothing to diff against a baseline being replaced."
+  exit 0
+fi
+
 if [ -n "$BASELINE_TAG" ] && [ -n "$ledger_release" ] && [ "$BASELINE_TAG" != "$ledger_release" ]; then
   echo "::error::rule-deltas.json declares nox_release $ledger_release but the baseline is $BASELINE_TAG."
   echo "A release was cut since the ledger was written. Clear the entries it explains, then set nox_release to $BASELINE_TAG."
   exit 3
 fi
-
 # An entry with no reason, or naming a classification nobody defined, explains
 # nothing. Checking it here means a malformed ledger cannot pass by matching a
 # rule ID and contributing an empty sentence.
