@@ -454,6 +454,13 @@ func normaliseSitePath(p string) string {
 // finding is about, as distinct from where it was found -- and that is a design
 // change, not a reporting one.
 //
+// Half of it is already specified: docs/design/condition-dedup.md proposes a
+// `condition` key on rules, and enumerates the 16 same-span pairs that must end
+// up with DIFFERENT conditions. That answers "which rules report the same
+// thing". It does not answer this one: within a single rule the condition is
+// constant, so counting it returns 1 every time. Tier 3 is condition x subject,
+// and the subject half is the part nothing in the tree carries.
+//
 // What is deliberately NOT done here: collapsing by proximity. "Same rule, same
 // file, within N lines" would merge the two penalty lines correctly and merge
 // two genuinely distinct credentials on adjacent lines just as happily, and a
