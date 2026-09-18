@@ -5,9 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.37.0] - 2026-09-18
+
+The theme is that a rule disappearing is itself a conclusion, and nox now
+preserves the evidence for it.
+
+v1.36.0 withdrew AI-029 and AI-041 outright — retracted, not renamed, because
+their condition was not a security condition. It shipped without telling anyone
+who had written those IDs down. This release fixes that retroactively and then
+makes the underlying mistake harder to repeat.
 
 ### Added
+
+- **A withdrawn rule now leaves a tombstone, not a silence.** Every place an
+  operator writes a rule ID down explains the withdrawal instead of going
+  quiet: a `nox:ignore` waiver, a baseline entry, and a VEX statement.
+
+  Before this, a waiver naming AI-029 produced the generic "waives a rule but
+  matched no finding" degradation, whose advice — check the rule ID, check the
+  line, check whether the finding moved — was wrong in every particular, because
+  the rule was gone. Baselines and VEX statements said nothing at all.
+
+  Each tombstone names the release that withdrew the rule and why, so somebody
+  upgrading past v1.36.0 gets the explanation for a rule that vanished in a
+  release they have already installed. A rule merely RETIRED into a survivor is
+  deliberately unaffected: its waivers still resolve through the survivor's
+  identity, and telling an operator it was withdrawn would be false.
 
 - `nox rule-review` — a maintainer-facing report of rule propositions worth a
   human read. It surfaces three signals independently and **prescribes nothing**:
@@ -68,6 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through the other rule's compiled pattern, so it cannot be wrong about what a
   pattern covers. That caught an error in the first hand-written account of the
   pair, which named the wrong rule as the adviser.
+
+### Fixed
+
+- `nox plugin init` no longer writes a dead waiver into the generated plugin.
+  `cli/templates/Dockerfile.tmpl` carried `nox:ignore IAC-002`, which is copied
+  verbatim to the new plugin's `Dockerfile`, so anyone scanning a freshly
+  initialised plugin was told their Dockerfile waives a rule that does not fire
+  there. Measured both ways on the rendered file: 0 findings and 7 suppressed
+  either way, with the degradation present only in the version carrying the
+  waiver. A second dead waiver was removed from `actions/remediate/action.yml`.
 
 ### Changed
 
