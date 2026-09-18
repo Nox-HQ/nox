@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `nox rule-review` — a maintainer-facing report of rule propositions worth a
+  human read. It surfaces three signals independently and **prescribes nothing**:
+  no rule is scored, ranked, suppressed, retired or changed by it.
+
+  Two of the three are ingested rather than recomputed, because nox already
+  measures them: `single_construct` from the metamorphic sweep's triage, and the
+  raw-findings-versus-authored-occurrences collapse from `nox bench --json`.
+
+  The third is new. A rule whose remediation recommends the value its own
+  trigger requires is a proposition that did not survive being written down
+  twice — AI-029 flagged `presence_penalty = 0` while advising "Set
+  presence_penalty (-2 to 0)", a range containing the flagged value, and it
+  fired 446 times on the pinned corpus before anyone read the two strings next
+  to each other.
+
+  Measured against the catalogue as it stood *before* that withdrawal
+  (1,498 rules), the check reports AI-029 and nothing else: one true positive,
+  zero false positives. The wider definition tried first — "the rule's pattern
+  matches its own remediation" — reported 35 rules, essentially all of them
+  correct remediations quoting the defect in order to say remove it, and missed
+  AI-029 entirely; it is kept as a negative fixture so it is not proposed again.
+
+  The honest limit is recorded too: AI-041, withdrawn in the same release, is
+  surfaced by none of the three signals, because "this condition is not a
+  security condition" is not something any of them detects. See
+  `docs/design/rule-review-candidates.md`.
+
 ## [1.36.0] - 2026-09-17
 
 One theme, found five times in different clothes: a keyword that matches as a
