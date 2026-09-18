@@ -55,11 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `nox rule-review` shows prevalence-collapse rows at a copy factor of 2 or
-  above by default; `--all` shows every measured row. The cutoff is
-  presentation, not adjudication: the factor stays canonical, every collapsing
-  rule is still computed and counted, and the report states how many rows it
-  withheld so a filtered list never reads as a short one.
+- `nox rule-review` shows prevalence-collapse rows that clear two bars by
+  default — a copy factor of 2 and at least 3 duplicated lines; `--all` shows
+  every measured row. The bars are complementary: a 2x built from four findings
+  is a single duplicated line, and 673 findings over 667 sites is a factor of
+  1.009 on six, and neither number alone withholds both.
+
+  3 was swept rather than picked: every copies floor from 3 to 36, and every
+  findings floor from 5 to 53, selects the same 8 rows. The cutoff is
+  presentation, not adjudication — the measurements stay canonical, every
+  collapsing rule is still computed and counted, and the report states how many
+  rows it withheld so a filtered list never reads as a short one.
 
 ## [1.36.0] - 2026-09-17
 

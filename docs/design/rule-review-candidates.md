@@ -172,13 +172,45 @@ states how many rows it withheld so a filtered list never reads as a short one.
 inside `collapseCandidates`, so moving the number can only change what is shown
 first.
 
-**The cutoff keeps 11 rows, not the 7 labelled informative above**, and the
-difference is worth knowing. Three of the extra four — SEC-509 at `2->1`,
-SEC-590 at `3->1`, SEC-629 at `4->2` — have counts so small that a factor of 2
-means two findings on one line. SEC-048 is the fourth, at 2.05. A pure ratio
-cannot tell a 2x built from 260 findings apart from one built from 4; only an
-absolute floor would, and that is a second threshold nobody has measured (see
-*Deliberately not built*).
+A row must clear **two** bars: a copy factor of 2 and at least 3 duplicated
+lines. They are complementary rather than redundant, and each exists for a case
+the other lets through:
+
+| withheld by | example | why the other bar misses it |
+|---|---|---|
+| the copies bar | SEC-509, `2 -> 1` | factor is exactly 2.000 — from one duplicated line |
+| the factor bar | SEC-161, `673 -> 667` | six duplicated lines, comfortably over the copies bar |
+
+### Why 3, and why 8 rows rather than 7
+
+The copies floor was swept rather than picked. Of the 11 rules at factor >= 2 on
+`docs/benchmarks/2026-09-15`:
+
+- **every** copies floor from 3 to 36 selects the same 8 rows
+- **every** findings floor from 5 to 53 selects those same 8 rows
+
+Two differently motivated bars, each with a plateau spanning an order of
+magnitude, agreeing exactly. A parameter that insensitive is not tuned, which is
+what makes it defensible from a single corpus — and one corpus is all there is,
+since `docs/benchmarks/2026-09-15` is the only bench report carrying prevalence
+data.
+
+Copies rather than findings, because copies **are** the quantity the signal is
+about: the floor lands on the measurement instead of a proxy for it, and "one
+duplicated line is not evidence of copy multiplication" needs no corpus to
+justify.
+
+The eight are AI-022, AI-029, AI-031, DATA-001, SEC-048, SEC-162, SEC-801 and
+SEC-803 — the 7 labelled informative above, plus SEC-048.
+
+**This was deliberately not tuned to produce 7.** Reaching 7 requires a findings
+floor of exactly 54, because SEC-801 has 53: a cliff with no plateau on either
+side, which is the shape of a number fitted to a wanted answer rather than read
+off the evidence. The "7 informative" label combined a high factor *with*
+concentration in one repository, which is a different filter from a magnitude
+bar; SEC-048's 82 findings collapsing to 40 is a real 2x on real volume, and
+excluding it would mean encoding the repository-concentration judgement as if it
+were a magnitude one. 8 is where the evidence separates.
 
 ## Promotion: when a signal becomes a gate
 
@@ -223,11 +255,11 @@ asserts a floor on how many rules it actually analysed.
   has no score, rank, severity, priority, risk, verdict or action field, because
   prose promising restraint is not a constraint.
 - **No automatic retirement.** See the two overturned cleanups above.
-- **No minimum-count floor on the collapse cutoff.** Four of the eleven rows the
-  factor-2 cutoff admits are tiny — `2->1`, `3->1`, `4->2` — and clear 2x
-  trivially. A floor on absolute findings would drop them, but that is a second
-  threshold, adjudicating relevance rather than presenting evidence, and it has
-  not been measured. Recorded here as the obvious next question, not answered.
+- **No repository-concentration bar.** The sharpest thing separating the rows
+  that carried information was that the collapse came from ONE repository —
+  AI-031 is 244->4 on crewAI alone. That is a third dimension, it is not
+  measured, and adding it would mean the presentation encoded a judgement about
+  which corpora count. Recorded as the next question, not answered.
 
 ## Running it
 
