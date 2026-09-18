@@ -4,6 +4,33 @@
 does not score, rank, suppress, retire or change anything, and that restraint
 is the design.
 
+## The result to read first: precision, not coverage
+
+**None of the three signals would have discovered why AI-029 and AI-041 were
+withdrawn.** Both were retired because their condition is not a security
+condition — "different from the vendor's default or recommendation" is not a
+security proposition — and nothing here detects that. A human reading the
+proposition caught both.
+
+What the contradiction signal does catch is a different, narrower defect that
+AI-029 happened to also have: its remediation recommended the value its trigger
+flagged. That is a true positive, and it is measured at 1 true positive and 0
+false positives across the 1,498-rule catalogue as it stood before the
+withdrawal. AI-041 has no such defect and is correctly silent.
+
+So what has been demonstrated is **precision, not coverage**. One signal is
+trustworthy about one narrow property. Nothing here knows what a bad rule is,
+and the gap between "this rule contradicts itself" and "this rule should not
+exist" is the entire distance a maintainer still has to walk.
+
+That fixes the shape of this tool. `rule-review` accumulates **independently
+validated maintainer-review signals** — each one narrow, each one measured on
+its own before it is trusted — rather than combining them into a general "bad
+rule" score. A combined number would imply a coverage claim that no measurement
+supports, and would let a rule with three weak smells outrank a rule with one
+decisive one. The sections stay separate for that reason, and a signal is
+promoted to a gate only on its own evidence (see *Promotion*, below).
+
 ## Why the restraint is the design
 
 Twice in one audit of this catalogue, a cleanup that was obviously right on
@@ -132,20 +159,75 @@ much. Labelled by hand against the per-project counts:
 | Moderate, spread across repositories | SEC-048, SEC-055, VULN-002 | llama_index-driven, factors 1.6–2.1 |
 
 So 7 of 19 rows carried information and the rest were dismissible from the
-factor column without opening anything. **If** a cutoff is later wanted, factor
-≥ 2 would keep 11 rows including all 7 informative ones — but that decision is
-deliberately not taken here.
+factor column without opening anything.
+
+### The cutoff that shipped
+
+`nox rule-review` shows rows at a copy factor of **2 or above** by default;
+`--all` shows every measured row. The number lives in one named constant,
+`defaultCollapseFactor`, and is applied AFTER the measurement — the factor is
+canonical, every collapsing rule is still computed and counted, and the report
+states how many rows it withheld so a filtered list never reads as a short one.
+`TestTheCutoffIsPresentationNotMeasurement` asserts that filtering never happens
+inside `collapseCandidates`, so moving the number can only change what is shown
+first.
+
+**The cutoff keeps 11 rows, not the 7 labelled informative above**, and the
+difference is worth knowing. Three of the extra four — SEC-509 at `2->1`,
+SEC-590 at `3->1`, SEC-629 at `4->2` — have counts so small that a factor of 2
+means two findings on one line. SEC-048 is the fourth, at 2.05. A pure ratio
+cannot tell a 2x built from 260 findings apart from one built from 4; only an
+absolute floor would, and that is a second threshold nobody has measured (see
+*Deliberately not built*).
+
+## Promotion: when a signal becomes a gate
+
+One signal has been promoted. **A built-in rule must not prescribe as its remedy
+the condition it reports as insecure**, and
+`TestNoBuiltinRuleContradictsItsOwnRemediation` fails the build on one that
+does.
+
+The promotion is earned on that signal's own evidence, not granted by analogy:
+
+- it is decidable from the rule alone — no corpus, no scan, no judgement about
+  how much of anything is too much;
+- it measures 1 true positive and 0 false positives across 1,498 rules;
+- the invariant is one nobody argues with. An operator who follows a remediation
+  to the letter must end up with the finding gone.
+
+**The other two signals are not promoted, and must not be promoted by analogy.**
+`single_construct` reports a gap in the CORPUS, not a defect in the rule — the
+usual remedy is a second test input. Prevalence collapse reports that a corpus
+repeats something a rule correctly detects; a correct rule fires as often as the
+thing it detects appears. Failing a build on either would be failing it on a
+measurement that is not about the rule being wrong.
+
+### Scope of the gate
+
+Built-in rules only. It deliberately does **not** run inside `CheckCoherence`,
+which refuses a rule at load time. An operator's own custom rule with loose
+remediation wording would then fail to load and take their scan down with it,
+and a wording smell must never be able to stop somebody's scanner. The gate
+belongs to this repository's catalogue, where the cost of a failure is a red
+build and the fix is an edit to a string.
+
+The gate carries its own teeth check. A test asserting "zero" over a catalogue
+that contains zero is indistinguishable from a test whose detector has broken,
+so `TestTheGateWouldHaveCaughtAI029` feeds the withdrawn rule's verbatim
+definition through the same path and requires it to fail, and the gate itself
+asserts a floor on how many rules it actually analysed.
 
 ## Deliberately not built
 
-- **No CI gate.** The contradiction signal measures 0 false positives across
-  1,498 rules, which is the precision data needed to *consider* one. Whether
-  nox should fail its own build on a rule smell is a product decision about what
-  nox nags its maintainers about, and it is not this milestone's to make.
 - **No ranking or scoring.** `TestTheReportRanksNothing` asserts the JSON schema
   has no score, rank, severity, priority, risk, verdict or action field, because
   prose promising restraint is not a constraint.
 - **No automatic retirement.** See the two overturned cleanups above.
+- **No minimum-count floor on the collapse cutoff.** Four of the eleven rows the
+  factor-2 cutoff admits are tiny — `2->1`, `3->1`, `4->2` — and clear 2x
+  trivially. A floor on absolute findings would drop them, but that is a second
+  threshold, adjudicating relevance rather than presenting evidence, and it has
+  not been measured. Recorded here as the obvious next question, not answered.
 
 ## Running it
 
@@ -153,6 +235,7 @@ deliberately not taken here.
 nox bench --json --output bench.json
 python3 scripts/metamorphic/sweep.py --bin ./nox --results sweep-out
 nox rule-review --bench bench.json --sweep sweep-out/triage_report.json
+nox rule-review --bench bench.json --all      # every measured collapse row
 ```
 
 Every source is optional. A signal whose source is absent reports `Not measured`

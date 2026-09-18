@@ -71,8 +71,23 @@ func renderCollapses(b *strings.Builder, report *RuleReviewReport) {
 		b.WriteString("Not measured — pass `--bench <bench.json>`.\n\n")
 		return
 	}
-	if len(report.Collapses) == 0 {
+	if report.CollapsesMeasured == 0 {
 		b.WriteString("None: every rule's findings are distinct authored occurrences.\n\n")
+		return
+	}
+	// A short list and a filtered list must not look alike, so the cutoff and
+	// what it withheld are stated before the table rather than inferred from it.
+	if withheld := report.CollapsesMeasured - len(report.Collapses); withheld > 0 {
+		fmt.Fprintf(b, "Showing %d of %d measured rows — those at a copy factor of %g or above.\n",
+			len(report.Collapses), report.CollapsesMeasured, report.CollapseFactorShown)
+		fmt.Fprintf(b, "The other %d collapse by less than that; pass `--all` to see them. The cutoff\n", withheld)
+		b.WriteString("is presentation, not adjudication: crossing it means worth a look, nothing more.\n\n")
+	} else {
+		fmt.Fprintf(b, "Showing all %d measured rows.\n\n", report.CollapsesMeasured)
+	}
+	if len(report.Collapses) == 0 {
+		fmt.Fprintf(b, "No rule reaches a factor of %g; pass `--all` to see the %d that collapse by less.\n\n",
+			report.CollapseFactorShown, report.CollapsesMeasured)
 		return
 	}
 	fmt.Fprintf(b, "| %-10s | %8s | %8s | %7s | %6s |\n", "rule", "findings", "authored", "factor", "repos")

@@ -197,3 +197,98 @@ func TestEveryBuiltInPatternSurvivesTheScanner(t *testing.T) {
 	}
 	t.Logf("catalogue: %d rules, %d remediation contradictions", len(catalog.Rules()), len(first))
 }
+
+// TestTheCutoffIsPresentationNotMeasurement pins the guarantee that makes the
+// default list safe to change later.
+//
+// The factor is the canonical measurement. The threshold decides which rows a
+// maintainer is shown FIRST and nothing else: every measured row is still
+// computed, still counted, and still reachable. If filtering ever started
+// happening inside collapseCandidates, moving the number would silently change
+// the signal rather than the presentation.
+func TestTheCutoffIsPresentationNotMeasurement(t *testing.T) {
+	dir := t.TempDir()
+	bench := filepath.Join(dir, "bench.json")
+	write(t, bench, `{"rule_prevalence":{
+		"BIG-1":{"repos":4,"findings":260,"sites":20},
+		"AT-CUTOFF-1":{"repos":1,"findings":4,"sites":2},
+		"UNDER-1":{"repos":7,"findings":673,"sites":667}}}`)
+
+	// The measurement itself never filters.
+	all, err := collapseCandidates(bench)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("collapseCandidates returned %d rows; it must measure every collapse", len(all))
+	}
+
+	shown := atOrAboveFactor(all, defaultCollapseFactor)
+	if len(shown) != 2 {
+		t.Errorf("shown %d rows at factor >= %g, want 2", len(shown), defaultCollapseFactor)
+	}
+	// Exactly at the cutoff is shown: "factor >= 2", not "> 2".
+	var sawCutoff bool
+	for _, r := range shown {
+		if r.Rule == "AT-CUTOFF-1" {
+			sawCutoff = true
+			if r.Factor != 2 {
+				t.Errorf("AT-CUTOFF-1 factor %v, want 2", r.Factor)
+			}
+		}
+		if r.Rule == "UNDER-1" {
+			t.Error("a row below the cutoff was shown")
+		}
+	}
+	if !sawCutoff {
+		t.Error("a row exactly at the cutoff was withheld; the comparison is > rather than >=")
+	}
+	if got := atOrAboveFactor(all, 0); len(got) != 3 {
+		t.Errorf("--all showed %d of 3 measured rows", len(got))
+	}
+}
+
+// TestAFilteredListDoesNotLookLikeAShortOne is the same distinction
+// renderPrevalence draws for tier 3, applied to the cutoff: a reader must never
+// have to guess whether a list is short because little collapsed or because
+// most of it was withheld.
+func TestAFilteredListDoesNotLookLikeAShortOne(t *testing.T) {
+	dir := t.TempDir()
+	bench := filepath.Join(dir, "bench.json")
+	write(t, bench, `{"rule_prevalence":{
+		"BIG-1":{"repos":4,"findings":260,"sites":20},
+		"UNDER-1":{"repos":7,"findings":673,"sites":667}}}`)
+
+	filtered := filepath.Join(dir, "filtered.md")
+	if code := runRuleReview([]string{"--bench", bench, "--output", filtered}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got := readFile(t, filtered)
+	if !strings.Contains(got, "Showing 1 of 2 measured rows") {
+		t.Errorf("filtered report does not say what it withheld:\n%s", got)
+	}
+	if !strings.Contains(got, "`--all`") {
+		t.Error("filtered report does not say how to see the rest")
+	}
+
+	everything := filepath.Join(dir, "all.md")
+	if code := runRuleReview([]string{"--bench", bench, "--all", "--output", everything}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got = readFile(t, everything)
+	if !strings.Contains(got, "Showing all 2 measured rows") {
+		t.Errorf("--all report does not state that nothing was withheld:\n%s", got)
+	}
+	if strings.Contains(got, "pass `--all`") {
+		t.Error("--all report still advertises --all")
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}

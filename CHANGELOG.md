@@ -33,8 +33,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The honest limit is recorded too: AI-041, withdrawn in the same release, is
   surfaced by none of the three signals, because "this condition is not a
-  security condition" is not something any of them detects. See
+  security condition" is not something any of them detects. What has been
+  demonstrated is precision, not coverage. See
   `docs/design/rule-review-candidates.md`.
+
+- A built-in rule can no longer prescribe as its remedy the condition it
+  reports as insecure. `TestNoBuiltinRuleContradictsItsOwnRemediation` fails
+  the build on one that does.
+
+  Only this signal is promoted to a gate, on its own evidence: it is decidable
+  from the rule alone, measures 1 true positive and 0 false positives across
+  1,498 rules, and encodes an invariant nobody argues with — following a
+  remediation to the letter must make the finding go away. The other two
+  signals stay informational, because `single_construct` reports a gap in the
+  corpus and prevalence collapse reports that a corpus repeats what a rule
+  correctly detects; neither is about a rule being wrong.
+
+  The gate runs over the built-in catalogue only, and deliberately not inside
+  `CheckCoherence`, so an operator's own rule with loose remediation wording
+  can never fail to load and take their scan with it.
+
+### Changed
+
+- `nox rule-review` shows prevalence-collapse rows at a copy factor of 2 or
+  above by default; `--all` shows every measured row. The cutoff is
+  presentation, not adjudication: the factor stays canonical, every collapsing
+  rule is still computed and counted, and the report states how many rows it
+  withheld so a filtered list never reads as a short one.
 
 ## [1.36.0] - 2026-09-17
 
