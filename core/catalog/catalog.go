@@ -9,6 +9,8 @@
 package catalog
 
 import (
+	"sort"
+
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/data"
@@ -86,4 +88,26 @@ func metaFromRule(r *rules.Rule) RuleMeta {
 		Remediation: r.Remediation,
 		References:  r.References,
 	}
+}
+
+// Rules returns every built-in rule, de-duplicated by ID and sorted, for
+// analyses that need the rule itself rather than its metadata.
+//
+// Catalog() cannot serve them: RuleMeta deliberately carries only what a
+// consumer joins on, and a rule's Pattern — which is what any analysis of a
+// rule's own proposition has to read — is not in it.
+func Rules() []*rules.Rule {
+	seen := map[string]bool{}
+	var out []*rules.Rule
+	for _, rs := range allRuleSets() {
+		for _, r := range rs.Rules() {
+			if seen[r.ID] {
+				continue
+			}
+			seen[r.ID] = true
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }

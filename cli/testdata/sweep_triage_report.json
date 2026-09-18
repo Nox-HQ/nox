@@ -1,0 +1,51 @@
+{
+  "corpus_roots": [
+    "testdata/metamorphic-corpus"
+  ],
+  "schema": "nox-metamorphic-triage/v1",
+  "suspicious_rule_count": 3,
+  "suspicious_rules": [
+    {
+      "distinct_constructs": 1,
+      "fire_count": 1,
+      "risk": "medium",
+      "ruleid": "AI-002",
+      "seed_count": 1,
+      "seeds": [
+        "testdata/metamorphic-corpus/python/llm_agent.py"
+      ],
+      "signals": [
+        "single_construct"
+      ],
+      "violation_directions": []
+    },
+    {
+      "distinct_constructs": 1,
+      "fire_count": 1,
+      "risk": "medium",
+      "ruleid": "AI-006",
+      "seed_count": 1,
+      "seeds": [
+        "testdata/metamorphic-corpus/python/llm_agent.py"
+      ],
+      "signals": [
+        "single_construct"
+      ],
+      "violation_directions": []
+    },
+    {
+      "distinct_constructs": 1,
+      "fire_count": 1,
+      "risk": "medium",
+      "ruleid": "IAC-001",
+      "seed_count": 1,
+      "seeds": [
+        "testdata/metamorphic-corpus/docker/Dockerfile.root-installer"
+      ],
+      "signals": [
+        "single_construct"
+      ],
+      "violation_directions": []
+    }
+  ]
+}
