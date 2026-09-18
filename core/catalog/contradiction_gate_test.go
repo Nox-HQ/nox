@@ -97,3 +97,53 @@ func TestTheGateWouldHaveCaughtAI029(t *testing.T) {
 		t.Errorf("endorsement %q does not quote the range it read", c.Endorsement)
 	}
 }
+
+// TestNoBuiltinRuleAdvisesWhatAnotherFlags is the cross-rule half of the same
+// invariant: following nox's own advice must not produce another nox finding.
+//
+// AI-023 and AI-041 shipped as such a pair for months. AI-023 advised "Use
+// top_p of 0.7-0.95 for balanced output"; AI-041 fired on `top_p: 0.95`. An
+// operator who did exactly what one rule said got a finding from the other.
+//
+// It was resolved incidentally — AI-041 was withdrawn in v1.36.0 for an
+// unrelated reason — which is the whole argument for checking this
+// mechanically. Nobody read the two remediations side by side in all that
+// time, and there are 1,496 rules.
+func TestNoBuiltinRuleAdvisesWhatAnotherFlags(t *testing.T) {
+	for _, c := range rules.CrossContradictions(Rules()) {
+		t.Errorf("%s advises a value %s reports as a defect.\n"+
+			"  %s remediation endorses %q for %s\n"+
+			"  %s fires on %q\n"+
+			"An operator who follows %s gets a %s finding for it. Either the "+
+			"advice or the trigger is wrong; they cannot both be right.",
+			c.Adviser, c.Flagger, c.Adviser, c.Endorsement, c.Param,
+			c.Flagger, c.Assignment, c.Adviser, c.Flagger)
+	}
+}
+
+// TestTheCrossGateWouldHaveCaughtTheShippedPair asserts the gate's teeth for
+// the same reason its intra-rule sibling does: a zero over a catalogue that
+// contains zero proves nothing about the detector.
+func TestTheCrossGateWouldHaveCaughtTheShippedPair(t *testing.T) {
+	shipped := []*rules.Rule{
+		{
+			ID:          "AI-023",
+			Pattern:     `(?i)(top_p\s*[:=]\s*0\.[0-6][0-9]?)`,
+			Remediation: "Use top_p of 0.7-0.95 for balanced output. Lower values (0.1-0.3) may cause repetitive responses and reduce response quality.",
+		},
+		{
+			ID:          "AI-041",
+			Pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*[1-9]|1\.0+)`,
+			Remediation: "High temperature (>0.9) increases randomness and reduces consistency. Use 0.1-0.3 for deterministic outputs.",
+		},
+	}
+	got := rules.CrossContradictions(shipped)
+	if len(got) != 1 {
+		t.Fatalf("the cross gate no longer detects the AI-023/AI-041 pair, so its "+
+			"zero result over the catalogue means nothing: %+v", got)
+	}
+	if got[0].Adviser != "AI-023" || got[0].Flagger != "AI-041" {
+		t.Errorf("direction is %s -> %s, want AI-023 -> AI-041",
+			got[0].Adviser, got[0].Flagger)
+	}
+}
