@@ -71,6 +71,7 @@ and a second implementation would be a second answer.
 | `single_construct` | `scripts/metamorphic/sweep.py` triage | the invariance check only ever exercised this rule in one place |
 | prevalence collapse | `nox bench --json` `rule_prevalence` | raw findings exceed authored occurrences |
 | remediation contradicts trigger | computed here, from the built-in catalogue | the remediation endorses the value the trigger requires |
+| remediation advises what another flags | computed here, from the built-in catalogue | one rule recommends a value a DIFFERENT rule reports as a defect |
 
 The sweep's other signal, `flips_under_edit`, is deliberately **not** carried:
 it is a confirmed rule bug with a minimal reproduction attached and the sweep
@@ -218,7 +219,7 @@ were a magnitude one. 8 is where the evidence separates.
 
 ## Promotion: when a signal becomes a gate
 
-One signal has been promoted. **A built-in rule must not prescribe as its remedy
+Two signals have been promoted, and they are the two halves of one invariant. **A built-in rule must not prescribe as its remedy
 the condition it reports as insecure**, and
 `TestNoBuiltinRuleContradictsItsOwnRemediation` fails the build on one that
 does.
@@ -231,14 +232,58 @@ The promotion is earned on that signal's own evidence, not granted by analogy:
 - the invariant is one nobody argues with. An operator who follows a remediation
   to the letter must end up with the finding gone.
 
-**The other two signals are not promoted, and must not be promoted by analogy.**
+**The prevalence and coverage signals are not promoted, and must not be promoted by analogy.**
 `single_construct` reports a gap in the CORPUS, not a defect in the rule — the
 usual remedy is a second test input. Prevalence collapse reports that a corpus
 repeats something a rule correctly detects; a correct rule fires as often as the
 thing it detects appears. Failing a build on either would be failing it on a
 measurement that is not about the rule being wrong.
 
-### Scope of the gate
+### The cross-rule half
+
+The same invariant, extended across the catalogue: **following nox's own advice
+must not produce another nox finding**. `TestNoBuiltinRuleAdvisesWhatAnotherFlags`
+fails the build on a pair that breaks it.
+
+AI-023 and AI-041 were such a pair and shipped together for months:
+
+> **AI-023** advised *"Use top_p of 0.7-0.95 for balanced output"*.
+> **AI-041** fired on `top_p: 0.95`.
+
+An operator who did exactly what one rule said got a finding from the other. It
+was resolved **incidentally** — AI-041 was withdrawn in v1.36.0 for an unrelated
+reason — which is the argument for checking mechanically rather than hoping
+someone reads two remediations side by side. Nobody did, in all that time,
+across 1,496 rules.
+
+Measured: 1 true positive and 0 false positives, and the pair is gone from
+`main` today.
+
+#### Measured by construction, not inferred
+
+The obvious implementation reads the flagged range out of the flagging rule's
+regex — deciding that `0\.[0-6][0-9]?` means [0.0, 0.69]. That is range
+inference over regex source, it is wrong in ways that are hard to see, and being
+wrong means either inventing a contradiction or missing one.
+
+So there is no inference. Values are sampled from the ENDORSED range, written
+out as real assignments in the spellings the catalogue's own patterns expect,
+and run through the flagging rule's compiled pattern. If it matches, it matches.
+
+That choice paid for itself immediately: the first hand-written account of this
+pair named **AI-041** as the adviser, reasoning that its "Use 0.1-0.3" advice
+would trip AI-023. It would not — AI-041's `0.1-0.3` sits next to the word
+*temperature*, not `top_p`, so it endorses nothing for that parameter. The
+measurement produced the opposite and correct direction.
+`TestTheShippedPairIsFound` asserts the direction for that reason.
+
+Eleven points are sampled across each range rather than the endpoints alone,
+because a flagging rule may cover only a slice in the middle of what is advised
+(`TestSamplingCoversTheInteriorOfARange`). Samples are rounded to four decimal
+places so the evidence is an assignment a maintainer can paste: `top_p: 0.925`,
+not `top_p: 0.9249999999999999`.
+
+### Scope of the gates
 
 Built-in rules only. It deliberately does **not** run inside `CheckCoherence`,
 which refuses a rule at load time. An operator's own custom rule with loose

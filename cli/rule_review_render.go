@@ -31,6 +31,7 @@ func renderRuleReview(report *RuleReviewReport) string {
 	b.WriteString("\n")
 
 	renderContradictions(&b, report)
+	renderCrossContradictions(&b, report)
 	renderCollapses(&b, report)
 	renderSingleConstruct(&b, report)
 
@@ -54,6 +55,26 @@ func renderContradictions(b *strings.Builder, report *RuleReviewReport) {
 		fmt.Fprintf(b, "- **%s** — flags `%s = %s`; remediation endorses %s for `%s` (range [%g, %g] contains %s)\n",
 			c.Rule, c.Param, c.Flagged, "`"+c.Endorsement+"`", c.Param, c.EndorsedLow, c.EndorsedHi, c.Flagged)
 		fmt.Fprintf(b, "  > %s\n", c.Remediation)
+	}
+	b.WriteString("\n")
+}
+
+func renderCrossContradictions(b *strings.Builder, report *RuleReviewReport) {
+	b.WriteString("## Remediation advises what another rule flags\n\n")
+	b.WriteString("One rule's remediation recommends a value a DIFFERENT rule reports as a\n")
+	b.WriteString("defect, so an operator who follows the advice earns a finding for it.\n")
+	b.WriteString("Read as: these two rules disagree, and both are shipping.\n\n")
+	b.WriteString("NOT a statement about which one is wrong. AI-023 advised `top_p` of\n")
+	b.WriteString("0.7-0.95 while AI-041 fired at 0.95; the pair was only resolved when\n")
+	b.WriteString("AI-041 was withdrawn for an unrelated reason.\n\n")
+
+	if len(report.CrossContradictions) == 0 {
+		b.WriteString("None.\n\n")
+		return
+	}
+	for _, c := range report.CrossContradictions {
+		fmt.Fprintf(b, "- **%s** advises %s for `%s`; **%s** fires on `%s`\n",
+			c.Adviser, "`"+c.Endorsement+"`", c.Param, c.Flagger, c.Assignment)
 	}
 	b.WriteString("\n")
 }

@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // `nox rule-review` points a maintainer at rule propositions worth re-reading.
@@ -66,6 +67,7 @@ func runRuleReview(args []string) int {
 	report.Sources.Catalog = len(catalog.Rules())
 
 	report.Contradictions = contradictionCandidates()
+	report.CrossContradictions = crossContradictionCandidates()
 
 	if benchPath != "" {
 		rows, err := collapseCandidates(benchPath)
@@ -188,7 +190,8 @@ type RuleReviewReport struct {
 		Sweep   string `json:"sweep,omitempty"`
 	} `json:"sources"`
 
-	Contradictions []ContradictionCandidate `json:"remediation_contradicts_trigger"`
+	Contradictions      []ContradictionCandidate      `json:"remediation_contradicts_trigger"`
+	CrossContradictions []CrossContradictionCandidate `json:"remediation_advises_what_another_flags"`
 
 	// Collapses holds the rows SHOWN. CollapsesMeasured is how many collapsed
 	// at all, and CollapseFactorShown is the cutoff that separated them, so a
@@ -248,6 +251,29 @@ type SingleConstructRow struct {
 	FireCount int      `json:"fire_count"`
 	SeedCount int      `json:"seed_count"`
 	Seeds     []string `json:"seeds,omitempty"`
+}
+
+// CrossContradictionCandidate is one rule advising a value another rule flags.
+type CrossContradictionCandidate struct {
+	Adviser     string `json:"adviser"`
+	Flagger     string `json:"flagger"`
+	Param       string `json:"param"`
+	Endorsement string `json:"endorsement"`
+	Assignment  string `json:"assignment"`
+}
+
+func crossContradictionCandidates() []CrossContradictionCandidate {
+	out := []CrossContradictionCandidate{}
+	for _, c := range rules.CrossContradictions(catalog.Rules()) {
+		out = append(out, CrossContradictionCandidate{
+			Adviser:     c.Adviser,
+			Flagger:     c.Flagger,
+			Param:       c.Param,
+			Endorsement: c.Endorsement,
+			Assignment:  c.Assignment,
+		})
+	}
+	return out
 }
 
 func contradictionCandidates() []ContradictionCandidate {

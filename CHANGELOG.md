@@ -53,6 +53,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CheckCoherence`, so an operator's own rule with loose remediation wording
   can never fail to load and take their scan with it.
 
+- A built-in rule can no longer advise a value that a DIFFERENT built-in rule
+  reports as a defect. `TestNoBuiltinRuleAdvisesWhatAnotherFlags` fails the
+  build on a pair that does.
+
+  The same invariant as above, extended across the catalogue: following nox's
+  own advice must not produce another nox finding. AI-023 and AI-041 were such
+  a pair for months — AI-023 advised "Use top_p of 0.7-0.95", AI-041 fired on
+  `top_p: 0.95` — and it was resolved only incidentally, when AI-041 was
+  withdrawn in v1.36.0 for an unrelated reason.
+
+  The check is measured by construction rather than inferred: values are
+  sampled from the endorsed range, written out as real assignments, and run
+  through the other rule's compiled pattern, so it cannot be wrong about what a
+  pattern covers. That caught an error in the first hand-written account of the
+  pair, which named the wrong rule as the adviser.
+
 ### Changed
 
 - `nox rule-review` shows prevalence-collapse rows that clear two bars by
