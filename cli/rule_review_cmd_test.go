@@ -223,7 +223,7 @@ func TestTheCutoffIsPresentationNotMeasurement(t *testing.T) {
 		t.Fatalf("collapseCandidates returned %d rows; it must measure every collapse", len(all))
 	}
 
-	shown := atOrAboveFactor(all, defaultCollapseFactor)
+	shown := meetsCollapseFloors(all, defaultCollapseFactor, 0)
 	if len(shown) != 2 {
 		t.Errorf("shown %d rows at factor >= %g, want 2", len(shown), defaultCollapseFactor)
 	}
@@ -243,8 +243,34 @@ func TestTheCutoffIsPresentationNotMeasurement(t *testing.T) {
 	if !sawCutoff {
 		t.Error("a row exactly at the cutoff was withheld; the comparison is > rather than >=")
 	}
-	if got := atOrAboveFactor(all, 0); len(got) != 3 {
+	if got := meetsCollapseFloors(all, 0, 0); len(got) != 3 {
 		t.Errorf("--all showed %d of 3 measured rows", len(got))
+	}
+}
+
+// TestBothCollapseBarsMustBeCleared pins the complementarity that is the whole
+// reason there are two.
+//
+// Each bar exists for a case the other lets through: a 2x built from four
+// findings is a single duplicated line, and 673 findings over 667 sites is a
+// 1.009 factor on six. Neither number alone withholds both.
+func TestBothCollapseBarsMustBeCleared(t *testing.T) {
+	rows := []CollapseCandidate{
+		{Rule: "TINY-1", Findings: 4, Authored: 2, Factor: 2},         // factor ok, copies 2
+		{Rule: "FLAT-1", Findings: 673, Authored: 667, Factor: 1.009}, // copies 6, factor low
+		{Rule: "REAL-1", Findings: 260, Authored: 20, Factor: 13},     // clears both
+	}
+	got := meetsCollapseFloors(rows, defaultCollapseFactor, defaultCollapseCopies)
+	if len(got) != 1 || got[0].Rule != "REAL-1" {
+		t.Fatalf("shown %+v; only REAL-1 clears both bars", got)
+	}
+	// Each bar alone lets one of the two withheld rows through, which is the
+	// evidence that neither is redundant.
+	if n := len(meetsCollapseFloors(rows, defaultCollapseFactor, 0)); n != 2 {
+		t.Errorf("factor alone kept %d rows, want 2 (TINY-1 survives it)", n)
+	}
+	if n := len(meetsCollapseFloors(rows, 0, defaultCollapseCopies)); n != 2 {
+		t.Errorf("copies alone kept %d rows, want 2 (FLAT-1 survives it)", n)
 	}
 }
 

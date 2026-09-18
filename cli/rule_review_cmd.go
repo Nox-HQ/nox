@@ -78,10 +78,13 @@ func runRuleReview(args []string) int {
 		// threshold decides only which are shown.
 		report.CollapsesMeasured = len(rows)
 		report.CollapseFactorShown = defaultCollapseFactor
+		report.CollapseCopiesShown = defaultCollapseCopies
 		if showAll {
 			report.CollapseFactorShown = 0
+			report.CollapseCopiesShown = 0
 		}
-		report.Collapses = atOrAboveFactor(rows, report.CollapseFactorShown)
+		report.Collapses = meetsCollapseFloors(rows,
+			report.CollapseFactorShown, report.CollapseCopiesShown)
 	}
 	if sweepPath != "" {
 		rows, err := singleConstructCandidates(sweepPath)
@@ -140,6 +143,38 @@ const ruleReviewSchema = "nox-rule-review-candidates/v1"
 // touching the signal.
 const defaultCollapseFactor = 2.0
 
+// defaultCollapseCopies is the number of duplicated lines a rule must have
+// before its factor is worth reading.
+//
+// The factor alone cannot tell a 2x built from 260 findings apart from one
+// built from 4. SEC-509 collapses 2 findings to 1 site — a factor of exactly
+// 2.000 from a single duplicated line — and sat beside AI-031's 260-to-20 as
+// though the two were comparable.
+//
+// So a row must clear BOTH bars, and they are complementary rather than
+// redundant: the factor is proportional and excludes the high-volume
+// near-unity rules (SEC-161 is 673 findings over 667 sites, six duplicates in
+// total), while this one is absolute and excludes the tiny ones. Neither
+// catches the other's case.
+//
+// 3 is chosen from a sensitivity sweep over docs/benchmarks/2026-09-15 rather
+// than picked. Of the 11 rules at factor >= 2, EVERY copies floor from 3 to 36
+// selects the same 8 rows, and every findings floor from 5 to 53 selects those
+// same 8 — two differently motivated bars agreeing across an order of
+// magnitude each. A parameter with a plateau that wide is not tuned, which is
+// what makes it safe to set from a single corpus.
+//
+// Counting copies rather than findings is the more honest of the two: copies
+// ARE the quantity the signal is about, so the floor lands on the measurement
+// instead of on a proxy for it. "One duplicated line is not evidence of copy
+// multiplication" needs no corpus to justify.
+//
+// Deliberately NOT tuned to produce 7 rows. Reaching 7 needs a findings floor
+// of exactly 54 — SEC-801 has 53 — which is a cliff with no plateau on either
+// side, the shape of a number fitted to a wanted answer. 8 is where the
+// evidence actually separates.
+const defaultCollapseCopies = 3
+
 // RuleReviewReport is the stable shape of the candidate report.
 //
 // The three signal lists are siblings and stay siblings. There is deliberately
@@ -162,17 +197,22 @@ type RuleReviewReport struct {
 	Collapses           []CollapseCandidate `json:"prevalence_collapses,omitempty"`
 	CollapsesMeasured   int                 `json:"prevalence_collapses_measured,omitempty"`
 	CollapseFactorShown float64             `json:"prevalence_collapse_factor_shown,omitempty"`
+	CollapseCopiesShown int                 `json:"prevalence_collapse_copies_shown,omitempty"`
 
 	SingleConstruct []SingleConstructRow `json:"single_construct,omitempty"`
 }
 
-// atOrAboveFactor filters rows for presentation. It never recomputes a factor:
-// the measurement is whatever collapseCandidates found, and this only decides
-// which of those rows a maintainer is shown first.
-func atOrAboveFactor(rows []CollapseCandidate, floor float64) []CollapseCandidate {
+// meetsCollapseFloors filters rows for presentation. It never recomputes
+// anything: the measurement is whatever collapseCandidates found, and this only
+// decides which of those rows a maintainer is shown first.
+//
+// Both bars must be cleared. They are complementary — proportional and
+// absolute — and a row passing one while failing the other is exactly the case
+// each exists to withhold.
+func meetsCollapseFloors(rows []CollapseCandidate, factor float64, copies int) []CollapseCandidate {
 	out := make([]CollapseCandidate, 0, len(rows))
 	for _, r := range rows {
-		if r.Factor >= floor {
+		if r.Factor >= factor && r.Findings-r.Authored >= copies {
 			out = append(out, r)
 		}
 	}
