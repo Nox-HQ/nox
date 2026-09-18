@@ -1863,6 +1863,28 @@ func ConfigRoot(target string) string {
 	return target
 }
 
+// withdrawnWaiverNote explains a waiver that names a withdrawn rule, or returns
+// "" when none of its IDs was withdrawn.
+//
+// Without this an operator who waived a rule nox has since retracted is told
+// the finding "may have been fixed" and to "check the rule ID" -- wrong on both
+// counts, and it invites them to go looking for a finding that cannot exist.
+func withdrawnWaiverNote(ids []string) string {
+	var notes []string
+	for _, id := range ids {
+		w, ok := rules.Withdrawn(id)
+		if !ok {
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s was withdrawn in %s: %s", w.ID, w.Version, w.Reason))
+	}
+	if len(notes) == 0 {
+		return ""
+	}
+	return strings.Join(notes, " ") +
+		" Nothing reports this condition now, so the waiver can be deleted."
+}
+
 // sweepWaiversInCleanFiles reports waivers in files that produced no finding.
 //
 // The unused-waiver check is driven by findings grouped by path, so it only
@@ -1907,6 +1929,17 @@ func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degra
 				continue
 			}
 			if s.Expires != nil && timeNow().After(*s.Expires) {
+				continue
+			}
+			// A waiver naming a WITHDRAWN rule has a specific answer, and the
+			// generic advice below is wrong for it in both directions: the
+			// finding was not fixed, and the rule ID is not a typo. Saying so
+			// is the whole reason the tombstone registry exists.
+			if why := withdrawnWaiverNote(s.RuleIDs); why != "" {
+				deg.Add(degrade.Suppression,
+					fmt.Sprintf("%s:%d waives %s, which was withdrawn",
+						rel, s.Line, strings.Join(s.RuleIDs, ",")),
+					why)
 				continue
 			}
 			deg.Add(degrade.Suppression,
