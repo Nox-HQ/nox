@@ -5,6 +5,152 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `nox rule-review` — a maintainer-facing report of rule propositions worth a
+  human read. It surfaces three signals independently and **prescribes nothing**:
+  no rule is scored, ranked, suppressed, retired or changed by it.
+
+  Two of the three are ingested rather than recomputed, because nox already
+  measures them: `single_construct` from the metamorphic sweep's triage, and the
+  raw-findings-versus-authored-occurrences collapse from `nox bench --json`.
+
+  The third is new. A rule whose remediation recommends the value its own
+  trigger requires is a proposition that did not survive being written down
+  twice — AI-029 flagged `presence_penalty = 0` while advising "Set
+  presence_penalty (-2 to 0)", a range containing the flagged value, and it
+  fired 446 times on the pinned corpus before anyone read the two strings next
+  to each other.
+
+  Measured against the catalogue as it stood *before* that withdrawal
+  (1,498 rules), the check reports AI-029 and nothing else: one true positive,
+  zero false positives. The wider definition tried first — "the rule's pattern
+  matches its own remediation" — reported 35 rules, essentially all of them
+  correct remediations quoting the defect in order to say remove it, and missed
+  AI-029 entirely; it is kept as a negative fixture so it is not proposed again.
+
+  The honest limit is recorded too: AI-041, withdrawn in the same release, is
+  surfaced by none of the three signals, because "this condition is not a
+  security condition" is not something any of them detects. What has been
+  demonstrated is precision, not coverage. See
+  `docs/design/rule-review-candidates.md`.
+
+- A built-in rule can no longer prescribe as its remedy the condition it
+  reports as insecure. `TestNoBuiltinRuleContradictsItsOwnRemediation` fails
+  the build on one that does.
+
+  Only this signal is promoted to a gate, on its own evidence: it is decidable
+  from the rule alone, measures 1 true positive and 0 false positives across
+  1,498 rules, and encodes an invariant nobody argues with — following a
+  remediation to the letter must make the finding go away. The other two
+  signals stay informational, because `single_construct` reports a gap in the
+  corpus and prevalence collapse reports that a corpus repeats what a rule
+  correctly detects; neither is about a rule being wrong.
+
+  The gate runs over the built-in catalogue only, and deliberately not inside
+  `CheckCoherence`, so an operator's own rule with loose remediation wording
+  can never fail to load and take their scan with it.
+
+### Changed
+
+- `nox rule-review` shows prevalence-collapse rows that clear two bars by
+  default — a copy factor of 2 and at least 3 duplicated lines; `--all` shows
+  every measured row. The bars are complementary: a 2x built from four findings
+  is a single duplicated line, and 673 findings over 667 sites is a factor of
+  1.009 on six, and neither number alone withholds both.
+
+  3 was swept rather than picked: every copies floor from 3 to 36, and every
+  findings floor from 5 to 53, selects the same 8 rows. The cutoff is
+  presentation, not adjudication — the measurements stay canonical, every
+  collapsing rule is still computed and counted, and the report states how many
+  rows it withheld so a filtered list never reads as a short one.
+
+## [1.36.0] - 2026-09-17
+
+One theme, found five times in different clothes: a keyword that matches as a
+substring is not evidence. Every instance below was measured on real
+repositories rather than argued from the code.
+
+The largest is that 151 secret rules matched nothing but a character class and
+a length, with the vendor's name as the only thing tying the value to a
+credential. Proximity was the previous defence — the vendor word within 4 lines
+and 512 characters — and crewAI's recorded cassettes showed it is not enough: a
+Content-Security-Policy header listing CDN domains sat three lines above an HTTP
+ETag, and five separate rules reported that one ETag as their vendor's
+credential. Against a corpus of adversarial HTTP traffic — ETags, request and
+trace ids, cache keys, session cookies — **116 of 151 fired on something that is
+not a credential and never was**. The vendor name now has to BIND the value:
+`<vendor>… = "<shape>"`.
+
+SEC-583 is the one worth reading. Its pattern is `[a-zA-Z0-9]{20}` gated only by
+the keyword "zuora". Exactly one file in crewAI contains that string: a 1.2M
+recorded cassette holding a base64-encoded PDF, in which the letters `zUOrA`
+occur by chance at byte 50087 *inside the payload*. Every 20-character run in
+that file — a base64 PDF has thousands — became a High-severity Zuora API key.
+**6,160 findings from one accident.** The rule text never changed.
+
+SEC-604 inverted the scanner against itself: it reported all five of certbot's
+pinned GitHub Actions — `uses: mattermost/action-mattermost-notify@ae31bb6f…` —
+as Mattermost API keys, because 32 characters of a git SHA sat next to the
+action's own name. Pinning an action to a SHA is the practice IAC-013
+recommends.
+
+### ⚠️ Behaviour changes
+
+- **AI-029 and AI-041 are retired.** Both reported LLM tuning values as security
+  findings. Repairing their matchers first is what made the question answerable:
+  AI-041 fell to zero once it stopped treating exactly 0.9 as "above 0.9", and
+  AI-029's residue was two lines of one documentation sample —
+  `frequency_penalty=0.0` and `presence_penalty=0.0`, which is the OpenAI
+  *default*, flagged by a rule whose own remediation advised setting it
+  "(-2 to 0)". Neither carries a security proposition. **If you pin either rule
+  ID in a baseline or waiver, it will no longer resolve** — they were retired
+  outright rather than into a survivor, so no alias carries them.
+- **Vendor secret rules require a binding, not a nearby name.** A credential
+  named for its vendor is still reported, and the vendor stem is matched as well
+  as the literal keyword, so `<vendor>_token` and `<vendor>_api_token` are caught
+  where they previously were not by anything. A vendor word merely *near* a
+  generic token no longer reports.
+- **Entropy candidates have an upper bound of 2048 characters.** There was none,
+  and recorded cassettes produced findings spanning 8,192 and 37,392 characters —
+  base64 response bodies reported as possible secrets. The bound is on the
+  candidate, not the file: a 40-character key inside a 2MB cassette is still
+  found. Derived rather than chosen: the longest credential any rule models is
+  1,000 characters.
+- **Secret-context hints match words, not substrings.** `input_tokens` supplied
+  "token" and `monkey` supplied "key", and since `input_tokens` appears in every
+  Anthropic API response, every recorded cassette line had its entropy threshold
+  lowered. Splitting is on punctuation and camelCase, so `apiKey`, `API_KEY` and
+  `signing_key` all still hint.
+
+### Fixed
+
+- **AI-015 joined two unrelated lines**, failing the corpus-wide metamorphic
+  audit on `main` since 2026-09-07. `\s` matches a newline in Go, so a comment
+  naming `innerHTML` above a docstring mentioning an LLM matched as
+  `'innerHTML\n\"\"\"A minimal LLM'`. Rendering happens on one line.
+- **Stacked pull requests ran no tests at all.** `ci.yml` and `metamorphic.yml`
+  filtered on `branches: [main]`, so a PR targeting any other branch ran neither
+  — not Lint, Test, Build, Security, nor the metamorphic invariance gate. A
+  green tick on a stacked PR stood for strictly less than the same tick on a PR
+  into main, and nothing said so.
+
+### Added
+
+- **The rule-diff corpus can pin a subdirectory**, fetched with a sparse
+  checkout. crewAI's recorded cassettes are 19.9M of a 370M repository: 3.4s to
+  fetch this way against 4–5 minutes to clone whole. Pinning them surfaced
+  **twelve narrowings the existing corpus was structurally unable to witness**.
+- **An entropy control in the rule-diff corpus.** `anthropic-sdk-python` carries
+  62 standing SEC-161 findings; no previous entry witnessed that family at all.
+- **Bench reporting separates raw findings from authored occurrences**, and
+  counts distinct security conditions for rules that declare what their finding
+  is about. AI-029 measured 446 raw findings and 26 authored occurrences on
+  crewAI — the raw figure ranked it among the worst rules in the set, the
+  authored figure showed it was one documentation page.
+
 ## [1.35.0] - 2026-09-10
 
 Seven changes and three defects, all one theme: a scan now says what it did not

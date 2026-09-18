@@ -38,10 +38,14 @@ type Rule struct {
 	FilePatterns       []string            `yaml:"file_patterns"`
 	IgnoreFilePatterns []string            `yaml:"ignore_file_patterns"`
 	Keywords           []string            `yaml:"keywords"`
-	Tags               []string            `yaml:"tags"`
-	Metadata           map[string]string   `yaml:"metadata"`
-	Remediation        string              `yaml:"remediation"`
-	References         []string            `yaml:"references"`
+	// keywordsLower caches Keywords lower-cased for the pre-filter. Populated
+	// by RuleSet.Add; nil for a Rule built directly, which falls back to
+	// lowering on the fly so behaviour is identical either way.
+	keywordsLower [][]byte
+	Tags          []string          `yaml:"tags"`
+	Metadata      map[string]string `yaml:"metadata"`
+	Remediation   string            `yaml:"remediation"`
+	References    []string          `yaml:"references"`
 
 	// IgnoreInComments drops matches that land on a source comment line.
 	// Used by prose rules (e.g. MCP tool-poisoning) that would otherwise fire
@@ -227,6 +231,20 @@ func NewRuleSet() *RuleSet {
 
 // Add appends a rule to the set and updates the lookup indexes.
 func (rs *RuleSet) Add(r *Rule) {
+	// Lower-case the keywords once, here, because the alternative is doing it
+	// per rule per file forever.
+	//
+	// The keyword pre-filter runs for every rule against every scanned file,
+	// and it used to allocate `[]byte(strings.ToLower(kw))` on each call — a
+	// constant, rebuilt roughly 1,100 times per file for the secret rules
+	// alone. Measured on anthropic-sdk-python, the pre-filter was 10% of scan
+	// CPU, most of it lowering strings that never change.
+	//
+	// Add is the single funnel every rule passes through, including custom
+	// rules, and it runs before any scan starts — so this is computed once and
+	// only ever read concurrently, never written during a scan.
+	r.keywordsLower = loweredKeywords(r.Keywords)
+
 	idx := len(rs.rules)
 	rs.rules = append(rs.rules, r)
 	rs.byID[r.ID] = idx

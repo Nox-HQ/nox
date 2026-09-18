@@ -22,6 +22,24 @@ const contextBoostReduction = 0.5
 // shorter than this are ignored to avoid false positives on short tokens.
 const minCandidateLen = 12
 
+// maxCandidateLen is the length past which a high-entropy run stops being a
+// plausible credential and starts being a payload.
+//
+// There was no ceiling at all, and on crewAI's recorded cassettes that meant
+// entropy findings with spans of 8,192 and 37,392 characters -- base64 response
+// bodies reported as "possible secret". 89 of 540 entropy findings there ran
+// past 1,024 characters.
+//
+// The number is derived, not chosen: the longest credential ANY rule in the set
+// models is 1,000 characters (SEC-302), and the 99th percentile across all
+// 1,423 length quantifiers is 135. 2,048 is twice the longest format anyone has
+// written down, so no credential the catalogue knows about can reach it, and a
+// candidate that does is something else.
+//
+// It is a ceiling on the CANDIDATE, not on the file: a 40-character key inside
+// a 2MB cassette is still found. Only the run itself has to be credential-sized.
+const maxCandidateLen = 2048
+
 // secretHints are lowercase substrings that, when present in the same line
 // as a candidate, lower the entropy threshold to increase detection
 // sensitivity.
@@ -177,10 +195,9 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 
 	for lineIdx, line := range lines {
 		lineStr := string(line)
-		lineLower := strings.ToLower(lineStr)
 
 		// Determine whether this line has secret-suggestive context.
-		boost := hasSecretContext(lineLower)
+		boost := hasSecretContext(lineStr)
 
 		// A line with no secret context is skipped wholesale only when every
 		// kind this rule reports on demands context. Otherwise the requirement
@@ -260,7 +277,7 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 			if !ok {
 				continue
 			}
-			if len(c.text) < minCandidateLen {
+			if len(c.text) < minCandidateLen || len(c.text) > maxCandidateLen {
 				continue
 			}
 			if isLikelyNotSecret(c.text) {
@@ -287,6 +304,49 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	return results
 }
 
+// isMemberAccessChain reports whether an unquoted token is a member-access
+// expression such as `process.env.API_KEY` rather than a literal value.
+//
+// Every dot-separated segment must be identifier-shaped, and none may be long
+// enough to be a credential in its own right. That length bound is what keeps
+// an unquoted JWT -- three base64url segments, the first typically 36 or more
+// characters -- on the reporting side of the line, since a YAML or .env value
+// is allowed to be an unquoted literal and a JWT is exactly that.
+func isMemberAccessChain(token string) bool {
+	const credentialSegment = 32
+	segments := strings.Split(token, ".")
+	if len(segments) < 2 {
+		return false
+	}
+	for _, seg := range segments {
+		if seg == "" || len(seg) >= credentialSegment {
+			return false
+		}
+		if !isIdentifierSegment(seg) {
+			return false
+		}
+	}
+	return true
+}
+
+// isIdentifierSegment reports whether s is shaped like a program identifier:
+// a leading letter or underscore, then letters, digits or underscores.
+func isIdentifierSegment(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c == '_':
+		case c >= '0' && c <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return s != ""
+}
+
 // ShannonEntropy calculates the Shannon entropy of a string in bits per
 // character. Higher values indicate more randomness. Exported for testing.
 func ShannonEntropy(s string) float64 {
@@ -308,15 +368,76 @@ func ShannonEntropy(s string) float64 {
 	return entropy
 }
 
-// hasSecretContext returns true if the line contains any secret-suggestive
-// variable names. The line must already be lowercased.
-func hasSecretContext(lineLower string) bool {
-	for _, hint := range secretHints {
-		if strings.Contains(lineLower, hint) {
-			return true
+// hasSecretContext returns true if the line names something secret-suggestive.
+// The line must already be lowercased.
+//
+// The hint has to be a WORD of an identifier, not a substring of the line.
+// strings.Contains was the whole test, and it made the context boost fire on
+// text that names nothing secret at all:
+//
+//	{"id":"msg_01DV…","monkey":1}          -> "key" inside "monkey"
+//	{"id":"msg_01DV…","input_tokens":12}   -> "token" inside "input_tokens"
+//
+// The second is the one that mattered. `input_tokens` and `output_tokens` are
+// in every Anthropic API response, so every recorded cassette line got its
+// entropy threshold lowered from 5.0 to 4.5, and message IDs came through as
+// possible secrets. That is the same defect the vendor rules had, where a
+// vendor keyword matched inside opaque base64; a hint list is no more exempt
+// from it than a keyword list.
+//
+// Words are split on the separators identifiers use, so `secret_key` still
+// hints on both halves while `monkey` hints on nothing. Matching is exact, so
+// `input_tokens` does not hint via the plural. That costs sensitivity on
+// `access_tokens = …` -- the threshold stays at 5.0 instead of 4.5 -- and
+// costs no detection, because the boost was never the thing that decided
+// whether a real credential was reported.
+func hasSecretContext(line string) bool {
+	for _, word := range identifierWords(line) {
+		for _, hint := range secretHints {
+			if word == hint {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// identifierWords splits a line into the words an identifier is built from,
+// lowercased. It splits on punctuation AND on camelCase boundaries, because
+// both spell the same name: `api_key`, `apiKey` and `API_KEY` all have to yield
+// `api` and `key`, while `monkey` yields only `monkey`.
+//
+// Case is why this takes the raw line rather than a lowercased one. Lowercasing
+// first turns `apiKey` into `apikey`, one word, and the hint is lost -- caught
+// by TestARealHexKeyStillFires/json_field, which is exactly that spelling.
+func identifierWords(line string) []string {
+	var out []string
+	var cur []rune
+	flush := func() {
+		if len(cur) > 0 {
+			out = append(out, strings.ToLower(string(cur)))
+			cur = cur[:0]
+		}
+	}
+	prev := rune(0)
+	for _, r := range line {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			cur = append(cur, r)
+		case r >= 'A' && r <= 'Z':
+			// A capital starts a new word after a lowercase letter or a digit
+			// (`apiKey`, `v2Token`), and continues a run of capitals (`API_KEY`).
+			if prev >= 'a' && prev <= 'z' || prev >= '0' && prev <= '9' {
+				flush()
+			}
+			cur = append(cur, r)
+		default:
+			flush()
+		}
+		prev = r
+	}
+	flush()
+	return out
 }
 
 // extractQuoted finds single- and double-quoted strings in line that are
@@ -337,7 +458,7 @@ func extractQuoted(line string, addFn func(col int, text string)) {
 			}
 			end += start + 1 // absolute position of closing quote
 			value := line[start+1 : end]
-			if len(value) >= minCandidateLen {
+			if len(value) >= minCandidateLen && len(value) <= maxCandidateLen {
 				addFn(start+2, value) // 1-based column of value start
 			}
 			i = end + 1
@@ -399,6 +520,25 @@ func extractAssignmentRHS(line string, addFn func(col int, text string)) {
 		// which has no value at scan time. A literal secret is never followed by
 		// an open paren, so skipping calls costs no recall.
 		if rhsEnd < len(line) && line[rhsEnd] == '(' {
+			i = rhsEnd
+			continue
+		}
+		// The same argument, one step further: a member-access chain has no
+		// value at scan time either, with or without a trailing call.
+		//
+		//	const apiKey = process.env.ANTHROPIC_MICROSOFT_API_KEY;
+		//	'x-api-key': sandboxEnvironment.ANTHROPIC_API_KEY,
+		//
+		// Both were reported as high-entropy secrets. They are the opposite:
+		// they are the remediation this rule recommends -- "move high-entropy
+		// values to environment variables" -- and the rule was flagging the
+		// code that does it. Measured on the pinned corpus, 8 of SEC-161's 22
+		// non-test findings were reads of an environment variable.
+		//
+		// What makes them references rather than values is syntax, not
+		// likelihood: an unquoted dotted chain of identifier-shaped segments is
+		// a selector in every language that writes one.
+		if isMemberAccessChain(token) {
 			i = rhsEnd
 			continue
 		}

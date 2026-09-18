@@ -18,9 +18,12 @@ type iacRule struct {
 	cwe          string
 	keywords     []string
 	filePatterns []string
-	tags         []string
-	remediation  string
-	references   []string
+	// ignoreFilePatterns excludes a file the rule would otherwise apply to,
+	// for the case where another rule owns the condition in that format.
+	ignoreFilePatterns []string
+	tags               []string
+	remediation        string
+	references         []string
 	// extraMetadata carries optional rule.Metadata entries beyond `cwe`.
 	// Used e.g. by IAC-013 to declare a trusted-publisher allowlist that the
 	// regex matcher consumes via a post-filter.
@@ -423,6 +426,21 @@ func builtinBaseIaCRules() []rules.Rule {
 			tags:         []string{"iac", "kubernetes", "supply-chain"},
 			remediation:  "Pin container images to specific versions or digests (e.g., 'nginx:1.25@sha256:abc...'). The latest tag is mutable and can silently introduce breaking changes.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
+			// A Compose service is not a Kubernetes manifest, and IAC-501 owns
+			// the unpinned-image condition there -- it resolves `${VAR:-default}`
+			// the way Compose does before reading the tag, which this rule
+			// cannot. Without this both fired on one `image: nginx:latest`, so
+			// an operator fixed one line and saw two findings.
+			//
+			// The narrow fix, not the general one. This rule is tagged
+			// `kubernetes` and scoped `*.yaml`/`*.yml`, and the kubernetes
+			// family has no row in documentKindGates -- unlike serverless,
+			// cloudformation, github-actions, ci-cd, ansible and kustomize,
+			// which all had this same catch-all and were gated on what the
+			// DOCUMENT declares. Adding that row is the real fix and needs its
+			// own corpus measurement; it is recorded in
+			// docs/design/identical-pattern-audit.md rather than bundled here.
+			ignoreFilePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
 		},
 		{
 			id: "IAC-032", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
@@ -2328,21 +2346,22 @@ func (d iacRule) toRule() rules.Rule {
 	md := map[string]string{"cwe": d.cwe}
 	maps.Copy(md, d.extraMetadata)
 	r := rules.Rule{
-		ID:            d.id,
-		Version:       "1.0",
-		Description:   d.description,
-		Severity:      d.severity,
-		Confidence:    d.confidence,
-		MatcherType:   "regex",
-		Pattern:       d.pattern,
-		FilePatterns:  d.filePatterns,
-		Keywords:      d.keywords,
-		Tags:          d.tags,
-		Metadata:      md,
-		Remediation:   d.remediation,
-		References:    d.references,
-		Retires:       d.retires,
-		ValidateMatch: d.validate,
+		ID:                 d.id,
+		Version:            "1.0",
+		Description:        d.description,
+		Severity:           d.severity,
+		Confidence:         d.confidence,
+		MatcherType:        "regex",
+		Pattern:            d.pattern,
+		FilePatterns:       d.filePatterns,
+		IgnoreFilePatterns: d.ignoreFilePatterns,
+		Keywords:           d.keywords,
+		Tags:               d.tags,
+		Metadata:           md,
+		Remediation:        d.remediation,
+		References:         d.references,
+		Retires:            d.retires,
+		ValidateMatch:      d.validate,
 	}
 	if d.absenceAnchor != "" {
 		r.MatcherType = "absence"

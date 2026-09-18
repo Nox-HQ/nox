@@ -16,6 +16,11 @@
 # Usage:
 #   scripts/rule-diff.sh <baseline-nox> <candidate-nox> [corpus.json]
 #
+# A corpus entry may set "path" to scan ONE subdirectory of the repository
+# instead of the whole checkout. That exists for a surface worth gating whose
+# repository is not: crewAI's recorded cassettes are 20M of 370M, and carry the
+# opaque base64 that the entropy and vendor-keyword rules over-fire on.
+#
 # Exits 0 when there is no delta, 1 when rules changed. The caller decides
 # whether a delta blocks; on a PR it is informational, at release it should be
 # read by a human.
@@ -43,12 +48,47 @@ command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
 # every entry describes a comparison nobody is making. Report that as a stale
 # ledger rather than letting entries silently match, or silently rot.
 ledger_release="$(jq -r '.nox_release // ""' "$LEDGER")"
+ledger_entries="$(jq -r '(.entries // []) | length' "$LEDGER")"
+
+# A ROLLED ledger -- empty, and naming a release ahead of the baseline -- means
+# this is the commit that cuts that release, and this check has nothing left to
+# ask.
+#
+# The two gates want opposite things of that one commit. rule-diff compares
+# against the LAST release and needs the entries present to explain the drops
+# since it. TestTheReleaseInvariant requires nox_release to equal the tag being
+# cut and entries to be EMPTY, because cutting the tag makes those drops part of
+# the new baseline. Both are right; they just cannot both hold at once here.
+#
+# It is answered by noticing that the question was already asked. Every drop the
+# ledger explained was gated on the pull request that introduced it, with the
+# entry written there and reviewed there. The roll archives those explanations
+# because the new baseline absorbs them. Re-asking on the release commit
+# re-litigates a decision already made, against a baseline that is about to stop
+# being the baseline.
+#
+# So this skips, loudly, and only for that exact shape: empty AND ahead. A
+# non-empty ledger naming the wrong release is still the stale ledger this was
+# written to catch, and still fails.
+#
+# Unnoticed until now because no release had ever rolled the ledger: v1.35.0
+# shipped with sixteen entries still explaining drops from v1.34.0 -- the
+# incident that caused the invariant to be written. v1.36.0 is the first release
+# to satisfy it and the first to meet this.
+if [ -n "$BASELINE_TAG" ] && [ -n "$ledger_release" ] \
+   && [ "$BASELINE_TAG" != "$ledger_release" ] && [ "$ledger_entries" -eq 0 ]; then
+  echo "::notice::rule-deltas.json is rolled for $ledger_release and the baseline is $BASELINE_TAG."
+  echo "This is the commit cutting $ledger_release. Every drop the cleared entries explained was"
+  echo "gated on the pull request that introduced it; the roll archives those explanations because"
+  echo "$ledger_release becomes the baseline. Nothing to diff against a baseline being replaced."
+  exit 0
+fi
+
 if [ -n "$BASELINE_TAG" ] && [ -n "$ledger_release" ] && [ "$BASELINE_TAG" != "$ledger_release" ]; then
   echo "::error::rule-deltas.json declares nox_release $ledger_release but the baseline is $BASELINE_TAG."
   echo "A release was cut since the ledger was written. Clear the entries it explains, then set nox_release to $BASELINE_TAG."
   exit 3
 fi
-
 # An entry with no reason, or naming a classification nobody defined, explains
 # nothing. Checking it here means a malformed ledger cannot pass by matching a
 # rule ID and contributing an empty sentence.
@@ -101,22 +141,42 @@ repo_count=0
 skipped=0
 dropped_rules=""   # rules whose count FELL somewhere; newline-separated, deduped at the end
 
-while read -r name url sha; do
+while read -r name url sha path; do
   [ -n "$name" ] || continue
   repo_count=$((repo_count + 1))
-  echo "── $name @ ${sha:0:8}"
+  echo "── $name @ ${sha:0:8}${path:+ /$path}"
   src="$work/src-$name"
-  git clone -q --filter=blob:none "$url" "$src" 2>/dev/null || {
+  git clone -q --filter=blob:none --no-checkout "$url" "$src" 2>/dev/null || {
     echo "   SKIP: clone failed (network or repo moved)"; skipped=$((skipped + 1)); continue; }
+  # An entry that pins a subdirectory fetches only that tree. crewAI's
+  # cassettes are 20M of a 370M repository, and materialising the other 350M
+  # to scan none of it would cost more than the scan does.
+  if [ -n "$path" ]; then
+    git -C "$src" sparse-checkout set --no-cone "$path" >/dev/null 2>&1 || {
+      echo "::error::$name pins $path but sparse-checkout failed -- is the git here older than 2.25?" >&2
+      exit 2; }
+  fi
   git -C "$src" checkout -q "$sha" 2>/dev/null || {
     echo "   SKIP: pinned sha $sha not found -- repo history rewritten?"; skipped=$((skipped + 1)); continue; }
   rm -rf "$src/.git"
 
+  # What gets scanned: the whole checkout, or the one subdirectory the entry
+  # pinned. A pinned path that is not there is FATAL for the same reason a
+  # failed scan is -- the repo moved the tree, the scan covers nothing, and a
+  # skip would report that as "no change".
+  scan_root="$src"
+  if [ -n "$path" ]; then
+    scan_root="$src/$path"
+    [ -d "$scan_root" ] || {
+      echo "::error::$name pins subdirectory $path, which does not exist at $sha" >&2
+      exit 2; }
+  fi
+
   # A scan that does not run is FATAL, never a skip. Skipping here would turn
   # "nox is broken" into a quiet "no change" -- the exact failure this whole
   # harness exists to make visible.
-  scan_counts "$BASE_BIN" "$src" "$work/out-base-$name" > "$work/base-$name.tsv" || exit 2
-  scan_counts "$CAND_BIN" "$src" "$work/out-cand-$name" > "$work/cand-$name.tsv" || exit 2
+  scan_counts "$BASE_BIN" "$scan_root" "$work/out-base-$name" > "$work/base-$name.tsv" || exit 2
+  scan_counts "$CAND_BIN" "$scan_root" "$work/out-cand-$name" > "$work/cand-$name.tsv" || exit 2
 
   # join on rule id, showing 0 where a side is absent
   delta="$(join -t"$(printf '\t')" -a1 -a2 -e0 -o '0,1.2,2.2' \
@@ -138,7 +198,7 @@ while read -r name url sha; do
       | awk -F'\t' '$3 < $2 {print $1}')
 "
   fi
-done < <(jq -r '.repos[] | "\(.name) \(.url) \(.sha)"' "$CORPUS")
+done < <(jq -r '.repos[] | "\(.name) \(.url) \(.sha) \(.path // "")"' "$CORPUS")
 
 echo
 if [ "$repo_count" -eq 0 ]; then

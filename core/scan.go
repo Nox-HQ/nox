@@ -1430,6 +1430,7 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		if vexErr != nil {
 			return fmt.Errorf("loading VEX document %s: %w", vexPath, vexErr)
 		}
+		reportWithdrawnVEXStatements(vexDoc, vexPath, deg)
 		vex.ApplyVEX(allFindings, vexDoc)
 	}
 
@@ -1863,6 +1864,28 @@ func ConfigRoot(target string) string {
 	return target
 }
 
+// withdrawnWaiverNote explains a waiver that names a withdrawn rule, or returns
+// "" when none of its IDs was withdrawn.
+//
+// Without this an operator who waived a rule nox has since retracted is told
+// the finding "may have been fixed" and to "check the rule ID" -- wrong on both
+// counts, and it invites them to go looking for a finding that cannot exist.
+func withdrawnWaiverNote(ids []string) string {
+	var notes []string
+	for _, id := range ids {
+		w, ok := rules.Withdrawn(id)
+		if !ok {
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s was withdrawn in %s: %s", w.ID, w.Version, w.Reason))
+	}
+	if len(notes) == 0 {
+		return ""
+	}
+	return strings.Join(notes, " ") +
+		" Nothing reports this condition now, so the waiver can be deleted."
+}
+
 // sweepWaiversInCleanFiles reports waivers in files that produced no finding.
 //
 // The unused-waiver check is driven by findings grouped by path, so it only
@@ -1907,6 +1930,17 @@ func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degra
 				continue
 			}
 			if s.Expires != nil && timeNow().After(*s.Expires) {
+				continue
+			}
+			// A waiver naming a WITHDRAWN rule has a specific answer, and the
+			// generic advice below is wrong for it in both directions: the
+			// finding was not fixed, and the rule ID is not a typo. Saying so
+			// is the whole reason the tombstone registry exists.
+			if why := withdrawnWaiverNote(s.RuleIDs); why != "" {
+				deg.Add(degrade.Suppression,
+					fmt.Sprintf("%s:%d waives %s, which was withdrawn",
+						rel, s.Line, strings.Join(s.RuleIDs, ",")),
+					why)
 				continue
 			}
 			deg.Add(degrade.Suppression,
@@ -2062,6 +2096,62 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 	}
 }
 
+// reportWithdrawnVEXStatements explains VEX statements whose rule was withdrawn.
+//
+// The third place an operator writes a rule ID down, and the quietest of the
+// three: VEX reports nothing at all about statements that match no finding, so
+// a statement naming a withdrawn rule is invisible twice over.
+func reportWithdrawnVEXStatements(doc *vex.Document, path string, deg *degrade.Degradations) {
+	if doc == nil {
+		return
+	}
+	seen := map[string]int{}
+	for _, st := range doc.Statements {
+		id := strings.ToUpper(strings.TrimSpace(st.VulnerabilityID))
+		if _, ok := rules.Withdrawn(id); ok {
+			seen[id]++
+		}
+	}
+	for id, n := range seen {
+		w, _ := rules.Withdrawn(id)
+		stmts := "statement"
+		if n > 1 {
+			stmts = "statements"
+		}
+		deg.Add(degrade.Suppression,
+			fmt.Sprintf("%s holds %d %s for %s, which was withdrawn", path, n, stmts, id),
+			fmt.Sprintf("%s was withdrawn in %s: %s Nothing reports this condition now, so these "+
+				"statements can be deleted.", w.ID, w.Version, w.Reason))
+	}
+}
+
+// reportWithdrawnBaselineEntries explains baseline entries whose rule was
+// withdrawn.
+//
+// The waiver sweep does this for `nox:ignore` comments. A baseline is the other
+// place an operator writes a rule ID down, and it fails more quietly: a waiver
+// at least gets an unused-waiver degradation, while a baseline entry for a
+// withdrawn rule produces nothing at all.
+func reportWithdrawnBaselineEntries(bl *baseline.Baseline, path string, deg *degrade.Degradations) {
+	seen := map[string]int{}
+	for _, e := range bl.Entries {
+		if _, ok := rules.Withdrawn(e.RuleID); ok {
+			seen[e.RuleID]++
+		}
+	}
+	for id, n := range seen {
+		w, _ := rules.Withdrawn(id)
+		entries := "entry"
+		if n > 1 {
+			entries = "entries"
+		}
+		deg.Add(degrade.Baseline,
+			fmt.Sprintf("%s holds %d %s for %s, which was withdrawn", path, n, entries, id),
+			fmt.Sprintf("%s was withdrawn in %s: %s Nothing reports this condition now, so these "+
+				"entries can be deleted.", w.ID, w.Version, w.Reason))
+	}
+}
+
 // applyBaseline loads a baseline file and marks matched findings.
 func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.Degradations) {
 	bl, err := baseline.Load(baselinePath)
@@ -2080,6 +2170,14 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.De
 	if bl.Len() == 0 {
 		return
 	}
+
+	// An entry naming a WITHDRAWN rule can never match: nothing emits that ID
+	// any more and nothing will. Without this it is simply inert -- the
+	// operator sees no finding, no suppression and no explanation, which is
+	// the silence tombstones exist to end. It is reported once per rule rather
+	// than once per entry, because a baseline commonly holds many entries for
+	// one rule and repeating the reason for each helps nobody.
+	reportWithdrawnBaselineEntries(bl, baselinePath, deg)
 
 	// A consuming matcher, not bl.Match. One entry accepts one finding, so a
 	// baseline written when a file had two continue-on-error steps does not

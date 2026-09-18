@@ -1,0 +1,1281 @@
+{
+ "started_at": "2026-09-15T09:00:00Z",
+ "finished_at": "2026-09-15T11:00:00Z",
+ "nox_version": "77314c3",
+ "nox_binary": "scratch build",
+ "note": "Seven repositories, pinned. by_site collapses documentation locale and version directories, so one authored line counts once rather than once per translated or versioned copy. Rank on repos and sites together with findings: findings alone ranks the corpus.",
+ "projects": [
+  {
+   "path": "joaomdmoura-crewAI",
+   "repo": "joaomdmoura/crewAI",
+   "commit": "894898f84c4ac0a89f24bf7bee6c381eb0e67f51",
+   "findings": 1881,
+   "by_rule": {
+    "AI-002": 1,
+    "AI-006": 5,
+    "AI-019": 1,
+    "AI-022": 224,
+    "AI-026": 2,
+    "AI-029": 78,
+    "AI-031": 244,
+    "AI-036": 41,
+    "AI-050": 2,
+    "AI-PI-002": 4,
+    "DATA-001": 311,
+    "DATA-005": 1,
+    "IAC-011": 2,
+    "IAC-018": 3,
+    "IAC-153": 3,
+    "IAC-155": 5,
+    "IAC-158": 2,
+    "IAC-306": 2,
+    "IAC-308": 7,
+    "IAC-309": 1,
+    "IAC-314": 2,
+    "SEC-055": 2,
+    "SEC-073": 1,
+    "SEC-080": 3,
+    "SEC-161": 522,
+    "SEC-162": 18,
+    "SEC-240": 2,
+    "SEC-371": 2,
+    "SEC-373": 5,
+    "SEC-454": 12,
+    "SEC-455": 10,
+    "SEC-536": 14,
+    "SEC-546": 17,
+    "SEC-662": 12,
+    "SEC-801": 40,
+    "SEC-803": 40,
+    "SEC-885": 1,
+    "SLOP-001": 219,
+    "TAINT-004": 5,
+    "TAINT-006": 9,
+    "VARIANT-003": 4,
+    "VULN-002": 2
+   },
+   "by_site": {
+    "AI-002": 1,
+    "AI-006": 5,
+    "AI-019": 1,
+    "AI-022": 8,
+    "AI-026": 2,
+    "AI-029": 10,
+    "AI-031": 4,
+    "AI-036": 41,
+    "AI-050": 2,
+    "AI-PI-002": 4,
+    "DATA-001": 9,
+    "DATA-005": 1,
+    "IAC-011": 2,
+    "IAC-018": 3,
+    "IAC-153": 3,
+    "IAC-155": 5,
+    "IAC-158": 2,
+    "IAC-306": 2,
+    "IAC-308": 7,
+    "IAC-309": 1,
+    "IAC-314": 2,
+    "SEC-055": 2,
+    "SEC-073": 1,
+    "SEC-080": 3,
+    "SEC-161": 518,
+    "SEC-162": 18,
+    "SEC-240": 2,
+    "SEC-371": 2,
+    "SEC-373": 5,
+    "SEC-454": 12,
+    "SEC-455": 10,
+    "SEC-536": 14,
+    "SEC-546": 17,
+    "SEC-662": 12,
+    "SEC-801": 4,
+    "SEC-803": 4,
+    "SEC-885": 1,
+    "SLOP-001": 219,
+    "TAINT-004": 5,
+    "TAINT-006": 9,
+    "VARIANT-003": 4,
+    "VULN-002": 1
+   },
+   "by_severity": {
+    "high": 172,
+    "medium": 1035,
+    "low": 359,
+    "critical": 7,
+    "info": 308
+   }
+  },
+  {
+   "path": "run-llama-llama_index",
+   "repo": "run-llama/llama_index",
+   "commit": "7169bcd0dca2e16aecc8e0247f34e50079d9c0d5",
+   "findings": 709,
+   "by_rule": {
+    "AI-002": 3,
+    "AI-006": 21,
+    "AI-007": 2,
+    "AI-017": 1,
+    "AI-019": 88,
+    "AI-022": 6,
+    "AI-026": 6,
+    "AI-031": 3,
+    "AI-034": 7,
+    "AI-036": 32,
+    "AI-039": 4,
+    "AI-041": 5,
+    "AI-050": 3,
+    "CRYPTO-001": 3,
+    "DATA-001": 12,
+    "DATA-002": 3,
+    "DATA-004": 4,
+    "DATA-005": 1,
+    "IAC-011": 1,
+    "IAC-013": 16,
+    "IAC-031": 1,
+    "IAC-155": 5,
+    "IAC-157": 1,
+    "IAC-158": 2,
+    "IAC-179": 10,
+    "IAC-180": 1,
+    "IAC-182": 7,
+    "IAC-225": 3,
+    "IAC-306": 1,
+    "IAC-308": 5,
+    "IAC-314": 2,
+    "IAC-501": 1,
+    "SEC-005": 2,
+    "SEC-008": 3,
+    "SEC-013": 1,
+    "SEC-048": 58,
+    "SEC-055": 75,
+    "SEC-073": 3,
+    "SEC-080": 71,
+    "SEC-081": 1,
+    "SEC-085": 1,
+    "SEC-086": 1,
+    "SEC-161": 1,
+    "SEC-240": 7,
+    "SEC-372": 3,
+    "SEC-374": 2,
+    "SEC-455": 4,
+    "SEC-509": 2,
+    "SEC-532": 1,
+    "SEC-533": 1,
+    "SEC-565": 9,
+    "SEC-629": 4,
+    "SEC-652": 11,
+    "SEC-801": 1,
+    "SEC-802": 2,
+    "SEC-904": 1,
+    "SLOP-001": 127,
+    "TAINT-002": 3,
+    "TAINT-004": 2,
+    "TAINT-006": 3,
+    "VARIANT-003": 1,
+    "VULN-002": 48
+   },
+   "by_site": {
+    "AI-002": 3,
+    "AI-006": 21,
+    "AI-007": 2,
+    "AI-017": 1,
+    "AI-019": 88,
+    "AI-022": 6,
+    "AI-026": 6,
+    "AI-031": 3,
+    "AI-034": 7,
+    "AI-036": 32,
+    "AI-039": 3,
+    "AI-041": 5,
+    "AI-050": 3,
+    "CRYPTO-001": 3,
+    "DATA-001": 12,
+    "DATA-002": 3,
+    "DATA-004": 4,
+    "DATA-005": 1,
+    "IAC-011": 1,
+    "IAC-013": 16,
+    "IAC-031": 1,
+    "IAC-155": 5,
+    "IAC-157": 1,
+    "IAC-158": 2,
+    "IAC-179": 10,
+    "IAC-180": 1,
+    "IAC-182": 7,
+    "IAC-225": 3,
+    "IAC-306": 1,
+    "IAC-308": 5,
+    "IAC-314": 2,
+    "IAC-501": 1,
+    "SEC-005": 2,
+    "SEC-008": 3,
+    "SEC-013": 1,
+    "SEC-048": 34,
+    "SEC-055": 41,
+    "SEC-073": 3,
+    "SEC-080": 71,
+    "SEC-081": 1,
+    "SEC-085": 1,
+    "SEC-086": 1,
+    "SEC-161": 1,
+    "SEC-240": 7,
+    "SEC-372": 3,
+    "SEC-374": 2,
+    "SEC-455": 2,
+    "SEC-509": 1,
+    "SEC-532": 1,
+    "SEC-533": 1,
+    "SEC-565": 9,
+    "SEC-629": 2,
+    "SEC-652": 6,
+    "SEC-801": 1,
+    "SEC-802": 2,
+    "SEC-904": 1,
+    "SLOP-001": 127,
+    "TAINT-002": 3,
+    "TAINT-004": 2,
+    "TAINT-006": 3,
+    "VARIANT-003": 1,
+    "VULN-002": 44
+   },
+   "by_severity": {
+    "high": 313,
+    "low": 62,
+    "medium": 321,
+    "critical": 7,
+    "info": 6
+   }
+  },
+  {
+   "path": "vercel-ai",
+   "repo": "vercel/ai",
+   "commit": "6c6c2210b9532a4c369615c044a16d595f3db117",
+   "findings": 1015,
+   "by_rule": {
+    "AI-006": 3,
+    "AI-009": 3,
+    "AI-017": 2,
+    "AI-022": 57,
+    "AI-023": 4,
+    "AI-028": 1,
+    "AI-029": 6,
+    "AI-031": 12,
+    "AI-034": 52,
+    "AI-035": 16,
+    "AI-036": 32,
+    "AI-041": 30,
+    "AI-050": 32,
+    "DATA-001": 1,
+    "IAC-012": 1,
+    "IAC-018": 2,
+    "IAC-153": 1,
+    "IAC-155": 4,
+    "IAC-306": 1,
+    "IAC-308": 4,
+    "IAC-314": 3,
+    "IAC-318": 1,
+    "MCP-020": 6,
+    "SEC-004": 1,
+    "SEC-048": 24,
+    "SEC-055": 16,
+    "SEC-080": 1,
+    "SEC-082": 355,
+    "SEC-161": 67,
+    "SEC-162": 77,
+    "SEC-371": 1,
+    "SEC-372": 2,
+    "SEC-386": 1,
+    "SEC-387": 3,
+    "SEC-390": 1,
+    "SEC-533": 4,
+    "SEC-590": 3,
+    "SEC-801": 12,
+    "SEC-803": 19,
+    "SEC-859": 1,
+    "SLOP-001": 87,
+    "TAINT-004": 12,
+    "TAINT-006": 20,
+    "VULN-002": 34
+   },
+   "by_site": {
+    "AI-006": 3,
+    "AI-009": 3,
+    "AI-017": 2,
+    "AI-022": 57,
+    "AI-023": 4,
+    "AI-028": 1,
+    "AI-029": 6,
+    "AI-031": 12,
+    "AI-034": 52,
+    "AI-035": 16,
+    "AI-036": 32,
+    "AI-041": 30,
+    "AI-050": 32,
+    "DATA-001": 1,
+    "IAC-012": 1,
+    "IAC-018": 2,
+    "IAC-153": 1,
+    "IAC-155": 4,
+    "IAC-306": 1,
+    "IAC-308": 4,
+    "IAC-314": 3,
+    "IAC-318": 1,
+    "MCP-020": 6,
+    "SEC-004": 1,
+    "SEC-048": 6,
+    "SEC-055": 6,
+    "SEC-080": 1,
+    "SEC-082": 355,
+    "SEC-161": 67,
+    "SEC-162": 1,
+    "SEC-371": 1,
+    "SEC-372": 2,
+    "SEC-386": 1,
+    "SEC-387": 3,
+    "SEC-390": 1,
+    "SEC-533": 4,
+    "SEC-590": 1,
+    "SEC-801": 12,
+    "SEC-803": 19,
+    "SEC-859": 1,
+    "SLOP-001": 87,
+    "TAINT-004": 12,
+    "TAINT-006": 20,
+    "VULN-002": 6
+   },
+   "by_severity": {
+    "medium": 735,
+    "critical": 5,
+    "high": 197,
+    "low": 78
+   }
+  },
+  {
+   "path": "openai-openai-python",
+   "repo": "openai/openai-python",
+   "commit": "e12b81d3bbf644ec7045e152d69bc4b68d69cd48",
+   "findings": 368,
+   "by_rule": {
+    "AGENTFLOW-001": 3,
+    "AI-006": 8,
+    "AI-022": 1,
+    "AI-026": 7,
+    "AI-034": 10,
+    "AI-036": 224,
+    "AI-039": 2,
+    "AI-050": 3,
+    "DATA-001": 2,
+    "DATA-004": 28,
+    "IAC-003": 1,
+    "IAC-018": 1,
+    "IAC-121": 1,
+    "IAC-124": 1,
+    "IAC-137": 1,
+    "IAC-138": 1,
+    "IAC-139": 1,
+    "IAC-140": 1,
+    "IAC-145": 1,
+    "IAC-153": 5,
+    "IAC-155": 1,
+    "IAC-158": 2,
+    "IAC-306": 2,
+    "IAC-308": 3,
+    "IAC-314": 1,
+    "IAC-406": 1,
+    "MCP-018": 2,
+    "SEC-004": 2,
+    "SEC-008": 1,
+    "SEC-031": 1,
+    "SEC-082": 11,
+    "SEC-161": 11,
+    "SEC-162": 3,
+    "SEC-299": 2,
+    "SEC-659": 2,
+    "SLOP-001": 14,
+    "TAINT-004": 2,
+    "TAINT-AI-001": 3,
+    "VARIANT-003": 1,
+    "VULN-002": 1
+   },
+   "by_site": {
+    "AGENTFLOW-001": 3,
+    "AI-006": 8,
+    "AI-022": 1,
+    "AI-026": 7,
+    "AI-034": 10,
+    "AI-036": 223,
+    "AI-039": 2,
+    "AI-050": 3,
+    "DATA-001": 2,
+    "DATA-004": 28,
+    "IAC-003": 1,
+    "IAC-018": 1,
+    "IAC-121": 1,
+    "IAC-124": 1,
+    "IAC-137": 1,
+    "IAC-138": 1,
+    "IAC-139": 1,
+    "IAC-140": 1,
+    "IAC-145": 1,
+    "IAC-153": 5,
+    "IAC-155": 1,
+    "IAC-158": 2,
+    "IAC-306": 2,
+    "IAC-308": 3,
+    "IAC-314": 1,
+    "IAC-406": 1,
+    "MCP-018": 2,
+    "SEC-004": 2,
+    "SEC-008": 1,
+    "SEC-031": 1,
+    "SEC-082": 9,
+    "SEC-161": 9,
+    "SEC-162": 3,
+    "SEC-299": 2,
+    "SEC-659": 2,
+    "SLOP-001": 14,
+    "TAINT-004": 2,
+    "TAINT-AI-001": 3,
+    "VARIANT-003": 1,
+    "VULN-002": 1
+   },
+   "by_severity": {
+    "high": 22,
+    "medium": 296,
+    "low": 47,
+    "critical": 3
+   }
+  },
+  {
+   "path": "anthropics-anthropic-sdk-python",
+   "repo": "anthropics/anthropic-sdk-python",
+   "commit": "eb21a4352015686c30f5759e8c2f02d70f5371e2",
+   "findings": 126,
+   "by_rule": {
+    "AI-031": 1,
+    "AI-050": 2,
+    "IAC-121": 1,
+    "IAC-123": 1,
+    "IAC-124": 1,
+    "IAC-306": 3,
+    "IAC-307": 2,
+    "IAC-308": 1,
+    "IAC-309": 1,
+    "SEC-001": 9,
+    "SEC-008": 10,
+    "SEC-082": 1,
+    "SEC-161": 62,
+    "SEC-162": 1,
+    "SEC-412": 9,
+    "SEC-508": 9,
+    "SEC-659": 2,
+    "SLOP-001": 9,
+    "VULN-002": 1
+   },
+   "by_site": {
+    "AI-031": 1,
+    "AI-050": 2,
+    "IAC-121": 1,
+    "IAC-123": 1,
+    "IAC-124": 1,
+    "IAC-306": 3,
+    "IAC-307": 2,
+    "IAC-308": 1,
+    "IAC-309": 1,
+    "SEC-001": 9,
+    "SEC-008": 10,
+    "SEC-082": 1,
+    "SEC-161": 62,
+    "SEC-162": 1,
+    "SEC-412": 9,
+    "SEC-508": 9,
+    "SEC-659": 2,
+    "SLOP-001": 9,
+    "VULN-002": 1
+   },
+   "by_severity": {
+    "medium": 80,
+    "low": 7,
+    "high": 29,
+    "critical": 10
+   }
+  },
+  {
+   "path": "modelcontextprotocol-python-sdk",
+   "repo": "modelcontextprotocol/python-sdk",
+   "commit": "9972c21aa42054fb1450c5fc614761ed11847ec6",
+   "findings": 95,
+   "by_rule": {
+    "AGENT-004": 1,
+    "AI-006": 5,
+    "AI-013": 1,
+    "AI-022": 4,
+    "AI-026": 1,
+    "IAC-011": 3,
+    "IAC-153": 3,
+    "IAC-155": 2,
+    "IAC-306": 3,
+    "IAC-308": 3,
+    "IAC-309": 2,
+    "SEC-073": 2,
+    "SEC-082": 13,
+    "SEC-161": 6,
+    "SLOP-001": 44,
+    "TAINT-002": 1,
+    "VULN-002": 1
+   },
+   "by_site": {
+    "AGENT-004": 1,
+    "AI-006": 5,
+    "AI-013": 1,
+    "AI-022": 4,
+    "AI-026": 1,
+    "IAC-011": 3,
+    "IAC-153": 3,
+    "IAC-155": 2,
+    "IAC-306": 3,
+    "IAC-308": 3,
+    "IAC-309": 2,
+    "SEC-073": 2,
+    "SEC-082": 4,
+    "SEC-161": 6,
+    "SLOP-001": 44,
+    "TAINT-002": 1,
+    "VULN-002": 1
+   },
+   "by_severity": {
+    "medium": 54,
+    "low": 31,
+    "high": 5,
+    "critical": 5
+   }
+  },
+  {
+   "path": "felixgeelhaar-agent-go",
+   "repo": "felixgeelhaar/agent-go",
+   "commit": "881e12869c44a1c5218405b4be15e0ac45baff5c",
+   "findings": 35,
+   "by_rule": {
+    "AI-006": 1,
+    "AI-036": 1,
+    "AI-047": 2,
+    "CRYPTO-001": 18,
+    "DATA-001": 2,
+    "DATA-003": 4,
+    "SEC-161": 4,
+    "SEC-461": 3
+   },
+   "by_site": {
+    "AI-006": 1,
+    "AI-036": 1,
+    "AI-047": 2,
+    "CRYPTO-001": 18,
+    "DATA-001": 2,
+    "DATA-003": 4,
+    "SEC-161": 4,
+    "SEC-461": 3
+   },
+   "by_severity": {
+    "medium": 26,
+    "info": 1,
+    "low": 1,
+    "high": 7
+   }
+  }
+ ],
+ "rule_fire_rate": {
+  "AI-002": 2,
+  "AI-006": 6,
+  "AI-019": 2,
+  "AI-022": 5,
+  "AI-026": 4,
+  "AI-029": 2,
+  "AI-031": 4,
+  "AI-036": 5,
+  "AI-050": 5,
+  "AI-PI-002": 1,
+  "DATA-001": 5,
+  "DATA-005": 2,
+  "IAC-011": 3,
+  "IAC-018": 3,
+  "IAC-153": 4,
+  "IAC-155": 5,
+  "IAC-158": 3,
+  "IAC-306": 6,
+  "IAC-308": 6,
+  "IAC-309": 3,
+  "IAC-314": 4,
+  "SEC-055": 3,
+  "SEC-073": 3,
+  "SEC-080": 3,
+  "SEC-161": 7,
+  "SEC-162": 4,
+  "SEC-240": 2,
+  "SEC-371": 2,
+  "SEC-373": 1,
+  "SEC-454": 1,
+  "SEC-455": 2,
+  "SEC-536": 1,
+  "SEC-546": 1,
+  "SEC-662": 1,
+  "SEC-801": 3,
+  "SEC-803": 2,
+  "SEC-885": 1,
+  "SLOP-001": 6,
+  "TAINT-004": 4,
+  "TAINT-006": 3,
+  "VARIANT-003": 3,
+  "VULN-002": 6,
+  "AI-007": 1,
+  "AI-017": 2,
+  "AI-034": 3,
+  "AI-039": 2,
+  "AI-041": 2,
+  "CRYPTO-001": 2,
+  "DATA-002": 1,
+  "DATA-004": 2,
+  "IAC-013": 1,
+  "IAC-031": 1,
+  "IAC-157": 1,
+  "IAC-179": 1,
+  "IAC-180": 1,
+  "IAC-182": 1,
+  "IAC-225": 1,
+  "IAC-501": 1,
+  "SEC-005": 1,
+  "SEC-008": 3,
+  "SEC-013": 1,
+  "SEC-048": 2,
+  "SEC-081": 1,
+  "SEC-085": 1,
+  "SEC-086": 1,
+  "SEC-372": 2,
+  "SEC-374": 1,
+  "SEC-509": 1,
+  "SEC-532": 1,
+  "SEC-533": 2,
+  "SEC-565": 1,
+  "SEC-629": 1,
+  "SEC-652": 1,
+  "SEC-802": 1,
+  "SEC-904": 1,
+  "TAINT-002": 2,
+  "AI-009": 1,
+  "AI-023": 1,
+  "AI-028": 1,
+  "AI-035": 1,
+  "IAC-012": 1,
+  "IAC-318": 1,
+  "MCP-020": 1,
+  "SEC-004": 2,
+  "SEC-082": 4,
+  "SEC-386": 1,
+  "SEC-387": 1,
+  "SEC-390": 1,
+  "SEC-590": 1,
+  "SEC-859": 1,
+  "AGENTFLOW-001": 1,
+  "IAC-003": 1,
+  "IAC-121": 2,
+  "IAC-124": 2,
+  "IAC-137": 1,
+  "IAC-138": 1,
+  "IAC-139": 1,
+  "IAC-140": 1,
+  "IAC-145": 1,
+  "IAC-406": 1,
+  "MCP-018": 1,
+  "SEC-031": 1,
+  "SEC-299": 1,
+  "SEC-659": 2,
+  "TAINT-AI-001": 1,
+  "IAC-123": 1,
+  "IAC-307": 1,
+  "SEC-001": 1,
+  "SEC-412": 1,
+  "SEC-508": 1,
+  "AGENT-004": 1,
+  "AI-013": 1,
+  "AI-047": 1,
+  "DATA-003": 1,
+  "SEC-461": 1
+ },
+ "rule_prevalence": {
+  "SEC-161": {
+   "repos": 7,
+   "findings": 673,
+   "sites": 667
+  },
+  "SLOP-001": {
+   "repos": 6,
+   "findings": 500,
+   "sites": 500
+  },
+  "SEC-082": {
+   "repos": 4,
+   "findings": 380,
+   "sites": 369
+  },
+  "AI-036": {
+   "repos": 5,
+   "findings": 330,
+   "sites": 329
+  },
+  "DATA-001": {
+   "repos": 5,
+   "findings": 328,
+   "sites": 26
+  },
+  "AI-022": {
+   "repos": 5,
+   "findings": 292,
+   "sites": 76
+  },
+  "AI-031": {
+   "repos": 4,
+   "findings": 260,
+   "sites": 20
+  },
+  "SEC-162": {
+   "repos": 4,
+   "findings": 99,
+   "sites": 23
+  },
+  "SEC-055": {
+   "repos": 3,
+   "findings": 93,
+   "sites": 49
+  },
+  "AI-019": {
+   "repos": 2,
+   "findings": 89,
+   "sites": 89
+  },
+  "VULN-002": {
+   "repos": 6,
+   "findings": 87,
+   "sites": 54
+  },
+  "AI-029": {
+   "repos": 2,
+   "findings": 84,
+   "sites": 16
+  },
+  "SEC-048": {
+   "repos": 2,
+   "findings": 82,
+   "sites": 40
+  },
+  "SEC-080": {
+   "repos": 3,
+   "findings": 75,
+   "sites": 75
+  },
+  "AI-034": {
+   "repos": 3,
+   "findings": 69,
+   "sites": 69
+  },
+  "SEC-803": {
+   "repos": 2,
+   "findings": 59,
+   "sites": 23
+  },
+  "SEC-801": {
+   "repos": 3,
+   "findings": 53,
+   "sites": 17
+  },
+  "AI-006": {
+   "repos": 6,
+   "findings": 43,
+   "sites": 43
+  },
+  "AI-050": {
+   "repos": 5,
+   "findings": 42,
+   "sites": 42
+  },
+  "AI-041": {
+   "repos": 2,
+   "findings": 35,
+   "sites": 35
+  },
+  "TAINT-006": {
+   "repos": 3,
+   "findings": 32,
+   "sites": 32
+  },
+  "DATA-004": {
+   "repos": 2,
+   "findings": 32,
+   "sites": 32
+  },
+  "IAC-308": {
+   "repos": 6,
+   "findings": 23,
+   "sites": 23
+  },
+  "TAINT-004": {
+   "repos": 4,
+   "findings": 21,
+   "sites": 21
+  },
+  "CRYPTO-001": {
+   "repos": 2,
+   "findings": 21,
+   "sites": 21
+  },
+  "IAC-155": {
+   "repos": 5,
+   "findings": 17,
+   "sites": 17
+  },
+  "SEC-546": {
+   "repos": 1,
+   "findings": 17,
+   "sites": 17
+  },
+  "AI-026": {
+   "repos": 4,
+   "findings": 16,
+   "sites": 16
+  },
+  "IAC-013": {
+   "repos": 1,
+   "findings": 16,
+   "sites": 16
+  },
+  "AI-035": {
+   "repos": 1,
+   "findings": 16,
+   "sites": 16
+  },
+  "SEC-455": {
+   "repos": 2,
+   "findings": 14,
+   "sites": 12
+  },
+  "SEC-536": {
+   "repos": 1,
+   "findings": 14,
+   "sites": 14
+  },
+  "SEC-008": {
+   "repos": 3,
+   "findings": 14,
+   "sites": 14
+  },
+  "IAC-153": {
+   "repos": 4,
+   "findings": 12,
+   "sites": 12
+  },
+  "IAC-306": {
+   "repos": 6,
+   "findings": 12,
+   "sites": 12
+  },
+  "SEC-454": {
+   "repos": 1,
+   "findings": 12,
+   "sites": 12
+  },
+  "SEC-662": {
+   "repos": 1,
+   "findings": 12,
+   "sites": 12
+  },
+  "SEC-652": {
+   "repos": 1,
+   "findings": 11,
+   "sites": 6
+  },
+  "IAC-179": {
+   "repos": 1,
+   "findings": 10,
+   "sites": 10
+  },
+  "SEC-240": {
+   "repos": 2,
+   "findings": 9,
+   "sites": 9
+  },
+  "SEC-565": {
+   "repos": 1,
+   "findings": 9,
+   "sites": 9
+  },
+  "SEC-001": {
+   "repos": 1,
+   "findings": 9,
+   "sites": 9
+  },
+  "SEC-412": {
+   "repos": 1,
+   "findings": 9,
+   "sites": 9
+  },
+  "SEC-508": {
+   "repos": 1,
+   "findings": 9,
+   "sites": 9
+  },
+  "IAC-314": {
+   "repos": 4,
+   "findings": 8,
+   "sites": 8
+  },
+  "IAC-182": {
+   "repos": 1,
+   "findings": 7,
+   "sites": 7
+  },
+  "IAC-011": {
+   "repos": 3,
+   "findings": 6,
+   "sites": 6
+  },
+  "IAC-018": {
+   "repos": 3,
+   "findings": 6,
+   "sites": 6
+  },
+  "IAC-158": {
+   "repos": 3,
+   "findings": 6,
+   "sites": 6
+  },
+  "SEC-073": {
+   "repos": 3,
+   "findings": 6,
+   "sites": 6
+  },
+  "VARIANT-003": {
+   "repos": 3,
+   "findings": 6,
+   "sites": 6
+  },
+  "AI-039": {
+   "repos": 2,
+   "findings": 6,
+   "sites": 5
+  },
+  "MCP-020": {
+   "repos": 1,
+   "findings": 6,
+   "sites": 6
+  },
+  "SEC-373": {
+   "repos": 1,
+   "findings": 5,
+   "sites": 5
+  },
+  "SEC-372": {
+   "repos": 2,
+   "findings": 5,
+   "sites": 5
+  },
+  "SEC-533": {
+   "repos": 2,
+   "findings": 5,
+   "sites": 5
+  },
+  "AI-002": {
+   "repos": 2,
+   "findings": 4,
+   "sites": 4
+  },
+  "AI-PI-002": {
+   "repos": 1,
+   "findings": 4,
+   "sites": 4
+  },
+  "IAC-309": {
+   "repos": 3,
+   "findings": 4,
+   "sites": 4
+  },
+  "SEC-629": {
+   "repos": 1,
+   "findings": 4,
+   "sites": 2
+  },
+  "TAINT-002": {
+   "repos": 2,
+   "findings": 4,
+   "sites": 4
+  },
+  "AI-023": {
+   "repos": 1,
+   "findings": 4,
+   "sites": 4
+  },
+  "SEC-659": {
+   "repos": 2,
+   "findings": 4,
+   "sites": 4
+  },
+  "DATA-003": {
+   "repos": 1,
+   "findings": 4,
+   "sites": 4
+  },
+  "SEC-371": {
+   "repos": 2,
+   "findings": 3,
+   "sites": 3
+  },
+  "AI-017": {
+   "repos": 2,
+   "findings": 3,
+   "sites": 3
+  },
+  "DATA-002": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "IAC-225": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "AI-009": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "SEC-004": {
+   "repos": 2,
+   "findings": 3,
+   "sites": 3
+  },
+  "SEC-387": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "SEC-590": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 1
+  },
+  "AGENTFLOW-001": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "TAINT-AI-001": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "SEC-461": {
+   "repos": 1,
+   "findings": 3,
+   "sites": 3
+  },
+  "DATA-005": {
+   "repos": 2,
+   "findings": 2,
+   "sites": 2
+  },
+  "AI-007": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "SEC-005": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "SEC-374": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "SEC-509": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 1
+  },
+  "SEC-802": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "IAC-121": {
+   "repos": 2,
+   "findings": 2,
+   "sites": 2
+  },
+  "IAC-124": {
+   "repos": 2,
+   "findings": 2,
+   "sites": 2
+  },
+  "MCP-018": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "SEC-299": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "IAC-307": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "AI-047": {
+   "repos": 1,
+   "findings": 2,
+   "sites": 2
+  },
+  "SEC-885": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-031": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-157": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-180": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-501": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-013": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-081": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-085": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-086": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-532": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-904": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "AI-028": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-012": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-318": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-386": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-390": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-859": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-003": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-137": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-138": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-139": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-140": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-145": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-406": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "SEC-031": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "IAC-123": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "AGENT-004": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  },
+  "AI-013": {
+   "repos": 1,
+   "findings": 1,
+   "sites": 1
+  }
+ }
+}

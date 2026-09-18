@@ -669,10 +669,46 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // was deleted outright: an Azure subscription ID is not a credential, and the
 // pattern could not have matched one anyway, since a subscription ID is a UUID
 // and the hyphens fall outside the class.
+// 886 -> 883 retired the `sk_live_` group into SEC-030. That prefix belongs to
+// Stripe alone: SEC-548 was a second Stripe rule, while SEC-551 claimed it as a
+// Square access token and SEC-554 as a PayPal key. Square's real tokens are
+// `EAAA` or `sq0atp-` (SEC-336 matches them); PayPal has no such prefix. Both
+// had no correct output -- on the only input they could match they named the
+// wrong vendor. dedup.go already owned the prefix to SEC-030.
+//
+// 899 -> 886 merged twelve groups of rules that described ONE condition with
+// two IDs, so one token produced two findings. Shopify's four token types were
+// each carried twice (SEC-321/318/319/320 into SEC-034/035/036/037); likewise
+// OpenSSH (SEC-428), PGP (SEC-429), Braintree (SEC-142), Mailchimp (SEC-378),
+// SendGrid (SEC-376), Bittrex (SEC-174), the `AIza` pair (SEC-115, SEC-415)
+// and the `AKIA` alternate (SEC-411). The Shopify and SendGrid prefixes are
+// absent from dedup.go's canonicalOwners, so nothing collapsed them at runtime
+// and both findings reached the report; `AIza` and `AKIA` were collapsed
+// already, so those retirements make the rule set say what the scanner did.
+// See docs/design/identical-pattern-audit.md.
+//
+// 906 -> 899 retired seven bare-token duplicates into the bound rules that
+// already reported the same credentials properly: SEC-454 and SEC-662
+// (Amplitude) into SEC-159, SEC-455 (Segment) into SEC-158, SEC-536 and
+// SEC-476 (Fastly) into SEC-053, SEC-533 (IBM) into SEC-014, SEC-546 (Sentry
+// DSN) into SEC-109. Each survivor binds the vendor's key name to the value;
+// each retired rule matched any token of the right length near the vendor's
+// name. SEC-533 went last of the group on purpose -- SEC-014 could not match a
+// quoted value until the preceding commit, and until then SEC-533 was the only
+// cover for the normal spelling.
+//
+// 907 -> 906 retired SEC-569 into SEC-007. A Gemini API key IS a Google API
+// key -- `AIza` plus 35 characters, which SEC-007 already matched -- so the
+// coverage was never missing. SEC-569 held `\b[a-zA-Z0-9]{24}\b` keyed on the
+// word "gemini", which cannot match that format and instead matched any
+// 24-character run near the word: 1,097 findings on the pinned corpus, 78.9%
+// of all remaining class-C volume, every one in Google API fixtures where
+// "gemini" is the model name. Narrowing it to `AIza` would have made a fourth
+// rule matching what SEC-007, SEC-415 and SEC-806 already match.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	if len(rules) != 907 {
-		t.Fatalf("expected 907 built-in secret rules, got %d", len(rules))
+	if len(rules) != 883 {
+		t.Fatalf("expected 883 built-in secret rules, got %d", len(rules))
 	}
 }
 
@@ -1212,6 +1248,13 @@ func TestBroadPatternRules_NoSVGBase64FalsePositives(t *testing.T) {
 	}
 }
 
+// The cases below no longer certify that a bare 32-character matcher matches a
+// bare 32-character string. Every rule here now requires a BINDING -- the
+// vendor's own key name, an assignment, then the value -- so each fixture
+// asserts the proposition the rule actually makes. SEC-455's case asserts the
+// survivor it was retired into. See the format-mismatch section of
+// docs/design/secret-rule-inventory.md.
+//
 // TestBroadPatternRules_DetectRealCredential verifies the word-boundary fix
 // does not suppress a real key presented in a typical config assignment.
 // Each 32-char token has >30% digits so isCamelOrPascalCase returns false,
@@ -1235,9 +1278,21 @@ func TestBroadPatternRules_DetectRealCredential(t *testing.T) {
 		{"SEC-005", `elk_api_key = "Elk3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, "SEC-692"},
 		{"SEC-664", `heap_api_key = "Heap3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`, ""},
 		{"SEC-590", `wave_api_key = "Wave3r9X2lK7vQ4bP8mZ1dN6cY5h30aB"`, ""},
-		{"SEC-455", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`, ""},
+		// SEC-455 is retired into SEC-158, which binds the write key to its
+		// value instead of matching any 32-character run near the word
+		// "segment". Asserting the SURVIVOR reports it, carrying the alias, is
+		// the stronger statement -- it proves the coverage moved rather than
+		// went away.
+		{"SEC-158", `segment_write_key = "seg3r9x2lk7vq4bp8mz1dn6cy5h30abc"`, "SEC-455"},
 		{"SEC-659", `split_api_key = "Spl3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, ""},
-		{"SEC-661", `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`, ""},
+		// This case used to read `posthog_api_key = "pHog3r9X2lK7vQ4bP8mZ1dN6cY5h30Bc"`
+		// -- an invented 32-character string, asserted as "a real credential".
+		// It was credential-SHAPED, which is not the same thing: PostHog issues
+		// prefixed keys, and no PostHog key is a bare 32-character run. The
+		// fixture had been written to match the rule, so it certified a rule
+		// that could not match any real key of the vendor it was named for.
+		// Now it is a real personal-API-key format. See posthog_test.go.
+		{"SEC-661", `posthog_api_key = "phx_kL9mR3pZqW7nL2vB8sT4yH6jF0dA5cE1xY2zQ4wV6bN"`, ""},
 		{"SEC-005", `literal_api_key = "Lit3r9X2lK7vQ4bP8mZ1dN6cY5h30aBc"`, "SEC-697"},
 	}
 	for _, tc := range cases {

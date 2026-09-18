@@ -11,6 +11,17 @@ scan:
     # correctly reports. Those are the fixtures' dependencies, not nox's, so
     # scanning them reports vulnerabilities nox does not have. Same rationale as
     # the precision corpora below.
+    # The secret-rule inventory is a catalogue OF detectors: every entry
+    # carries the rule's own pattern, its required literals, and a sentence
+    # naming them. Scanning it reports nox's rule definitions back as nox's
+    # secrets -- 143 findings, all of them the catalogue describing itself
+    # (SEC-004 on an OpenSSH private-key header, SEC-162 on the age secret-key
+    # bech32 alphabet, and so on). Same rationale as the precision corpora: a
+    # file that is finding-bearing by construction.
+    #
+    # Naming those literals in full here would make this comment match them too
+    # -- the waiver causing the finding it waives.
+    - "docs/design/secret-rule-inventory.json"
     - "core/analyzers/deps/testdata/lockfiles/"
     - "testdata/precision-corpus/"
     - "testdata/precision-suite/"

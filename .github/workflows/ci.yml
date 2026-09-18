@@ -9,8 +9,22 @@ on:
       - 'docs/**'
       - 'LICENSE'
   pull_request:
-    branches:
-      - main
+    # No `branches` filter. It used to be `- main`, which meant a pull request
+    # targeting anything else ran NO CI at all -- not Lint, not Test, not Build,
+    # not Security. Only the checks with their own triggers reported, so a
+    # stacked PR showed a green tick that stood for strictly less than the same
+    # tick on a PR into main, and nothing said so.
+    #
+    # Measured: a four-PR stack merged on that green. Three of them had never
+    # run the test suite in any form; the fourth only did because CI was
+    # dispatched by hand, and that run failed on a lint error the other three
+    # would have carried in. A stack is the normal way to land a large change
+    # here, so this was not an edge case.
+    #
+    # This is the same trap as the paths-ignore note below, one level out: a
+    # workflow that does not run reports nothing, and "no failures" reads
+    # exactly like "passed".
+    #
     # No paths-ignore here: branch protection requires the reusable CI's
     # status checks (Lint/Test/Build/Security), and a docs-only PR that skips
     # the whole workflow never reports them — so the PR is unmergeable forever

@@ -19,6 +19,15 @@ type MatchResult struct {
 	Column    int
 	MatchText string
 
+	// ShapeText is the part of the match that is supposed to BE the credential,
+	// when the rule names one via Metadata["shape_group"]. A bound vendor rule
+	// matches `nexmo = "<token>"`, so scoring the whole match for secret shape
+	// scores the binding too -- and `nexmo = "` is lowercase, punctuated and
+	// low-entropy, which sank 54 rules' genuine detections when this was first
+	// written. Empty means "no group declared"; the filter falls back to
+	// MatchText, which is what every unbound rule wants.
+	ShapeText string
+
 	// Structural, when non-empty, is what parsing the document established
 	// about this result — "the cloudformation resource \"LogBucket\"
 	// (AWS::S3::Bucket) was parsed and sets no BucketEncryption".
@@ -42,6 +51,31 @@ type MatchResult struct {
 // the claim is silently never recorded and the ledger looks exactly as it did
 // before the structural path existed.
 const StructuralClaimKey = "structural_claim"
+
+// SubjectKindKey is the rule-metadata key by which a rule DECLARES what its
+// finding is about: "value" or "construct".
+//
+// It is declared and not derived, because no location-derived definition works
+// for both of the cases measured in docs/design/condition-dedup.md. IAC-211
+// reports three unpinned Galaxy roles in one requirements.yml block and they
+// are three conditions, so its subject is the matched VALUE. An LLM tuning
+// rule reporting `frequency_penalty=0.0` and `presence_penalty=0.0` on
+// consecutive lines reports one decision, so its subject is the CONSTRUCT.
+// A subject rule keyed on the construct merges the three roles; one keyed on
+// the value splits the one decision. Only the rule knows which it is.
+const SubjectKindKey = "subject"
+
+// SubjectIDKey is the per-finding metadata key carrying the computed subject.
+// Absent when the rule declares no subject kind, which is most of them: a rule
+// that has not said what it is about does not get a guess.
+//
+// The value is FILE-LOCAL. Anything counting distinct subjects must key on
+// (path, subject_id), never on subject_id alone: measured on
+// geerlingguy/ansible-for-devops, IAC-211's 65 findings carry only 26 distinct
+// subject strings because `- name: geerlingguy.apache` is unpinned in several
+// requirements.yml files at once -- and each of those is its own pin to add,
+// not one condition seen repeatedly.
+const SubjectIDKey = "subject_id"
 
 // Matcher is the interface that all pattern-matching strategies must satisfy.
 // Implementations receive raw file content and a pointer to the triggering
@@ -113,10 +147,29 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	// AbsenceMatcher already uses, rather than inlining a second copy of the
 	// line/column arithmetic.
 	lineStarts := computeLineStarts(content)
-	matches := re.FindAllIndex(content, -1)
-	results := make([]MatchResult, 0, len(matches))
-	for _, loc := range matches {
-		results = append(results, makeMatchResult(content, lineStarts, loc))
+	shapeGroup := 0
+	if g := rule.Metadata["shape_group"]; g != "" {
+		if n, err := strconv.Atoi(g); err == nil && n > 0 && n <= re.NumSubexp() {
+			shapeGroup = n
+		}
+	}
+	var results []MatchResult
+	if shapeGroup > 0 {
+		subs := re.FindAllSubmatchIndex(content, -1)
+		results = make([]MatchResult, 0, len(subs))
+		for _, loc := range subs {
+			mr := makeMatchResult(content, lineStarts, loc[0:2])
+			if lo, hi := loc[2*shapeGroup], loc[2*shapeGroup+1]; lo >= 0 && hi >= lo {
+				mr.ShapeText = string(content[lo:hi])
+			}
+			results = append(results, mr)
+		}
+	} else {
+		matches := re.FindAllIndex(content, -1)
+		results = make([]MatchResult, 0, len(matches))
+		for _, loc := range matches {
+			results = append(results, makeMatchResult(content, lineStarts, loc))
+		}
 	}
 
 	if rule.Metadata["secret_shape"] == "true" {
@@ -190,7 +243,11 @@ func filterBySecretShape(in []MatchResult, rule *Rule) []MatchResult {
 	}
 	out := in[:0]
 	for _, r := range in {
-		if !isSecretShape(r.MatchText, minEntropy) {
+		text := r.MatchText
+		if r.ShapeText != "" {
+			text = r.ShapeText
+		}
+		if !isSecretShape(text, minEntropy) {
 			continue
 		}
 		out = append(out, r)

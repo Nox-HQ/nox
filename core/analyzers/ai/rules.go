@@ -185,7 +185,20 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AI-015", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			// nox:ignore AI-015 -- rule definition, not a real finding
-			pattern:     `(?i)(innerHTML|dangerouslySetInnerHTML|v-html|\.html\()\s*[=({]?\s*.*?(response|completion|output|generated|llm|ai_result|message\.content|chat_response)`,
+			// `[ \t]*`, never `\s*`: Go's `\s` matches a newline, so the rule
+			// could be satisfied by two unrelated lines. The corpus-wide
+			// metamorphic sweep has failed on exactly that since 2026-09-07 --
+			// adding the comment `# innerHTML` to the top of
+			// testdata/metamorphic-corpus/python/llm_agent.py made it fire,
+			// because `\s*` swallowed the newline and the docstring below
+			// supplied the second half:
+			//
+			//	match: 'innerHTML\n"""A minimal LLM'
+			//
+			// A comment naming innerHTML and a docstring mentioning an LLM is
+			// not LLM output rendered as raw HTML. Rendering happens on one
+			// line; requiring that costs nothing and closes the class.
+			pattern:     `(?i)(innerHTML|dangerouslySetInnerHTML|v-html|\.html\()[ \t]*[=({]?[ \t]*.*?(response|completion|output|generated|llm|ai_result|message\.content|chat_response)`,
 			description: "LLM output rendered as raw HTML without escaping",
 			cwe:         "CWE-79", keywords: []string{"innerhtml", "dangerouslysetinnerhtml", "v-html"},
 			tags:        []string{"ai", "output-handling", "xss"},
@@ -420,15 +433,6 @@ func builtinAIRules() []*rules.Rule {
 			references:         []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
-			id: "AI-029", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(presence_penalty\s*[:=]\s*0| frequency_penalty\s*[:=]\s*0)`,
-			description: "LLM repetition penalties disabled",
-			cwe:         "CWE-754", keywords: []string{"presence_penalty", "frequency_penalty"},
-			tags:        []string{"ai", "reliability", "repetition"},
-			remediation: "Set presence_penalty (-2 to 0) and frequency_penalty (-2 to 0) to reduce repetitive token generation. Default values of 0 may allow excessive repetition.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
 			id: "AI-030", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(tools?|functions?)\s*[:=]\s*\[.*?(admin|root|sudo|delete|drop|truncate)`,
 			description: "AI agent has excessive tool permissions",
@@ -530,15 +534,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "injection", "shell"},
 			remediation: "Remove dangerous shell commands from system prompts. These can be exploited for command injection attacks.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/78.html"},
-		},
-		{
-			id: "AI-041", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(temperature|top_p)\s*[:=]\s*(?:0\.9[0-9]*|1\.0+)`,
-			description: "AI model uses high temperature/top_p settings",
-			cwe:         "CWE-20", keywords: []string{"temperature", "top_p"},
-			tags:        []string{"ai", "reliability", "configuration"},
-			remediation: "High temperature (>0.9) increases randomness and reduces consistency. Use 0.1-0.3 for deterministic outputs.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/20.html"},
 		},
 		{
 			id: "AI-042", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,

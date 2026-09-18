@@ -139,6 +139,19 @@ func isManifest(base string) bool {
 	switch base {
 	case "package.json", "package-lock.json", "pyproject.toml", "pipfile", "setup.py", "setup.cfg":
 		return true
+	// Lockfiles carry the transitive closure. They must be listed HERE as well
+	// as handled in collectDeclared: this predicate decides which files are
+	// read at all, so a parser added there and not here is never reached.
+	//
+	// That is exactly what happened. The parsers were written, unit-tested
+	// against collectDeclared directly, and passed -- while the corpus showed
+	// SLOP-001 unchanged at 219 on crewAI with `typing-extensions` sitting in
+	// its uv.lock. Two lists that have to agree, and a test that called one of
+	// them. TestEveryLockfileParserIsReachable exists so the next one cannot
+	// drift the same way.
+	case "poetry.lock", "uv.lock", "pdm.lock", "pipfile.lock",
+		"pnpm-lock.yaml", "pnpm-lock.yml", "yarn.lock":
+		return true
 	}
 	return base == "requirements.txt" ||
 		(strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"))
