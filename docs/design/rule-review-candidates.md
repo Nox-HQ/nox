@@ -23,10 +23,14 @@ trustworthy about one narrow property. Nothing here knows what a bad rule is,
 and the gap between "this rule contradicts itself" and "this rule should not
 exist" is the entire distance a maintainer still has to walk.
 
-That fixes the shape of this tool. `rule-review` accumulates **independently
-validated maintainer-review signals** — each one narrow, each one measured on
-its own before it is trusted — rather than combining them into a general "bad
-rule" score. A combined number would imply a coverage claim that no measurement
+That fixes the shape of this tool, and the boundary is worth stating as a rule:
+
+> `rule-review` reports narrow properties it can measure reliably. It does not
+> estimate whether a rule is good or bad.
+
+So it accumulates **independently validated maintainer-review signals** — each
+one narrow, each one measured on its own before it is trusted — rather than
+combining them into a general "bad rule" score. A combined number would imply a coverage claim that no measurement
 supports, and would let a rule with three weak smells outrank a rule with one
 decisive one. The sections stay separate for that reason, and a signal is
 promoted to a gate only on its own evidence (see *Promotion*, below).
@@ -257,9 +261,36 @@ asserts a floor on how many rules it actually analysed.
 - **No automatic retirement.** See the two overturned cleanups above.
 - **No repository-concentration bar.** The sharpest thing separating the rows
   that carried information was that the collapse came from ONE repository —
-  AI-031 is 244->4 on crewAI alone. That is a third dimension, it is not
-  measured, and adding it would mean the presentation encoded a judgement about
-  which corpora count. Recorded as the next question, not answered.
+  AI-031 is 244->4 on crewAI alone. It is deliberately not surfaced, and the
+  reason is worth stating precisely, because it is the boundary this whole
+  command sits on.
+
+  **Concentration is not purely a rule property.** `244 -> 4 on crewAI` is
+  equally consistent with a rule overfitted to one repository and with crewAI
+  legitimately containing that condition 244 times. Worse, the resulting number
+  depends on which repositories were put in the benchmark at all, so it is
+  partly a measurement of the CORPUS DESIGN rather than something intrinsic to
+  the rule. The other two ingested signals do not have that problem in the same
+  way: a copy factor is a ratio within whatever was scanned, and
+  `single_construct` is explicitly a statement about corpus coverage.
+
+  Before this could be surfaced, three things need settling — and they are a
+  benchmark investigation, not a presentation change:
+
+  1. **The sampling unit.** Repo, project family, authored source, released
+     version, generated or documentation material — these give different
+     answers, and crewAI's locale-and-version doc tree is exactly the case that
+     makes them diverge.
+  2. **The corpus independence model.** nox has already answered this class of
+     question once and must not answer it twice differently: the evidence spine
+     counts independence in *distinct reporters, not observations* — 100
+     self-scans are one source (`IndependentSources()`, see `docs/roadmap.md`).
+     Any concentration measure should start from that model rather than invent
+     a parallel notion of independence.
+  3. **Whether it predicts anything.** Concentration has to be shown to predict
+     review-worthy rules before it is shown to maintainers as though it does.
+
+  Only then is it a question of whether it belongs here.
 
 ## Running it
 
