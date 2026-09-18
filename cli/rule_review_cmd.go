@@ -51,11 +51,13 @@ func runRuleReview(args []string) int {
 		sweepPath string
 		output    string
 		asJSON    bool
+		showAll   bool
 	)
 	fs.StringVar(&benchPath, "bench", "", "path to a `nox bench --json` report (supplies the prevalence-collapse signal)")
 	fs.StringVar(&sweepPath, "sweep", "", "path to a scripts/metamorphic/sweep.py triage report (supplies the single-construct signal)")
 	fs.StringVar(&output, "output", "", "destination path (defaults to stdout)")
 	fs.BoolVar(&asJSON, "json", false, "emit the report as JSON")
+	fs.BoolVar(&showAll, "all", false, "show every measured collapse row, not just those at or above the default factor")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -72,7 +74,14 @@ func runRuleReview(args []string) int {
 			return 2
 		}
 		report.Sources.Bench = benchPath
-		report.Collapses = rows
+		// Every measured row is kept in the report's own accounting; the
+		// threshold decides only which are shown.
+		report.CollapsesMeasured = len(rows)
+		report.CollapseFactorShown = defaultCollapseFactor
+		if showAll {
+			report.CollapseFactorShown = 0
+		}
+		report.Collapses = atOrAboveFactor(rows, report.CollapseFactorShown)
 	}
 	if sweepPath != "" {
 		rows, err := singleConstructCandidates(sweepPath)
@@ -111,6 +120,26 @@ func runRuleReview(args []string) int {
 
 const ruleReviewSchema = "nox-rule-review-candidates/v1"
 
+// defaultCollapseFactor is the copy factor at or above which a collapsing rule
+// is shown by default.
+//
+// It is PRESENTATION, not adjudication. Crossing it says "worth looking at"
+// and says nothing about whether the rule is defective; the factor itself is
+// the canonical measurement and every measured row is still computed, counted
+// and reachable with --all.
+//
+// 2 was chosen from the labelled run over docs/benchmarks/2026-09-15: of the
+// 19 rules that collapse at all, 7 carried information and 12 were dismissible
+// from the factor column alone — three of them near unity (SEC-161 at 1.009 is
+// six duplicated lines out of 673) and six with counts too small to read
+// (2->1, 3->1, 4->2). A cutoff of 2 keeps all 7 informative rows.
+//
+// Changing this number changes what a maintainer is shown first and nothing
+// else. It is deliberately a constant rather than an expression inside
+// collapseCandidates so that future catalogue evidence can move it without
+// touching the signal.
+const defaultCollapseFactor = 2.0
+
 // RuleReviewReport is the stable shape of the candidate report.
 //
 // The three signal lists are siblings and stay siblings. There is deliberately
@@ -124,9 +153,30 @@ type RuleReviewReport struct {
 		Sweep   string `json:"sweep,omitempty"`
 	} `json:"sources"`
 
-	Contradictions  []ContradictionCandidate `json:"remediation_contradicts_trigger"`
-	Collapses       []CollapseCandidate      `json:"prevalence_collapses,omitempty"`
-	SingleConstruct []SingleConstructRow     `json:"single_construct,omitempty"`
+	Contradictions []ContradictionCandidate `json:"remediation_contradicts_trigger"`
+
+	// Collapses holds the rows SHOWN. CollapsesMeasured is how many collapsed
+	// at all, and CollapseFactorShown is the cutoff that separated them, so a
+	// reader can always tell a short list from a filtered one. Zero means
+	// nothing was withheld.
+	Collapses           []CollapseCandidate `json:"prevalence_collapses,omitempty"`
+	CollapsesMeasured   int                 `json:"prevalence_collapses_measured,omitempty"`
+	CollapseFactorShown float64             `json:"prevalence_collapse_factor_shown,omitempty"`
+
+	SingleConstruct []SingleConstructRow `json:"single_construct,omitempty"`
+}
+
+// atOrAboveFactor filters rows for presentation. It never recomputes a factor:
+// the measurement is whatever collapseCandidates found, and this only decides
+// which of those rows a maintainer is shown first.
+func atOrAboveFactor(rows []CollapseCandidate, floor float64) []CollapseCandidate {
+	out := make([]CollapseCandidate, 0, len(rows))
+	for _, r := range rows {
+		if r.Factor >= floor {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // ContradictionCandidate is a rule whose remediation recommends a range

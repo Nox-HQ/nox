@@ -93,3 +93,20 @@ func (r *Rule) RemediationContradiction() (Contradiction, bool) {
 	}
 	return Contradiction{}, false
 }
+
+// PinnedAssignment reports the parameter names and literal value the rule's
+// pattern requires in order to fire, when it pins one.
+//
+// It exists so a caller can tell "this rule has nothing for the contradiction
+// analysis to read" apart from "this rule was analysed and is clean". A gate
+// asserting zero contradictions needs that distinction: without it, a scanner
+// that quietly stopped parsing patterns would keep the gate green forever.
+//
+// ok is false for the overwhelming majority of rules — a pattern that pins a
+// range rather than a literal, or names no parameter, has nothing to compare.
+func (r *Rule) PinnedAssignment() (params []string, value string, ok bool) {
+	if r.Pattern == "" {
+		return nil, "", false
+	}
+	return flaggedAssignment(r.Pattern)
+}
