@@ -320,3 +320,80 @@ jobs:
         run: |
           cosign sign --yes \
             ghcr.io/nox-hq/nox@${{ steps.docker-build.outputs.digest }}
+
+  # SLSA provenance, generated HERE -- by the workflow the tag push triggered --
+  # rather than by a `workflow_run` from main.
+  #
+  # It used to be the latter (.github/workflows/slsa-provenance.yml), and every
+  # attestation it produced recorded `refs/heads/main` as its source ref. The
+  # digest was right -- it named the exact tagged commit -- but the tag was
+  # nowhere in it, so `slsa-verifier --source-tag vX.Y.Z` failed for every
+  # release from v1.15.0 to v1.38.1. The provenance could prove which commit
+  # built a binary and could not prove which release it was. Found by verifying
+  # v1.38.1's artifacts with the tag flag rather than without it.
+  provenance-subjects:
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: read
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'checksums.txt' --dir /tmp/release
+      - name: Encode subjects
+        id: hash
+        working-directory: /tmp/release
+        # checksums.txt is already `<sha256>  <filename>` per line, the format
+        # the generator takes; -w0 keeps it on one line on ubuntu.
+        run: echo "hashes=$(base64 -w0 < checksums.txt)" >> "$GITHUB_OUTPUT"
+
+  provenance:
+    needs: provenance-subjects
+    permissions:
+      actions: read # required by the reusable workflow
+      id-token: write # nox:ignore IAC-306 -- OIDC is the keyless-signing mechanism for the attestation
+      contents: write # nox:ignore IAC-314 -- uploads the provenance attestation to the release
+    # MUST be referenced by a full tag, never a SHA: slsa-verifier resolves the
+    # trusted builder's identity from the ref. See slsa-provenance.yml for the
+    # six releases a digest pin cost.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.provenance-subjects.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ github.ref_name }}
+
+  # A green provenance job is not evidence of a verifiable attestation. The old
+  # check asserted an in-toto asset EXISTED; the one that went missing here
+  # existed, and verified, and still could not be tied to its tag. So this runs
+  # the verification a consumer would, with the tag.
+  provenance-verify:
+    runs-on: ubuntu-latest
+    needs: provenance
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Verify every archive against the tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          go install github.com/slsa-framework/slsa-verifier/v2/cli/slsa-verifier@v2.7.1
+          mkdir -p /tmp/v && cd /tmp/v
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern '*.tar.gz' --pattern '*.zip' --pattern '*.intoto.jsonl'
+          prov=$(ls ./*.intoto.jsonl)
+          for a in ./*.tar.gz ./*.zip; do
+            [ -e "$a" ] || continue
+            "$(go env GOPATH)/bin/slsa-verifier" verify-artifact "$a" \
+              --provenance-path "$prov" \
+              --source-uri "github.com/${GITHUB_REPOSITORY}" \
+              --source-tag "${GITHUB_REF_NAME}"
+          done

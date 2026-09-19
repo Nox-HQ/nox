@@ -8,13 +8,18 @@ name: SLSA Provenance
 # job exit 27 (no subjects supplied).
 
 on:
-  workflow_run:
-    workflows: ["Release"]
-    types: [completed]
+  # Releases attest themselves now: release.yml runs the generator from the tag
+  # push, so the attestation records the tag. This workflow used to run on
+  # `workflow_run` from main, which recorded `refs/heads/main` and made
+  # `slsa-verifier --source-tag` fail for every release up to v1.38.1.
+  #
+  # It remains for BACKFILL only. Dispatch it ON THE TAG, or the new
+  # attestation has the same defect:
+  #   gh workflow run slsa-provenance.yml --ref vX.Y.Z -f tag=vX.Y.Z
   workflow_dispatch: # nox:ignore IAC-308 -- provenance can be regenerated for an existing release on demand
     inputs:
       tag:
-        description: "Release tag to backfill provenance for (e.g. v0.10.1). Leave blank to attest the latest published release."
+        description: "Must equal the tag this run is dispatched on (--ref vX.Y.Z). Leave blank to use that tag."
         required: false
         type: string
 
@@ -26,9 +31,7 @@ jobs:
   # generator expects. Runs only when Release was a success on a tag.
   subjects:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       startsWith(github.event.workflow_run.head_branch, 'v'))
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,19 +42,21 @@ jobs:
       - name: Resolve tag
         id: tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISPATCH_TAG: ${{ inputs.tag }}
-          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        # Refuse rather than skip. The attestation records the ref this run was
+        # dispatched on; dispatched on main it records a branch, which is the
+        # defect this workflow exists to backfill. A tag input that differs from
+        # the ref would attest one release and upload onto another.
         run: |
-          if [ -n "$DISPATCH_TAG" ]; then
-            tag="$DISPATCH_TAG"
-          elif [ -n "$RUN_BRANCH" ]; then
-            tag="$RUN_BRANCH"
-          else
-            tag=$(gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName)
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error title=Dispatch on the tag::this run is on ${GITHUB_REF}; the attestation would record a branch and fail slsa-verifier --source-tag. Re-run: gh workflow run slsa-provenance.yml --ref vX.Y.Z -f tag=vX.Y.Z"
+            exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
+          if [ -n "$DISPATCH_TAG" ] && [ "$DISPATCH_TAG" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error title=Tag mismatch::input tag $DISPATCH_TAG differs from the ref ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
       - name: Download release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
