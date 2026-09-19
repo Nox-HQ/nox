@@ -354,26 +354,9 @@ func builtinAIRules() []*rules.Rule {
 		},
 
 		// -----------------------------------------------------------------
-		// More AI security rules (AI-022 to AI-040)
+		// More AI security rules (AI-024 to AI-040; AI-022, AI-023, AI-028 and
+		// AI-037 were withdrawn in v1.38.0 -- see core/rules/withdrawn.go)
 		// -----------------------------------------------------------------
-		{
-			id: "AI-022", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(temperature\s*[:=]\s*(0\.[8-9]|1\.0|1))`,
-			description: "LLM temperature set too high, allowing hallucination",
-			cwe:         "CWE-754", keywords: []string{"temperature"},
-			tags:        []string{"ai", "reliability", "hallucination"},
-			remediation: "Set temperature to 0-0.3 for factual/structured tasks. Higher values (0.7-1.0) should only be used for creative tasks with explicit user consent.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
-			id: "AI-023", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(top_p\s*[:=]\s*0\.[0-6][0-9]?)`,
-			description: "LLM top_p set too low, reducing output diversity",
-			cwe:         "CWE-754", keywords: []string{"top_p"},
-			tags:        []string{"ai", "reliability", "diversity"},
-			remediation: "Use top_p of 0.7-0.95 for balanced output. Lower values (0.1-0.3) may cause repetitive responses and reduce response quality.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
 		{
 			id: "AI-024", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(stop\s*[:=]\s*\[\])`,
@@ -413,20 +396,6 @@ func builtinAIRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/77.html"},
 		},
 		{
-			id: "AI-028", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			// Alternation must be grouped — the previous form
-			// `(seed\s*[:=]\s*None|null|undefined)` allowed bare `null` or
-			// `undefined` anywhere in the file (e.g. fuzz seed corpora like
-			// `f.Add([]byte(\`null\`))`). See issue #59.
-			pattern:     `(?i)\bseed\s*[:=]\s*(None|null|undefined)\b`,
-			description: "LLM seed not set, causing non-deterministic output",
-			cwe:         "CWE-754", keywords: []string{"seed"},
-			ignoreFilePatterns: []string{"*_test.go", "*_test.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
-			tags:               []string{"ai", "reproducibility", "testing"},
-			remediation:        "Set a seed value for reproducible outputs in testing and auditing. This ensures consistent behavior for the same inputs.",
-			references:         []string{"https://cwe.mitre.org/data/definitions/754.html"},
-		},
-		{
 			id: "AI-030", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(tools?|functions?)\s*[:=]\s*\[.*?(admin|root|sudo|delete|drop|truncate)`,
 			description: "AI agent has excessive tool permissions",
@@ -464,7 +433,13 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-034", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(function_call|tool_choice|force_tool)\s*[:=]\s*["']?(any|auto|required)`,
+			// Only the values that force a call. `auto` is the API default and
+			// means the model decides, so matching it flagged the default as
+			// "forced". `[ \t]*` and `\b` for the reason AI-015 needed them:
+			// `\s*` crossed the newline and `any` matched the JSON-schema
+			// keyword `anyOf` on the next line. On openai-python at the pinned
+			// bench commit all 10 findings were one or the other.
+			pattern:     `(?i)(function_call|tool_choice|force_tool)[ \t]*[:=][ \t]*["']?(any|required)\b`,
 			description: "AI agent forced to use tool calls without validation",
 			cwe:         "CWE-754", keywords: []string{"function_call", "tool_choice"},
 			tags:        []string{"ai", "agent", "tool-calling"},
@@ -490,15 +465,6 @@ func builtinAIRules() []*rules.Rule {
 			tags:        []string{"ai", "deprecation", "model-selection"},
 			remediation: "Upgrade to GPT-4 or later models for production. GPT-3.5 has known limitations and will be deprecated.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/1104.html"},
-		},
-		{
-			id: "AI-037", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(system|assistant)\s*[:=]\s*["'][^"']{1000}[^"']{1000,}`,
-			description: "Excessively long system prompt may cause inconsistency",
-			cwe:         "CWE-754", keywords: []string{"system", "prompt"},
-			tags:        []string{"ai", "reliability", "prompt-engineering"},
-			remediation: "Keep system prompts under 2000 tokens. Very long prompts can cause inconsistent model behavior and higher latency.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/754.html"},
 		},
 		{
 			id: "AI-038", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,

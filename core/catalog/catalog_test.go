@@ -107,8 +107,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// named for Square and PayPal.
 	// 1498 -> 1496 retired AI-029 and AI-041: LLM tuning guidance with no
 	// security proposition (see core/analyzers/ai/tuning_params_retired_test.go).
-	if got := len(cat); got != 1496 {
-		t.Errorf("Catalog() returned %d rules, want 1496", got)
+	// 1496 -> 1492 withdrew AI-022, AI-023, AI-028 and AI-037 on the same standard
+	// (see core/analyzers/ai/reliability_rules_retired_test.go).
+	if got := len(cat); got != 1492 {
+		t.Errorf("Catalog() returned %d rules, want 1492", got)
 	}
 }
 

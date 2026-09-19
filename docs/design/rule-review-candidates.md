@@ -208,6 +208,15 @@ justify.
 The eight are AI-022, AI-029, AI-031, DATA-001, SEC-048, SEC-162, SEC-801 and
 SEC-803 — the 7 labelled informative above, plus SEC-048.
 
+> **Later, and worth reading in the right order:** AI-022 was withdrawn in
+> v1.38.0. The collapse list did not decide that, and could not have — a copy
+> factor of 3.84 says the corpus repeats a line, not that the line is wrong. The
+> withdrawal rested on the rule's proposition: it flagged a strict superset of
+> the values AI-041 was withdrawn for. What the report did was put the rule in
+> front of a maintainer, which is the whole of its job. AI-029 on the same list
+> had already been withdrawn in v1.36.0; the other six remain live, and nothing
+> here says they should not.
+
 **This was deliberately not tuned to produce 7.** Reaching 7 requires a findings
 floor of exactly 54, because SEC-801 has 53: a cliff with no plateau on either
 side, which is the shape of a number fitted to a wanted answer rather than read
