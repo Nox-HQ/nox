@@ -851,20 +851,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 func runServe(args []string) int {
 	serveFS := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var allowedPaths string
-	serveFS.StringVar(&allowedPaths, "allowed-paths", "", "comma-separated list of allowed workspace paths")
+	serveFS.StringVar(&allowedPaths, "allowed-paths", "", "comma-separated workspace roots the server may scan (default: the working directory)")
 
 	if err := serveFS.Parse(args); err != nil {
 		return 2
 	}
 
-	var paths []string
-	if allowedPaths != "" {
-		for _, p := range strings.Split(allowedPaths, ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				paths = append(paths, p)
-			}
-		}
+	paths, err := serveAllowedPaths(allowedPaths)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
 	}
 
 	srv := server.New(version, paths)
@@ -873,6 +869,38 @@ func runServe(args []string) int {
 		return 2
 	}
 	return 0
+}
+
+// serveAllowedPaths turns the --allowed-paths flag into the workspace roots the
+// MCP server confines itself to.
+//
+// An empty flag does not mean "anywhere". server.New reads a zero-length
+// allowlist as unrestricted, which is a deliberate affordance for embedders and
+// for tests that scan a t.TempDir() — but `nox serve` is launched by agents, and
+// an agent that can be talked into scanning $HOME or /etc is the excessive-agency
+// defect nox itself reports. So the CLI substitutes the process working
+// directory, which is already what an MCP client config points at the project it
+// wants scanned. Widening stays explicit and visible in the process table:
+// --allowed-paths takes the roots, and `--allowed-paths /` restores the old
+// unrestricted behaviour for anyone who actually wants it.
+func serveAllowedPaths(flagValue string) ([]string, error) {
+	var paths []string
+	for _, p := range strings.Split(flagValue, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) > 0 {
+		return paths, nil
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		// Failing open here would hand an agent the whole filesystem because
+		// of an unrelated error, so refuse and make the operator name a root.
+		return nil, fmt.Errorf("cannot determine the working directory to confine the MCP server to: %w (pass --allowed-paths)", err)
+	}
+	return []string{cwd}, nil
 }
 
 // parseFormats splits the comma-separated format flag into individual format
