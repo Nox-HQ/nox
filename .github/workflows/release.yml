@@ -130,8 +130,10 @@ jobs:
           DOCKER
 
           # A plugin the scan must not DEPEND on: a registry outage should cost
-          # the taint rules, never the scan. This is the 2026-07-19 failure.
-          /tmp/nox-smoke plugin install nox/taint-analysis@0.7.0 || \
+          # that plugin's findings, never the scan. This is the 2026-07-19
+          # failure. It exercises a current plugin: taint-analysis, which stood
+          # here, was archived on 2026-09-02 once core's taint engine replaced it.
+          /tmp/nox-smoke plugin install nox/depconfusion@0.2.4 || \
             echo "::warning title=Plugin unavailable::continuing; the scan must not depend on it"
 
           set +e

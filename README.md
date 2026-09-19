@@ -29,7 +29,7 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 - **Full MCP threat coverage** mapped to the OWASP MCP Top 10 — server hardening (MCP-001..008), tool poisoning (MCP-009..014, MCP03), rug-pull / definition drift (MCP-015, MCP04), authn/authz & SSRF (MCP-016..021, MCP07), shadow & cross-server tool shadowing (MCP-022..024, MCP09)
 - **Cross-file AI taint** — `request.json` → service hop → `chat.completions.create` across functions and files (TAINT-AI-*)
 - **Polyglot AIBOM** — Python ingest + Go service + TS frontend produce one inventory naming every model invocation, auth env var, and endpoint
-- **Verified plugin marketplace** — extension scanners (reachability, cross-file taint, k8s-runtime, red-team chains, GRC for 15 frameworks incl. EU AI Act / ISO 42001 / NIST AI RMF) install with one command, signed end-to-end via Sigstore
+- **Verified plugin marketplace** — extension scanners (reachability, container, dependency confusion, k8s-runtime, DAST, GRC across 13 frameworks incl. EU AI Act / ISO 42001 / NIST AI RMF) install with one command, signed end-to-end via Sigstore
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
@@ -734,7 +734,7 @@ plugins:
   required:
     - nox/reachability@>=0.5
     - nox/ai-eval
-    - nox/taint-analysis
+    - nox/depconfusion
   registries:
     # Project-level registry overrides; merged with the official source.
     # Use `name=url` to assign a name.
@@ -794,27 +794,40 @@ Installed nox/reachability@0.6.5 (community)
 
 | Plugin | Track | What it adds |
 |---|---|---|
-| `nox/reachability` | core-analysis | Multi-language reachability for VULN findings (Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet). Bundled in the default release archive. |
-| `nox/taint-analysis` | core-analysis | Cross-file taint flow. TAINT-001..005 + interprocedural TAINT-006/007 + AI flows TAINT-AI-001/002. |
-| `nox/k8s-runtime` | dynamic-runtime | Live cluster scanning. KRUNT-001..008. |
-| `nox/red-team` | dynamic-runtime | Attack-chain analysis + active validation. |
-| `nox/grc` | policy-governance | 12 compliance frameworks (SOC2, ISO 27001, GDPR, FedRAMP L/M/H, HIPAA, PCI-DSS, NIST 800-53, NIST CSF, CIS v8, CMMC). |
-| `nox/ai-eval` | dynamic-runtime | Adversarial prompt corpus runner. Fires jailbreak / system-leak / role-confusion / tool-misuse against a chat endpoint. AI-EVAL-001..004. |
+| `nox/reachability` | core-analysis | Multi-language reachability analysis. Annotates VULN findings as REACH-001 (unreachable), REACH-002 (reachable), or REACH-003 (undetermined). Supports Go, PyPI, npm, Cargo, Maven, RubyGems, NuGet. |
+| `nox/k8s-runtime` | dynamic-runtime | Inspect running Kubernetes workloads for security misconfigurations |
+| `nox/grc` | policy-governance | Governance, Risk & Compliance assessment with 13-framework coverage, gap analysis, and evidence collection |
+| `nox/ai-eval` | dynamic-runtime | Adversarial prompt corpus runner. Fires a bundled jailbreak / prompt-leak / role-confusion corpus against a configured chat endpoint and reports which attacks succeeded. |
+| `nox/dast` | dynamic-runtime | DAST web/API scanning with HTTP misconfig probes (headers, CORS, TLS, cookies, rate-limit, open-redirect) |
+| `nox/container` | core-analysis | Dockerfile linting + image vulnerability scanning + container SBOM (22 rules) |
+| `nox/depconfusion` | supply-chain | Dependency confusion detection across npm, PyPI, RubyGems, Maven (3 rules) |
+| `nox/threat-enrich` | intelligence | CVE enrichment, CWE mapping, MITRE ATT&CK correlation (13 rules) |
+| `nox/triage-agent` | agent-assistance | LLM-powered finding prioritization and false-positive reduction (4 rules + 7-provider LLM: openai, anthropic, gemini, ollama, cohere, bedrock, copilot) |
+| `nox/threat-model` | threat-modeling | STRIDE-based threat pattern detection in source code; opt-in AI threat modeling via ai_model: true (5 rules + LLM) |
+| `nox/api-abuse` | dynamic-runtime | API authorization testing for BOLA, BFLA, rate-limit, and abuse patterns in server code (5 rules) |
+| `nox/attack-surface` | dynamic-runtime | Static endpoint extraction and exposure mapping across Go (net/http, Gin, Echo, Chi), Python (Flask, Django, FastAPI), and JavaScript/TypeScript (Express, Koa, Fastify) frameworks |
+| `nox/remediate` | remediation | Deterministic remediation planning and application for code findings |
+| `nox/llm-triage` | dynamic-runtime | Optional LLM second-opinion triage. Sends each finding plus a code snippet to a configured chat endpoint and attaches a true/false-positive verdict as an enrichment. Never gates the scan; the deterministic core is unaffected. |
+
+Taint analysis, attack validation (`nox attack`), EPSS/KEV prioritisation and
+CWE metadata are built into core; the plugins that used to provide them are
+retired and marked deprecated in the registry. The full, current list is at
+[nox-hq.dev/plugins](https://nox-hq.dev/plugins).
 
 ### Publish a plugin
 
-```bash
-# Tag the plugin repo. The release workflow builds binaries via
-# GoReleaser, signs the checksums via Cosign keyless, generates a
-# registry entry, and uploads it as a workflow artifact.
-git tag v0.2.0 && git push --tags
+Start from `nox plugin init`, which scaffolds the release pipeline the registry
+verifies, and check the built binary with `nox plugin test` before tagging:
 
-# Open a PR against nox-hq/nox to add the entry to
-# registry-scaffold/index.json. Operators see the new version in
-# `nox plugin search` once the PR merges.
+```bash
+make build && nox plugin test ./nox-plugin-foo
+git tag v0.1.0 && git push --tags   # GoReleaser builds, cosign signs (keyless)
 ```
 
-See [`docs/marketplace.md`](docs/marketplace.md) for the full publish flow and the maturity ladder. A public marketplace site rendered from the same index is published at [`nox-hq.github.io/nox`](https://nox-hq.github.io/nox/).
+A plugin's first release needs an entry in
+[`nox-hq/registry`](https://github.com/nox-hq/registry); later releases are
+added by its daily sync. See [`docs/plugin-authoring.md`](docs/plugin-authoring.md#distribution)
+and [`docs/marketplace.md`](docs/marketplace.md).
 
 ## MCP Server
 

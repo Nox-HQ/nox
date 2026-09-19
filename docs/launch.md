@@ -107,7 +107,7 @@ nox scan examples/ai-app
 ```
 
 Repo: https://github.com/nox-hq/nox
-Marketplace: https://nox-hq.github.io/nox
+Marketplace: https://nox-hq.dev/plugins
 Migration from Snyk: docs/migration-from-snyk.md
 
 Looking for feedback on rule precision (we shipped TAINT-AI cross-
