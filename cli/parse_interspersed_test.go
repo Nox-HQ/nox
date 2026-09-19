@@ -134,7 +134,9 @@ func TestParseInterspersedStopsAtDoubleDash(t *testing.T) {
 // the order `registry add`'s own usage line gives, and it used to drop --name
 // silently and file the registry under the URL's hostname.
 func TestRegistryAddHonoursNameAfterTheURL(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	// NOX_HOME, not HOME: os.UserHomeDir reads USERPROFILE on Windows, so
+	// HOME would leave the test writing to the real profile there.
+	t.Setenv("NOX_HOME", t.TempDir())
 	t.Setenv("NOX_NO_DEFAULT_REGISTRY", "1")
 	const u = "https://example.invalid/index.json"
 	if code := runRegistryAdd([]string{u, "--name", "official"}); code != 0 {
