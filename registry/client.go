@@ -284,7 +284,7 @@ func (c *Client) Resolve(ctx context.Context, name, constraint string, opts ...R
 					continue
 				}
 				if rc.nox != nil && ve.MinNoxVersion != "" {
-					if min, err := ParseVersion(strings.TrimPrefix(ve.MinNoxVersion, "v")); err == nil && min.Compare(*rc.nox) > 0 {
+					if need, err := ParseVersion(strings.TrimPrefix(ve.MinNoxVersion, "v")); err == nil && need.Compare(*rc.nox) > 0 {
 						if tooNew == nil || v.Compare(tooNewVer) > 0 {
 							tooNew, tooNewVer = ve, v
 						}
