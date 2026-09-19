@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: nox-hq/nox-remediate-action@e0246ca8e14ef65b800ea13f4a730960b05588be # v1.0.2
+      - uses: nox-hq/nox-remediate-action@bd80743be12912cec91111b9d0a988b7845788f0 # v1.0.2
         with:
           path: .
           # Run a real verification step before opening the PR so reviewers

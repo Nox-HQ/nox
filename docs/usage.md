@@ -1744,7 +1744,7 @@ jobs:
           format: sarif
 
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: always()
         with:
           sarif_file: nox-results/results.sarif
@@ -1803,7 +1803,7 @@ still uploads its SARIF:
           output: reports
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: always()
         with:
           sarif_file: reports/results.sarif
@@ -1849,7 +1849,7 @@ jobs:
         run: nox scan . --format sarif,json --output results/
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@33119e582d3ab4ed79c2610af108cb08ff983917 # v3
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         if: always()
         with:
           sarif_file: results/results.sarif
