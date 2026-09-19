@@ -11,7 +11,7 @@ The first nox CLI invocation auto-adds the official registry source:
 
 ```
 name: official
-url:  https://raw.githubusercontent.com/nox-hq/nox/main/registry-scaffold/index.json
+url:  https://raw.githubusercontent.com/nox-hq/registry/main/index.json
 ```
 
 Operators don't need to run `nox registry add` for the official set.
@@ -102,14 +102,17 @@ cd path/to/nox-plugin-foo
 nox plugin entry --version 0.2.0 --output entry.json
 ```
 
-The output is a single `PluginEntry` ready to splice into
-`registry-scaffold/index.json`'s `plugins` array. Open a PR against
-the registry repo with the new entry.
+The output is a single `PluginEntry`. For a plugin's **first** release, open
+a PR against [`nox-hq/registry`](https://github.com/nox-hq/registry) adding it
+to `index.json`'s `plugins` array, with the description, track and maintainers
+written by hand, and `minimum_nox_version` if the plugin depends on a policy or
+SDK change. Nothing can infer those, so the registry's reconcile job fails,
+deliberately, while a released plugin has no entry.
 
-After publishing the binaries you must update `digest` and `size` in
-the entry to match the SHA-256 digests of the released archives —
-the entry generator stamps `sha256:tbd` placeholders that nox refuses
-to install.
+After that, releases need no manual step. The registry's daily workflow adds
+every published version, taking each archive's digest and size from the
+release's own `checksums.txt`, and it omits any artifact it cannot verify rather
+than writing a placeholder.
 
 ### Private registries
 
@@ -247,15 +250,9 @@ metacharacters into the install command.
 
 ## Public marketplace site
 
-A static HTML site is rendered from the same `index.json` and deployed
-via GitHub Pages from this repo. The generator lives in
-`cmd/marketplace-build/`; the workflow at
-`.github/workflows/marketplace.yml` rebuilds and deploys on every
-change to the index or the generator. Operators who prefer a
-clickable view land on `https://nox-hq.github.io/nox/` (or the
-configured custom domain) and discover plugins by track / tag.
+The marketplace is [nox-hq.dev/plugins](https://nox-hq.dev/plugins). Its
+catalogue lives in the site repository (`src/data/plugins.ts`); summaries and
+grouping are written by hand, and versions and deprecations are kept in step
+with `index.json` by a daily sync that opens a PR and fails on drift only a
+human can resolve, such as a newly deprecated plugin still shown as current.
 
-The generator is intentionally one Go file plus two HTML templates.
-No JS runtime, no SaaS, no build pipeline beyond `go run`. Operators
-who fork the marketplace into a private context get the same UI by
-pointing the generator at their internal index.
