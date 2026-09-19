@@ -51,6 +51,13 @@ updates:
     labels:
       - dependencies
       - javascript
+    # @types/vscode tracks engines.vscode, not the latest VS Code. It describes
+    # the API the extension may use; a newer one lets code compile against APIs
+    # older supported editors lack, and vsce refuses to package when it exceeds
+    # engines.vscode. Raise both together, deliberately, or neither.
+    ignore:
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Base image for the published container.
   - package-ecosystem: docker

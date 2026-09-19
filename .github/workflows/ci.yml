@@ -598,3 +598,11 @@ jobs:
       - name: Type-check
         working-directory: editors/vscode
         run: npx tsc -p ./ --noEmit
+      # Type-checking passed for weeks while the extension could not be
+      # packaged at all: vsce refuses when @types/vscode is newer than
+      # engines.vscode, and nothing ran vsce. Packaging is the check that
+      # answers "can this be installed", so it runs here. Builds a .vsix
+      # locally; publishes nothing.
+      - name: Package
+        working-directory: editors/vscode
+        run: npx --yes @vscode/vsce@3.9.2 package --no-dependencies -o "$RUNNER_TEMP/nox.vsix"
