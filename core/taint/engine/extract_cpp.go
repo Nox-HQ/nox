@@ -75,6 +75,8 @@ func extractCPP(lines []logicalLine) []unitDraft {
 				applyCPPBufferBuilder(&st)
 				cur.stmts = append(cur.stmts, st)
 			}
+		} else if g, ok := conditionGuard(langCPP, ll); ok {
+			cur.guards = append(cur.guards, g)
 		}
 
 		depth += braceDelta(trimmed)

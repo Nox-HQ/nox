@@ -122,6 +122,19 @@ type Unit struct {
 	// unit and for functions with no parameters. The intraprocedural engine
 	// ignores it.
 	Params []string
+	// Guards are the branch conditions of this function (`if !strings.HasPrefix(p,
+	// base)`), kept apart from Stmts because a condition is evidence of a CHECK,
+	// not a data flow: nothing is assigned or sunk by it. The StructuralEngine
+	// reads them only to decide whether a partial sanitizer (a canonicalizer such
+	// as filepath.Clean) was paired with the check that makes it a sanitizer.
+	Guards []Guard
+}
+
+// Guard is one branch condition: the calls it makes and the variables it reads.
+type Guard struct {
+	Line  int
+	Calls []string
+	Reads []string
 }
 
 // Flow is a reported source-to-sink taint path within a Unit. It is the engine's

@@ -58,6 +58,9 @@ func extractJava(lines []logicalLine) []unitDraft {
 		closesMethod := methodDepth >= 0 && before > methodDepth && depth <= methodDepth
 
 		if isJavaStructuralLine(trimmed) {
+			if g, ok := conditionGuard(langJava, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
 			if closesMethod {
 				cur = module
 				methodDepth = -1

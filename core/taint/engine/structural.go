@@ -36,12 +36,22 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 		for j := range d.stmts {
 			stmts = append(stmts, toStatement(&d.stmts[j]))
 		}
+		var guards []taint.Guard
+		for j := range d.guards {
+			g := &d.guards[j]
+			guards = append(guards, taint.Guard{
+				Line:  g.line,
+				Calls: append([]string(nil), g.calls...),
+				Reads: append([]string(nil), g.reads...),
+			})
+		}
 		units = append(units, taint.Unit{
 			FilePath: filePath,
 			FuncName: d.funcName,
 			Language: lang.String(),
 			Stmts:    stmts,
 			Params:   append([]string(nil), d.params...),
+			Guards:   guards,
 		})
 	}
 	return units
@@ -265,6 +275,7 @@ func (e *StructuralEngine) forwardPass(
 	var flows []taint.Flow
 	var suppressed []taint.Suppression
 	var returned []string
+	checked := e.checkedValues(lang, unit)
 
 	for i := range unit.Stmts {
 		st := &unit.Stmts[i]
@@ -441,6 +452,7 @@ func (e *StructuralEngine) forwardPass(
 					}
 				}
 			}
+			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
 			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: cleared}
 			continue
 		}
@@ -494,6 +506,7 @@ func (e *StructuralEngine) forwardPass(
 				cleared[class] = true
 			}
 		}
+		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
 		tainted[st.Assigns] = taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via}
 	}
 
@@ -1129,11 +1142,13 @@ func topLevelCallsRest(code string) (calls []callChain, rest string) {
 }
 
 // sanitizerClasses returns every vuln class a call neutralizes (by suffix match).
+// A partial sanitizer's classes are left out: canonicalizing a path is not, on
+// its own, a defence (see partial_sanitizer.go).
 func (e *StructuralEngine) sanitizerClasses(lang, rawCall string) []taint.VulnClass {
 	var out []taint.VulnClass
 	for _, key := range suffixKeys(rawCall) {
 		for _, class := range allVulnClasses {
-			if e.cat.IsSanitizer(lang, key, class) {
+			if e.cat.IsSanitizer(lang, key, class) && !e.cat.IsPartialSanitizer(lang, key, class) {
 				out = append(out, class)
 			}
 		}

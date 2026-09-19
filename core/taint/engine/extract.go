@@ -32,6 +32,9 @@ type unitDraft struct {
 	// to map a caller argument position to the callee parameter it binds.
 	params []string
 	stmts  []stmtDraft
+	// guards are the function's branch conditions (see taint.Unit.Guards). Only
+	// calls and reads are meaningful on them.
+	guards []stmtDraft
 }
 
 // stmtDraft is one recognized simple statement: either an assignment or a bare
@@ -266,6 +269,53 @@ type logicalLine struct {
 	line int    // 1-based line number where this logical line starts
 	code string // code-only text of the logical line (literals blanked)
 	raw  string // original text (used to read variable names verbatim)
+}
+
+// conditionGuard recognizes a branch header — `if (…)`, `} else if (…)`,
+// `elseif (…)`, `while (…)` — and returns the calls and variables its condition
+// reads, for the extractors that otherwise skip control-flow lines as
+// scaffolding. The whole remainder of the line is read, so a one-line
+// `if (!p.startsWith(base)) { return; }` contributes its body's calls too; that
+// is harmless, since only catalog checks are ever read from a guard.
+func conditionGuard(lang langKind, ll logicalLine) (stmtDraft, bool) {
+	code := strings.TrimSpace(ll.code)
+	code = strings.TrimSpace(strings.TrimPrefix(code, "}"))
+	code = strings.TrimSpace(strings.TrimPrefix(code, "else"))
+	var rest string
+	for _, kw := range []string{"elseif", "if", "while"} {
+		if strings.HasPrefix(code, kw) && len(code) > len(kw) && (code[len(kw)] == '(' || code[len(kw)] == ' ') {
+			rest = code[len(kw):]
+			break
+		}
+	}
+	if strings.TrimSpace(rest) == "" {
+		return stmtDraft{}, false
+	}
+	off := strings.Index(ll.code, rest)
+	raw := rest
+	if off >= 0 && off+len(rest) <= len(ll.raw) {
+		raw = ll.raw[off : off+len(rest)]
+	}
+	g := stmtDraft{line: ll.line}
+	calls := extractCalls(lang, rest, raw)
+	reads := map[string]struct{}{}
+	for _, id := range freeIdentifiers(lang, rest) {
+		reads[id] = struct{}{}
+	}
+	for i := range calls {
+		g.calls = append(g.calls, calls[i].callee)
+		for _, v := range argInfo(lang, calls[i]).taintedArgVars {
+			reads[v] = struct{}{}
+		}
+	}
+	for r := range reads {
+		g.reads = append(g.reads, r)
+	}
+	sortStrings(g.reads)
+	if len(g.calls) == 0 {
+		return stmtDraft{}, false
+	}
+	return g, true
 }
 
 // logicalLines splits content into logical lines: physical lines merged while
