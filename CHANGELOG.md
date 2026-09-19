@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Two defects found by verifying v1.37.0 rather than by reading it. Both were
+places where a check existed and simply was not reached.
+
+### Fixed
+
+- **`nox serve` now confines itself to its working directory.** The MCP server
+  has had workspace allowlisting since it shipped, with symlink resolution and
+  its own tests. The CLI never turned it on: `--allowed-paths` defaulted to
+  empty, and an empty allowlist means "anywhere". A released 1.37.0 binary
+  answered `tools/call scan {"path": "/etc"}` by scanning `/etc`.
+
+  That is the excessive-agency shape nox itself reports in other people's
+  agents — the caller here is an LLM, and an attacker who can steer it could
+  read findings out of `$HOME` or any other readable tree. `nox serve` with no
+  flag now allows exactly its working directory, which is already what an MCP
+  client config points at the project it wants scanned. `--allowed-paths` still
+  widens it, and `--allowed-paths /` restores the old behaviour for anyone who
+  wants it — the difference being that it is now visible in the process table.
+
+  `server.New` is unchanged: an empty allowlist still means unrestricted there,
+  because embedders hold their own boundary. That semantic is now pinned by a
+  test rather than left implicit, since a fail-open default nobody asserts is
+  one a later refactor quietly "fixes".
+
+  **This is a behaviour change.** A client that launches `nox serve` from one
+  directory and asks it to scan another now gets `path ... is outside allowed
+  workspaces`. Name the roots with `--allowed-paths` to restore it.
+
+  Probing all ten path-taking tools against a running server, seven refuse an
+  outside path and three — `attack_plan`, `dashboard`, `fix_plan` — do not.
+  Those three take the path as a cache key selecting results a prior `scan`
+  produced, never as something to read, so an unscanned path is a miss and the
+  boundary holds at `scan`. That is now a test, so it stays true if one of them
+  ever grows a real read.
+
+- **A model is listed once per file in `ai.inventory.json`, not once per
+  detector.** Two extractors reach the same call site by different routes —
+  `model="gpt-4o"` satisfies the config-assignment pattern and the
+  SDK-invocation pattern — and both appended. One row carried the license and
+  registry, the other the line number and auth env var, and neither was the
+  whole answer.
+
+  Measured on the Anthropic SDK repository, the 1.37.0 binary emitted 293
+  `model_provenance` rows for 71 distinct model-and-file pairs: 76% of that
+  section was duplication, and anything counting models over-counted by 4x.
+  The rows now merge into one carrying both halves. Verified against the same
+  corpus: 71 rows out, no model gained or lost, and no field dropped that any
+  1.37.0 row supplied.
+
+  Entries are keyed by (path, name), so a second call to the same model in one
+  file collapses to the first line rather than adding a row. That is the
+  granularity the inventory already reported at — `extractModelReferences` has
+  always collapsed repeat names within a file, so no caller could count call
+  sites here — and per-occurrence locations remain the finding stream's job.
+
 ## [1.37.0] - 2026-09-18
 
 The theme is that a rule disappearing is itself a conclusion, and nox now
