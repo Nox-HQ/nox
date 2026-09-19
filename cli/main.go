@@ -289,7 +289,7 @@ func run(args []string) int {
 // through fs.Arg / fs.Args: flags are honoured wherever they appear (see
 // parseInterspersed), and fs is left holding exactly the positionals.
 //
-// #103 fixed `nox scan . -offline` dropping -offline. Twenty-three other
+// #103 fixed `nox scan . -offline` dropping -offline. Twenty-two other
 // commands kept plain fs.Parse and the same bug -- `nox diff . --base main`
 // ignored --base, and `nox registry add <url> --name x`, the order its own
 // usage line gave, ignored --name. They use this instead.
