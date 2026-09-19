@@ -30,7 +30,7 @@ on:
     types: [published]      # primary trigger — every published release
   schedule:
     - cron: "17 6 * * 1"    # weekly safety net (Mon). Release+CI events keep badges fresh.
-  workflow_dispatch: # nox:ignore IAC-308 -- badge refresh is run on demand after a release
+  workflow_dispatch: # nox:ignore IAC-308,IAC-155 -- badge refresh is run on demand after a release; it opens a PR, which is where review happens
   workflow_run:
     workflows: ["CI"]
     types: [completed]

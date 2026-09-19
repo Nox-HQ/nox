@@ -30,6 +30,11 @@ jobs:
   # and turn their sha256 sums into the base64 subject blob the SLSA
   # generator expects. Runs only when Release was a success on a tag.
   subjects:
+    # Uploads an attestation onto a published release, so a backfill waits for
+    # maintainer approval in the protected `release` environment (IAC-155). The
+    # gate sits here because `provenance` calls a reusable workflow and cannot
+    # take an environment itself; it needs this job, so nothing runs unapproved.
+    environment: release
     if: >-
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

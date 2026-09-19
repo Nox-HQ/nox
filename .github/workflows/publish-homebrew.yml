@@ -30,6 +30,9 @@ permissions:
 
 jobs:
   publish:
+    # Publishes the tap formula users install from, so a manual run waits for
+    # maintainer approval in the protected `release` environment (IAC-155).
+    environment: release
     runs-on: ubuntu-latest
     steps:
       - name: Render the formula from the release's own checksums
