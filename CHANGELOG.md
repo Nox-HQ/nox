@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.38.4] - 2026-09-19
+
+### Fixed
+
+- **A plugin version that needs a newer nox is not installed on an older one.**
+  The registry's `minimum_nox_version` was written by `nox plugin entry` and
+  read by nothing, so such a plugin installed cleanly and then failed
+  registration on every scan. Resolution now skips those versions, choosing an
+  older compatible one if there is one, and otherwise names the nox release
+  required. The first plugin to need it is `nox/freshness` 0.1.0, released
+  alongside, which requires 1.38.3.
+
 ## [1.38.3] - 2026-09-19
 
 The audit taken all the way out: not only this repository but the release
