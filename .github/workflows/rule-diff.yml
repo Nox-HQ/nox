@@ -50,14 +50,22 @@ jobs:
         run: go build -o /tmp/nox-candidate ./cli
 
       - name: Fetch last released nox as the baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Authenticated and retried. Both requests used to be anonymous curl, so
+        # they shared the 60-per-hour budget of every job on the runner's IP and
+        # failed on a 403 throttle (seen on #687) -- turning the gate red for a
+        # reason that says nothing about rules. The same fix nox's own action
+        # needed for the same throttle.
         run: |
           set -euo pipefail
-          tag="$(curl -fsSL https://api.github.com/repos/nox-hq/nox/releases/latest | jq -r .tag_name)"
+          retry() { for i in 1 2 3 4 5; do "$@" && return 0; echo "attempt $i failed; retrying" >&2; sleep $((i * 10)); done; return 1; }
+          tag="$(retry gh release view --repo nox-hq/nox --json tagName -q .tagName)"
           ver="${tag#v}"
           echo "baseline: $tag"
           tmp="$(mktemp -d)"
-          curl -fsSL -o "$tmp/nox.tar.gz" \
-            "https://github.com/nox-hq/nox/releases/download/${tag}/nox_${ver}_linux_amd64.tar.gz"
+          retry gh release download "$tag" --repo nox-hq/nox \
+            --pattern "nox_${ver}_linux_amd64.tar.gz" --output "$tmp/nox.tar.gz" --clobber
           tar xzf "$tmp/nox.tar.gz" -C "$tmp"
           mv "$tmp/nox" /tmp/nox-baseline
           /tmp/nox-baseline version
