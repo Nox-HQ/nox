@@ -60,6 +60,15 @@ found by verifying v1.37.0 against what it claims rather than by reading it.
   one before this shipped: the plugin runner is `plugin.call_tool`, and the first
   draft wrote `plugin_call_tool`, which would have left it unlimited.
 
+- **`nox fix --actions` names every pin it passes over.** Only a held major
+  printed a reason; a reusable workflow, a branch-tracking ref, and a repository
+  with no stable release were skipped without a word. The first of those is the
+  SLSA provenance generator in a release workflow — the exact pin this command
+  once rewrote to a release candidate's SHA, which was found by reading a diff
+  after the fact. Keeping it on its tag is correct (slsa-verifier resolves
+  builder identity from the ref); doing so silently left an operator unable to
+  tell "kept on purpose" from "never seen".
+
 - **A model is listed once per file in `ai.inventory.json`, not once per
   detector.** Two extractors reach the same call site by different routes —
   `model="gpt-4o"` satisfies the config-assignment pattern and the

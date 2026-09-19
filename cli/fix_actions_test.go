@@ -384,3 +384,31 @@ func TestRunActionsFix_LeavesReusableWorkflowsTagged(t *testing.T) {
 		t.Errorf("reusable workflow was rewritten, or the sibling action was not:\n%s", got)
 	}
 }
+
+// The mis-pin this command once made — slsa-github-generator's reusable workflow
+// rewritten to a release candidate's SHA — was found by reading a diff after the
+// fact. Skipping it silently would hide the next one the same way, so every skip
+// has to say which pin it passed over and why.
+func TestRunActionsFix_EverySkipNamesItself(t *testing.T) {
+	root := t.TempDir()
+	writeWFPin(t, root, "mixed.yml", `jobs:
+  provenance:
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+  build:
+    steps:
+      - uses: some/action@main
+      - uses: norelease/action@v1
+`)
+	res := fakeResolver{}
+	out := captureStdout(t, func() { runActionsFix(root, true, false, res) })
+
+	for _, want := range []string{
+		"skip (reusable workflow): slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0",
+		"skip (branch): some/action@main",
+		"skip (unresolved): norelease/action@v1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+}

@@ -158,17 +158,27 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 	for _, p := range pins {
 		// A reusable workflow keeps its tag: pinning it by digest makes it
 		// unverifiable to slsa-verifier. See isReusableWorkflowRef.
+		//
+		// Every skip names itself. A pin tool that passes over the provenance
+		// generator in a release workflow without a word leaves the operator
+		// unable to tell "kept on its tag on purpose" from "never seen" — and
+		// the second reading is how a real mis-pin would hide.
 		if isReusableWorkflowRef(p.full) {
+			fmt.Printf("skip (reusable workflow): %s@%s keeps its tag; slsa-verifier resolves builder identity from it\n", p.full, p.ref)
 			skipped++
 			continue
 		}
 		cur := p.currentVersion()
 		if cur == "" {
-			skipped++ // tracks a branch (e.g. @main reusable workflow) — leave it
+			fmt.Printf("skip (branch): %s@%s tracks a branch, not a release\n", p.full, p.ref)
+			skipped++
 			continue
 		}
 		l := resolve(p.repo)
 		if !l.ok {
+			// A resolver error has already been warned on stderr; this line
+			// also covers a repository with no stable release, which is silent.
+			fmt.Printf("skip (unresolved): %s@%s has no stable release to compare against\n", p.full, p.ref)
 			skipped++
 			continue
 		}
