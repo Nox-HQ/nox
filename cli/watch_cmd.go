@@ -23,7 +23,7 @@ func runWatch(args []string) int {
 	)
 	fs.DurationVar(&debounce, "debounce", 500*time.Millisecond, "debounce interval for file changes")
 	fs.BoolVar(&jsonFlag, "json", false, "output as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

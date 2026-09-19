@@ -50,7 +50,7 @@ func runBenchPrecision(args []string) int {
 	fs.BoolVar(&jsonOut, "json", false, "emit the report as JSON instead of a table")
 	fs.Float64Var(&minPrecision, "min-precision", -1, "fail (exit 1) if any rule that fired scores below this precision (0..1); default off")
 	fs.StringVar(&baselineFile, "baseline", "", "snapshot file: written if absent, else compared (exit 1 on regression)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

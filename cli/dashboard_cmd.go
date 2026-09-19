@@ -20,7 +20,7 @@ func runDashboard(args []string) int {
 	)
 	fs.StringVar(&output, "output", "", "output HTML file path (default: temp file)")
 	fs.BoolVar(&noBrowser, "no-browser", false, "write HTML file without opening browser")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

@@ -152,7 +152,7 @@ func runPluginSearch(args []string) int {
 	var trackFlag string
 	fs.StringVar(&trackFlag, "track", "", "filter by track (e.g. core-analysis, ai-security)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -342,7 +342,7 @@ func runPluginInstall(args []string) int {
 	fs.StringVar(&policyOverride, "trust-policy", "", "override trust policy: permissive, default, enterprise")
 	var localPath string
 	fs.StringVar(&localPath, "local", "", "install an unsigned plugin binary from a local path (development only)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

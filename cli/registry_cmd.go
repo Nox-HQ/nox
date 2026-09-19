@@ -37,7 +37,7 @@ func runRegistryAdd(args []string) int {
 	var name string
 	fs.StringVar(&name, "name", "", "registry name (default: derived from URL hostname)")
 
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

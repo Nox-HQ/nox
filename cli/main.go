@@ -285,28 +285,54 @@ func run(args []string) int {
 	}
 }
 
+// parseFlagsAnywhere is fs.Parse for a command that reads its positionals
+// through fs.Arg / fs.Args: flags are honoured wherever they appear (see
+// parseInterspersed), and fs is left holding exactly the positionals.
+//
+// #103 fixed `nox scan . -offline` dropping -offline. Twenty-three other
+// commands kept plain fs.Parse and the same bug -- `nox diff . --base main`
+// ignored --base, and `nox registry add <url> --name x`, the order its own
+// usage line gave, ignored --name. They use this instead.
+func parseFlagsAnywhere(fs *flag.FlagSet, args []string) error {
+	pos, err := parseInterspersed(fs, args)
+	if err != nil {
+		return err
+	}
+	return fs.Parse(append([]string{"--"}, pos...))
+}
+
 // parseInterspersed parses fs from args where flags may appear before AND
 // after positional arguments. The stdlib flag package stops at the first
 // non-flag token, so a flag placed after the path (e.g. "scan . -offline")
 // would otherwise be silently dropped (#103). After each positional we
 // re-parse the remainder, so every flag is honored regardless of position.
 // Returns the positional arguments in order.
+//
+// `--` still ends flag parsing for good: everything after it is returned
+// verbatim as positionals. Commands such as `nox mcp baseline -- nox serve
+// --allowed-paths x` pass that tail to a child process, and re-parsing it as
+// our own flags would reject the child's flags or consume ones sharing a name.
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	head, tail := args, []string(nil)
+	for i, a := range args {
+		if a == "--" {
+			head, tail = args[:i], args[i+1:]
+			break
+		}
+	}
 	var positionals []string
-	rest := args
-	for {
+	rest := head
+	for len(rest) > 0 {
 		if err := fs.Parse(rest); err != nil {
 			return positionals, err
 		}
 		if fs.NArg() == 0 {
-			return positionals, nil
+			break
 		}
 		positionals = append(positionals, fs.Arg(0))
 		rest = fs.Args()[1:]
-		if len(rest) == 0 {
-			return positionals, nil
-		}
 	}
+	return append(positionals, tail...), nil
 }
 
 // resolveOutputFormat picks the output format from the CLI flag, then
