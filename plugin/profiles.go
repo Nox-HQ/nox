@@ -56,8 +56,18 @@ func ProfileForTrack(track registry.Track) Policy {
 
 	case registry.TrackSupplyChain:
 		return Policy{
-			MaxRiskClass:          RiskClassPassive,
-			AllowedNetworkHosts:   []string{"*.osv.dev", "*.github.com", "*.npmjs.org", "*.pypi.org"},
+			MaxRiskClass: RiskClassPassive,
+			// The package registries a provenance check has to read. npm and
+			// PyPI were here; Go's module proxy, the same thing for Go, was
+			// not, so nox/freshness -- which checks a Go dependency's age and
+			// withdrawal at proxy.golang.org -- was rejected at registration
+			// under the track built for it. Exactly that host, no wildcard.
+			//
+			// pypi.org is listed as well as *.pypi.org because a wildcard does
+			// not match its apex, and PyPI's JSON API is the apex
+			// (pypi.org/pypi/<name>/json): *.pypi.org alone let a plugin reach
+			// every PyPI host except the one with the metadata.
+			AllowedNetworkHosts:   []string{"*.osv.dev", "*.github.com", "*.npmjs.org", "*.pypi.org", "pypi.org", "proxy.golang.org"},
 			MaxArtifactBytes:      20 * 1024 * 1024,
 			MaxConcurrency:        4,
 			ToolInvocationTimeout: 3 * time.Minute,

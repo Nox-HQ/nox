@@ -292,3 +292,22 @@ func TestTrackProfile_GovernsManifestAcceptance(t *testing.T) {
 		}
 	})
 }
+
+// A supply-chain plugin has to reach the registries whose packages it audits.
+// nox/freshness declares registry.npmjs.org and proxy.golang.org; before Go's
+// proxy was on this list the host rejected it at registration, so a plugin
+// written for this track could not run under it. The allowlist must stay an
+// allowlist: an arbitrary host, or a different golang.org host, is still out.
+func TestSupplyChainTrackReachesThePackageRegistriesItAudits(t *testing.T) {
+	allowed := ProfileForTrack(registry.TrackSupplyChain).AllowedNetworkHosts
+	for _, h := range []string{"registry.npmjs.org", "proxy.golang.org", "pypi.org", "api.osv.dev"} {
+		if !hostAllowed(h, allowed) {
+			t.Errorf("supply-chain track rejects %s, a registry its plugins must read", h)
+		}
+	}
+	for _, h := range []string{"evil.example", "sum.golang.org", "golang.org", "proxy.golang.org.evil.example"} {
+		if hostAllowed(h, allowed) {
+			t.Errorf("supply-chain track allows %s, which it has no reason to reach", h)
+		}
+	}
+}
