@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.37.0",
+  "nox_release": "v1.38.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",

@@ -5,12 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.38.0] - 2026-09-19
 
-Every known defect, closed before release rather than listed after it. Three are
-places where nox's contract said one thing and the code did another, found by
-verifying v1.37.0 against what it claims; the rest are rules that could not stand
-beside a standard nox had already set.
+Every known defect, closed before release rather than listed after it.
+
+Most were found by verifying v1.37.0 against what nox claims rather than by
+reading its code: the MCP server was documented as sandboxed and rate-limited and
+was neither, and the AI inventory listed most models twice. The rest are rules
+that could not stand beside a standard nox had already set — four withdrawn, one
+narrowed — and one command that skipped the pin that matters most without saying
+so.
 
 ### Removed
 
