@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"text/template"
 
@@ -29,6 +32,14 @@ type pluginInitData struct {
 	CapabilityDesc   string // e.g. "Static analysis"
 	ReadOnly         string // "true" or "false"
 	SafetyOpts       string // e.g. "sdk.WithRiskClass(sdk.RiskPassive)"
+
+	// The scaffold pins its SDK and its nox scan to the release that generated
+	// it, so a new plugin starts on the version its author just ran rather
+	// than on whatever a template file was last edited to say. go.mod.tmpl
+	// once said nox v0.1.0 and Go 1.25; nox-plugin-freshness inherited both.
+	GoVersion    string // go directive, e.g. "1.26.5"
+	NoxVersion   string // SDK require, e.g. "v1.38.3"; empty on a dev build (go mod tidy resolves it)
+	NoxActionRef string // nox action pin, e.g. "<commit> # v1.38.3"; "v1" on a dev build
 }
 
 // runPluginInit scaffolds a new plugin project with track-aware templates.
@@ -142,7 +153,46 @@ func buildInitData(name string, track registry.Track, riskClassOverride string) 
 		CapabilityDesc:   trackInfo.DisplayName + " analysis",
 		ReadOnly:         readOnly,
 		SafetyOpts:       safetyOpts,
+		GoVersion:        scaffoldGoVersion(),
+		NoxVersion:       scaffoldNoxVersion(version),
+		NoxActionRef:     scaffoldNoxActionRef(version, commit),
 	}
+}
+
+var releaseVersion = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
+
+// scaffoldNoxVersion is the SDK version a new plugin requires: the release
+// that is scaffolding it. A dev build has no release to name, and pinning a
+// guess would rot, so the require is left out and `go mod tidy` resolves the
+// latest release on first build.
+func scaffoldNoxVersion(v string) string {
+	if m := releaseVersion.FindStringSubmatch(v); m != nil {
+		return "v" + m[1]
+	}
+	return ""
+}
+
+// scaffoldNoxActionRef pins the generated CI's nox scan the way nox pins every
+// action: by commit, labelled with the release. A dev build falls back to the
+// floating v1 tag, which always names the latest release.
+func scaffoldNoxActionRef(v, c string) string {
+	m := releaseVersion.FindStringSubmatch(v)
+	if m == nil || !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(c) {
+		return "v1"
+	}
+	return c + " # v" + m[1]
+}
+
+// scaffoldGoVersion is the go directive for a new plugin: the Go release that
+// built this nox, which is at least nox's own go directive, so requiring the
+// SDK can never demand a newer toolchain than the plugin declares.
+func scaffoldGoVersion() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if v := strings.TrimPrefix(bi.GoVersion, "go"); releaseVersion.MatchString(v) {
+			return v
+		}
+	}
+	return strings.TrimPrefix(runtime.Version(), "go")
 }
 
 // buildSafetyOpts generates SDK safety option code for templates.
@@ -191,6 +241,8 @@ func scaffoldPlugin(outDir string, data *pluginInitData) error {
 		{"templates/Dockerfile.tmpl", "Dockerfile"},
 		{"templates/ci.yml.tmpl", filepath.Join(".github", "workflows", "ci.yml")},
 		{"templates/release.yml.tmpl", filepath.Join(".github", "workflows", "release.yml")},
+		{"templates/goreleaser.yaml.tmpl", ".goreleaser.yaml"},
+		{"templates/plugin.yaml.tmpl", "plugin.yaml"},
 	}
 
 	for _, f := range files {

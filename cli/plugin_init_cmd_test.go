@@ -191,6 +191,8 @@ func TestScaffoldPlugin(t *testing.T) {
 		"Dockerfile",
 		filepath.Join(".github", "workflows", "ci.yml"),
 		filepath.Join(".github", "workflows", "release.yml"),
+		".goreleaser.yaml",
+		"plugin.yaml",
 	}
 
 	for _, f := range expectedFiles {
@@ -351,5 +353,65 @@ func TestRunPluginInit_ViaRunCommand(t *testing.T) {
 	code := run([]string{"plugin", "init", "--name", "nox/test", "--track", "core-analysis", "--output", outDir})
 	if code != 0 {
 		t.Fatalf("expected exit code 0 via run, got %d", code)
+	}
+}
+
+// The scaffold used to generate the old shared pipeline: Go 1.25, a
+// golangci-lint built with Go 1.25, Ed25519 signing via NOX_SIGNING_KEY, and
+// the SDK pinned to nox v0.1.0. nox-plugin-freshness was generated from it,
+// sat red in CI from the day it was created, and could not have produced a
+// release the registry verifies. Nothing generated may point back at it.
+func TestScaffoldGeneratesTheFleetPipeline(t *testing.T) {
+	dir := t.TempDir()
+	data := buildInitData("nox/demo", registry.TrackSupplyChain, "")
+	if err := scaffoldPlugin(dir, &data); err != nil {
+		t.Fatalf("scaffoldPlugin: %v", err)
+	}
+	var all strings.Builder
+	for _, f := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml", ".goreleaser.yaml", "go.mod", "plugin.yaml"} {
+		b, err := os.ReadFile(filepath.Join(dir, f))
+		if err != nil {
+			t.Fatalf("reading %s: %v", f, err)
+		}
+		all.Write(b)
+	}
+	out := all.String()
+	for _, stale := range []string{"nox-hq/.github/", "NOX_SIGNING_KEY", "go-version: '1.25'", "nox v0.1.0", "go 1.25\n"} {
+		if strings.Contains(out, stale) {
+			t.Errorf("scaffold still generates %q from the old shared pipeline", stale)
+		}
+	}
+	for _, want := range []string{"goreleaser", "cosign", "checksums.txt.sigstore.json", "track: supply-chain", "go-version-file: go.mod"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("scaffold is missing %q from the fleet pipeline", want)
+		}
+	}
+	// The generated text must be valid after templating: no Go template
+	// markers left over, and GitHub/GoReleaser expressions preserved.
+	// GoReleaser's own {{.Version}} is meant to survive; ours are not.
+	for _, field := range []string{"{{.ModuleName", "{{.Name", "{{.Track", "{{.Nox", "{{.Go", "{{.Description", "{{.Capability"} {
+		if strings.Contains(out, field) {
+			t.Errorf("scaffold field %s survived unrendered", field)
+		}
+	}
+	if !strings.Contains(out, "${{ secrets.GITHUB_TOKEN }}") || !strings.Contains(out, "{{ .Version }}") {
+		t.Error("GitHub or GoReleaser expressions were consumed by the Go template instead of preserved")
+	}
+}
+
+func TestScaffoldPinsTheReleaseThatGeneratedIt(t *testing.T) {
+	const c = "f345910099d0d7404f15fb4a55a8a826af6f824e"
+	if got := scaffoldNoxVersion("1.38.2"); got != "v1.38.2" {
+		t.Errorf("release build: SDK %q, want v1.38.2", got)
+	}
+	if got := scaffoldNoxActionRef("1.38.2", c); got != c+" # v1.38.2" {
+		t.Errorf("release build: action ref %q", got)
+	}
+	// A dev build names no release, so it must not guess one.
+	if got := scaffoldNoxVersion("dev"); got != "" {
+		t.Errorf("dev build: SDK %q, want empty (go mod tidy resolves it)", got)
+	}
+	if got := scaffoldNoxActionRef("dev", "none"); got != "v1" {
+		t.Errorf("dev build: action ref %q, want v1", got)
 	}
 }

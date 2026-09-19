@@ -2,13 +2,121 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
-  ci:
-    uses: nox-hq/.github/.github/workflows/plugin-ci.yml@main
-    with:
-      go-version: '1.25'
-      run-conformance: true
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Remove local replace
+        run: sed -i '/^replace /d' go.mod && go mod tidy
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          only-new-issues: true
+
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Remove local replace
+        run: sed -i '/^replace /d' go.mod && go mod tidy
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -race -v ./...
+
+      - name: Build binary
+        run: make build
+
+  nox-scan:
+    name: Nox Self-Scan
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Run Nox
+        uses: nox-hq/nox@{{.NoxActionRef}}
+        with:
+          path: .
+          format: sarif,json
+          output: nox-results
+          fail-on-findings: 'false'
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        if: always()
+        with:
+          sarif_file: nox-results/results.sarif
+        continue-on-error: true
+
+      - name: Upload scan artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nox-results
+          path: nox-results/
+          if-no-files-found: warn
+
+  nox-pr-gate:
+    name: Nox PR Gate (high/critical)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Run Nox (changed files only)
+        uses: nox-hq/nox@{{.NoxActionRef}}
+        with:
+          path: .
+          format: sarif,json
+          output: nox-pr
+          fail-on-findings: 'true'
+          severity-threshold: high
+          changed-since: origin/${{`{{ github.base_ref }}`}}
+
+      - name: Upload SARIF (PR-scoped)
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        if: always()
+        with:
+          sarif_file: nox-pr/results.sarif
+          category: nox-pr
+        continue-on-error: true

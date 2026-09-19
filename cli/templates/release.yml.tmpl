@@ -2,12 +2,61 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write   # required for cosign keyless signing
+  packages: write
 
 jobs:
-  release:
-    uses: nox-hq/.github/.github/workflows/plugin-release.yml@main
-    with:
-      go-version: '1.25'
-    secrets:
-      NOX_SIGNING_KEY: ${{`{{ secrets.NOX_SIGNING_KEY }}`}}
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install Cosign
+        # cosign v4: signs config uses the new --bundle (.sigstore.json)
+        # format; --output-signature/--output-certificate were removed.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Syft (for SBOM)
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{`{{ secrets.GITHUB_TOKEN }}`}}
+
+      - name: Generate registry entry
+        # Best-effort. The `nox plugin entry` subcommand requires nox
+        # >= 0.8.0 (added 2026-05). Older nox releases on PATH cause
+        # this step to exit non-zero — that's fine, the actual
+        # GoReleaser release + Cosign signing already succeeded above.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Pull a release-built nox binary so we can run `plugin entry`.
+          curl -sSL "https://github.com/nox-hq/nox/releases/latest/download/nox_$(curl -sSL https://api.github.com/repos/nox-hq/nox/releases/latest | jq -r .tag_name | sed 's/^v//')_linux_amd64.tar.gz" -o nox.tar.gz
+          tar xzf nox.tar.gz
+          ./nox plugin entry --dir . --release "${GITHUB_REF_NAME#v}" --output entry.json
+          echo "::notice file=entry.json::Published releases are added to the registry automatically by the Registry workflow in nox-hq/registry (runs daily). entry.json is kept as a debugging aid; no manual PR is normally needed."
+      - name: Upload registry entry artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: registry-entry
+          path: entry.json
+          retention-days: 30
