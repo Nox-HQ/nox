@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Two defects found by verifying v1.37.0 rather than by reading it. Both were
-places where a check existed and simply was not reached.
+Three places where nox's own contract said one thing and the code did another,
+found by verifying v1.37.0 against what it claims rather than by reading it.
 
 ### Fixed
 
@@ -41,6 +41,24 @@ places where a check existed and simply was not reached.
   produced, never as something to read, so an unscanned path is a miss and the
   boundary holds at `scan`. That is now a test, so it stays true if one of them
   ever grows a real read.
+
+- **The MCP server is rate-limited, as its design has always said.** CLAUDE.md
+  and the backlog both describe `nox serve` as rate-limited; nothing limited it.
+  There are now two tiers. Every request shares a ceiling of 20/s (burst 50), and
+  the tools whose cost scales with the workspace (`scan`, `diff`,
+  `plugin.call_tool`, `plugin_install`) also share 1/s (burst 3). Triage calls
+  never spend the scan budget, because a limit that stalls `list_findings` would
+  punish the well-behaved agent it was never aimed at.
+
+  Measured over real stdio: 80 rapid calls → 48 served, 32 refused with
+  `-32003`; 12 scans of a one-file directory → 3 served, 9 refused. Scans of a
+  real project take over a second each and stdio handles them in turn, so the
+  bucket refills between calls. The scan tier binds when scans are cheap enough
+  to loop on, which is the case it exists for.
+
+  A test fails if a costly-tier name stops matching a registered tool. It caught
+  one before this shipped: the plugin runner is `plugin.call_tool`, and the first
+  draft wrote `plugin_call_tool`, which would have left it unlimited.
 
 - **A model is listed once per file in `ai.inventory.json`, not once per
   detector.** Two extractors reach the same call site by different routes —

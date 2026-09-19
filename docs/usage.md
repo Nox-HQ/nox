@@ -1951,6 +1951,13 @@ nox serve --allowed-paths /path/to/project
 
 All tools are **read-only**. Output is truncated at **1 MB**.
 
+Requests are rate-limited in two tiers, so a runaway or steered agent cannot
+turn the host into a scanning farm. Every request shares a ceiling of 20 per
+second (burst 50). The tools whose cost scales with the workspace — `scan`,
+`diff`, `plugin.call_tool`, `plugin_install` — additionally share 1 per second
+(burst 3). Reading results back is never charged against the scan budget. A
+refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
+
 ### Resources
 
 | URI | MIME Type | Description |

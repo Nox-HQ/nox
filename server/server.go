@@ -216,7 +216,7 @@ func (s *Server) Serve() error {
 	s.registerTools(srv)
 	s.registerResources(srv)
 
-	return mcp.ServeStdio(context.Background(), srv)
+	return mcp.ServeStdio(context.Background(), srv, mcp.WithMiddleware(rateLimits()...))
 }
 
 func (s *Server) registerTools(srv *mcp.Server) {
