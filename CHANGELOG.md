@@ -5,7 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.38.0] - 2026-09-19
+## [1.38.1] - 2026-09-19
+
+v1.38.1 is the release. v1.38.0 was tagged but never published, and is
+retracted in `go.mod`; everything described under it ships here. The tag
+recorded by the Go checksum database can't be moved, so the fix needed a new
+version.
+
+### Fixed
+
+- **A waiver naming a withdrawn rule is explained wherever it appears.** The
+  unused-waiver check runs on two paths: a sweep over files with no findings,
+  and a pass over files that have some. Only the sweep consulted the tombstone
+  registry, so a waiver in a file with *any* other finding — the ordinary case
+  in a real codebase — got "check the rule ID" instead of the withdrawal. v1.37.0
+  shipped with the gap, which is why its tombstones worked in its release check
+  and not in general: that check's fixture had no other finding.
+
+  Found by verifying the v1.38.0 release binary against a fixture that did.
+  Both paths now call one function, so they cannot drift apart again, and the
+  new test drives a scan down each path rather than testing the helper. Also
+  verified end to end in one scan: a waiver, a baseline entry and a VEX
+  statement, each explaining its withdrawn rule.
+
+## [1.38.0] - 2026-09-19 — tagged, not released
 
 Every known defect, closed before release rather than listed after it.
 
