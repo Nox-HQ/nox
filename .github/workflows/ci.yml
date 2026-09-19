@@ -36,7 +36,7 @@ on:
   # the PR gate (changed-files only) would miss.
   schedule:
     - cron: '0 6 * * 1' # Mondays 06:00 UTC
-  workflow_dispatch: {} # nox:ignore IAC-308 -- used to run the full OS matrix on a branch before merge
+  workflow_dispatch: {} # nox:ignore IAC-308,IAC-155 -- used to run the full OS matrix on a branch before merge; it publishes nothing
 
 permissions:
   contents: write # nox:ignore IAC-314 -- needed for badge commits and SARIF upload

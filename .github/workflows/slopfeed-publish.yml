@@ -40,6 +40,12 @@ permissions:
 
 jobs:
   publish:
+    # Gate the MANUAL path only. A manual run signs and publishes the feed on
+    # demand, so it waits for maintainer approval in the protected `release`
+    # environment (IAC-155). The scheduled run is the feed's normal cadence and
+    # must not stall on an approval nobody is watching for; an empty environment
+    # name means none.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'release' || '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # nox:ignore IAC-314 -- creating the feed release and uploading the signed feed + public key requires write to releases

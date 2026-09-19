@@ -19,7 +19,7 @@ on:
   schedule:
     # Mondays 07:17 UTC. Off the hour to avoid the top-of-hour scheduler surge.
     - cron: "17 7 * * 1"
-  workflow_dispatch: # nox:ignore IAC-308 -- on-demand re-run of the corpus audit after a rule change
+  workflow_dispatch: # nox:ignore IAC-308,IAC-155 -- on-demand re-run of the corpus audit after a rule change; its only output is an issue
 
 permissions:
   contents: read
