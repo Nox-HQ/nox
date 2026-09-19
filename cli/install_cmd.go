@@ -183,7 +183,7 @@ func installOne(name, constraint string, st *State) error {
 	store := newOCIStoreWithPolicy(policyName)
 	ctx := context.Background()
 
-	ve, err := client.Resolve(ctx, name, constraint)
+	ve, err := client.Resolve(ctx, name, constraint, registry.WithNoxVersion(version))
 	if err != nil {
 		return fmt.Errorf("resolving: %w", err)
 	}

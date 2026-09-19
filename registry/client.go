@@ -211,6 +211,25 @@ type ResolveOption func(*resolveConfig)
 
 type resolveConfig struct {
 	filter func(PluginEntry) bool
+	// nox is the running nox version, when it is a release. Versions whose
+	// minimum_nox_version is newer are skipped.
+	nox *Version
+}
+
+// WithNoxVersion skips plugin versions that declare a minimum_nox_version
+// newer than v, the version of nox doing the resolving.
+//
+// The field was in the index schema, and `nox plugin entry` wrote it, but
+// nothing read it: a plugin that needed a newer host -- nox/freshness, which
+// needs the supply-chain track to allow proxy.golang.org (nox 1.38.3) --
+// installed cleanly on an older one and was then rejected at registration on
+// every scan. A dev build names no release; pass "" and nothing is skipped.
+func WithNoxVersion(v string) ResolveOption {
+	return func(rc *resolveConfig) {
+		if parsed, err := ParseVersion(strings.TrimPrefix(v, "v")); err == nil {
+			rc.nox = &parsed
+		}
+	}
 }
 
 // WithFilter adds a filter that must return true for a plugin to be
@@ -241,6 +260,10 @@ func (c *Client) Resolve(ctx context.Context, name, constraint string, opts ...R
 
 	var best *VersionEntry
 	var bestVer Version
+	// The newest version passed over only because it needs a newer nox, so
+	// the error can say that instead of "no version matches".
+	var tooNew *VersionEntry
+	var tooNewVer Version
 
 	for _, idx := range indexes {
 		for i := range idx.Plugins {
@@ -260,6 +283,14 @@ func (c *Client) Resolve(ctx context.Context, name, constraint string, opts ...R
 				if !con.Match(v) {
 					continue
 				}
+				if rc.nox != nil && ve.MinNoxVersion != "" {
+					if min, err := ParseVersion(strings.TrimPrefix(ve.MinNoxVersion, "v")); err == nil && min.Compare(*rc.nox) > 0 {
+						if tooNew == nil || v.Compare(tooNewVer) > 0 {
+							tooNew, tooNewVer = ve, v
+						}
+						continue
+					}
+				}
 				if best == nil || v.Compare(bestVer) > 0 {
 					best = ve
 					bestVer = v
@@ -269,6 +300,10 @@ func (c *Client) Resolve(ctx context.Context, name, constraint string, opts ...R
 	}
 
 	if best == nil {
+		if tooNew != nil {
+			return nil, fmt.Errorf("%s %s requires nox >= %s, and this is nox %s; upgrade nox to install it",
+				name, tooNew.Version, strings.TrimPrefix(tooNew.MinNoxVersion, "v"), rc.nox.String())
+		}
 		return nil, fmt.Errorf("no version of %q matches constraint %q", name, constraint)
 	}
 

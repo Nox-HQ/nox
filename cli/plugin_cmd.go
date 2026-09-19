@@ -398,7 +398,7 @@ func runPluginInstall(args []string) int {
 	store := newOCIStoreWithPolicy(policyName)
 	ctx := context.Background()
 
-	ve, err := client.Resolve(ctx, name, constraint)
+	ve, err := client.Resolve(ctx, name, constraint, registry.WithNoxVersion(version))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: resolving %s@%s: %v\n", name, constraint, err)
 		return 2
@@ -530,7 +530,7 @@ func runPluginUpdate(args []string) int {
 			continue
 		}
 
-		ve, err := client.Resolve(ctx, name, "*")
+		ve, err := client.Resolve(ctx, name, "*", registry.WithNoxVersion(version))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cannot resolve %s: %v\n", name, err)
 			continue
