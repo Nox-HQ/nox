@@ -481,6 +481,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "canonicalizes; must be paired with a startswith prefix check on the allowed base dir"
         },
         {
@@ -488,6 +489,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "must be paired with a prefix/allow-base check"
         },
         {
@@ -507,20 +509,29 @@
           "neutralizes": [
             "unsafe_deserialization"
           ]
+        }
+      ],
+      "checks": [
+        {
+          "call": "startswith",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "str.startswith on the canonicalized path against the allowed base"
         },
         {
-          "call": "ipaddress.ip_address",
-          "neutralizes": [
-            "ssrf"
+          "call": "is_relative_to",
+          "completes": [
+            "path_traversal"
           ],
-          "note": "validation step; must be paired with an allow/deny-list decision"
+          "note": "pathlib PurePath.is_relative_to(base)"
         },
         {
-          "call": "urllib.parse.urlparse",
-          "neutralizes": [
-            "ssrf"
+          "call": "os.path.commonpath",
+          "completes": [
+            "path_traversal"
           ],
-          "note": "parse step for host allowlisting"
+          "note": "commonpath([base, p]) == base"
         }
       ]
     },
@@ -921,6 +932,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "must be paired with a startsWith allow-base check"
         },
         {
@@ -928,6 +940,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "canonicalizes; pair with a startsWith prefix check"
         },
         {
@@ -935,20 +948,22 @@
           "neutralizes": [
             "path_traversal"
           ]
+        }
+      ],
+      "checks": [
+        {
+          "call": "startsWith",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "String.prototype.startsWith on the resolved path against the allowed base"
         },
         {
-          "call": "url.parse",
-          "neutralizes": [
-            "ssrf"
+          "call": "path.relative",
+          "completes": [
+            "path_traversal"
           ],
-          "note": "parse step for host allowlisting"
-        },
-        {
-          "call": "new URL",
-          "neutralizes": [
-            "ssrf"
-          ],
-          "note": "parse step; pair with a host allowlist decision"
+          "note": "path.relative(base, p), then refused when it starts with .."
         }
       ]
     },
@@ -1189,6 +1204,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "canonicalizes; must be paired with a prefix/allow-base check"
         },
         {
@@ -1229,6 +1245,29 @@
             "path_traversal",
             "code_injection"
           ]
+        }
+      ],
+      "checks": [
+        {
+          "call": "strings.HasPrefix",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "HasPrefix on the cleaned path against the allowed base"
+        },
+        {
+          "call": "filepath.IsLocal",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "IsLocal refuses absolute paths and .. escapes"
+        },
+        {
+          "call": "filepath.Rel",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "Rel(base, p), then refused when it starts with .."
         }
       ]
     },
@@ -1645,13 +1684,6 @@
           "neutralizes": [
             "unsafe_deserialization"
           ]
-        },
-        {
-          "call": "URI.parse",
-          "neutralizes": [
-            "ssrf"
-          ],
-          "note": "parse step for host allowlisting"
         }
       ]
     },
@@ -1922,6 +1954,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "canonicalizes; must be paired with an allow-base prefix check"
         },
         {
@@ -1943,6 +1976,27 @@
           "call": "escapeshellcmd",
           "neutralizes": [
             "command_injection"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "call": "str_starts_with",
+          "completes": [
+            "path_traversal"
+          ]
+        },
+        {
+          "call": "strpos",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "strpos($p, $base) === 0"
+        },
+        {
+          "call": "strncmp",
+          "completes": [
+            "path_traversal"
           ]
         }
       ]
@@ -2210,7 +2264,17 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        }
+      ],
+      "checks": [
+        {
+          "call": "startsWith",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "Path.startsWith(base) on the normalized path"
         }
       ]
     },
@@ -2942,6 +3006,7 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "canonicalizes the path; must be paired with a base-prefix/allow-list check to actually contain traversal"
         },
         {
@@ -3035,6 +3100,22 @@
             "ssrf"
           ],
           "note": "URL-encodes a component; does not by itself validate the host"
+        }
+      ],
+      "checks": [
+        {
+          "call": "strncmp",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "strncmp(p, base, strlen(base)) on the resolved path"
+        },
+        {
+          "call": "starts_with",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "std::string_view/std::string starts_with (C++20)"
         }
       ]
     },
@@ -3578,7 +3659,17 @@
           "neutralizes": [
             "path_traversal"
           ],
+          "requires_guard": true,
           "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        }
+      ],
+      "checks": [
+        {
+          "call": "startsWith",
+          "completes": [
+            "path_traversal"
+          ],
+          "note": "Path.startsWith(base) on the normalized path"
         }
       ]
     },

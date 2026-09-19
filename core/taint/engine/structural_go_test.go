@@ -117,7 +117,7 @@ func listDir(dir string) {
 }`,
 		},
 		{
-			name: "filepath.Clean sanitizes path traversal",
+			name: "filepath.Base sanitizes path traversal",
 			src: `package f
 func serve(r *Req) {
 	name := r.URL.Query().Get("file")

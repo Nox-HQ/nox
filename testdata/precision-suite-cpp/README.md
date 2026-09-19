@@ -67,7 +67,8 @@ see the documented FN below.
   the noise broad rules trip on — a base64 data-URI in a C++11 raw string,
   `.env`-style placeholder credentials, a `@generated`-style banner — alongside
   the *safe* forms of the same sinks (fixed-format `printf`, `atoi`-coerced
-  input, `realpath`-canonicalized paths, a parameterized prepared statement).
+  input, `realpath`-canonicalized paths checked against a base, a parameterized
+  prepared statement).
 - **True-positive samples** (`tp_*.c` / `tp_*.cpp`) annotate, per line, the rule a
   correct scanner *should* fire. Where nox fires *more* those extras score as
   false positives; where it fires *nothing* the annotation scores as a false
@@ -89,7 +90,7 @@ untrusted input) reaching a **sink** with no sanitizer on the path:
 
 The `clean_*` counterparts prove each is suppressed when made safe:
 `clean_fixed_format.c` (`printf("%s", user)` — fixed format), `clean_parse_int.c`
-(`atoi` numeric coercion), `clean_realpath.c` (`realpath` canonicalization),
+(`atoi` numeric coercion), `clean_realpath.c` (`realpath` plus a base-prefix check),
 `clean_safe_sql.c` (prepared statement + bound parameter), plus `clean_no_source.c`
 (constant-only sinks), `clean_placeholders.c` (placeholder creds), and
 `clean_data_blob.cpp` (base64 blob in a raw string).

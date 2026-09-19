@@ -26,7 +26,13 @@ func extractPHP(lines []logicalLine) []unitDraft {
 	for _, raw := range lines {
 		ll := normalizePHPLine(raw)
 		code := strings.TrimSpace(ll.code)
-		if code == "" || isPHPStructuralLine(code) {
+		if code == "" {
+			continue
+		}
+		if isPHPStructuralLine(code) {
+			if g, ok := conditionGuard(langPHP, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
 			continue
 		}
 		if name, params, ok := phpFuncHeader(code); ok {
@@ -65,7 +71,13 @@ func extractPHP(lines []logicalLine) []unitDraft {
 // extraction so both paths recognize statements identically.
 func phpRecognizeInto(u *unitDraft, ll logicalLine) {
 	code := strings.TrimSpace(ll.code)
-	if code == "" || isPHPStructuralLine(code) {
+	if code == "" {
+		return
+	}
+	if isPHPStructuralLine(code) {
+		if g, ok := conditionGuard(langPHP, ll); ok {
+			u.guards = append(u.guards, g)
+		}
 		return
 	}
 	if st, ok := phpReturnStatement(ll); ok {

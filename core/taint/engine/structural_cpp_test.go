@@ -142,11 +142,14 @@ func TestStructuralCPPCleanNoFlow(t *testing.T) {
 }`,
 		},
 		{
-			name: "realpath sanitizes traversal",
+			name: "realpath paired with a base-prefix check",
 			src: `void serve(void) {
     char *path = getenv("FILE");
     char resolved[4096];
     char *safe = realpath(path, resolved);
+    if (safe == NULL || strncmp(safe, BASE, strlen(BASE)) != 0) {
+        return;
+    }
     FILE *f = fopen(safe, "r");
 }`,
 		},

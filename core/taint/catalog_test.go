@@ -1,6 +1,9 @@
 package taint
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestDefaultLoads verifies the embedded catalog parses and indexes without
 // error and is populated for both prioritized languages.
@@ -177,6 +180,50 @@ func TestSanitizerInvariants(t *testing.T) {
 				t.Errorf("%s: sanitizer %q neutralizes nothing", lang, s.Call)
 			}
 		}
+	}
+}
+
+// A partial sanitizer clears only when a check completes it, so one whose
+// language lists no such check could never clear anything. That is a catalog
+// mistake, and loading refuses it rather than silently reporting everything.
+func TestPartialSanitizerNeedsACheck(t *testing.T) {
+	const partialOnly = `{"schema_version": 1, "languages": {"go": {
+		"sources": [], "sinks": [],
+		"sanitizers": [{"call": "filepath.Clean", "neutralizes": ["path_traversal"], "requires_guard": true}]}}}`
+	if _, err := parse([]byte(partialOnly)); err == nil || !strings.Contains(err.Error(), "no check completing") {
+		t.Fatalf("parse accepted a partial sanitizer with no check: err=%v", err)
+	}
+
+	const completed = `{"schema_version": 1, "languages": {"go": {
+		"sources": [], "sinks": [],
+		"sanitizers": [{"call": "filepath.Clean", "neutralizes": ["path_traversal"], "requires_guard": true}],
+		"checks": [{"call": "strings.HasPrefix", "completes": ["path_traversal"]}]}}}`
+	cat, err := parse([]byte(completed))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !cat.IsPartialSanitizer("go", "filepath.Clean", VulnPathTraversal) || !cat.IsCheck("go", "strings.HasPrefix", VulnPathTraversal) {
+		t.Fatal("partial sanitizer or check not indexed")
+	}
+	if cat.IsCheck("go", "strings.HasPrefix", VulnSSRF) {
+		t.Fatal("a check completes only the classes it lists")
+	}
+}
+
+// Every canonicalizer the embedded catalog carries is marked partial: a
+// canonicalized path is still whatever the input resolved to.
+func TestCanonicalizersArePartial(t *testing.T) {
+	cat := MustDefault()
+	for lang, call := range map[string]string{
+		"go": "filepath.Clean", "python": "os.path.realpath", "javascript": "path.resolve",
+		"php": "realpath", "java": "normalize", "kotlin": "normalize", "cpp": "realpath",
+	} {
+		if !cat.IsPartialSanitizer(lang, call, VulnPathTraversal) {
+			t.Errorf("%s: %s clears path traversal without a check", lang, call)
+		}
+	}
+	if cat.IsPartialSanitizer("go", "filepath.Base", VulnPathTraversal) {
+		t.Error("go: filepath.Base strips directories and needs no check")
 	}
 }
 

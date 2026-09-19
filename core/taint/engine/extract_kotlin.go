@@ -66,6 +66,9 @@ func extractKotlin(lines []logicalLine) []unitDraft {
 		closesFun := funDepth >= 0 && before > funDepth && depth <= funDepth
 
 		if isKotlinStructuralLine(trimmed) {
+			if g, ok := conditionGuard(langKotlin, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
 			if closesFun {
 				cur = module
 				funDepth = -1

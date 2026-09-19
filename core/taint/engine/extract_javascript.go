@@ -53,6 +53,8 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 			if st, ok := recognizeStatement(langJavaScript, ll); ok {
 				stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
 			}
+		} else if g, ok := conditionGuard(langJavaScript, ll); ok && !isHeader {
+			stack[len(stack)-1].unit.guards = append(stack[len(stack)-1].unit.guards, g)
 		}
 
 		openB := strings.Count(ll.code, "{")

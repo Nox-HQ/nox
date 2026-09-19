@@ -116,14 +116,38 @@ A sanitizer neutralizes one or more classes. Highlights:
 | xss / ssti            | HTML escaping / sanitizing                 | `markupsafe.escape`, `html.escape`, `bleach.clean` | `DOMPurify.sanitize`, `escape-html`, `he.encode` |
 | path_traversal        | canonicalize + prefix check / basename     | `os.path.realpath`+startswith, `secure_filename`, `os.path.basename` | `path.resolve`+startsWith, `sanitize-filename`, `path.basename` |
 | unsafe_deserialization| safe loader                                | `yaml.safe_load`                               | (n/a)                                  |
-| ssrf                  | URL parse + host allowlist                 | `urllib.parse.urlparse`, `ipaddress.ip_address` | `new URL`, `url.parse`               |
+| ssrf                  | component encoding                         | (none)                                         | `encodeURIComponent`                   |
 | all (numeric coerce)  | numeric coercion drops metacharacters      | `int`, `float`                                 | `parseInt`, `Number`                   |
 
-Some sanitizers (canonicalize, URL parse, IP validate) are marked in the catalog
-`note` as **partial** — they only neutralize when paired with a check
-(`startswith` on an allowed base dir, a host allowlist). The stub engine treats
-any recognized sanitizer as clearing taint conservatively; the full engine will
-require the paired check before clearing.
+**Partial sanitizers.** A canonicalizer (`filepath.Clean`, `os.path.realpath`,
+`path.resolve`, `Path.normalize`, `realpath`) is not a defence on its own:
+`Clean("../../etc/passwd")` is still `../../etc/passwd`, and `realpath` resolves
+a traversal rather than refusing it. The catalog marks these `requires_guard`,
+and lists per language the **checks** that complete them (`strings.HasPrefix`,
+`filepath.Rel`, `filepath.IsLocal`, `startswith`, `startsWith`,
+`str_starts_with`, `strncmp`, …). The StructuralEngine clears a partial
+sanitizer's class on a variable only when a check reads that variable in a
+branch condition of the same function, at or after the line that produced it.
+A check on the raw input before canonicalization does not count
+(`HasPrefix("/srv/../etc/passwd", "/srv/")` is true), and neither does
+canonicalizing inside the sink call, which leaves nothing to check. Loading
+refuses a partial sanitizer whose language lists no check able to complete it.
+
+The extractors carry branch conditions as `Unit.Guards`, separate from `Stmts`:
+a condition asserts something about a value, it does not move one, so no other
+analysis sees it. Python's recognizer already emits a condition as an ordinary
+statement, and the check index reads both.
+
+**URL parsing is not an SSRF sanitizer.** `urlparse`, `url.parse`, `new URL`
+and `URI.parse` return the attacker's host intact. The defence is a host
+allowlist, and the calls it makes cannot be told apart from a scheme check
+(`['http:', 'https:'].includes(u.protocol)`), so parsing clears nothing and an
+allowlisted request is left to a waiver. Encoding a URL *component*
+(`encodeURIComponent`, `url.QueryEscape`, `curl_easy_escape`) does keep it from
+changing the host, and still clears.
+
+The heuristic stub engine (`NewHeuristicEngine`, tests only) still treats any
+recognized sanitizer as clearing.
 
 ## Data model and package layout
 

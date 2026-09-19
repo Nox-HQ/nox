@@ -133,7 +133,22 @@ type Sanitizer struct {
 	// Neutralizes lists the VulnClasses this sanitizer defuses. Membership is
 	// the join used by IsSanitizer.
 	Neutralizes []VulnClass `json:"neutralizes"`
-	Note        string      `json:"note,omitempty"`
+	// RequiresGuard marks a PARTIAL sanitizer: one that only neutralizes its
+	// classes when the value it produced is then checked. filepath.Clean is the
+	// case in point: Clean("../../etc/passwd") is still "../../etc/passwd", and
+	// realpath resolves a traversal rather than refusing it. Such a sanitizer
+	// clears taint only when one of the language's Checks reads its result.
+	RequiresGuard bool   `json:"requires_guard,omitempty"`
+	Note          string `json:"note,omitempty"`
+}
+
+// Check is a call that, in a branch condition, completes a partial sanitizer
+// for the listed classes: strings.HasPrefix on a canonicalized path is the
+// allow-base check filepath.Clean needs.
+type Check struct {
+	Call     string      `json:"call"`
+	Complete []VulnClass `json:"completes"`
+	Note     string      `json:"note,omitempty"`
 }
 
 // languageCatalog is the per-language slice of the catalog as stored in JSON.
@@ -141,6 +156,7 @@ type languageCatalog struct {
 	Sources    []Source    `json:"sources"`
 	Sinks      []Sink      `json:"sinks"`
 	Sanitizers []Sanitizer `json:"sanitizers"`
+	Checks     []Check     `json:"checks,omitempty"`
 }
 
 // rawCatalog mirrors the on-disk JSON structure for decoding.
@@ -157,6 +173,7 @@ type Catalog struct {
 	sources    map[string]map[string]Source    // lang -> call -> Source
 	sinks      map[string]map[string]Sink      // lang -> call -> Sink
 	sanitizers map[string]map[string]Sanitizer // lang -> call -> Sanitizer
+	checks     map[string]map[string]Check     // lang -> call -> Check
 }
 
 var (
@@ -192,6 +209,11 @@ func load(fsys embed.FS) (*Catalog, error) {
 	if err != nil {
 		return nil, fmt.Errorf("taint: reading embedded catalog: %w", err)
 	}
+	return parse(data)
+}
+
+// parse decodes, validates and indexes catalog JSON.
+func parse(data []byte) (*Catalog, error) {
 	var raw rawCatalog
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("taint: parsing embedded catalog: %w", err)
@@ -205,6 +227,7 @@ func load(fsys embed.FS) (*Catalog, error) {
 		sources:       make(map[string]map[string]Source, len(raw.Languages)),
 		sinks:         make(map[string]map[string]Sink, len(raw.Languages)),
 		sanitizers:    make(map[string]map[string]Sanitizer, len(raw.Languages)),
+		checks:        make(map[string]map[string]Check, len(raw.Languages)),
 	}
 	for lang, lc := range raw.Languages {
 		srcIdx := make(map[string]Source, len(lc.Sources))
@@ -241,9 +264,34 @@ func load(fsys embed.FS) (*Catalog, error) {
 			}
 			sanIdx[s.Call] = s
 		}
+		checkIdx := make(map[string]Check, len(lc.Checks))
+		for _, k := range lc.Checks {
+			if k.Call == "" {
+				return nil, fmt.Errorf("taint: %s: check with empty call", lang)
+			}
+			for _, class := range k.Complete {
+				if !knownVulnClass(class) {
+					return nil, fmt.Errorf("taint: %s: check %q completes unknown vuln class %q", lang, k.Call, class)
+				}
+			}
+			checkIdx[k.Call] = k
+		}
+		// A partial sanitizer with no check able to complete it could never
+		// clear anything: that is a catalog mistake, not a policy, so refuse it.
+		for _, s := range lc.Sanitizers {
+			if !s.RequiresGuard {
+				continue
+			}
+			for _, class := range s.Neutralizes {
+				if !completesClass(checkIdx, class) {
+					return nil, fmt.Errorf("taint: %s: partial sanitizer %q has no check completing %q", lang, s.Call, class)
+				}
+			}
+		}
 		c.sources[lang] = srcIdx
 		c.sinks[lang] = sinkIdx
 		c.sanitizers[lang] = sanIdx
+		c.checks[lang] = checkIdx
 	}
 	return c, nil
 }
@@ -324,6 +372,38 @@ func (c *Catalog) IsSanitizer(lang, call string, class VulnClass) bool {
 	}
 	for _, vc := range s.Neutralizes {
 		if vc == class {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPartialSanitizer reports whether call neutralizes class for lang only when
+// its result is then checked (Sanitizer.RequiresGuard).
+func (c *Catalog) IsPartialSanitizer(lang, call string, class VulnClass) bool {
+	s, ok := c.sanitizers[normalizeLang(lang)][call]
+	return ok && s.RequiresGuard && containsClass(s.Neutralizes, class)
+}
+
+// IsCheck reports whether call, in a branch condition, completes a partial
+// sanitizer of class for lang.
+func (c *Catalog) IsCheck(lang, call string, class VulnClass) bool {
+	k, ok := c.checks[normalizeLang(lang)][call]
+	return ok && containsClass(k.Complete, class)
+}
+
+func completesClass(idx map[string]Check, class VulnClass) bool {
+	for _, k := range idx {
+		if containsClass(k.Complete, class) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsClass(classes []VulnClass, class VulnClass) bool {
+	for _, c := range classes {
+		if c == class {
 			return true
 		}
 	}

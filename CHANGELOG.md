@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A canonicalized path is no longer treated as a contained one.**
+  `filepath.Clean`, `os.path.realpath`, `os.path.abspath`, `path.resolve`,
+  `path.normalize`, PHP and C `realpath`, and Java/Kotlin `Path.normalize` all
+  cleared path-traversal taint on their own. None of them contains a path:
+  `Clean("../../etc/passwd")` is still `../../etc/passwd`, and `realpath`
+  resolves a traversal rather than refusing it. The catalog said as much in a
+  note on each ("must be paired with a prefix/allow-base check"), and the
+  engine ignored it. They now clear TAINT-004 only when an allow-base check
+  (`strings.HasPrefix`, `filepath.Rel`, `filepath.IsLocal`, `startswith`,
+  `startsWith`, `str_starts_with`, `strncmp`, …) reads the canonicalized value
+  in a branch of the same function. A check on the raw input before
+  canonicalizing does not count, and neither does canonicalizing inside the
+  sink call. Basename-style calls (`filepath.Base`, `os.path.basename`, …)
+  strip the directory and still clear on their own. The pairing also fixes a
+  false positive: Java and Kotlin `Paths.get(src).normalize()` followed by a
+  `startsWith` check was reported, because the chained `normalize` was never
+  seen.
+
+- **Parsing a URL is no longer an SSRF sanitizer.** `url.parse`, `new URL`,
+  `urllib.parse.urlparse`, `ipaddress.ip_address` and `URI.parse` return the
+  attacker's host intact, so `http.get(url.parse(input))` went unreported. A
+  host allowlist is the defence, and it cannot be told apart from a scheme
+  check by the calls it makes, so an allowlisted request is now reported and
+  left to a waiver. Encoding a URL component (`encodeURIComponent`,
+  `url.QueryEscape`, `curl_easy_escape`) still clears.
+
 ## [1.38.4] - 2026-09-19
 
 ### Fixed

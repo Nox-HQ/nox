@@ -128,6 +128,7 @@ func (ex *goExtractor) walkStmt(u *unitDraft, s ast.Stmt) {
 		if st.Init != nil {
 			ex.walkStmt(u, st.Init)
 		}
+		ex.emitGuard(u, st.Cond)
 		if st.Body != nil {
 			ex.walkBlock(u, st.Body.List)
 		}
@@ -218,6 +219,23 @@ func (ex *goExtractor) emitCallStmt(u *unitDraft, call *ast.CallExpr, line int) 
 		return
 	}
 	u.stmts = append(u.stmts, st)
+}
+
+// emitGuard records an if-condition's calls and reads as a guard (see
+// taint.Unit.Guards). A condition with no call carries no check.
+func (ex *goExtractor) emitGuard(u *unitDraft, cond ast.Expr) {
+	if cond == nil {
+		return
+	}
+	var g stmtDraft
+	g.line = ex.line(cond.Pos())
+	g.sinkArgs = map[string]sinkArgDraft{}
+	ex.collectExprs(&g, []ast.Expr{cond})
+	finalizeStmt(&g)
+	if len(g.calls) == 0 {
+		return
+	}
+	u.guards = append(u.guards, g)
 }
 
 // emitReturn turns a `return e1, e2, ...` into a stmtDraft whose returns are the

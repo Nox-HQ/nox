@@ -351,6 +351,10 @@ func applyImportAliases(drafts []unitDraft, t aliasTable) {
 			st.chains = withExpansions(st.chains, t)
 			expandSinkArgs(st, t)
 		}
+		for j := range drafts[i].guards {
+			g := &drafts[i].guards[j]
+			g.calls = withExpansions(g.calls, t)
+		}
 	}
 }
 
