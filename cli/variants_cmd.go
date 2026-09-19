@@ -28,7 +28,7 @@ func runVariants(args []string) int {
 		fmt.Fprintln(os.Stderr, "  nox variants CVE-2021-44228 .  scan only for Log4Shell-style variants")
 		fmt.Fprintln(os.Stderr, "  nox variants --list            list the known signatures")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

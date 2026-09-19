@@ -45,7 +45,7 @@ func protectInstall(args []string) int {
 	fs.StringVar(&threshold, "severity-threshold", "high", "minimum severity to block commit (critical, high, medium, low)")
 	fs.StringVar(&hookPath, "hook-path", "", "path to pre-commit hook file (default: auto-detect)")
 	fs.BoolVar(&force, "force", false, "overwrite existing hook without prompting")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -115,7 +115,7 @@ func protectUninstall(args []string) int {
 	fs := flag.NewFlagSet("protect uninstall", flag.ContinueOnError)
 	var hookPath string
 	fs.StringVar(&hookPath, "hook-path", "", "path to pre-commit hook file (default: auto-detect)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -169,7 +169,7 @@ func protectStatus(args []string) int {
 	fs := flag.NewFlagSet("protect status", flag.ContinueOnError)
 	var hookPath string
 	fs.StringVar(&hookPath, "hook-path", "", "path to pre-commit hook file (default: auto-detect)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

@@ -21,7 +21,7 @@ func runDiff(args []string) int {
 	fs.StringVar(&head, "head", "HEAD", "head ref for comparison")
 	fs.StringVar(&rulesPath, "rules", "", "path to custom rules YAML file or directory")
 	fs.BoolVar(&jsonFlag, "json", false, "output as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

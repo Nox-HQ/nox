@@ -15,20 +15,6 @@ import (
 
 // runBadge implements the "nox badge" command.
 func runBadge(args []string) int {
-	var flagArgs []string
-	var positionalArgs []string
-	for i := 0; i < len(args); i++ {
-		if strings.HasPrefix(args[i], "-") {
-			flagArgs = append(flagArgs, args[i])
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-				i++
-				flagArgs = append(flagArgs, args[i])
-			}
-		} else {
-			positionalArgs = append(positionalArgs, args[i])
-		}
-	}
-
 	fs := flag.NewFlagSet("badge", flag.ContinueOnError)
 
 	var (
@@ -45,10 +31,10 @@ func runBadge(args []string) int {
 	fs.BoolVar(&bySeverity, "by-severity", false, "generate additional badges per severity level")
 	fs.BoolVar(&explain, "explain", false, "print per-finding score contributions instead of writing the badge")
 
-	if err := fs.Parse(flagArgs); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
-	positionalArgs = append(positionalArgs, fs.Args()...)
+	positionalArgs := fs.Args()
 
 	var findingsList []findings.Finding
 

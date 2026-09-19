@@ -21,22 +21,6 @@ import (
 func runShow(args []string) int {
 	// Extract positional args (paths) before parsing flags so that
 	// "nox show . --severity critical" works like "nox show --severity critical .".
-	var flagArgs []string
-	var positionalArgs []string
-	for i := 0; i < len(args); i++ {
-		if strings.HasPrefix(args[i], "-") {
-			flagArgs = append(flagArgs, args[i])
-			// If this flag takes a value (not a boolean), consume the next arg too.
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") &&
-				!isBoolFlag(args[i]) {
-				i++
-				flagArgs = append(flagArgs, args[i])
-			}
-		} else {
-			positionalArgs = append(positionalArgs, args[i])
-		}
-	}
-
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 
 	var (
@@ -55,11 +39,11 @@ func runShow(args []string) int {
 	fs.BoolVar(&jsonOutput, "json", false, "output JSON instead of TUI")
 	fs.IntVar(&contextN, "context", 5, "number of source context lines")
 
-	if err := fs.Parse(flagArgs); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 	// Merge any remaining positional args from flag parse with pre-extracted ones.
-	positionalArgs = append(positionalArgs, fs.Args()...)
+	positionalArgs := fs.Args()
 
 	// Load or generate findings.
 	var store *detail.Store

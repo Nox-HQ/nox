@@ -62,7 +62,7 @@ func baselineMigrate(args []string) int {
 	fs.IntVar(&fromV, "from", 1, "source fingerprint version (1 or 2)")
 	fs.IntVar(&toV, "to", 2, "target fingerprint version (1 or 2)")
 	fs.BoolVar(&prune, "prune", false, "drop entries whose finding no longer exists instead of keeping them")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 	if fromV == toV {
@@ -197,7 +197,7 @@ func baselineInit(args []string) int {
 	var force bool
 	fs.StringVar(&outputPath, "output", "", "baseline file path (default: .nox/baseline.json)")
 	fs.BoolVar(&force, "force", false, "recreate the baseline even if one already exists")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -264,7 +264,7 @@ func baselineWrite(args []string) int {
 	fs := flag.NewFlagSet("baseline write", flag.ContinueOnError)
 	var outputPath string
 	fs.StringVar(&outputPath, "output", "", "baseline file path (default: .nox/baseline.json)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -303,7 +303,7 @@ func baselineUpdate(args []string) int {
 	fs := flag.NewFlagSet("baseline update", flag.ContinueOnError)
 	var baselinePath string
 	fs.StringVar(&baselinePath, "baseline", "", "baseline file path (default: .nox/baseline.json)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -389,7 +389,7 @@ func baselineAdd(args []string) int {
 	fs.StringVar(&fpFilter, "fingerprint", "", "add these specific fingerprints (comma-separated; skips the scan)")
 	fs.StringVar(&reason, "reason", "", "free-form rationale stored on each new entry")
 	fs.StringVar(&owner, "owner", "", "owner/team tag stored on each new entry")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 
@@ -483,7 +483,7 @@ func baselineDiff(args []string) int {
 	fs := flag.NewFlagSet("baseline diff", flag.ContinueOnError)
 	var baselinePath string
 	fs.StringVar(&baselinePath, "baseline", "", "baseline file path (default: .nox/baseline.json)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlagsAnywhere(fs, args); err != nil {
 		return 2
 	}
 

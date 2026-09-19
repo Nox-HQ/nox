@@ -101,7 +101,7 @@ func mcpBaseline(args []string) int {
 	fs.StringVar(&target, "target", ".", "project root for the default baseline path")
 	fs.DurationVar(&timeout, "timeout", 15*time.Second, "per-request timeout")
 	fs.BoolVar(&force, "force", false, "overwrite an existing baseline")
-	if err := fs.Parse(ourArgs); err != nil {
+	if err := parseFlagsAnywhere(fs, ourArgs); err != nil {
 		return 2
 	}
 	if len(serverCmd) == 0 {
@@ -180,7 +180,7 @@ func mcpDrift(args []string) int {
 	fs.StringVar(&target, "target", ".", "project root for the default baseline path")
 	fs.StringVar(&outputDir, "output", ".", "directory for findings.json / results.sarif")
 	fs.DurationVar(&timeout, "timeout", 15*time.Second, "per-request timeout")
-	if err := fs.Parse(ourArgs); err != nil {
+	if err := parseFlagsAnywhere(fs, ourArgs); err != nil {
 		return 2
 	}
 	if len(serverCmd) == 0 {
