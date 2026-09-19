@@ -100,6 +100,19 @@ resolve_version() {
     version="${tag#v}"
   fi
 
+  # A pinned version must be a full release version. A bare major such as
+  # `1` used to resolve to releases/download/v1/nox_1_*: a release that
+  # existed by accident (the floating tag was once pushed by hand and built),
+  # frozen at the June 2026 code, so `version: 1` silently scanned with a
+  # months-old binary. Refuse it and say what would have been meant.
+  version="${version#v}"
+  if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "::error::nox version '${1}' is not a release version. Use a full" \
+      "version such as 1.38.2, or 'latest'. A bare major like '1' does not" \
+      "track the newest 1.x — it named one frozen build." >&2
+    exit 2
+  fi
+
   echo "${version}"
 }
 

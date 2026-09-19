@@ -125,3 +125,23 @@ func TestActionYAMLSuppliesTheTokenActionSHReads(t *testing.T) {
 			"(60/hour per runner IP) — add `GITHUB_TOKEN: ${{ github.token }}`")
 	}
 }
+
+// A pinned version must name one real release. `version: 1` used to fetch
+// releases/download/v1/nox_1_*, an accidental release frozen at June 2026
+// code, so it scanned with a stale binary and said nothing. It must fail, and
+// the full forms — with or without the leading v — must still resolve without
+// touching the API.
+func TestActionResolveVersion_RejectsANonReleaseVersion(t *testing.T) {
+	const unreachable = "http://127.0.0.1:1" // a pinned version never calls the API
+	for _, v := range []string{"1", "v1", "1.38", "1.38.2-rc.1", "main"} {
+		if got, ok := runResolveVersion(t, unreachable, v); ok {
+			t.Errorf("version %q was accepted and resolved to %q", v, got)
+		}
+	}
+	for v, want := range map[string]string{"1.38.2": "1.38.2", "v1.38.2": "1.38.2"} {
+		got, ok := runResolveVersion(t, unreachable, v)
+		if !ok || got != want {
+			t.Errorf("version %q: got %q ok=%v, want %q", v, got, ok, want)
+		}
+	}
+}
