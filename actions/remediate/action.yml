@@ -81,7 +81,7 @@ runs:
       # Pinned by commit SHA, not the floating @v1 tag: IAC-013 is nox's own
       # rule, and an action that remediates supply-chain risk must not itself
       # consume a mutable ref.
-      uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
+      uses: nox-hq/nox@f345910099d0d7404f15fb4a55a8a826af6f824e # v1.38.2
       with:
         path: ${{ inputs.path }}
         format: ${{ inputs.scan-format }}
@@ -113,6 +113,29 @@ runs:
       working-directory: ${{ inputs.manifest-root }}
       run: ${{ inputs.verify-cmd }}
 
+    # actions/checkout persists an Authorization header for later git calls:
+    # v6+ through an includeIf-referenced credentials file, earlier releases
+    # through http.<url>.extraheader. create-pull-request adds its own, and
+    # GitHub rejects a request carrying two with `remote: Duplicate header:
+    # "Authorization"` (HTTP 400) -- so with any default checkout, no pull
+    # request was ever opened. Upgrading create-pull-request does not help
+    # (peter-evans/create-pull-request#4272 reproduces on v8). So the caller's
+    # credentials are set aside for this one step and put back afterwards,
+    # leaving the caller's later git steps exactly as they were.
+    - name: Set aside the checkout's persisted credentials
+      id: creds
+      if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.open-pr == 'true'
+      shell: bash
+      run: |
+        stash="${RUNNER_TEMP}/nox-remediate-git-auth"
+        : > "$stash"
+        git config --local --get-regexp '^(includeif\..*|http\..*\.extraheader)$' > "$stash" || true
+        cut -d' ' -f1 "$stash" | sort -u | while read -r key; do
+          git config --local --unset-all "$key"
+        done
+        echo "stash=$stash" >> "$GITHUB_OUTPUT"
+        echo "set aside $(wc -l < "$stash" | tr -d ' ') persisted credential setting(s)"
+
     - name: Open pull request
       id: pr
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.open-pr == 'true'
@@ -126,6 +149,18 @@ runs:
         commit-message: 'fix(deps): apply nox remediation upgrades'
         labels: ${{ inputs.pr-labels }}
         body-path: ${{ inputs.scan-output }}/pr-body.md
+
+    - name: Restore the checkout's persisted credentials
+      if: always() && steps.creds.outputs.stash != ''
+      shell: bash
+      env:
+        STASH: ${{ steps.creds.outputs.stash }}
+      run: |
+        [ -s "$STASH" ] || exit 0
+        while read -r key value; do
+          git config --local --add "$key" "$value"
+        done < "$STASH"
+        rm -f "$STASH"
 
     - name: Upload remediation plan
       if: always()
