@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.38.3] - 2026-09-19
+
+The audit taken all the way out: not only this repository but the release
+artifacts, the organisation's other repositories, and the posts about to be
+published. Every item found is closed here or recorded below as closed
+elsewhere.
+
+### Fixed
+
+- **MCP-009 and MCP-010 no longer report an injection fed to an agent as tool
+  metadata.** Both rules describe "MCP tool metadata". phidata's guardrail
+  cookbook passes `input="Ignore previous instructions ..."` to an agent to test
+  its guardrail, and v1.38.2 reported each as tool poisoning. A match is now
+  dropped only when the phrase is inside the string literal that is the value
+  of an agent-input key (`input`, `prompt`, `query`, `question`, `user_input`,
+  `user_message`, `user_prompt`) on the same line. A poisoned tool reaches a
+  model through a description, instructions or a docstring, never through
+  `input=`, and recall is witnessed on Cisco's malicious example servers.
+
+- **Supply-chain plugins may reach the Go module proxy and PyPI's API.** The
+  track allowed npm and PyPI but not `proxy.golang.org`, so nox-plugin-freshness
+  was rejected under the track built for it. `*.pypi.org` also never matched the
+  apex `pypi.org`, where PyPI's JSON API lives. Both are allowed, exactly.
+
+- **`nox plugin test` works.** It printed "not yet implemented" while listed in
+  `nox plugin`'s usage. It now registers a built plugin under its track's policy
+  and runs its scan tool through the same code a scan uses, so it fails on what a
+  scan would silently degrade.
+
+- **`nox plugin init` scaffolds the pipeline the registry verifies.** Scaffolds
+  generated the retired shared pipeline — Go 1.25, Ed25519 signing, the SDK at
+  nox v0.1.0 — which is why nox-plugin-freshness was red from its first commit.
+  They now carry GoReleaser, keyless cosign and a `plugin.yaml`, pinned to the
+  release that generated them.
+
+- **A flag after a positional is honoured by every command.** Twenty-two
+  commands dropped it silently, the bug #103 fixed only for `nox scan`:
+  `nox diff . --base main` ignored `--base`, and `nox registry add <url> --name x`
+  — the order its own usage gives — ignored `--name`. `--` still passes
+  everything after it to a child process untouched.
+
+- **The GitHub Action refuses a version that names no release.** `version: 1`
+  fetched `releases/download/v1/nox_1_*`, an accidental June build, and scanned
+  with it silently.
+
+- **`actions/remediate` opens its pull request with a default checkout.** With
+  credentials persisted (the default), the PR step failed with `Duplicate header:
+  Authorization`. The same fix ships in nox-remediate-action v1.0.3.
+
+- **Every verification command in the docs works as written.** `VERIFICATION.md`
+  matched the signing identity as `nox-hq`; certificates say `Nox-HQ`, and the
+  match is case-sensitive, so nothing verified. It now uses each tag's exact
+  identity and was executed end to end. The plugin guide described the retired
+  pipeline, a track table missing half the tracks, and a registry URL that does
+  not resolve.
+
+### Changed
+
+- Releases run only for full semver tags. `v*` matched the floating `v1` tag, and
+  a manual push of it once published a release.
+- Badge-refresh PRs enable auto-merge. The workflow always said they would; none
+  ever did.
+- The rule-diff corpus gains eleven witnesses, so AI and MCP rule changes are no
+  longer invisible to the gate that exists to catch them.
+
+### Release history, corrected
+
+- Provenance for **v0.10.2 – v1.38.1** was regenerated on each release's own tag
+  and now verifies with `slsa-verifier --source-tag`: 62 releases, every one in
+  that range except the seven below.
+- **Eight attestations were false** and are removed: v1.14.0 – v1.17.0 and
+  v0.10.1 carried backfills generated on `main` that named a different commit as
+  their source. They cannot be regenerated, because those tags' copies of the
+  workflow cannot run; each release page says so, as do the 18 releases that
+  predate provenance.
+- The accidental `v1` release (June 5 binaries versioned "1") and five orphaned
+  draft releases were deleted. The `v1` tag, which the Action uses, is unchanged.
+
 ## [1.38.2] - 2026-09-19
 
 What v1.38.1 claimed and did not have. It was released on the condition that
