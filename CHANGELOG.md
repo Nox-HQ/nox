@@ -7,10 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Three places where nox's own contract said one thing and the code did another,
-found by verifying v1.37.0 against what it claims rather than by reading it.
+Every known defect, closed before release rather than listed after it. Three are
+places where nox's contract said one thing and the code did another, found by
+verifying v1.37.0 against what it claims; the rest are rules that could not stand
+beside a standard nox had already set.
+
+### Removed
+
+- **AI-022, AI-023, AI-028 and AI-037 are withdrawn.** v1.36.0 withdrew AI-029
+  and AI-041 on a stated standard: a rule must make a confidentiality, integrity
+  or availability claim, and "differs from a tuning recommendation" is not one.
+  These four were still shipping the same proposition.
+
+  AI-022 is the one that could not stand beside that precedent. AI-041 was
+  withdrawn for flagging temperature above 0.9 as a tuning property; AI-022
+  flagged 0.8 and up — a strict superset — at **High**. 1.0 is the default of the
+  OpenAI and Anthropic APIs and the only temperature o1/o3 accept, which is how
+  the scan-of-the-week on SWE-agent found it firing on reasoning-model configs.
+
+  | rule | reported | why it is not a security finding |
+  |---|---|---|
+  | AI-022 | temperature 0.8-1.0, "allowing hallucination" | superset of withdrawn AI-041; flags the vendor default at High |
+  | AI-023 | top_p below 0.7, "reducing output diversity" | output quality; contradicted AI-041 while both shipped |
+  | AI-028 | unset seed, "non-deterministic output" | determinism is AI-041's tuning property; unset is the API default |
+  | AI-037 | system prompt over 2000 chars, "inconsistency" | quality and latency; no C/I/A claim |
+
+  Each leaves a permanent tombstone, so a `nox:ignore`, baseline entry or VEX
+  statement naming one explains the withdrawal instead of going quiet. AI-024
+  (stop sequences) and AI-050 (retries disabled) stay: each states a claim, however
+  weak, and `nox rule-review` is where a maintainer reads them again.
 
 ### Fixed
+
+- **AI-034 fires only when a tool call is actually forced.** It says "agent
+  forced to use tool calls", and matched `auto` — the API default, in which the
+  model decides. It also used `\s*`, which crosses a newline, with no word
+  boundary, so `tool_choice:` followed by the JSON-schema keyword `anyOf` on the
+  next line satisfied `any`. On openai-python at the pinned bench commit that was
+  all 10 of its findings: six `tool_choice="auto"`, four `anyOf`. It now matches
+  `any` and `required` as whole words on the same line.
 
 - **`nox serve` now confines itself to its working directory.** The MCP server
   has had workspace allowlisting since it shipped, with symlink resolution and
