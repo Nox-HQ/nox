@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.39.0] - 2026-09-19
+
+Estate-wide blast radius. Two new commands describe a service and its
+`nox attack` runs to the intelligence service, which assesses what a
+vulnerability reaches across an organisation's estate.
 
 ### Added
 
