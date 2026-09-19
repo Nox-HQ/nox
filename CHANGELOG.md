@@ -61,6 +61,14 @@ elsewhere.
   pipeline, a track table missing half the tracks, and a registry URL that does
   not resolve.
 
+- **The README and marketplace guide describe the plugins that exist.** The
+  example `.nox.yaml` required `nox/taint-analysis` and the plugin table listed
+  it and `nox/red-team` as current; both were archived in early September,
+  superseded by core. The table is now generated from the registry. Publishing
+  instructions pointed at a `registry-scaffold/` directory and a marketplace URL
+  that no longer exist; they point at `nox-hq/registry` and
+  [nox-hq.dev/plugins](https://nox-hq.dev/plugins).
+
 ### Changed
 
 - Releases run only for full semver tags. `v*` matched the floating `v1` tag, and
@@ -82,6 +90,24 @@ elsewhere.
   predate provenance.
 - The accidental `v1` release (June 5 binaries versioned "1") and five orphaned
   draft releases were deleted. The `v1` tag, which the Action uses, is unchanged.
+
+### Across the plugin fleet
+
+- **Archived plugins are deprecated in the registry.** `taint-analysis`,
+  `red-team`, `risk-score` and `threat-explain` were archived with READMEs saying
+  "Do not install this plugin", but the registry still offered them as current.
+  All seven archived plugins are now deprecated, each with what replaced it.
+- **Every plugin's release notes verify.** Their footer told users to verify
+  with `--signature checksums.txt.sig`, a file the plugins do not publish. The
+  release config is fixed in 14 repositories, and the command in 72 published
+  release notes was rewritten for the files each release actually carries. All
+  66 verifiable ones were then run and verify; six early releases published a
+  signature without its certificate, and now say plainly that it cannot be
+  verified.
+- **The CodeQL pin that did not exist is gone fleet-wide.** 14 plugins pinned the
+  same `upload-sarif@33119e58` nox did; all now use v4.38.1. `llm-triage` also
+  passed `--output-signature`, which cosign v4 removed, so its next release
+  would have failed at signing.
 
 ## [1.38.2] - 2026-09-19
 
