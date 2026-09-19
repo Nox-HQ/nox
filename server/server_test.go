@@ -2210,3 +2210,65 @@ func TestHandleFixPlan_PlansForwardUpgrade(t *testing.T) {
 		t.Error("forward upgrade must carry a runnable command")
 	}
 }
+
+// An empty allowlist is unrestricted, and that is deliberate: embedders hold
+// their own boundary, and most tests in this file scan a t.TempDir() that no
+// fixed root could contain. It is recorded as a test because it is a fail-open
+// default, and a fail-open default that nobody asserts is one a later refactor
+// "fixes" without noticing which callers relied on it.
+//
+// The confinement for the binary an agent launches lives in the CLI, not here:
+// cli.serveAllowedPaths substitutes the working directory so `nox serve` never
+// reaches this branch. See TestServeConfinesItselfWhenNoPathsAreGiven.
+func TestAnEmptyAllowlistIsUnrestrictedByDesign(t *testing.T) {
+	s := New("0.1.0", nil)
+	for _, p := range []string{"/etc", "/", os.TempDir()} {
+		if err := s.isPathAllowed(p); err != nil {
+			t.Fatalf("expected %q to be allowed with an empty allowlist, got %v", p, err)
+		}
+	}
+}
+
+// Ten MCP tools accept a path. Seven check it against the allowlist; three —
+// attack_plan, dashboard, fix_plan — do not, and probing a released binary makes
+// them look like holes in the confinement.
+//
+// They are not. Their path is a cache key, not a filesystem argument: it selects
+// among results a previous scan already produced, and scan is checked. An
+// unscanned path is a cache miss, so the boundary holds one layer up. This test
+// exists so that stays true — if one of them ever grows a real read of its path,
+// it will need the allowlist check the other seven have, and this will start
+// returning data instead of a miss.
+func TestTheCacheKeyToolsCannotReachAnUnscannedPath(t *testing.T) {
+	workspace := t.TempDir()
+	s := New("0.1.0", []string{workspace})
+
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "config.yaml"), []byte("password: hunter2\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	attack, err := s.handleAttackPlan(context.Background(), attackPlanInput{Path: outside})
+	if err != nil {
+		t.Fatalf("attack_plan: %v", err)
+	}
+	if !strings.Contains(textOf(attack), "no scan results available") {
+		t.Fatalf("attack_plan returned data for an unscanned path: %s", textOf(attack))
+	}
+
+	dash, err := s.handleDashboard(context.Background(), dashboardInput{Path: outside})
+	if err != nil {
+		t.Fatalf("dashboard: %v", err)
+	}
+	if !strings.Contains(dash, "no scan results available") {
+		t.Fatalf("dashboard returned data for an unscanned path: %s", dash)
+	}
+
+	plan, err := s.handleFixPlan(context.Background(), fixPlanInput{Path: outside})
+	if err != nil {
+		t.Fatalf("fix_plan: %v", err)
+	}
+	if !strings.Contains(textOf(plan), "no scan results available") {
+		t.Fatalf("fix_plan returned data for an unscanned path: %s", textOf(plan))
+	}
+}

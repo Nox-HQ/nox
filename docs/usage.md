@@ -703,17 +703,30 @@ nox serve [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--allowed-paths` | (none) | Comma-separated list of allowed workspace paths |
+| `--allowed-paths` | the working directory | Comma-separated workspace roots the server may scan |
+
+The server confines itself to its own working directory unless you widen it.
+That matters because the caller is usually an agent: without a boundary, a
+prompt-injected one can ask the server to scan `$HOME` or `/etc` and read back
+the findings, which is the excessive-agency defect nox itself reports. MCP client
+configs already launch the server with `cwd` set to the project, so the default
+is normally the answer you wanted.
 
 **Example:**
 
 ```bash
-# Allow scanning a specific project
-nox serve --allowed-paths /home/user/myproject
+# Confined to the working directory — no flag needed
+nox serve
 
-# Allow multiple paths
+# Serve several checkouts from one server
 nox serve --allowed-paths /path/one,/path/two
+
+# Opt out of confinement entirely (visible in the process table)
+nox serve --allowed-paths /
 ```
+
+Paths are resolved through symlinks before the check, so a symlink inside an
+allowed root that points outside it is refused.
 
 See [MCP Server](#mcp-server) for details on available tools and resources.
 
@@ -1915,6 +1928,10 @@ fi
 The MCP server allows AI agents to invoke nox safely over stdio.
 
 ```bash
+# Confined to the working directory by default
+nox serve
+
+# Or name the roots explicitly
 nox serve --allowed-paths /path/to/project
 ```
 
@@ -1922,7 +1939,7 @@ nox serve --allowed-paths /path/to/project
 
 | Tool | Description | Input |
 |------|-------------|-------|
-| `scan` | Scan a directory | `path` (absolute path, must be in allowed-paths) |
+| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it) |
 | `get_findings` | Get findings from last scan | `format` (`json` or `sarif`, default: `json`) |
 | `get_sbom` | Get SBOM from last scan | `format` (`cdx` or `spdx`, default: `cdx`) |
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |

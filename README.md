@@ -818,10 +818,13 @@ See [`docs/marketplace.md`](docs/marketplace.md) for the full publish flow and t
 
 ## MCP Server
 
-The built-in MCP server allows AI agents to invoke scans safely:
+The built-in MCP server allows AI agents to invoke scans safely. It confines
+itself to its working directory unless `--allowed-paths` widens it, so an agent
+cannot talk it into scanning `$HOME`:
 
 ```bash
-nox serve --allowed-paths /path/to/project
+nox serve                                    # the working directory
+nox serve --allowed-paths /path/to/project   # or name the roots
 ```
 
 ### Tools
