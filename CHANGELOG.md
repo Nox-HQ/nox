@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`nox intel components` and `nox intel evidence`: the inputs to estate-wide
+  blast radius.** The intelligence service's `blast_radius` capability assesses
+  what a candidate reaches across an organisation's estate, from the estate
+  the organisation describes.
+  - `components` describes one service. Its dependencies come from the scan,
+    and reachability means the service's own code imports the package.
+    Capabilities are derived from sink calls in the service's own code, each
+    citing the call. Exposure, identities and data classes are declared by the
+    operator. Test code is excluded, and the scan runs offline.
+  - `evidence` binds `nox attack run` traces to a candidate the operator names.
+    A run is marked deterministic only if a machine-checkable oracle decided
+    it, and reproduced only if the determinism gate passed.
+  - Both print what they would send and send nothing without `--upload`, which
+    needs an organisation token in `NOX_INTEL_TOKEN`. An upload replaces only
+    the named service's components. See `docs/intelligence.md`.
+
 ## [1.38.5] - 2026-09-19
 
 Taint analysis stops trusting two kinds of call that looked like defences and

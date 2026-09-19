@@ -93,11 +93,70 @@ organisations on the service. None of them are needed to scan or to
 contribute anonymously; they exist for organisation-private intelligence and
 for operating the service. `--endpoint` on each defaults exactly as above.
 
+## Blast radius across the estate
+
+A scan already answers what a vulnerability reaches *in one repository*, on
+data that never leaves. Across an organisation's whole estate, the answer
+needs every service at once, which only the service holds. So it asks the
+organisation to describe its estate. This is a paid capability
+(`blast_radius`, Security plan and above), and the description goes to the
+organisation's own private store on the service. It never reaches the shared
+corpus or another tenant.
+
+Two commands build that description. Both print it and send nothing unless
+`--upload` is given:
+
+```bash
+# One service's dependencies, what its own code imports, and the
+# capabilities its own code demonstrates.
+nox intel components . --service checkout --exposed --data-classes payment
+
+# Bind `nox attack run` traces to a candidate the run exercised.
+nox intel evidence attack-result.json --candidate <fingerprint> \
+  --component checkout:npm:lodash@4.17.20
+```
+
+What each field rests on:
+
+- **The components** come from the scan's dependency inventory. The scan runs
+  offline, since an inventory needs packages, not advisories.
+- **Reachability** (`vulnerable_path_reachable`) means the service's own code
+  imports the package. A candidate is usually an issue nox has never seen, so
+  it cannot know the affected symbols. "The service uses this package" is the
+  strongest package-level answer, and a missing import is not evidence of
+  non-use.
+- **Exposure** (`externally_exposed`) is the operator's `--exposed`
+  declaration, applied only to packages the service's code imports. Whether a
+  service faces the internet is a fact about the deployment, not the source.
+- **Capabilities** are derived from sink calls in the service's own code, and
+  each derived one cites the call it came from:
+  - `exec.Command` gives `shell.execute`, and an HTTP client gives
+    `network.egress`.
+  - SQL and file sinks give only `database.read` and `filesystem.read`.
+    Neither call shows write access, and claiming more than a call shows would
+    inflate every assessment.
+  - Add the rest with `--capabilities`. `--identities` and `--data-classes`
+    are always declared.
+  - Test code is excluded throughout.
+- **Exploit evidence** is bound to a candidate by `--candidate`, the operator's
+  statement. An attack is grounded in your own findings, not in intelligence,
+  so nox cannot make that link itself.
+  - A run counts as deterministic only if its winning oracle was not a model's
+    judgment, and as reproduced only if the determinism gate passed.
+  - Only a deterministic, reproduced run can take a component to CONFIRMED on
+    the service.
+
+`--upload` replaces the named service's components and leaves every other
+service's alone. It needs an organisation token in `NOX_INTEL_TOKEN`; a
+`nox intel login` session signs in an operator and is never accepted as one.
+
 ## The boundary, in one sentence
 
-The CLI decides *what this means here* — reachability, exposure, blast
-radius — on data that never leaves; the service decides *what is emerging
-across the ecosystem* on data that was minimised before it left. See
+The CLI decides *what this means here* (reachability, exposure, blast radius
+within one repository) on data that never leaves. The service decides *what
+is emerging across the ecosystem* on data that was minimised before it left.
+Estate-wide blast radius is the one place an organisation sends a description
+of itself, only with `--upload`, and only into its own tenant. See
 [design/intelligence-service.md](design/intelligence-service.md) for the
 service side and [ADR 0002](adr/0002-intelligence-layer-is-a-separate-service.md)
 for why it is a service at all.

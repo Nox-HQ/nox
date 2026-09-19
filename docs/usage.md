@@ -930,6 +930,11 @@ is off until `scan.intelligence.contribute: true` is set; only `nox scan`
 contributes (never `diff`, `bench` or `intel preview`), and
 `nox intel preview <path>` shows exactly what would be sent.
 
+For estate-wide blast radius (a paid capability), `nox intel components` and
+`nox intel evidence` describe a service and bind `nox attack` runs to a
+candidate. They print what they would send and upload only with `--upload`.
+See [Blast radius across the estate](intelligence.md#blast-radius-across-the-estate).
+
 ### Predictive Slopsquat Feed (SLOP-002)
 
 The SLOP analyzer can consume a versioned, offline **predictive slopsquat
