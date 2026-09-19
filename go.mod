@@ -2,6 +2,12 @@ module github.com/nox-hq/nox
 
 go 1.26.5
 
+// v1.38.0 was tagged, and recorded by the Go checksum database, but never
+// released: its release was cancelled before publishing when verification found
+// a waiver naming a withdrawn rule getting the wrong explanation. v1.38.1 is the
+// same release with that fixed.
+retract v1.38.0
+
 require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
