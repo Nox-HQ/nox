@@ -66,6 +66,67 @@ func (inv *Inventory) Add(c Component) {
 	inv.Components = append(inv.Components, c)
 }
 
+// AddModels merges model references into the inventory, combining any that
+// describe the same model in the same file.
+//
+// Two extractors reach the same call site by different routes:
+// extractModelReferences matches `model="gpt-4o"` as a config assignment, and
+// extractSDKInvocations matches it as an SDK invocation. Appending both listed
+// gpt-4o twice for one call — once carrying the license and registry, once
+// carrying the line and auth env var, neither complete — so a consumer counting
+// models over-counted, and neither row was the full answer. Merging produces the
+// one row with both halves.
+//
+// The key is (path, name) rather than (path, name, line) because that is already
+// the granularity the inventory reports at: extractModelReferences collapses
+// repeat names within a file before it returns. Two calls to the same model in
+// one file are one model reference from that file.
+func (inv *Inventory) AddModels(refs []ModelReference) {
+	for _, ref := range refs {
+		if i := indexOfModel(inv.ModelProvenance, ref.Path, ref.Name); i >= 0 {
+			mergeModel(&inv.ModelProvenance[i], ref)
+			continue
+		}
+		inv.ModelProvenance = append(inv.ModelProvenance, ref)
+	}
+}
+
+func indexOfModel(refs []ModelReference, path, name string) int {
+	for i := range refs {
+		if refs[i].Path == path && refs[i].Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// mergeModel folds src into dst, keeping whichever extractor supplied a field.
+// Both are describing the same reference, so a value one of them found is a
+// value the merged row should carry; first writer wins on a genuine conflict.
+func mergeModel(dst *ModelReference, src ModelReference) {
+	for _, f := range []struct {
+		dst *string
+		src string
+	}{
+		{&dst.Version, src.Version},
+		{&dst.License, src.License},
+		{&dst.Registry, src.Registry},
+		{&dst.Hash, src.Hash},
+		{&dst.AuthEnvVar, src.AuthEnvVar},
+		{&dst.Endpoint, src.Endpoint},
+	} {
+		if *f.dst == "" {
+			*f.dst = f.src
+		}
+	}
+	if dst.Line == 0 {
+		dst.Line = src.Line
+	}
+	// Pinned is evidence that some reference fixes an immutable revision. One
+	// extractor seeing the pin is enough; the other simply does not look.
+	dst.Pinned = dst.Pinned || src.Pinned
+}
+
 // JSON returns the inventory as pretty-printed JSON bytes.
 func (inv *Inventory) JSON() ([]byte, error) {
 	return json.MarshalIndent(inv, "", "  ")
@@ -328,14 +389,17 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				}
 			}
 
-			inv.ModelProvenance = append(inv.ModelProvenance, extractModelReferences(artifact.Path, content)...)
+			inv.AddModels(extractModelReferences(artifact.Path, content))
 			inv.PromptTemplates = append(inv.PromptTemplates, extractPromptTemplates(artifact.Path, content)...)
 			inv.ToolMatrix = append(inv.ToolMatrix, extractToolPermissions(artifact.Path, content, a.deg)...)
 
 			// Polyglot SDK invocation discovery — captures `client.chat.
 			// completions.create(model="gpt-4o")` style call sites that
-			// extractModelReferences misses.
-			inv.ModelProvenance = append(inv.ModelProvenance, extractSDKInvocations(artifact.Path, content)...)
+			// extractModelReferences misses. The two overlap more often than
+			// "misses" suggests: `model="gpt-4o"` satisfies the config pattern
+			// here and the invocation pattern there, so these merge into the
+			// existing entry rather than appending a second one.
+			inv.AddModels(extractSDKInvocations(artifact.Path, content))
 			for _, comp := range extractFrameworkComponents(artifact.Path, content) {
 				inv.Add(comp)
 			}
