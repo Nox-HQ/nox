@@ -36,6 +36,10 @@ func runIntel(args []string) int {
 		return runIntelInvite(args[1:])
 	case "enroll":
 		return runIntelEnroll(args[1:])
+	case "components":
+		return runIntelComponents(args[1:])
+	case "evidence":
+		return runIntelEvidence(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "nox intel: unknown subcommand %q\n\n", args[0])
 		printIntelUsage()
@@ -48,6 +52,9 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry\n")
 	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
 	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
+	fmt.Fprintf(os.Stderr, "\nBlast radius (organisation token in NOX_INTEL_TOKEN; prints, sends with --upload):\n")
+	fmt.Fprintf(os.Stderr, "  components [path]            describe this service's dependencies and capabilities\n")
+	fmt.Fprintf(os.Stderr, "  evidence <attack-result>     bind `nox attack run` traces to a candidate\n")
 	fmt.Fprintf(os.Stderr, "\nOperator accounts:\n")
 	fmt.Fprintf(os.Stderr, "  login            approve this terminal from your browser and store the session\n")
 	fmt.Fprintf(os.Stderr, "  logout           revoke the session, on the server as well as here\n")
