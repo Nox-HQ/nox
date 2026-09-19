@@ -18,9 +18,11 @@ Nox is a good fit for a registry security tier because it is:
 ## 1. Pull and verify the scanner
 
 ```bash
-# Pin by tag or digest; verify the signature before running.
-cosign verify ghcr.io/nox-hq/nox:latest \
-  --certificate-identity-regexp 'https://github.com/nox-hq/nox/.*' \
+# Pin by version; verify the signature against that release's exact identity
+# before running (the organisation is Nox-HQ, and the match is case-sensitive).
+VERSION=1.38.2
+cosign verify "ghcr.io/nox-hq/nox:${VERSION}" \
+  --certificate-identity "https://github.com/Nox-HQ/nox/.github/workflows/release.yml@refs/tags/v${VERSION}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 

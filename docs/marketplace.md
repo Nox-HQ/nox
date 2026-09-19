@@ -199,7 +199,7 @@ Out-of-band verification of any release archive:
 
 ```bash
 cosign verify-blob \
-  --certificate-identity-regexp "https://github.com/nox-hq/nox-plugin-NAME/.github/workflows/release.yml@.*" \
+  --certificate-identity-regexp '(?i)^https://github\.com/nox-hq/nox-plugin-NAME/\.github/workflows/release\.yml@refs/tags/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --bundle checksums.txt.sig.bundle \
   --new-bundle-format \

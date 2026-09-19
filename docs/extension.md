@@ -261,7 +261,7 @@ Trust roots are configurable.
 
 ### Registry Management
 ```sh
-nox registry add https://registry.nox-hq.dev/index.json
+nox registry add https://raw.githubusercontent.com/nox-hq/registry/main/index.json --name official
 nox registry list
 nox registry remove <name>
 ```
