@@ -1932,20 +1932,7 @@ func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degra
 			if s.Expires != nil && timeNow().After(*s.Expires) {
 				continue
 			}
-			// A waiver naming a WITHDRAWN rule has a specific answer, and the
-			// generic advice below is wrong for it in both directions: the
-			// finding was not fixed, and the rule ID is not a typo. Saying so
-			// is the whole reason the tombstone registry exists.
-			if why := withdrawnWaiverNote(s.RuleIDs); why != "" {
-				deg.Add(degrade.Suppression,
-					fmt.Sprintf("%s:%d waives %s, which was withdrawn",
-						rel, s.Line, strings.Join(s.RuleIDs, ",")),
-					why)
-				continue
-			}
-			deg.Add(degrade.Suppression,
-				fmt.Sprintf("%s:%d waives %s but matched no finding",
-					rel, s.Line, strings.Join(s.RuleIDs, ",")),
+			reportUnusedWaiver(deg, rel, s.Line, s.RuleIDs,
 				"this waiver is not suppressing anything — the finding it covered may have been fixed, "+
 					"in which case remove the waiver; otherwise check the rule ID and that a dedicated "+
 					"nox:ignore comment sits on the line directly above the code")
@@ -2086,14 +2073,33 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 			if suppressions[si].DocExample {
 				continue
 			}
-			deg.Add(degrade.Suppression,
-				fmt.Sprintf("%s:%d waives %s but matched no finding",
-					filePath, suppressions[si].Line, strings.Join(suppressions[si].RuleIDs, ",")),
+			reportUnusedWaiver(deg, filePath, suppressions[si].Line, suppressions[si].RuleIDs,
 				"this waiver is not suppressing anything — check the rule ID, whether the finding moved, "+
 					"and that a dedicated nox:ignore comment sits on the line directly above the code (a reason "+
 					"wrapped onto a second comment line takes the waiver with it)")
 		}
 	}
+}
+
+// reportUnusedWaiver records a waiver that suppressed nothing.
+//
+// There are two callers — the sweep over files with no finding and the per-file
+// pass over files that have some — and this is the one place either of them
+// decides what to say. Until v1.38.1 each built its own message, and only the
+// sweep asked the tombstone registry: a waiver naming a withdrawn rule in a file
+// with any other finding was told to "check the rule ID", which is wrong in both
+// directions. The finding was not fixed and the ID is not a typo; the rule is
+// gone, and saying so is the whole reason the registry exists.
+//
+// generic is the caller's advice for a waiver on a LIVE rule, which does differ
+// between the paths: only the per-file pass can know the finding merely moved.
+func reportUnusedWaiver(deg *degrade.Degradations, file string, line int, ruleIDs []string, generic string) {
+	ids := strings.Join(ruleIDs, ",")
+	if why := withdrawnWaiverNote(ruleIDs); why != "" {
+		deg.Add(degrade.Suppression, fmt.Sprintf("%s:%d waives %s, which was withdrawn", file, line, ids), why)
+		return
+	}
+	deg.Add(degrade.Suppression, fmt.Sprintf("%s:%d waives %s but matched no finding", file, line, ids), generic)
 }
 
 // reportWithdrawnVEXStatements explains VEX statements whose rule was withdrawn.

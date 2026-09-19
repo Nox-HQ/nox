@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -49,5 +51,48 @@ func TestAWaiverOnALiveRuleGetsTheOrdinaryAdvice(t *testing.T) {
 		if note := withdrawnWaiverNote([]string{id}); note != "" {
 			t.Errorf("%s is not withdrawn but got a withdrawal note: %s", id, note)
 		}
+	}
+}
+
+// The unused-waiver check runs on two paths: a sweep over files with no finding
+// at all, and a per-file pass over files that DO have findings. Only the sweep
+// consulted the tombstone registry. A waiver naming a withdrawn rule in a file
+// with any other finding — the common case in a real codebase — got the generic
+// "matched no finding" advice, which is wrong for it in both directions.
+//
+// TestAWaiverOnAWithdrawnRuleExplainsItself tested the helper and so could not
+// see that one caller never called it. This drives both paths through a scan.
+// It was found by verifying the v1.38.0 release binary, which had to be
+// withdrawn before it published; v1.37.0 shipped with the same gap.
+func TestBothUnusedWaiverPathsExplainAWithdrawal(t *testing.T) {
+	cases := map[string]string{
+		// No finding in the file: the sweep path.
+		"clean file": "r = chat(temperature=1.0)  # nox:ignore AI-022\n",
+		// SLOP-001 fires on the import, so the file takes the per-file path.
+		"file with another finding": "import openai\nr = openai.chat(temperature=1.0)  # nox:ignore AI-022\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "a.py"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			res, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, d := range res.Degradations {
+				if strings.Contains(d.Detail, "AI-022") {
+					got = append(got, d.Detail)
+				}
+			}
+			if len(got) != 1 {
+				t.Fatalf("want exactly one degradation about the AI-022 waiver, got %q", got)
+			}
+			if !strings.Contains(got[0], "which was withdrawn") {
+				t.Errorf("the waiver got generic advice instead of the withdrawal explanation: %q", got[0])
+			}
+		})
 	}
 }
