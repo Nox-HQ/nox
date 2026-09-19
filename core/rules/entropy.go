@@ -669,7 +669,53 @@ func isLikelyNotSecret(s string) bool {
 		return true
 	}
 
+	// Character-set definitions — base32/58/62/64 alphabets — have high
+	// entropy by construction, because every symbol appears once. Their shape
+	// gives them away: long, and almost entirely consecutive code points.
+	if isCharacterSetDefinition(s) {
+		return true
+	}
+
 	return false
+}
+
+// isCharacterSetDefinition reports whether s is an alphabet definition: at
+// least charsetMinLen long, with at least charsetMinSequential of its adjacent
+// pairs one code point apart.
+//
+// Both bars are about recall. A single run of consecutive characters is NOT
+// enough: machine-generated secrets essentially never contain one, but
+// human-chosen ones do — a committed `Summer12345678!` is still a leaked
+// password, and excusing it to silence an alphabet would be the wrong trade.
+// What an alphabet has and a credential does not is consecutiveness across
+// nearly its whole length:
+//
+//	base64       64 chars, 59/63 pairs sequential (94%)
+//	base62       62 chars, 59/61 (97%)
+//	base58       58 chars, 52/57 (91%)
+//	base32       32 chars, 30/31 (97%)
+//	crockford32  32 chars, 26/31 (84%)
+//	deadbeef12345678   16 chars, 60% — still reported
+//	Summer12345678!    15 chars, 50% — still reported
+//
+// Found on nox's own source: SEC-161 reported the base62 alphabet in the
+// GitHub token checksum verifier as a possible secret.
+const (
+	charsetMinLen        = 32
+	charsetMinSequential = 0.75
+)
+
+func isCharacterSetDefinition(s string) bool {
+	if len(s) < charsetMinLen {
+		return false
+	}
+	seq := 0
+	for i := 1; i < len(s); i++ {
+		if s[i] == s[i-1]+1 {
+			seq++
+		}
+	}
+	return float64(seq) >= charsetMinSequential*float64(len(s)-1)
 }
 
 // sriPrefixes are the algorithm labels that precede the base64 body of a

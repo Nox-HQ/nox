@@ -346,7 +346,10 @@ func TestEntropyMatcher_HexString(t *testing.T) {
 	// Hex strings using only [0-9a-f] have a theoretical max entropy of 4.0
 	// (16 distinct characters). Using mixed case pushes entropy higher. The
 	// metadata threshold lets us test hex extraction specifically.
-	content := []byte("hash = 0123456789abcdef0123456789ABCDEF\n")
+	// Random hex, not an alphabet: "0123456789abcdef0123456789ABCDEF" used to
+	// stand in here, and a hex digit table is exactly the character-set
+	// definition isCharacterSetDefinition now excuses.
+	content := []byte("hash = 3f9a1c7e5b2d8046aE7F1C9B3D5A8024\n")
 	rule := Rule{
 		MatcherType: "entropy",
 		Metadata:    map[string]string{"entropy_threshold": "3.5"},
@@ -359,7 +362,7 @@ func TestEntropyMatcher_HexString(t *testing.T) {
 
 	found := false
 	for _, r := range results {
-		if strings.Contains(r.MatchText, "0123456789abcdef") {
+		if strings.Contains(r.MatchText, "3f9a1c7e5b2d8046") {
 			found = true
 		}
 	}
