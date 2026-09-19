@@ -291,6 +291,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					"the match lies outside code — in a comment, a string literal or an embedded blob")
 				continue
 			}
+			// MCP-009/010 report tool metadata. A phrase that is the value of
+			// an agent's input is a test of an injection defence, not metadata;
+			// see isAgentInputValue for why this is structural, not proximate.
+			if (results[i].RuleID == "MCP-009" || results[i].RuleID == "MCP-010") &&
+				isAgentInputValue(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the phrase is the value of an agent's input, not tool metadata")
+				continue
+			}
 			// AI-002 (prompt string concatenation of user input) fires on any
 			// interpolated-format-string-plus-user-variable shape, but that shape
 			// is just as common in a parameterised SQL call as in a real prompt.
