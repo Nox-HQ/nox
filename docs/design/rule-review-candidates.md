@@ -209,7 +209,7 @@ The eight are AI-022, AI-029, AI-031, DATA-001, SEC-048, SEC-162, SEC-801 and
 SEC-803 — the 7 labelled informative above, plus SEC-048.
 
 > **Later, and worth reading in the right order:** AI-022 was withdrawn in
-> v1.38.0. The collapse list did not decide that, and could not have — a copy
+> v1.38.1. The collapse list did not decide that, and could not have — a copy
 > factor of 3.84 says the corpus repeats a line, not that the line is wrong. The
 > withdrawal rested on the rule's proposition: it flagged a strict superset of
 > the values AI-041 was withdrawn for. What the report did was put the rule in

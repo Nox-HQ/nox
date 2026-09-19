@@ -9,7 +9,7 @@ import (
 //
 // Neither is in the catalogue any more: AI-041 was withdrawn in v1.36.0 for an
 // unrelated reason, which is what resolved this pair, and AI-023 followed in
-// v1.38.0. Both definitions are kept here because the pair is the only worked
+// v1.38.1. Both definitions are kept here because the pair is the only worked
 // example this check has, and a check whose one example is not asserted is a
 // check nobody can trust.
 func retiredAI023Pair() []*Rule {

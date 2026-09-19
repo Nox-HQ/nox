@@ -1377,7 +1377,7 @@ var oauthDiscovery = "https://auth.example.com/.well-known/openid-configuration"
 
 // ---------------------------------------------------------------------------
 // AI-006 false-positive regressions for issue #59. The AI-028 half left with
-// the rule in v1.38.0; see reliability_rules_retired_test.go.
+// the rule in v1.38.1; see reliability_rules_retired_test.go.
 // ---------------------------------------------------------------------------
 
 // TestAI006_IgnoresGoTestFiles ensures the rule is skipped for Go test files

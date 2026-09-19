@@ -55,7 +55,7 @@ var withdrawnRules = map[string]WithdrawnRule{
 	},
 	"AI-022": {
 		ID:      "AI-022",
-		Version: "v1.38.0",
+		Version: "v1.38.1",
 		Reason: "reported temperature 0.8-1.0 at High severity as \"allowing hallucination\". AI-041 was " +
 			"withdrawn in v1.36.0 for flagging temperature above 0.9 as a tuning property rather than a " +
 			"security one, and this rule flagged a strict superset of those values. 1.0 is the default " +
@@ -64,7 +64,7 @@ var withdrawnRules = map[string]WithdrawnRule{
 	},
 	"AI-023": {
 		ID:      "AI-023",
-		Version: "v1.38.0",
+		Version: "v1.38.1",
 		Reason: "reported top_p below 0.7 as \"reducing output diversity\", and its remediation gave the " +
 			"cost as \"reduce response quality\". Output diversity is an output-quality property: no " +
 			"confidentiality, integrity or availability claim follows from it, and CWE-754 describes " +
@@ -72,14 +72,14 @@ var withdrawnRules = map[string]WithdrawnRule{
 	},
 	"AI-028": {
 		ID:      "AI-028",
-		Version: "v1.38.0",
+		Version: "v1.38.1",
 		Reason: "reported an unset seed as \"causing non-deterministic output\", for \"reproducible " +
 			"outputs in testing and auditing\". Determinism is the tuning property AI-041 was withdrawn " +
 			"for in v1.36.0, and the OpenAI API's `seed` is optional and unset by default.",
 	},
 	"AI-037": {
 		ID:      "AI-037",
-		Version: "v1.38.0",
+		Version: "v1.38.1",
 		Reason: "reported system prompts over 2000 characters as able to \"cause inconsistent model " +
 			"behavior and higher latency\". Consistency and latency are quality and performance " +
 			"properties; the rule stated no confidentiality, integrity or availability claim.",
