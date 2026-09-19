@@ -215,10 +215,20 @@ sdk.WithMaxArtifactBytes(50 * 1024 * 1024)   // Maximum artifact size
 | Track | Risk | Network | Confirmation |
 |-------|------|---------|-------------|
 | core-analysis | passive | none | no |
-| dynamic-runtime | active | localhost | yes |
+| dynamic-runtime | active | `localhost`, `127.0.0.1`, `::1` | yes |
 | ai-security | passive | none | no |
-| supply-chain | passive | *.osv.dev, *.github.com | no |
-| agent-assistance | passive | LLM APIs | no |
+| threat-modeling | passive | none | no |
+| supply-chain | passive | `*.osv.dev`, `*.github.com`, `*.npmjs.org`, `*.pypi.org`, `pypi.org`, `proxy.golang.org` | no |
+| intelligence | passive | `*.osv.dev`, `*.github.com`, `*.nvd.nist.gov` | no |
+| policy-governance | passive | none | no |
+| incident-readiness | passive | none | no |
+| developer-experience | passive | none | no |
+| agent-assistance | passive | `*.openai.com`, `*.anthropic.com`, `*.googleapis.com` | no |
+
+A wildcard matches subdomains only: `*.pypi.org` does not match `pypi.org`,
+which is why the apex is listed separately. Generated from
+`plugin.ProfileForTrack`; if the two disagree, the code is right and this table
+is a bug.
 
 These profiles are **enforced**. The host resolves each plugin's policy as its
 track profile merged with the operator's `.nox.yaml` `plugin_policy` block,
@@ -308,43 +318,82 @@ func TestConformance(t *testing.T) {
 
 ## Distribution
 
+`nox plugin init` generates the pipeline every nox plugin releases with:
+`.github/workflows/ci.yml`, `.github/workflows/release.yml`,
+`.goreleaser.yaml` and `plugin.yaml`. Keep them; the registry verifies what
+they produce.
+
+### Before you release: `nox plugin test`
+
+```bash
+make build
+nox plugin test ./nox-plugin-my-scanner
+```
+
+This runs the built binary the way a scan will: registered with a host under
+its track's policy (read from `plugin.yaml`, or `--track`), then its `scan`
+tool invoked against `--target` (default `.`). It fails on what a scan would
+silently degrade — most often a network host the track does not allow, which
+otherwise surfaces only after the plugin is published and installed.
+
+It complements the in-process conformance suite above rather than replacing it.
+
 ### Signing
 
-Plugins are signed with Ed25519 keys. Generate a signing key:
+There is no key to manage. The release workflow signs `checksums.txt` with
+cosign **keyless**, using the workflow's GitHub OIDC identity, and publishes
+the bundle as `checksums.txt.sigstore.json`. Anyone can verify a release
+against the workflow that built it:
 
 ```bash
-openssl genpkey -algorithm Ed25519 -out signing-key.pem
+cosign verify-blob checksums.txt \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity "https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/<tag>" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-Store the base64-encoded key as a GitHub secret `NOX_SIGNING_KEY`:
+Earlier versions of this guide described Ed25519 signing with a
+`NOX_SIGNING_KEY` secret. That pipeline produced artifacts the registry does
+not verify; do not use it.
+
+### Release workflow
 
 ```bash
-base64 -w0 signing-key.pem  # Store this as the secret value
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-### Release Workflow
+The tag runs GoReleaser, which:
 
-Tag a version to trigger the release:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-The GitHub Actions workflow will:
-1. Build multi-platform binaries (linux/darwin, amd64/arm64)
-2. Sign artifacts with Ed25519
-3. Create a GitHub Release
-4. Dispatch to the registry for index update
+1. runs the tests, then builds linux/darwin (amd64, arm64) and windows/amd64
+2. archives each binary with `README.md` and `plugin.yaml`
+3. writes `checksums.txt` and signs it (see above)
+4. generates an SBOM per archive and publishes the GitHub release
 
 ### Registry
 
-Users install plugins from the registry:
+The official registry is `index.json` in
+[`nox-hq/registry`](https://github.com/nox-hq/registry). A plugin's **first**
+release needs an entry there written by hand — its description, track and
+maintainers, and `minimum_nox_version` if it depends on a policy or SDK change —
+because nothing can infer those. From then on the Registry workflow adds each
+new release automatically: every morning it opens a PR with the versions the
+index is missing, their digests taken from the release's own `checksums.txt`.
+Its reconcile step fails, deliberately, while a released plugin has no entry at
+all.
+
+nox registers the official registry on first run, so users install directly:
 
 ```bash
-nox registry add https://registry.nox-hq.dev/index.json
 nox plugin search my-scanner
 nox plugin install nox/my-scanner@^1.0.0
+```
+
+To add a registry explicitly, for example after opting out of the default with
+`NOX_NO_DEFAULT_REGISTRY=1`:
+
+```bash
+nox registry add https://raw.githubusercontent.com/nox-hq/registry/main/index.json --name official
 ```
 
 ## Troubleshooting
