@@ -116,7 +116,7 @@ runs:
     - name: Open pull request
       id: pr
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.open-pr == 'true'
-      uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
+      uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
       with:
         token: ${{ inputs.github-token }}
         branch: ${{ inputs.pr-branch-prefix }}/${{ github.run_id }}
