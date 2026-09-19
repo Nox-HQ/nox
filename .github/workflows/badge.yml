@@ -93,6 +93,7 @@ jobs:
           fi
 
       - name: Open PR with refreshed badges
+        id: cpr
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
@@ -114,3 +115,15 @@ jobs:
             .github/nox-high.svg
             .github/nox-medium.svg
             .github/nox-low.svg
+
+      # The PR body and the header of this file both said auto-merge would pick
+      # this up. Nothing ever turned it on: create-pull-request opens a PR and
+      # stops, so every badge refresh since May (#85, #225, #313, #409, #647)
+      # sat open until someone merged it by hand -- one stale PR per release.
+      # Auto-merge still waits for the required checks, so this adds no bypass.
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.NOX_TOKEN || secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash

@@ -3,7 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      # Full semver only. `v*` also matched the floating major tag: pushing
+      # `v1` by hand on 2026-06-05 built and published a GitHub release
+      # versioned "1", whose binaries (nox_1_*) went stale the moment the tag
+      # moved on. update-major-tag moves `v1` with GITHUB_TOKEN, which does not
+      # trigger workflows, so only a manual push ever hit this -- once was
+      # enough.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: write # nox:ignore IAC-314 -- needed for creating GitHub releases
