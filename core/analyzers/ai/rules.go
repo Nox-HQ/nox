@@ -355,7 +355,7 @@ func builtinAIRules() []*rules.Rule {
 
 		// -----------------------------------------------------------------
 		// More AI security rules (AI-024 to AI-040; AI-022, AI-023, AI-028 and
-		// AI-037 were withdrawn in v1.38.0 -- see core/rules/withdrawn.go)
+		// AI-037 were withdrawn in v1.38.1 -- see core/rules/withdrawn.go)
 		// -----------------------------------------------------------------
 		{
 			id: "AI-024", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,

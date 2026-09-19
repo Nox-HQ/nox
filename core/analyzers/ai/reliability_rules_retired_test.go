@@ -7,7 +7,7 @@ import (
 	"github.com/nox-hq/nox/core/rules"
 )
 
-// AI-022, AI-023, AI-028 and AI-037 were withdrawn in v1.38.0 on the standard
+// AI-022, AI-023, AI-028 and AI-037 were withdrawn in v1.38.1 on the standard
 // v1.36.0 set for AI-029 and AI-041: a rule must state a confidentiality,
 // integrity or availability claim, and "differs from a tuning recommendation" is
 // not one.
