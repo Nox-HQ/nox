@@ -27,5 +27,12 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "SLOP-001",
+      "classification": "refined-away",
+      "pr": 695,
+      "reason": "SLOP-001 collected JS/TS import specifiers with regexes that match anywhere in the file, so prose and code-generation templates that read like an import were collected as imports and reported as undeclared packages — at a rule whose whole proposition is \"a developer installed a package an LLM hallucinated\". All four drops on vercel-ai-codemod are that error: scripts/scaffold-codemod.ts:58-59 lie inside the testTemplate template literal, where the specifier is an unresolved ${toRelativeImportPath(...)} interpolation that names no package at all; src/codemods/v5/move-react-to-ai-sdk.ts:5 is a JSDoc line documenting the migration `import { useChat } from 'ai/react'` → `'@ai-sdk/react'`; and src/codemods/v5/rsc-package.ts:19 is a usage example inside a string literal. The last two name real published packages, so the rule was asserting a slopsquat against @ai-sdk/react and @ai-sdk/rsc on the strength of prose describing them. Matches are now classified with lexctx and kept only where the match begins in code; the offset is always the keyword (from, import, require), never the quoted specifier, so a real import classifies as code while the same text in a comment or string literal does not. Python needed no change: pyImportRe and pyFromRe are line-anchored. Recall is witnessed in the same run: 109 of 113 survive, including the real imports under src/test/__testfixtures__ (@ai-sdk/openai, @ai-sdk/azure, other-module)."
+    }
+  ]
 }
