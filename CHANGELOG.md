@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.39.1] - 2026-09-20
+
+A tsconfig path alias is first-party source. SLOP-001 read a scoped `paths`
+alias as an undeclared npm package and reported the import as a slopsquat
+candidate; the analyzer now reads the project's own config.
 
 ### Fixed
 
@@ -4095,7 +4099,7 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.34.0...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.39.1...HEAD
 [1.34.0]: https://github.com/nox-hq/nox/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/nox-hq/nox/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/nox-hq/nox/compare/v1.31.0...v1.32.0
