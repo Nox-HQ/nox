@@ -41,7 +41,7 @@ func runFix(args []string) int {
 	fs.StringVar(&manifestRoot, "root", ".", "directory containing the project's manifest (go.mod)")
 	fs.BoolVar(&doActions, "actions", false, "also upgrade outdated GitHub Actions pins in .github/workflows (needs GITHUB_TOKEN)")
 	fs.BoolVar(&onlyActions, "actions-only", false, "only upgrade GitHub Actions pins; skip the package-dependency pass")
-	fs.BoolVar(&doOutdated, "outdated", false, "upgrade dependencies that are merely out of date (opt-in currency pass; reaches the network, Go only)")
+	fs.BoolVar(&doOutdated, "outdated", false, "upgrade dependencies that are merely out of date (opt-in currency pass; reaches the network: go, npm, pypi, cargo, rubygems, composer, nuget)")
 	fs.BoolVar(&doContent, "content", false, "generate deterministic patches for mechanical IAC misconfigurations (previews the diff; add --write to apply)")
 	fs.BoolVar(&write, "write", false, "with --content: apply the patches instead of only previewing them")
 	if err := fs.Parse(args); err != nil {
