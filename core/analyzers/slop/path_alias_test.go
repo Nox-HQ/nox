@@ -167,3 +167,57 @@ func TestNoPathAliasesLeavesEveryImportACandidate(t *testing.T) {
 		t.Error("a tsconfig without paths matched an import")
 	}
 }
+
+// SLOP-001 reads import specifiers with regexes that match anywhere in the
+// file, so prose in a comment that happens to contain `from "..."` was
+// reported as an undeclared package. Three separate instances of this turned
+// up in one TypeScript repo, including a code comment reading
+// `indistinguishable from "you have no groups"`, which blocked a pull request
+// as a suspected slopsquat.
+func TestProseInCommentsIsNotAnImport(t *testing.T) {
+	content := []byte(`
+// A read that failed is indistinguishable from "you have no groups".
+/*
+ * Historically this returned early, so a caller could not tell it apart
+ * from "an empty store" — see the note below.
+ */
+import { real } from "react";
+
+/** The badge omits itself rather than claiming the light is "off". */
+export const x = require("lodash");
+`)
+
+	specs := []string{}
+	for _, ref := range extractImports(ecoNPM, content) {
+		specs = append(specs, ref.spec)
+	}
+
+	want := map[string]bool{"react": true, "lodash": true}
+	for _, spec := range specs {
+		if !want[spec] {
+			t.Errorf("extractImports picked up %q — prose in a comment is not an import", spec)
+		}
+	}
+	if len(specs) != 2 {
+		t.Errorf("extractImports found %d specifiers (%v), want the 2 real ones", len(specs), specs)
+	}
+}
+
+// The mirror case: a specifier inside a real string literal is not an import
+// either, but an import's own specifier must still be found.
+func TestPythonProseInCommentsIsNotAnImport(t *testing.T) {
+	content := []byte(`
+# Falls back to the cache, so it reads import flask as a hint only.
+import requests
+
+def f():
+    """Docstring mentioning: import hallucinated_helper"""
+    return requests
+`)
+
+	for _, ref := range extractImports(ecoPyPI, content) {
+		if ref.spec != "requests" {
+			t.Errorf("extractImports picked up %q — prose is not an import", ref.spec)
+		}
+	}
+}

@@ -124,8 +124,22 @@ func isPyModulePath(s string) bool {
 
 func extractJSImports(content []byte) []importRef {
 	var refs []importRef
+	// The regexes match anywhere, so prose in a comment that happens to read
+	// `from "..."` was collected as an import and reported as an undeclared
+	// package. Real examples from one TypeScript repo, each of which blocked a
+	// pull request: a comment reading `indistinguishable from "you have no
+	// groups"`, another explaining a badge that claims a light is "off", and a
+	// third distinguishing `empty because device has no items`.
+	//
+	// The match offset is the keyword (`from`, `import`, `require`), never the
+	// quoted specifier, so a real import is classified as code while the same
+	// text inside a comment or a string literal is not.
+	regions := lexctx.Classify(lexctx.LangJavaScript, content)
 	add := func(res []int) {
 		if res == nil {
+			return
+		}
+		if lexctx.KindAt(regions, res[0]) != lexctx.KindCode {
 			return
 		}
 		refs = append(refs, importRef{spec: string(content[res[2]:res[3]]), line: lexctx.LineForOffset(content, res[0])})

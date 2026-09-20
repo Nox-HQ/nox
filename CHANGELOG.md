@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Prose in a comment is no longer read as an import.** SLOP-001 collected
+  import specifiers with regexes that match anywhere in the file, so a code
+  comment containing `from "..."` was reported as an undeclared package —
+  possible slopsquat. One TypeScript repository produced three of them,
+  including a comment reading `indistinguishable from "you have no groups"`,
+  each blocking a pull request until it was dismissed by hand. JS/TS matches
+  are now classified with `lexctx` and kept only where the keyword (`from`,
+  `import`, `require`) sits in code, so the same text in a comment or a string
+  literal is ignored. Python was already safe: its patterns are line-anchored.
+
 ## [1.39.1] - 2026-09-20
 
 A tsconfig path alias is first-party source. SLOP-001 read a scoped `paths`
