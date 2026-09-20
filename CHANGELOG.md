@@ -23,6 +23,12 @@ package — a slopsquat claim against text nobody installed.
   `import`, `require`) sits in code, so the same text in a comment or a string
   literal is ignored. Python was already safe: its patterns are line-anchored.
 
+- **`--outdated` says which ecosystems it resolves.** The flag description
+  read "Go only" while the currency pass had been resolving npm, PyPI,
+  crates.io, RubyGems, Packagist and NuGet for as long as `docs/usage.md`
+  documented seven ecosystems. Only the text an operator reads was wrong, so
+  the flag understated what it does. Pinned by a test over the usage text.
+
 ## [1.39.1] - 2026-09-20
 
 A tsconfig path alias is first-party source. SLOP-001 read a scoped `paths`
