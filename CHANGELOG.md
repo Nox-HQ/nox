@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.39.2] - 2026-09-20
+
+Prose in a comment is not an import. SLOP-001 matched import syntax anywhere
+in a file, so a sentence in a comment could be reported as an undeclared
+package — a slopsquat claim against text nobody installed.
 
 ### Fixed
 
@@ -18,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are now classified with `lexctx` and kept only where the keyword (`from`,
   `import`, `require`) sits in code, so the same text in a comment or a string
   literal is ignored. Python was already safe: its patterns are line-anchored.
+
+- **`--outdated` says which ecosystems it resolves.** The flag description
+  read "Go only" while the currency pass had been resolving npm, PyPI,
+  crates.io, RubyGems, Packagist and NuGet for as long as `docs/usage.md`
+  documented seven ecosystems. Only the text an operator reads was wrong, so
+  the flag understated what it does. Pinned by a test over the usage text.
 
 ## [1.39.1] - 2026-09-20
 
@@ -4113,7 +4123,7 @@ secrets-pattern noise inside npm bundles.
 - Interspersed flags and positional args handled correctly.
 - Timeout added to `nox explain` to prevent indefinite hangs.
 
-[Unreleased]: https://github.com/nox-hq/nox/compare/v1.39.1...HEAD
+[Unreleased]: https://github.com/nox-hq/nox/compare/v1.39.2...HEAD
 [1.34.0]: https://github.com/nox-hq/nox/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/nox-hq/nox/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/nox-hq/nox/compare/v1.31.0...v1.32.0
