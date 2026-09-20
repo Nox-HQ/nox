@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A tsconfig `paths` alias is first-party source, not a hallucinated
+  package.** SLOP-001 read `@shared/types` as a scoped npm package nobody had
+  declared, and reported the import as a slopsquat candidate. The specifier has
+  exactly the shape npm requires, so it cannot be told from a real dependency
+  without reading the project's own config — which the analyzer now does.
+  `compilerOptions.paths` is collected from every `tsconfig*.json` and
+  `jsconfig*.json` in the tree, comments and trailing commas included, and an
+  import covered by a declared pattern resolves to first-party source instead of
+  becoming a candidate. A bare `"*"` catch-all is ignored, since honouring it
+  would silence the rule for the whole project. This is the non-empty-scope half
+  of the narrowing that `@/components` already received: on one TypeScript
+  project it removed 28 of 31 SLOP-001 findings, every one of them an alias.
+
 ## [1.39.0] - 2026-09-19
 
 Estate-wide blast radius. Two new commands describe a service and its

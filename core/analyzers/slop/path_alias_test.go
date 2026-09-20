@@ -69,3 +69,101 @@ func TestRelativeImportsStayLocal(t *testing.T) {
 		}
 	}
 }
+
+// A tsconfig `paths` alias with a NON-EMPTY scope (`@shared/types`) has a valid
+// package shape, so the empty-scope narrowing above cannot see it: telling it
+// from a real dependency needs the project's own config read. Until it was,
+// every such import was reported as a hallucinated package — the alias is
+// first-party source by construction, which is precisely what SLOP-001
+// excludes.
+func TestTsconfigPathAliasIsNotAPhantomImport(t *testing.T) {
+	pkgs := findingsFor(t, map[string]string{
+		"package.json": `{"dependencies":{"react":"^18.0.0"}}`,
+		"tsconfig.json": `{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@app": ["./src/app.ts"]
+    }
+  }
+}`,
+		"src/index.ts": `import type { LightItem } from "@shared/types";
+import { boot } from "@app";
+import React from "react";
+import { thing } from "@ai-sdk/hallucinated-helper";
+`,
+	})
+	for _, alias := range []string{"@shared/types", "@app"} {
+		if hasPkg(pkgs, alias) {
+			t.Errorf("false positive: %q is a tsconfig path alias, not a package; got %v", alias, pkgs)
+		}
+	}
+	if !hasPkg(pkgs, "@ai-sdk/hallucinated-helper") {
+		t.Errorf("recall lost: an undeclared scoped package must still be reported; got %v", pkgs)
+	}
+}
+
+// jsconfig.json is the same file for a JavaScript project, and tsconfig files
+// are JSONC in practice: the TypeScript compiler accepts comments and trailing
+// commas, and the templates it generates ship with them.
+func TestPathAliasesAreReadFromJsconfigAndJSONC(t *testing.T) {
+	pkgs := findingsFor(t, map[string]string{
+		"package.json": `{"dependencies":{}}`,
+		"jsconfig.json": `{
+  // Editor support for the alias below.
+  "compilerOptions": {
+    /* block comment */
+    "paths": {
+      "~/*": ["./src/*"],
+      "@util/*": ["./src/util/*"],
+    },
+  },
+}`,
+		"src/index.js": `import a from "~/components/button";
+import b from "@util/chat-store";
+`,
+	})
+	if len(pkgs) != 0 {
+		t.Errorf("false positives: %v — both specifiers are jsconfig path aliases", pkgs)
+	}
+}
+
+// The unit half: pattern semantics. TypeScript allows at most one `*` in a
+// pattern, and it matches a whole path segment sequence, not a substring.
+func TestPathAliasMatching(t *testing.T) {
+	aliases := collectPathAliases(map[string][]byte{
+		"tsconfig.json": []byte(`{"compilerOptions":{"paths":{
+			"@shared/*": ["./src/shared/*"],
+			"@app": ["./src/app.ts"],
+			"~/*": ["./src/*"]
+		}}}`),
+	})
+
+	for _, spec := range []string{"@shared/types", "@shared/types/light", "@app", "~/lib/x"} {
+		if !aliases.matches(spec) {
+			t.Errorf("matches(%q) = false, want true — declared in tsconfig paths", spec)
+		}
+	}
+	// Recall: a near-miss must stay a candidate. `@shared-utils` is a valid npm
+	// package name and is NOT covered by the `@shared/*` pattern.
+	for _, spec := range []string{"@shared-utils/x", "@sharedx/y", "@apple", "react", "@app/extra"} {
+		if aliases.matches(spec) {
+			t.Errorf("matches(%q) = true, want false — not covered by any alias", spec)
+		}
+	}
+}
+
+// No config, or a config with no paths, must leave behavior exactly as it was.
+func TestNoPathAliasesLeavesEveryImportACandidate(t *testing.T) {
+	aliases := collectPathAliases(nil)
+	if aliases.matches("@shared/types") {
+		t.Error("an empty alias set matched an import")
+	}
+	empty := collectPathAliases(map[string][]byte{
+		"tsconfig.json": []byte(`{"compilerOptions":{"strict":true}}`),
+	})
+	if empty.matches("@shared/types") {
+		t.Error("a tsconfig without paths matched an import")
+	}
+}

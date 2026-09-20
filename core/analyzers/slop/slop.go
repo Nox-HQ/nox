@@ -164,6 +164,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Gather declared packages from manifests and first-party module roots from
 	// the source tree before evaluating any import.
 	manifests := make(map[string][]byte)
+	configs := make(map[string][]byte)
 	local := make(map[string]struct{})
 	pkgDirs := make(map[string]struct{})
 	for i := range artifacts {
@@ -172,6 +173,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if isManifest(base) {
 			if content, err := os.ReadFile(art.AbsPath); err == nil {
 				manifests[art.Path] = content
+			}
+		}
+		if isPathAliasConfig(base) {
+			if content, err := os.ReadFile(art.AbsPath); err == nil {
+				configs[art.Path] = content
 			}
 		}
 		if art.Type == discovery.Source {
@@ -187,6 +193,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		local[root] = struct{}{}
 	}
 	declared := collectDeclared(manifests)
+	aliases := collectPathAliases(configs)
 
 	for i := range artifacts {
 		if err := ctx.Err(); err != nil {
@@ -204,17 +211,26 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			continue
 		}
-		a.scanFile(fs, eco, art.Path, content, declared, local)
+		a.scanFile(fs, eco, art.Path, content, declared, local, aliases)
 	}
 	return fs, nil
 }
 
 // scanFile evaluates one source file's imports and adds a SLOP-001 finding for
 // each undeclared external package (deduplicated per package within the file).
-func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string, content []byte, declared *declaredSet, local map[string]struct{}) {
+func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string, content []byte, declared *declaredSet, local map[string]struct{}, aliases *aliasSet) {
 	seen := make(map[string]struct{})
 	seenPred := make(map[string]struct{})
 	for _, imp := range extractImports(eco, content) {
+		if eco == ecoNPM && aliases.matches(imp.spec) {
+			// The project's own tsconfig/jsconfig maps this specifier onto its
+			// source tree, so it names first-party code and no registry package
+			// is involved.
+			a.refute(path, imp.line, "\""+imp.spec+"\" is a path alias declared in this "+
+				"project's tsconfig/jsconfig, so it resolves to first-party source, "+
+				"not a registry package")
+			continue
+		}
 		pkg, ok := packageName(eco, imp.spec)
 		if !ok {
 			continue // relative/local specifier
