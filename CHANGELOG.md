@@ -20,20 +20,26 @@ report the one thing in a cassette worth reporting.
   request, or in the request URI. Everything else is traffic: response headers
   and bodies, request bodies, and cookies in either direction.
 
-  Measured on crewAI 1.15.21 against v1.35.0: **522 → 0** for SEC-161, 18 → 0 for
-  SEC-162. All 540 findings were inside cassettes and not one was a credential
-  the project held — 234 Cloudflare `__cf_bm`/`_cfuvid` cookies, 148 continuation
-  lines of base64 response bodies, 58 response ids, 44 embedding vectors up to
-  8,193 characters, 32 Gemini thought signatures, and 8 occurrences of PostHog's
-  `phc_` project key, which the vendor publishes and which SEC-661 was redesigned
-  specifically to stop reporting. The generic entropy rule reported it anyway,
-  out of a recorded response body.
+  Measured against v1.39.2 on the rule-diff corpus: **373 → 0** on crewAI's
+  cassettes, and **no change across the other 24 repositories** — which is the
+  evidence the gate is scoped to recordings rather than over-reaching.
 
-  Both rules are unchanged everywhere else in the corpus, which is the evidence
-  the gate is scoped to recordings rather than over-reaching. The gate applies to
-  the entropy rules only: any rule encoding a vendor's credential format still
-  fires anywhere in a recording, request body included, which is where an OAuth
-  `client_secret` sits in a recorded token exchange. See
+  v1.38.2 had already removed 149 of these through its 2048-character bound on
+  entropy candidates and its word-boundary context hints; against v1.35.0 the
+  same gate is 522 → 0. The smaller number is this release's, and the larger one
+  is only quoted to say which it is not.
+
+  All 540 were read individually and not one was a credential the project holds:
+  234 Cloudflare `__cf_bm`/`_cfuvid` cookies, 148 continuation lines of base64
+  response bodies, 58 response ids, 44 embedding vectors up to 8,193 characters,
+  32 Gemini thought signatures, and 8 occurrences of PostHog's `phc_` project
+  key — which the vendor publishes, and which SEC-661 was redesigned specifically
+  to stop reporting. The generic entropy rule reported it anyway, out of a
+  recorded response body.
+
+  The gate applies to the entropy rules only: any rule encoding a vendor's
+  credential format still fires anywhere in a recording, request body included,
+  which is where an OAuth `client_secret` sits in a recorded token exchange. See
   `docs/design/recorded-http-exchanges.md`, including the gap it leaves — a
   credential with no recognised vendor format, hardcoded into a recorded request
   *body*, is now reported by nothing.

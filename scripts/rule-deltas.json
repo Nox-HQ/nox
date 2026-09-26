@@ -32,37 +32,7 @@
       "rule": "SEC-161",
       "classification": "applicability-narrowed",
       "pr": 702,
-      "reason": "The response side and the bodies of a recorded HTTP exchange are traffic, not a credential the repository holds — and nobody can rotate them. Measured on crewAI 1.15.21 against v1.35.0, SEC-161 and SEC-162 produced 540 findings and every one was inside a vcrpy cassette: 202 __cf_bm and 32 _cfuvid Cloudflare cookies, 148 continuation lines of base64 response bodies, 58 response ids, 44 embedding vectors up to 8,193 characters, 32 Gemini thought signatures, and 8 occurrences of PostHog's phc_ project key, which the vendor publishes and SEC-661 deliberately excludes. SEC-161 fell 522 to 0 on that repository and is unchanged everywhere else in the corpus. The gate covers the entropy rules only: any rule encoding a vendor's credential format still fires anywhere in a recording, including a request body, which is where an OAuth client_secret sits. The request headers and URI are untouched, and SEC-082 was fixed in the same change so that an unredacted authorization header in a cassette is reported at all — it was not, because Go's \\s crosses a newline but not a YAML sequence dash. See docs/design/recorded-http-exchanges.md."
-    },
-    {
-      "rule": "SEC-162",
-      "classification": "applicability-narrowed",
-      "pr": 702,
-      "reason": "Same gate as SEC-161: the bodies and response side of a recorded HTTP exchange are server traffic. 18 to 0 on crewAI. See that entry for the measured breakdown and for the false negative fixed alongside it."
-    },
-    {
-      "rule": "SEC-562",
-      "classification": "format-bound",
-      "pr": 702,
-      "reason": "Re-keyed from `live_[a-zA-Z0-9]{32}` near the word \"checkout\" onto Checkout.com's documented prefixes `sk_` and `sk_sbox_`. The old pattern matched no Checkout.com key of any kind and did match any `live_` token near a word that appears in e-commerce code constantly. pk_ is deliberately absent: Checkout.com publishes the public key for client-side use, and reporting a credential the vendor documents as publishable trains people to ignore the rule, which is the reason SEC-661 omits PostHog's phc_. Stripe's `sk_live_`/`sk_test_` namespace (SEC-030) cannot collide, because `[a-z0-9]{26,}` cannot cross the underscore — asserted by TestSEC562DoesNotClaimStripesNamespace, which was checked by breaking that property."
-    },
-    {
-      "rule": "SEC-572",
-      "classification": "rule-removed",
-      "pr": 702,
-      "reason": "Removed. SEC-572 \"Payoneer API Token\" matched `live_[a-zA-Z0-9]{32}`, and Payoneer issues no credential of that shape: it authenticates with OAuth2 client_id/client_secret and publishes no token prefix, length or charset at all. A rule cannot encode a format the vendor does not have. It shared the pattern with SEC-562, so one token near either vendor name produced a finding named for the other; SEC-562 was re-keyed onto Checkout.com's real prefixes and SEC-572 had nothing to be re-keyed onto. No survivor reports \"a Payoneer token\" because nothing distinguishes one from any other OAuth client secret; a hardcoded client secret is still reported by the generic credential rules, which is the correct strength of claim."
-    },
-    {
-      "rule": "SLOP-001",
-      "classification": "applicability-narrowed",
-      "pr": 702,
-      "reason": "Two classes v1.39.2 did not cover. (1) Python docstrings: v1.39.2 gated the JavaScript extractor on lexctx so prose in a comment stopped being collected as an import, and left the Python extractor ungated — and a docstring showing a caller what to type is the most common place in Python to write an import you are not making. Same gate, same keyword offset, same reasoning. (2) An interpolated specifier: no npm registry can serve a name containing `$`, `{` or `}`, so `@ai-sdk/${pkgName}` and `${moduleName}` are not package names and reporting them undeclared asserts a hallucinated package on the strength of a code generator. The lexctx gate already catches the common shape, where the generated import sits inside a template literal; this covers the rest of the class exactly rather than heuristically. The control test keeps JSONStream and lodash.debounce resolving, because a false negative here is silent."
-    },
-    {
-      "rule": "AI-019",
-      "classification": "refined-away",
-      "pr": 702,
-      "reason": "AI-019 \"Model loaded without hash verification\" matched `from_pretrained(` and stopped at the opening paren, so it never saw the arguments; its own comment conceded this and argued the absence was still the signal because a pinned line was \"unlikely to match\". A pinned load was reported exactly like an unpinned one, so the rule's name asserted something its pattern had not established. excludeContextKeywords now establishes it, and reaches a multi-line call where widening the pattern would not. Of 99 model loads across the fourteen pinned repositories, ZERO carry a pin, so no count is expected to move: the rule was right about every one of them for a reason it could not give, and what the gate buys is that a project which does pin stops being told it has not. The same change fixes a false negative in the other direction — a bare `pipeline(\"sentiment-analysis\")` as the first token on a line matched nothing, because the character class excluding `conn.pipeline()` needs a character."
+      "reason": "The bodies and response side of a recorded HTTP exchange are traffic, not a credential the repository holds — and nobody can rotate them. Measured by this harness against v1.39.2: 373 -> 0 on crewai-cassettes, and NO CHANGE across the other 24 repositories, which is the evidence the gate is scoped to recordings rather than over-reaching. The earlier figure of 522 -> 0 was against v1.35.0 and is not this change's marginal value: v1.38.2's 2048-character bound on entropy candidates and its word-boundary context hints had already removed 149 of them. Of the 540 SEC-161/SEC-162 findings read individually on crewAI, not one was a credential: 234 Cloudflare __cf_bm/_cfuvid cookies, 148 continuation lines of base64 response bodies, 58 response ids, 44 embedding vectors, 32 Gemini thought signatures, and 8 occurrences of PostHog's phc_ project key — which the vendor publishes and SEC-661 deliberately excludes, reported anyway by the generic entropy rule out of a recorded response body. The gate covers SEC-161 and SEC-162, the two rules whose whole claim is that some bytes are random; SEC-162 has no entry because it drops nothing on this corpus. Any rule encoding a vendor's credential format still fires anywhere in a recording, including a request body, which is where an OAuth client_secret sits. The request headers and URI are untouched, and SEC-082 was fixed in the same change so that an unredacted authorization header in a cassette is reported at all — it was not, because Go's \\s crosses a newline but not a YAML sequence dash. See docs/design/recorded-http-exchanges.md."
     }
   ]
 }
