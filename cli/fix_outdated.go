@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/fix"
 )
 
@@ -169,10 +171,29 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 		fmt.Fprintf(os.Stderr, "degraded: %s\n", d)
 	}
 
+	// Every target is checked against known advisories before it is shown as
+	// a plan, so a dry run tells the operator the same thing an apply would do.
+	advDeg := &degrade.Degradations{}
+	kept, held, checked := holdAffectedTargets(context.Background(), advisorySource(advDeg), advDeg, plan.actions)
+	if !checked {
+		for _, d := range advDeg.Items() {
+			fmt.Fprintf(os.Stderr, "degraded: %s\n", d)
+		}
+		fmt.Fprintf(os.Stderr, "error: could not check %d upgrade target(s) against known advisories; applying none\n", len(plan.actions))
+		return 1
+	}
+	plan.actions = kept
+	for _, h := range held {
+		fmt.Printf("held: %s\n", h)
+	}
+
 	if len(plan.actions) == 0 {
-		if len(degraded) > 0 {
+		switch {
+		case len(held) > 0:
+			fmt.Printf("nox fix --outdated: nothing applied; %d upgrade(s) held because the target has a known advisory.\n", len(held))
+		case len(degraded) > 0:
 			fmt.Printf("nox fix --outdated: no upgrades found, but %d dependency check(s) could not complete (see above).\n", len(degraded))
-		} else {
+		default:
 			fmt.Println("nox fix --outdated: all direct dependencies are current.")
 		}
 		if plan.majorSkipped > 0 {
