@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **nox's own weekly remediation runs nox 1.41.0, with the currency pass back
+  on.** It had been pinned to the org default (1.28.0), which predates refusing
+  a vulnerable upgrade target, so `outdated-fixes` was off after Dependabot was
+  removed. The pin's sha256 was checked against the downloaded archive.
+
 ## [1.41.0] - 2026-09-26
 
 nox keeps its own dependencies current, and Dependabot is gone. Doing that

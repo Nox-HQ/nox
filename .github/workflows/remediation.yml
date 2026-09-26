@@ -32,11 +32,13 @@ jobs:
       include-major: ${{ inputs.include-major || false }}
       # nox's own suite is the gate on its own dependency upgrades.
       verify-cmd: 'go test ./... -count=1'
-      # TEMPORARILY OFF. nox now keeps its own dependencies current (Dependabot
-      # was removed), but the currency pass does not yet check the version it
-      # upgrades TO against known advisories: it would move grpc 1.83.2 ->
-      # 1.84.0, which is affected by GO-2026-6443 while 1.83.2 is patched —
-      # the exact regression Dependabot shipped in #699. The security pass
-      # (VULN-001 fixed_in) still runs. Turn this back on, and pin nox-version
-      # here, once a nox release refuses a vulnerable upgrade target.
-      outdated-fixes: false
+      # nox updates its own dependencies with a nox that can do it safely.
+      # The org default (1.28.0) predates what that takes: refusing an upgrade
+      # target with a known advisory (it would move grpc 1.83.2 -> 1.84.0, the
+      # bump Dependabot shipped in #699), keeping package.json intact on npm
+      # upgrades, reading fix.outdated.directories/hold from .nox.yaml, and
+      # refreshing base images and composite actions. Bump both lines together;
+      # the sha256 is of nox_<version>_linux_amd64.tar.gz, checked on download.
+      nox-version: '1.41.0'
+      nox-sha256: 'c730f188492875b6a95123f0fa1fbe54c67935713799e7aa7d9e96c65fe88c41'
+      outdated-fixes: true
