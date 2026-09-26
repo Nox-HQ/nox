@@ -56,7 +56,7 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.klarlabs.de/fortify v1.10.0 // indirect
-	go.klarlabs.de/mcp v1.27.0
+	go.klarlabs.de/mcp v1.28.0
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
