@@ -145,7 +145,11 @@ func placeholderCandidate(raw string) bool {
 	if urlUserPass.MatchString(v) {
 		return true
 	}
-	// Angle-bracket / template markers: "<your-smtp-password>", "${SECRET}".
+	// Angle-bracket markers: "<your-smtp-password>". This comment used to add
+	// "${SECRET}", which the regex below has never matched — `<[^>]*>` needs an
+	// angle bracket. Interpolations are references rather than placeholders and
+	// are handled in reference.go, with the conditions that keep a literal
+	// fallback like `${PW:-hunter2}` reportable.
 	if angleBracketPlaceholder.MatchString(v) {
 		return true
 	}
