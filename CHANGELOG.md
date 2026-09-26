@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox fix` rewrote `package.json` around an npm advisory.** It ran `npm
+  install pkg@version` for every npm finding, and npm writes whatever it is
+  given into the manifest: a transitive package became a new direct dependency
+  (one run on roady added eleven), and a devDependency moved into
+  `dependencies`. The manifest now decides — a declared package keeps its
+  section, anything else is moved with `npm update`, which touches only the
+  lockfile, and the lockfile is read back so a copy a parent's range still
+  holds below the fix is an error, not an "applied". A package an earlier
+  upgrade in the same run had already moved is reported as satisfied rather
+  than failed, which had made a fully successful run exit non-zero.
+
 - **`nox fix --outdated` could upgrade a dependency into a known
   vulnerability.** It asked only whether a newer version existed. grpc 1.84.0
   is newer than 1.83.2 and is affected by GO-2026-6443, which 1.83.2 is patched
