@@ -129,3 +129,21 @@ scan:
         - ".github/workflows/*.yml"
       rules: ["*"]
       action: skip_analyzer
+
+# The directories `nox fix --outdated` keeps current: the Go module at the root
+# and the VS Code extension — the two Dependabot covered before nox took over
+# its own dependencies. A list, not a walk: examples/ and testdata/ hold
+# manifests that are old or vulnerable on purpose.
+fix:
+  outdated:
+    directories:
+      - "."
+      - "editors/vscode"
+    hold:
+      - package: "@types/vscode"
+        allow: patch
+        reason: >-
+          @types/vscode tracks engines.vscode, not the newest VS Code: a newer
+          one compiles code against APIs older supported editors lack, and vsce
+          refuses to package when it exceeds engines.vscode. Raise both
+          together, deliberately.

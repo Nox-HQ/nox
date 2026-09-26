@@ -654,9 +654,37 @@ Scope and guarantees:
   appears. There is a real difference between "checked seven ecosystems and
   everything is current" and "found nothing to check", and only one of them is
   good news. Same contract as scan degradations.
+- **Never upgrades into a known advisory.** Newer is not safer: grpc 1.84.0 was
+  the newest stable release and affected by GO-2026-6443, which 1.83.2 is
+  patched against. Every target is looked up against OSV before it is shown or
+  applied; an affected one is `held:` with the advisory named. If the lookup
+  cannot complete, nothing is applied and the command exits non-zero.
 - **Reaches the network.** This is the one thing that cannot be answered
   offline. It runs only behind this flag, never as part of a scan, so nox's
   offline-first scanning guarantee is unaffected.
+
+Which directories, and what to hold back, come from `.nox.yaml`:
+
+```yaml
+fix:
+  outdated:
+    # Project directories to keep current. Default: the root alone.
+    # A list, not a walk — examples/ and testdata/ often hold manifests that
+    # are old or vulnerable on purpose.
+    directories:
+      - "."
+      - "editors/vscode"
+    # The largest bump a package may take (patch or minor), and why.
+    # The reason is printed whenever the hold stops an upgrade.
+    hold:
+      - package: "@types/vscode"
+        allow: patch
+        reason: "tracks engines.vscode; vsce refuses to package past it"
+```
+
+Entries may not be absolute or leave the repository, a hold with no reason or
+an unknown `allow` is an error, and each upgrade runs in the directory whose
+manifest it came from.
 
 `--outdated` is a *mode*, not a modifier: like `--content`, it returns before
 the dependency and Action passes run. `nox fix --outdated --actions` therefore

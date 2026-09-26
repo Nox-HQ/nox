@@ -37,6 +37,7 @@ type ScanConfig struct {
 	Compliance ComplianceSettings `yaml:"compliance"`
 	Cache      CacheSettings      `yaml:"cache"`
 	Plugins    PluginsConfig      `yaml:"plugins"`
+	Fix        FixSettings        `yaml:"fix"`
 
 	// PluginPolicy is the plugin sandbox policy. The scan engine never reads
 	// it — package plugin does, from this same file — but the schema lives
@@ -633,6 +634,35 @@ type ExplainSettings struct {
 	Output    string `yaml:"output"`      // output file path (default: explanations.json)
 	Enrich    string `yaml:"enrich"`      // comma-separated enrichment tool names
 	PluginDir string `yaml:"plugin_dir"`  // directory containing plugin binaries
+}
+
+// FixSettings configures `nox fix`.
+type FixSettings struct {
+	Outdated OutdatedSettings `yaml:"outdated"`
+}
+
+// OutdatedSettings configures the `nox fix --outdated` currency pass.
+type OutdatedSettings struct {
+	// Directories lists the project directories, relative to the repository
+	// root, whose dependency manifests the currency pass keeps current. Empty
+	// means the root alone.
+	//
+	// A list rather than a walk: a repository's examples/ and testdata/ hold
+	// manifests that are old, or vulnerable, on purpose, and upgrading a
+	// fixture destroys what it was kept to show.
+	Directories []string `yaml:"directories"`
+
+	// Hold caps how far named packages may move. Each entry needs a reason,
+	// which is printed whenever the hold stops an upgrade.
+	Hold []OutdatedHold `yaml:"hold"`
+}
+
+// OutdatedHold caps the currency pass for one package: Allow is the largest
+// bump it may take ("patch" or "minor"), and Reason says why.
+type OutdatedHold struct {
+	Package string `yaml:"package"`
+	Allow   string `yaml:"allow"`
+	Reason  string `yaml:"reason"`
 }
 
 // LoadScanConfig reads .nox.yaml from root and returns the parsed config.

@@ -21,7 +21,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because it does not yet check the version it upgrades to against known
   advisories and would repeat that exact bump. The security pass still runs.
 
+### Added
+
+- **`nox fix --outdated` covers the directories `.nox.yaml` lists.**
+  `fix.outdated.directories` names the project directories to keep current
+  (default: the root alone, so nothing changes without it), and
+  `fix.outdated.hold` caps how far a named package may move, with a required
+  reason printed whenever it applies. Together they are what Dependabot's
+  `directories` and `ignore` were doing for nox: the VS Code extension under
+  `editors/vscode` had gone unchecked since Dependabot was removed, and
+  `@types/vscode` must track `engines.vscode`, not the newest VS Code.
+
 ### Fixed
+
+- **`nox fix` rewrote `package.json` around an npm advisory.** It ran `npm
+  install pkg@version` for every npm finding, and npm writes whatever it is
+  given into the manifest: a transitive package became a new direct dependency
+  (one run on roady added eleven), and a devDependency moved into
+  `dependencies`. The manifest now decides — a declared package keeps its
+  section, anything else is moved with `npm update`, which touches only the
+  lockfile, and the lockfile is read back so a copy a parent's range still
+  holds below the fix is an error, not an "applied". A package an earlier
+  upgrade in the same run had already moved is reported as satisfied rather
+  than failed, which had made a fully successful run exit non-zero.
+
+- **`nox fix --actions` skipped composite actions outside `.github`.** nox's
+  own root `action.yml` and `actions/remediate/action.yml` — which pinned nox
+  itself two releases behind — were never refreshed. Any `action.yml` /
+  `action.yaml` in the repository is now read, except in vendored and fixture
+  trees.
 
 - **`nox fix --outdated` could upgrade a dependency into a known
   vulnerability.** It asked only whether a newer version existed. grpc 1.84.0

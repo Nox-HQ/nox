@@ -262,8 +262,15 @@ type rewrite struct {
 	newRest string
 }
 
-// collectActionPins walks .github/workflows under root and returns every
-// `uses:` pin. Composite-action files (action.yml) are included too.
+// collectActionPins walks .github/workflows and .github/actions under root and
+// returns every `uses:` pin, plus those in any composite-action file
+// (action.yml / action.yaml) elsewhere in the repository.
+//
+// A published action does not have to live under .github: nox's own action.yml
+// sits at the root, and actions/remediate/action.yml is a second one. Their
+// pins are what every user of the action runs, and reading .github alone left
+// them unrefreshed. Vendored and fixture trees are skipped — an old pin in a
+// fixture is the fixture.
 func collectActionPins(root string) []actionPin {
 	var pins []actionPin
 	dirs := []string{filepath.Join(root, ".github", "workflows")}
@@ -281,7 +288,30 @@ func collectActionPins(root string) []actionPin {
 			return nil
 		})
 	}
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if path != root && skipForActionFiles[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if name := d.Name(); name == "action.yml" || name == "action.yaml" {
+			pins = append(pins, parsePins(root, path)...)
+		}
+		return nil
+	})
 	return pins
+}
+
+// skipForActionFiles are the directories the composite-action walk does not
+// enter: .github is read above, and the rest hold other people's code or
+// fixtures whose pins are old on purpose.
+var skipForActionFiles = map[string]bool{
+	".github": true, ".git": true, "node_modules": true, "vendor": true,
+	"testdata": true, "fixtures": true, "__fixtures__": true, "__testfixtures__": true,
 }
 
 func parsePins(root, path string) []actionPin {
