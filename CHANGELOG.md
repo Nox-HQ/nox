@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.41.0] - 2026-09-26
+
+nox keeps its own dependencies current, and Dependabot is gone. Doing that
+honestly took more than deleting a file: the version bumper nox already had
+would have repeated Dependabot's last mistake — moving grpc onto a release
+that is newer and vulnerable — and it could not see the VS Code extension, the
+composite actions nox publishes, or its base images. Each of those is fixed
+here, and each was checked against nox's own tree with live registries.
 
 ### Changed
 
