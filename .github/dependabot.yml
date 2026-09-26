@@ -28,6 +28,16 @@ updates:
     labels:
       - dependencies
       - go
+    # grpc 1.84.0 is a REGRESSION against 1.83.2: 1.83.2 carries the fix for
+    # GO-2026-6443 / GHSA-2v4p-qf9q-27wj (server panic on a request missing its
+    # :authority and Host headers) and 1.84.0 does not. #699 moved us onto it
+    # and the weekly CVE audit went red the same day (#700). The fix exists
+    # upstream only as a 1.85.0-dev pseudo-version, so 1.84.0 is the newest
+    # stable release and the newest vulnerable one. Remove this once a patched
+    # stable release (1.84.1 or 1.85.0) ships — Dependabot will then propose it.
+    ignore:
+      - dependency-name: google.golang.org/grpc
+        versions: ["1.84.0"]
 
   - package-ecosystem: github-actions
     directory: /
