@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox fix --outdated` keeps base images current.** The `FROM` lines of each
+  configured directory's Dockerfiles are checked against their registry: a
+  digest pin is refreshed when its tag is rebuilt, and a numeric tag moves to
+  the newest tag of the same shape (`1.27-alpine` → `1.28-alpine`), majors held.
+  This was the last thing Dependabot did for nox that nox could not. On nox's
+  own Dockerfile it found `golang:1.27-alpine` rebuilt on 2026-09-21 under the
+  same tag, two days after the pinned digest.
+
 - **`nox fix --outdated` covers the directories `.nox.yaml` lists.**
   `fix.outdated.directories` names the project directories to keep current
   (default: the root alone, so nothing changes without it), and
