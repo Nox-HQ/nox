@@ -48,11 +48,19 @@ is therefore a **list**:
 ```yaml
     headers:
       authorization:
-      - Bearer sk-proj-…
+      - Bearer <token>
 ```
 
 `\s*` cannot cross the `-`. Measured: a credential written inline was reported,
 and the identical credential written as a one-element YAML sequence was not.
+
+(The placeholder is deliberate. An earlier draft wrote a realistic
+`sk-proj-`-prefixed value here, and SEC-082 reported this document — the rule
+firing on the text explaining the rule, which is a true positive and a blocked
+pull request. The shape being illustrated is the sequence dash, not the token, so
+the literal was not carrying its weight. Nothing is waived: `<` is outside the
+character class the pattern accepts after `Bearer `, so there is no longer a
+credential-shaped string here to report.)
 
 **Had the suppression shipped first, cassettes would have become quiet while
 remaining unchecked, and the two states read identically from the outside.**
