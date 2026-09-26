@@ -253,7 +253,10 @@ func outdatedDirectories(configured []string) ([]string, error) {
 	seen := map[string]bool{}
 	var dirs []string
 	for _, d := range configured {
-		if filepath.IsAbs(d) {
+		// filepath.IsAbs alone is not enough: on Windows "/etc" has no drive
+		// letter and is not "absolute", yet it is rooted and still names a
+		// directory outside the repository.
+		if filepath.IsAbs(d) || filepath.VolumeName(d) != "" || strings.HasPrefix(d, "/") || strings.HasPrefix(d, `\`) {
 			return nil, fmt.Errorf("%q is absolute; directories are relative to the repository root", d)
 		}
 		clean := filepath.ToSlash(filepath.Clean(d))

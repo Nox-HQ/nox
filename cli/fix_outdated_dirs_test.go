@@ -25,6 +25,7 @@ func TestOutdatedDirectories(t *testing.T) {
 		{[]string{"editors/vscode/", "./editors/vscode"}, "editors/vscode", false},
 		{[]string{"../elsewhere"}, "", true},
 		{[]string{"/etc"}, "", true},
+		{[]string{`\\etc`}, "", true},
 	} {
 		got, err := outdatedDirectories(tc.in)
 		if (err != nil) != tc.wantErr {
