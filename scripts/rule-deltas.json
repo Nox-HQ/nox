@@ -39,6 +39,12 @@
       "classification": "refined-away",
       "pr": 704,
       "reason": "A reference to where a secret is stored is not the secret, and SEC-080's own remediation tells you to write one. Measured against main on the 25-entry corpus: 12 -> 0, every drop read individually and every one a reference — 4 CloudFormation dynamic references ('{{resolve:secretsmanager:...}}'), 3 GitHub Actions secret references (\"${{ secrets.DOCKERHUB_TOKEN }}\"), 3 Ansible/Jinja variables (\"{{ upassword }}\"), and 2 shell variables (\"$hashed_password\") in .sh files. No other rule moved in any repository. Only a value that is ENTIRELY a reference qualifies: a quote inside the braces ({{ 'hunter2' }}, default('hunter2')) is a template evaluating to a hardcoded literal; a literal prefix or suffix could be the credential; an interpolation with a non-empty fallback (${PW:-hunter2}) is what runs when the variable is unset; and a bare $name is a reference only in a shell file, because YAML, JSON and Python do not expand it. Each of those is asserted still reportable, and the quote exclusion was falsified by removing it. placeholderCandidate's comment had claimed to handle \"${SECRET}\" since it was written; its regex, <[^>]*>, never matched one."
+    },
+    {
+      "rule": "SLOP-001",
+      "classification": "applicability-narrowed",
+      "pr": 705,
+      "reason": "A file under __testfixtures__ is jscodeshift's input/output pair: the codemod's test reads it with readFileSync and runs a transform over the string, so its imports are the transform's subject matter, not a dependency, and nothing resolves or installs them. 109 -> 0 on vercel-ai-codemod, the same 109 on v1.39.2 (built from its tag) and on main; A/B against main, NO rule moves in the other 24 repositories. The dropped names are deliberately fictional — other-pkg, other-package, not-ai, some-other-package, other-module — written to prove the codemod leaves foreign imports alone, alongside real packages (@ai-sdk/openai, zod) that appear as fixture text. On a full vercel/ai checkout SLOP-001 goes 36 -> 3, the three being ordinary test scripts outside any fixture directory, still reported. Only a directory segment named exactly __testfixtures__ qualifies (a substring match was falsified by test), and each exempted import is recorded as a refutation."
     }
   ]
 }

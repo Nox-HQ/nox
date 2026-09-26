@@ -123,3 +123,11 @@ traffic. A sequence item at equal indent continues the block.
 HAR — the JSON format with the same request/response shape — is not handled.
 That is a gap, not an oversight; it is written down here so it can be closed
 deliberately.
+
+Measured 2026-09-26, so that it is not closed on assumption: across the 25
+rule-diff corpus entries — full clones, 64,233 files — there is no `.har` file,
+no JSON carrying HAR's `creator`/`entries` shape or Polly.js's `_recordingName`,
+and no nock recording (`reqheaders`/`rawHeaders`). There is nothing to measure a
+gate against, so none was built. Close it when a HAR recording shows up in a
+corpus repository and produces findings, and measure it the way the cassette
+gate was.
