@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/fix"
@@ -277,12 +278,12 @@ func TestNpmCommand_FollowsTheLockfile(t *testing.T) {
 		extra    string
 		want     string
 	}{
-		{"package-lock.json", "", "npm install"},
+		{"package-lock.json", "", "npm update"},
 		{"pnpm-lock.yaml", "", "pnpm update"},
 		{"yarn.lock", "", "yarn upgrade"},
 		{"yarn.lock", ".yarnrc.yml", "yarn up"},
 		{"bun.lockb", "", "bun update"},
-		{"", "", "npm install"}, // package.json alone: npm is the baseline
+		{"", "", "npm update"}, // package.json alone: npm is the baseline
 	} {
 		dir := t.TempDir()
 		touchFile(t, dir, "package.json")
@@ -297,9 +298,72 @@ func TestNpmCommand_FollowsTheLockfile(t *testing.T) {
 		if got := name + " " + args[0]; got != tc.want {
 			t.Errorf("with %s%s: got %q, want %q", tc.lockfile, " "+tc.extra, got, tc.want)
 		}
-		if last := args[len(args)-1]; last != "js-yaml@4.3.1" {
-			t.Errorf("with %s: target = %q", tc.lockfile, last)
+		// npm update takes no version: it moves the package as far as the
+		// ranges that pull it in allow, and the lockfile is checked after.
+		want := "js-yaml@4.3.1"
+		if name == "npm" {
+			want = "js-yaml"
 		}
+		if last := args[len(args)-1]; last != want {
+			t.Errorf("with %s: target = %q, want %q", tc.lockfile, last, want)
+		}
+	}
+}
+
+// npm install adds whatever it is given to package.json. Given a transitive
+// package, it declared it as a new direct dependency — roady's app and website
+// gained eleven that way from one `nox fix` — and given a devDependency, it
+// moved it into dependencies. The manifest decides the verb.
+func TestNpmCommand_TheManifestDecidesTheVerb(t *testing.T) {
+	manifest := `{
+  "dependencies": {"astro": "^7.1.6"},
+  "devDependencies": {"vitest": "^3.0.0"},
+  "optionalDependencies": {"fsevents": "^2.3.0"}
+}`
+	for _, tc := range []struct {
+		pkg  string
+		want string
+	}{
+		{"astro", "npm install astro@9.9.9"},
+		{"vitest", "npm install --save-dev vitest@9.9.9"},
+		{"fsevents", "npm install --save-optional fsevents@9.9.9"},
+		{"fast-uri", "npm update fast-uri"}, // transitive: never declared
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		touchFile(t, dir, "package-lock.json")
+		name, args := npmCommand(dir, tc.pkg, "9.9.9")
+		if got := name + " " + strings.Join(args, " "); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.pkg, got, tc.want)
+		}
+	}
+}
+
+// npm update moves a transitive package only as far as its parents' ranges
+// allow. If that stops short of the fixed version, the advisory is still there,
+// and saying "applied" would be a false all-clear.
+func TestNpmLockBelow_FindsCopiesStillShortOfTheFix(t *testing.T) {
+	lock := `{"lockfileVersion": 3, "packages": {
+  "": {"name": "app"},
+  "node_modules/fast-uri": {"version": "3.1.6"},
+  "node_modules/ajv/node_modules/fast-uri": {"version": "3.1.5"},
+  "node_modules/not-fast-uri": {"version": "1.0.0"}
+}}`
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lock), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	below, err := npmLockBelow(dir, "fast-uri", "3.1.6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(below) != 1 || !strings.Contains(below[0], "node_modules/ajv/node_modules/fast-uri@3.1.5") {
+		t.Errorf("want only the nested 3.1.5 copy; got %v", below)
+	}
+	if below, _ := npmLockBelow(dir, "not-fast-uri", "0.1.0"); len(below) != 0 {
+		t.Errorf("a satisfied package reported short: %v", below)
 	}
 }
 
@@ -343,5 +407,30 @@ func TestTreeDigest_MovesWithTheLockfile(t *testing.T) {
 func TestTreeDigest_UnknownEcosystemIsUnverifiable(t *testing.T) {
 	if _, ok := treeDigest(t.TempDir(), "nuget"); ok {
 		t.Error("claimed to verify an ecosystem with no known manifests")
+	}
+}
+
+// Upgrading browserslist moves baseline-browser-mapping, its dependency, so the
+// separate upgrade for baseline-browser-mapping then rewrites nothing. That is
+// not a failure — the lockfile already carries the fix — and counting it as one
+// made a run that fixed every advisory exit non-zero.
+func TestNpmAlreadySatisfied_WhenAnEarlierUpgradeMovedIt(t *testing.T) {
+	dir := t.TempDir()
+	lock := `{"lockfileVersion": 3, "packages": {
+  "node_modules/baseline-browser-mapping": {"version": "2.11.0"}
+}}`
+	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lock), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := upgradeAction{pkg: "baseline-browser-mapping", toVersion: "2.11.0", ecosystem: "npm"}
+	if !alreadySatisfied(dir, a) {
+		t.Error("every copy is at the fixed version; that is satisfied, not unchanged")
+	}
+	a.toVersion = "2.12.0"
+	if alreadySatisfied(dir, a) {
+		t.Error("a copy below the fix is not satisfied")
+	}
+	if alreadySatisfied(t.TempDir(), a) {
+		t.Error("with no lockfile to read, nothing can be claimed")
 	}
 }
