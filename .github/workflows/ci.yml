@@ -506,27 +506,14 @@ jobs:
       - name: Audit dependencies for known CVEs (OSV)
         run: |
           ./nox scan --format json --output nox-deps --vex vex.json . || true
-          python3 - <<'PY'
-          import json, sys
-          findings = json.load(open("nox-deps/findings.json")).get("findings", [])
-          cves = [f for f in findings
-                  if f.get("RuleID") == "VULN-001"
-                  and f.get("Status", "new") in ("new", "")]
-          # Match Dependabot semantics: block only when a fix is available;
-          # CVEs with no fixed version are reported for triage (waive in
-          # vex.json once reviewed) but don't fail the run — there's nothing
-          # to apply.
-          fixable = [f for f in cves if f.get("Metadata", {}).get("fixed_in")]
-          unfixable = [f for f in cves if not f.get("Metadata", {}).get("fixed_in")]
-          for f in unfixable:
-              print("::warning::no fix available — " + f.get("Message", ""))
-          for f in fixable:
-              print("::error::fix available — " + f.get("Message", ""))
-          print(f"dependency CVEs: {len(fixable)} fixable, {len(unfixable)} awaiting-fix")
-          if fixable:
-              print("Run `nox fix_plan` or bump the affected packages.")
-              sys.exit(1)
-          PY
+          # "Fixable" is what nox fix would actually apply, not merely a
+          # fixed_in on the advisory: a pre-release or downgrade target is
+          # refused by the planner, and failing on it demands a fix nobody can
+          # make (grpc 1.84.0, whose fix exists only as 1.85.0-dev). Majors
+          # count — they are applicable, just held from automatic bumps.
+          ./nox fix --input nox-deps/findings.json --dry-run --include-major --root . \
+            > nox-deps/fix-plan.txt 2>&1 || true
+          python3 scripts/deps-audit.py nox-deps/findings.json nox-deps/fix-plan.txt
 
       - name: Upload dependency scan artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

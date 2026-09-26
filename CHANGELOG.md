@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upgrade in the same run had already moved is reported as satisfied rather
   than failed, which had made a fully successful run exit non-zero.
 
+- **`nox fix --actions` skipped composite actions outside `.github`.** nox's
+  own root `action.yml` and `actions/remediate/action.yml` — which pinned nox
+  itself two releases behind — were never refreshed. Any `action.yml` /
+  `action.yaml` in the repository is now read, except in vendored and fixture
+  trees.
+
 - **`nox fix --outdated` could upgrade a dependency into a known
   vulnerability.** It asked only whether a newer version existed. grpc 1.84.0
   is newer than 1.83.2 and is affected by GO-2026-6443, which 1.83.2 is patched
