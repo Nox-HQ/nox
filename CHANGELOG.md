@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a vulnerable upgrade target, so `outdated-fixes` was off after Dependabot was
   removed. The pin's sha256 was checked against the downloaded archive.
 
+### Fixed
+
+- **Nine vendor-binding secret rules read a class name as an API key, and
+  missed JSON.** `splitter = SemanticDoubleMergingSplitterNodeParser(` reported
+  SEC-659 "Split API Key" six times across llama_index — `splitter` starts with
+  `split`, and the class name's first 32 characters qualified. A value that
+  runs on into a call, attribute or index is now refuted as an identifier.
+  In the other direction, none of the nine (Namecheap, Wave, FCM, Lob,
+  Salesforce, Jenkins, Split, Heap, FullStory) could see `{"split_key": "…"}`,
+  because the key's closing quote sat before the colon; it may now. Existing
+  findings keep their fingerprints.
+
 ## [1.41.0] - 2026-09-26
 
 nox keeps its own dependencies current, and Dependabot is gone. Doing that
