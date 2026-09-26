@@ -192,25 +192,24 @@ live and honest, and currently has nothing to prove on the corpus.
 The `condition` half of Option 1 remains unbuilt, and its sequencing argument
 above still holds: nothing needs it yet.
 
-## Something needs it now (2026-09-26)
+## A vocabulary gap, not yet a need (2026-09-26)
 
-The sentence above — "nothing needs it yet" — no longer holds. The case did not
-arrive from a new measurement; it was already in the tree, in the allowlist the
-invariant test consults, and it is visible by reading that list against its own
-stated bar.
+The sentence above — "nothing needs it yet" — still holds. An earlier revision of
+this section, written the same day, claimed otherwise and was wrong in a way
+worth recording.
 
-The bar, from the comment above `allowedCrossAnalyzerOverlap`: *"Each needs a
-reason, and the reason has to name both fixes."* Every entry clears it but one:
+It was found by reading the allowlist the invariant test consults against that
+list's own bar: *"Each needs a reason, and the reason has to name both fixes."*
+One entry does not clear it:
 
 ```go
 "IAC-225|SEC-080": "the IaC and secrets views of one hardcoded password",
 ```
 
-That names two *views*, not two fixes. The two rules' remediations differ in
-wording — IAC-225 points at a vault, SEC-080 at environment variables or a
-secrets manager — but those are two mechanisms for one goal, and doing either
-resolves both findings. Compare the entry a few lines above, which clears the bar
-because its two remediations lead somewhere genuinely different:
+That names two *views*, not two fixes. The remediations differ in wording — a
+vault vs. a secrets manager — but they are two mechanisms for one goal, and doing
+either resolves both findings. Compare the entry above it, which clears the bar
+because its remediations lead somewhere genuinely different:
 
 ```go
 "SEC-161|SEC-162": "one value reported as a high-entropy assignment and as a
@@ -219,44 +218,43 @@ because its two remediations lead somewhere genuinely different:
     whether it holds one",
 ```
 
-Two readings, two destinations, two findings. One reader rotates a credential;
-the other decodes a blob to find out whether it holds one. IAC-225 and SEC-080
-send the reader to the same place.
+So the vocabulary gap is real: **the invariant test can say a pair is wrong, the
+allowlist can say a pair is fine, and neither can say a pair should be merged.**
+"These are one condition" has to be written down as "these are legitimately
+different".
 
-That is the gap stated precisely, and it is a gap in the *vocabulary* rather than
-in any rule: **the invariant test can say a pair is wrong, the allowlist can say
-a pair is fine, and neither can say a pair should be merged.** An entry is
-currently the only way to stop the test failing, so "these are one condition" has
-to be written down as "these are legitimately different".
+### What the earlier revision got wrong
 
-### Why this one cannot be fixed by merging
+It said the case was "already in the tree" as a live duplicate, and gave SEC-080's
+75 sites on the benchmark corpus as the stakes. It had not measured the one
+number that mattered — how often the two rules land on the *same line*:
 
-Every duplicate found so far was fixed by merging and binding: one condition, one
-rule, no second finding to collapse. This one cannot be, because both rules must
-keep existing. IAC-225's subject is a YAML mapping key whose name ends in
-`password`; SEC-080's is a generic password assignment in any file. Each is
-reachable on inputs the other never sees, and deleting either loses real
-coverage. The overlap is only on the inputs both reach.
+| | lines |
+|---|---:|
+| IAC-225 and SEC-080 on the same line | **0** |
+| SEC-080 only | 12 |
+| IAC-225 only | 22 |
 
-So it is exactly the shape the sequencing argument asked for: two rules that
-genuinely must both exist and genuinely report one condition.
+across all 25 rule-diff corpus entries. The two rules co-fire on the synthetic
+`password: hunter2` fixture in `cross_analyzer_dedup_test.go` and nowhere on real
+software, because their shapes barely intersect: SEC-080 wants a quoted value of
+eight or more characters, IAC-225 is anchored to a YAML mapping key and rejects
+anything containing `{` or `$`. The allowlist entry protects one fixture line.
 
-### What it adds to the migration set
+The 75 sites described how often SEC-080 fires, not how often it duplicates
+anything — a count of the wrong thing, quoted as the size of a problem.
 
-The set named earlier gains a third member, and it is the one that makes a
-`condition` key do work the allowlist cannot:
+### What measuring it found instead
 
-- the allowlisted pairs that must end up with **different** conditions,
-- the merged duplicates that must end up with the **same** condition,
-- and IAC-225/SEC-080, which must end up with the same condition **while both
-  rules continue to exist**.
+The 12 SEC-080-only lines were read individually, and all 12 were false
+positives of one kind: references to where a secret is stored, which is the
+remediation SEC-080 itself recommends — `'{{resolve:secretsmanager:…}}'`,
+`"${{ secrets.DOCKERHUB_TOKEN }}"`, `"{{ upassword }}"`, `"$hashed_password"`.
+That was fixed as a refiner (`core/analyzers/secrets/reference.go`), not as a
+merge — a different defect, found only because the merge question was measured
+before being built.
 
-### Not fixed here
-
-Which rule should own the condition is a judgement about which finding a reader
-should receive — the IaC view carries the resource and the task, the secrets view
-carries the credential shape — and suppressing either is a behavioural delta
-owing its own measurement and its own ledger entry. SEC-080 fired on 75 sites
-across 3 repositories on the pinned corpus, so this is not a rounding error.
-Shipping it as a rider on an unrelated change would be the thing this document
-exists to argue against.
+So the sequencing argument stands, and this section is the evidence for it rather
+than against it: had the `condition` key been built on the strength of the
+earlier revision, it would have shipped a collapse with no measured effect, and
+missed the defect that was actually there.

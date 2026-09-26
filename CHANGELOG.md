@@ -84,14 +84,33 @@ report the one thing in a cassette worth reporting.
   block (`- x`) and flow (`[x]`) sequence forms now match, for SEC-082 and
   SEC-083, which fixes every YAML header map and not only cassettes.
 
-- **A decoded finding bypassed every refiner.** `DecodeAndScan` added its results
-  straight to the finding set, past the placeholder, embedded-blob, comment and
-  recording filters alike — 107 of crewAI's cassette findings survived the gate
-  that way, base64 OpenTelemetry payloads decoded out of request bodies and
-  relocated back onto them. The recording gate is now wired through that path,
-  because position-in-the-document is the one question the relocation preserves
-  the answer to. The rest of the gap is named in a comment where the decode
-  happens rather than silently half-fixed.
+- **SEC-080 reported its own remediation as the defect.** "Generic password
+  assignment" recommends environment variables or a secrets manager, and then
+  reported exactly those: `'{{resolve:secretsmanager:…}}'`,
+  `"${{ secrets.DOCKERHUB_TOKEN }}"`, `"{{ upassword }}"`, `"$hashed_password"`.
+  Measured on the 25-entry rule-diff corpus: **12 → 0**, each read individually,
+  every one a reference, and no other rule moved in any repository.
+
+  Only a value that is *entirely* a reference is refuted, because any literal part
+  could be the credential. `{{ 'hunter2' }}` is a template that evaluates to a
+  hardcoded literal; `${PW:-hunter2}` has a hardcoded fallback that runs whenever
+  the variable is unset; a bare `$name` is a reference only in a shell file,
+  since YAML, JSON and Python do not expand it. All of those are still reported.
+  `placeholderCandidate`'s comment had claimed to handle `"${SECRET}"` since it was
+  written — its regex, `<[^>]*>`, never matched one.
+
+- **A decoded finding bypassed the recording gate.** `DecodeAndScan` adds its
+  results past the `ScanArtifacts` refiners — 107 of crewAI's cassette findings
+  survived the gate that way, base64 OpenTelemetry payloads decoded out of request
+  bodies and relocated back onto them. The recording gate is now wired through
+  that path, because position-in-the-document is the one question the relocation
+  preserves the answer to. The other refiners split in two: the positional ones
+  must never apply (every decoded finding is inside an encoded segment by
+  construction), and the value ones — placeholder, bare prefix — are an
+  inconsistency on a constructed input (a base64-wrapped `xxxx…` AWS key is
+  reported as SEC-002 critical) that was measured **inert** across all 25 corpus
+  entries: no decoded finding reaches output anywhere. The exact fix is written at
+  the call site, to be built when one is seen.
 
 - **AI-019 reported a pinned model load as unverified.** Its pattern ended at the
   opening paren and never saw the arguments, and its own comment conceded the
@@ -142,14 +161,15 @@ report the one thing in a cassette worth reporting.
 
 ### Documentation
 
-- `docs/design/condition-dedup.md` said the `condition` key was worth building
-  when a case arrived that merging could not fix, and that nothing needed it yet.
-  One case was already in the tree: `IAC-225|SEC-080` sits in the cross-analyzer
-  allowlist with the reason "the IaC and secrets views of one hardcoded
-  password", which names two *views*, not the two fixes that list's own bar
-  demands. Both rules must keep existing, because each is reachable on inputs the
-  other never sees — so an allowlist cannot express it and a merge cannot serve
-  it. Recorded, with the measurement it would need, rather than fixed as a rider.
+- `docs/design/condition-dedup.md` records a vocabulary gap: the cross-analyzer
+  allowlist can say a pair of rules is legitimately different and the invariant
+  test can say a pair is wrong, but nothing can say a pair should be *merged*.
+  `IAC-225|SEC-080` is the entry that shows it — its reason names two views of one
+  hardcoded password rather than the two fixes the list's own bar demands. It is
+  **not** a live duplicate: the two rules land on the same line zero times across
+  the 25 rule-diff corpus entries, and co-fire only on a synthetic fixture. An
+  earlier revision of that note claimed otherwise without measuring the overlap;
+  it is corrected, and says what measuring it found instead (below).
 
 ## [1.39.2] - 2026-09-20
 
