@@ -303,7 +303,14 @@ func workdirFor(root string, a upgradeAction) (string, error) {
 			return dir, nil
 		}
 	}
-	return "", fmt.Errorf("no %s in %s — nothing to upgrade there", strings.Join(names, " or "), rel)
+	// Finding paths are relative to the directory that was scanned, so a
+	// --root pointing anywhere else joins them onto the wrong base: --root app
+	// with app/package-lock.json looks in app/app. Say where it looked, from
+	// the root's own name, rather than naming a directory that may well hold
+	// the manifest.
+	looked := filepath.ToSlash(filepath.Join(filepath.Base(rootAbs), rel))
+	return "", fmt.Errorf("no %s in %s — nothing to upgrade there (finding paths are relative to the scanned directory; --root must be that directory)",
+		strings.Join(names, " or "), looked)
 }
 
 // ecoTrees names the files an upgrade in that ecosystem must touch. An
