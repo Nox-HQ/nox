@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/nox-hq/nox-core/degrade"
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/fix"
 )
 
@@ -137,32 +139,32 @@ func goListModules(root string) ([]goModuleStatus, error) {
 // Output distinguishes the two reasons a dependency can move. A line tagged
 // OUTDATED means "newer version exists", not "you were vulnerable" — conflating
 // them would inflate what a remediation PR appears to have fixed.
+//
+// The directories come from fix.outdated.directories in .nox.yaml, defaulting
+// to the root. Each is planned on its own and each upgrade runs in the
+// directory whose manifest it came from.
 func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
-	var plan upgradePlan
-	var degraded []string
-
-	// Go is resolved through the toolchain rather than a registry call:
-	// `go list -m -u` already understands replace directives, retractions and
-	// the module graph, none of which a proxy query would honour. Absent go.mod
-	// is not an error — a JavaScript project has nothing to report here.
-	if _, statErr := os.Stat(filepath.Join(manifestRoot, "go.mod")); statErr == nil {
-		mods, err := goListModules(manifestRoot)
-		if err != nil {
-			degraded = append(degraded, fmt.Sprintf("could not enumerate Go modules: %v", err))
-		} else {
-			goPlan := planCurrencyUpgrades(mods, includeMajor)
-			plan.actions = append(plan.actions, goPlan.actions...)
-			plan.skipped += goPlan.skipped
-			plan.majorSkipped += goPlan.majorSkipped
-		}
+	cfg, err := nox.LoadScanConfig(manifestRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
 	}
-
-	// Everything else resolves against its own registry.
-	regPlan, regDegraded := planRegistryCurrency(manifestRoot, includeMajor, registryBase)
-	plan.actions = append(plan.actions, regPlan.actions...)
-	plan.skipped += regPlan.skipped
-	plan.majorSkipped += regPlan.majorSkipped
-	degraded = append(degraded, regDegraded...)
+	dirs, err := outdatedDirectories(cfg.Fix.Outdated.Directories)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: fix.outdated.directories: %v\n", err)
+		return 1
+	}
+	holds := cfg.Fix.Outdated.Hold
+	if err := validateHolds(holds); err != nil {
+		fmt.Fprintf(os.Stderr, "error: fix.outdated.hold: %v\n", err)
+		return 1
+	}
+	plan, degraded := planOutdated(manifestRoot, dirs, includeMajor, registryBase)
+	var capped []string
+	plan.actions, capped = applyHolds(plan.actions, holds)
+	for _, c := range capped {
+		fmt.Printf("held: %s\n", c)
+	}
 
 	// Report what could not be checked before reporting what was found, so a
 	// short list is never mistaken for a clean bill of health. This is the same
@@ -203,7 +205,7 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	}
 
 	for _, a := range plan.actions {
-		fmt.Printf("plan: %s %s %s -> %s  (%s)\n", a.action, a.pkg, a.fromVer, a.toVersion, a.ruleID)
+		fmt.Printf("plan: %s %s %s -> %s  (%s)%s\n", a.action, a.pkg, a.fromVer, a.toVersion, a.ruleID, inDir(a))
 	}
 	if plan.majorSkipped > 0 {
 		fmt.Printf("note: %d major-bump upgrade(s) held back (use --include-major to apply)\n", plan.majorSkipped)
@@ -213,30 +215,187 @@ func runOutdatedFix(manifestRoot string, dryRun, includeMajor bool) int {
 	}
 
 	failed := 0
+	used := map[[2]string]bool{}
 	for _, a := range plan.actions {
-		if err := applyUpgrade(manifestRoot, a); err != nil {
+		dir, err := workdirFor(manifestRoot, a)
+		if err == nil {
+			err = applyUpgrade(dir, a)
+		}
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s: %v\n", a.pkg, err)
 			failed++
 			continue
 		}
-		fmt.Printf("applied: %s -> %s\n", a.pkg, a.toVersion)
+		used[[2]string{dir, a.ecosystem}] = true
+		fmt.Printf("applied: %s -> %s%s\n", a.pkg, a.toVersion, inDir(a))
 	}
 
 	// Only tidy when every upgrade landed. Tidying over a partial application
 	// can rewrite go.mod around a state the operator did not intend.
 	if failed == 0 {
-		used := map[string]bool{}
-		for _, a := range plan.actions {
-			used[a.ecosystem] = true
-		}
-		for eco := range used {
-			if err := tidyEco(manifestRoot, eco); err != nil {
-				fmt.Fprintf(os.Stderr, "warn: %s tidy failed: %v\n", eco, err)
+		for key := range used {
+			if err := tidyEco(key[0], key[1]); err != nil {
+				fmt.Fprintf(os.Stderr, "warn: %s tidy failed in %s: %v\n", key[1], key[0], err)
 			}
 		}
 		return 0
 	}
 	return 1
+}
+
+// outdatedDirectories normalises fix.outdated.directories: the root when
+// nothing is configured, duplicates collapsed, and no entry allowed to be
+// absolute or to climb out of the repository.
+func outdatedDirectories(configured []string) ([]string, error) {
+	if len(configured) == 0 {
+		return []string{"."}, nil
+	}
+	seen := map[string]bool{}
+	var dirs []string
+	for _, d := range configured {
+		// filepath.IsAbs alone is not enough: on Windows "/etc" has no drive
+		// letter and is not "absolute", yet it is rooted and still names a
+		// directory outside the repository.
+		if filepath.IsAbs(d) || filepath.VolumeName(d) != "" || strings.HasPrefix(d, "/") || strings.HasPrefix(d, `\`) {
+			return nil, fmt.Errorf("%q is absolute; directories are relative to the repository root", d)
+		}
+		clean := filepath.ToSlash(filepath.Clean(d))
+		if clean == ".." || strings.HasPrefix(clean, "../") {
+			return nil, fmt.Errorf("%q lies outside the repository", d)
+		}
+		if !seen[clean] {
+			seen[clean] = true
+			dirs = append(dirs, clean)
+		}
+	}
+	return dirs, nil
+}
+
+// planOutdated plans the currency pass for each directory under root. Every
+// action records the manifest it came from, so workdirFor runs it in that
+// directory — and refuses one that is not there.
+func planOutdated(root string, dirs []string, includeMajor bool, base map[string]string) (plan upgradePlan, degraded []string) {
+	for _, dir := range dirs {
+		abs := filepath.Join(root, dir)
+		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+			degraded = append(degraded, fmt.Sprintf("fix.outdated.directories names %s, which is not a directory", dir))
+			continue
+		}
+		where := ""
+		if dir != "." {
+			where = " in " + dir
+		}
+
+		var dirPlan upgradePlan
+		// Go is resolved through the toolchain rather than a registry call:
+		// `go list -m -u` already understands replace directives, retractions
+		// and the module graph, none of which a proxy query would honour.
+		// Absent go.mod is not an error — a JavaScript project has nothing to
+		// report here.
+		if _, statErr := os.Stat(filepath.Join(abs, "go.mod")); statErr == nil {
+			mods, err := goListModules(abs)
+			if err != nil {
+				degraded = append(degraded, fmt.Sprintf("could not enumerate Go modules%s: %v", where, err))
+			} else {
+				dirPlan.merge(planCurrencyUpgrades(mods, includeMajor))
+			}
+		}
+		// Everything else resolves against its own registry.
+		regPlan, regDegraded := planRegistryCurrency(abs, includeMajor, base)
+		dirPlan.merge(regPlan)
+		for _, d := range regDegraded {
+			degraded = append(degraded, d+where)
+		}
+
+		for i := range dirPlan.actions {
+			dirPlan.actions[i].manifest = manifestIn(dir, dirPlan.actions[i].ecosystem)
+		}
+		plan.merge(dirPlan)
+	}
+	return plan, degraded
+}
+
+// outdatedHold is a fix.outdated.hold entry from .nox.yaml.
+type outdatedHold = nox.OutdatedHold
+
+// holdAllows ranks the bump sizes a hold can permit.
+var holdAllows = map[string]int{"patch": 1, "minor": 2}
+
+// validateHolds refuses a hold that explains nothing: no package, no reason,
+// or an allow level nobody defined. Such an entry would hold silently, or
+// silently not.
+func validateHolds(holds []outdatedHold) error {
+	for _, h := range holds {
+		switch {
+		case h.Package == "":
+			return fmt.Errorf("an entry names no package")
+		case h.Reason == "":
+			return fmt.Errorf("%s has no reason; say why it is held", h.Package)
+		case holdAllows[h.Allow] == 0:
+			return fmt.Errorf("%s: allow is %q, want \"patch\" or \"minor\"", h.Package, h.Allow)
+		}
+	}
+	return nil
+}
+
+// applyHolds drops each action that moves a held package further than its
+// hold allows, and describes each one it drops.
+func applyHolds(actions []upgradeAction, holds []outdatedHold) (kept []upgradeAction, held []string) {
+	byPkg := map[string]outdatedHold{}
+	for _, h := range holds {
+		byPkg[h.Package] = h
+	}
+	for _, a := range actions {
+		h, ok := byPkg[a.pkg]
+		if !ok || bumpSize(a.fromVer, a.toVersion) <= holdAllows[h.Allow] {
+			kept = append(kept, a)
+			continue
+		}
+		held = append(held, fmt.Sprintf("%s %s -> %s: fix.outdated.hold allows %s only — %s",
+			a.pkg, a.fromVer, a.toVersion, h.Allow, h.Reason))
+	}
+	return kept, held
+}
+
+// bumpSize ranks the move from one version to another: 1 patch, 2 minor,
+// 3 major.
+func bumpSize(from, to string) int {
+	a, b := parseVer(from), parseVer(to)
+	switch {
+	case a[0] != b[0]:
+		return 3
+	case a[1] != b[1]:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// merge folds another plan into p.
+func (p *upgradePlan) merge(o upgradePlan) {
+	p.actions = append(p.actions, o.actions...)
+	p.skipped += o.skipped
+	p.majorSkipped += o.majorSkipped
+}
+
+// manifestIn names a manifest path inside dir for eco. workdirFor only takes
+// its directory, then checks that one of the ecosystem's manifests is there.
+func manifestIn(dir, eco string) string {
+	name := "project"
+	if names := ecoManifests[eco]; len(names) > 0 {
+		name = names[0]
+	}
+	return filepath.ToSlash(filepath.Join(dir, name))
+}
+
+// inDir renders " in <dir>" for an action outside the root, and nothing for
+// one at it, so a single-directory run reads exactly as it always has.
+func inDir(a upgradeAction) string {
+	dir := filepath.ToSlash(filepath.Dir(a.manifest))
+	if a.manifest == "" || dir == "." {
+		return ""
+	}
+	return " in " + dir
 }
 
 // goGetBase is the base command for a go upgrade, from the shared registry.
