@@ -81,7 +81,7 @@ runs:
       # Pinned by commit SHA, not the floating @v1 tag: IAC-013 is nox's own
       # rule, and an action that remediates supply-chain risk must not itself
       # consume a mutable ref.
-      uses: nox-hq/nox@f345910099d0d7404f15fb4a55a8a826af6f824e # v1.38.2
+      uses: nox-hq/nox@3ea7b0a3453f46bfc28902c1e7a129a9ca30d2c3 # v1.41.0
       with:
         path: ${{ inputs.path }}
         format: ${{ inputs.scan-format }}
@@ -164,7 +164,7 @@ runs:
 
     - name: Upload remediation plan
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: nox-remediation-plan
         path: ${{ inputs.scan-output }}/remediation-plan.txt
