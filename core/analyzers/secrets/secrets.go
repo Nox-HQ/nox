@@ -284,6 +284,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					"the matched VALUE is a documentation placeholder, read from the literal rather than inferred from the identifier")
 				continue
 			}
+			// A reference to where the secret lives is what the remediation
+			// for a hardcoded secret tells you to write. See reference.go for
+			// why only a value that is ENTIRELY a reference qualifies.
+			if isReferenceFinding(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the matched value is entirely a reference to where the secret is stored — a template variable, a secret-manager lookup or an environment interpolation with no literal fallback — not the secret itself")
+				continue
+			}
 			// A secret shown inside a display-text HTML/JSX attribute
 			// (`placeholder=`, `aria-label=`, `title=`) is the instruction
 			// telling a user what to paste, not key material the repository
@@ -322,13 +330,34 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 		// Scan decoded base64/hex content for encoded secrets.
 		//
-		// NOTE, because it is wider than the one filter applied here: a decoded
-		// finding goes through NONE of the refiners above. Not the placeholder
-		// check, not the embedded-blob check, not the comment checks. Each
-		// reasons about the file's own bytes, and a decoded finding's location
-		// has been relocated back onto the encoding segment, so applying them
-		// unchanged would ask questions about the wrong text. That is a real
-		// gap and it is not closed here.
+		// A decoded finding does not go through the refiners above, and they
+		// split into two kinds that must not be confused:
+		//
+		//   - The POSITIONAL ones (embedded blob, data: URI) must never apply.
+		//     Every decoded finding sits inside an encoded segment by
+		//     construction, so asking "is this inside a blob?" answers yes for
+		//     all of them and would delete the decode feature outright.
+		//     DecodeAndScan has its own blob check instead (decodedIsBlob),
+		//     asked of the decoded bytes rather than their position.
+		//
+		//   - The VALUE ones (placeholder, bare provider prefix) ask about the
+		//     matched value, which is answerable from the decoded plaintext —
+		//     but only before relocation, since afterwards the location names
+		//     base64 text. They are not applied, and that is an inconsistency:
+		//     `AWS_SECRET_ACCESS_KEY = "xxxx…"` is refuted as a placeholder in
+		//     plaintext and reported as SEC-002 CRITICAL when base64-wrapped.
+		//
+		// Measured 2026-09-26 across all 25 rule-diff corpus entries: the
+		// decode path produces findings in exactly one place, crewAI's
+		// cassettes (107), and the recording gate below drops every one. No
+		// decoded finding reaches output anywhere in the corpus, and none is a
+		// placeholder or a bare prefix. So the inconsistency is real on a
+		// constructed input and inert on 25 real repositories, which is why it
+		// is written down here rather than closed with a mechanism nothing
+		// exercises. If a decoded placeholder is ever reported, the fix is to
+		// ask isPlaceholderFinding and isBareProviderPrefix of the decoded
+		// bytes inside DecodeAndScan, before relocateToSegment — no new
+		// judgement, just the plaintext verdict extended to the same value.
 		//
 		// The recording gate IS applied, because it is the one filter that asks
 		// a question the relocation preserves the answer to: the encoding
