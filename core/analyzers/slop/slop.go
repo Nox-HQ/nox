@@ -221,6 +221,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string, content []byte, declared *declaredSet, local map[string]struct{}, aliases *aliasSet) {
 	seen := make(map[string]struct{})
 	seenPred := make(map[string]struct{})
+	fixture := isTransformFixture(path)
 	for _, imp := range extractImports(eco, content) {
 		if eco == ecoNPM && aliases.matches(imp.spec) {
 			// The project's own tsconfig/jsconfig maps this specifier onto its
@@ -234,6 +235,12 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, eco ecosystem, path string,
 		pkg, ok := packageName(eco, imp.spec)
 		if !ok {
 			continue // relative/local specifier
+		}
+		if fixture {
+			a.refute(path, imp.line, "\""+pkg+"\" is imported by a file under __testfixtures__, "+
+				"which a codemod test reads as text and runs a transform over; nothing "+
+				"resolves or installs its imports")
+			continue
 		}
 		if isStdlib(eco, pkg) {
 			a.refute(path, imp.line, "\""+pkg+"\" is in the "+string(eco)+
@@ -404,6 +411,26 @@ func topLevelPackages(pkgDirs map[string]struct{}) map[string]struct{} {
 var vendoredSegments = map[string]struct{}{
 	"vendor": {}, "_vendor": {}, "vendored": {}, "patched": {},
 	"node_modules": {}, "third_party": {}, "thirdparty": {}, "3rdparty": {},
+}
+
+// isTransformFixture reports whether path sits under a __testfixtures__
+// directory: jscodeshift's convention for the input/output pairs a codemod test
+// reads as text and runs its transform over.
+//
+// SLOP-001 asks whether the project depends on a package it never declared. A
+// fixture's imports are the transform's subject matter, not a dependency, and
+// they name fictional packages on purpose — vercel/ai's fixtures import
+// `other-pkg` and `not-ai` to prove the codemod leaves foreign imports alone,
+// and those were all 33 of its SLOP-001 findings. Only the directory counts: a
+// file or directory that merely contains the word is ordinary source.
+func isTransformFixture(path string) bool {
+	segs := strings.Split(filepath.ToSlash(path), "/")
+	for _, seg := range segs[:len(segs)-1] {
+		if seg == "__testfixtures__" {
+			return true
+		}
+	}
+	return false
 }
 
 // isVendoredPath reports whether any directory segment of path names a
