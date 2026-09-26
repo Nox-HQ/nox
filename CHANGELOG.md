@@ -132,6 +132,22 @@ report the one thing in a cassette worth reporting.
   import sits inside a template literal, and this covers the rest of the class
   exactly rather than heuristically.
 
+- **SLOP-001 read a codemod's test fixtures as its dependencies.** A file under
+  `__testfixtures__` is jscodeshift's input/output pair: the test reads it as text
+  and runs a transform over it, and nothing resolves or installs its imports.
+  vercel/ai's fixtures import `other-pkg`, `not-ai` and `some-other-package` on
+  purpose, to prove the codemod leaves imports it does not own alone. **109 → 0**
+  on the codemod corpus entry (109 on v1.39.2 and on main alike), and an A/B
+  against main moves no rule in the other 24; on a full vercel/ai checkout,
+  36 → 3, the three left outside any
+  fixture directory. Only a directory named exactly `__testfixtures__` qualifies,
+  and each exempted import is recorded as a refutation rather than dropped.
+
+  Two larger-looking SLOP-001 classes in the same corpus — 39 `vitest` imports in
+  three vercel/ai packages and 84 in crewAI's `utilities` — were measured and are
+  not defects: they exist only because the corpus scans a subdirectory, below the
+  root manifest that declares them. A full checkout reports 0 and 1.
+
 - **`scripts/rule-diff.sh` could lose corpus repositories in silence.** The
   manifest was the loop's stdin, so any child process in the body that read stdin
   consumed repo lines; those repositories were never scanned, and the ledger
