@@ -5,6 +5,152 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A cassette is a test recording of real HTTP traffic, and it was the single
+largest source of secret findings nox produced on real software. Suppressing that
+noise turned out to require fixing a false negative first — because nox could not
+report the one thing in a cassette worth reporting.
+
+### ⚠️ Behaviour changes
+
+- **SEC-161 and SEC-162 no longer report recorded HTTP traffic.** Inside a
+  recorded exchange — a `vcrpy`, `betamax` or Ruby `VCR` cassette — a credential
+  the repository holds appears in a request header that authenticates the
+  request, or in the request URI. Everything else is traffic: response headers
+  and bodies, request bodies, and cookies in either direction.
+
+  Measured against v1.39.2 on the rule-diff corpus: **373 → 0** on crewAI's
+  cassettes, and **no change across the other 24 repositories** — which is the
+  evidence the gate is scoped to recordings rather than over-reaching.
+
+  v1.38.2 had already removed 149 of these through its 2048-character bound on
+  entropy candidates and its word-boundary context hints; against v1.35.0 the
+  same gate is 522 → 0. The smaller number is this release's, and the larger one
+  is only quoted to say which it is not.
+
+  All 540 were read individually and not one was a credential the project holds:
+  234 Cloudflare `__cf_bm`/`_cfuvid` cookies, 148 continuation lines of base64
+  response bodies, 58 response ids, 44 embedding vectors up to 8,193 characters,
+  32 Gemini thought signatures, and 8 occurrences of PostHog's `phc_` project
+  key — which the vendor publishes, and which SEC-661 was redesigned specifically
+  to stop reporting. The generic entropy rule reported it anyway, out of a
+  recorded response body.
+
+  The gate applies to the entropy rules only: any rule encoding a vendor's
+  credential format still fires anywhere in a recording, request body included,
+  which is where an OAuth `client_secret` sits in a recorded token exchange. See
+  `docs/design/recorded-http-exchanges.md`, including the gap it leaves — a
+  credential with no recognised vendor format, hardcoded into a recorded request
+  *body*, is now reported by nothing.
+
+- **SEC-572 is removed and SEC-562 is re-keyed.** Both matched
+  `live_[a-zA-Z0-9]{32}` under different vendor names, so one token near either
+  word produced a finding named for the other — and neither vendor issues a
+  credential of that shape. SEC-562 now keys on Checkout.com's documented `sk_`
+  and `sk_sbox_` prefixes; `pk_` is deliberately absent because the vendor
+  publishes the public key on purpose. SEC-572 had nothing to be re-keyed onto:
+  Payoneer authenticates with OAuth2 `client_id`/`client_secret` and publishes no
+  token prefix, length or charset at all. A rule cannot encode a format the
+  vendor does not have.
+
+  Stripe's `sk_live_`/`sk_test_` namespace (SEC-030) cannot collide with the new
+  pattern, because `[a-z0-9]{26,}` cannot cross the underscore.
+
+  **SEC-572 is removed, not retired.** A baseline entry, VEX statement or
+  `nox:ignore` naming it resolves through the withdrawn-rule path added in
+  v1.38.1.
+
+### Fixed
+
+- **A leaked `authorization:` header written as a YAML list was never reported.**
+  This is why the change above was safe to make, and it had to land first.
+
+  ```yaml
+  authorization: Bearer sk-proj-…     # reported
+  authorization:
+  - Bearer sk-proj-…                  # NOT reported
+  ```
+
+  SEC-082 allowed only whitespace between the key and `Bearer`, and Go's `\s`
+  crosses a newline but not a YAML sequence dash. An HTTP header may repeat, so
+  every recorded exchange — and most header maps anywhere — writes them as a
+  list. `vcrpy` does not filter headers unless `filter_headers` is configured,
+  which makes an unredacted key the most valuable thing there is to find in a
+  cassette.
+
+  Had the suppression shipped first, cassettes would have gone quiet while
+  remaining unchecked, and from the outside those two states are identical. Both
+  block (`- x`) and flow (`[x]`) sequence forms now match, for SEC-082 and
+  SEC-083, which fixes every YAML header map and not only cassettes.
+
+- **A decoded finding bypassed every refiner.** `DecodeAndScan` added its results
+  straight to the finding set, past the placeholder, embedded-blob, comment and
+  recording filters alike — 107 of crewAI's cassette findings survived the gate
+  that way, base64 OpenTelemetry payloads decoded out of request bodies and
+  relocated back onto them. The recording gate is now wired through that path,
+  because position-in-the-document is the one question the relocation preserves
+  the answer to. The rest of the gap is named in a comment where the decode
+  happens rather than silently half-fixed.
+
+- **AI-019 reported a pinned model load as unverified.** Its pattern ended at the
+  opening paren and never saw the arguments, and its own comment conceded the
+  absence it claimed to detect was not visible where it looked. Of 99 model loads
+  across the fourteen pinned repositories, zero carry a pin — so this changes no
+  count, and that is the measurement rather than an excuse: the rule was right
+  about every one of them for a reason it could not give. A project that does pin
+  now stops being told it has not. Separately, a bare `pipeline(...)` at the
+  start of a line matched nothing, because the guard excluding `conn.pipeline()`
+  is a character class and needs a character.
+
+- **SLOP-001: two classes v1.39.2 did not cover.** That release gated the
+  JavaScript extractor so prose in a comment stopped being read as an import, and
+  left the Python extractor ungated — and a docstring showing a caller what to
+  type is the most common place in Python to write an import you are not making.
+  Same gate, same keyword offset. Separately, no npm registry can serve a name
+  containing `$`, `{` or `}`, so `@ai-sdk/${pkgName}` and `${moduleName}` are not
+  package names; the lexctx gate catches the common shape where the generated
+  import sits inside a template literal, and this covers the rest of the class
+  exactly rather than heuristically.
+
+- **`scripts/rule-diff.sh` could lose corpus repositories in silence.** The
+  manifest was the loop's stdin, so any child process in the body that read stdin
+  consumed repo lines; those repositories were never scanned, and the ledger
+  entries explaining their drops surfaced as stale — which is how a stale-entry
+  error appeared on one invocation and not the next with no input changing.
+  Reproduced against the shipped script with two local repositories and a stub
+  binary that reads stdin: "no rule-level change across 1 repo(s)" with two in
+  the manifest. The manifest now arrives on fd 3, and a new check asserts every
+  manifest entry was reached, naming stdin as the suspect.
+
+- **IAC-225's remediation still assumed Ansible.** The rule was deliberately
+  renamed away from Ansible — its subject is any YAML mapping key whose name ends
+  in `password`, and the widening was prompted by real hits in Kubernetes Secrets
+  and a Cassandra config — but the remediation told every reader to run
+  `ansible-vault encrypt_string`, which helps with none of those.
+
+- **Two claims that nothing checked.** The README said 1506 rules across five
+  suites, 938 secrets, 50 AI and 500 IaC, while the catalog held 1491, 882, 55
+  and 482. Nobody wrote a wrong number — every retirement made the sentence a
+  little less true, and the AI count had drifted the *other* way, which is the
+  direction nobody thinks to check. It is now gated by a test. And
+  `TestRuleDeltaLedgerNamesRealRules` rejected a `rule-removed` ledger entry on
+  the premise that an ID belonging to no rule can never match a drop; that
+  premise is false precisely for a removal, because the harness diffs the
+  baseline binary against the candidate and the baseline still has the rule. The
+  check now runs in both directions.
+
+### Documentation
+
+- `docs/design/condition-dedup.md` said the `condition` key was worth building
+  when a case arrived that merging could not fix, and that nothing needed it yet.
+  One case was already in the tree: `IAC-225|SEC-080` sits in the cross-analyzer
+  allowlist with the reason "the IaC and secrets views of one hardcoded
+  password", which names two *views*, not the two fixes that list's own bar
+  demands. Both rules must keep existing, because each is reachable on inputs the
+  other never sees — so an allowlist cannot express it and a merge cannot serve
+  it. Recorded, with the measurement it would need, rather than fixed as a rider.
+
 ## [1.39.2] - 2026-09-20
 
 Prose in a comment is not an import. SLOP-001 matched import syntax anywhere

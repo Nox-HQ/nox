@@ -191,3 +191,72 @@ live and honest, and currently has nothing to prove on the corpus.
 
 The `condition` half of Option 1 remains unbuilt, and its sequencing argument
 above still holds: nothing needs it yet.
+
+## Something needs it now (2026-09-26)
+
+The sentence above — "nothing needs it yet" — no longer holds. The case did not
+arrive from a new measurement; it was already in the tree, in the allowlist the
+invariant test consults, and it is visible by reading that list against its own
+stated bar.
+
+The bar, from the comment above `allowedCrossAnalyzerOverlap`: *"Each needs a
+reason, and the reason has to name both fixes."* Every entry clears it but one:
+
+```go
+"IAC-225|SEC-080": "the IaC and secrets views of one hardcoded password",
+```
+
+That names two *views*, not two fixes. The two rules' remediations differ in
+wording — IAC-225 points at a vault, SEC-080 at environment variables or a
+secrets manager — but those are two mechanisms for one goal, and doing either
+resolves both findings. Compare the entry a few lines above, which clears the bar
+because its two remediations lead somewhere genuinely different:
+
+```go
+"SEC-161|SEC-162": "one value reported as a high-entropy assignment and as a
+    base64 blob: two readings of the same bytes, kept apart because the
+    remediation differs — rotate the secret, vs. decode the blob and find out
+    whether it holds one",
+```
+
+Two readings, two destinations, two findings. One reader rotates a credential;
+the other decodes a blob to find out whether it holds one. IAC-225 and SEC-080
+send the reader to the same place.
+
+That is the gap stated precisely, and it is a gap in the *vocabulary* rather than
+in any rule: **the invariant test can say a pair is wrong, the allowlist can say
+a pair is fine, and neither can say a pair should be merged.** An entry is
+currently the only way to stop the test failing, so "these are one condition" has
+to be written down as "these are legitimately different".
+
+### Why this one cannot be fixed by merging
+
+Every duplicate found so far was fixed by merging and binding: one condition, one
+rule, no second finding to collapse. This one cannot be, because both rules must
+keep existing. IAC-225's subject is a YAML mapping key whose name ends in
+`password`; SEC-080's is a generic password assignment in any file. Each is
+reachable on inputs the other never sees, and deleting either loses real
+coverage. The overlap is only on the inputs both reach.
+
+So it is exactly the shape the sequencing argument asked for: two rules that
+genuinely must both exist and genuinely report one condition.
+
+### What it adds to the migration set
+
+The set named earlier gains a third member, and it is the one that makes a
+`condition` key do work the allowlist cannot:
+
+- the allowlisted pairs that must end up with **different** conditions,
+- the merged duplicates that must end up with the **same** condition,
+- and IAC-225/SEC-080, which must end up with the same condition **while both
+  rules continue to exist**.
+
+### Not fixed here
+
+Which rule should own the condition is a judgement about which finding a reader
+should receive — the IaC view carries the resource and the task, the secrets view
+carries the credential shape — and suppressing either is a behavioural delta
+owing its own measurement and its own ledger entry. SEC-080 fired on 75 sites
+across 3 repositories on the pinned corpus, so this is not a rounding error.
+Shipping it as a rider on an unrelated change would be the thing this document
+exists to argue against.

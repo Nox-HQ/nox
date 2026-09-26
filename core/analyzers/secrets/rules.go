@@ -872,9 +872,27 @@ func builtinSecretRules() []*rules.Rule {
 			remediation: "Use environment variables or a secrets manager for secrets and credentials.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
+		// The `(?:[-\[]\s*)?` is a YAML sequence indicator — block form `- x`
+		// and flow form `[x]` — and it is the difference between reading an HTTP
+		// header map and not.
+		//
+		// Go's `\s` matches a newline, so `authorization:\n  Bearer x` already
+		// worked. What did not is the form every recorded HTTP exchange and most
+		// header maps actually use, because a header may repeat and so is a
+		// LIST:
+		//
+		//	    headers:
+		//	      authorization:
+		//	      - Bearer sk-proj-…
+		//
+		// `\s*` cannot cross the `-`. Measured: a credential written inline was
+		// reported and the identical credential written as a one-element YAML
+		// sequence was not — which is the shape a vcrpy cassette records when
+		// `filter_headers` was never configured, the single most valuable thing
+		// there is to find in one.
 		{
 			id: "SEC-082", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(authorization|auth)\s*[=:]\s*['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
+			pattern:     `(?i)(authorization|auth)\s*[=:]\s*(?:[-\[]\s*)?['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
 			description: "Bearer token detected",
 			cwe:         "CWE-798", keywords: []string{"bearer"},
 			remediation: "Do not hard-code bearer tokens. Use environment variables or a token refresh mechanism.",
@@ -882,7 +900,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-083", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(authorization|auth)\s*[=:]\s*['"]?Basic\s+[A-Za-z0-9+/=]{10,}['"]?`,
+			pattern:     `(?i)(authorization|auth)\s*[=:]\s*(?:[-\[]\s*)?['"]?Basic\s+[A-Za-z0-9+/=]{10,}['"]?`,
 			description: "Basic auth header detected",
 			cwe:         "CWE-798", keywords: []string{"basic"},
 			remediation: "Do not hard-code Basic auth credentials. Use environment variables or a credentials provider.",
@@ -3461,7 +3479,24 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-559", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Detected Plaid Client ID", cwe: "CWE-798", keywords: []string{"plaid_client"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-560", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{24}`, description: "Detected Plaid Secret", cwe: "CWE-798", keywords: []string{"plaid_secret"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-561", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected ClearBank API Key", cwe: "CWE-798", keywords: []string{"clearbank"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-562", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `live_[a-zA-Z0-9]{32}`, description: "Detected Checkout.com API Key", cwe: "CWE-798", keywords: []string{"checkout"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-562 matched `live_` + 32 characters and was named for Checkout.com.
+		// Checkout.com does not issue a credential beginning `live_`. Its secret
+		// keys are `sk_` for production and `sk_sbox_` for sandbox, the tail being
+		// a lowercase base32-style run -- the documented example is `sk_sbox_`
+		// followed by 27 such characters. So the rule matched no Checkout.com key,
+		// and what it did match was any `live_` token near the word "checkout", a
+		// word that appears in e-commerce code constantly.
+		//
+		// Keyed on the real prefixes. The underscore is what separates this from
+		// Stripe, which owns `sk_live_` and `sk_test_` (SEC-030): `[a-z0-9]{26,}`
+		// cannot cross the underscore in `sk_live_`, so the two namespaces do not
+		// overlap and neither rule needs to know about the other.
+		//
+		// pk_ is deliberately absent. Checkout.com publishes the public key for
+		// client-side use, and reporting a credential the vendor documents as
+		// publishable trains people to ignore the rule -- the same reason SEC-661
+		// omits PostHog's phc_.
+		{id: "SEC-562", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh, pattern: `\bsk_(?:sbox_)?[a-z0-9]{26,}\b`, description: "Detected Checkout.com secret API key", cwe: "CWE-798", keywords: []string{"sk_"}, remediation: "Rotate the exposed credential immediately. Checkout.com secret keys authenticate server-to-server calls against most of the API; the public pk_ key does not and is not reported.", references: []string{"https://cwe.mitre.org/data/definitions/798.html", "https://www.checkout.com/docs/developer-resources/api/manage-api-keys/api-keys"}},
 		{id: "SEC-563", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected Adyen API Key", cwe: "CWE-798", keywords: []string{"adyen"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-564", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `stripe[_-]?whsec_[a-zA-Z0-9]{32}`, description: "Detected Stripe Webhook Secret", cwe: "CWE-798", keywords: []string{"stripe_webhook"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-565", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)\bcoinbase[a-z0-9_ .\-]*[=:][ \t]*["\x27]?[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`, description: "Detected Coinbase API Key", cwe: "CWE-798", keywords: []string{"coinbase"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3470,7 +3505,17 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-568", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)\bbitfinex[a-z0-9_ .\-]*[=:][ \t]*["\x27]?[a-f0-9]{32}`, description: "Detected Bitfinex API Key", cwe: "CWE-798", keywords: []string{"bitfinex"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-570", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `pub-[a-z0-9]{34}`, description: "Detected CoinGecko API Key", cwe: "CWE-798", keywords: []string{"coingecko"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-571", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9-]{36,}`, description: "Detected CoinMarketCap API Key", cwe: "CWE-798", keywords: []string{"coinmarketcap"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-572", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `live_[a-zA-Z0-9]{32}`, description: "Detected Payoneer API Token", cwe: "CWE-798", keywords: []string{"payoneer"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-572 "Payoneer API Token" was the other half of the `live_` collision:
+		// the same pattern as SEC-562, so one token near either vendor name
+		// produced a finding named for the other. Unlike Checkout.com there is
+		// nothing to redesign it onto -- Payoneer authenticates with OAuth2
+		// client_id/client_secret and publishes no token prefix, length or charset.
+		// A rule cannot encode a format the vendor does not have.
+		//
+		// Removed rather than retired: no surviving rule reports "a Payoneer
+		// token", because nothing distinguishes one from any other OAuth client
+		// secret. A hardcoded client secret is still reported by the generic
+		// credential rules, which is the correct strength of claim for it.
 		{id: "SEC-573", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-z0-9]{20}\b`, description: "Detected TransferWise API Key", cwe: "CWE-798", keywords: []string{"transferwise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-574", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[a-zA-Z0-9]{32}\b`, description: "Detected Wise API Key", cwe: "CWE-798", keywords: []string{"wise"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, minEntropy: 3.5},
 		{id: "SEC-575", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)\bsquare[_-]?pos[a-z0-9_ .\-]*[=:][ \t]*["\x27]?[a-zA-Z0-9]{24}`, description: "Detected Square POS API Key", cwe: "CWE-798", keywords: []string{"square_pos"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

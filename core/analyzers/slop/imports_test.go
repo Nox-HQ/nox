@@ -114,3 +114,77 @@ func TestIsStdlib(t *testing.T) {
 		t.Error("express is not a node builtin")
 	}
 }
+
+// A docstring is where Python writes an import it is not making.
+//
+// v1.39.2 stopped SLOP-001 collecting import syntax out of JavaScript comments
+// and strings. The Python extractor was left ungated, and Python has an even
+// more common place to write an import you are only describing: a docstring
+// showing a caller what to type.
+func TestImportInAPythonDocstringIsNotAnImport(t *testing.T) {
+	src := []byte("import os\n" +
+		"\n" +
+		"def load():\n" +
+		"    \"\"\"Usage:\n" +
+		"\n" +
+		"    import nonexistent_demo_package\n" +
+		"    from another_demo_package import thing\n" +
+		"    \"\"\"\n" +
+		"    return None\n")
+	got := map[string]bool{}
+	for _, r := range extractImports(ecoPyPI, src) {
+		got[r.spec] = true
+	}
+	if !got["os"] {
+		t.Errorf("the real import of \"os\" was dropped; got %v", got)
+	}
+	for _, shown := range []string{"nonexistent_demo_package", "another_demo_package"} {
+		if got[shown] {
+			t.Errorf("%q is named in a docstring, not imported — reporting it claims a "+
+				"slopsquat against a package nobody installed; got %v", shown, got)
+		}
+	}
+}
+
+// An interpolated specifier names no package.
+//
+// The lexctx gate catches the common case, where the generated import sits
+// inside a template literal. This catches the rest of the class, and it is
+// exact rather than heuristic: npm's registry accepts URL-safe characters only,
+// so a name containing `$`, `{` or `}` cannot exist.
+func TestAnInterpolatedSpecifierIsNotAPackage(t *testing.T) {
+	for _, spec := range []string{
+		"${moduleName}",
+		"@ai-sdk/${pkgName}",
+		"${toRelativeImportPath(paths.test, paths.codemod)}",
+		"@${scope}/thing",
+		"pkg name with spaces",
+	} {
+		if name, ok := packageName(ecoNPM, spec); ok {
+			t.Errorf("packageName(npm, %q) = %q, true — no registry can serve that name, "+
+				"so reporting it undeclared asserts a hallucinated package on the "+
+				"strength of a code generator", spec, name)
+		}
+	}
+}
+
+// The control. Every shape above is rejected for holding a character npm
+// forbids, so the check has to keep accepting the names that do not — including
+// the awkward legacy ones, where a false negative is silent.
+func TestRealPackageNamesStillResolve(t *testing.T) {
+	for spec, want := range map[string]string{
+		"react":                           "react",
+		"@ai-sdk/openai":                  "@ai-sdk/openai",
+		"@ai-sdk/openai/internal":         "@ai-sdk/openai",
+		"lodash.debounce":                 "lodash.debounce",
+		"node-fetch":                      "node-fetch",
+		"JSONStream":                      "JSONStream",
+		"@babel/plugin-transform-runtime": "@babel/plugin-transform-runtime",
+		"zod/v4":                          "zod",
+	} {
+		got, ok := packageName(ecoNPM, spec)
+		if !ok || got != want {
+			t.Errorf("packageName(npm, %q) = %q, %v — want %q, true", spec, got, ok, want)
+		}
+	}
+}

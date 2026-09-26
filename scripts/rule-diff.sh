@@ -141,7 +141,7 @@ repo_count=0
 skipped=0
 dropped_rules=""   # rules whose count FELL somewhere; newline-separated, deduped at the end
 
-while read -r name url sha path; do
+while read -r name url sha path <&3; do
   [ -n "$name" ] || continue
   repo_count=$((repo_count + 1))
   echo "── $name @ ${sha:0:8}${path:+ /$path}"
@@ -198,11 +198,33 @@ while read -r name url sha path; do
       | awk -F'\t' '$3 < $2 {print $1}')
 "
   fi
-done < <(jq -r '.repos[] | "\(.name) \(.url) \(.sha) \(.path // "")"' "$CORPUS")
+done 3< <(jq -r '.repos[] | "\(.name) \(.url) \(.sha) \(.path // "")"' "$CORPUS")
 
 echo
 if [ "$repo_count" -eq 0 ]; then
   echo "::error::corpus is empty -- this check verified nothing"
+  exit 2
+fi
+
+# Every repo in the manifest must have been reached. The loop body runs git and
+# nox, and until the manifest was moved to fd 3 above it was the loop's STDIN --
+# so any child process that read stdin consumed corpus lines, and the repos it
+# ate were never scanned. Nothing said so: repo_count simply came out lower, the
+# drops those repos witnessed did not appear, and the ledger entries explaining
+# them were reported as stale. That is how a stale-entry error appeared on one
+# invocation and not the next with no input changing.
+#
+# Reproduced with two local repos and a stub binary containing `cat > /dev/null`:
+# before the redirect, "no rule-level change across 1 repo(s)" with two in the
+# manifest.
+#
+# The redirect is the fix; this is the check that would have named it. A harness
+# whose own coverage is silent cannot be used to audit anything else.
+manifest_count="$(jq -r '.repos | length' "$CORPUS")"
+if [ "$((repo_count + 0))" -ne "$((manifest_count + 0))" ]; then
+  echo "::error title=Corpus entries were never reached::the manifest lists $manifest_count repo(s) but the loop processed $repo_count."
+  echo "Every skip prints a SKIP line above; if fewer were printed than the shortfall,"
+  echo "something in the loop body consumed the manifest from stdin."
   exit 2
 fi
 if [ "$total_delta" -eq 0 ]; then

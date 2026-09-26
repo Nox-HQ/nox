@@ -27,5 +27,12 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "SEC-161",
+      "classification": "applicability-narrowed",
+      "pr": 702,
+      "reason": "The bodies and response side of a recorded HTTP exchange are traffic, not a credential the repository holds — and nobody can rotate them. Measured by this harness against v1.39.2: 373 -> 0 on crewai-cassettes, and NO CHANGE across the other 24 repositories, which is the evidence the gate is scoped to recordings rather than over-reaching. The earlier figure of 522 -> 0 was against v1.35.0 and is not this change's marginal value: v1.38.2's 2048-character bound on entropy candidates and its word-boundary context hints had already removed 149 of them. Of the 540 SEC-161/SEC-162 findings read individually on crewAI, not one was a credential: 234 Cloudflare __cf_bm/_cfuvid cookies, 148 continuation lines of base64 response bodies, 58 response ids, 44 embedding vectors, 32 Gemini thought signatures, and 8 occurrences of PostHog's phc_ project key — which the vendor publishes and SEC-661 deliberately excludes, reported anyway by the generic entropy rule out of a recorded response body. The gate covers SEC-161 and SEC-162, the two rules whose whole claim is that some bytes are random; SEC-162 has no entry because it drops nothing on this corpus. Any rule encoding a vendor's credential format still fires anywhere in a recording, including a request body, which is where an OAuth client_secret sits. The request headers and URI are untouched, and SEC-082 was fixed in the same change so that an unredacted authorization header in a cassette is reported at all — it was not, because Go's \\s crosses a newline but not a YAML sequence dash. See docs/design/recorded-http-exchanges.md."
+    }
+  ]
 }

@@ -65,8 +65,22 @@ func extractImports(eco ecosystem, content []byte) []importRef {
 
 func extractPythonImports(content []byte) []importRef {
 	var refs []importRef
+	// Same reasoning as extractJSImports, and the same fix, for the language
+	// that has an even more common place to write an import you are not making:
+	// a docstring. `"""Usage:\n    import nonexistent_demo_package"""` is
+	// documentation, and collecting it reports a slopsquat against a package
+	// nobody installed.
+	//
+	// lexctx classifies a Python docstring as a string, so the keyword offset
+	// answers it — the same offset the JS side uses, for the same reason.
+	regions := lexctx.Classify(lexctx.LangPython, content)
+	inCode := func(off int) bool { return lexctx.KindAt(regions, off) == lexctx.KindCode }
+
 	// `import x.y as z, a.b` — split the tail on commas, take each module.
 	for _, m := range pyImportRe.FindAllSubmatchIndex(content, -1) {
+		if !inCode(m[0]) {
+			continue
+		}
 		line := lexctx.LineForOffset(content, m[0])
 		tail := strings.TrimSpace(string(content[m[2]:m[3]]))
 		// Strip trailing comments.
@@ -92,6 +106,9 @@ func extractPythonImports(content []byte) []importRef {
 	}
 	// `from x import y` / `from . import y`.
 	for _, m := range pyFromRe.FindAllSubmatchIndex(content, -1) {
+		if !inCode(m[0]) {
+			continue
+		}
 		line := lexctx.LineForOffset(content, m[0])
 		spec := string(content[m[2]:m[3]])
 		refs = append(refs, importRef{spec: spec, line: line})
@@ -208,15 +225,56 @@ func packageName(eco ecosystem, spec string) (name string, ok bool) {
 			if parts[0] == "@" {
 				return "", false
 			}
-			return parts[0] + "/" + parts[1], true
+			name := parts[0] + "/" + parts[1]
+			if !isNPMPackageName(name) {
+				return "", false
+			}
+			return name, true
 		}
 		if i := strings.IndexByte(spec, '/'); i >= 0 {
 			spec = spec[:i]
 		}
-		if spec == "" {
+		if spec == "" || !isNPMPackageName(spec) {
 			return "", false
 		}
 		return spec, true
 	}
 	return "", false
+}
+
+// npmNameSegment is the character set an npm package name segment can hold. The
+// registry accepts URL-safe characters only, so a specifier carrying anything
+// else is not a name any registry could serve.
+var npmNameSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]*$`)
+
+// isNPMPackageName reports whether name could be a package on a registry.
+//
+// SLOP-001 says "this import resolves to no declared dependency", and reads
+// that as evidence of a hallucinated package. That inference needs the
+// specifier to be a package name in the first place, and it is not when the
+// import statement is being GENERATED rather than executed:
+//
+//	await import('${moduleName}');
+//	import transformer from '${toRelativeImportPath(paths.test, …)}';
+//
+// Those sit inside a template literal that writes a source file, so the
+// lexctx gate in extractJSImports already catches that particular shape. This
+// catches the rest of the class: the same interpolation in code that is not
+// itself inside a string, such as `@ai-sdk/${pkgName}` in a dynamic import
+// assembled at the top level. No registry can serve a name containing `$`, `{`
+// or `}`, so the check excludes what cannot exist rather than what looks
+// unusual.
+//
+// The awkward legacy names matter here, which is why the test keeps them:
+// JSONStream has capitals and lodash.debounce has a dot, and both are real. A
+// false negative in this rule is silent.
+func isNPMPackageName(name string) bool {
+	if name == "" || len(name) > 214 {
+		return false
+	}
+	if strings.HasPrefix(name, "@") {
+		scope, rest, ok := strings.Cut(name[1:], "/")
+		return ok && npmNameSegment.MatchString(scope) && npmNameSegment.MatchString(rest)
+	}
+	return npmNameSegment.MatchString(name)
 }
