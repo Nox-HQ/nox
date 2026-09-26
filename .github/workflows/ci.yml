@@ -573,9 +573,9 @@ jobs:
   # The VS Code extension had no CI at all: no workflow ran `npm ci` or `tsc`,
   # so a dependency bump to its toolchain merged on a green tick that had never
   # compiled it. That is how GHSA-mh99-v99m-4gvg (brace-expansion ReDoS) got in
-  # — found later by a self-scan and fixed by hand — and Dependabot now opens
-  # TypeScript and vscode-languageclient MAJOR bumps against this tree, which
-  # nothing would have type-checked.
+  # — found later by a self-scan and fixed by hand — and dependency bumps to
+  # TypeScript and vscode-languageclient land against this tree, which nothing
+  # would have type-checked.
   #
   # Type-check only (`--noEmit`): the extension is published from a tagged
   # release, so CI's job is to prove the source still compiles against the
