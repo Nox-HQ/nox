@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **nox keeps its own dependencies current; Dependabot is gone.** Both
+  `.github/dependabot.yml` and the workflow that auto-merged its pull requests
+  are removed. nox's weekly remediation run (`nox fix` over the org's reusable
+  workflow, gated on the full test suite) already existed and had been running
+  alongside it. Dependabot's last contribution was the reason to stop: #699
+  moved grpc from 1.83.2, which is patched against GO-2026-6443, to 1.84.0,
+  which is not, and auto-merged it on a green suite.
+
+  The currency pass (`nox fix --outdated`) is off in nox's own run for now,
+  because it does not yet check the version it upgrades to against known
+  advisories and would repeat that exact bump. The security pass still runs.
+
+### Fixed
+
+- **`nox fix --outdated` could upgrade a dependency into a known
+  vulnerability.** It asked only whether a newer version existed. grpc 1.84.0
+  is newer than 1.83.2 and is affected by GO-2026-6443, which 1.83.2 is patched
+  against — the fix existed only on a development branch, so the newest stable
+  release was also the vulnerable one. That is the bump Dependabot made in #699,
+  and nox's own currency pass would have made it too.
+
+  Every upgrade target is now looked up against the same advisory source the
+  scan uses before anything is shown or applied. A target with a known advisory
+  is held, and the line says which (`held: google.golang.org/grpc v1.83.2 ->
+  v1.84.0: the target is affected by GO-2026-6443`). If the lookup cannot
+  complete, nothing is applied and the command exits non-zero: a currency bump
+  is optional, and an unchecked target is not a clean one. Verified against the
+  live OSV API on nox's own tree, where the previous binary planned exactly
+  that bump.
+
 ## [1.40.0] - 2026-09-26
 
 A cassette is a test recording of real HTTP traffic, and it was the single
