@@ -404,6 +404,8 @@ func applyUpgrade(manifestRoot string, a upgradeAction) error {
 		return applyComposerUpgrade(manifestRoot, a)
 	case "nuget":
 		return applyNuGetUpgrade(manifestRoot, a)
+	case "docker":
+		return applyImageUpgrade(manifestRoot, a)
 	}
 	return fmt.Errorf("ecosystem %q not supported by applyUpgrade", a.ecosystem)
 }

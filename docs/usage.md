@@ -630,6 +630,15 @@ Scope and guarantees:
   Maven and Gradle are parsed by the scanner but have no currency resolver:
   `maven-metadata.xml` has no single "latest stable" and Gradle has no canonical
   upgrade command, so they are reported as unresolved rather than guessed at.
+- **Base images too.** In each configured directory, the `FROM` lines of
+  `Dockerfile`, `Containerfile`, `Dockerfile.*` and `*.Dockerfile` are checked
+  against their registry over the OCI distribution API (Docker Hub, gcr.io,
+  ghcr.io, any conforming registry; anonymous token auth included). A digest
+  pin is refreshed when its tag was rebuilt, and a numeric tag moves to the
+  newest tag of the same shape — `1.27-alpine` to `1.28-alpine`, never to
+  `1.28.1-alpine`, `1.28-bookworm` or a prerelease; a new major is held. Stage
+  references, `scratch` and `${ARG}` images are skipped, and only the `FROM`
+  reference is rewritten.
 - **Latest STABLE, never a prerelease.** Every registry expresses this
   differently and most of them invite the wrong answer: npm publishes channels
   under `dist-tags` where only `latest` is stable; crates.io reports

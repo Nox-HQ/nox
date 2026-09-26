@@ -310,10 +310,24 @@ func planOutdated(root string, dirs []string, includeMajor bool, base map[string
 		for i := range dirPlan.actions {
 			dirPlan.actions[i].manifest = manifestIn(dir, dirPlan.actions[i].ecosystem)
 		}
+		// Base images: the Dockerfiles directly in this directory. Their
+		// actions already name the file, since a directory can hold several.
+		imgPlan, imgDegraded := planImageCurrency(abs, includeMajor, baseImageRegistry)
+		for i := range imgPlan.actions {
+			imgPlan.actions[i].manifest = filepath.ToSlash(filepath.Join(dir, imgPlan.actions[i].manifest))
+		}
+		dirPlan.merge(imgPlan)
+		for _, d := range imgDegraded {
+			degraded = append(degraded, d+where)
+		}
 		plan.merge(dirPlan)
 	}
 	return plan, degraded
 }
+
+// baseImageRegistry answers the base-image pass. A variable so tests can point
+// it at a fake registry.
+var baseImageRegistry = newImageRegistry()
 
 // outdatedHold is a fix.outdated.hold entry from .nox.yaml.
 type outdatedHold = nox.OutdatedHold
