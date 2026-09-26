@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -152,6 +153,11 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 			continue
 		}
 		if after, _ := treeDigest(dir, a.ecosystem); verifiable && after == before {
+			if alreadySatisfied(dir, a) {
+				fmt.Printf("satisfied: %s [%s] -> %s in %s — already at or above the fix; an earlier upgrade in this run moved it\n",
+					a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
+				continue
+			}
 			// The finding exists because the installed version is vulnerable,
 			// so an upgrade that rewrote nothing did not fix it, whatever the
 			// tool's exit code said.
@@ -403,9 +409,112 @@ func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
 
 // applyNpmUpgrade drives whichever package manager the workspace actually
 // uses.
+//
+// When npm updates a transitive package, the lockfile is read back: `npm
+// update` moves it only as far as its parents' ranges allow, and a copy still
+// short of the fixed version means the advisory is still there.
 func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
-	name, args := npmCommand(manifestRoot, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
-	return runIn(manifestRoot, name, args...)
+	version := strings.TrimPrefix(a.toVersion, "v")
+	name, args := npmCommand(manifestRoot, a.pkg, version)
+	if err := runIn(manifestRoot, name, args...); err != nil {
+		return err
+	}
+	if name != "npm" || args[0] != "update" {
+		return nil
+	}
+	below, err := npmLockBelow(manifestRoot, a.pkg, version)
+	if err != nil {
+		return fmt.Errorf("reading package-lock.json after npm update: %w", err)
+	}
+	if len(below) > 0 {
+		return fmt.Errorf("%s is transitive and npm update left %s below %s: a parent's "+
+			"version range excludes the fix; upgrade that parent, or pin it with an "+
+			"\"overrides\" entry in package.json", a.pkg, strings.Join(below, ", "), version)
+	}
+	return nil
+}
+
+// npmDirectSection names the package.json section that declares pkg directly,
+// or "" when nothing does and pkg is only pulled in by another package.
+// peerDependencies is not a section anything is installed into, so a package
+// listed only there is treated as transitive.
+func npmDirectSection(dir, pkg string) string {
+	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return ""
+	}
+	var manifest map[string]json.RawMessage
+	if json.Unmarshal(raw, &manifest) != nil {
+		return ""
+	}
+	for _, section := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
+		var deps map[string]string
+		if json.Unmarshal(manifest[section], &deps) != nil {
+			continue
+		}
+		if _, ok := deps[pkg]; ok {
+			return section
+		}
+	}
+	return ""
+}
+
+// npmLockBelow lists every copy of pkg in dir's package-lock.json whose
+// version is still below version, as "path@version". Nested copies count:
+// node_modules/a/node_modules/pkg is installed and loaded just the same.
+func npmLockBelow(dir, pkg, version string) ([]string, error) {
+	copies, err := npmLockCopies(dir, pkg)
+	if err != nil {
+		return nil, err
+	}
+	var below []string
+	for path, v := range copies {
+		if v != "" && versionLess(v, version) {
+			below = append(below, path+"@"+v)
+		}
+	}
+	sort.Strings(below)
+	return below, nil
+}
+
+// npmLockCopies maps each lockfile path that installs pkg to its version.
+func npmLockCopies(dir, pkg string) (map[string]string, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "package-lock.json"))
+	if err != nil {
+		return nil, err
+	}
+	var lock struct {
+		Packages map[string]struct {
+			Version string `json:"version"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(raw, &lock); err != nil {
+		return nil, err
+	}
+	copies := map[string]string{}
+	for path, entry := range lock.Packages {
+		if path == "node_modules/"+pkg || strings.HasSuffix(path, "/node_modules/"+pkg) {
+			copies[path] = entry.Version
+		}
+	}
+	return copies, nil
+}
+
+// alreadySatisfied reports whether an npm upgrade that rewrote nothing had
+// nothing left to do: the lockfile holds at least one copy of the package and
+// every copy is at or above the fixed version. That happens when an earlier
+// upgrade in the same run moved it as a dependency of something else. With no
+// lockfile, or no copy found in one, nothing is claimed.
+func alreadySatisfied(dir string, a upgradeAction) bool {
+	if a.ecosystem != "npm" {
+		return false
+	}
+	copies, err := npmLockCopies(dir, a.pkg)
+	if err != nil || len(copies) == 0 {
+		return false
+	}
+	below, err := npmLockBelow(dir, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
+	return err == nil && len(below) == 0
 }
 
 // npmCommand picks the package manager from the lockfile in dir.
@@ -435,7 +544,20 @@ func npmCommand(dir, pkg, version string) (tool string, args []string) {
 	case has("bun.lock"), has("bun.lockb"):
 		return "bun", []string{"update", target}
 	}
-	return "npm", []string{"install", target}
+	// npm install writes whatever it is given into package.json: a transitive
+	// package becomes a new direct dependency, and a devDependency moves into
+	// dependencies. So the manifest decides. A declared package keeps its
+	// section; anything else is moved by `npm update`, which touches only the
+	// lockfile and takes no version — applyNpmUpgrade checks where it landed.
+	switch npmDirectSection(dir, pkg) {
+	case "dependencies":
+		return "npm", []string{"install", target}
+	case "devDependencies":
+		return "npm", []string{"install", "--save-dev", target}
+	case "optionalDependencies":
+		return "npm", []string{"install", "--save-optional", target}
+	}
+	return "npm", []string{"update", pkg}
 }
 
 // applyPyPIUpgrade runs `pip install --upgrade pkg==version`. Operators
