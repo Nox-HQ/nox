@@ -5,12 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.40.0] - 2026-09-26
 
 A cassette is a test recording of real HTTP traffic, and it was the single
 largest source of secret findings nox produced on real software. Suppressing that
 noise turned out to require fixing a false negative first — because nox could not
 report the one thing in a cassette worth reporting.
+
+Two smaller classes went the same way, each measured before it was built: SEC-080
+reporting a reference to a secret manager as a hardcoded password, and SLOP-001
+reading a codemod's test fixtures as its dependencies. Against v1.39.2 on the
+25-repository rule-diff corpus, those three changes are the only rule-level
+movement: SEC-161 373 → 0, SLOP-001 109 → 0, SEC-080 12 → 0.
 
 ### ⚠️ Behaviour changes
 
