@@ -109,8 +109,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// security proposition (see core/analyzers/ai/tuning_params_retired_test.go).
 	// 1496 -> 1492 withdrew AI-022, AI-023, AI-028 and AI-037 on the same standard
 	// (see core/analyzers/ai/reliability_rules_retired_test.go).
-	if got := len(cat); got != 1492 {
-		t.Errorf("Catalog() returned %d rules, want 1492", got)
+	// 1492 -> 1491 removed SEC-572, whose pattern encoded a Payoneer credential
+	// format Payoneer does not publish (see TestSEC572IsGone).
+	if got := len(cat); got != 1491 {
+		t.Errorf("Catalog() returned %d rules, want 1491", got)
 	}
 }
 
