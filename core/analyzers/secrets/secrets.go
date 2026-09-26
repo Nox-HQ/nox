@@ -292,6 +292,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					"the matched value is entirely a reference to where the secret is stored — a template variable, a secret-manager lookup or an environment interpolation with no literal fallback — not the secret itself")
 				continue
 			}
+			// A vendor-binding rule's value that runs on into a call, an
+			// attribute or an index is a code identifier's prefix, not a
+			// credential. See binding.go.
+			if continuesAsIdentifier(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the matched value is the start of a code identifier that continues into a call, attribute or index; a credential ends where it is written")
+				continue
+			}
 			// A secret shown inside a display-text HTML/JSX attribute
 			// (`placeholder=`, `aria-label=`, `title=`) is the instruction
 			// telling a user what to paste, not key material the repository
