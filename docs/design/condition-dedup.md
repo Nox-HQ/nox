@@ -86,3 +86,64 @@ two rules that genuinely must both exist and genuinely report one condition —
 rather than now, against no measured delta. Building it now would mean shipping
 a collapse whose only measurable effect on the current corpus is the risk of
 removing one of those 16 correct findings.
+
+## The case arrived (2026-09-26, v1.36.0)
+
+The sequencing above asks for "two rules that genuinely must both exist and
+genuinely report one condition". There is now one, and it was found by reading
+the allowlist against its own stated bar rather than by a new measurement.
+
+The bar, from the comment above `allowedCrossAnalyzerOverlap`: *"Each needs a
+reason, and the reason has to name both fixes."* Sixteen of the seventeen
+entries clear it. This one does not:
+
+```go
+"IAC-225|SEC-080": "the IaC and secrets views of one hardcoded password",
+```
+
+It names two *views*, not two fixes. The two rules' remediations differ in
+wording, so the distinction has to be drawn carefully: IAC-225 says "use Ansible
+Vault to encrypt passwords" and SEC-080 says "use environment variables or a
+secrets manager". Those are two mechanisms for one goal — stop keeping the
+plaintext password in the file — not two things the reader must do. Doing either
+resolves both findings.
+
+Compare the entry directly above it, which clears the bar because its two
+remediations lead somewhere genuinely different:
+
+```go
+"SEC-161|SEC-162": "one value reported as a high-entropy assignment and as a
+    base64 blob: two readings of the same bytes, kept apart because the
+    remediation differs — rotate the secret, vs. decode the blob and find out
+    whether it holds one",
+```
+
+Two readings, two destinations, two findings: one reader rotates a credential,
+the other decodes a blob to find out whether it holds one. IAC-225 and SEC-080
+send the reader to the same place, and the allowlist has no vocabulary for that — its only verdict is
+"legitimately different", so an entry is the only way to stop the invariant test
+failing. That is the gap: **the test can say a pair is wrong, and the allowlist
+can say a pair is fine, and neither can say a pair should be merged.**
+
+### Why it is not fixed in v1.36.0
+
+Merging it means suppressing one of the two, and SEC-080 fired on 75 sites
+across 3 repositories on the pinned corpus. Which rule owns the condition is a
+judgement about which finding a reader should receive — the IaC view carries the
+resource and the task, the secrets view carries the credential shape — and
+changing it is a behavioural delta that needs its own measurement and its own
+ledger entry. Shipping it inside a release already removing thirteen rules,
+unmeasured, would be the thing this document exists to argue against.
+
+### What it makes concrete for option 1
+
+The migration set named above gains a third member, and it is the one that makes
+the `condition` key do work the allowlist cannot:
+
+- the 16 pairs that must end up with **different** conditions,
+- the merged duplicates that must end up with the **same** condition,
+- and now IAC-225/SEC-080, which must end up with the same condition **while
+  both rules continue to exist**, because each is reachable from a different
+  analyzer on inputs the other does not see.
+
+That third case is the one an allowlist cannot express and a merge cannot serve.

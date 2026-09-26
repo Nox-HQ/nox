@@ -5,6 +5,169 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.0] - 2026-09-26
+
+Thirteen rules removed, five narrowed, two false negatives fixed — on one
+criterion applied to every one of them: **did the detector establish what its
+name claims, and can the reader act on it?**
+
+A rule that reports a true fact nobody can act on costs a reader the same as one
+that is wrong. Both are read, triaged and dismissed. The difference is only that
+the true one cannot be fixed by making the pattern more precise, because the
+pattern is already doing exactly what it says.
+
+Every behavioural change was measured by building two binaries over one pinned
+tree, so the engine is the only variable. The figures below say what each was
+measured against, because a fire-rate number without its engine is evidence for
+whatever the reader already believes.
+
+### ⚠️ Behaviour changes
+
+- **Twelve AI rules are removed.** AI-022, AI-023, AI-024, AI-028, AI-029,
+  AI-034, AI-036, AI-037, AI-041, AI-044, AI-048, AI-050. They reported a
+  model-configuration preference, not a security condition — 503 of the AI
+  family's 780 sites on the pinned seven-repository corpus.
+
+  Three refuted themselves without leaving the rule table. AI-023 reported
+  `top_p ≤ 0.69` as "reducing output diversity" and AI-041 reported `top_p > 0.9`
+  as "increases randomness", so between them the parameter had to sit in a narrow
+  band or you had a finding — and OpenAI's documented default is `1.0`, which
+  AI-041 reported. AI-034's pattern was
+  `(function_call|tool_choice|force_tool)\s*[:=]\s*['"]?(any|auto|required)`,
+  which is the complete set of values the parameter accepts. AI-029 reported
+  `presence_penalty = 0` while its own remediation said "set presence_penalty
+  (-2 to 0)".
+
+  The line, in `docs/design/ai-rule-proposition.md`: a configuration parameter is
+  a security finding only when the configured value creates a consequence an
+  attacker can reach. Divergence from a recommendation is not one, and a vendor
+  default is not one by construction — if it were, every application using the
+  SDK as documented would be vulnerable on its first line, and the finding would
+  carry no information about the application that received it.
+
+  AI-017, AI-033, AI-035 and AI-046 sit on the other side of that line and are
+  kept, each reporting a protection switched **off** rather than a value tuned.
+  A second test pins them there, so the decision cannot quietly become a cull.
+
+  **These IDs are removed, not retired.** A baseline entry, VEX statement or
+  `nox:ignore` naming one now resolves to nothing. That is the correct outcome —
+  `Retires` needs a successor reporting the same condition, and there is none,
+  because the condition is not one nox should report. But it is a change to
+  waivers you may be holding.
+
+- **SEC-572 is removed; SEC-562 is re-keyed.** Both matched
+  `live_[a-zA-Z0-9]{32}` under two different vendor names, so one token near
+  either word produced a finding named for the other — and neither vendor issues
+  a credential of that shape. SEC-562 now keys on Checkout.com's documented `sk_`
+  and `sk_sbox_` prefixes; `pk_` is deliberately absent because the vendor
+  publishes the public key on purpose. SEC-572 had nothing to be re-keyed onto:
+  Payoneer authenticates with OAuth2 `client_id`/`client_secret` and publishes no
+  token prefix, length or charset at all. A rule cannot encode a format the
+  vendor does not have.
+
+  The `sk_live_`/`sk_test_` namespace remains Stripe's (SEC-030) and the two do
+  not overlap, because `[a-z0-9]{26,}` cannot cross the underscore.
+
+- **SEC-161 and SEC-162 no longer report recorded HTTP traffic.** Inside a
+  recorded exchange — a `vcrpy`, `betamax` or Ruby `VCR` cassette — a credential
+  the repository holds appears in a request header that authenticates the
+  request, or in the request URI. Everything else is traffic.
+
+  Measured on crewAI 1.15.21 against 1.35.0: **522 → 0** for SEC-161 and 18 → 0
+  for SEC-162, with the repository total falling 1320 → 780. All 540 were inside
+  cassettes and not one was a credential the project held — 234 Cloudflare
+  `__cf_bm`/`_cfuvid` cookies, 148 continuation lines of base64 response bodies,
+  58 response ids, 44 embedding vectors up to 8,193 characters, 32 Gemini thought
+  signatures, and 8 occurrences of PostHog's `phc_` project key, which the vendor
+  publishes and which SEC-661 was redesigned specifically to stop reporting.
+
+  Both rules are unchanged everywhere else in the corpus, which is the evidence
+  the gate is scoped to recordings rather than over-reaching. See
+  `docs/design/recorded-http-exchanges.md`, including the gap it leaves: a
+  credential with no recognised vendor format, hardcoded into a recorded request
+  *body*, is now reported by nothing.
+
+### Fixed
+
+- **A leaked `authorization:` header written as a YAML list was never
+  reported.** This is the reason the change above was safe to make, and it had to
+  land first.
+
+  ```yaml
+  authorization: Bearer sk-proj-…     # reported
+  authorization:
+  - Bearer sk-proj-…                  # NOT reported
+  ```
+
+  SEC-082 allowed only whitespace between the key and `Bearer`, and Go's `\s`
+  crosses a newline but not a YAML sequence dash. An HTTP header may repeat, so
+  every recorded exchange — and most header maps anywhere — writes them as a
+  list. `vcrpy` does not filter headers unless `filter_headers` is configured,
+  which makes this the single most valuable thing there is to find in a cassette.
+
+  Had the suppression shipped first, cassettes would have gone quiet while
+  remaining unchecked, and from the outside those two states are identical. Both
+  block (`- x`) and flow (`[x]`) sequence forms now match, for SEC-082 and
+  SEC-083, which fixes every YAML header map and not only cassettes.
+
+- **SLOP-001 no longer reads generated, documented or aliased imports as
+  dependencies.** An import statement inside a template literal or a docstring is
+  text being generated or displayed rather than a module being resolved; a
+  specifier containing `$`, `{` or `}` names no package any registry could serve;
+  and a tsconfig `paths` alias resolves to a path inside the repository.
+  Measured on vercel/ai against 1.35.0: **79 → 36**.
+
+  The 36 that remain are almost all jscodeshift `__testfixtures__` — synthetic
+  before/after pairs for a code transform — and are left alone deliberately, as a
+  fourth class deserving its own decision.
+
+- **AI-019 reported a pinned model load as unverified.** Its pattern ended at the
+  opening paren and never saw the arguments, and its own comment conceded the
+  absence it claimed to detect was not visible where it looked. Of 99 model loads
+  across all fourteen pinned repositories, zero carry a pin — so this changes no
+  count, and that is the measurement rather than an excuse: the rule was right
+  about every one of them for a reason it could not give. A project that does pin
+  now stops being told it has not. Separately, a bare `pipeline(...)` at the start
+  of a line matched nothing at all, because the guard excluding `conn.pipeline()`
+  is a character class and needs a character.
+
+- **`scripts/rule-diff.sh` could lose corpus repositories in silence.** The
+  manifest was the loop's stdin, so any child process in the body that read stdin
+  consumed repo lines; those repositories were never scanned, and the ledger
+  entries explaining their drops surfaced as stale — which is how a stale-entry
+  error appeared on one invocation and not the next with no input changing.
+  Reproduced with two local repositories and a stub binary that reads stdin:
+  before the fix, "no rule-level change across 1 repo(s)" with two in the
+  manifest. The manifest now arrives on fd 3, and a new check asserts every
+  manifest entry was reached.
+
+- **A decoded finding bypassed every refiner.** `DecodeAndScan` added its results
+  straight to the finding set, past the placeholder, embedded-blob, comment and
+  recording filters alike. The recording gate is now wired through that path,
+  because position-in-the-document is the one question the relocation preserves
+  the answer to; the rest of the gap is named in a comment where the decode
+  happens rather than silently half-fixed.
+
+- **Two claims that nothing checked.** The README said 1506 rules across five
+  suites, 938 secrets and 500 IaC, while the catalog held 1485, 882 and 482 —
+  nobody wrote a wrong number, every retirement since made the sentence a little
+  less true. It is now gated by a test. And `TestRuleDeltaLedgerNamesRealRules`
+  rejected this release's removal entries on the premise that an ID belonging to
+  no rule can never match a drop; that premise is false precisely for a removal,
+  because the harness diffs the baseline binary against the candidate and the
+  baseline still has the rule. The check now runs in both directions.
+
+### A note on the figures
+
+The per-rule numbers above are each measured against v1.35.0. The
+three-repository aggregate for the secrets and SLOP work — 2703 → 2117, −21.7%
+across crewAI, llama_index and vercel/ai — was measured against a binary that
+**already had the twelve AI rules removed**, so it does not include them. The AI
+family's contribution is stated separately as 503 of 780 sites on the pinned
+seven-repository corpus. They are not added together here, because the two
+measurements have different baselines and a combined figure would be a number
+nobody measured.
+
 ## [1.35.0] - 2026-09-10
 
 Seven changes and three defects, all one theme: a scan now says what it did not

@@ -33,7 +33,13 @@ func BuildReviewPayload(ff []findings.Finding) *ReviewPayload {
 	var comments []ReviewComment
 	for i := range ff {
 		badge := SeverityBadge(ff[i].Severity)
-		body := fmt.Sprintf("%s **%s** `%s`\n\n%s", badge, ff[i].Severity, ff[i].RuleID, ff[i].Message)
+		// %#q rather than a literal backquote pair around %s. The two are
+		// identical for every rule ID nox issues -- they match `[A-Z]+-[0-9]+`,
+		// so %#q always picks the backquoted form -- and TestBuildReviewPayload_Body
+		// pins the rendered string so the equivalence is checked rather than
+		// assumed. %#q would differ only for a value containing a backquote or a
+		// newline, which a rule ID cannot.
+		body := fmt.Sprintf("%s **%s** %#q\n\n%s", badge, ff[i].Severity, ff[i].RuleID, ff[i].Message)
 
 		c := ReviewComment{
 			Path: ff[i].Location.FilePath,

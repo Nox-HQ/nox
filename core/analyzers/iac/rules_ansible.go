@@ -534,8 +534,14 @@ func builtinAnsibleRules() []rules.Rule {
 			keywords:     []string{"password"},
 			filePatterns: []string{"*.yml", "*.yaml"},
 			tags:         []string{"iac", "secrets"},
-			remediation:  "Use Ansible Vault to encrypt passwords. Run 'ansible-vault encrypt_string' for inline encryption or store all passwords in a vault-encrypted vars file. Never commit plaintext passwords to version control.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.ansible.com/ansible/latest/vault_guide/index.html"},
+			// The remediation follows the name, and for the same reason. It told
+			// every reader to run `ansible-vault encrypt_string` — advice that
+			// does not apply to the Kubernetes Secrets and Cassandra config
+			// the widening was prompted by, and the comment above already
+			// argues this is not an Ansible rule. Ansible Vault stays, as one
+			// mechanism among several rather than the only one named.
+			remediation: "Remove the plaintext password from the file: reference a secret manager, an environment variable, or an external secret provider. In an Ansible tree, 'ansible-vault encrypt_string' encrypts it inline. Never commit a plaintext password to version control.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/798.html", "https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure", "https://docs.ansible.com/ansible/latest/vault_guide/index.html"},
 		},
 
 		// =================================================================

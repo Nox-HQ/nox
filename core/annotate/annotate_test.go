@@ -93,3 +93,27 @@ func TestBuildReviewPayload_SeverityBadges(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildReviewPayload_Body pins the rendered comment text.
+//
+// Nothing asserted it, so changing the format verb that renders the rule ID
+// was an unguarded change to the only part of this payload a human reads. The
+// expected string below is the output from before that change, character for
+// character.
+func TestBuildReviewPayload_Body(t *testing.T) {
+	ff := []findings.Finding{{
+		RuleID:   "SEC-161",
+		Severity: findings.SeverityHigh,
+		Message:  "High-entropy string in assignment (possible secret)",
+		Location: findings.Location{FilePath: "config.env", StartLine: 5},
+	}}
+	payload := BuildReviewPayload(ff)
+	if payload == nil || len(payload.Comments) != 1 {
+		t.Fatal("expected one comment")
+	}
+	want := SeverityBadge(findings.SeverityHigh) +
+		" **high** `SEC-161`\n\nHigh-entropy string in assignment (possible secret)"
+	if got := payload.Comments[0].Body; got != want {
+		t.Errorf("comment body =\n%q\nwant\n%q", got, want)
+	}
+}
