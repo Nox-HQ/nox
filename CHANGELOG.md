@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **nox keeps its own dependencies current; Dependabot is gone.** Both
+  `.github/dependabot.yml` and the workflow that auto-merged its pull requests
+  are removed. nox's weekly remediation run (`nox fix` over the org's reusable
+  workflow, gated on the full test suite) already existed and had been running
+  alongside it. Dependabot's last contribution was the reason to stop: #699
+  moved grpc from 1.83.2, which is patched against GO-2026-6443, to 1.84.0,
+  which is not, and auto-merged it on a green suite.
+
+  The currency pass (`nox fix --outdated`) is off in nox's own run for now,
+  because it does not yet check the version it upgrades to against known
+  advisories and would repeat that exact bump. The security pass still runs.
+
 ### Fixed
 
 - **`nox fix --outdated` could upgrade a dependency into a known

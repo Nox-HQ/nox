@@ -49,8 +49,11 @@ coverage.
 - **Younger ecosystem** — fewer integrations than Snyk's enterprise
   product (Jira, ServiceNow, etc.). Build via the MCP server or
   consume `findings.json`.
-- **No automated PR creation for fixes** — `nox fix` is local-only
-  today. Wire to a Renovate / Dependabot pipeline if you want PRs.
+- **Automated fix PRs come from a workflow, not a service** — `nox fix`
+  applies upgrades locally; the [`actions/remediate`](../actions/remediate/)
+  composite action runs it in CI, verifies with your test suite, and opens the
+  pull request. nox keeps its own dependencies current this way, with no
+  Dependabot.
 
 ## 30-minute migration
 
