@@ -12,6 +12,7 @@ import (
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/attack"
 	mcpclient "go.klarlabs.de/mcp/client"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 const attackMCPUsage = `Usage: nox attack mcp (--command|--url|--addr) <target> [flags]
@@ -230,7 +231,16 @@ func (s *mcpClientSource) Capture(ctx context.Context) (attack.MCPManifest, erro
 
 // connect builds the mcp client for the chosen transport. gRPC has no client
 // transport in the mcp library, so nox supplies one (see attack_mcp_grpc.go).
+//
+// Every client is built with the protocol revision nox actually speaks. nox
+// performs the initialize handshake (Capture calls Initialize), and initialize
+// negotiation stops at protocol.MCPVersion. go.klarlabs.de/mcp 1.28.0 changed
+// the client's DEFAULT to the stateless 2026-07-28 revision, which the HTTP
+// transport stamps on its MCP-Protocol-Version header, while Initialize still
+// sends 2025-11-25 in the body — and the server rejects the mismatch. Relying
+// on the library's default meant a minor bump broke `nox attack mcp --http`.
 func (s *mcpClientSource) connect(ctx context.Context) (*mcpclient.Client, error) {
+	initializeEra := mcpclient.WithProtocolVersion(protocol.MCPVersion)
 	switch s.transport {
 	case "stdio":
 		fields := strings.Fields(s.ref)
@@ -241,19 +251,19 @@ func (s *mcpClientSource) connect(ctx context.Context) (*mcpclient.Client, error
 		if err != nil {
 			return nil, fmt.Errorf("stdio transport: %w", err)
 		}
-		return mcpclient.New(tr), nil
+		return mcpclient.New(tr, initializeEra), nil
 	case "http":
 		tr, err := mcpclient.NewHTTPTransport(s.ref, mcpclient.WithRequestTimeout(s.timeout))
 		if err != nil {
 			return nil, fmt.Errorf("http transport: %w", err)
 		}
-		return mcpclient.New(tr), nil
+		return mcpclient.New(tr, initializeEra), nil
 	case "grpc":
 		tr, err := dialGRPCTransport(ctx, s.ref)
 		if err != nil {
 			return nil, err
 		}
-		return mcpclient.New(tr), nil
+		return mcpclient.New(tr, initializeEra), nil
 	default:
 		return nil, fmt.Errorf("unknown transport %q", s.transport)
 	}
