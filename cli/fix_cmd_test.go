@@ -434,3 +434,22 @@ func TestNpmAlreadySatisfied_WhenAnEarlierUpgradeMovedIt(t *testing.T) {
 		t.Error("with no lockfile to read, nothing can be claimed")
 	}
 }
+
+// Finding paths are relative to the directory that was scanned, and --root has
+// to be that directory. Pointed at a subdirectory, nox looked for app/app and
+// reported "no package.json in app" — naming a directory that does have one.
+// The message now names where it looked and says what --root must be.
+func TestWorkdirFor_ARootMismatchSaysWhereItLooked(t *testing.T) {
+	repo := t.TempDir()
+	touchFile(t, repo, "app/package.json")
+	_, err := workdirFor(filepath.Join(repo, "app"), upgradeAction{ecosystem: "npm", manifest: "app/package-lock.json"})
+	if err == nil {
+		t.Fatal("app/app does not exist; that must be an error")
+	}
+	msg := err.Error()
+	for _, want := range []string{"app/app", "--root"} {
+		if !strings.Contains(filepath.ToSlash(msg), want) {
+			t.Errorf("message %q does not mention %q", msg, want)
+		}
+	}
+}
