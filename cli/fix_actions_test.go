@@ -412,3 +412,48 @@ func TestRunActionsFix_EverySkipNamesItself(t *testing.T) {
 		}
 	}
 }
+
+// A published composite action is not under .github/: nox's own action.yml
+// sits at the root, and actions/remediate/action.yml pins nox itself,
+// peter-evans/create-pull-request and actions/upload-artifact. The pass read
+// .github/workflows and .github/actions only, so those pins — which every user
+// of the action runs — were never refreshed. Fixture trees are skipped: an old
+// pin there is the point of the fixture.
+func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	step := func(repo string) string {
+		return "runs:\n  using: composite\n  steps:\n    - uses: " + repo + "@v1.0.0\n"
+	}
+	write("action.yml", step("root/action"))
+	write("actions/remediate/action.yml", step("nested/action"))
+	write(".github/workflows/ci.yml", "jobs:\n  a:\n    steps:\n      - uses: wf/action@v1.0.0\n")
+	write("testdata/old/action.yml", step("fixture/action"))
+	write("node_modules/pkg/action.yml", step("vendored/action"))
+	write("docs/notes.yml", "uses: not/an-action-file@v1.0.0\n")
+
+	var got []string
+	for _, p := range collectActionPins(root) {
+		got = append(got, p.repo)
+	}
+	joined := strings.Join(got, ",")
+	for _, want := range []string{"root/action", "nested/action", "wf/action"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("%s not collected; got %v", want, got)
+		}
+	}
+	for _, not := range []string{"fixture/action", "vendored/action", "not/an-action-file"} {
+		if strings.Contains(joined, not) {
+			t.Errorf("%s must not be collected; got %v", not, got)
+		}
+	}
+}
