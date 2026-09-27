@@ -163,6 +163,45 @@ var roleMailboxes = map[string]bool{
 	"git": true,
 }
 
+// DATA-004 — phone numbers
+//
+// isReportablePhoneMatch rejects numbers no person has. The North American
+// Numbering Plan reserves 555-0100 through 555-0199 for fictional use, which
+// is why documentation uses them: on the 2026-09-27 head-to-head, 28 of the
+// rule's 32 findings were +1 415 555 0123 in openai-python's API reference.
+// The other 4 were 1234567890. A run of consecutive or identical digits is a
+// placeholder in the same way.
+func isReportablePhoneMatch(matchText string) bool {
+	var d []byte
+	for i := 0; i < len(matchText); i++ {
+		if c := matchText[i]; c >= '0' && c <= '9' {
+			d = append(d, c)
+		}
+	}
+	if len(d) < 10 {
+		return true
+	}
+	n := string(d[len(d)-10:])
+	if n[3:6] == "555" && n[6:] >= "0100" && n[6:] <= "0199" {
+		return false
+	}
+	return !isDigitRun(n)
+}
+
+// isDigitRun reports whether every digit repeats the first, or each is one
+// more (or one less) than the one before, wrapping 9 to 0: 5555555555,
+// 1234567890, 9876543210.
+func isDigitRun(n string) bool {
+	same, up, down := true, true, true
+	for i := 1; i < len(n); i++ {
+		p, c := n[i-1]-'0', n[i]-'0'
+		same = same && c == p
+		up = up && c == (p+1)%10
+		down = down && c == (p+9)%10
+	}
+	return same || up || down
+}
+
 // DATA-003 — payment card numbers
 //
 // The issuer prefixes (4.., 51-55.., 34/37.., 6011/65..) describe the SHAPE of
