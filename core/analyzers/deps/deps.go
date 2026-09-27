@@ -668,12 +668,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			defer cancel()
 
 			src := a.vulnSource()
-			queries := make([]vulnsource.Query, len(pkgs))
-			for i, p := range pkgs {
-				queries[i] = vulnsource.Query{Ecosystem: p.Ecosystem, Name: p.Name, Version: p.Version}
-			}
-
-			vulnMap, err := src.Lookup(ctx, queries)
+			vulnMap, err := lookupDistinct(ctx, src, pkgs)
 			if err != nil {
 				return nil, nil, fmt.Errorf("querying %s: %w", src.Name(), err)
 			}
@@ -908,4 +903,42 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 	}
 	return applicability.Undeterminable(applicability.SymbolUsed,
 		applicability.CallReachable, capability.Unknown)
+}
+
+// lookupDistinct asks src about each distinct (ecosystem, name, version) once
+// and returns the answer keyed by every index in pkgs that names it.
+//
+// The inventory holds one entry per lockfile occurrence, and a monorepo pins
+// the same package in hundreds of lockfiles. Querying per occurrence sent
+// llama_index's lookups as sequential batches of 1000 that ran past the
+// lookup's time budget; the batches after the deadline were never sent, so
+// whole lockfiles reported no advisories. Asking once per package keeps the
+// request count proportional to what is actually distinct.
+func lookupDistinct(ctx context.Context, src vulnsource.Source, pkgs []Package) (map[int][]vulnsource.Record, error) {
+	type pkgKey struct{ eco, name, version string }
+	first := make(map[pkgKey]int, len(pkgs))
+	owners := make([]int, len(pkgs)) // pkgs index -> queries index
+	var queries []vulnsource.Query
+	for i, p := range pkgs {
+		k := pkgKey{p.Ecosystem, p.Name, p.Version}
+		qi, seen := first[k]
+		if !seen {
+			qi = len(queries)
+			first[k] = qi
+			queries = append(queries, vulnsource.Query{Ecosystem: p.Ecosystem, Name: p.Name, Version: p.Version})
+		}
+		owners[i] = qi
+	}
+
+	answers, err := src.Lookup(ctx, queries)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int][]vulnsource.Record, len(answers))
+	for i, qi := range owners {
+		if recs, ok := answers[qi]; ok {
+			out[i] = recs
+		}
+	}
+	return out, nil
 }
