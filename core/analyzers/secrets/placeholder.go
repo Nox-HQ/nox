@@ -133,10 +133,12 @@ func isPlaceholderValue(matched string) bool {
 	return isDescriptiveValue(assignedValue(matched))
 }
 
-// assignedValue returns the value side of a keyword rule's span —
-// `NAME=value`, `NAME: 'value`, `password="value"`, `Authorization: 'Bearer
-// value'` — or the span itself when it has no assignment. An auth scheme word
-// in front of the value is dropped: it names the header format, not the secret.
+// assignedValue returns the value side of a keyword rule's span — an env
+// assignment, a YAML or object key, a keyword argument, or an auth header — or
+// the span itself when it has no assignment. An auth scheme word in front of
+// the value is dropped: it names the header format, not the secret. (The
+// shapes are described rather than quoted: quoted, they are what SEC-082
+// matches, and nox's self-scan reports this comment.)
 func assignedValue(matched string) string {
 	v := matched
 	if i := strings.IndexAny(v, "=:"); i >= 0 {
