@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **Model-issued ciphertext is not a credential.** Recorded model API traffic
+  carries opaque values the provider issues and takes back: Anthropic's
+  thinking-block `signature` and web-search `encrypted_index`, OpenAI's
+  reasoning `encrypted_content`, Gemini's `thoughtSignature`. They are long
+  base64, so the entropy rule (SEC-161) and short-prefix vendor rules (SEC-048,
+  SEC-055) fired inside them. A match in the string value of one of those
+  keys is now refuted; the same token under any other key is still reported.
+  anthropic-sdk-python 96 → 88 and vercel/ai 211 → 152 secret findings, all
+  67 drops under those four keys, nothing added.
+
 - **A role mailbox is not personal data, and neither is a database URL.**
   DATA-001 is CWE-359, exposure of private personal information. On the
   head-to-head benchmark two addresses were 309 of its 328 findings:
