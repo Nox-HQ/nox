@@ -99,3 +99,52 @@ func isBase64Byte(b byte) bool {
 	}
 	return b == '+' || b == '/' || b == '=' || b == '-' || b == '_'
 }
+
+// imageBase64Signatures are how the first bytes of common image formats read
+// once base64-encoded: PNG's \x89PNG\r\n\x1a\n, JPEG's \xff\xd8\xff, GIF's
+// GIF8, and WebP's RIFF header. A string that starts with one is an image.
+var imageBase64Signatures = [][]byte{
+	[]byte("iVBORw0KGgo"), // PNG
+	[]byte("/9j/"),        // JPEG
+	[]byte("R0lGOD"),      // GIF
+	[]byte("UklGR"),       // WebP (RIFF)
+}
+
+// inBase64ImageString reports whether a finding's match lies inside a quoted
+// string whose content is a base64-encoded image.
+//
+// inDataURIPayload needs the `data:<mime>;base64,` prefix, and a notebook's
+// outputs and a recorded API response carry images without one:
+// "image/png": "iVBORw0KGgo…", "data": "/9j/4AAQ…". Any long enough base64 run
+// contains any short vendor prefix, so these fired vendor rules by the dozen.
+// The image's own signature at the start of the string is as unambiguous as
+// the data: marker, and a credential never starts with one.
+func inBase64ImageString(content []byte, f *findings.Finding) bool {
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	if start <= 0 || start > len(content) {
+		return false
+	}
+	// The opening quote of the string holding the match: the nearest quote
+	// before it on the same line. Base64 has no quotes, so none can sit
+	// between the string's start and a match inside it.
+	open := start - 1
+	for ; open >= 0; open-- {
+		c := content[open]
+		if c == '"' || c == '\'' {
+			break
+		}
+		if c == '\n' {
+			return false
+		}
+	}
+	if open < 0 {
+		return false
+	}
+	body := content[open+1:]
+	for _, sig := range imageBase64Signatures {
+		if bytes.HasPrefix(body, sig) {
+			return true
+		}
+	}
+	return false
+}
