@@ -111,8 +111,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// (see core/analyzers/ai/reliability_rules_retired_test.go).
 	// 1492 -> 1491 removed SEC-572, whose pattern encoded a Payoneer credential
 	// format Payoneer does not publish (see TestSEC572IsGone).
-	if got := len(cat); got != 1491 {
-		t.Errorf("Catalog() returned %d rules, want 1491", got)
+	// 1491 -> 1492 added SEC-951, the opt-in generic credential rule.
+	if got := len(cat); got != 1492 {
+		t.Errorf("Catalog() returned %d rules, want 1492", got)
 	}
 }
 
