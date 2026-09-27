@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **A fictional or placeholder phone number is not personal data.** DATA-004's
+  32 findings on the benchmark were numbers no person has: 28 × +1 415 555 0123
+  in openai-python's API reference, in the 555-0100–0199 range the North
+  American Numbering Plan reserves for fiction, and 4 × `1234567890`. Those,
+  and runs of consecutive or identical digits, are no longer reported;
+  `(212) 555-0237` and other real-looking numbers still are. DATA findings on
+  the benchmark go from 55 to 23, nothing added, every drop read.
+
 - **Model-issued ciphertext is not a credential.** Recorded model API traffic
   carries opaque values the provider issues and takes back: Anthropic's
   thinking-block `signature` and web-search `encrypted_index`, OpenAI's

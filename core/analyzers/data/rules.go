@@ -72,6 +72,9 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)(?:phone|tel|mobile|cell)\s*[=:]\s*['"]?\+?1?\s*\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}`,
 			description: "US phone number in configuration",
 			cwe:         "CWE-359", keywords: []string{"phone", "tel", "mobile", "cell"},
+			// 555-0100..0199 is reserved for fiction, and 1234567890 is a
+			// placeholder; neither belongs to a person. See isReportablePhoneMatch.
+			validate:    isReportablePhoneMatch,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
