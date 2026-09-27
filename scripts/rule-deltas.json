@@ -39,6 +39,12 @@
       "classification": "refined-away",
       "pr": 733,
       "reason": "DATA-001 is CWE-359, private personal information. Two refutations: a role mailbox (support@, hello@, noreply@, matched on the whole local part) names a function rather than a person, and the password@host of a connection URL is URL userinfo, not an e-mail address. On the corpus: chronos 2 -> 1, the dropped line `mysql://user:pw@db.local:6603/?namespace=tenant_a` in internal/store/mysql/mysql_test.go (URL userinfo); the kept one is in .goreleaser.yaml. On the seven-repo benchmark DATA 369 -> 55, all 314 drops read: support@crewai.com 156, hello@neatlogs.com 152, deploy@/noreply@/support@unstructured.io/git@github.com 4, postgresql://…:password@ 2. Personal addresses (a gmail address, jane@…) are still reported; #733 landed while rule-diff exited 1 on a crash and passed, which is why this entry arrives with the harness fix."
+    },
+    {
+      "rule": "SEC-161",
+      "classification": "refined-away",
+      "pr": 734,
+      "reason": "SEC-161 (high-entropy string) fired inside ciphertext a model API issued and takes back: Anthropic's thinking-block signature and web-search encrypted_index, OpenAI's reasoning encrypted_content, Gemini's thoughtSignature. A match in the string value of one of those JSON keys is now refuted. On the corpus: anthropic-sdk-python 58 -> 50 and vercel-ai-anthropic 9 -> 0, recorded responses under tests/ and __fixtures__/. On the seven-repo benchmark the refutation removes 67 findings, all read and all under those four keys (SEC-161 32, SEC-048 21, SEC-055 14); the same token under any other key is still reported."
     }
   ]
 }

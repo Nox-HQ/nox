@@ -2,6 +2,8 @@ package secrets
 
 import (
 	"bytes"
+	"regexp"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
@@ -120,23 +122,7 @@ var imageBase64Signatures = [][]byte{
 // The image's own signature at the start of the string is as unambiguous as
 // the data: marker, and a credential never starts with one.
 func inBase64ImageString(content []byte, f *findings.Finding) bool {
-	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
-	if start <= 0 || start > len(content) {
-		return false
-	}
-	// The opening quote of the string holding the match: the nearest quote
-	// before it on the same line. Base64 has no quotes, so none can sit
-	// between the string's start and a match inside it.
-	open := start - 1
-	for ; open >= 0; open-- {
-		c := content[open]
-		if c == '"' || c == '\'' {
-			break
-		}
-		if c == '\n' {
-			return false
-		}
-	}
+	open := enclosingStringOpen(content, f)
 	if open < 0 {
 		return false
 	}
@@ -147,4 +133,55 @@ func inBase64ImageString(content []byte, f *findings.Finding) bool {
 		}
 	}
 	return false
+}
+
+// enclosingStringOpen returns the offset of the quote that opens the string a
+// finding's match sits in, or -1: the nearest quote before the match on the
+// same line. It is only meaningful for opaque encoded values (base64 has no
+// quotes, so none can sit between such a string's start and a match inside
+// it), which is all its callers ask about.
+func enclosingStringOpen(content []byte, f *findings.Finding) int {
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	if start <= 0 || start > len(content) {
+		return -1
+	}
+	for open := start - 1; open >= 0; open-- {
+		switch content[open] {
+		case '"', '\'':
+			return open
+		case '\n':
+			return -1
+		}
+	}
+	return -1
+}
+
+// modelCiphertextKeys are the JSON keys under which model APIs hand back
+// ciphertext they issued and will take back: Anthropic's thinking-block
+// signature and web-search encrypted_index, OpenAI's reasoning
+// encrypted_content, Gemini's thoughtSignature.
+var modelCiphertextKeys = map[string]bool{
+	"signature":         true,
+	"thoughtsignature":  true,
+	"thought_signature": true,
+	"encrypted_content": true,
+	"encrypted_index":   true,
+}
+
+// modelCiphertextKey matches the end of `"<key>": ` before a string value.
+var modelCiphertextKey = regexp.MustCompile(`"([A-Za-z_]+)"\s*:\s*$`)
+
+// inModelCiphertext reports whether a finding's match lies in the string value
+// of one of modelCiphertextKeys. Such a value is opaque provider ciphertext in
+// recorded traffic: long base64, so the entropy rule and short-prefix vendor
+// rules fired inside it (67 findings on the 2026-09-27 head-to-head), and
+// never a credential this repository holds.
+func inModelCiphertext(content []byte, f *findings.Finding) bool {
+	open := enclosingStringOpen(content, f)
+	if open < 0 {
+		return false
+	}
+	lineStart := bytes.LastIndexByte(content[:open], '\n') + 1
+	m := modelCiphertextKey.FindSubmatch(content[lineStart:open])
+	return len(m) == 2 && modelCiphertextKeys[strings.ToLower(string(m[1]))]
 }

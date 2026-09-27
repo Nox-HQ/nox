@@ -274,6 +274,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					"the match lies inside a string that is a base64-encoded image")
 				continue
 			}
+			if inModelCiphertext(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match lies inside ciphertext a model API issued (a thinking signature or encrypted reasoning)")
+				continue
+			}
 			// Drop a bare provider-prefix match with no token body — the literal
 			// `"glpat-"` or the `sk_live_` inside a `// prefix (ghp_, sk_live_, …)`
 			// comment that a pattern-vocabulary file must name. A live credential
