@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.42.0] - 2026-09-27
+
+Eleven rules stop reporting what merely resembles the condition they name:
+nine vendor-binding secret rules no longer read identifiers as API keys, and
+AI-036 and AI-050 need a model actually selected and retries actually turned
+off. No rule was removed; each was narrowed or bound, and every dropped finding
+was read. `docs/benchmarks/2026-09-27` re-measures the seven pinned repositories
+against the 2026-09-15 run: engine findings outside VULN-001 fall from 4,229 to
+2,689 (−36%), a figure that also includes the precision work released in
+1.40.0 and 1.41.0. `scripts/rule-deltas.json` is rolled to v1.42.0.
 
 ### Changed
 
