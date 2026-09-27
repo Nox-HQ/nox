@@ -122,9 +122,15 @@ func runBench(args []string) int {
 		corpusDir = dir
 	}
 
-	entries, err := os.ReadDir(corpusDir)
+	projects, err := benchProjects(corpusDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading corpus dir %s: %v\n", corpusDir, err)
+		return 2
+	}
+	// A benchmark of nothing is not a benchmark: an empty report with exit 0
+	// reads exactly like a clean run.
+	if len(projects) == 0 {
+		fmt.Fprintf(os.Stderr, "error: %s holds no project directories; bench scans one subdirectory (or link to one) per project\n", corpusDir)
 		return 2
 	}
 
@@ -150,11 +156,8 @@ func runBench(args []string) int {
 		pins[owner+"--"+repo] = struct{ Repo, Ref string }{entry.Repo, entry.Ref}
 	}
 
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		project := filepath.Join(corpusDir, e.Name())
+	for _, name := range projects {
+		project := filepath.Join(corpusDir, name)
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "[bench] scanning %s\n", project)
 		}
@@ -163,7 +166,7 @@ func runBench(args []string) int {
 			report.Failed = append(report.Failed, FailedProject{Path: project, Error: err.Error()})
 			continue
 		}
-		if pin, ok := pins[e.Name()]; ok {
+		if pin, ok := pins[name]; ok {
 			summary.Repo, summary.Ref = pin.Repo, pin.Ref
 		}
 		// Resolved from the tree actually scanned, so it is right for a
@@ -640,4 +643,30 @@ func splitRepoSlug(slug string) (owner, repo string) {
 		}
 	}
 	return "", slug
+}
+
+// benchProjects lists the project directories in a corpus: its
+// subdirectories, and links to directories. A hand-assembled corpus is often
+// links to clones that already exist, and skipping them turned a seven-repo
+// corpus into "0 projects". Anything else — files, links to files, dangling
+// links — is not a project.
+func benchProjects(corpusDir string) ([]string, error) {
+	entries, err := os.ReadDir(corpusDir)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+			continue
+		}
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(corpusDir, e.Name())); err == nil && info.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
 }
