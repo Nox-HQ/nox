@@ -27,6 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **Python taint analysis lost the flows most Python web code has.** Measured
+  on the OWASP Benchmark for Python (1,230 labelled cases), four gaps:
+  - `cur = con.cursor(); cur.execute(sql)` was never a SQL sink: the sinks
+    are `cursor.execute` / `connection.execute`, matched on the variable's
+    name. A local made by `.cursor()` or `.connect()` now stands for one.
+  - `if not param: param = ""` cleaned a tainted value, as if the branch always
+    ran. An assignment inside an if/loop/except body is now a weak update:
+    it keeps prior taint, and a sanitizer in it counts only if both paths
+    applied it.
+  - A value stored with `m['k'] = v`, `l.append(v)` or `conf.set(s, k, v)` lost
+    its taint. Python now taints the container, as Perl and Dart already did.
+  - `cursor.execute(sql, (user,))` was reported whenever the SQL sat in a
+    variable, because "the first argument is a variable" was read as "the
+    first argument is tainted". The parameterised form is now recognised.
+  The benchmark score (detection rate minus false-positive rate, averaged
+  over its 14 categories) goes from 10.9 to 15.5; Semgrep's `p/default` scores
+  10.7. SQL injection 0 → 40, command injection 0 → 23, deserialization 28 →
+  39. On the seven benchmark repositories nothing is added and three command
+  injection false positives are removed (`os.environ` passed as `env=` to an
+  argv `subprocess.run`).
+
 - **Three rules no longer scan most of a repository for a word they never
   find.** DATA-009's keyword `tin` matched inside `setting`, `testing` and
   `routing`, so its case-insensitive regex ran over 27,881 of the benchmark's
