@@ -143,7 +143,24 @@ func isReportableEmailMatch(matchText string) bool {
 			return false
 		}
 	}
-	return true
+	local := strings.ToLower(strings.TrimLeft(matchText[:at], "\"'=: \t"))
+	return !roleMailboxes[local]
+}
+
+// roleMailboxes are local parts that name a function rather than a person.
+// DATA-001 is CWE-359, exposure of private personal information, and a role
+// mailbox belongs to an organisation wherever it appears: on the 2026-09-27
+// head-to-head, support@crewai.com and hello@neatlogs.com alone were 309 of
+// the rule's 328 findings. Matched whole, so supporter.jane@ is still a person.
+var roleMailboxes = map[string]bool{
+	"support": true, "hello": true, "hi": true, "info": true, "contact": true,
+	"sales": true, "security": true, "noreply": true, "no-reply": true,
+	"donotreply": true, "do-not-reply": true, "admin": true, "team": true,
+	"help": true, "helpdesk": true, "press": true, "privacy": true,
+	"legal": true, "abuse": true, "postmaster": true, "webmaster": true,
+	"hostmaster": true, "feedback": true, "billing": true, "careers": true,
+	"jobs": true, "partners": true, "notifications": true, "deploy": true,
+	"git": true,
 }
 
 // DATA-003 — payment card numbers

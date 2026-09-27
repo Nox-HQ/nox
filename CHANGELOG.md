@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **A role mailbox is not personal data, and neither is a database URL.**
+  DATA-001 is CWE-359, exposure of private personal information. On the
+  head-to-head benchmark two addresses were 309 of its 328 findings:
+  `support@crewai.com` in OpenAPI contact blocks and `hello@neatlogs.com` in
+  docs, repeated in every versioned copy. A role mailbox (`support@`, `hello@`,
+  `noreply@`, `security@`…) names a function rather than a person, and is no
+  longer reported; `supporter.jane@` still is. The `user:password@host` part
+  of a connection URL, which the rule's pattern also matched, is no longer
+  read as an e-mail address. On the seven benchmark repositories DATA findings
+  go from 369 to 55, nothing added, every drop read.
+
 - **A value that describes itself is not a credential.** `Bearer test-api-key`,
   `password="test_password"` and `OPENAI_API_KEY=sua_chave_openai` were reported
   as hardcoded secrets: on the head-to-head benchmark they were most of nox's
