@@ -439,7 +439,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
 		}
@@ -494,7 +494,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Same class of blind spot as an unparsed lockfile: without the base
 		// image nox has no container inventory and no base-image findings for
 		// this file, and reported success either way.
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			a.degradations.Add(degrade.Lockfile,
 				fmt.Sprintf("%s could not be read: %v", art.Path, err),

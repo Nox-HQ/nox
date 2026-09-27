@@ -6,7 +6,6 @@ package iac
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"path/filepath"
@@ -421,7 +420,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return nil, err
 		}
 
-		content, err := os.ReadFile(artifact.AbsPath)
+		content, err := artifact.ReadContent()
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}

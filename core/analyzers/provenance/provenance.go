@@ -16,7 +16,6 @@ package provenance
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -69,7 +68,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		art := artifacts[i]
 		base := strings.ToLower(filepath.Base(art.Path))
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			continue
 		}

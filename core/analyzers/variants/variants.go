@@ -11,7 +11,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -146,7 +145,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if art.Type != discovery.Source && art.Type != discovery.Config {
 			continue
 		}
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			continue
 		}

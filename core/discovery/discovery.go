@@ -7,6 +7,7 @@
 package discovery
 
 import (
+	"github.com/nox-hq/nox/core/fsutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,6 +42,15 @@ type Artifact struct {
 	Type ArtifactType
 	// Size is the file size in bytes.
 	Size int64
+	// Reads, when set, is the scan's shared read cache (see ReadContent).
+	Reads *fsutil.ReadCache `json:"-"`
+}
+
+// ReadContent returns the artifact's bytes. Analyzers call this rather than
+// os.ReadFile so that one scan reads each file once for all of them; with no
+// cache attached it is os.ReadFile. The slice is shared: do not modify it.
+func (a Artifact) ReadContent() ([]byte, error) {
+	return a.Reads.ReadFile(a.AbsPath)
 }
 
 // Classifier determines the ArtifactType of a file based on its path and

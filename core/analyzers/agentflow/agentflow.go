@@ -52,7 +52,6 @@ package agentflow
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -149,7 +148,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			// from a recognised source to an unrecognised destination.
 			continue
 		}
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			continue
 		}

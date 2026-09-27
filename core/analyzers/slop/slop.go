@@ -13,7 +13,6 @@ package slop
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -171,12 +170,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		art := artifacts[i]
 		base := filepath.Base(art.Path)
 		if isManifest(base) {
-			if content, err := os.ReadFile(art.AbsPath); err == nil {
+			if content, err := art.ReadContent(); err == nil {
 				manifests[art.Path] = content
 			}
 		}
 		if isPathAliasConfig(base) {
-			if content, err := os.ReadFile(art.AbsPath); err == nil {
+			if content, err := art.ReadContent(); err == nil {
 				configs[art.Path] = content
 			}
 		}
@@ -207,7 +206,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if eco == "" {
 			continue
 		}
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			continue
 		}

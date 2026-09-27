@@ -41,7 +41,6 @@ package weakcrypto
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -411,7 +410,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			// Unreadable file is not a finding; discovery already surfaced it.
 			continue

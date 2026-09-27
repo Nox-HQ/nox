@@ -7,7 +7,6 @@ package secrets
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -188,7 +187,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		content, err := os.ReadFile(artifact.AbsPath)
+		content, err := artifact.ReadContent()
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}

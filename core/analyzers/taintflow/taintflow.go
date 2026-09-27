@@ -17,7 +17,6 @@ package taintflow
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -152,7 +151,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if lang == lexctx.LangUnknown {
 			continue // unsupported language: skip (LangFromPath gates the set)
 		}
-		content, err := os.ReadFile(art.AbsPath)
+		content, err := art.ReadContent()
 		if err != nil {
 			continue
 		}

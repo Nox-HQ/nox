@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/nox-hq/nox/core/fsutil"
 	"log/slog"
 	"net/http"
 	"os"
@@ -403,6 +404,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// no findings. Non-source artifacts always pass through. This runs on the
 	// discovered set (deterministic, input order preserved).
 	artifacts = FilterArtifactsByLanguageProfile(artifacts, cfg.Scan.SAST)
+
+	// One read per file for every analyzer (#736). The analyzers run in
+	// parallel over broadly the same order, so a bounded cache keeps each file
+	// while they all want it; a file larger than the budget is read uncached.
+	reads := fsutil.NewReadCache(sharedReadBudget)
+	for i := range artifacts {
+		artifacts[i].Reads = reads
+	}
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -1472,6 +1481,11 @@ func policyBudget(in map[string]int) map[findings.Severity]int {
 // each analyzer as a uniform task lets sequential and parallel execution share
 // a single runner.
 type analyzerTask func(context.Context) error
+
+// sharedReadBudget bounds the scan's shared read cache: large enough that the
+// analyzers working through the same stretch of a repository find each file
+// still held, small enough not to matter next to the scan's own memory.
+const sharedReadBudget = 256 << 20
 
 // runAnalyzerTasks executes tasks sequentially (deterministic, for debugging)
 // or in parallel via errgroup, returning the first error and canceling
