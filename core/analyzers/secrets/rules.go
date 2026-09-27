@@ -39,6 +39,11 @@ type secretRule struct {
 	// rule's meaning a regex cannot express in one pass, such as "the
 	// password component is not a template placeholder".
 	validate func(string) bool
+	// optIn: see rules.Rule.OptIn.
+	optIn bool
+	// shapeGroup names the capture group the secret-shape filter scores, so
+	// a keyword-bound rule is judged on its value rather than its key.
+	shapeGroup string
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
@@ -3938,6 +3943,24 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-948", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)webstorm[_-]?license[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected WebStorm License Key", cwe: "CWE-798", keywords: []string{"webstorm"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-949", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)pycharm[_-]?license[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected PyCharm License Key", cwe: "CWE-798", keywords: []string{"pycharm"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-950", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)goland[_-]?license[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected GoLand License Key", cwe: "CWE-798", keywords: []string{"goland"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{
+			// Opt-in (scan.rules.enable: [SEC-951]). A credential-named key
+			// bound to a quoted, random-looking value that no vendor format
+			// describes: a GigaChat key (base64 of client_id:secret), a
+			// MonsterAPI key (a UUID). The 2026-09-27 head-to-head found both
+			// only through gitleaks' generic-api-key, which reported them
+			// among 169 findings -- so this is recall a team can choose, not a
+			// default. The shape filter scores the captured value, and the
+			// placeholder, reference and data-blob refiners apply as to every
+			// secret rule.
+			id: "SEC-951", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			pattern:     `(?i)(?:api[_-]?key|apikey|api[_-]?secret|secret[_-]?key|client[_-]?secret|access[_-]?key|auth[_-]?key|auth[_-]?token|access[_-]?token|credentials?|secret|token)["']?[ \t]*[=:][ \t]*["']([A-Za-z0-9+/_\-]{16,200}={0,2})["']`,
+			description: "Credential-named key with a random-looking value (generic, opt-in)",
+			cwe:         "CWE-798", keywords: []string{"key", "secret", "token", "credential"},
+			remediation: "If this is a live credential, rotate it and move it to a secrets manager or environment variable.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			secretShape: true, minEntropy: 3.5, shapeGroup: "1", optIn: true,
+		},
 	}
 
 	out := make([]*rules.Rule, 0, len(defs)+len(builtinEntropyRules()))
@@ -4022,6 +4045,13 @@ func builtinSecretRules() []*rules.Rule {
 				md["secret_shape"] = "true"
 			}
 		}
+		if d.shapeGroup != "" {
+			md["shape_group"] = d.shapeGroup
+		}
+		tags := []string{"secrets"}
+		if d.optIn {
+			tags = append(tags, "opt-in")
+		}
 
 		out = append(out, &rules.Rule{
 			ID:                     d.id,
@@ -4035,7 +4065,8 @@ func builtinSecretRules() []*rules.Rule {
 			Retires:                d.retires,
 			RequireContextKeywords: requireContext,
 			ValidateMatch:          d.validate,
-			Tags:                   []string{"secrets"},
+			OptIn:                  d.optIn,
+			Tags:                   tags,
 			Metadata:               md,
 			Remediation:            d.remediation,
 			References:             d.references,

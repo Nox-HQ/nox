@@ -89,6 +89,9 @@ type Analyzer struct {
 // of them the rule catalog, which has no scan and wants no store.
 func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
 
+// EnableOptIn turns on the opt-in secret rules named in ids (scan.rules.enable).
+func (a *Analyzer) EnableOptIn(ids []string) { a.engine.EnableOptIn(ids) }
+
 // NewAnalyzer creates an Analyzer with built-in secret detection rules loaded
 // programmatically. The rules use regex matching and apply to all file types.
 func NewAnalyzer() *Analyzer {
