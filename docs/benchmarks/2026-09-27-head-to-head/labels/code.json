@@ -1,0 +1,722 @@
+[
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "packages/harness/src/agent/harness-agent.test.ts",
+  "line": 333,
+  "rule": "javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "modelcontextprotocol-python-sdk",
+  "file": "src/mcp/cli/cli.py",
+  "line": 184,
+  "rule": "python.lang.security.audit.non-literal-import.non-literal-import",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-azurepostgresql/llama_index/vector_stores/azure_postgres/base.py",
+  "line": 357,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-core/llama_index/core/objects/base_node_mapping.py",
+  "line": 47,
+  "rule": "python.lang.security.deserialization.pickle.avoid-pickle",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": ".github/dependabot.yml",
+  "line": 5,
+  "rule": "package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown",
+  "label": "actionable"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "felixgeelhaar-agent-go",
+  "file": "contrib/pack-kubernetes/kubernetes.go",
+  "line": 438,
+  "rule": "go.lang.security.audit.dangerous-exec-command.dangerous-exec-command",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "felixgeelhaar-agent-go",
+  "file": "contrib/pack-shell/shell.go",
+  "line": 183,
+  "rule": "go.lang.security.audit.dangerous-exec-command.dangerous-exec-command",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-azurepostgresql/llama_index/vector_stores/azure_postgres/common/_base.py",
+  "line": 699,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/retrievers/llama-index-retrievers-duckdb-retriever/llama_index/retrievers/duckdb_retriever/base.py",
+  "line": 29,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/graph_stores/llama-index-graph-stores-nebula/llama_index/graph_stores/nebula/nebula_property_graph.py",
+  "line": 142,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-vertexaivectorsearch/pyproject.toml",
+  "line": 224,
+  "rule": "package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown",
+  "label": "actionable"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "felixgeelhaar-agent-go",
+  "file": "contrib/storage-sqlite/config.go",
+  "line": 103,
+  "rule": "go.lang.security.audit.database.string-formatted-query.string-formatted-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-core/llama_index/core/ingestion/data_sources.py",
+  "line": 82,
+  "rule": "python.lang.security.insecure-uuid-version.insecure-uuid-version",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/crewai/src/crewai/flow/visualization/renderers/interactive.py",
+  "line": 398,
+  "rule": "python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "examples/ai-functions/src/generate-text/openai/responses-mcp-tool-auth.ts",
+  "line": 28,
+  "rule": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-singlestoredb/llama_index/vector_stores/singlestoredb/base.py",
+  "line": 164,
+  "rule": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-alibabacloud-mysql/llama_index/vector_stores/alibabacloud_mysql/base.py",
+  "line": 588,
+  "rule": "python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "docs/examples/data/csv/commit_history_2.csv",
+  "line": 65,
+  "rule": "javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": ".github/workflows/close_new_integration_prs.yml",
+  "line": 17,
+  "rule": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+  "label": "actionable"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "anthropics-anthropic-sdk-python",
+  "file": "src/anthropic/lib/credentials/_cache.py",
+  "line": 159,
+  "rule": "python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/crewai-core/src/crewai_core/version.py",
+  "line": 125,
+  "rule": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/graph_stores/llama-index-graph-stores-nebula/llama_index/graph_stores/nebula/nebula_graph_store.py",
+  "line": 600,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "examples/ai-functions/src/telemetry/tracing-channel/generate-text.ts",
+  "line": 15,
+  "rule": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-duckdb/llama_index/vector_stores/duckdb/base.py",
+  "line": 260,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "examples/ai-e2e-next/app/realtime/page.tsx",
+  "line": 219,
+  "rule": "javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "packages/harness-opencode/src/opencode-harness.test.ts",
+  "line": 718,
+  "rule": "javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-oracledb/llama_index/vector_stores/oracledb/base.py",
+  "line": 399,
+  "rule": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-oracledb/llama_index/vector_stores/oracledb/base.py",
+  "line": 158,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/crewai/src/crewai/project/json_loader.py",
+  "line": 1960,
+  "rule": "python.lang.security.audit.non-literal-import.non-literal-import",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-postgres/llama_index/vector_stores/postgres/base.py",
+  "line": 582,
+  "rule": "python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "felixgeelhaar-agent-go",
+  "file": ".github/workflows/nox-remediate.yml",
+  "line": 18,
+  "rule": "yaml.github-actions.security.secrets-inherit.secrets-inherit",
+  "label": "actionable"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "packages/harness-opencode/src/opencode-harness.test.ts",
+  "line": 303,
+  "rule": "javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-azurepostgresql/llama_index/vector_stores/azure_postgres/common/_connection.py",
+  "line": 181,
+  "rule": "python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/crewai-tools/src/crewai_tools/rag/data_types.py",
+  "line": 92,
+  "rule": "python.lang.security.audit.non-literal-import.non-literal-import",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-db2/llama_index/vector_stores/db2/base.py",
+  "line": 171,
+  "rule": "python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "packages/harness/src/agent/harness-agent.test.ts",
+  "line": 213,
+  "rule": "javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "vercel-ai",
+  "file": "packages/provider-utils/src/to-json-schema/zod3-to-json-schema/parsers/string.ts",
+  "line": 415,
+  "rule": "javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp",
+  "label": "needs-context"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "felixgeelhaar-agent-go",
+  "file": "contrib/pack-json/json.go",
+  "line": 819,
+  "rule": "go.lang.security.deserialization.unsafe-deserialization-interface.go-unsafe-deserialization-interface",
+  "label": "false-positive"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "run-llama-llama_index",
+  "file": ".github/workflows/sync-docs.yml",
+  "line": 26,
+  "rule": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+  "label": "actionable"
+ },
+ {
+  "region": "semgrep-only",
+  "pool": 488,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/crewai/src/crewai/types/callback.py",
+  "line": 118,
+  "rule": "python.lang.security.audit.non-literal-import.non-literal-import",
+  "label": "needs-context"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "openai-openai-python",
+  "file": ".github/workflows/python-version-review.yml",
+  "line": 164,
+  "rule": "IAC-153",
+  "label": "actionable"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.3/pt-BR/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "openai-openai-python",
+  "file": ".github/workflows/castiron-custom-code.yml",
+  "line": 91,
+  "rule": "IAC-153",
+  "label": "actionable"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.4/enterprise-api.ko.yaml",
+  "line": 15,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.12.0/enterprise-api.ko.yaml",
+  "line": 15,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.10.1/ko/observability/neatlogs.mdx",
+  "line": 111,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "openai-openai-python",
+  "file": "tests/api_resources/live/test_sessions.py",
+  "line": 677,
+  "rule": "DATA-004",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.11.0/en/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.5/ko/observability/neatlogs.mdx",
+  "line": 111,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.21/enterprise-api.pt-BR.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "lib/cli/src/crewai_cli/git.py",
+  "line": 149,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.10.0/ko/observability/neatlogs.mdx",
+  "line": 111,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.12/pt-BR/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "run-llama-llama_index",
+  "file": ".github/workflows/pre_release.yml",
+  "line": 4,
+  "rule": "IAC-308",
+  "label": "actionable"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.7/en/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.6/enterprise-api.base.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.6/en/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.3/ar/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.17/ar/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.10.1/enterprise-api.en.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.11.1/en/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.1/pt-BR/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "vercel-ai",
+  "file": "packages/ai/src/generate-text/generate-text.test.ts",
+  "line": 2400,
+  "rule": "MCP-020",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.12.2/enterprise-api.en.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.11.1/enterprise-api.ko.yaml",
+  "line": 15,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/readers/llama-index-readers-openalex/README.md",
+  "line": 14,
+  "rule": "DATA-001",
+  "label": "personal-data"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.0/enterprise-api.en.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/readers/llama-index-readers-dashscope/llama_index/readers/dashscope/utils.py",
+  "line": 31,
+  "rule": "CRYPTO-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.10.1/enterprise-api.ko.yaml",
+  "line": 15,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.8/pt-BR/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.12.2/enterprise-api.pt-BR.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.14/enterprise-api.en.yaml",
+  "line": 42,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "run-llama-llama_index",
+  "file": "docs/examples/node_postprocessor/PII.ipynb",
+  "line": 367,
+  "rule": "DATA-002",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "vercel-ai",
+  "file": "packages/harness-claude-code/src/claude-code-bridge-protocol.test.ts",
+  "line": 121,
+  "rule": "MCP-020",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.14.3/ko/observability/neatlogs.mdx",
+  "line": 111,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/edge/pt-BR/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "vercel-ai",
+  "file": ".github/workflows/ci.yml",
+  "line": 219,
+  "rule": "IAC-153",
+  "label": "actionable"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.15/en/observability/neatlogs.mdx",
+  "line": 117,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "joaomdmoura-crewAI",
+  "file": "docs/v1.15.19/ko/observability/neatlogs.mdx",
+  "line": 111,
+  "rule": "DATA-001",
+  "label": "false-positive"
+ },
+ {
+  "region": "nox-only-code",
+  "pool": 578,
+  "repo": "run-llama-llama_index",
+  "file": "llama-index-integrations/vector_stores/llama-index-vector-stores-solr/tests/docker-compose.yml",
+  "line": 12,
+  "rule": "IAC-179",
+  "label": "actionable"
+ }
+]
