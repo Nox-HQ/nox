@@ -479,9 +479,15 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-036", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			// Require the gpt- prefix; the old all-optional pattern matched a
-			// bare "35" anywhere (version strings, hashes, lockfiles).
-			pattern:     `(?i)gpt[-_]?3[._-]?5(?:[-_]?turbo)?`,
+			// The claim is that the application SELECTS the model, so the
+			// match is a model chosen by an argument, config key or env var
+			// (model=, model_name=, "model":, OPENAI_MODEL=) — not any mention.
+			// A bare gpt-3.5 string reported SDK model lists and context-window
+			// tables: 330 findings on the seven-repo benchmark, from
+			// openai-python's accepted-model Literals and crewAI's token-limit
+			// map, none of which selects anything. The gpt- prefix is still
+			// required; the older all-optional pattern matched a bare "35".
+			pattern:     `(?i)\b[a-z_]*model(?:[_-]?name|[_-]?id)?["']?\s*[:=]\s*["']?gpt[-_]?3[._-]?5(?:[-_]?turbo)?`,
 			description: "Using deprecated GPT-3.5 model",
 			cwe:         "CWE-1104", keywords: []string{"gpt-3.5", "fallback"},
 			tags:        []string{"ai", "deprecation", "model-selection"},
@@ -593,7 +599,13 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "AI-050", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(retry|retries)\s*[:=]\s*(?:0|false|none)`,
+			// The claim is an LLM client or request configured with retries
+			// off: max_retries / maxRetries set to 0, the parameter the OpenAI
+			// and Anthropic SDKs expose. The older pattern took any `retry` or
+			// `retries` assigned false/none/0, which is ordinary control flow —
+			// crewAI's `should_retry = False`, openai-python's own
+			// `self._retry = None` — and an attempt counter starting at 0.
+			pattern:     `(?i)\bmax[_-]?retries["']?\s*[:=]\s*0\b`,
 			description: "AI API retries disabled",
 			cwe:         "CWE-705", keywords: []string{"retry", "0"},
 			tags:        []string{"ai", "reliability", "error-handling"},

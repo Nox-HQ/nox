@@ -27,5 +27,18 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "AI-036",
+      "classification": "binding-required",
+      "pr": 725,
+      "reason": "AI-036 claims an application uses a deprecated model, and matched any gpt-3.5 string. The model name must now be bound to a model selection — a model/model_name/model_id argument or key, or an *_MODEL variable. On the corpus: crewai-cassettes 50 -> 31. Every drop read: 7 recorded API RESPONSES echoing the model back as escaped JSON (\\\"model\\\": \\\"gpt-3.5-turbo-0125\\\") and the rest response-body text (\"object\": \"chat.completion\", an article caption); the 31 kept are recorded REQUESTS selecting the model. On the seven-repo benchmark, 330 -> 34: openai-python 224 -> 9 (its accepted-model Literals and `model: Union[str, Literal[...]]` parameter annotations, which declare what may be chosen and choose nothing), crewAI 41 -> 0 (a context-window table and a prefix list; no dropped line assigns a model). Kept everywhere: request examples and configs that select gpt-3.5. The rule stays: removing it was proposed and declined, and it now reports the condition it names."
+    },
+    {
+      "rule": "AI-050",
+      "classification": "applicability-narrowed",
+      "pr": 725,
+      "reason": "AI-050 claims an LLM client runs with retries disabled, and matched any retry/retries assigned 0, false or none. It now matches max_retries / maxRetries set to 0, the parameter the OpenAI and Anthropic SDKs expose. On the corpus: chronos 1 -> 0 (`cfg.Retries = 0`, a webhook's delivery config), anthropic-sdk-python 2 -> 0 (`self._retry = None`, its streaming parser's state). On the seven-repo benchmark, 42 -> 26: dropped crewAI's `should_retry = False` and similar control flow; kept all 25 of vercel/ai's `maxRetries: 0` and openai-python's README `max_retries=0`. An attempt counter starting at 0 and max_retries=3 or 10 are asserted not reported."
+    }
+  ]
 }
