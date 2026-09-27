@@ -51,6 +51,14 @@ type Rule struct {
 	// Used by prose rules (e.g. MCP tool-poisoning) that would otherwise fire
 	// on comments describing an attack rather than on real tool metadata.
 	IgnoreInComments bool `yaml:"ignore_in_comments"`
+	// KeywordTokens makes the rule's keywords words rather than substrings,
+	// in both places they act: the file pre-filter (the keyword must appear
+	// bounded by non-alphanumerics) and the match (it must start at such a
+	// boundary). For rules whose pattern opens with the keyword, so the match
+	// text of every finding the rule keeps is unchanged. A short keyword like
+	// `tin` otherwise sits inside setting and routing, which ran DATA-009 on
+	// most files of a repository (#736), and its pattern matched martin:.
+	KeywordTokens bool `yaml:"keyword_tokens"`
 	// ExcludeContextKeywords drops a match when any of these keywords appears
 	// on or near the matched line (windowed). Used to suppress matches in
 	// defensive contexts — e.g. an SSRF metadata IP that sits in a block/deny

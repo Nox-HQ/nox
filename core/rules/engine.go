@@ -45,6 +45,9 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	var contentLower []byte
 	// Lazily split lines for the comment / context precision filters.
 	var lines []string
+	// Lazily computed for KeywordTokens rules, which check the byte before a
+	// match.
+	var lineStarts []int
 	for _, rule := range e.rules.Rules() {
 		if !fileMatchesRule(path, rule) {
 			continue
@@ -60,7 +63,11 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			if len(kws) != len(rule.Keywords) {
 				kws = loweredKeywords(rule.Keywords)
 			}
-			if !containsAnyKeyword(contentLower, kws) {
+			if rule.KeywordTokens {
+				if !containsAnyKeywordToken(contentLower, kws) {
+					continue
+				}
+			} else if !containsAnyKeyword(contentLower, kws) {
 				continue
 			}
 		}
@@ -72,6 +79,14 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 		results := matcher.Match(content, rule)
 		for _, mr := range results {
+			if rule.KeywordTokens {
+				if lineStarts == nil {
+					lineStarts = computeLineStarts(content)
+				}
+				if !startsAtToken(content, lineStarts, mr.Line, mr.Column) {
+					continue
+				}
+			}
 			// Post-match predicate: the rule inspects its own match text and
 			// vetoes it. Runs before the line-windowed filters because it is
 			// the cheapest of the three and needs no line splitting.
@@ -382,6 +397,37 @@ func contextHasKeyword(lines []string, line1, col1, window int, keywords []strin
 	// is the only thing standing between a bare token pattern and every string
 	// of that length in the file.
 	return keywordNear(lines, line1, col1, window, keywords, false, true)
+}
+
+// containsAnyKeywordToken is containsAnyKeyword for KeywordTokens rules: a
+// keyword counts only where keywordAsToken would accept it.
+func containsAnyKeywordToken(contentLower []byte, keywords [][]byte) bool {
+	for _, kw := range keywords {
+		for from := 0; from+len(kw) <= len(contentLower); {
+			j := bytes.Index(contentLower[from:], kw)
+			if j < 0 {
+				break
+			}
+			at := from + j
+			end := at + len(kw)
+			if (at == 0 || !isAlphanumericByte(contentLower[at-1])) &&
+				(end == len(contentLower) || !isAlphanumericByte(contentLower[end])) {
+				return true
+			}
+			from = at + 1
+		}
+	}
+	return false
+}
+
+// startsAtToken reports whether the match at (line, col), both 1-based, begins
+// at the start of content or after a byte that is not a letter or digit.
+func startsAtToken(content []byte, lineStarts []int, line, col int) bool {
+	if line < 1 || line > len(lineStarts) {
+		return true
+	}
+	at := lineStarts[line-1] + col - 1
+	return at <= 0 || at > len(content) || !isAlphanumericByte(content[at-1])
 }
 
 // containsAnyKeyword returns true if content contains at least one of the
