@@ -192,6 +192,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}
+		if strings.EqualFold(filepath.Ext(artifact.Path), ".ipynb") {
+			content = unescapeNotebookQuotes(content)
+		}
 
 		results, err := a.ScanFile(artifact.Path, content)
 		if err != nil {
