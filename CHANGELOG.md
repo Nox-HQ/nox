@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **A value that describes itself is not a credential.** `Bearer test-api-key`,
+  `password="test_password"` and `OPENAI_API_KEY=sua_chave_openai` were reported
+  as hardcoded secrets: on the head-to-head benchmark they were most of nox's
+  secret findings (`test-api-key` alone, 86 lines). The placeholder check now
+  recognises a value made only of short words and numbers that carries a test
+  marker (`test`, `mock`, `fake`, `stub`, `expired`), opens with a translated
+  "your" (`sua_chave`, `tu_clave`, `votre_cle`), or uses only credential
+  vocabulary (`my-api-key`, `token-2`). A value with a random body is never one
+  of these, so a Stripe test-mode key `sk_test_51H…` and a passphrase like
+  `correct-horse-battery-staple` are still reported. Across the seven benchmark
+  repositories secret findings go from 960 to 547, nothing is added, and every
+  drop was read; none of the real credentials nox found is among them.
+
 ## [1.42.0] - 2026-09-27
 
 Eleven rules stop reporting what merely resembles the condition they name:
