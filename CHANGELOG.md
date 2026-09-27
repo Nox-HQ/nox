@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **Three rules no longer scan most of a repository for a word they never
+  find.** DATA-009's keyword `tin` matched inside `setting`, `testing` and
+  `routing`, so its case-insensitive regex ran over 27,881 of the benchmark's
+  55,102 text files (1 GB) to report nothing at all. A new rule flag,
+  `KeywordTokens`, makes a keyword count only as a whole word, in the file
+  pre-filter and at the start of the match. On for DATA-009 (27,881 → 6 files
+  scanned), DATA-004 (12,163 → 1,384) and DATA-005 (40,973 → 10,087). The
+  findings on the seven benchmark repositories are identical, fingerprints
+  included; words that merely end in the keyword (`martin:`, `hotel:`,
+  `zip =`) no longer match. Wall time on the benchmark: 2,313 s → 1,781 s,
+  measured on a loaded machine (#736).
+
 - **A fictional or placeholder phone number is not personal data.** DATA-004's
   32 findings on the benchmark were numbers no person has: 28 × +1 415 555 0123
   in openai-python's API reference, in the 555-0100–0199 range the North
