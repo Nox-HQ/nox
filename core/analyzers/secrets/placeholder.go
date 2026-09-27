@@ -130,7 +130,103 @@ func isPlaceholderValue(matched string) bool {
 			return true
 		}
 	}
-	return false
+	return isDescriptiveValue(assignedValue(matched))
+}
+
+// assignedValue returns the value side of a keyword rule's span — an env
+// assignment, a YAML or object key, a keyword argument, or an auth header — or
+// the span itself when it has no assignment. An auth scheme word in front of
+// the value is dropped: it names the header format, not the secret. (The
+// shapes are described rather than quoted: quoted, they are what SEC-082
+// matches, and nox's self-scan reports this comment.)
+func assignedValue(matched string) string {
+	v := matched
+	if i := strings.IndexAny(v, "=:"); i >= 0 {
+		v = v[i+1:]
+	}
+	v = strings.Trim(strings.TrimSpace(v), "\"'` },)")
+	for _, scheme := range []string{"bearer ", "basic ", "token "} {
+		if len(v) > len(scheme) && strings.EqualFold(v[:len(scheme)], scheme) {
+			v = strings.TrimSpace(v[len(scheme):])
+			break
+		}
+	}
+	return v
+}
+
+// descriptiveTestMarkers are words that label a value as a test stand-in.
+// They count only inside a value made entirely of short words (see
+// isDescriptiveValue), so a test-mode key with a random body — Stripe's
+// sk_test_51H... — is never treated as one.
+var descriptiveTestMarkers = map[string]bool{
+	"test": true, "testing": true, "mock": true, "mocked": true, "fake": true,
+	"stub": true, "fixture": true, "bogus": true, "invalid": true, "expired": true,
+}
+
+// localizedYour opens a translated "your key" placeholder: sua_chave_openai
+// (pt), tu_clave (es), votre_cle (fr), deine/dein (de), tua/tuo (it), uw (nl).
+var localizedYour = map[string]bool{
+	"sua": true, "seu": true, "tu": true, "tua": true, "tuo": true,
+	"votre": true, "ton": true, "deine": true, "dein": true, "uw": true,
+}
+
+// credentialVocabulary are the words a value is built from when it names a
+// credential instead of being one: my-api-key, token-2, api_token.
+var credentialVocabulary = map[string]bool{
+	"api": true, "key": true, "apikey": true, "token": true, "secret": true,
+	"password": true, "pass": true, "pwd": true, "auth": true, "access": true,
+	"refresh": true, "oauth": true, "jwt": true, "credential": true,
+	"credentials": true, "my": true, "custom": true, "value": true, "sk": true,
+}
+
+// isDescriptiveValue reports whether v describes a credential instead of
+// being one. The value must consist only of short words and short numbers —
+// nothing a random generator would produce — and then either carry a test
+// marker, open with a translated "your", or use only credential vocabulary.
+// A real secret has a random body and fails the first condition; a real
+// passphrase ("correct-horse-battery-staple") fails the second.
+func isDescriptiveValue(v string) bool {
+	parts := strings.FieldsFunc(strings.ToLower(v), func(r rune) bool {
+		return r == '-' || r == '_' || r == '.' || r == ' '
+	})
+	if len(parts) == 0 || len(parts) > 6 {
+		return false
+	}
+	var words []string
+	for _, p := range parts {
+		switch {
+		case isAllOf(p, 'a', 'z') && len(p) <= 12:
+			words = append(words, p)
+		case isAllOf(p, '0', '9') && len(p) <= 4:
+		default:
+			return false
+		}
+	}
+	if len(words) == 0 {
+		return false
+	}
+	if localizedYour[words[0]] && len(words) > 1 {
+		return true
+	}
+	vocabOnly := true
+	for _, w := range words {
+		if descriptiveTestMarkers[w] {
+			return true
+		}
+		if !credentialVocabulary[w] {
+			vocabOnly = false
+		}
+	}
+	return vocabOnly
+}
+
+func isAllOf(s string, lo, hi byte) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < lo || s[i] > hi {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // placeholderCandidate applies the placeholder heuristics to a single value.
