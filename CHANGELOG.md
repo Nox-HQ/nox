@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **AI-036 and AI-050 report the condition they name, and nothing else.**
+  AI-036 ("deprecated GPT-3.5 model") matched any `gpt-3.5` string, so an SDK
+  listing the models it accepts reported it — 224 findings in openai-python
+  alone, from type annotations and model lists. It now needs the model to be
+  selected: a `model=` / `model_name=` argument, a `model:` key, an `*_MODEL`
+  variable. AI-050 ("retries disabled") matched any `retry = False`, which is
+  ordinary control flow; it now matches `max_retries` / `maxRetries` set to 0.
+  On the seven-repo benchmark AI-036 goes 330 → 34 and AI-050 42 → 26, and
+  every finding left is a real selection or a client configured with retries
+  off. Both rules stay: narrowing them was chosen over removing them.
+
 - **`nox bench` reported a benchmark of nothing as a success.** A corpus of
   symlinked clones — the natural way to assemble one from repositories already
   on disk — produced "0 projects", a report and exit 0, because only plain
