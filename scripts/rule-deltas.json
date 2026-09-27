@@ -45,6 +45,12 @@
       "classification": "refined-away",
       "pr": 734,
       "reason": "SEC-161 (high-entropy string) fired inside ciphertext a model API issued and takes back: Anthropic's thinking-block signature and web-search encrypted_index, OpenAI's reasoning encrypted_content, Gemini's thoughtSignature. A match in the string value of one of those JSON keys is now refuted. On the corpus: anthropic-sdk-python 58 -> 50 and vercel-ai-anthropic 9 -> 0, recorded responses under tests/ and __fixtures__/. On the seven-repo benchmark the refutation removes 67 findings, all read and all under those four keys (SEC-161 32, SEC-048 21, SEC-055 14); the same token under any other key is still reported."
+    },
+    {
+      "rule": "TAINT-002",
+      "classification": "refined-away",
+      "pr": 743,
+      "reason": "TAINT-002 claims command injection. For Python, the flag \"taint is in the first argument\" was set whenever the first argument held any variable, so a call whose tainted value sat only in a later argument -- env=os.environ -- was judged as if the command itself were tainted. It is now set from the taint state at the sink. On the corpus: certbot 3 -> 1. The two dropped are acme_server.py:191 `subprocess.Popen(command, ..., env=env)` and tools/venv.py:137 `subprocess.check_output(cmd, env=env, shell=shell)`, both with env from os.environ and an untainted command; a third drop, apache-conf-test-pebble.py:22 env via `environ`, sits on a line whose argv-to-command flow is still reported (the kept finding). On the seven-repo benchmark the same shape drops three in llama_index's dev CLI (os.environ.copy() passed as env= to an argv subprocess.run). Nothing is added."
     }
   ]
 }
