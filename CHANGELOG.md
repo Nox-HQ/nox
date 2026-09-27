@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   together; the sha256 is of `nox_1.42.0_linux_amd64.tar.gz` and matches the
   release's cosign-verified `checksums.txt`.
 
+### Fixed
+
+- **A monorepo's dependency advisories stopped at the lookup deadline.** nox
+  asked the advisory source once per lockfile entry, so a package pinned in
+  600 lockfiles was asked about 600 times. On llama_index the batches ran past
+  the lookup's two-minute budget and the rest were never sent: 211 of its 608
+  vulnerable lockfiles reported nothing. The scan did say so
+  (`osv_lookup`, "dependency vulnerabilities are under-reported"), but the
+  advisories were still missing. Each distinct package version is now asked
+  about once and the answer reported in every lockfile that pins it:
+  llama_index goes from 397 to 608 lockfiles with findings and from 248 to 273
+  distinct advisories, with nothing lost, and no degradation. Found by running
+  osv-scanner over the same seven repositories.
+
 ## [1.42.0] - 2026-09-27
 
 Eleven rules stop reporting what merely resembles the condition they name:
