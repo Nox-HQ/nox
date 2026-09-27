@@ -33,6 +33,12 @@
       "classification": "refined-away",
       "pr": 730,
       "reason": "SEC-082 claims a hardcoded bearer token. A value built only from short words and numbers that carries a test marker, opens with a translated \"your\", or uses only credential vocabulary is a placeholder, not a token. On the corpus: vercel-ai-mistral 7 -> 0, every one `authorization: 'Bearer test-api-key'` in a *.test.ts file. On the seven-repo benchmark SEC-082 drops 274 lines, read grouped by value: test-api-key 86, test-key 32, test-token 32, custom-token 20, mock-auth-token 18, token 14, secret 11, mock-api-key 9, TEST_TOKEN 8, and smaller groups of the same kind; nothing is added and no real credential is among them. A random value (a JWT, sk_test_51H...) is never word-composed, and TestDescriptiveValuesArePlaceholders asserts it stays reported."
+    },
+    {
+      "rule": "DATA-001",
+      "classification": "refined-away",
+      "pr": 733,
+      "reason": "DATA-001 is CWE-359, private personal information. Two refutations: a role mailbox (support@, hello@, noreply@, matched on the whole local part) names a function rather than a person, and the password@host of a connection URL is URL userinfo, not an e-mail address. On the corpus: chronos 2 -> 1, the dropped line `mysql://user:pw@db.local:6603/?namespace=tenant_a` in internal/store/mysql/mysql_test.go (URL userinfo); the kept one is in .goreleaser.yaml. On the seven-repo benchmark DATA 369 -> 55, all 314 drops read: support@crewai.com 156, hello@neatlogs.com 152, deploy@/noreply@/support@unstructured.io/git@github.com 4, postgresql://…:password@ 2. Personal addresses (a gmail address, jane@…) are still reported; #733 landed while rule-diff exited 1 on a crash and passed, which is why this entry arrives with the harness fix."
     }
   ]
 }
