@@ -428,6 +428,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Initialize analyzers.
 	secretsAnalyzer := secrets.NewAnalyzer()
 	secretsAnalyzer.RecordReasoningTo(reasons)
+	secretsAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
 	if ec := cfg.Scan.Entropy; ec.Threshold > 0 || ec.HexThreshold > 0 || ec.Base64Threshold > 0 || ec.RequireContext != nil {
 		secretsAnalyzer.ApplyEntropyOverrides(secrets.EntropyOverrides{
 			Threshold:       ec.Threshold,

@@ -862,6 +862,14 @@ scan:
       - "AI-008"      # Unpinned model refs are acceptable in this project
       - "IAC-002"      # We use floating base image tags intentionally
 
+    # Turn on opt-in rules, which do not run otherwise. SEC-951 is the
+    # generic "credential-named key with a random-looking value" rule: it finds
+    # keys no vendor format describes (a GigaChat key, a UUID API key) and also
+    # reports more that are not keys, so it is off by default. `nox rules`
+    # tags opt-in rules `opt-in`.
+    enable:
+      - "SEC-951"
+
     # Override severity for specific rules
     severity_override:
       SEC-005: low     # Downgrade generic API key detection

@@ -59,6 +59,12 @@ type Rule struct {
 	// `tin` otherwise sits inside setting and routing, which ran DATA-009 on
 	// most files of a repository (#736), and its pattern matched martin:.
 	KeywordTokens bool `yaml:"keyword_tokens"`
+	// OptIn rules do not run unless the scan enables them by ID
+	// (scan.rules.enable in .nox.yaml). For detections whose recall is worth
+	// having to some teams and whose precision is not good enough to be a
+	// default -- a generic "credential-named key with a random-looking value"
+	// finds keys no vendor format describes, and a lot else besides.
+	OptIn bool `yaml:"opt_in"`
 	// ExcludeContextKeywords drops a match when any of these keywords appears
 	// on or near the matched line (windowed). Used to suppress matches in
 	// defensive contexts — e.g. an SSRF metadata IP that sits in a block/deny

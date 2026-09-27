@@ -614,7 +614,10 @@ type SlopConfig struct {
 
 // RulesConfig allows disabling rules or overriding their severity.
 type RulesConfig struct {
-	Disable          []string          `yaml:"disable"`
+	Disable []string `yaml:"disable"`
+	// Enable turns on opt-in rules, which do not run otherwise. See
+	// rules.Rule.OptIn and docs/usage.md.
+	Enable           []string          `yaml:"enable"`
 	SeverityOverride map[string]string `yaml:"severity_override"`
 }
 

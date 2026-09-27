@@ -14,6 +14,20 @@ import (
 type Engine struct {
 	rules    *RuleSet
 	matchers *MatcherRegistry
+	// optIn holds the IDs of OptIn rules this scan enabled. An OptIn rule not
+	// in it is skipped outright, so a rule nobody enabled costs nothing.
+	optIn map[string]bool
+}
+
+// EnableOptIn turns on the OptIn rules named in ids. IDs that name no OptIn
+// rule are ignored: enabling a default rule changes nothing.
+func (e *Engine) EnableOptIn(ids []string) {
+	for _, id := range ids {
+		if e.optIn == nil {
+			e.optIn = map[string]bool{}
+		}
+		e.optIn[id] = true
+	}
 }
 
 // NewEngine creates an Engine with the given rules and the default matcher
@@ -49,6 +63,9 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// match.
 	var lineStarts []int
 	for _, rule := range e.rules.Rules() {
+		if rule.OptIn && !e.optIn[rule.ID] {
+			continue
+		}
 		if !fileMatchesRule(path, rule) {
 			continue
 		}
