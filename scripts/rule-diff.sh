@@ -24,7 +24,26 @@
 # Exits 0 when there is no delta, 1 when rules changed. The caller decides
 # whether a delta blocks; on a PR it is informational, at release it should be
 # read by a human.
-set -euo pipefail
+set -Eeuo pipefail
+
+# An unexpected failure is "the harness did not run", never a result. Under
+# `set -e` a failing command exits with ITS status, which is usually 1 -- and 1
+# is this script's "rules changed and every drop is explained", which the
+# workflow passes. On #733 an rm of a checkout's .git failed on the third of 25
+# corpus repositories, the script exited 1, and the check passed having checked
+# three repositories and never reached the ledger; an unexplained DATA-001
+# drop merged behind it. The ERR trap (inherited by functions and subshells
+# via -E) turns every such failure into 2, which the workflow fails.
+# core/catalog/rule_diff_harness_test.go reproduces the rm failure.
+trap 'rc=$?; echo "::error title=Rule diff harness failed::line $LINENO exited $rc; the harness stopped before checking the corpus and the ledger, so this run verified nothing" >&2; exit 2' ERR
+
+# Background git maintenance can still be writing into a fresh clone (a
+# commit-graph, an auto-gc) when the loop deletes its .git, which is the rm
+# that failed on #733. The harness wants none of it.
+export GIT_CONFIG_COUNT=3 \
+  GIT_CONFIG_KEY_0=gc.auto GIT_CONFIG_VALUE_0=0 \
+  GIT_CONFIG_KEY_1=maintenance.auto GIT_CONFIG_VALUE_1=false \
+  GIT_CONFIG_KEY_2=fetch.writeCommitGraph GIT_CONFIG_VALUE_2=false
 
 BASE_BIN="${1:?usage: rule-diff.sh <baseline-nox> <candidate-nox> [corpus.json]}"
 CAND_BIN="${2:?usage: rule-diff.sh <baseline-nox> <candidate-nox> [corpus.json]}"
@@ -158,7 +177,9 @@ while read -r name url sha path <&3; do
   fi
   git -C "$src" checkout -q "$sha" 2>/dev/null || {
     echo "   SKIP: pinned sha $sha not found -- repo history rewritten?"; skipped=$((skipped + 1)); continue; }
-  rm -rf "$src/.git"
+  # Retried once: a background writer that outlived the config above finishes
+  # within a moment. A second failure reaches the ERR trap and fails the run.
+  rm -rf "$src/.git" 2>/dev/null || { sleep 2; rm -rf "$src/.git"; }
 
   # What gets scanned: the whole checkout, or the one subdirectory the entry
   # pinned. A pinned path that is not there is FATAL for the same reason a
