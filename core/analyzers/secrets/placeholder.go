@@ -54,6 +54,9 @@ var placeholderWords = []string{
 	"redacted",
 	"sample",
 	"fixme",
+	// "PASTE YOUR PASSWORD HERE": the token list has your- and your_, and a
+	// notebook cell spelled it with spaces.
+	"your",
 }
 
 // wordBoundaryRE matches any placeholderWord delimited by non-alphanumeric
@@ -186,7 +189,7 @@ var credentialVocabulary = map[string]bool{
 // A real secret has a random body and fails the first condition; a real
 // passphrase ("correct-horse-battery-staple") fails the second.
 func isDescriptiveValue(v string) bool {
-	parts := strings.FieldsFunc(strings.ToLower(v), func(r rune) bool {
+	parts := strings.FieldsFunc(strings.ToLower(splitCamelCase(v)), func(r rune) bool {
 		return r == '-' || r == '_' || r == '.' || r == ' '
 	})
 	if len(parts) == 0 || len(parts) > 6 {
@@ -218,6 +221,21 @@ func isDescriptiveValue(v string) bool {
 		}
 	}
 	return vocabOnly
+}
+
+// splitCamelCase puts a space before each upper-case letter that follows a
+// lower-case one, so FakeExamplePassword reads as fake example password. A
+// random value gains nothing from it: its pieces still carry digits or run
+// past the word-length limit.
+func splitCamelCase(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		if i > 0 && v[i] >= 'A' && v[i] <= 'Z' && v[i-1] >= 'a' && v[i-1] <= 'z' {
+			b.WriteByte(' ')
+		}
+		b.WriteByte(v[i])
+	}
+	return b.String()
 }
 
 func isAllOf(s string, lo, hi byte) bool {

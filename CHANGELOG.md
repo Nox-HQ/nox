@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distinct advisories, with nothing lost, and no degradation. Found by running
   osv-scanner over the same seven repositories.
 
+- **"PASTE YOUR PASSWORD HERE" and `FakeExamplePassword` are placeholders.**
+  Both reached reports once #732 made notebooks scannable. "your" as a
+  separate word now marks a placeholder (it already did as `your-` and
+  `your_`), and a value's CamelCase words are read as words, so
+  `FakeExamplePassword` carries the `fake` marker. A passphrase in CamelCase
+  with no marker (`CorrectHorseBatteryStaple`) is still reported. Benchmark:
+  llama_index 74 → 67 secret findings, all seven drops read, nothing added.
+
 - **Model-issued ciphertext is not a credential.** Recorded model API traffic
   carries opaque values the provider issues and takes back: Anthropic's
   thinking-block `signature` and web-search `encrypted_index`, OpenAI's
