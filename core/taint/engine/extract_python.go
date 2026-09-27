@@ -12,6 +12,7 @@ func extractPython(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	var blocks pyBlocks
 
 	for _, ll := range lines {
 		code := ll.code
@@ -19,18 +20,27 @@ func extractPython(lines []logicalLine) []unitDraft {
 		if trimmed == "" {
 			continue
 		}
+		indent := pyIndent(ll.raw)
+		blocks.enter(indent)
 		if name, params, ok := pyDefHeader(trimmed); ok {
 			u := &unitDraft{funcName: name, params: params}
 			units = append(units, u)
 			cur = u
+			blocks.open(indent, false)
 			continue
 		}
+		conditional := blocks.conditional()
 		if st, ok := pyReturnStatement(langPython, ll); ok {
+			st.conditional = conditional
 			cur.stmts = append(cur.stmts, st)
 			continue
 		}
 		if st, ok := recognizeStatement(langPython, ll); ok {
+			st.conditional = conditional
 			cur.stmts = append(cur.stmts, st)
+		}
+		if strings.HasSuffix(trimmed, ":") {
+			blocks.open(indent, pyConditionalHeader(trimmed))
 		}
 	}
 
@@ -162,4 +172,58 @@ func blankRange(s string, start, end int) string {
 		b[i] = ' '
 	}
 	return string(b)
+}
+
+// pyBlocks tracks the Python blocks enclosing the current line, by indentation,
+// so a statement can be marked conditional: inside an if/elif/else, a loop, or
+// a try/except branch, it may not run (see taint.Statement.Conditional).
+type pyBlocks struct{ stack []pyBlock }
+
+type pyBlock struct {
+	indent      int
+	conditional bool
+}
+
+// enter closes every block the line at indent is not inside.
+func (b *pyBlocks) enter(indent int) {
+	for len(b.stack) > 0 && b.stack[len(b.stack)-1].indent >= indent {
+		b.stack = b.stack[:len(b.stack)-1]
+	}
+}
+
+// open records a block header at indent; its body is the lines indented
+// further.
+func (b *pyBlocks) open(indent int, conditional bool) {
+	b.stack = append(b.stack, pyBlock{indent: indent, conditional: conditional})
+}
+
+// conditional reports whether any enclosing block may skip its body.
+func (b *pyBlocks) conditional() bool {
+	for _, blk := range b.stack {
+		if blk.conditional {
+			return true
+		}
+	}
+	return false
+}
+
+// pyIndent is the width of a line's leading whitespace. Python requires a file
+// to be consistent in how it indents, so comparing widths within one file is
+// enough; a tab counts as one, like a space.
+func pyIndent(raw string) int {
+	return len(raw) - len(strings.TrimLeft(raw, " \t"))
+}
+
+// pyConditionalHeader reports whether a block header's body may not run: an
+// if/elif/else, a for/while loop (including its else), a try's except/else
+// branch, or a match case. `try:` itself, `finally:`, `with`, `def` and
+// `class` bodies always run.
+func pyConditionalHeader(trimmed string) bool {
+	head := strings.TrimPrefix(trimmed, "async ")
+	for _, kw := range []string{"if ", "if(", "elif ", "elif(", "else:", "for ", "while ", "while(", "except", "case "} {
+		if strings.HasPrefix(head, kw) {
+			return true
+		}
+	}
+	return false
 }

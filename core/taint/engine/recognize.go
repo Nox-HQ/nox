@@ -497,6 +497,9 @@ func dottedAssignRoot(left string) (string, bool) {
 var containerTaintLangs = map[langKind]bool{
 	langPerl: true,
 	langDart: true,
+	// Python: `m['k'] = param; bar = m['k']` -- the OWASP Benchmark for
+	// Python routes injection cases through element stores like this.
+	langPython: true,
 }
 
 // containerMutators are, per language, the methods that MUTATE their receiver
@@ -508,6 +511,14 @@ var containerTaintLangs = map[langKind]bool{
 // kept, taint in the arguments is added. Container-level and field-insensitive,
 // like containerTaintLangs, and enabled per language as a corpus demands it.
 var containerMutators = map[langKind]map[string]bool{
+	// Python's in-place mutators on lists, sets, dicts and deques, plus the
+	// store-into-object calls the OWASP Benchmark for Python uses
+	// (configparser's set) and file-like buffers (io.StringIO's write).
+	langPython: {
+		"append": true, "extend": true, "insert": true, "appendleft": true,
+		"add": true, "update": true, "setdefault": true, "set": true,
+		"write": true, "put": true,
+	},
 	langDart: {
 		"add": true, "addAll": true, "insert": true, "insertAll": true,
 		"addEntries": true, "write": true, "writeln": true, "writeAll": true,

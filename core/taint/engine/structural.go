@@ -61,13 +61,14 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 // taint.Statement, copying the argument-shape evidence into taint.SinkArgInfo.
 func toStatement(d *stmtDraft) taint.Statement {
 	st := taint.Statement{
-		Line:    d.line,
-		Assigns: d.assigns,
-		Calls:   append([]string(nil), d.calls...),
-		Reads:   append([]string(nil), d.reads...),
-		Chains:  append([]string(nil), d.chains...),
-		Returns: append([]string(nil), d.returns...),
-		Expr:    d.expr,
+		Line:        d.line,
+		Assigns:     d.assigns,
+		Conditional: d.conditional,
+		Calls:       append([]string(nil), d.calls...),
+		Reads:       append([]string(nil), d.reads...),
+		Chains:      append([]string(nil), d.chains...),
+		Returns:     append([]string(nil), d.returns...),
+		Expr:        d.expr,
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -318,6 +319,10 @@ func (e *StructuralEngine) forwardPass(
 				hasInfo = true
 			}
 
+			if hasInfo && lang == "python" {
+				info = firstArgTaintFromState(info, tainted, inline)
+			}
+
 			// Unknown shape (no SinkArgInfo at all) is dangerous — we never suppress
 			// on missing evidence.
 			if hasInfo && !e.sinkArgShapeDangerous(&sink, info) {
@@ -422,6 +427,23 @@ func (e *StructuralEngine) forwardPass(
 		if st.Assigns == "" {
 			continue
 		}
+		// A conditional assignment is a weak update: the branch may not run, so
+		// the variable keeps whatever taint it already had. Without this,
+		// `if not param: param = ""` made a tainted param clean, and every flow
+		// through the commonest defaulting idiom in Python web code was lost.
+		prev, hadPrev := tainted[st.Assigns]
+		weak := st.Conditional && hadPrev
+		setTaint := func(ti taintInfo) {
+			if weak {
+				ti = weakMerge(prev, ti)
+			}
+			tainted[st.Assigns] = ti
+		}
+		clearTaint := func() {
+			if !weak {
+				delete(tainted, st.Assigns)
+			}
+		}
 
 		// A source assignment taints the LHS afresh (a re-source overwrites prior
 		// taint/clear state). Sources may be CALLS (request.args.get) or bare
@@ -453,7 +475,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			tainted[st.Assigns] = taintInfo{src: src, srcLine: st.Line, cleared: cleared}
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared})
 			continue
 		}
 
@@ -464,7 +486,7 @@ func (e *StructuralEngine) forwardPass(
 		// does not leak via a raw read of its tainted argument.
 		if summaries != nil {
 			if ti, ok := e.interprocReturnTaint(lang, st, tainted, summaries); ok {
-				tainted[st.Assigns] = ti
+				setTaint(ti)
 				continue
 			}
 			// A lone local-helper call on the RHS (`x = helper(tainted)`) that did
@@ -475,7 +497,7 @@ func (e *StructuralEngine) forwardPass(
 			// LONE call qualifies; a compound RHS (`x = helper(a) + tainted`) still
 			// falls through to conservative read-propagation.
 			if e.rhsIsLoneLocalCall(st, summaries) {
-				delete(tainted, st.Assigns)
+				clearTaint()
 				continue
 			}
 		}
@@ -492,7 +514,7 @@ func (e *StructuralEngine) forwardPass(
 		}
 		if carried == nil {
 			// LHS reassigned from untainted data: it becomes clean.
-			delete(tainted, st.Assigns)
+			clearTaint()
 			continue
 		}
 
@@ -507,7 +529,7 @@ func (e *StructuralEngine) forwardPass(
 			}
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-		tainted[st.Assigns] = taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via}
+		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via})
 	}
 
 	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
@@ -857,6 +879,45 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 // subprocess/exec/printf/sh — treats the tainted first argument as dangerous just
 // as it would for a tainted variable). TaintedArgVars is re-sorted so the sink
 // loop's first-match choice stays deterministic regardless of map iteration.
+// firstArgTaintFromState narrows FirstArgTainted from "the first argument
+// contains a variable" to "the first argument contains a TAINTED one".
+//
+// The extractors set the flag from the argument's text, before any taint state
+// exists, so `cursor.execute(sql, (user,))` with `sql = "... WHERE a = ?"`
+// counted as taint in the SQL string: `sql` is a variable. The parameterised
+// query -- the safe form sinkArgShapeDangerous exists to recognise -- was
+// reported as an injection whenever the SQL was held in a variable rather than
+// written inline, which is how it is usually written. Here the state is known:
+// the flag stays set only if a variable in the first positional slot is tainted
+// now, or a source is used directly in that slot.
+//
+// It never raises the flag, and it leaves alone an extractor that set the flag
+// without recording the slot's variables, so it can only take a false positive
+// away where the first argument is provably untainted.
+//
+// Python only, because "first" is not the same slot everywhere: the Clojure
+// extractor sets the flag for jdbc/query's SQL argument, which follows the db
+// handle, and slot 0 there is the handle. Other languages whose extractors mean
+// positional slot 0 may have the same false positive; each needs measuring
+// before it is widened.
+func firstArgTaintFromState(info taint.SinkArgInfo, tainted map[string]taintInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
+	if !info.FirstArgTainted || len(info.PositionalVars) == 0 || len(info.PositionalVars[0]) == 0 {
+		return info
+	}
+	for _, v := range info.PositionalVars[0] {
+		if _, ok := tainted[v]; ok {
+			return info
+		}
+	}
+	for _, op := range inline {
+		if op.slot == 0 && !op.vector {
+			return info
+		}
+	}
+	info.FirstArgTainted = false
+	return info
+}
+
 func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
 	out := info
 	out.TaintedArgVars = append([]string(nil), info.TaintedArgVars...)
@@ -1411,4 +1472,20 @@ func suppression(lang string, unit *taint.Unit, st *taint.Statement, sink *taint
 		Class:     string(sink.VulnClass),
 		Reason:    reason,
 	}
+}
+
+// weakMerge is the state after a conditional assignment: the variable holds
+// either the old value or the new one. It stays tainted from the old source,
+// and a class counts as cleared only if BOTH paths cleared it -- a sanitizer
+// that may not have run neutralises nothing.
+func weakMerge(old, updated taintInfo) taintInfo {
+	merged := cloneTaintInfo(old)
+	cleared := map[taint.VulnClass]bool{}
+	for class, ok := range old.cleared {
+		if ok && updated.cleared[class] {
+			cleared[class] = true
+		}
+	}
+	merged.cleared = cleared
+	return merged
 }

@@ -43,8 +43,10 @@ type unitDraft struct {
 type stmtDraft struct {
 	line    int
 	assigns string
-	calls   []string
-	reads   []string
+	// conditional: see taint.Statement.Conditional.
+	conditional bool
+	calls       []string
+	reads       []string
 	// chains are the dotted attribute/identifier chains read on the RHS,
 	// whether or not followed by a call (e.g. "request.args", "req.query"). They
 	// let the engine recognize source ATTRIBUTES (request.args) alongside source
