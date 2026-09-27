@@ -33,6 +33,12 @@
       "classification": "refined-away",
       "pr": 730,
       "reason": "SEC-082 claims a hardcoded bearer token. A value built only from short words and numbers that carries a test marker, opens with a translated \"your\", or uses only credential vocabulary is a placeholder, not a token. On the corpus: vercel-ai-mistral 7 -> 0, every one `authorization: 'Bearer test-api-key'` in a *.test.ts file. On the seven-repo benchmark SEC-082 drops 274 lines, read grouped by value: test-api-key 86, test-key 32, test-token 32, custom-token 20, mock-auth-token 18, token 14, secret 11, mock-api-key 9, TEST_TOKEN 8, and smaller groups of the same kind; nothing is added and no real credential is among them. A random value (a JWT, sk_test_51H...) is never word-composed, and TestDescriptiveValuesArePlaceholders asserts it stays reported."
+    },
+    {
+      "rule": "SEC-161",
+      "classification": "refined-away",
+      "pr": 734,
+      "reason": "SEC-161 (high-entropy string) fired inside ciphertext a model API issued and takes back: Anthropic's thinking-block signature and web-search encrypted_index, OpenAI's reasoning encrypted_content, Gemini's thoughtSignature. A match in the string value of one of those JSON keys is now refuted. On the corpus: anthropic-sdk-python 58 -> 50 and vercel-ai-anthropic 9 -> 0, recorded responses under tests/ and __fixtures__/. On the seven-repo benchmark the refutation removes 67 findings, all read and all under those four keys (SEC-161 32, SEC-048 21, SEC-055 14); the same token under any other key is still reported."
     }
   ]
 }
