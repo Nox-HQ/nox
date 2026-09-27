@@ -27,5 +27,12 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "SEC-082",
+      "classification": "refined-away",
+      "pr": 730,
+      "reason": "SEC-082 claims a hardcoded bearer token. A value built only from short words and numbers that carries a test marker, opens with a translated \"your\", or uses only credential vocabulary is a placeholder, not a token. On the corpus: vercel-ai-mistral 7 -> 0, every one `authorization: 'Bearer test-api-key'` in a *.test.ts file. On the seven-repo benchmark SEC-082 drops 274 lines, read grouped by value: test-api-key 86, test-key 32, test-token 32, custom-token 20, mock-auth-token 18, token 14, secret 11, mock-api-key 9, TEST_TOKEN 8, and smaller groups of the same kind; nothing is added and no real credential is among them. A random value (a JWT, sk_test_51H...) is never word-composed, and TestDescriptiveValuesArePlaceholders asserts it stays reported."
+    }
+  ]
 }
