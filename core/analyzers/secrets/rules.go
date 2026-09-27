@@ -3960,6 +3960,7 @@ func builtinSecretRules() []*rules.Rule {
 			remediation: "If this is a live credential, rotate it and move it to a secrets manager or environment variable.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 			secretShape: true, minEntropy: 3.5, shapeGroup: "1", optIn: true,
+			validate: isRandomLookingValue,
 		},
 	}
 
@@ -4363,4 +4364,51 @@ func builtinEntropyRules() []*rules.Rule {
 		// retired into SEC-161, which now reports the hex kind with the threshold
 		// and context requirement SEC-163 carried. See the `retires` there.
 	}
+}
+
+// isRandomLookingValue is SEC-951's veto: the quoted value at the end of the
+// match must not be made of words. A key that no vendor format describes is
+// random; `sandbox-gateway-secret`, `my-anthropic-api-key` and
+// `valid-oidc-token-12345` are test fixtures. On the seven benchmark
+// repositories this removed 115 of the rule's 137 findings and none of the six
+// real ones (a GigaChat key and a MonsterAPI key).
+//
+// Only SEC-951 uses it. A PASSWORD can be words (`correct-horse-battery-staple`),
+// which is why the placeholder check every rule shares is narrower.
+func isRandomLookingValue(match string) bool {
+	m := strings.TrimRight(match, "\"'")
+	open := strings.LastIndexAny(m, "\"'")
+	if open < 0 {
+		return true
+	}
+	parts := strings.FieldsFunc(m[open+1:], func(r rune) bool { return r == '-' || r == '_' || r == '.' })
+	if len(parts) == 0 {
+		return true
+	}
+	for _, p := range parts {
+		word := isLetters(p) && len(p) <= 16
+		number := isDigits(p) && len(p) <= 6
+		if !word && !number {
+			return true // a random-looking part
+		}
+	}
+	return false
+}
+
+func isLetters(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i] | 0x20; c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return s != ""
+}
+
+func isDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
 }

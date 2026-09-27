@@ -53,6 +53,13 @@ func TestSEC951IsOptIn(t *testing.T) {
 		`token="test-token-for-the-unit-tests"`,
 		`secret: "0000000000000000000000000000"`,
 		`api_key="ENVIRONMENT_VARIABLE_NAME_ONLY"`,
+		// Words, not randomness: 115 of SEC-951's 137 findings on the
+		// seven benchmark repositories were values like these.
+		`AI_GATEWAY_API_KEY: 'sandbox-gateway-secret'`,
+		`apiKey: 'anthropic-api-key'`,
+		`api_key = "my-anthropic-api-key"`,
+		`PROVIDER_API_KEY: 'ephemeral-PROVIDER_API_KEY'`,
+		`envOidcToken: 'valid-oidc-token-12345'`,
 	} {
 		if scanWith(t, on, "c.py", src+"\n")["SEC-951"] {
 			t.Errorf("enabled SEC-951 reported a placeholder: %s", src)
