@@ -22,6 +22,8 @@ type dataRule struct {
 	// — an IPv4-shaped or email-shaped token — use it to decide in Go whether
 	// that particular value is reportable. See validate.go.
 	validate func(matchText string) bool
+	// keywordTokens: see rules.Rule.KeywordTokens.
+	keywordTokens bool
 }
 
 // builtinDataRules returns all built-in data sensitivity detection rules.
@@ -72,6 +74,7 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)(?:phone|tel|mobile|cell)\s*[=:]\s*['"]?\+?1?\s*\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}`,
 			description: "US phone number in configuration",
 			cwe:         "CWE-359", keywords: []string{"phone", "tel", "mobile", "cell"},
+			keywordTokens: true,
 			// 555-0100..0199 is reserved for fiction, and 1234567890 is a
 			// placeholder; neither belongs to a person. See isReportablePhoneMatch.
 			validate:    isReportablePhoneMatch,
@@ -83,6 +86,7 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)(?:ip|host|server|addr)\s*[=:]\s*['"]?(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)`,
 			description: "Hardcoded public IP address in configuration",
 			cwe:         "CWE-200", keywords: []string{"ip", "host", "server", "addr"},
+			keywordTokens: true,
 			// The pattern matches any dotted quad; "public" is decided here.
 			// Without this the rule fired on `host: 127.0.0.1` and
 			// `addr: 10.0.0.5` — the common case in real configuration and the
@@ -121,8 +125,9 @@ func builtinDataRules() []*rules.Rule {
 			pattern:     `(?i)(?:tax_?id|steuer_?id|tin|steuernummer)\s*[=:]\s*['"]?\d{2,3}[/\s]?\d{3}[/\s]?\d{4,5}`,
 			description: "Tax ID (German/EU)",
 			cwe:         "CWE-359", keywords: []string{"tax_id", "taxid", "steuer_id", "steuerid", "tin", "steuernummer"},
-			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
+			keywordTokens: true,
+			remediation:   "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
+			references:    []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
 		{
 			id: "DATA-010", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
@@ -166,6 +171,7 @@ func builtinDataRules() []*rules.Rule {
 			Remediation:   defs[i].remediation,
 			References:    defs[i].references,
 			ValidateMatch: defs[i].validate,
+			KeywordTokens: defs[i].keywordTokens,
 		}
 	}
 	return out
