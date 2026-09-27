@@ -17,6 +17,13 @@ type Statement struct {
 	Line int
 	// Assigns is the variable this statement writes, or "" if none.
 	Assigns string
+	// Conditional marks a statement that may not run: it sits inside an if,
+	// loop or exception branch. Its assignment is a WEAK update -- the variable
+	// afterwards holds either its old value or the new one -- so reassigning a
+	// tainted variable from clean data there does not make it clean. Set by the
+	// extractors that know block structure (Python); false means "always runs",
+	// which is how every statement was treated before.
+	Conditional bool
 	// Calls are the normalized call chains invoked in this statement, in source
 	// order (e.g. ["os.getenv", "shlex.quote"]).
 	Calls []string

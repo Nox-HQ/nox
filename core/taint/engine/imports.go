@@ -107,7 +107,15 @@ func (t aliasTable) empty() bool { return len(t.names) == 0 }
 func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 	switch lang {
 	case lexctx.LangPython:
-		return aliasTable{names: pythonAliases(content), sep: "."}
+		names := pythonAliases(content)
+		// A receiver binding never overrides an import: `from db import cursor`
+		// already says what `cursor` is.
+		for local, kind := range pythonReceiverBindings(content) {
+			if _, imported := names[local]; !imported {
+				names[local] = kind
+			}
+		}
+		return aliasTable{names: names, sep: "."}
 	case lexctx.LangJavaScript:
 		return aliasTable{names: javascriptAliases(content), sep: "."}
 	case lexctx.LangClojure:
