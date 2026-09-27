@@ -30,6 +30,19 @@ type ReadCache struct {
 	order    *list.List // front = most recently used; values are *cacheEntry
 	entries  map[string]*list.Element
 	inflight map[string]*inflightRead
+	// hits and misses count reads served from memory and from disk.
+	hits, misses int64
+}
+
+// Stats reports how many reads were served from memory and how many went to
+// disk.
+func (c *ReadCache) Stats() (hits, misses int64) {
+	if c == nil {
+		return 0, 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.hits, c.misses
 }
 
 type cacheEntry struct {
@@ -64,16 +77,19 @@ func (c *ReadCache) ReadFile(path string) ([]byte, error) {
 	if el, ok := c.entries[path]; ok {
 		c.order.MoveToFront(el)
 		data := el.Value.(*cacheEntry).data
+		c.hits++
 		c.mu.Unlock()
 		return data, nil
 	}
 	if r, ok := c.inflight[path]; ok {
+		c.hits++
 		c.mu.Unlock()
 		<-r.done
 		return r.data, r.err
 	}
 	r := &inflightRead{done: make(chan struct{})}
 	c.inflight[path] = r
+	c.misses++
 	c.mu.Unlock()
 
 	r.data, r.err = os.ReadFile(path) // #nosec G304 -- callers pass discovered artifact paths

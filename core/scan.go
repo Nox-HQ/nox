@@ -90,6 +90,11 @@ type ScanResult struct {
 	// report meta so the decision is visible in the artifact, not just in config.
 	SASTProfile map[string]string
 
+	// SharedReads and DiskReads count the analyzers' file reads: served from
+	// the scan's shared read cache, and read from disk. Without the cache every
+	// read was a disk read (#736).
+	SharedReads, DiskReads int64
+
 	// Degradations lists the parts of the scan that could not run. An empty
 	// slice means every configured check completed; a non-empty one means the
 	// findings are incomplete and "no findings" must not be read as "clean".
@@ -938,6 +943,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// actually concluded rather than an intermediate state.
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
+	sharedReads, diskReads := reads.Stats()
 	return &ScanResult{
 		Capabilities:       capabilities,
 		Coverage:           coverage,
@@ -955,6 +961,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Rules:              allRules,
 		Degradations:       degradations.Items(),
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
+		SharedReads:        sharedReads,
+		DiskReads:          diskReads,
 	}, nil
 }
 
