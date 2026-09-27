@@ -25,6 +25,9 @@ func TestDescriptiveValuesArePlaceholders(t *testing.T) {
 		`ANTHROPIC_API_KEY: 'fake-anthropic-key`,
 		`access_token: 'expired-access-token'`,
 		`OPENAI_API_KEY: 'my-api-key`,
+		// From llama_index notebooks, reachable since #732 scans them.
+		`password="PASTE YOUR PASSWORD HERE"`,
+		`password="FakeExamplePassword"`,
 	}
 	keep := []string{
 		`Authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'`,
@@ -34,6 +37,8 @@ func TestDescriptiveValuesArePlaceholders(t *testing.T) {
 		`password="correct-horse-battery-staple"`, // a passphrase: words, but no marker
 		`password="OXYLABS_PASSWORD"`,
 		`Authorization: 'Bearer gateway-secret'`,
+		`password="CorrectHorseBatteryStaple"`, // CamelCase words, no marker
+		`password="yourcompanyadmin2024"`,      // "your" inside a word is not the word
 	}
 	for _, v := range drop {
 		if !isPlaceholderValue(v) {

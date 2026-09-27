@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `(212) 555-0237` and other real-looking numbers still are. DATA findings on
   the benchmark go from 55 to 23, nothing added, every drop read.
 
+- **"PASTE YOUR PASSWORD HERE" and `FakeExamplePassword` are placeholders.**
+  Both reached reports once #732 made notebooks scannable. "your" as a
+  separate word now marks a placeholder (it already did as `your-` and
+  `your_`), and a value's CamelCase words are read as words, so
+  `FakeExamplePassword` carries the `fake` marker. A passphrase in CamelCase
+  with no marker (`CorrectHorseBatteryStaple`) is still reported. Benchmark:
+  llama_index 74 → 67 secret findings, all seven drops read, nothing added.
+
 - **Model-issued ciphertext is not a credential.** Recorded model API traffic
   carries opaque values the provider issues and takes back: Anthropic's
   thinking-block `signature` and web-search `encrypted_index`, OpenAI's
