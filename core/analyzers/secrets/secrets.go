@@ -192,6 +192,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}
+		if strings.EqualFold(filepath.Ext(artifact.Path), ".ipynb") {
+			content = unescapeNotebookQuotes(content)
+		}
 
 		results, err := a.ScanFile(artifact.Path, content)
 		if err != nil {
@@ -264,6 +267,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if inDataURIPayload(content, &results[i]) {
 				a.refute(candidate, evidence.KindStatic,
 					"the match lies inside a data: URI payload")
+				continue
+			}
+			if inBase64ImageString(content, &results[i]) {
+				a.refute(candidate, evidence.KindStatic,
+					"the match lies inside a string that is a base64-encoded image")
 				continue
 			}
 			// Drop a bare provider-prefix match with no token body — the literal

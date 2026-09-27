@@ -40,6 +40,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repositories secret findings go from 960 to 547, nothing is added, and every
   drop was read; none of the real credentials nox found is among them.
 
+- **A notebook cell is scanned as the code it holds.** A `.ipynb` file stores
+  each source line as a JSON string, so `api_key="…"` in a cell is
+  `api_key=\"…\"` on disk, and rules that expect a quote right against the
+  value never matched it. The same line in a `.py` file was reported. Escaped
+  quotes in a notebook now read as quotes, with every line and column
+  unchanged, so findings still point at the file on disk. On llama_index's 759
+  notebooks this adds 42 findings and removes none: a Vercel AI Gateway key and
+  a Weaviate Cloud API key (two lines each; neither nox, gitleaks nor
+  TruffleHog reported the Weaviate key), and 38 hardcoded passwords in example
+  notebooks, the same rule nox applies to `.py` files.
+
+- **Base64 images are image data, not API keys.** A notebook's outputs and a
+  recorded API response carry images as bare base64 strings
+  (`"image/png": "iVBORw0KGgo…"`, `"data": "/9j/4AAQ…"`), and any long base64
+  run contains any short vendor prefix: SEC-048 (NuGet, `oy2…`) and SEC-055
+  fired inside them. The `data:` URI check needed the `data:` prefix these
+  lack. A match inside a string that starts with an image's own base64
+  signature (PNG, JPEG, GIF, WebP) is now refuted. On the benchmark:
+  llama_index 236 → 101 secret findings, vercel/ai 491 → 486, nothing added,
+  every drop on an image line. The same token in an ordinary string is still
+  reported.
+
 ## [1.42.0] - 2026-09-27
 
 Eleven rules stop reporting what merely resembles the condition they name:
