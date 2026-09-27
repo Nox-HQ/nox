@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/nox-hq/nox/core/discovery"
@@ -99,6 +100,9 @@ func dropPublishedContactEmails(got []findings.Finding, path string, content []b
 					continue
 				}
 				if manifest && contactField(lower) {
+					continue
+				}
+				if inURLUserinfo(lines[ln-1], f.Location.StartColumn) {
 					continue
 				}
 			}
@@ -214,4 +218,20 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+// urlUserinfoPrefix matches a line up to the user part of a URL's userinfo:
+// scheme://user, with nothing between that could end the authority.
+var urlUserinfoPrefix = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s/@"'<>]*$`)
+
+// inURLUserinfo reports whether a DATA-001 match starting at col (1-based) is
+// the password@host part of a connection URL. The rule's pattern is a
+// separator followed by local@domain, and in postgresql://user:password@host
+// the colon after the user is that separator: on the head-to-head it reported
+// database URLs from llama_index's docs as e-mail addresses.
+func inURLUserinfo(line string, col int) bool {
+	if col < 1 || col > len(line) {
+		return false
+	}
+	return urlUserinfoPrefix.MatchString(line[:col-1])
 }
