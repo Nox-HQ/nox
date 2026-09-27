@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox bench` reported a benchmark of nothing as a success.** A corpus of
+  symlinked clones — the natural way to assemble one from repositories already
+  on disk — produced "0 projects", a report and exit 0, because only plain
+  directories counted. Links to directories are projects now, and a corpus
+  with no projects is an error rather than an empty report.
+
 - **Nine vendor-binding secret rules read a class name as an API key, and
   missed JSON.** `splitter = SemanticDoubleMergingSplitterNodeParser(` reported
   SEC-659 "Split API Key" six times across llama_index — `splitter` starts with
