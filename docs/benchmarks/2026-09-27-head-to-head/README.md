@@ -192,27 +192,46 @@ used to time out now complete.
 
 ## What this changes for nox
 
-Fixed:
+Everything below was measured after this report, against v1.42.0 on the same
+seven repositories at the same commits, offline (so dependency advisories are
+not in these counts), and every dropped finding was read.
 
-- #728 — one lookup per package version, not per lockfile.
+| | v1.42.0 | after the follow-ups | |
+|---|---:|---:|---:|
+| All engine findings | 2,376 | 1,429 | −40% |
+| Secrets | 960 | 359 | −63% |
+| Personal data (DATA) | 369 | 23 | −94% |
+| Every other rule family | unchanged | unchanged | |
 
-Follow-ups, each measured above:
+Each follow-up, and what became of it:
 
-1. **Placeholder values.** `SEC-080`/`082`/`801`/`803` report `test-api-key`,
-   `test_password` and `sua_chave_openai` as credentials; that is most of nox's
-   secret noise.
-2. **Notebook escaping.** Credentials in `.ipynb` source lines are stored as
-   `\"…\"` and slip past rules that match them in a `.py` file.
-3. **Keyword-plus-entropy fallback.** The GigaChat and MonsterAPI keys have no
-   vendor format; only a generic rule finds them.
-4. **Base64 image data** still fires `SEC-048`/`SEC-055`/`SEC-161` in notebooks
-   and recorded responses.
-5. **`DATA-001`** reports public support addresses repeated across every
-   versioned docs copy; that is most of nox's unique code-analysis noise.
-6. **Scan time** on large repositories.
-7. **Reachability** beyond Go.
-8. A failed advisory-detail fetch is logged but not recorded on the scan
-   (nox-core).
+1. **Placeholder values** — fixed in #730 and #737. A value made only of short
+   words with a test marker, a translated "your", or only credential
+   vocabulary is a placeholder; a random value never is.
+2. **Notebook escaping** — fixed in #732. It adds 42 findings on llama_index,
+   among them the Vercel key only TruffleHog found and a **Weaviate Cloud API
+   key none of the three tools found**. With it, nox finds 7 of the 9 real
+   credentials any tool found here; gitleaks finds 5, TruffleHog 3.
+3. **Keyword-plus-entropy fallback** — not done. gitleaks' `generic-api-key`
+   found two real keys among 169 findings; the precision cost is not yet
+   justified.
+4. **Base64 image data** — fixed in #731. Model-issued ciphertext
+   (`signature`, `encrypted_content`, `thoughtSignature`) turned out to be a
+   separate class and is fixed in #734.
+5. **`DATA-001`** — fixed in #733: role mailboxes and a URL's userinfo are not
+   personal data. `DATA-004`'s fictional 555-01xx and `1234567890` numbers
+   followed in #738.
+6. **Scan time** — profiled in #736: the regex engine is 53% of CPU, and one
+   rule (`DATA-009`, keyword `tin`) costs 80 s on crewAI for zero findings.
+   Not yet changed.
+7. **Reachability** beyond Go — not started.
+8. **The unrecorded detail fetch** — nox-core#3. Recording it naively would
+   make the verifier call a reachable source unreachable, so it waits for the
+   design there.
+
+And one the comparison found in nox's own tooling: the rule-diff check passed
+a run that crashed after three of its 25 repositories, because the crash exited
+with the code that means "every drop is explained". Fixed in #735.
 
 ## Limits of this comparison
 
