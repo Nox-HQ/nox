@@ -144,7 +144,6 @@ func stripLeadingBoundary(re *syntax.Regexp) (*syntax.Regexp, bool) {
 	return rest, true
 }
 
-
 // leadingLiterals returns the literal every match must begin with, one per
 // alternative, or ok=false when some match could begin otherwise.
 //
