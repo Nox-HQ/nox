@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **nox's own weekly remediation runs nox 1.43.0.** Both pin lines moved
+  together; the sha256 is of `nox_1.43.0_linux_amd64.tar.gz` and matches the
+  release's cosign-verified `checksums.txt`.
+
 ## [1.43.0] - 2026-09-28
 
 nox was compared, for the first time, with the tools people run instead of it
