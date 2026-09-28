@@ -143,33 +143,40 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		return nil
 	}
 
-	// Reuse the shared offset helpers (computeLineStarts / makeMatchResult) that
-	// AbsenceMatcher already uses, rather than inlining a second copy of the
-	// line/column arithmetic.
-	lineStarts := computeLineStarts(content)
 	shapeGroup := 0
 	if g := rule.Metadata["shape_group"]; g != "" {
 		if n, err := strconv.Atoi(g); err == nil && n > 0 && n <= re.NumSubexp() {
 			shapeGroup = n
 		}
 	}
-	var results []MatchResult
-	if shapeGroup > 0 {
-		subs := re.FindAllSubmatchIndex(content, -1)
-		results = make([]MatchResult, 0, len(subs))
-		for _, loc := range subs {
-			mr := makeMatchResult(content, lineStarts, loc[0:2])
+	// The same locations either way: a pattern that provably starts with a
+	// literal is tried only where the literal occurs (see prefixplan.go);
+	// every other pattern is scanned in full.
+	var locs [][]int
+	switch plan := planFor(rule.Pattern); {
+	case plan != nil && plan.usable(content):
+		locs = plan.findAll(content, shapeGroup > 0)
+	case shapeGroup > 0:
+		locs = re.FindAllSubmatchIndex(content, -1)
+	default:
+		locs = re.FindAllIndex(content, -1)
+	}
+	if len(locs) == 0 {
+		return nil
+	}
+	// Line offsets only once there is something to place; most rules match
+	// nothing in most files. Reuses the shared helpers (computeLineStarts /
+	// makeMatchResult) that AbsenceMatcher already uses.
+	lineStarts := computeLineStarts(content)
+	results := make([]MatchResult, 0, len(locs))
+	for _, loc := range locs {
+		mr := makeMatchResult(content, lineStarts, loc[0:2])
+		if shapeGroup > 0 {
 			if lo, hi := loc[2*shapeGroup], loc[2*shapeGroup+1]; lo >= 0 && hi >= lo {
 				mr.ShapeText = string(content[lo:hi])
 			}
-			results = append(results, mr)
 		}
-	} else {
-		matches := re.FindAllIndex(content, -1)
-		results = make([]MatchResult, 0, len(matches))
-		for _, loc := range matches {
-			results = append(results, makeMatchResult(content, lineStarts, loc))
-		}
+		results = append(results, mr)
 	}
 
 	if rule.Metadata["secret_shape"] == "true" {

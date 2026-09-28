@@ -13,6 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   together; the sha256 is of `nox_1.43.0_linux_amd64.tar.gz` and matches the
   release's cosign-verified `checksums.txt`.
 
+### Fixed
+
+- **Scans take half the CPU, with identical findings.** About half of a
+  scan's CPU was Go's regex engine scanning whole files for rules whose
+  keyword appeared somewhere in them (#736). A pattern that can only start
+  with one of a few literal words (`(?i)mlflow[_-]?tracking…`,
+  `\b(?:eval|exec)\(`) is now tried only where one of those words occurs,
+  which returns exactly the matches a full scan returns; any pattern this
+  cannot be proven for keeps the full scan. 1,262 of the 1,392 regex rules
+  qualify. Checked three ways: the fast and full paths agree on every
+  built-in rule over 3,101 files (a test that runs in CI and was shown to
+  fail on a broken fast path), the seven benchmark repositories give
+  identical findings down to column and fingerprint, and rule-diff shows no
+  change on its 25-repository corpus. CPU time on the benchmark falls from
+  1,721 s to 863 s (crewAI −54%, llama_index −53%); elapsed time from 818 s
+  to 503 s. Line offsets are now computed only for files a rule matches.
+
 ## [1.43.0] - 2026-09-28
 
 nox was compared, for the first time, with the tools people run instead of it
