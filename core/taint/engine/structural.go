@@ -2,6 +2,7 @@ package engine
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1350,6 +1351,16 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// language discriminator: a quoted/validated shell file invocation leaves
 		// both false and is still suppressed.
 		return info.ShellTrue || info.FirstArgTainted
+	case "xpath", "etree.XPath", "etree.XPathEvaluator", "elementpath.Selector":
+		// The query is the first argument. XPath variables are passed as
+		// keywords -- `root.xpath("//u[@id=$id]", id=v)` -- and bound by the
+		// engine, never parsed as XPath, so a taint that reaches only them is
+		// the safe parameterized form.
+		return info.FirstArgTainted
+	case "elementpath.select", "elementpath.iter_select":
+		// select(root, path, ...): the document is arg 0 and may well be
+		// user-supplied XML; the injection is a tainted PATH, arg 1.
+		return positionalSlotTainted(info, 1)
 	case "setTimeout", "setInterval":
 		// A timer runs its first argument as CODE only when that argument is a
 		// string. A function literal is the ordinary form -- the callback body
@@ -1361,6 +1372,20 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 	default:
 		return true
 	}
+}
+
+// positionalSlotTainted reports whether a tainted variable is read in the
+// given positional argument slot of the call.
+func positionalSlotTainted(info taint.SinkArgInfo, slot int) bool {
+	if slot >= len(info.PositionalVars) {
+		return false
+	}
+	for _, v := range info.PositionalVars[slot] {
+		if slices.Contains(info.TaintedArgVars, v) {
+			return true
+		}
+	}
+	return false
 }
 
 // firstArgIsFunctionLiteral reports whether the code view of the first
@@ -1422,19 +1447,9 @@ func dots(s string) int {
 	return n
 }
 
-// allVulnClasses is the fixed set of classes checked when resolving a sanitizer
-// call to the classes it clears. Ordered deterministically.
-var allVulnClasses = []taint.VulnClass{
-	taint.VulnCommandInjection,
-	taint.VulnSQLInjection,
-	taint.VulnCodeInjection,
-	taint.VulnXSS,
-	taint.VulnSSTI,
-	taint.VulnPathTraversal,
-	taint.VulnSSRF,
-	taint.VulnUnsafeDeserialization,
-	taint.VulnPromptInjection,
-}
+// allVulnClasses is every class, taken from the catalog package so a class
+// added there is never missing here.
+var allVulnClasses = taint.AllVulnClasses()
 
 // sortFlows orders flows deterministically by sink line, then source line, then
 // sink call — matching the foundation stub's ordering so downstream consumers

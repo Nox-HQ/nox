@@ -21,6 +21,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -47,19 +48,29 @@ const (
 	VulnUnsafeDeserialization VulnClass = "unsafe_deserialization" // CWE-502
 	VulnPromptInjection       VulnClass = "prompt_injection"       // CWE-77 / CWE-200
 	VulnOpenRedirect          VulnClass = "open_redirect"          // CWE-601
+	VulnXPathInjection        VulnClass = "xpath_injection"        // CWE-643
+	VulnLDAPInjection         VulnClass = "ldap_injection"         // CWE-90
 )
+
+// vulnClasses is every class above, in a fixed order. It is the one list: a
+// sanitizer is honoured for a class only if the engine asks about that class,
+// and two hand-kept copies of this list elsewhere once stopped at
+// prompt_injection, so open_redirect -- and any class added after it -- could
+// be declared neutralized in the catalog and never be.
+var vulnClasses = []VulnClass{
+	VulnCommandInjection, VulnSQLInjection, VulnCodeInjection, VulnXSS,
+	VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
+	VulnPromptInjection, VulnOpenRedirect, VulnXPathInjection, VulnLDAPInjection,
+}
+
+// AllVulnClasses returns every vulnerability class, in a fixed order.
+func AllVulnClasses() []VulnClass { return slices.Clone(vulnClasses) }
 
 // knownVulnClass reports whether class is one of the classes above, so a
 // catalog entry naming a class that nothing reports fails to load instead of
 // silently excluding nothing.
 func knownVulnClass(class VulnClass) bool {
-	switch class {
-	case VulnCommandInjection, VulnSQLInjection, VulnCodeInjection, VulnXSS,
-		VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
-		VulnPromptInjection, VulnOpenRedirect:
-		return true
-	}
-	return false
+	return slices.Contains(vulnClasses, class)
 }
 
 // SourceKind describes the provenance of untrusted input. It is informational

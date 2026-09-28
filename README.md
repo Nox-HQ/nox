@@ -140,7 +140,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1492 built-in rules** across five analyzer suites:
+Nox ships with **1494 built-in rules** across five analyzer suites:
 
 ### Secrets (883 rules)
 

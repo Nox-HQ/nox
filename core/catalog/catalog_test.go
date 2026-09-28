@@ -112,8 +112,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1492 -> 1491 removed SEC-572, whose pattern encoded a Payoneer credential
 	// format Payoneer does not publish (see TestSEC572IsGone).
 	// 1491 -> 1492 added SEC-951, the generic credential rule.
-	if got := len(cat); got != 1492 {
-		t.Errorf("Catalog() returned %d rules, want 1492", got)
+	// 1492 -> 1494 added TAINT-008 (XPath injection) and TAINT-009 (LDAP
+	// injection), the first two new taint sink classes since TAINT-007.
+	if got := len(cat); got != 1494 {
+		t.Errorf("Catalog() returned %d rules, want 1494", got)
 	}
 }
 

@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 189,
+  "version": 191,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -735,10 +735,21 @@
       "elapsed_minutes": 0
     },
     "task-75": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #752 merged (6410536): CRYPTO-002 for Python. OWASP weakrand 0 -\u003e 100 (overall 15.5 -\u003e 22.7); 0 findings on 403 random-using corpus files; 51/55 plainly-secret findings on 89 GitHub search hits; rule-diff no change on 25 repos."
+      ],
+      "started_at": "2026-09-28T16:43:07.344365+02:00",
+      "completed_at": "2026-09-28T17:14:22.170127+02:00",
+      "elapsed_minutes": 31
+    },
+    "task-76": {
       "status": "in_progress",
       "path": "",
       "owner": "ai-agent",
-      "started_at": "2026-09-28T16:43:07.344365+02:00",
+      "started_at": "2026-09-28T17:14:22.214985+02:00",
       "elapsed_minutes": 0
     },
     "task-8": {
@@ -760,5 +771,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T16:43:07.344365+02:00"
+  "updated_at": "2026-09-28T17:14:22.214985+02:00"
 }
