@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reflected XSS through a Flask handler's return value (`TAINT-003`).**
+  Flask serves a string a view returns as text/html, so `return
+  f"<p>{request.args['q']}</p>"` is reflected XSS with no template in sight;
+  the only Python XSS sinks were `Markup` and `mark_safe`. A plain value
+  returned from a route in a file that imports Flask is now a sink (FastAPI's
+  identical decorators serialize a returned string as JSON, so it is
+  excluded), and so are `make_response` and Django's `HttpResponse` on the
+  body only -- a tainted header is not XSS. Returned `jsonify`, dicts, lists,
+  and locals built by a response constructor are not. OWASP Benchmark for
+  Python xss: 0 -> 23 (Semgrep `p/default`: -28). AGENTFLOW-002 does not
+  treat a route's return as an action a hijacked model takes: nox's own
+  self-scan showed it would otherwise fire, at high severity, on every Flask
+  app that returns a model's reply -- including the examples' `safe.py`.
+  Rendering model output as HTML (OWASP LLM05) deserves its own measured rule.
+
 - **XML external entity resolution (XXE) is a taint sink (`TAINT-010`).**
   Python's XML parsers stopped resolving external entities by default (the
   standard library in 3.7.1, lxml in 5.0), so the vulnerable condition is two
@@ -96,6 +111,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to miss.
 
 ### Fixed
+
+- **`x += y` in Python carried no taint.** An augmented assignment was not
+  modelled as an assignment at all, so `sql += q; cursor.execute(sql)` and
+  `body += f"<p>{q}</p>"; return body` were both unreported. It now keeps
+  the target's taint and adds the operand's, like `x = x + y`. On the OWASP
+  Benchmark for Python this alone moves command injection 23 -> 40,
+  deserialization 39 -> 50, XPath 22 -> 27, LDAP 41 -> 47, open redirect 1 ->
+  9 and path traversal 7 -> 11. The other recognizer languages share the gap
+  and are left for their own measurement.
 
 - **A sanitizer for open redirect was never honoured.** The engine asks the
   catalog "does this call clear class X" for a fixed list of classes, and two

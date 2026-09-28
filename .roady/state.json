@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 195,
+  "version": 197,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -768,10 +768,21 @@
       "elapsed_minutes": 13
     },
     "task-78": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #755 merged: HARDEN-003 cookie secure=False (securecookie 0 -\u003e 100; 3 real findings on 41 GitHub files after skipping def signatures); TAINT-011 trust boundary opt-in (44%/42% when enabled, so off by default); shared lexctx.MaskNonCode; rule-diff no change."
+      ],
+      "started_at": "2026-09-28T17:52:29.034363+02:00",
+      "completed_at": "2026-09-28T18:16:29.051002+02:00",
+      "elapsed_minutes": 24
+    },
+    "task-79": {
       "status": "in_progress",
       "path": "",
       "owner": "ai-agent",
-      "started_at": "2026-09-28T17:52:29.034363+02:00",
+      "started_at": "2026-09-28T18:16:29.079395+02:00",
       "elapsed_minutes": 0
     },
     "task-8": {
@@ -793,5 +804,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T17:52:29.034363+02:00"
+  "updated_at": "2026-09-28T18:16:29.079395+02:00"
 }

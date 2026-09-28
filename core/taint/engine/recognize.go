@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // langKind selects the small syntactic differences between the two supported
 // languages (assignment keywords, call-chain punctuation). Everything else in
@@ -84,9 +87,19 @@ func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
 
 	st.chains = dottedChains(exprCode)
 
-	// A mutator call on a container is a store into it (see containerMutators).
+	// A mutator call on a container is a store into it (see containerMutators),
+	// and so is Python's augmented assignment: `sql += user` keeps what sql
+	// held and adds what user holds, exactly like `sql = sql + user`.
+	// splitAssignment declines compound operators, so before this `x += y`
+	// was no assignment at all and the taint it carried was dropped --
+	// `body += f"<p>{q}</p>"; return body` and `sql += q; cursor.execute(sql)`
+	// both went unreported.
 	if st.assigns == "" {
-		if root, ok := containerMutationRoot(lang, code); ok {
+		root, ok := containerMutationRoot(lang, code)
+		if !ok {
+			root, ok = augmentedAssignRoot(lang, code)
+		}
+		if ok {
 			st.assigns = root
 			if _, seen := reads[root]; !seen {
 				st.reads = append(st.reads, root)
@@ -616,4 +629,20 @@ func rubyStateSigilName(code string) string {
 		return ""
 	}
 	return lhs
+}
+
+// pyAugmentedAssign matches `name op= expr` for Python's augmented operators.
+var pyAugmentedAssign = regexp.MustCompile(`^\s*([A-Za-z_]\w*)\s*(?:\*\*|//|<<|>>|[-+*/%@&|^])=[^=]`)
+
+// augmentedAssignRoot returns the target of a Python augmented assignment.
+// Other recognizer languages share the gap and are not changed here: each
+// needs its own measurement before its behaviour moves.
+func augmentedAssignRoot(lang langKind, code string) (string, bool) {
+	if lang != langPython {
+		return "", false
+	}
+	if m := pyAugmentedAssign.FindStringSubmatch(code); m != nil {
+		return m[1], true
+	}
+	return "", false
 }
