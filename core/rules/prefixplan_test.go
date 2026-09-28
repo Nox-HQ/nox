@@ -31,19 +31,22 @@ func TestAFoldOutlierFallsBackToTheFullScan(t *testing.T) {
 // A pattern the plan cannot prove starts with a literal keeps the full scan.
 func TestAPatternWithoutALiteralStartHasNoPlan(t *testing.T) {
 	for _, p := range []string{
-		`\bAKIA[0-9A-Z]{16}`,     // leading assertion
-		`[a-z0-9]{32}`,           // character class
-		`(?m)^password\s*=`,      // start-of-line anchor
-		`key.*|[0-9]+`,           // one alternative has no literal
-		`a`,                      // single-character literal
-		`(?:secret)?\s*[=:]\s*x`, // optional literal: a match can start elsewhere
+		`\B(?:akia|asia)[0-9A-Z]{16}`, // leading non-boundary
+		`\b\.env\b`,                   // \b before a non-word literal
+		`[a-z0-9]{32}`,                // character class
+		`(?m)^password\s*=`,           // start-of-line anchor
+		`key.*|[0-9]+`,                // one alternative has no literal
+		`a`,                           // single-character literal
+		`(?:secret)?\s*[=:]\s*x`,      // optional literal: a match can start elsewhere
 	} {
 		if planFor(p) != nil {
 			t.Errorf("%q got a literal-prefix plan", p)
 		}
 	}
-	if planFor(`(?i)(?:phone|tel)\s*[=:]\s*\d+`) == nil {
-		t.Error("a pattern that opens with literals got no plan")
+	for _, p := range []string{`(?i)(?:phone|tel)\s*[=:]\s*\d+`, `\bAKIA[0-9A-Z]{16}`, `(?i)\b(?:eval|exec)\s*\(`} {
+		if planFor(p) == nil {
+			t.Errorf("%q opens with literals (after \\b) and got no plan", p)
+		}
 	}
 }
 
@@ -54,6 +57,8 @@ func TestPrefixPathEdgeCases(t *testing.T) {
 		{`(?i)aa\w*`, "aaaa aAa AAAAb"},
 		{`(?i)token\s*=\s*"[^"]+"`, "token =\n  \"multi-line value\"\nTOKEN=\"x\""},
 		{`(?:foo|foobar)baz`, "foobarbaz foobaz"},
+		{`\bAKIA[0-9A-Z]{4}`, "AKIA1234 xAKIA1234 _AKIA1234 (AKIA1234"},
+		{`(?i)\b(?:eval|exec)\(`, "eval( retrieval( myexec( .EXEC( EvAl("},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)

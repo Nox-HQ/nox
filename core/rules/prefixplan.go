@@ -39,8 +39,9 @@ import (
 // keeps the full scan (planFor returns nil):
 //
 //   - the first element must be a literal of two or more ASCII characters, in
-//     every alternative (a leading assertion like `\b` looks at the byte
-//     BEFORE the start, which an anchored match cannot see);
+//     every alternative -- or `\b` followed by such literals that all begin
+//     with a word character, where the boundary is checked on the byte before
+//     the candidate, since an anchored match cannot see it;
 //   - the pattern must contain no `^` or `\A` anywhere, because in the slice a
 //     match is tried on, "start of text" moves to the candidate;
 //   - the pattern must not match the empty string.
@@ -51,6 +52,11 @@ import (
 type prefixPlan struct {
 	prefixes []literalPrefix
 	anchored *regexp.Regexp // `^(?:pattern)`: matches only at the start of its input
+	// leadBoundary: the pattern opens with `\b`. The anchored match cannot see
+	// the byte before a candidate, so the boundary is checked here instead:
+	// every literal starts with a word character, which makes `\b` at the
+	// candidate exactly "the previous byte is not a word character".
+	leadBoundary bool
 }
 
 type literalPrefix struct {
@@ -96,9 +102,17 @@ func buildPlan(pattern string) *prefixPlan {
 	if hasTextStartAssertion(re) {
 		return nil
 	}
-	prefixes, ok := leadingLiterals(re)
+	body, leadBoundary := stripLeadingBoundary(re)
+	prefixes, ok := leadingLiterals(body)
 	if !ok || len(prefixes) == 0 {
 		return nil
+	}
+	if leadBoundary {
+		for _, p := range prefixes {
+			if !isWordByte(p.text[0]) {
+				return nil
+			}
+		}
 	}
 	for _, p := range prefixes {
 		if len(p.text) < 2 {
@@ -109,8 +123,27 @@ func buildPlan(pattern string) *prefixPlan {
 	if err != nil {
 		return nil
 	}
-	return &prefixPlan{prefixes: prefixes, anchored: anchored}
+	return &prefixPlan{prefixes: prefixes, anchored: anchored, leadBoundary: leadBoundary}
 }
+
+// stripLeadingBoundary returns the pattern without a leading `\b`, and whether
+// there was one. Only the form `\b` + rest at the top of the pattern (through
+// capture groups) is recognised; `\b` inside some alternatives only, or `\B`,
+// leaves the pattern as it is, and leadingLiterals then declines it.
+func stripLeadingBoundary(re *syntax.Regexp) (*syntax.Regexp, bool) {
+	for re.Op == syntax.OpCapture {
+		re = re.Sub[0]
+	}
+	if re.Op != syntax.OpConcat || len(re.Sub) < 2 || re.Sub[0].Op != syntax.OpWordBoundary {
+		return re, false
+	}
+	rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[1:]}
+	if len(rest.Sub) == 1 {
+		return rest.Sub[0], true
+	}
+	return rest, true
+}
+
 
 // leadingLiterals returns the literal every match must begin with, one per
 // alternative, or ok=false when some match could begin otherwise.
@@ -235,6 +268,9 @@ func (p *prefixPlan) findAll(content []byte, submatch bool) [][]int {
 	for _, s := range starts {
 		if s < resume {
 			continue
+		}
+		if p.leadBoundary && s > 0 && isWordByte(content[s-1]) {
+			continue // `\b` does not hold here, so no match starts here
 		}
 		loc := p.anchored.FindSubmatchIndex(content[s:])
 		if loc == nil {
