@@ -30,22 +30,16 @@ func scanWith(t *testing.T, a *Analyzer, name, src string) map[string]bool {
 // SEC-951 is the generic "credential-named key, random-looking value" rule. The
 // head-to-head found a GigaChat key (base64 of client_id:secret) and a
 // MonsterAPI key (a UUID) only through gitleaks' generic rule, among 169
-// findings, so it is opt-in: off unless scan.rules.enable names it. The values
-// below are invented in the same shapes.
-func TestSEC951IsOptIn(t *testing.T) {
+// findings. It runs by default. The values below are invented in the same
+// shapes.
+func TestSEC951FindsKeysNoVendorFormatDescribes(t *testing.T) {
 	gigachat := `llm = GigaChatLLM(credentials="ZjNhOWMxZTItN2I0ZC00YzhhLTk1ZTEtMmQ2YjhmMGE0YzdlOmE4YjJjOTFkLTRlNWYtNDdhMS1iYzNkLTllOGYyYTFiNmM0ZA==")` + "\n"
 	monster := `llm = MonsterLLM(api_key="7c2e9a41-3f8b-4d6e-a15c-9b0d2e7f4a83")` + "\n"
 
-	off := NewAnalyzer()
-	if scanWith(t, off, "a.py", gigachat)["SEC-951"] {
-		t.Fatal("SEC-951 ran without being enabled")
-	}
-
 	on := NewAnalyzer()
-	on.EnableOptIn([]string{"SEC-951"})
 	for name, src := range map[string]string{"gigachat.py": gigachat, "monster.py": monster} {
 		if !scanWith(t, on, name, src)["SEC-951"] {
-			t.Errorf("%s: enabled SEC-951 did not report the value", name)
+			t.Errorf("%s: SEC-951 did not report the value", name)
 		}
 	}
 	for _, src := range []string{
@@ -60,9 +54,14 @@ func TestSEC951IsOptIn(t *testing.T) {
 		`api_key = "my-anthropic-api-key"`,
 		`PROVIDER_API_KEY: 'ephemeral-PROVIDER_API_KEY'`,
 		`envOidcToken: 'valid-oidc-token-12345'`,
+		// The rest of the benchmark's noise: a PostHog project key (public by
+		// design), AWS's documented example key, and a sequential placeholder.
+		`"api_key": "phc_PHQDA5KwztijnSojsxJ2c1DuJd52QCzJzT2xnSGvjN2"`,
+		`"secretAccessKey": "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"`,
+		`DATABRICKS_TOKEN="dapi1234567890abcdef"`,
 	} {
 		if scanWith(t, on, "c.py", src+"\n")["SEC-951"] {
-			t.Errorf("enabled SEC-951 reported a placeholder: %s", src)
+			t.Errorf("SEC-951 reported a placeholder: %s", src)
 		}
 	}
 }

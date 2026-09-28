@@ -40,9 +40,10 @@ func ruleSpecificityFallback(ruleID string) int {
 
 // Specificity tiers. Larger is more specific (wins a span contest).
 const (
-	specGenericEntropy  = 0 // SEC-161/162/163 high-entropy heuristics
-	specKeywordGeneric  = 1 // loose vendor patterns gated by a secret_shape post-filter
-	specProviderDefault = 2 // an anchored provider regex (all providers share this tier)
+	specGenericFallback = -1 // SEC-951: reports only a span no other rule claims
+	specGenericEntropy  = 0  // SEC-161/162/163 high-entropy heuristics
+	specKeywordGeneric  = 1  // loose vendor patterns gated by a secret_shape post-filter
+	specProviderDefault = 2  // an anchored provider regex (all providers share this tier)
 )
 
 // specificityByRule builds a rule-ID → specificity-tier map from the analyzer's
@@ -66,6 +67,13 @@ func specificityByRule(rs []*rules.Rule) map[string]int {
 
 // classifyRuleSpecificity assigns a specificity tier to a single rule by shape.
 func classifyRuleSpecificity(r *rules.Rule) int {
+	// A generic fallback loses every span contest, including to the entropy
+	// rules. SEC-951 exists to report keys nothing else finds; winning a span
+	// SEC-161 already reports would move that finding to a new rule ID and
+	// fingerprint, breaking every baseline and waiver written against it.
+	if r.Metadata != nil && r.Metadata["generic_fallback"] == "true" {
+		return specGenericFallback
+	}
 	if r.MatcherType == "entropy" {
 		return specGenericEntropy
 	}

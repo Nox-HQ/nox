@@ -134,20 +134,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **SEC-951, a generic credential rule you can switch on, and
-  `scan.rules.enable` to do it.** Some keys have no vendor format to match: a
-  GigaChat key is base64 of `client_id:secret`, a MonsterAPI key is a UUID. In
-  the head-to-head only gitleaks found them, with a generic rule that reported
-  them among 169 findings. SEC-951 reports a credential-named key
-  (`api_key`, `secret`, `token`, `credentials`, …) bound to a quoted value of
-  16–200 characters that looks random: entropy of at least 3.5 and not made of
-  words, so `sandbox-gateway-secret` and `my-anthropic-api-key` are not
-  reported. Switched on across the seven benchmark repositories it reports 22
-  lines, 6 of them the two real keys above, which nox finds no other way;
-  the rest are test tokens shaped like real ones, public PostHog keys and
-  AWS's documented example key. That is why it is opt-in:
-  `scan.rules.enable: [SEC-951]` in `.nox.yaml`. Opt-in rules are tagged
-  `opt-in` in `nox rules` and cost nothing when off.
+- **SEC-951, a generic credential rule, and `scan.rules.enable` for opt-in
+  rules.** Some keys have no vendor format to match: a GigaChat key is base64
+  of `client_id:secret`, a MonsterAPI key is a UUID. In the head-to-head only
+  gitleaks found them, with a generic rule that reported them among 169
+  findings. SEC-951 reports a credential-named key (`api_key`, `secret`,
+  `token`, `credentials`, …) bound to a quoted value of 16–200 characters that
+  looks random: entropy of at least 3.5, not made of words, not a key that is
+  public by design (PostHog `phc_`, Stripe `pk_`), not a documentation example,
+  and not a run of sequential digits. It ranks below every other secret rule
+  on a shared span, so it reports only what nothing else does and never moves
+  an existing finding to a new rule ID. It runs by default at medium severity
+  and low confidence, below the usual `fail_on: high`; `scan.rules.disable:
+  [SEC-951]` turns it off. Opt-in rules (`scan.rules.enable`, tagged `opt-in`
+  in `nox rules`) cost nothing when off; none ships opt-in today.
 
 ## [1.42.0] - 2026-09-27
 
