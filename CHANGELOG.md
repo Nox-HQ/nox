@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.44.0] - 2026-09-28
+
+Six new Python detections, and taint analysis that follows two ordinary idioms
+it used to drop. Weak randomness (CRYPTO-002), XPath, LDAP and XXE injection
+(TAINT-008 to 010), `secure=False` cookies (HARDEN-003), reflected XSS through
+Flask route returns, taint through `x += y`, and branches whose condition is a
+constant no longer analysed as if they could run. On the OWASP Benchmark for
+Python the average score goes from 15.5 to 49.3 (Semgrep `p/default`: 10.7);
+rule-diff's 25-repository corpus shows no rule-level change, and every new
+rule was also measured on real repositories before it shipped. One rule,
+TAINT-011 (untrusted data stored in the session), is opt-in.
 
 ### Added
 
