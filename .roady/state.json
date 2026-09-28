@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 197,
+  "version": 199,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -779,11 +779,15 @@
       "elapsed_minutes": 24
     },
     "task-79": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "PR #756 merged: Flask route-return + make_response/HttpResponse XSS sinks (xss 0 -\u003e 23) and Python += carries taint (cmdi 23 -\u003e 40, deser 39 -\u003e 50); AGENTFLOW-002 excludes route returns (found by self-scan); average 37.4 -\u003e 42.7; no change on 9 Python corpus repos; rule-diff no change on 25."
+      ],
       "started_at": "2026-09-28T18:16:29.079395+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-09-28T19:17:48.449848+02:00",
+      "elapsed_minutes": 61
     },
     "task-8": {
       "status": "verified",
@@ -792,6 +796,13 @@
       "evidence": [
         "CLI scaffold implemented with scan command, --format (json,sarif,cdx,spdx,all), --output, --quiet, --verbose flags, proper exit codes (0=clean, 1=findings, 2=error), and 10 passing tests including end-to-end scan verification"
       ],
+      "elapsed_minutes": 0
+    },
+    "task-80": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-09-28T19:17:48.462173+02:00",
       "elapsed_minutes": 0
     },
     "task-9": {
@@ -804,5 +815,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T18:16:29.079395+02:00"
+  "updated_at": "2026-09-28T19:17:48.462173+02:00"
 }
