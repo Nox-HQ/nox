@@ -337,11 +337,15 @@ func (a *Analyzer) resolveUntrustedSource(lang string, st *taint.Statement) (tai
 // for LLM output — every sink class EXCEPT prompt_injection (the LLM prompt is
 // not a "dangerous action driven by the model"; it is the model's own input)
 // and opt-in sinks (a session store is not an action, and an opt-in sink must
-// not be reported at high severity through a side door).
+// not be reported at high severity through a side door). A Flask route's
+// return is excluded for the same reason: returning a model's reply as a page
+// is output handling (OWASP LLM05), not excessive agency, and it is how nearly
+// every Flask LLM app answers -- reporting it here at high severity was found
+// by nox's own self-scan, on the examples' reference safe.py.
 func (a *Analyzer) resolveDangerousSink(lang, rawCall string) (taint.Sink, bool) {
 	for _, key := range suffixKeys(rawCall) {
 		if s, ok := a.cat.IsSink(lang, key); ok {
-			if s.VulnClass == taint.VulnPromptInjection || s.OptIn {
+			if s.VulnClass == taint.VulnPromptInjection || s.OptIn || s.Call == engine.FlaskReturnSinkCall {
 				return taint.Sink{}, false
 			}
 			return s, true

@@ -29,6 +29,8 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 	if lang == lexctx.LangPython {
 		// Trust boundary: see trust_boundary_python.go.
 		applySessionStores(drafts, content)
+		// Reflected XSS through a route's return: see xss_python.go.
+		applyFlaskReturns(drafts, content)
 	}
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
@@ -1369,6 +1371,10 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// select(root, path, ...): the document is arg 0 and may well be
 		// user-supplied XML; the injection is a tainted PATH, arg 1.
 		return positionalSlotTainted(info, 1)
+	case "make_response", "HttpResponse":
+		// The body is the first positional argument, or the first element of
+		// a (body, status, headers) tuple; a tainted header is not XSS.
+		return responseBodyTainted(info)
 	case "setTimeout", "setInterval":
 		// A timer runs its first argument as CODE only when that argument is a
 		// string. A function literal is the ordinary form -- the callback body
@@ -1381,6 +1387,48 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		return true
 	}
 }
+
+// responseBodyTainted reports whether a tainted variable is in a response
+// constructor's body argument.
+func responseBodyTainted(info taint.SinkArgInfo) bool {
+	if len(info.PositionalArgs) == 0 {
+		return false
+	}
+	body := strings.TrimSpace(info.PositionalArgs[0])
+	if strings.HasPrefix(body, "(") {
+		body = firstTupleElement(body[1:])
+	}
+	for _, id := range identRe.FindAllString(body, -1) {
+		if slices.Contains(info.TaintedArgVars, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// firstTupleElement returns the text of a tuple's first element, given the
+// text after its opening parenthesis.
+func firstTupleElement(s string) string {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth == 0 {
+				return s[:i]
+			}
+			depth--
+		case ',':
+			if depth == 0 {
+				return s[:i]
+			}
+		}
+	}
+	return s
+}
+
+var identRe = regexp.MustCompile(`[A-Za-z_]\w*`)
 
 // positionalSlotTainted reports whether a tainted variable is read in the
 // given positional argument slot of the call.
