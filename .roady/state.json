@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 201,
+  "version": 206,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -799,10 +799,25 @@
       "elapsed_minutes": 0
     },
     "task-80": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "PR #757 merged: constant-condition branch pruning for Python. OWASP average 42.7 -\u003e 49.3, no detection rate moved, FPR down in 8 categories; 59 taint findings on 9 Python corpus repos identical; rule-diff no change."
+      ],
       "started_at": "2026-09-28T19:17:48.462173+02:00",
+      "completed_at": "2026-09-28T19:51:35.004825+02:00",
+      "elapsed_minutes": 33
+    },
+    "task-81": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #759 merged: all 369 secret findings labelled (labels/secrets-v1.43.json): 217 placeholder, 127 not-a-credential, 20 real (10 distinct, all found), 5 public-by-design."
+      ],
+      "started_at": "2026-09-28T19:51:35.02236+02:00",
+      "completed_at": "2026-09-28T19:51:35.041606+02:00",
       "elapsed_minutes": 0
     },
     "task-82": {
@@ -816,6 +831,17 @@
       "completed_at": "2026-09-28T19:38:42.370098+02:00",
       "elapsed_minutes": 2
     },
+    "task-83": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #759 merged: of 619 PyPI/npm advisories stopped at affected_version (uv.lock, pnpm-lock.yaml), 104 (17%) are dev-only; step 2 judged worth building (docs/design/reachability-python-js.md)."
+      ],
+      "started_at": "2026-09-28T19:51:35.052088+02:00",
+      "completed_at": "2026-09-28T19:51:35.060884+02:00",
+      "elapsed_minutes": 0
+    },
     "task-9": {
       "status": "verified",
       "path": "",
@@ -826,5 +852,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T19:38:42.370099+02:00"
+  "updated_at": "2026-09-28T19:51:35.060884+02:00"
 }
