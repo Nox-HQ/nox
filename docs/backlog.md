@@ -442,3 +442,21 @@ After the Python taint fixes in v1.43.0 the detection rate rose but so did the f
 Three open measurements from the 2026-09-27 head-to-head. (1) The 369 secret findings nox still reports on the seven repositories after v1.43.0 have not been re-labelled, so its current secrets precision is not known. (2) Only the Python OWASP Benchmark was run; the Java benchmark (2,740 cases) is the one other tools publish scores for. (3) Reachability step 1 in docs/design/reachability-python-js.md: how many dependency findings sit in dev-only packages. Each produces a number and a README section, not code.
 
 ---
+
+## LLM output rendered as HTML (OWASP LLM05)
+
+Found while adding the Flask route-return XSS sink (#756): nearly every Flask LLM app returns the model's reply as a text/html body, so a model steered by prompt injection can emit script into the page. AGENTFLOW-002 now deliberately excludes route returns (returning text is not an action), so this is currently unreported. It needs its own rule with its own severity, measured on real Flask/FastAPI LLM apps before it is on by default: most apps render replies through a frontend that escapes them, which a server-side scan cannot see.
+
+---
+
+## Augmented assignment carries taint in every recognizer language
+
+splitAssignment declines compound operators for every recognizer language, so `x += tainted` is not an assignment and its taint is dropped. #756 fixed Python (measured: OWASP cmdi 23 -> 40, deserialization 39 -> 50, no change on 9 Python corpus repos). JavaScript, Java, PHP, Ruby, C#, Kotlin and the other recognizer languages share the gap; each needs a probe and a corpus A/B before its behaviour moves, as Python had.
+
+---
+
+## Key-sensitive container taint for literal keys
+
+Python container taint is field-insensitive: `m['keyB'] = param; bar = m['keyA']` and configparser's `conf.set(s, 'keyB', param); bar = conf.get(s, 'keyA')` taint bar, though the key read never held the tainted value. Likewise `lst.append(param); lst.pop(0); bar = lst[1]` cannot tell elements apart. These are the largest remaining false-positive family on the OWASP Benchmark for Python after dead-branch pruning (list index 18, configparser 9). Tracking literal string keys per container is the fix; a non-literal key or index must fall back to the whole container so nothing is lost.
+
+---
