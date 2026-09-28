@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"bytes"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,8 +21,9 @@ import (
 // NOX_PREFIX_EQUIV_CORPUS when set (run locally over the benchmark repos).
 func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	type compiled struct {
-		id string
-		re *regexp.Regexp
+		id       string
+		re       *regexp.Regexp
+		keywords [][]byte
 	}
 	var planned []compiled
 	total := 0
@@ -33,7 +35,11 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 		if _, ok := rules.PrefixFindAll(r.Pattern, []byte("x"), false); !ok {
 			continue
 		}
-		planned = append(planned, compiled{r.ID, regexp.MustCompile(r.Pattern)})
+		var kws [][]byte
+		for _, k := range r.Keywords {
+			kws = append(kws, []byte(strings.ToLower(k)))
+		}
+		planned = append(planned, compiled{r.ID, regexp.MustCompile(r.Pattern), kws})
 	}
 	t.Logf("%d of %d regex rules take the literal-prefix path", len(planned), total)
 	if len(planned) == 0 {
@@ -44,7 +50,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if extra := os.Getenv("NOX_PREFIX_EQUIV_CORPUS"); extra != "" {
 		roots = append(roots, extra)
 	}
-	files, matched := 0, 0
+	files, matched, seen := 0, 0, 0
 	for _, root := range roots {
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -67,8 +73,24 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			if err != nil || strings.IndexByte(string(content[:min(len(content), 8000)]), 0) >= 0 {
 				return nil
 			}
+			seen++
+			// Under -race the detector multiplies the cost of the full-scan
+			// reference by ~10 and finds nothing here: the property is about
+			// matching, not concurrency. Check a fixed tenth of the files so
+			// CI stays inside its timeout; every other run checks them all.
+			if raceEnabled && seen%10 != 0 {
+				return nil
+			}
 			files++
+			lower := bytes.ToLower(content)
 			for _, c := range planned {
+				// Only where the engine would run the rule: its keyword
+				// pre-filter passes. That is every case the fast path can
+				// decide, and it keeps the test inside CI's time budget
+				// under -race.
+				if len(c.keywords) > 0 && !containsAny(lower, c.keywords) {
+					continue
+				}
 				// The submatch form carries the whole-match pair too, so it
 				// checks both shapes the matcher asks for.
 				got, ok := rules.PrefixFindAll(c.re.String(), content, true)
@@ -91,4 +113,13 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if matched == 0 {
 		t.Fatal("no rule matched any file; the equivalence was never exercised")
 	}
+}
+
+func containsAny(content []byte, keywords [][]byte) bool {
+	for _, k := range keywords {
+		if bytes.Contains(content, k) {
+			return true
+		}
+	}
+	return false
 }
