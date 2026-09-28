@@ -11,8 +11,9 @@
 // fix, so they never fire. `random.SystemRandom().randint(…)` is excluded by
 // shape: the receiver of `.randint` is a call, not the module.
 //
-// FINDING THE NAMES WITHOUT A PARSER. The file is masked (string bodies and
-// comments blanked, offsets kept) and split into logical lines, so a call
+// FINDING THE NAMES WITHOUT A PARSER. The file is masked by
+// lexctx.MaskNonCode (string bodies and comments blanked, offsets kept, an
+// f-string's interpolations left as code) and split into logical lines, so a call
 // spread over several lines is still one statement. For a call the context is:
 // the assignment target, a keyword-argument or dict-key name, the functions it
 // is passed to, and the enclosing `def`. Then ONE forward hop: if the value is
@@ -43,8 +44,8 @@
 // single words and silent.
 //
 // KNOWN FALSE NEGATIVES. numpy.random, a generator passed in as a parameter, a
-// value laundered through a helper, names inside f-string expressions, and a
-// security use more than one assignment away are not seen.
+// value laundered through a helper, and a security use more than one
+// assignment away are not seen.
 
 package weakcrypto
 
@@ -54,6 +55,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // pyWeakFns are the `random` functions that draw a value. `seed`, `getstate`
@@ -118,7 +120,7 @@ type pyLine struct {
 // scanInsecureRandomPython reports predictable `random` draws that the
 // surrounding names identify as security-bearing, in one Python file.
 func scanInsecureRandomPython(fs *findings.FindingSet, art discovery.Artifact, content []byte) {
-	masked := maskPython(content)
+	masked := lexctx.MaskNonCode(lexctx.LangPython, content)
 	lines := pyLogicalLines(masked)
 	b := pyBindings(masked, lines)
 	if b.empty() {
@@ -563,53 +565,6 @@ func pyStringLiterals(content, masked []byte, from, to int) []string {
 			out = append(out, body)
 		}
 		i = j
-	}
-	return out
-}
-
-// maskPython blanks comments and the bodies of string literals, keeping every
-// offset and newline, so brackets and names can be read without a tokenizer
-// mistaking `"(" ` or `# token =` for code. Quotes themselves are kept.
-func maskPython(src []byte) []byte {
-	out := make([]byte, len(src))
-	copy(out, src)
-	blank := func(i int) {
-		if out[i] != '\n' {
-			out[i] = ' '
-		}
-	}
-	for i := 0; i < len(src); i++ {
-		switch c := src[i]; c {
-		case '#':
-			for ; i < len(src) && src[i] != '\n'; i++ {
-				blank(i)
-			}
-		case '"', '\'':
-			triple := i+2 < len(src) && src[i+1] == c && src[i+2] == c
-			j := i + 1
-			if triple {
-				j = i + 3
-			}
-			for ; j < len(src); j++ {
-				if src[j] == '\\' {
-					blank(j)
-					if j+1 < len(src) {
-						j++
-						blank(j)
-					}
-					continue
-				}
-				if triple && j+2 < len(src) && src[j] == c && src[j+1] == c && src[j+2] == c {
-					j += 2
-					break
-				}
-				if !triple && (src[j] == c || src[j] == '\n') {
-					break
-				}
-				blank(j)
-			}
-			i = j
-		}
 	}
 	return out
 }
