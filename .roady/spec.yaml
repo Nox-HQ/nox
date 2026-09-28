@@ -342,5 +342,33 @@ features:
       title: Adopt policy.require_capabilities so Track D stops being inert
       description: 'D5 shipped the gate that closes Track D''s exit criterion — uninstalling or breaking an analyzer can no longer make a build greener — and nothing is using it. policy.require_capabilities is empty in every repository, which is by design: failing whenever anything is unevaluated would turn every build red on upgrade, since three analysis capabilities (constant evaluation, call graph, entry point) have no implementation at all, and a gate everybody disables within the hour protects nothing. So the mechanism is opt-in and currently protects no one. The work is adoption, not code: decide which capabilities this project''s triage actually depends on, list them, and choose between uncertainty warn and fail. nox''s own .nox.yaml is the obvious first adopter and the honest test of whether the setting is usable. Note the ordering the design doc asks for: warn first, for a release in which the warning names the flag, before fail becomes anyone''s default — so that switching it later surprises nobody. Run nox analysis-capabilities to see what this installation can and cannot establish.'
       requirements: []
+    - id: predictable-randomness-in-python-security-contexts
+      title: Predictable randomness in Python security contexts
+      description: 'CRYPTO-002 (CWE-338) covers Go only. The OWASP Benchmark for Python has 326 weakrand cases (the largest category) and nox scores 0 on them, as does Semgrep p/default. Extend CRYPTO-002 to Python: a draw from the `random` module (random.random, randint, choice, getrandbits, normalvariate, ...) whose value is named or stored as security-bearing (token, secret, key, session, password, nonce, salt, otp, csrf, rememberMe) fires; `secrets` and `random.SystemRandom` never do; the Go rule''s benign vetoes (jitter, backoff, retry, sample, shuffle) carry over. Measure on the benchmark AND on the seven head-to-head repositories, and read every new finding: the Go rule''s premise is that most random calls are benign, and that must hold for Python too.'
+      requirements: []
+    - id: xpath-and-ldap-injection-as-taint-sinks
+      title: XPath and LDAP injection as taint sinks
+      description: 'The taint catalog has no XPath (CWE-643) or LDAP (CWE-90) sink class, so nox scores 0 on the benchmark''s 186 xpathi and 29 ldapi cases. Add vuln classes xpath_injection (TAINT-008) and ldap_injection (TAINT-009) with Python sinks (lxml.etree.XPath / .xpath, elementpath.select, ElementTree find/findall/iterfind; ldap3 Connection.search, python-ldap search_s / search_ext_s) and Java sinks (javax.xml.xpath XPath.evaluate/compile, DirContext.search), plus the sanitizers each ecosystem offers (ldap3.utils.conv.escape_filter_chars, ldap.filter.escape_filter_chars, XPath variables). Taint-gated like every other sink: a constant query never fires.'
+      requirements: []
+    - id: xml-external-entity-resolution-xxe
+      title: XML external entity resolution (XXE)
+      description: 'nox has no XXE (CWE-611) detection; the benchmark has 28 xxe cases, scored 0. In Python the standard parsers are safe by default since 3.7.1, so the vulnerable condition is an explicit opt-in: xml.sax / pulldom with setFeature(feature_external_ges, True), lxml.etree.XMLParser(resolve_entities=True, no_network=False, load_dtd=True) — and parsing input the caller does not control. Flag the opt-in, raise confidence when the parsed document is tainted. Do not flag the default parser (that is the benchmark''s false case, and correct).'
+      requirements: []
+    - id: insecure-cookies-and-trust-boundary-violations
+      title: Insecure cookies and trust-boundary violations
+      description: 'Benchmark securecookie (39, CWE-614) and trustbound (37, CWE-501) both score 0. Cookie: set_cookie(..., secure=False) is an explicit statement and fires; an omitted flag is not claimed here (framework defaults and deployment config decide it). Trust boundary: an untrusted value written into the server-side session as key or value (flask.session[k] = v, request.session[...]) — taint-gated as a new sink class trust_boundary (TAINT-010). Measure on real Flask/Django repositories before claiming precision: session writes of request data are common and not all are wrong.'
+      requirements: []
+    - id: reflected-xss-through-python-handler-return-values
+      title: Reflected XSS through Python handler return values
+      description: 'Benchmark xss (89, CWE-79) scores 0: the flows return an HTML string built from request data (`RESPONSE += f''...{bar}''; return RESPONSE`) from a Flask route. The catalog''s Python XSS sinks are render_template_string / Markup only. Add the handler-return sink: a tainted string returned from a function decorated as a route (or passed to make_response / HttpResponse) without html.escape / markupsafe.escape. Escaping helpers become sanitizers. JSON responses (jsonify, dict return) are not HTML and must not fire.'
+      requirements: []
+    - id: false-positive-rate-on-path-traversal-code-injection-and
+      title: False-positive rate on path traversal, code injection and redirect
+      description: 'After the Python taint fixes in v1.43.0 the detection rate rose but so did the false-positive rate: pathtraver 28%/20%, codeinj 55%/48%, redirect 54%/52% (TPR/FPR). A rule that fires on half the safe cases cannot be trusted on the unsafe ones. Read the false cases, name the idiom each one uses to be safe (constant overwrite after a container write, a guard that makes the tainted branch dead, a sanitizer nox does not know), fix the engine where the idiom is general and not benchmark-specific, and re-measure on real repositories.'
+      requirements: []
+    - id: measure-what-remains-secrets-labels-java-benchmark-dev-only
+      title: 'Measure what remains: secrets labels, Java benchmark, dev-only dependencies'
+      description: 'Three open measurements from the 2026-09-27 head-to-head. (1) The 369 secret findings nox still reports on the seven repositories after v1.43.0 have not been re-labelled, so its current secrets precision is not known. (2) Only the Python OWASP Benchmark was run; the Java benchmark (2,740 cases) is the one other tools publish scores for. (3) Reachability step 1 in docs/design/reachability-python-js.md: how many dependency findings sit in dev-only packages. Each produces a number and a README section, not code.'
+      requirements: []
 constraints: []
 version: 0.1.0
