@@ -344,6 +344,10 @@ func TestRulesAreRegistered(t *testing.T) {
 			if r.Severity != findings.SeverityMedium {
 				t.Errorf("%s severity = %s, want medium", r.ID, r.Severity)
 			}
+		case ruleInsecureCookie:
+			if r.Metadata["cwe"] != "CWE-614" {
+				t.Errorf("%s cwe = %q, want CWE-614", r.ID, r.Metadata["cwe"])
+			}
 		default:
 			t.Errorf("unexpected rule %s", r.ID)
 		}
@@ -351,7 +355,7 @@ func TestRulesAreRegistered(t *testing.T) {
 			t.Errorf("%s is missing remediation or references", r.ID)
 		}
 	}
-	if !byID[ruleInsecureSkipVerify] || !byID[ruleWeakTLSVersion] {
+	if !byID[ruleInsecureSkipVerify] || !byID[ruleWeakTLSVersion] || !byID[ruleInsecureCookie] {
 		t.Errorf("missing rules, got %v", byID)
 	}
 }
