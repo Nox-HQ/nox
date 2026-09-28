@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 199,
+  "version": 201,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -805,6 +805,17 @@
       "started_at": "2026-09-28T19:17:48.462173+02:00",
       "elapsed_minutes": 0
     },
+    "task-82": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "OWASP Benchmark for Java 1.2 scored: nox 14.1 vs Semgrep p/default 34.9 (docs/benchmarks/2026-09-28-owasp). Gaps recorded as spec features: Java weakrand + securecookie (0 vs 100 each), Java XPath/LDAP sinks and flow recall."
+      ],
+      "started_at": "2026-09-28T19:36:38.100277+02:00",
+      "completed_at": "2026-09-28T19:38:42.370098+02:00",
+      "elapsed_minutes": 2
+    },
     "task-9": {
       "status": "verified",
       "path": "",
@@ -815,5 +826,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T19:17:48.462173+02:00"
+  "updated_at": "2026-09-28T19:38:42.370099+02:00"
 }

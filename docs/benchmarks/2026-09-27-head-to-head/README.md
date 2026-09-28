@@ -233,6 +233,48 @@ And one the comparison found in nox's own tooling: the rule-diff check passed
 a run that crashed after three of its 25 repositories, because the crash exited
 with the code that means "every drop is explained". Fixed in #735.
 
+## Secrets, re-labelled after the follow-ups
+
+Every secret finding nox reports on the seven repositories after the
+follow-ups, at `main` on 2026-09-28 (v1.43.1 plus the unreleased rule work), was
+read and labelled: 369 findings, all of them, not a sample. The labels are in
+[`labels/secrets-v1.43.json`](labels/secrets-v1.43.json) (file, line, rule and
+verdict; never the matched text).
+
+| Verdict | Findings | Share |
+|---|---:|---:|
+| Placeholder or test value | 217 | 59% |
+| Not a credential | 127 | 34% |
+| Real | 20 | 5.4% |
+| Public by design | 5 | 1.4% |
+
+The 20 real lines are **10 distinct credentials, and nox now finds all 10**:
+the 8 in the table above, the Weaviate Cloud key #732 surfaced, and a password
+for a Neo4j instance on a public IP in a llama_index notebook that none of the
+three tools reported in the original comparison. At v1.42.0 roughly 1% of 960
+secret findings were real; now it is 5.4% of 369, with nothing real lost on
+the way down.
+
+The same standard as above: a key or token genuinely issued by a system counts
+as real even when it sits in a test fixture or an expired recording (the mTLS
+keys, the crewAI JWT), and nothing was tested against a live API.
+
+Where the remaining noise is, largest first:
+
+- **`SEC-082`, bearer tokens (106).** Every one is a descriptive test string
+  in a test file: `'Bearer managed-secret'`, `'Bearer host-only-credential'`,
+  `'Bearer ASYNC_TOKEN'`.
+- **`SEC-161` (81).** 50 are `credential_id="vcrd_…"`: an identifier named
+  after a credential. Most of the rest are Vertex AI grounding redirect URLs
+  and response IDs in test recordings.
+- **AWS's documented example keys (33, across five rules).**
+  `AKIAIOSFODNN7EXAMPLE` and its secret key, in anthropic-sdk and
+  openai-python tests.
+- **`SEC-008` (14).** `"type": "service_account"` with no key material next to
+  it.
+- **`SEC-373` / `SEC-372` / `SEC-374` (12).** Plain `s3://` and storage URLs
+  with no credential in them.
+
 ## Limits of this comparison
 
 - Seven repositories, most of them AI SDKs and frameworks. That favours nox's AI
