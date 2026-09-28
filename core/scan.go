@@ -553,6 +553,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	taintflowAnalyzer := taintflow.NewAnalyzer()
 	taintflowAnalyzer.RecordReasoningTo(reasons)
+	taintflowAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
 	agentflowAnalyzer := agentflow.NewAnalyzer()
 	provenanceAnalyzer := provenance.NewAnalyzer()
 

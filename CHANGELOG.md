@@ -22,6 +22,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and 2 in command-line tools that parse a file named on the command line; the
   42 files that never parse untrusted input stay silent.
 
+- **A cookie set with `secure=False` is reported (`HARDEN-003`, CWE-614).**
+  A Python `set_cookie` / `set_signed_cookie` call (Flask, Werkzeug, Django,
+  Starlette) passed the literal `secure=False` sends the cookie over plain
+  HTTP. Only the explicit statement is reported: an omitted flag, and a flag
+  bound to configuration (`secure=not app.debug`), are deployment decisions a
+  file cannot see. Framework signatures (`def set_cookie(self, ...,
+  secure=False)`) are parameter defaults, not cookies, and are skipped -- they
+  were 36 of the first 41 GitHub hits. OWASP Benchmark for Python
+  securecookie: 0 -> 100. On 41 GitHub files containing `secure=False`, 3
+  findings, all real calls.
+- **Opt-in: untrusted data stored in the session (`TAINT-011`, CWE-501).** A
+  request value written into `session[...]`, `flask.session[...]` or Django's
+  `request.session[...]`, as key or value, lets later code trust what the
+  attacker chose. It is off by default and low severity: 5 of 53 Flask files
+  from GitHub search do it, a mix of preferences (`session['lang']`) and
+  pre-authentication identity. Turn it on with `scan.rules.enable:
+  [TAINT-011]`; taint rules now honour that switch, as regex rules already
+  did. On the benchmark it finds 44% of the trustbound cases at a 42%
+  false-positive rate -- the dead-branch idioms task-80 addresses -- which is
+  itself the reason it is not on by default.
+
 - **XPath and LDAP injection are taint sinks (`TAINT-008`, `TAINT-009`).**
   There was no sink class for either, so a request value spliced into an
   XPath expression or an LDAP filter was invisible. Python sinks: lxml's
@@ -65,6 +86,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it; and a security word glued to a lowercase word (`mysession`,
   `authtoken`) is split before matching. "guess" is now a benign word in both
   languages: a brute-force loop's `guess_password` is not a secret.
+
+### Changed
+
+- **Python rules share one comment/string masker.** `lexctx.MaskNonCode`
+  blanks comments and string bodies with offsets kept, and leaves an
+  f-string's interpolations as code; CRYPTO-002's Python scanner now uses it
+  instead of its own copy, and sees names inside f-string expressions it used
+  to miss.
 
 ### Fixed
 

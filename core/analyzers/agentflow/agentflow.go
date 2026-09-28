@@ -335,11 +335,13 @@ func (a *Analyzer) resolveUntrustedSource(lang string, st *taint.Statement) (tai
 
 // resolveDangerousSink resolves a raw call to a catalog sink that is dangerous
 // for LLM output — every sink class EXCEPT prompt_injection (the LLM prompt is
-// not a "dangerous action driven by the model"; it is the model's own input).
+// not a "dangerous action driven by the model"; it is the model's own input)
+// and opt-in sinks (a session store is not an action, and an opt-in sink must
+// not be reported at high severity through a side door).
 func (a *Analyzer) resolveDangerousSink(lang, rawCall string) (taint.Sink, bool) {
 	for _, key := range suffixKeys(rawCall) {
 		if s, ok := a.cat.IsSink(lang, key); ok {
-			if s.VulnClass == taint.VulnPromptInjection {
+			if s.VulnClass == taint.VulnPromptInjection || s.OptIn {
 				return taint.Sink{}, false
 			}
 			return s, true

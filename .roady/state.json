@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 193,
+  "version": 195,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -757,10 +757,21 @@
       "elapsed_minutes": 24
     },
     "task-77": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #754 merged: TAINT-010 XXE as a taint sink gated on an entity-resolving parser. OWASP xxe 0 -\u003e 42; 16 findings on 58 real entity-enabling files (demo apps + argv-file CLIs), 42 silent; rule-diff no change."
+      ],
+      "started_at": "2026-09-28T17:38:51.094601+02:00",
+      "completed_at": "2026-09-28T17:52:29.019801+02:00",
+      "elapsed_minutes": 13
+    },
+    "task-78": {
       "status": "in_progress",
       "path": "",
       "owner": "ai-agent",
-      "started_at": "2026-09-28T17:38:51.094601+02:00",
+      "started_at": "2026-09-28T17:52:29.034363+02:00",
       "elapsed_minutes": 0
     },
     "task-8": {
@@ -782,5 +793,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T17:38:51.094601+02:00"
+  "updated_at": "2026-09-28T17:52:29.034363+02:00"
 }

@@ -478,6 +478,14 @@
           "cwe": "CWE-611",
           "rule_id": "TAINT-010",
           "note": "synthetic chain: a parse call that reads a parser with external entities switched on (setFeature(feature_external_ges, True), XMLParser(resolve_entities=True / no_network=False)); see engine/xxe_python.go"
+        },
+        {
+          "call": "trust_boundary.session_store",
+          "vuln_class": "trust_boundary",
+          "cwe": "CWE-501",
+          "rule_id": "TAINT-011",
+          "note": "synthetic chain: an untrusted key or value stored into the server-side session (session[k] = v, flask.session, request.session); see engine/trust_boundary_python.go. Opt-in: storing request data in a session is common and often deliberate.",
+          "opt_in": true
         }
       ],
       "sanitizers": [
