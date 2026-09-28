@@ -100,6 +100,11 @@ func buildPlan(pattern string) *prefixPlan {
 	if !ok || len(prefixes) == 0 {
 		return nil
 	}
+	for _, p := range prefixes {
+		if len(p.text) < 2 {
+			return nil // a one-character literal is too common to narrow anything
+		}
+	}
 	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
 	if err != nil {
 		return nil
@@ -109,11 +114,23 @@ func buildPlan(pattern string) *prefixPlan {
 
 // leadingLiterals returns the literal every match must begin with, one per
 // alternative, or ok=false when some match could begin otherwise.
+//
+// Go's parser factors shared prefixes out of an alternation, so
+// `api_key|access_key|auth_token` arrives as `a` followed by
+// `pi_key|ccess_key|uth_token`. A concatenation that opens with a literal is
+// therefore extended with the literals of what follows, one level, so the
+// factored letter and its continuations become `api`, `access`, `auth`.
+//
+// Any widening here is safe and any narrowing is not: every candidate is
+// re-checked by the anchored match, so a candidate that cannot match costs a
+// failed match, while a start the candidates miss would lose a finding. So
+// where two literals disagree on case sensitivity, the combined literal is
+// searched case-insensitively. Length is judged by the caller, not here.
 func leadingLiterals(re *syntax.Regexp) ([]literalPrefix, bool) {
 	switch re.Op {
 	case syntax.OpLiteral:
 		s := string(re.Rune)
-		if len(re.Rune) < 2 || !isASCII(s) {
+		if s == "" || !isASCII(s) {
 			return nil, false
 		}
 		fold := re.Flags&syntax.FoldCase != 0
@@ -127,7 +144,29 @@ func leadingLiterals(re *syntax.Regexp) ([]literalPrefix, bool) {
 		if len(re.Sub) == 0 {
 			return nil, false
 		}
-		return leadingLiterals(re.Sub[0])
+		head, ok := leadingLiterals(re.Sub[0])
+		if !ok {
+			return nil, false
+		}
+		// Extend only a first element that is itself a plain literal: then the
+		// second element really does start where the literal ends.
+		if re.Sub[0].Op != syntax.OpLiteral || len(re.Sub) < 2 {
+			return head, true
+		}
+		tail, ok := leadingLiterals(re.Sub[1])
+		if !ok {
+			return head, true
+		}
+		out := make([]literalPrefix, 0, len(tail))
+		for _, t := range tail {
+			fold := head[0].fold || t.fold
+			text := head[0].text + t.text
+			if fold {
+				text = string(bytes.ToLower([]byte(text)))
+			}
+			out = append(out, literalPrefix{text: text, fold: fold})
+		}
+		return out, true
 	case syntax.OpAlternate:
 		var out []literalPrefix
 		for _, sub := range re.Sub {
