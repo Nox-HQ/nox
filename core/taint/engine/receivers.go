@@ -69,11 +69,11 @@ func pythonReceiverBindings(content []byte) map[string]string {
 			out[m[2]] = pyReceiverKind[m[1]]
 			continue
 		}
-		if m := pyAssignFromAnyCall.FindStringSubmatch(line); m != nil && madeByLDAP(m[2], imports) {
+		if m := pyAssignFromAnyCall.FindStringSubmatch(line); len(m) == 3 && madeByLDAP(m[2], imports) {
 			out[m[1]] = "ldap_connection"
 			continue
 		}
-		if m := pyWithAsAnyCall.FindStringSubmatch(line); m != nil && madeByLDAP(m[1], imports) {
+		if m := pyWithAsAnyCall.FindStringSubmatch(line); len(m) == 3 && madeByLDAP(m[1], imports) {
 			out[m[2]] = "ldap_connection"
 		}
 	}
