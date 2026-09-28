@@ -51,6 +51,7 @@ const (
 	VulnXPathInjection        VulnClass = "xpath_injection"        // CWE-643
 	VulnLDAPInjection         VulnClass = "ldap_injection"         // CWE-90
 	VulnXXE                   VulnClass = "xxe"                    // CWE-611
+	VulnTrustBoundary         VulnClass = "trust_boundary"         // CWE-501
 )
 
 // vulnClasses is every class above, in a fixed order. It is the one list: a
@@ -63,6 +64,7 @@ var vulnClasses = []VulnClass{
 	VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
 	VulnPromptInjection, VulnOpenRedirect, VulnXPathInjection, VulnLDAPInjection,
 	VulnXXE,
+	VulnTrustBoundary,
 }
 
 // AllVulnClasses returns every vulnerability class, in a fixed order.
@@ -136,6 +138,11 @@ type Sink struct {
 	// Note documents WHY/when the sink is dangerous (e.g. "shell=True"), guiding
 	// the future argument-aware refinement in the engine.
 	Note string `json:"note,omitempty"`
+	// OptIn marks a sink whose flows are reported only when its rule is named
+	// in scan.rules.enable: correct by definition, but common enough in
+	// ordinary code that reporting it by default would be noise. See
+	// trust_boundary.
+	OptIn bool `json:"opt_in,omitempty"`
 }
 
 // Sanitizer is a callable that neutralizes taint for one or more VulnClasses.

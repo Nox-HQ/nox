@@ -115,8 +115,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1492 -> 1494 added TAINT-008 (XPath injection) and TAINT-009 (LDAP
 	// injection), the first two new taint sink classes since TAINT-007.
 	// 1494 -> 1495 added TAINT-010 (XML external entity resolution).
-	if got := len(cat); got != 1495 {
-		t.Errorf("Catalog() returned %d rules, want 1495", got)
+	// 1495 -> 1497 added HARDEN-003 (cookie secure=False) and TAINT-011
+	// (untrusted data stored in the session, opt-in).
+	if got := len(cat); got != 1497 {
+		t.Errorf("Catalog() returned %d rules, want 1497", got)
 	}
 }
 

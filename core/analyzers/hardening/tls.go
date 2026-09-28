@@ -83,9 +83,10 @@ const (
 //     misconfigured *tls.Config is reported where the literal is written, not
 //     where it is used.
 //
-//  4. GO ONLY. The equivalent in other languages (Python `verify=False`, Node
-//     `rejectUnauthorized: false`) is a separate detection with separate
-//     precision problems, and is not in this rule.
+//  4. GO ONLY for TLS. The equivalent in other languages (Python
+//     `verify=False`, Node `rejectUnauthorized: false`) is a separate detection
+//     with separate precision problems, and is not in these rules. The one
+//     Python rule here, HARDEN-003, is about cookies; see cookie.go.
 type Analyzer struct{}
 
 // NewAnalyzer constructs the hardening analyzer.
@@ -159,6 +160,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-327", "gosec": "G402"},
 	})
+	rs.Add(insecureCookieRule())
 	return rs
 }
 
@@ -179,7 +181,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err := ctx.Err(); err != nil {
 			return fs, err
 		}
-		if !strings.EqualFold(filepath.Ext(art.Path), ".go") {
+		ext := strings.ToLower(filepath.Ext(art.Path))
+		if ext != ".go" && ext != ".py" {
 			continue
 		}
 		// See KNOWN LIMITS (2) on Analyzer for why test code is out of scope.
@@ -189,6 +192,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
 			// Unreadable file is not a finding; discovery already surfaced it.
+			continue
+		}
+		if ext == ".py" {
+			// Insecure cookie flags (HARDEN-003); see cookie.go.
+			for _, f := range scanPythonCookies(art.Path, content) {
+				fs.Add(f)
+			}
 			continue
 		}
 		if !hasTrigger(content) {

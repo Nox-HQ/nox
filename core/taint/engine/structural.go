@@ -26,6 +26,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
+	if lang == lexctx.LangPython {
+		// Trust boundary: see trust_boundary_python.go.
+		applySessionStores(drafts, content)
+	}
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]

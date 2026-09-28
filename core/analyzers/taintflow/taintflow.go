@@ -39,6 +39,18 @@ type Analyzer struct {
 	// recording call is nil-safe, so the scan path below never branches on
 	// whether anybody wanted them.
 	reasoning *reasoning.Store
+	// optIn holds the rule IDs of opt-in sinks this scan enabled; a flow into
+	// an opt-in sink whose rule is not here is not reported.
+	optIn map[string]bool
+}
+
+// EnableOptIn turns on the opt-in taint rules named in ids (scan.rules.enable),
+// the same switch the regex rules use.
+func (a *Analyzer) EnableOptIn(ids []string) {
+	a.optIn = map[string]bool{}
+	for _, id := range ids {
+		a.optIn[id] = true
+	}
 }
 
 // RecordReasoningTo directs this analyzer's refutations at store.
@@ -69,6 +81,10 @@ func severityForClass(class taint.VulnClass) findings.Severity {
 	case taint.VulnCommandInjection, taint.VulnSQLInjection, taint.VulnCodeInjection,
 		taint.VulnUnsafeDeserialization, taint.VulnSSRF, taint.VulnPromptInjection:
 		return findings.SeverityHigh
+	case taint.VulnTrustBoundary:
+		// The value is not executed or interpreted where it lands; the risk
+		// is later code trusting what the session holds.
+		return findings.SeverityLow
 	default:
 		return findings.SeverityMedium
 	}
@@ -84,12 +100,13 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	type ruleInfo struct {
 		class taint.VulnClass
 		cwe   string
+		optIn bool
 	}
 	byID := map[string]ruleInfo{}
 	for _, lang := range a.cat.Languages() {
 		for _, s := range a.cat.Sinks(lang) {
 			if _, ok := byID[s.RuleID]; !ok {
-				byID[s.RuleID] = ruleInfo{class: s.VulnClass, cwe: s.CWE}
+				byID[s.RuleID] = ruleInfo{class: s.VulnClass, cwe: s.CWE, optIn: s.OptIn}
 			}
 		}
 	}
@@ -114,6 +131,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 				"https://owasp.org/www-community/Injection_Flaws",
 			},
 			Metadata: map[string]string{"cwe": info.cwe, "vuln_class": string(info.class)},
+			OptIn:    info.optIn,
 		})
 	}
 	return rs
@@ -173,6 +191,9 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.La
 	// reachable both ways, so a purely intraprocedural bug is still reported once.
 	flows, suppressed := a.eng.AnalyzeFileWithSuppressions(units)
 	for j := range flows {
+		if flows[j].Sink.OptIn && !a.optIn[flows[j].Sink.RuleID] {
+			continue
+		}
 		fs.Add(a.toFinding(&flows[j]))
 	}
 	a.recordSuppressions(path, suppressed)

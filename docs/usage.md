@@ -863,10 +863,13 @@ scan:
       - "IAC-002"      # We use floating base image tags intentionally
 
     # Turn on opt-in rules, which do not run otherwise. `nox rules` tags them
-    # `opt-in`; none ships opt-in today. SEC-951, the generic "credential-named
-    # key with a random-looking value" rule, runs by default at medium severity
-    # and low confidence; `disable` above switches it off.
-    enable: []
+    # `opt-in`. One ships opt-in today: TAINT-011, untrusted request data
+    # stored in the server-side session (CWE-501, low severity). It is correct
+    # by definition and common in ordinary login code, so it is off unless
+    # named here. SEC-951, the generic "credential-named key with a
+    # random-looking value" rule, runs by default at medium severity and low
+    # confidence; `disable` above switches it off.
+    enable: []   # e.g. [TAINT-011]
 
     # Override severity for specific rules
     severity_override:
