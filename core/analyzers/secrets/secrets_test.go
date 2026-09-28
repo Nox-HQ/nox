@@ -607,7 +607,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		// SEC-163: threshold=4.5, require_context, context boost -0.5 → effective 4.0;
 		//   mixed-case hex for entropy > 4.0 (pure lowercase hex max is exactly 4.0).
 		"SEC-163": "hex_key = " + "9F8e7D6c5B4a3210" + "FEdcBA9876543210\n",
-		// SEC-951 is opt-in; the analyzer below enables it.
+		// SEC-951: a padded base64 payload, like the GigaChat key.
 		// A padded base64 payload, like the GigaChat key the head-to-head found.
 		"SEC-951": "credentials = \"" + "ZjNhOWMxZTItN2I0ZC00YzhhLTk1ZTEt" + "MmQ2YjhmMGE0YzdlOmE4YjJ==\"\n",
 	}
@@ -623,7 +623,6 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 	}
 
 	a := NewAnalyzer()
-	a.EnableOptIn([]string{"SEC-951"})
 	for _, r := range builtinSecretRules() {
 		t.Run(r.ID, func(t *testing.T) {
 			example, ok := examples[r.ID]
@@ -718,7 +717,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 // format at all. See TestSEC572IsGone.
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
-	// 882 -> 883: SEC-951, the opt-in generic credential rule.
+	// 882 -> 883: SEC-951, the generic credential rule.
 	if len(rules) != 883 {
 		t.Fatalf("expected 883 built-in secret rules, got %d", len(rules))
 	}

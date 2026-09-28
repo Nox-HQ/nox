@@ -44,6 +44,9 @@ type secretRule struct {
 	// shapeGroup names the capture group the secret-shape filter scores, so
 	// a keyword-bound rule is judged on its value rather than its key.
 	shapeGroup string
+	// genericFallback ranks the rule below every other on a shared span (see
+	// classifyRuleSpecificity), so it only reports what nothing else does.
+	genericFallback bool
 }
 
 // builtinSecretRules returns all built-in secret detection rules.
@@ -3944,22 +3947,25 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-949", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)pycharm[_-]?license[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected PyCharm License Key", cwe: "CWE-798", keywords: []string{"pycharm"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-950", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)goland[_-]?license[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected GoLand License Key", cwe: "CWE-798", keywords: []string{"goland"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{
-			// Opt-in (scan.rules.enable: [SEC-951]). A credential-named key
-			// bound to a quoted, random-looking value that no vendor format
-			// describes: a GigaChat key (base64 of client_id:secret), a
-			// MonsterAPI key (a UUID). The 2026-09-27 head-to-head found both
-			// only through gitleaks' generic-api-key, which reported them
-			// among 169 findings -- so this is recall a team can choose, not a
-			// default. The shape filter scores the captured value, and the
-			// placeholder, reference and data-blob refiners apply as to every
-			// secret rule.
+			// A credential-named key bound to a quoted, random-looking value
+			// that no vendor format describes: a GigaChat key (base64 of
+			// client_id:secret), a MonsterAPI key (a UUID). The 2026-09-27
+			// head-to-head found both only through gitleaks' generic-api-key,
+			// which reported them among 169 findings. It shipped opt-in at 27%
+			// precision on the benchmark; the published-key, example and
+			// sequential-digit filters in isRandomLookingValue took it to 6 of
+			// 10, and it is on by default at medium severity and low
+			// confidence, below the usual fail_on: high. Turn it off with
+			// scan.rules.disable: [SEC-951]. The shape filter scores the
+			// captured value, and the placeholder, reference and data-blob
+			// refiners apply as to every secret rule.
 			id: "SEC-951", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
 			pattern:     `(?i)(?:api[_-]?key|apikey|api[_-]?secret|secret[_-]?key|client[_-]?secret|access[_-]?key|auth[_-]?key|auth[_-]?token|access[_-]?token|credentials?|secret|token)["']?[ \t]*[=:][ \t]*["']([A-Za-z0-9+/_\-]{16,200}={0,2})["']`,
-			description: "Credential-named key with a random-looking value (generic, opt-in)",
+			description: "Credential-named key with a random-looking value (generic)",
 			cwe:         "CWE-798", keywords: []string{"key", "secret", "token", "credential"},
 			remediation: "If this is a live credential, rotate it and move it to a secrets manager or environment variable.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
-			secretShape: true, minEntropy: 3.5, shapeGroup: "1", optIn: true,
+			secretShape: true, minEntropy: 3.5, shapeGroup: "1", genericFallback: true,
 			validate: isRandomLookingValue,
 		},
 	}
@@ -4048,6 +4054,9 @@ func builtinSecretRules() []*rules.Rule {
 		}
 		if d.shapeGroup != "" {
 			md["shape_group"] = d.shapeGroup
+		}
+		if d.genericFallback {
+			md["generic_fallback"] = "true"
 		}
 		tags := []string{"secrets"}
 		if d.optIn {
@@ -4381,7 +4390,11 @@ func isRandomLookingValue(match string) bool {
 	if open < 0 {
 		return true
 	}
-	parts := strings.FieldsFunc(m[open+1:], func(r rune) bool { return r == '-' || r == '_' || r == '.' })
+	value := m[open+1:]
+	if isPublishedOrExampleValue(value) {
+		return false
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '-' || r == '_' || r == '.' })
 	if len(parts) == 0 {
 		return true
 	}
@@ -4391,6 +4404,41 @@ func isRandomLookingValue(match string) bool {
 		if !word && !number {
 			return true // a random-looking part
 		}
+	}
+	return false
+}
+
+// publicKeyPrefixes are keys issued to be embedded in client code: a PostHog
+// project key and a Stripe publishable key. Reporting one as a leaked secret is
+// wrong on its face; eight of SEC-951's findings on the benchmark were phc_.
+var publicKeyPrefixes = []string{"phc_", "pk_live_", "pk_test_"}
+
+// isPublishedOrExampleValue reports a value that is public by design, a
+// documentation example (AWS's AKIA…EXAMPLE / …EXAMPLEKEY pair), or a
+// keyboard placeholder with a run of eight sequential or repeated digits
+// (dapi1234567890abcdef).
+func isPublishedOrExampleValue(v string) bool {
+	lower := strings.ToLower(v)
+	for _, p := range publicKeyPrefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	if strings.Contains(lower, "example") {
+		return true
+	}
+	run, prev := 1, byte(0)
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c >= '0' && c <= '9' && i > 0 && prev >= '0' && prev <= '9' && (c == prev+1 || c == prev || prev == '9' && c == '0') {
+			run++
+			if run >= 8 {
+				return true
+			}
+		} else {
+			run = 1
+		}
+		prev = c
 	}
 	return false
 }
