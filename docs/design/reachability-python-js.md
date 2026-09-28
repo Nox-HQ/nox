@@ -77,6 +77,40 @@ A Python or JavaScript `not_impacting` has to rest on something as complete as
   severity, like Go's unlinked advisories); the finding stays in the report
   with its verdict.
 
+## Measured: how much would the dev-only fact refute? (step 1)
+
+On the seven benchmark repositories (v1.42.0 + #728 findings), 801 advisories
+stop at `affected_version`. Go's 80 are out of scope: Go has the call graph.
+Of the PyPI and npm ones, those in `uv.lock` and `pnpm-lock.yaml` can be
+checked against the lockfile's own dependency types
+([`devonly.py`](../benchmarks/2026-09-27-head-to-head/scripts/devonly.py)):
+the runtime closure is everything reachable from the project's runtime and
+optional dependencies, and a package outside it is dev-only.
+
+| lockfile | advisories | dev-only | runtime | unknown |
+|---|---:|---:|---:|---:|
+| `uv.lock` | 459 | 99 | 360 | 0 |
+| `pnpm-lock.yaml` | 160 | 5 | 131 | 24 |
+| **total** | **619** | **104 (17%)** | 491 | 24 |
+
+Not measured: 100 in `requirements.txt` files, which record no dependency
+type, and 2 in `poetry.lock`.
+
+The dev-only ones are what a reader would expect: `jupyterlab` (51) and
+`notebook` (18) pulled in through a `dev` group's `jupyter`, `black`, and
+`datamodel-code-generator` (22) in the MCP SDK's dev tooling. Checked by hand
+on llama_index's lilac reader: `jupyterlab` reaches that lockfile only through
+`[package.dev-dependencies] dev = [..., "jupyter", ...]`. Every `uv.lock`
+advisory sits in a lockfile with a detectable project root, so no lockfile was
+read as "all dev" for lack of one. The 24 pnpm unknowns are packages whose
+snapshot key the script's name parser does not resolve (peer-dependency
+suffixes); they were left unknown, never counted as dev-only.
+
+So the dev-only fact would resolve about one in six of the advisories the
+ladder cannot resolve today, in the two lockfile formats that record it. That
+is past the "a handful" bar step 1 set, so step 2 is worth building, with the
+assumption named in the verdict and the switch to turn it off.
+
 ## Plan
 
 1. **Measure first.** On the seven benchmark repositories, count how many of
