@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.43.0] - 2026-09-28
+
+nox was compared, for the first time, with the tools people run instead of it
+(`docs/benchmarks/2026-09-27-head-to-head/`): gitleaks and TruffleHog for
+secrets, osv-scanner and Trivy for dependencies, Semgrep for code. This
+release is what that comparison found. On the seven benchmark repositories
+secret findings fall 62% and personal-data findings 94%, with nothing real
+lost; nox now finds all nine real credentials any of the tools found there
+(gitleaks five, TruffleHog three), including a Weaviate Cloud key none of them
+reported. Dependency advisories no longer stop at a deadline in large
+monorepos, which brings nox level with osv-scanner on pinned dependencies. On
+the OWASP Benchmark for Python, nox's score goes from 10.9 to 15.5 (Semgrep
+`p/default`: 10.7). Every dropped finding was read, and the ones that changed
+the rule-diff corpus are explained in the ledger this release rolls.
 
 ### Changed
 
@@ -14,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release's cosign-verified `checksums.txt`.
 
 ### Fixed
+
+- **The rule-diff check passed a run that never finished.** Under `set -e` a
+  failing command exited with its own status, usually 1, which the workflow
+  reads as "every drop is explained". An `rm` of a fresh clone's `.git` failed
+  on the third of 25 corpus repositories, the check passed, and an
+  unexplained drop merged. Any unexpected failure now exits 2, which the
+  workflow fails; background git maintenance is off and the `rm` is retried
+  (#735).
 
 - **A monorepo's dependency advisories stopped at the lookup deadline.** nox
   asked the advisory source once per lockfile entry, so a package pinned in

@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.42.0",
+  "nox_release": "v1.43.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -27,30 +27,5 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": [
-    {
-      "rule": "SEC-082",
-      "classification": "refined-away",
-      "pr": 730,
-      "reason": "SEC-082 claims a hardcoded bearer token. A value built only from short words and numbers that carries a test marker, opens with a translated \"your\", or uses only credential vocabulary is a placeholder, not a token. On the corpus: vercel-ai-mistral 7 -> 0, every one `authorization: 'Bearer test-api-key'` in a *.test.ts file. On the seven-repo benchmark SEC-082 drops 274 lines, read grouped by value: test-api-key 86, test-key 32, test-token 32, custom-token 20, mock-auth-token 18, token 14, secret 11, mock-api-key 9, TEST_TOKEN 8, and smaller groups of the same kind; nothing is added and no real credential is among them. A random value (a JWT, sk_test_51H...) is never word-composed, and TestDescriptiveValuesArePlaceholders asserts it stays reported."
-    },
-    {
-      "rule": "DATA-001",
-      "classification": "refined-away",
-      "pr": 733,
-      "reason": "DATA-001 is CWE-359, private personal information. Two refutations: a role mailbox (support@, hello@, noreply@, matched on the whole local part) names a function rather than a person, and the password@host of a connection URL is URL userinfo, not an e-mail address. On the corpus: chronos 2 -> 1, the dropped line `mysql://user:pw@db.local:6603/?namespace=tenant_a` in internal/store/mysql/mysql_test.go (URL userinfo); the kept one is in .goreleaser.yaml. On the seven-repo benchmark DATA 369 -> 55, all 314 drops read: support@crewai.com 156, hello@neatlogs.com 152, deploy@/noreply@/support@unstructured.io/git@github.com 4, postgresql://…:password@ 2. Personal addresses (a gmail address, jane@…) are still reported; #733 landed while rule-diff exited 1 on a crash and passed, which is why this entry arrives with the harness fix."
-    },
-    {
-      "rule": "SEC-161",
-      "classification": "refined-away",
-      "pr": 734,
-      "reason": "SEC-161 (high-entropy string) fired inside ciphertext a model API issued and takes back: Anthropic's thinking-block signature and web-search encrypted_index, OpenAI's reasoning encrypted_content, Gemini's thoughtSignature. A match in the string value of one of those JSON keys is now refuted. On the corpus: anthropic-sdk-python 58 -> 50 and vercel-ai-anthropic 9 -> 0, recorded responses under tests/ and __fixtures__/. On the seven-repo benchmark the refutation removes 67 findings, all read and all under those four keys (SEC-161 32, SEC-048 21, SEC-055 14); the same token under any other key is still reported."
-    },
-    {
-      "rule": "TAINT-002",
-      "classification": "refined-away",
-      "pr": 743,
-      "reason": "TAINT-002 claims command injection. For Python, the flag \"taint is in the first argument\" was set whenever the first argument held any variable, so a call whose tainted value sat only in a later argument -- env=os.environ -- was judged as if the command itself were tainted. It is now set from the taint state at the sink. On the corpus: certbot 3 -> 1. The two dropped are acme_server.py:191 `subprocess.Popen(command, ..., env=env)` and tools/venv.py:137 `subprocess.check_output(cmd, env=env, shell=shell)`, both with env from os.environ and an untainted command; a third drop, apache-conf-test-pebble.py:22 env via `environ`, sits on a line whose argv-to-command flow is still reported (the kept finding). On the seven-repo benchmark the same shape drops three in llama_index's dev CLI (os.environ.copy() passed as env= to an argv subprocess.run). Nothing is added."
-    }
-  ]
+  "entries": []
 }
