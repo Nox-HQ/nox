@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 188,
+  "version": 189,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -734,6 +734,13 @@
       "completed_at": "2026-06-05T13:07:40.026159+02:00",
       "elapsed_minutes": 0
     },
+    "task-75": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-09-28T16:43:07.344365+02:00",
+      "elapsed_minutes": 0
+    },
     "task-8": {
       "status": "verified",
       "path": "",
@@ -753,5 +760,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-06-05T13:11:25.789639+02:00"
+  "updated_at": "2026-09-28T16:43:07.344365+02:00"
 }

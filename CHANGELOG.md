@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Predictable randomness is now caught in Python (`CRYPTO-002`).** The rule
+  was Go-only. A `random` draw (`random.random`, `randint`, `choice` in a
+  `join`, `getrandbits`, a `random.Random` instance, ...) is reported when the
+  names around it say the value is a secret: `otp = random.randint(...)`,
+  `app.secret_key = ''.join(random.choice(...) ...)`, or a neutral name stored
+  one step later into a session. `secrets` and `random.SystemRandom` never
+  fire, and jitter, backoff, sampling and element picks stay silent, as in Go.
+  Measured three ways:
+  - OWASP Benchmark for Python, weakrand (326 cases): 0 → 100 (every
+    vulnerable case found, no safe case flagged). The benchmark's overall
+    score goes from 15.5 to 22.7; Semgrep `p/default` scores 10.7.
+  - 403 Python files that use `random` in the rule-diff and head-to-head
+    corpora, holding 85 draws for jitter, sleeps, sample data and request IDs:
+    no findings.
+  - 89 files from GitHub code search for security-named `random` use: 55
+    findings, of which 51 are plainly secrets (OTPs, Flask `secret_key`,
+    password and licence-key generators, a salt, a Diffie-Hellman private key)
+    and 4 are debatable. Misses are neutrally named secrets (`hashCode` for a
+    reset code), the limit the Go rule documents too.
+
+  Two differences from the Go rule, both documented in `rand_python.go`: the
+  enclosing function's name vetoes only on a purpose word (retry, sample, ...)
+  or a pytest `test_` prefix, not on words like "demo" or "bench" anywhere in
+  it; and a security word glued to a lowercase word (`mysession`,
+  `authtoken`) is split before matching. "guess" is now a benign word in both
+  languages: a brute-force loop's `guess_password` is not a secret.
+
 ## [1.43.1] - 2026-09-28
 
 Scans take half the CPU, with identical findings: 1,262 of the 1,392 regex
