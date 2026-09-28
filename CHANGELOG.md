@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **XML external entity resolution (XXE) is a taint sink (`TAINT-010`).**
+  Python's XML parsers stopped resolving external entities by default (the
+  standard library in 3.7.1, lxml in 5.0), so the vulnerable condition is two
+  things together: a parser someone switched entities back on --
+  `setFeature(feature_external_ges, True)`, `XMLParser(resolve_entities=True)`
+  or `no_network=False` -- and a document the caller does not control. Either
+  alone is not reported: a default parser on request data is safe, and an
+  entity-resolving parser on a bundled file is not an exploit. OWASP Benchmark
+  for Python xxe: 0 -> 42 (TPR 62%, FPR 20%). On 58 GitHub files that enable
+  entity resolution, 16 findings: 14 in deliberately vulnerable XXE demo apps
+  and 2 in command-line tools that parse a file named on the command line; the
+  42 files that never parse untrusted input stay silent.
+
 - **XPath and LDAP injection are taint sinks (`TAINT-008`, `TAINT-009`).**
   There was no sink class for either, so a request value spliced into an
   XPath expression or an LDAP filter was invisible. Python sinks: lxml's

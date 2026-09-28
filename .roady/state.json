@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 191,
+  "version": 193,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -746,10 +746,21 @@
       "elapsed_minutes": 31
     },
     "task-76": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #753 merged (c06ee3a): TAINT-008 XPath, TAINT-009 LDAP (Python). OWASP xpathi 0 -\u003e 22, ldapi 0 -\u003e 41; fixed hand-kept vuln-class lists that never honoured open_redirect sanitizers; rule-diff no change on 25 repos. Java sinks deferred to task-82 (measured there)."
+      ],
+      "started_at": "2026-09-28T17:14:22.214985+02:00",
+      "completed_at": "2026-09-28T17:38:51.08461+02:00",
+      "elapsed_minutes": 24
+    },
+    "task-77": {
       "status": "in_progress",
       "path": "",
       "owner": "ai-agent",
-      "started_at": "2026-09-28T17:14:22.214985+02:00",
+      "started_at": "2026-09-28T17:38:51.094601+02:00",
       "elapsed_minutes": 0
     },
     "task-8": {
@@ -771,5 +782,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-28T17:14:22.214985+02:00"
+  "updated_at": "2026-09-28T17:38:51.094601+02:00"
 }

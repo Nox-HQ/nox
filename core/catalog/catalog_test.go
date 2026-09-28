@@ -114,8 +114,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1491 -> 1492 added SEC-951, the generic credential rule.
 	// 1492 -> 1494 added TAINT-008 (XPath injection) and TAINT-009 (LDAP
 	// injection), the first two new taint sink classes since TAINT-007.
-	if got := len(cat); got != 1494 {
-		t.Errorf("Catalog() returned %d rules, want 1494", got)
+	// 1494 -> 1495 added TAINT-010 (XML external entity resolution).
+	if got := len(cat); got != 1495 {
+		t.Errorf("Catalog() returned %d rules, want 1495", got)
 	}
 }
 
