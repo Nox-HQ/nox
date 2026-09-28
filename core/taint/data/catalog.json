@@ -471,6 +471,13 @@
           "cwe": "CWE-90",
           "rule_id": "TAINT-009",
           "note": "ldap3 Connection.search(base, filter); a local bound from an LDAP-named constructor or factory (see receivers.go)"
+        },
+        {
+          "call": "xxe_enabled_parser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "synthetic chain: a parse call that reads a parser with external entities switched on (setFeature(feature_external_ges, True), XMLParser(resolve_entities=True / no_network=False)); see engine/xxe_python.go"
         }
       ],
       "sanitizers": [

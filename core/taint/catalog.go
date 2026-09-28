@@ -50,6 +50,7 @@ const (
 	VulnOpenRedirect          VulnClass = "open_redirect"          // CWE-601
 	VulnXPathInjection        VulnClass = "xpath_injection"        // CWE-643
 	VulnLDAPInjection         VulnClass = "ldap_injection"         // CWE-90
+	VulnXXE                   VulnClass = "xxe"                    // CWE-611
 )
 
 // vulnClasses is every class above, in a fixed order. It is the one list: a
@@ -61,6 +62,7 @@ var vulnClasses = []VulnClass{
 	VulnCommandInjection, VulnSQLInjection, VulnCodeInjection, VulnXSS,
 	VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
 	VulnPromptInjection, VulnOpenRedirect, VulnXPathInjection, VulnLDAPInjection,
+	VulnXXE,
 }
 
 // AllVulnClasses returns every vulnerability class, in a fixed order.

@@ -22,6 +22,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 	// matched nothing. Expanding through the file's imports is what lets an
 	// ordinary import idiom be recognised. Additions only; see imports.go.
 	applyImportAliases(drafts, importAliases(lang, content))
+	if lang == lexctx.LangPython {
+		// XXE: see xxe_python.go.
+		applyXXEParsers(drafts, pythonXXEParsers(content))
+	}
 	units := make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]
