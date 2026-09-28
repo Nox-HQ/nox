@@ -153,6 +153,9 @@ var benignWords = map[string]bool{
 	"cache": true, "test": true, "testing": true, "fake": true,
 	"mock": true, "dummy": true, "stub": true, "fixture": true,
 	"example": true, "demo": true, "bench": true, "benchmark": true,
+	// A guess is predictable by design: `guess_password` in a brute-force
+	// loop is an attempt at someone else's secret, not a secret.
+	"guess": true, "guessed": true,
 }
 
 // randRule describes CRYPTO-002 for the rule catalogue.
@@ -173,18 +176,20 @@ func randRule() *rules.Rule {
 	return &rules.Rule{
 		ID:          randRuleID,
 		Version:     "1.0",
-		Description: "Predictable randomness (math/rand) used for a security-bearing value",
+		Description: "Predictable randomness (Go math/rand, Python random) used for a security-bearing value",
 		Severity:    findings.SeverityHigh,
 		Confidence:  findings.ConfidenceMedium,
 		Tags:        []string{"crypto", "weak-random", "owasp-a02"},
 		Remediation: "`math/rand` is a deterministic PRNG: its output is predictable from a small number of observed values, so a token, key, nonce, salt, password or session identifier derived from it is guessable. " +
 			"Use `crypto/rand` instead — `crypto/rand.Read` for raw bytes, `crypto/rand.Int` for a bounded integer, or `crypto/rand.Text` (Go 1.24+) for a random string — and encode the bytes with `encoding/hex` or `encoding/base64` rather than deriving characters with a modulo. " +
+			"In Python, use the `secrets` module (`secrets.token_urlsafe`, `secrets.token_hex`, `secrets.randbelow`, `secrets.choice`) or `random.SystemRandom`; the `random` module's functions and `random.Random` are a Mersenne Twister whose state is recoverable from its output. " +
 			"This rule fires only where the surrounding names say the value is security-bearing, so `math/rand` for jitter, backoff, sampling, shuffling or load balancing is not reported and needs no change; conversely, a security-bearing generator whose variables are named neutrally will NOT be caught, so this finding's absence is not evidence a file is clean. " +
 			"If the value here genuinely is not security-bearing, suppress it with a nox:ignore comment recording that reason.",
 		References: []string{
 			"https://cwe.mitre.org/data/definitions/338.html",
 			"https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
 			"https://pkg.go.dev/crypto/rand",
+			"https://docs.python.org/3/library/secrets.html",
 		},
 		Metadata: map[string]string{"cwe": "CWE-338"},
 	}
