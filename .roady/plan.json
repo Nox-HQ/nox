@@ -3,6 +3,102 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-83",
+      "title": "Reachability step 1: measure dev-only dependency findings",
+      "description": "Per docs/design/reachability-python-js.md: how many VULN findings on the seven repositories sit in dev-only packages; decide from the number whether step 2 is worth building.",
+      "priority": "low",
+      "estimate": "S",
+      "depends_on": null,
+      "feature_id": "measure-what-remains-secrets-labels-java-benchmark-dev-only",
+      "source": {}
+    },
+    {
+      "id": "task-82",
+      "title": "Run the OWASP Benchmark for Java",
+      "description": "Score nox and Semgrep p/default on the Java benchmark per category; record gaps as spec features.",
+      "priority": "low",
+      "estimate": "M",
+      "depends_on": [
+        "task-76"
+      ],
+      "feature_id": "measure-what-remains-secrets-labels-java-benchmark-dev-only",
+      "source": {}
+    },
+    {
+      "id": "task-81",
+      "title": "Re-label the remaining secret findings on the seven repositories",
+      "description": "Label all 369 current secret findings (no matched text in labels) and publish nox's current secrets precision alongside gitleaks and TruffleHog.",
+      "priority": "low",
+      "estimate": "S",
+      "depends_on": null,
+      "feature_id": "measure-what-remains-secrets-labels-java-benchmark-dev-only",
+      "source": {}
+    },
+    {
+      "id": "task-80",
+      "title": "Lower the false-positive rate on pathtraver, codeinj and redirect",
+      "description": "Read every false case flagged in the three categories, name each safe idiom, fix the general ones in the engine, re-measure on benchmark and real repositories.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-76",
+        "task-78",
+        "task-79"
+      ],
+      "feature_id": "false-positive-rate-on-path-traversal-code-injection-and",
+      "source": {}
+    },
+    {
+      "id": "task-79",
+      "title": "Reflected XSS through Flask/Django handler return values",
+      "description": "Tainted HTML string returned from a route handler or passed to make_response/HttpResponse without escaping. Escape helpers as sanitizers; jsonify/dict returns never fire. Measure xss (89).",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": null,
+      "feature_id": "reflected-xss-through-python-handler-return-values",
+      "source": {}
+    },
+    {
+      "id": "task-78",
+      "title": "Insecure cookie flag (secure=False) and trust-boundary session writes",
+      "description": "CWE-614 on an explicit secure=False; TAINT-010 trust_boundary for tainted keys/values written to the server-side session. Measure securecookie (39) and trustbound (37), then real Flask/Django repos.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": null,
+      "feature_id": "insecure-cookies-and-trust-boundary-violations",
+      "source": {}
+    },
+    {
+      "id": "task-77",
+      "title": "XXE: flag parsers configured to resolve external entities",
+      "description": "Python: sax/pulldom setFeature(feature_external_ges, True), lxml XMLParser(resolve_entities=True / load_dtd with network). Default parsers stay silent. Measure xxe (28).",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": null,
+      "feature_id": "xml-external-entity-resolution-xxe",
+      "source": {}
+    },
+    {
+      "id": "task-76",
+      "title": "TAINT-008 XPath and TAINT-009 LDAP injection sink classes",
+      "description": "Add xpath_injection and ldap_injection vuln classes, Python and Java sinks, escape_filter_chars sanitizers, fixtures (vulnerable + clean with a real source). Measure xpathi (186) and ldapi (29); rule-diff must show no drops.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": null,
+      "feature_id": "xpath-and-ldap-injection-as-taint-sinks",
+      "source": {}
+    },
+    {
+      "id": "task-75",
+      "title": "CRYPTO-002 for Python: predictable randomness in a security context",
+      "description": "Extend CRYPTO-002 to Python's random module with the Go rule's word-based security context and benign vetoes; secrets/SystemRandom never fire. Measure on the OWASP weakrand category (326 cases) and read every new finding on the seven head-to-head repositories.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": null,
+      "feature_id": "predictable-randomness-in-python-security-contexts",
+      "source": {}
+    },
+    {
       "id": "task-74",
       "title": "AI-rule precision + generated-content detection (top-25 scan)",
       "description": "Fixes surfaced scanning the top 26 public MCP servers: AI-033 pattern bug (matched bare null/false/disabled -\u003e 6300 FPs on TS type defs), AI-036 pattern bug (bare '35'), AI-026 over-broad logging, test/doc ignore for AI-006/008/026/036/039, and content-based generated/minified detection in the AI analyzer (banner + long-line) to catch generated bundles embedded in normal extensions. Validated: cloudflare AI-033 -\u003e0, mongodb 38-\u003e6, top-26 corpus 0 true positives / 0 disclosure. Documented in CHANGELOG.",
