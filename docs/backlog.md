@@ -460,3 +460,15 @@ splitAssignment declines compound operators for every recognizer language, so `x
 Python container taint is field-insensitive: `m['keyB'] = param; bar = m['keyA']` and configparser's `conf.set(s, 'keyB', param); bar = conf.get(s, 'keyA')` taint bar, though the key read never held the tainted value. Likewise `lst.append(param); lst.pop(0); bar = lst[1]` cannot tell elements apart. These are the largest remaining false-positive family on the OWASP Benchmark for Python after dead-branch pruning (list index 18, configparser 9). Tracking literal string keys per container is the fix; a non-literal key or index must fall back to the whole container so nothing is lost.
 
 ---
+
+## Java: predictable randomness and insecure cookies
+
+Measured on the OWASP Benchmark for Java 1.2 (2026-09-28): weakrand (493 cases) and securecookie (67) both score 0, where Semgrep p/default scores 100 on each; together they are most of the gap to Semgrep's 34.9 average (nox 14.1). CRYPTO-002 and HARDEN-003 exist for Go and Python; Java needs the same premises: java.util.Random / Math.random / ThreadLocalRandom drawn into a security-named value (SecureRandom never fires), and Cookie.setSecure(false) stated explicitly. Measure on real Java repositories before shipping, as the Python rules were.
+
+---
+
+## Java taint: XPath/LDAP sinks and flow recall
+
+OWASP Benchmark for Java 1.2 (2026-09-28): ldapi and xpathi score 0 (no Java sinks: DirContext.search, XPath.evaluate/compile), and the flow categories detect little -- sqli TPR 15% (Semgrep 93%), xss 28% (82%), pathtraver 20% (90%), cmdi 52% (93%). Semgrep's recall comes at 50-88% false-positive rates, so the target is recall with nox's precision, not Semgrep's shape. Start by reading which benchmark idioms the Java extractor loses (servlet request sources, helper classes, string builders) and fix the general ones, as the Python work did.
+
+---
