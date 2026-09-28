@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.43.1] - 2026-09-28
+
+Scans take half the CPU, with identical findings: 1,262 of the 1,392 regex
+rules are now tried only where their opening literal occurs. Verified three
+ways, including full scans of the seven benchmark repositories and rule-diff's
+25-repository corpus, both unchanged.
 
 ### Changed
 
