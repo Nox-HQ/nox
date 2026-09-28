@@ -549,19 +549,9 @@ func suffixKeys(chain string) []string {
 	return out
 }
 
-// allVulnClasses is the fixed class set consulted when checking whether a call
-// is any sanitizer. Ordered deterministically.
-var allVulnClasses = []taint.VulnClass{
-	taint.VulnCommandInjection,
-	taint.VulnSQLInjection,
-	taint.VulnCodeInjection,
-	taint.VulnXSS,
-	taint.VulnSSTI,
-	taint.VulnPathTraversal,
-	taint.VulnSSRF,
-	taint.VulnUnsafeDeserialization,
-	taint.VulnPromptInjection,
-}
+// allVulnClasses is every class, taken from the catalog package so a class
+// added there is never missing here.
+var allVulnClasses = taint.AllVulnClasses()
 
 // sortFindings orders findings deterministically by line, then rule ID, so
 // repeated runs over one Unit produce identical output.

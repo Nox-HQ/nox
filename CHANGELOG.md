@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **XPath and LDAP injection are taint sinks (`TAINT-008`, `TAINT-009`).**
+  There was no sink class for either, so a request value spliced into an
+  XPath expression or an LDAP filter was invisible. Python sinks: lxml's
+  `.xpath(query)` and `etree.XPath`, `elementpath.select`; python-ldap's
+  `search_s` family, and ldap3's `conn.search` where `conn` was made by
+  something LDAP-named (`ldap3.Connection(...)`, `ldap.initialize(...)`, a
+  project's `get_ldap_connection()`) -- `search` alone is `re.search` and every
+  vector store, so it is not a sink by name. Only the query counts: XPath's
+  parameterised form (`root.xpath("//u[@id=$id]", id=v)`) and a user-supplied
+  document with a constant path stay silent. `escape_filter_chars`,
+  `filter_format`, `escape_dn_chars` and `escape_rdn` sanitize LDAP; `int` and
+  `float` sanitize both. On the OWASP Benchmark for Python, xpathi goes from 0
+  to 22 and ldapi from 0 to 41 (Semgrep `p/default`: 0 on both). Twelve of the
+  XPath false positives reject an apostrophe and return before building a
+  single-quoted query; recognising that guard is task-80's work, with the
+  rest of the benchmark's dead-branch idioms.
+
 - **Predictable randomness is now caught in Python (`CRYPTO-002`).** The rule
   was Go-only. A `random` draw (`random.random`, `randint`, `choice` in a
   `join`, `getrandbits`, a `random.Random` instance, ...) is reported when the
@@ -35,6 +52,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it; and a security word glued to a lowercase word (`mysession`,
   `authtoken`) is split before matching. "guess" is now a benign word in both
   languages: a brute-force loop's `guess_password` is not a secret.
+
+### Fixed
+
+- **A sanitizer for open redirect was never honoured.** The engine asks the
+  catalog "does this call clear class X" for a fixed list of classes, and two
+  hand-kept copies of that list stopped at prompt injection. Open redirect had
+  no catalog sanitizer yet, so nothing changed in practice, but every class
+  added after it would have been declared sanitizable and silently not been.
+  The list now comes from one place, `taint.AllVulnClasses`.
 
 ## [1.43.1] - 2026-09-28
 

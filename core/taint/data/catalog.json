@@ -398,6 +398,79 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "Django redirect to a request-derived value"
+        },
+        {
+          "call": "xpath",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "lxml/parsel/scrapy .xpath(query): the query is arg 0; XPath variables passed as keywords (root.xpath('//u[@id=$id]', id=v)) are the safe parameterized form"
+        },
+        {
+          "call": "etree.XPath",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "lxml.etree.XPath(query) compiles the query; variables are bound at call time"
+        },
+        {
+          "call": "etree.XPathEvaluator",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "elementpath.select",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "elementpath.select(root, path): the path is arg 1"
+        },
+        {
+          "call": "elementpath.iter_select",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "the path is arg 1"
+        },
+        {
+          "call": "elementpath.Selector",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "the path is arg 0"
+        },
+        {
+          "call": "search_s",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009",
+          "note": "python-ldap LDAPObject.search_s(base, scope, filterstr)"
+        },
+        {
+          "call": "search_st",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "search_ext",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "search_ext_s",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "ldap_connection.search",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009",
+          "note": "ldap3 Connection.search(base, filter); a local bound from an LDAP-named constructor or factory (see receivers.go)"
         }
       ],
       "sanitizers": [
@@ -426,7 +499,9 @@
             "command_injection",
             "sql_injection",
             "path_traversal",
-            "code_injection"
+            "code_injection",
+            "xpath_injection",
+            "ldap_injection"
           ],
           "note": "numeric coercion removes injection metacharacters"
         },
@@ -436,7 +511,9 @@
             "command_injection",
             "sql_injection",
             "path_traversal",
-            "code_injection"
+            "code_injection",
+            "xpath_injection",
+            "ldap_injection"
           ]
         },
         {
@@ -509,6 +586,34 @@
           "neutralizes": [
             "unsafe_deserialization"
           ]
+        },
+        {
+          "call": "escape_filter_chars",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "ldap3.utils.conv.escape_filter_chars / ldap.filter.escape_filter_chars"
+        },
+        {
+          "call": "ldap.filter.filter_format",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "escapes each assertion value it formats"
+        },
+        {
+          "call": "escape_dn_chars",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "ldap.dn.escape_dn_chars for a DN component"
+        },
+        {
+          "call": "escape_rdn",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "ldap3.utils.dn.escape_rdn"
         }
       ],
       "checks": [
