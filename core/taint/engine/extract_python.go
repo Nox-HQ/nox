@@ -13,6 +13,10 @@ func extractPython(lines []logicalLine) []unitDraft {
 	units := []*unitDraft{module}
 	cur := module
 	var blocks pyBlocks
+	// Dead-branch pruning; see pydead.go.
+	single := pySingleAssigned(lines)
+	env := pyConstEnv{}
+	chains := map[int]*pyChain{}
 
 	for _, ll := range lines {
 		code := ll.code
@@ -22,6 +26,10 @@ func extractPython(lines []logicalLine) []unitDraft {
 		}
 		indent := pyIndent(ll.raw)
 		blocks.enter(indent)
+		if !strings.HasPrefix(trimmed, "elif") && !strings.HasPrefix(trimmed, "else") {
+			delete(chains, indent)
+		}
+		dead := blocks.dead()
 		if name, params, ok := pyDefHeader(trimmed); ok {
 			u := &unitDraft{funcName: name, params: params}
 			units = append(units, u)
@@ -29,7 +37,28 @@ func extractPython(lines []logicalLine) []unitDraft {
 			blocks.open(indent, false)
 			continue
 		}
+		if dead {
+			// Inside a branch that cannot run: nothing here is a statement,
+			// and a nested header is dead too.
+			if strings.HasSuffix(trimmed, ":") {
+				blocks.openState(indent, branchDead, nil)
+			}
+			continue
+		}
 		conditional := blocks.conditional()
+		if strings.HasSuffix(trimmed, ":") {
+			if state, ours := resolveHeader(trimmed, ll, indent, chains, blocks.innermostMatch(), env); ours {
+				// The header's own condition still runs (`if os.system(c):`
+				// is a sink); only its body is resolved.
+				if st, ok := recognizeStatement(langPython, ll); ok {
+					st.conditional = conditional
+					cur.stmts = append(cur.stmts, st)
+				}
+				blocks.openState(indent, state, chains[indent])
+				continue
+			}
+		}
+		ll = rewriteConstTernary(ll, env)
 		if st, ok := pyReturnStatement(langPython, ll); ok {
 			st.conditional = conditional
 			cur.stmts = append(cur.stmts, st)
@@ -38,6 +67,13 @@ func extractPython(lines []logicalLine) []unitDraft {
 		if st, ok := recognizeStatement(langPython, ll); ok {
 			st.conditional = conditional
 			cur.stmts = append(cur.stmts, st)
+			if single[st.assigns] {
+				if eq := strings.Index(ll.code, "="); eq >= 0 {
+					if v, ok := evalPyConst(pyEvalText(ll, eq+1, len(ll.code)), env); ok {
+						env[st.assigns] = v
+					}
+				}
+			}
 		}
 		if strings.HasSuffix(trimmed, ":") {
 			blocks.open(indent, pyConditionalHeader(trimmed))
@@ -182,6 +218,41 @@ type pyBlocks struct{ stack []pyBlock }
 type pyBlock struct {
 	indent      int
 	conditional bool
+	dead        bool
+	chain       *pyChain // a match block's subject, for its case arms
+}
+
+// openState records a resolved branch header (see pydead.go).
+func (b *pyBlocks) openState(indent int, state branchState, chain *pyChain) {
+	blk := pyBlock{indent: indent}
+	switch state {
+	case branchDead:
+		blk.dead = true
+	case branchMaybe:
+		blk.conditional = true
+	}
+	if chain != nil && chain.kind == 'm' {
+		blk.chain = chain
+	}
+	b.stack = append(b.stack, blk)
+}
+
+// dead reports whether any enclosing block provably never runs.
+func (b *pyBlocks) dead() bool {
+	for _, blk := range b.stack {
+		if blk.dead {
+			return true
+		}
+	}
+	return false
+}
+
+// innermostMatch returns the chain of the nearest enclosing match block.
+func (b *pyBlocks) innermostMatch() *pyChain {
+	if n := len(b.stack); n > 0 {
+		return b.stack[n-1].chain
+	}
+	return nil
 }
 
 // enter closes every block the line at indent is not inside.

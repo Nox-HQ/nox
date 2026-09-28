@@ -112,6 +112,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Python taint reported flows through branches that cannot run.** An
+  `if`, `elif`, `else`, `match`/`case` arm or conditional expression whose
+  condition is a constant -- `if 7 * 42 - num > 200:` with `num = 106`,
+  `x if 'a' in 'abc' else y`, `match "ABC"[1]:` -- was treated as "may run".
+  A small evaluator now resolves such conditions and drops the arm that
+  cannot run. It refuses rather than guesses: any operand it cannot pin to a
+  value (a call, an attribute, a parameter, a name the file assigns more
+  than once, which covers loop variables) leaves the branch as it was, so
+  only code that provably does not execute is removed. A condition's own
+  calls are still statements (`if os.system(c):` stays a sink). On the OWASP
+  Benchmark for Python no category's detection rate moves, and the
+  false-positive rate falls in eight: xss 22% -> 10%, ldapi 15% -> 0%,
+  deserialization 11% -> 3%, xpathi 33% -> 23%, codeinj 52% -> 33%, redirect
+  52% -> 38%, pathtraver 23% -> 14%, xxe 20% -> 15%. The average score goes
+  from 42.7 to 49.3.
+
 - **`x += y` in Python carried no taint.** An augmented assignment was not
   modelled as an assignment at all, so `sql += q; cursor.execute(sql)` and
   `body += f"<p>{q}</p>"; return body` were both unreported. It now keeps
