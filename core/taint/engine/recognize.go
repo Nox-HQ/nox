@@ -513,6 +513,10 @@ var containerTaintLangs = map[langKind]bool{
 	// Python: `m['k'] = param; bar = m['k']` -- the OWASP Benchmark for
 	// Python routes injection cases through element stores like this.
 	langPython: true,
+	// Java is NOT here: `arr[0] = param` reaches splitAssignment's Java
+	// declaration-type stripping, which mangles the subscripted target, so an
+	// array element store is still unmodelled. Java's collections and
+	// builders are covered by containerMutators below.
 }
 
 // containerMutators are, per language, the methods that MUTATE their receiver
@@ -536,6 +540,16 @@ var containerMutators = map[langKind]map[string]bool{
 		"add": true, "addAll": true, "insert": true, "insertAll": true,
 		"addEntries": true, "write": true, "writeln": true, "writeAll": true,
 	},
+	// Java collections and builders: `map.put(k, param)`, `list.add(param)`,
+	// `sb.append(param)`. PreparedStatement's setString/setInt are absent on
+	// purpose: binding a value is the safe form, and must not taint the
+	// statement.
+	langJava: {
+		"put": true, "putAll": true, "putIfAbsent": true, "add": true,
+		"addAll": true, "addElement": true, "addFirst": true, "addLast": true,
+		"offer": true, "push": true, "set": true, "append": true, "insert": true,
+		"setProperty": true,
+	},
 }
 
 // containerMutationRoot returns the receiver of a whole-statement mutator call
@@ -558,7 +572,20 @@ func containerMutationRoot(lang langKind, code string) (string, bool) {
 	if !isBareIdent(root) || isKeyword(root) || !mutators[method] {
 		return "", false
 	}
-	return root, matchParen(code, open) == len(code)-1
+	// A chain of mutators on the same receiver -- `sb.append(a).append(b)`,
+	// the ordinary Java builder idiom -- is still a store into the root.
+	for end := matchParen(code, open); end >= 0; {
+		if end == len(code)-1 {
+			return root, true
+		}
+		rest := code[end+1:]
+		next := strings.IndexByte(rest, '(')
+		if !strings.HasPrefix(rest, ".") || next < 2 || !mutators[rest[1:next]] {
+			return "", false
+		}
+		end = matchParen(code, end+1+next)
+	}
+	return "", false
 }
 
 // containerAssignRoot returns the container name of an element-assignment target

@@ -2424,6 +2424,20 @@
       ],
       "sanitizers": [
         {
+          "call": "Util.escape",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "hudson.Util.escape, the HTML escaper Jenkins core and its plugins use"
+        },
+        {
+          "call": "HtmlUtils.htmlEscape",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Spring's org.springframework.web.util.HtmlUtils"
+        },
+        {
           "call": "Integer.parseInt",
           "neutralizes": [
             "command_injection",

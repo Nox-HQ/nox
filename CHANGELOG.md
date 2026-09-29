@@ -46,6 +46,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Java taint read most methods wrong.** Four defects, found together while
+  reading why nox missed flows on the OWASP Benchmark for Java and checked on
+  Kafka, Keycloak, Jenkins and 90 GitHub servlet files:
+  - *No branch model.* A statement in an `if`, `else`, loop or `switch` was an
+    unconditional overwrite, and a brace-less branch -- `if (c) bar = "x";
+    else bar = param;` -- was skipped whole because its line starts with
+    `if`. Branch bodies are now weak updates, brace-less branches are read,
+    and an `if`/`else`, `switch` case or ternary whose condition is a constant
+    is resolved the way Python's are (#757): only code that provably does not
+    run is dropped, with `switch` fall-through and stacked labels honoured.
+  - *A method whose `throws` clause sat on the next line was not a method.*
+    Its statements folded into one file-wide scope, which joined flows across
+    methods that never share a variable.
+  - *`map.put(k, param)`, `list.add(param)` and `sb.append(a).append(b)`
+    dropped the value's taint.* Java now has Python's container stores,
+    including chained builders. `PreparedStatement.setString` is deliberately
+    not one: binding a value is the safe form.
+  - *`System.getProperty("user.dir")` was untrusted input.* The properties the
+    JVM defines (`user.dir`, `user.home`, `java.io.tmpdir`, `os.name`,
+    `line.separator`, ...) describe the machine; only a custom `-D` property,
+    or a non-literal key, is still a source.
+- **A sanitizer wrapping a helper's argument was ignored.** In every language,
+  `helper(escape(x))` was reported by the helper's own sink when the helper
+  was a function in the same file; a direct sink already honoured the wrapper.
+  Found on Jenkins' `FormFieldValidator`, whose `error(msg)` escapes before it
+  writes. `hudson.Util.escape` and Spring's `HtmlUtils.htmlEscape` are now
+  Java XSS sanitizers.
+
 - **A string-literal argument shifted every later argument.** The code view
   blanks literals, and an argument that was blank was skipped, so in
   `query("SELECT ... WHERE id=?", source())` the source was read as the SQL

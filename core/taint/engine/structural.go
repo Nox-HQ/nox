@@ -575,6 +575,9 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 					if cls := sum.sanitizesClass[argIdx]; cls[as.sink.VulnClass] {
 						continue // helper sanitizes this parameter for this class
 					}
+					if argIdx < len(info.PositionalArgs) && e.slotSanitizes(lang, info.PositionalArgs[argIdx], op.sourceVar, as.sink.VulnClass) {
+						continue // the argument itself is wrapped: helper(escape(x))
+					}
 					via := append(append([]string(nil), op.ti.via...), sum.name)
 					via = append(via, as.via...)
 					out = append(out, taint.Flow{
@@ -595,6 +598,47 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 		}
 	}
 	return out
+}
+
+// slotSanitizes reports whether, in one argument's code, the variable v is
+// passed through a sanitizer for class -- `helper(Util.escape(v))`. A direct
+// sink already honours a wrapping sanitizer; a local helper did not, so a
+// value escaped on its way into the helper was reported by the helper's own
+// sink. Found on Jenkins' FormFieldValidator: error(msg) escapes before it
+// writes.
+func (e *StructuralEngine) slotSanitizes(lang, code, v string, class taint.VulnClass) bool {
+	if v == "" {
+		return false
+	}
+	for _, c := range topLevelCalls(code) {
+		if containsWord(c.codeArgs, v) {
+			for _, cl := range e.sanitizerClasses(lang, c.callee) {
+				if cl == class {
+					return true
+				}
+			}
+		}
+		if e.slotSanitizes(lang, c.codeArgs, v, class) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsWord reports whether ident occurs in code as a whole identifier.
+func containsWord(code, ident string) bool {
+	for i := strings.Index(code, ident); i >= 0; {
+		end := i + len(ident)
+		if (i == 0 || !isIdentPart(code[i-1])) && (end == len(code) || !isIdentPart(code[end])) {
+			return true
+		}
+		next := strings.Index(code[i+1:], ident)
+		if next < 0 {
+			break
+		}
+		i += 1 + next
+	}
+	return false
 }
 
 // interprocReturnTaint checks whether st is `lhs = helper(args...)` for a local
