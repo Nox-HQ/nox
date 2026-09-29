@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.45.0] - 2026-09-29
+
+Java catches up. Predictable randomness and `setSecure(false)` cookies are
+now reported in Java; `prepareStatement` was a SQL *sanitizer* and is now a
+sink, so the classic JDBC injection is found; and Java taint gains a branch
+model, correct method scoping and container stores. On the OWASP Benchmark for
+Java the average score goes from 14.1 to 39.6 (Semgrep `p/default`: 34.9);
+Python is unchanged at 49.3. Every change was also measured on Kafka,
+Keycloak, Jenkins and 90 GitHub servlet files, and rule-diff's 25-repository
+corpus shows no rule-level change.
 
 ### Added
 
