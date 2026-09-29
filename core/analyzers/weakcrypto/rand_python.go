@@ -142,15 +142,15 @@ func scanInsecureRandomPython(fs *findings.FindingSet, art discovery.Artifact, c
 			if reported[line] {
 				continue
 			}
-			names, enclosing, target := pyContextAt(content, masked, ln.start, at)
+			names, enclosing, target := contextAt(content, masked, ln.start, at)
 			if target != "" {
 				names = append(names, pyForwardUses(content, masked, lines, li, target)...)
 			}
 			if fn := pyEnclosingFunc(masked, lines, li); fn != "" {
-				names = append(names, ctxName{name: pyFuncContext(fn), role: roleFunc})
+				names = append(names, ctxName{name: funcContext(fn), role: roleFunc})
 			}
 			args := string(masked[ln.start+loc[1] : pyCloseOf(masked, ln.start+loc[1]-1)])
-			hit, vetoed := classify(names, pyIndexDraw(fn, enclosing, args))
+			hit, vetoed := classify(names, pyIndexDraw(fn, enclosing, args) || isIndexName(target))
 			if vetoed || hit == "" {
 				continue
 			}
@@ -262,15 +262,15 @@ func pyImportItem(item string) (name, local string) {
 	return "", ""
 }
 
-// pyContextAt walks outward from a call at `at` to the start of its statement,
+// contextAt walks outward from a call at `at` to the start of its statement,
 // collecting the names that describe the value: each enclosing call, a keyword
 // argument or dict key it is bound to, and the assignment target. It also
 // returns the enclosing call names (for pyIndexDraw) and, when the value is
 // assigned to one plain name, that name (for the forward hop).
-func pyContextAt(content, masked []byte, lineStart, at int) (names []ctxName, enclosing []string, target string) {
+func contextAt(content, masked []byte, lineStart, at int) (names []ctxName, enclosing []string, target string) {
 	add := func(n string, r role) {
 		if n != "" {
-			names = append(names, ctxName{name: pyUnglue(n), role: r})
+			names = append(names, ctxName{name: unglue(n), role: r})
 		}
 	}
 	child, segStart, depth := at, -1, 0
@@ -369,7 +369,7 @@ func pyForwardUses(content, masked []byte, lines []pyLine, from int, name string
 			if loc[0] > 0 && text[loc[0]-1] == '.' {
 				continue
 			}
-			names, enclosing, _ := pyContextAt(content, masked, ln.start, ln.start+loc[0])
+			names, enclosing, _ := contextAt(content, masked, ln.start, ln.start+loc[0])
 			if anyLookup(enclosing) {
 				// `csrf = get_csrf_token(value)`: the value selects what the
 				// call returns; the result's name says nothing about the value.
@@ -414,10 +414,10 @@ func pyEnclosingFunc(masked []byte, lines []pyLine, li int) string {
 	return string(pyDefRe.FindSubmatch(masked[lines[d].start:lines[d].end])[1])
 }
 
-// pyFuncContext is the enclosing function's name as it may take part in
+// funcContext is the enclosing function's name as it may take part in
 // classify: code-kind words are dropped unless the name opens with `test`, the
 // pytest convention. See THE ENCLOSING FUNCTION'S NAME above.
-func pyFuncContext(fn string) string {
+func funcContext(fn string) string {
 	words := identWords(fn)
 	if len(words) > 0 && words[0] == "test" {
 		return fn
@@ -428,7 +428,22 @@ func pyFuncContext(fn string) string {
 			kept = append(kept, w)
 		}
 	}
-	return pyUnglue(strings.Join(kept, "_"))
+	return unglue(strings.Join(kept, "_"))
+}
+
+// isIndexName reports a draw assigned to a name that is an index or position:
+// `index = rand.nextInt(n)` then `key = keys[index]` picks a key, and the
+// forward hop must not let `key` accuse the draw.
+func isIndexName(name string) bool {
+	words := identWords(name)
+	if len(words) == 0 {
+		return false
+	}
+	switch words[len(words)-1] {
+	case "index", "idx", "i", "j", "pos", "position", "offset", "slot", "choice", "pick":
+		return true
+	}
+	return false
 }
 
 // pyIndexDraw reports a draw that chooses rather than makes: `random.choice`,
@@ -447,8 +462,8 @@ func pyIndexDraw(fn string, enclosing []string, args string) bool {
 	return (fn == "randint" || fn == "randrange") && pyLenCallRe.MatchString(args)
 }
 
-// pyUnglue splits a security word glued onto the end of a lowercase word.
-func pyUnglue(name string) string {
+// unglue splits a security word glued onto the end of a lowercase word.
+func unglue(name string) string {
 	words := identWords(name)
 	for i, w := range words {
 		for _, s := range gluedSecuritySuffixes {

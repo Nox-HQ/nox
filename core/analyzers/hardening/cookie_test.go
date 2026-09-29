@@ -34,3 +34,21 @@ func TestInsecureCookieReportsTheFlagLine(t *testing.T) {
 		t.Fatalf("want one finding on line 3, got %+v", got)
 	}
 }
+
+func TestInsecureCookieJava(t *testing.T) {
+	for name, c := range map[string]struct {
+		src  string
+		want int
+	}{
+		"servlet setSecure(false)": {"Cookie c = new Cookie(\"sid\", v);\nc.setSecure(false);\n", 1},
+		"setSecure(true)":          {"c.setSecure(true);\n", 0},
+		"config-driven":            {"c.setSecure(props.isSecure());\n", 0},
+		"Spring ResponseCookie":    {"ResponseCookie rc = ResponseCookie.from(\"sid\", v)\n    .httpOnly(true)\n    .secure(false)\n    .build();\n", 1},
+		"another builder's secure": {"Client c = Client.builder().secure(false).build();\n", 0},
+		"commented out":            {"// c.setSecure(false);\n", 0},
+	} {
+		if got := scanJavaCookies("A.java", []byte(c.src)); len(got) != c.want {
+			t.Errorf("%s: got %d findings, want %d", name, len(got), c.want)
+		}
+	}
+}

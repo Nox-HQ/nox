@@ -29,21 +29,27 @@ import (
 // to anything but the literal (`secure=not settings.DEBUG`) is not reported
 // either: that is a deployment switch, usually the right one.
 //
+// Java: `cookie.setSecure(false)` on a javax/jakarta servlet Cookie, and
+// Spring's `ResponseCookie.from(…).secure(false)`. The same rule: only the
+// literal false, only as written.
+//
 // Test paths are skipped, as for HARDEN-001: tests set cookies over plain
 // HTTP to local servers on purpose.
 const ruleInsecureCookie = "HARDEN-003"
 
 var (
-	cookieCallRe  = regexp.MustCompile(`\bset(?:_signed)?_cookie\s*\(`)
-	secureFalseRe = regexp.MustCompile(`\bsecure\s*=\s*False\b`)
-	defBefore     = regexp.MustCompile(`\bdef\s+$`)
+	cookieCallRe         = regexp.MustCompile(`\bset(?:_signed)?_cookie\s*\(`)
+	secureFalseRe        = regexp.MustCompile(`\bsecure\s*=\s*False\b`)
+	defBefore            = regexp.MustCompile(`\bdef\s+$`)
+	javaSetSecure        = regexp.MustCompile(`\.\s*setSecure\s*\(\s*false\s*\)`)
+	javaRespCookieSecure = regexp.MustCompile(`\bResponseCookie\b[^;]*?\.\s*secure\s*\(\s*false\s*\)`)
 )
 
 func insecureCookieRule() *rules.Rule {
 	return &rules.Rule{
 		ID:          ruleInsecureCookie,
 		Version:     "1.0",
-		Description: "Cookie set with the Secure flag explicitly disabled (secure=False)",
+		Description: "Cookie set with the Secure flag explicitly disabled (Python secure=False, Java setSecure(false))",
 		// Medium: the cookie's contents decide the impact -- a session cookie
 		// sent in the clear is takeover, a UI preference is nothing -- and
 		// the call does not say which.
@@ -135,4 +141,28 @@ func topLevelMatch(re *regexp.Regexp, args []byte) int {
 		}
 	}
 	return -1
+}
+
+// scanJavaCookies reports a servlet Cookie's setSecure(false) and Spring's
+// ResponseCookie secure(false) in one Java file.
+func scanJavaCookies(path string, content []byte) []findings.Finding {
+	if !bytes.Contains(content, []byte("ecure")) {
+		return nil
+	}
+	masked := lexctx.MaskNonCode(lexctx.LangJava, content)
+	var out []findings.Finding
+	for _, re := range []*regexp.Regexp{javaSetSecure, javaRespCookieSecure} {
+		for _, loc := range re.FindAllIndex(masked, -1) {
+			line := lexctx.LineForOffset(content, loc[1]-1)
+			out = append(out, findings.Finding{
+				RuleID:     ruleInsecureCookie,
+				Severity:   findings.SeverityMedium,
+				Confidence: findings.ConfidenceHigh,
+				Message:    "Cookie with its Secure flag set to false is sent over plain HTTP",
+				Location:   findings.Location{FilePath: path, StartLine: line, EndLine: line},
+				Metadata:   map[string]string{"cwe": "CWE-614", "language": "java"},
+			})
+		}
+	}
+	return out
 }

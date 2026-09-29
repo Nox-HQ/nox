@@ -128,6 +128,11 @@ var quantityWords = map[string]bool{
 	"num": true, "index": true, "idx": true, "offset": true,
 	"max": true, "min": true, "limit": true, "cap": true,
 	"capacity": true, "total": true, "position": true, "pos": true,
+	// Durations and proportions: a jittered `sessionLifetimeMs` or `pctToUse`
+	// is a time, not a secret (found in Kafka's SASL re-authentication).
+	"ms": true, "millis": true, "seconds": true, "secs": true, "nanos": true,
+	"lifetime": true, "duration": true, "ttl": true, "pct": true,
+	"percent": true, "ratio": true, "fraction": true, "factor": true,
 }
 
 // lookupPrefixes name a call that RETRIEVES rather than stores. An enclosing
@@ -156,6 +161,11 @@ var benignWords = map[string]bool{
 	// A guess is predictable by design: `guess_password` in a brute-force
 	// loop is an attempt at someone else's secret, not a secret.
 	"guess": true, "guessed": true,
+	// Teardown: overwriting a secret's memory with noise before release is
+	// scrubbing, not generating (Keycloak's vault secrets do it in close()).
+	// "reset" is deliberately absent: resetPassword generates one.
+	"close": true, "destroy": true, "dispose": true, "wipe": true,
+	"scrub": true, "erase": true, "zeroize": true, "cleanup": true,
 }
 
 // randRule describes CRYPTO-002 for the rule catalogue.

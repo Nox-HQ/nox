@@ -182,7 +182,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return fs, err
 		}
 		ext := strings.ToLower(filepath.Ext(art.Path))
-		if ext != ".go" && ext != ".py" {
+		if ext != ".go" && ext != ".py" && ext != ".java" {
 			continue
 		}
 		// See KNOWN LIMITS (2) on Analyzer for why test code is out of scope.
@@ -192,6 +192,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
 			// Unreadable file is not a finding; discovery already surfaced it.
+			continue
+		}
+		if ext == ".java" {
+			for _, f := range scanJavaCookies(art.Path, content) {
+				fs.Add(f)
+			}
 			continue
 		}
 		if ext == ".py" {

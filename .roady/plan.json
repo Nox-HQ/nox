@@ -3,6 +3,28 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-85",
+      "title": "Java taint: XPath/LDAP sinks and flow recall",
+      "description": "Add Java XPath (XPath.evaluate/compile) and LDAP (DirContext.search) sinks; read which BenchmarkJava idioms the Java extractor loses on sqli/xss/pathtraver/cmdi and fix the general ones; A/B on real Java repositories.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [
+        "task-84"
+      ],
+      "feature_id": "java-taint-xpath-ldap-sinks-and-flow-recall",
+      "source": {}
+    },
+    {
+      "id": "task-84",
+      "title": "Java: CRYPTO-002 predictable randomness and HARDEN-003 setSecure(false)",
+      "description": "Port the Python premises to Java: java.util.Random / Math.random / ThreadLocalRandom / RandomStringUtils drawn into a security-named value (one forward hop), SecureRandom never; Cookie.setSecure(false) stated explicitly. Measure on OWASP BenchmarkJava weakrand (493) and securecookie (67) and on real Java repositories; read every finding.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": null,
+      "feature_id": "java-predictable-randomness-and-insecure-cookies",
+      "source": {}
+    },
+    {
       "id": "task-83",
       "title": "Reachability step 1: measure dev-only dependency findings",
       "description": "Per docs/design/reachability-python-js.md: how many VULN findings on the seven repositories sit in dev-only packages; decide from the number whether step 2 is worth building.",
