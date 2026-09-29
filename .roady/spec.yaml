@@ -390,5 +390,9 @@ features:
       title: 'Java taint: XPath/LDAP sinks and flow recall'
       description: 'OWASP Benchmark for Java 1.2 (2026-09-28): ldapi and xpathi score 0 (no Java sinks: DirContext.search, XPath.evaluate/compile), and the flow categories detect little -- sqli TPR 15% (Semgrep 93%), xss 28% (82%), pathtraver 20% (90%), cmdi 52% (93%). Semgrep''s recall comes at 50-88% false-positive rates, so the target is recall with nox''s precision, not Semgrep''s shape. Start by reading which benchmark idioms the Java extractor loses (servlet request sources, helper classes, string builders) and fix the general ones, as the Python work did.'
       requirements: []
+    - id: java-taint-branch-model-and-constant-condition-pruning
+      title: 'Java taint: branch model and constant-condition pruning'
+      description: 'The Java extractor has no branch model: the last assignment wins, there is no weak update in an if/else or switch, and no constant-condition pruning (Python got both, #757). On the OWASP Benchmark for Java, constant conditions and constant switches account for 98 of 204 false positives in sqli/cmdi/xss/pathtraver after the JDBC catalog fix; list-index and map-key idioms (key-sensitive containers) are most of the rest. Needs Java block structure (brace-less if/else, switch with fall-through, ternaries) before the Python evaluator can be reused. Measure on Kafka/Keycloak/Jenkins and the GitHub servlet sample, as the JDBC fix was.'
+      requirements: []
 constraints: []
 version: 0.1.0

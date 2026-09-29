@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 207,
+  "version": 209,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -843,10 +843,21 @@
       "elapsed_minutes": 0
     },
     "task-84": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #763 merged: Java CRYPTO-002 + HARDEN-003. OWASP Java weakrand/securecookie 0 -\u003e 100 each, average 14.1 -\u003e 32.3 (Semgrep 34.9); Kafka/Keycloak/Jenkins 2 findings on 73 weak sites; 62/64 GitHub findings are secrets; Python benchmark unchanged; rule-diff no change on 25 repos."
+      ],
+      "started_at": "2026-09-29T14:24:16.197628+02:00",
+      "completed_at": "2026-09-29T14:59:06.55593+02:00",
+      "elapsed_minutes": 34
+    },
+    "task-85": {
       "status": "in_progress",
       "path": "",
       "owner": "ai-agent",
-      "started_at": "2026-09-29T14:24:16.197628+02:00",
+      "started_at": "2026-09-29T14:59:06.567141+02:00",
       "elapsed_minutes": 0
     },
     "task-9": {
@@ -859,5 +870,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-29T14:24:16.197628+02:00"
+  "updated_at": "2026-09-29T14:59:06.567141+02:00"
 }

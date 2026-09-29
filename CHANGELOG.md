@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Java SQL injection through `prepareStatement`, Spring `JdbcTemplate`
+  and more request sources (`TAINT-001`).** `prepareStatement` was in the Java
+  catalog as a SQL *sanitizer*. A prepared statement is safe only when its SQL
+  string is constant, so the classic JDBC injection --
+  `conn.prepareStatement("... '" + request.getParameter("q") + "'")` -- was
+  cleared rather than reported. It is now a sink on its SQL argument, as are
+  `prepareCall`, `addBatch` and Spring's `queryForObject` / `queryForList` /
+  `queryForMap` / `queryForRowSet` / `batchUpdate`; bind parameters after the
+  SQL are the safe form and never count. `getParameterNames`,
+  `getParameterMap`, `getRequestURI`, `getRequestURL`, `getPathInfo` and
+  `getHeaderNames` are now sources. Each injection is reported once, where the
+  statement is prepared, not again at the zero-argument `executeQuery()` that
+  runs it. On 90 GitHub servlet files: 21 more findings, all SQL built from
+  request data, none removed. OWASP Benchmark for Java sqli: 4 -> 14.
+
 - **Java: predictable randomness (`CRYPTO-002`) and `setSecure(false)`
   cookies (`HARDEN-003`).** Both rules existed for Go and Python only, and on
   the OWASP Benchmark for Java both categories scored 0 where Semgrep
@@ -30,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     64 findings, 62 of them the thing the rule is for.
 
 ### Fixed
+
+- **A string-literal argument shifted every later argument.** The code view
+  blanks literals, and an argument that was blank was skipped, so in
+  `query("SELECT ... WHERE id=?", source())` the source was read as the SQL
+  argument. That misaligned the per-argument record in every language,
+  including the interprocedural pass's mapping of arguments to parameters.
+  Found through Spring's `queryForMap(SQL, request.getParameter(...))`, a
+  bind parameter reported as injection. The Java engine now also checks
+  whether the first argument is actually tainted rather than merely a
+  variable, as Python's already did. No change on 11 real repositories across
+  Python, JavaScript, Go and Java (254 taint findings, identical).
 
 - **CRYPTO-002 no longer accuses a duration, an index or a teardown.** Found by
   running the Java rule on Kafka and Keycloak, and applied to every language:

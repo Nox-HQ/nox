@@ -2146,6 +2146,30 @@
       "comment": "Java source/sink/sanitizer model for the lexctx line/statement recognizer (no CGo tree-sitter). Sinks come in two shapes, matched via the engine's suffixKeys fallback: (1) package/class-qualified calls matched on the full dotted chain (Files.readAllBytes, ObjectInputStream.readObject), and (2) methods on a value whose receiver name varies — matched by METHOD-NAME suffix (.executeQuery, .println, .exec, .start). Method-suffix matching is imprecise on purpose: it is AST-only, so a .executeQuery on a non-JDBC object still matches. This is the same precision trade documented for Go's method sinks; the corpus README records the resulting honest FNs (chained fluent calls the flat recognizer cannot follow). See core/taint/engine/extract_java.go.",
       "sources": [
         {
+          "call": "request.getParameterNames",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getParameterMap",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getRequestURI",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getRequestURL",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getPathInfo",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.getHeaderNames",
+          "kind": "http_header"
+        },
+        {
           "call": "request.getParameter",
           "kind": "http_query"
         },
@@ -2203,6 +2227,58 @@
         }
       ],
       "sinks": [
+        {
+          "call": "prepareStatement",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JDBC: the SQL string is arg 0. A prepared statement is safe only when that string is constant; a tainted one is the injection"
+        },
+        {
+          "call": "prepareCall",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JDBC CallableStatement: as prepareStatement"
+        },
+        {
+          "call": "addBatch",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Statement.addBatch(sql)"
+        },
+        {
+          "call": "queryForObject",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Spring JdbcTemplate: the SQL string is arg 0"
+        },
+        {
+          "call": "queryForList",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "queryForMap",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "queryForRowSet",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "batchUpdate",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
         {
           "call": "exec",
           "vuln_class": "command_injection",
@@ -2347,13 +2423,6 @@
         }
       ],
       "sanitizers": [
-        {
-          "call": "prepareStatement",
-          "neutralizes": [
-            "sql_injection"
-          ],
-          "note": "a PreparedStatement with ? placeholders binds values via setString rather than string concatenation"
-        },
         {
           "call": "Integer.parseInt",
           "neutralizes": [

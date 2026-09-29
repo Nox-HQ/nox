@@ -330,7 +330,7 @@ func (e *StructuralEngine) forwardPass(
 				hasInfo = true
 			}
 
-			if hasInfo && lang == "python" {
+			if hasInfo && (lang == "python" || lang == "java") {
 				info = firstArgTaintFromState(info, tainted, inline)
 			}
 
@@ -906,11 +906,13 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 // without recording the slot's variables, so it can only take a false positive
 // away where the first argument is provably untainted.
 //
-// Python only, because "first" is not the same slot everywhere: the Clojure
-// extractor sets the flag for jdbc/query's SQL argument, which follows the db
-// handle, and slot 0 there is the handle. Other languages whose extractors mean
-// positional slot 0 may have the same false positive; each needs measuring
-// before it is widened.
+// Python and Java only, because "first" is not the same slot everywhere: the
+// Clojure extractor sets the flag for jdbc/query's SQL argument, which follows
+// the db handle, and slot 0 there is the handle. Java was widened when its JDBC
+// sinks were judged on the SQL argument: `jt.queryForMap(SQL, request.getX())`
+// had the flag set because the constant SQL is a variable. Other languages
+// whose extractors mean positional slot 0 may have the same false positive;
+// each needs measuring before it is widened.
 func firstArgTaintFromState(info taint.SinkArgInfo, tainted map[string]taintInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
 	if !info.FirstArgTainted || len(info.PositionalVars) == 0 || len(info.PositionalVars[0]) == 0 {
 		return info
@@ -1287,6 +1289,15 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		"db.Exec", "db.ExecContext",
 		"tx.Query", "tx.QueryContext", "tx.QueryRow", "tx.QueryRowContext",
 		"tx.Exec", "tx.ExecContext":
+		// A call with no arguments cannot receive SQL: `pstmt.executeQuery()`
+		// runs what was prepared, and a tainted statement object was judged
+		// where it was built (prepareStatement). Reading the receiver's taint
+		// here reported every JDBC injection twice.
+		if info.ArgCount == 0 && sink.VulnClass == taint.VulnSQLInjection {
+			// (SQL only: Groovy's `"cmd ${x}".execute()` runs its receiver
+			// as a command, and there a zero-argument call is the sink.)
+			return false
+		}
 		// Parameterized query: the tainted value is passed as the params
 		// argument (2nd positional), NOT interpolated into the SQL string
 		// (1st positional). Safe only when there is more than one positional
@@ -1295,6 +1306,13 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 			return false
 		}
 		return true
+	case "prepareStatement", "prepareCall", "addBatch", "executeUpdate",
+		"queryForObject", "queryForList", "queryForMap", "queryForRowSet", "batchUpdate":
+		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
+		// everything after it is bind parameters or a row mapper, which is
+		// the safe parameterized form. A zero-argument executeUpdate() runs a
+		// statement prepared -- and judged -- earlier.
+		return info.FirstArgTainted
 	case "subprocess.run", "subprocess.call", "subprocess.Popen",
 		// check_output takes the same (args-vector | string, shell=) shape as
 		// its siblings and was simply missing from this list, so
