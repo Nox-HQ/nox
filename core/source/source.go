@@ -33,7 +33,9 @@ var testSuffixes = []string{
 // testDirs are path fragments that identify a test tree. Only unambiguous ones:
 // a bare `test/` is a real source directory in plenty of projects, and skipping
 // it would silently drop findings rather than merely quieten fixtures.
-var testDirs = []string{"testdata/", "__tests__/", "src/test/", "src/tests/"}
+// src/testfixtures/ is Gradle's java-test-fixtures source set: code shared
+// between test suites, never shipped (Kafka's SmokeTestDriver lives there).
+var testDirs = []string{"testdata/", "__tests__/", "src/test/", "src/tests/", "src/testfixtures/"}
 
 // IsTestPath reports whether a path is test code — a test file by name, or a
 // file under a recognised test tree. Path separators are normalised to forward

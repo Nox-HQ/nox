@@ -398,9 +398,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		ext := strings.ToLower(filepath.Ext(art.Path))
 		re, weakOK := weakByExt[ext]
-		// Insecure randomness (CRYPTO-002): Go (rand.go) and Python
-		// (rand_python.go).
-		randOK := ext == ".go" || ext == ".py"
+		// Insecure randomness (CRYPTO-002): Go (rand.go), Python
+		// (rand_python.go) and Java (rand_java.go).
+		randOK := ext == ".go" || ext == ".py" || ext == ".java"
 		if !weakOK && !randOK {
 			continue
 		}
@@ -421,6 +421,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		switch {
 		case randOK && ext == ".go":
 			scanInsecureRandom(fs, art, content)
+		case randOK && ext == ".java":
+			scanInsecureRandomJava(fs, art, content)
 		case randOK:
 			scanInsecureRandomPython(fs, art, content)
 		}

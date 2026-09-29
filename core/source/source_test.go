@@ -13,6 +13,7 @@ func TestIsTestPath(t *testing.T) {
 		"lib_test.rs", "FooTest.java", "FooTest.kt",
 		"test_helpers.py", // test_ prefix
 		"src/test/java/com/x/C.java",
+		"streams/src/testFixtures/java/org/x/Driver.java", // Gradle test fixtures
 		"pkg/testdata/sample.go",
 		"web/__tests__/hash.js",
 		// Windows separators must classify the same as POSIX — the bug one

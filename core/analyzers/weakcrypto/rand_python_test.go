@@ -141,7 +141,7 @@ func TestPythonFindingLineIsTheCall(t *testing.T) {
 	}
 }
 
-func TestPyUnglue(t *testing.T) {
+func TestUnglue(t *testing.T) {
 	for in, want := range map[string]string{
 		"mysession": "my_session",
 		"authtoken": "auth_token",
@@ -150,8 +150,8 @@ func TestPyUnglue(t *testing.T) {
 		"session":   "session",
 		"userToken": "user_token",
 	} {
-		if got := pyUnglue(in); got != want {
-			t.Errorf("pyUnglue(%q) = %q, want %q", in, got, want)
+		if got := unglue(in); got != want {
+			t.Errorf("unglue(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

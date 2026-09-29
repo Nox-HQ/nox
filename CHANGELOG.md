@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Java: predictable randomness (`CRYPTO-002`) and `setSecure(false)`
+  cookies (`HARDEN-003`).** Both rules existed for Go and Python only, and on
+  the OWASP Benchmark for Java both categories scored 0 where Semgrep
+  `p/default` scores 100. `java.util.Random`, `Math.random`,
+  `ThreadLocalRandom` and commons-lang's static `RandomStringUtils.random*`
+  are reported when the names around the draw say it is a secret -- with the
+  same one-step forward hop, so `long l = new Random().nextLong(); String
+  rememberMeKey = Long.toString(l);` is found. `SecureRandom` never fires, even
+  behind a `Random`-typed field: a generator is judged by its constructor.
+  Cookies: a servlet `setSecure(false)` and Spring's `ResponseCookie`
+  `.secure(false)`, literal only. Measured:
+  - OWASP Benchmark for Java: weakrand 0 -> 100, securecookie 0 -> 100;
+    average 14.1 -> 32.3 (Semgrep 34.9).
+  - Kafka, Keycloak and Jenkins (1,227 Java files, 73 weak generator call
+    sites outside tests): 2 findings -- Kafka's fetch-session ID (debatable)
+    and Jenkins' deliberately predictable dummy password, which SpotBugs also
+    flags and the project suppresses with a justification.
+  - 125 GitHub files that generate tokens, OTPs or passwords with `Random`:
+    64 findings, 62 of them the thing the rule is for.
+
+### Fixed
+
+- **CRYPTO-002 no longer accuses a duration, an index or a teardown.** Found by
+  running the Java rule on Kafka and Keycloak, and applied to every language:
+  names that measure time or proportion (`sessionLifetimeMs`, `pctToUse`) do
+  not accuse; a draw assigned to `index`/`idx`/`pos` is a pick, so a later
+  `key = keys[index]` cannot accuse it; and a teardown purpose (`close`,
+  `destroy`, `wipe`, `scrub`) vetoes, because overwriting a secret's memory
+  with noise is scrubbing, not generating. The Python GitHub sample keeps all
+  55 of its findings.
+- **Gradle `src/testFixtures/` is test code.** Every analyzer that skips tests
+  now skips it; Kafka's `SmokeTestDriver` lives there.
+
 ## [1.44.0] - 2026-09-28
 
 Six new Python detections, and taint analysis that follows two ordinary idioms
