@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 209,
+  "version": 210,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -854,11 +854,15 @@
       "elapsed_minutes": 34
     },
     "task-85": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "PR #764 merged: Java prepareStatement was a SQL sanitizer, now a sink with JdbcTemplate sinks and 6 request sources; literal-argument slot shift fixed in every language; Java first-arg taint checked against state. OWASP Java sqli 4 -\u003e 14, average 33.5 (Semgrep 34.9); +21 GitHub servlet findings, 0 removed; 254 taint findings on 11 real repos identical; rule-diff no change. Java XPath/LDAP sinks and the Java branch model remain open as spec features (need receiver binding / block structure)."
+      ],
       "started_at": "2026-09-29T14:59:06.567141+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-09-29T15:26:07.035751+02:00",
+      "elapsed_minutes": 27
     },
     "task-9": {
       "status": "verified",
@@ -870,5 +874,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-29T14:59:06.567141+02:00"
+  "updated_at": "2026-09-29T15:26:07.035752+02:00"
 }
