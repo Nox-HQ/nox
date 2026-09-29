@@ -3,6 +3,18 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-86",
+      "title": "Java taint: branch model, method scoping, container stores",
+      "description": "Brace-less branches, weak updates and constant pruning for Java; multi-line method headers; Java container mutators; standard JVM properties not sources; sanitizer wrapping a local helper's argument honoured in every language. Measure on BenchmarkJava, the GitHub servlet sample and Kafka/Keycloak/Jenkins.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [
+        "task-85"
+      ],
+      "feature_id": "java-taint-branch-model-and-constant-condition-pruning",
+      "source": {}
+    },
+    {
       "id": "task-85",
       "title": "Java taint: XPath/LDAP sinks and flow recall",
       "description": "Add Java XPath (XPath.evaluate/compile) and LDAP (DirContext.search) sinks; read which BenchmarkJava idioms the Java extractor loses on sqli/xss/pathtraver/cmdi and fix the general ones; A/B on real Java repositories.",

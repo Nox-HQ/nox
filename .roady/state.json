@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 210,
+  "version": 212,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -864,6 +864,17 @@
       "completed_at": "2026-09-29T15:26:07.035751+02:00",
       "elapsed_minutes": 27
     },
+    "task-86": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #766 merged: Java branch model with constant pruning, multi-line headers, container stores, JVM properties not sources, helper-argument sanitizers in every language. OWASP Java 33.5 -\u003e 39.6 (Semgrep 34.9); Python 49.3 unchanged; GitHub SQL sample identical; 11 repos 254 -\u003e 220 with every change read; rule-diff no change."
+      ],
+      "started_at": "2026-09-29T22:13:12.2504+02:00",
+      "completed_at": "2026-09-29T22:13:12.262449+02:00",
+      "elapsed_minutes": 0
+    },
     "task-9": {
       "status": "verified",
       "path": "",
@@ -874,5 +885,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-29T15:26:07.035752+02:00"
+  "updated_at": "2026-09-29T22:13:12.26245+02:00"
 }
