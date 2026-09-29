@@ -23,6 +23,10 @@ import "strings"
 // are part of the enclosing method, which is exactly the intraprocedural scope
 // we model.
 func extractJava(lines []logicalLine) []unitDraft {
+	// Standard JVM properties are not untrusted input; see java_properties.go.
+	neutralizeStandardProperties(lines)
+	// Branch model; see java_branches.go.
+	jb := newJavaBranches(lines)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
@@ -33,9 +37,35 @@ func extractJava(lines []logicalLine) []unitDraft {
 	depth := 0
 	methodDepth := -1
 
+	// pendingSig holds a line that reads as a method signature but did not
+	// open its body: `public void doPost(HttpServletRequest request, ...)`
+	// followed by `throws ServletException, IOException {` on the next line.
+	// Without joining the two, the header was never recognized and the
+	// method's statements folded into the module unit.
+	pendingSig := ""
+
 	for _, ll := range lines {
 		trimmed := strings.TrimSpace(ll.code)
 		if trimmed == "" {
+			continue
+		}
+		if pendingSig != "" {
+			sig := pendingSig
+			pendingSig = ""
+			if strings.HasPrefix(trimmed, "throws ") || trimmed == "{" {
+				joined := sig + " " + trimmed
+				if name, params, ok := javaMethodHeader(joined); ok {
+					u := &unitDraft{funcName: name, params: params}
+					units = append(units, u)
+					cur = u
+					methodDepth = depth
+					depth += braceDelta(trimmed)
+					continue
+				}
+			}
+		}
+		if javaSignatureWithoutBody(trimmed) {
+			pendingSig = trimmed
 			continue
 		}
 
@@ -57,9 +87,17 @@ func extractJava(lines []logicalLine) []unitDraft {
 		// statement content on the line.
 		closesMethod := methodDepth >= 0 && before > methodDepth && depth <= methodDepth
 
-		if isJavaStructuralLine(trimmed) {
-			if g, ok := conditionGuard(langJava, ll); ok {
-				cur.guards = append(cur.guards, g)
+		// The depth the line's own content sits at, after any leading `}`.
+		depthHere := before - (len(trimmed) - len(strings.TrimLeft(trimmed, "}")))
+		jb.enter(depthHere)
+
+		// A case label in a switch body: resolve it, then treat any statement
+		// after the colon like any other.
+		if sw := jb.innermostSwitch(); sw != nil && (strings.HasPrefix(trimmed, "case ") || strings.HasPrefix(trimmed, "default")) {
+			if rest := jb.caseLabel(sw, ll.raw); rest != "" {
+				if colon := strings.IndexByte(ll.code, ':'); colon >= 0 {
+					javaStatement(cur, jb, subLine(ll, colon+1), branchTaken)
+				}
 			}
 			if closesMethod {
 				cur = module
@@ -68,11 +106,36 @@ func extractJava(lines []logicalLine) []unitDraft {
 			continue
 		}
 
-		if st, ok := javaReturnStatement(ll); ok {
-			cur.stmts = append(cur.stmts, st)
-		} else if st, ok := recognizeStatement(langJava, ll); ok {
-			cur.stmts = append(cur.stmts, st)
+		// `} else {` and `} else if (c) {` start with the brace that closed
+		// the previous arm; the header is what follows it.
+		if isJavaStructuralLine(trimmed) || isJavaStructuralLine(strings.TrimLeft(trimmed, "} \t")) {
+			if g, ok := conditionGuard(langJava, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
+			if h, ok := parseJavaHeader(ll); ok {
+				st := jb.header(h, depthHere)
+				switch {
+				case h.rest != "":
+					// `if (c) stmt` / `else stmt` on one line.
+					javaStatement(cur, jb, subLine(ll, h.restAt), st)
+				case !h.opens:
+					// `if (c)` with the statement on the next line.
+					jb.pending = &st
+				}
+			}
+			if closesMethod {
+				cur = module
+				methodDepth = -1
+			}
+			continue
 		}
+
+		arm := branchTaken
+		if jb.pending != nil {
+			arm = *jb.pending
+			jb.pending = nil
+		}
+		javaStatement(cur, jb, ll, arm)
 
 		if closesMethod {
 			cur = module
@@ -85,6 +148,76 @@ func extractJava(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// javaStatement recognizes one statement under the branch model: dropped in
+// an arm that cannot run, conditional in one that may not.
+func javaStatement(cur *unitDraft, jb *javaBranches, ll logicalLine, arm branchState) {
+	state := combineStates(jb.state(), arm)
+	if sw := jb.innermostSwitch(); sw != nil {
+		sw.statement(strings.TrimSpace(ll.code))
+	}
+	if state == branchDead {
+		return
+	}
+	ll = jb.rewriteJavaTernary(ll)
+	conditional := state == branchMaybe
+	if st, ok := javaReturnStatement(ll); ok {
+		st.conditional = conditional
+		cur.stmts = append(cur.stmts, st)
+	} else if st, ok := recognizeStatement(langJava, ll); ok {
+		st.conditional = conditional
+		cur.stmts = append(cur.stmts, st)
+		jb.learn(ll, st.assigns)
+	}
+}
+
+// combineStates is dead if either is, maybe if either is, taken otherwise.
+func combineStates(a, b branchState) branchState {
+	switch {
+	case a == branchDead || b == branchDead:
+		return branchDead
+	case a == branchMaybe || b == branchMaybe:
+		return branchMaybe
+	}
+	return branchTaken
+}
+
+// javaSignatureWithoutBody reports a line that is a method signature whose
+// body opens on a later line: it would be a header if it ended in `{`.
+func javaSignatureWithoutBody(trimmed string) bool {
+	if strings.HasSuffix(trimmed, "{") || strings.HasSuffix(trimmed, ";") || !strings.HasSuffix(trimmed, ")") {
+		return false
+	}
+	_, _, ok := javaMethodHeader(trimmed + " {")
+	return ok && javaDeclarationHead(trimmed)
+}
+
+// javaDeclarationHead reports whether the text before a signature's `(` is a
+// declaration -- modifiers and a return type before the name -- rather than a
+// bare call such as `doPost(request, response)`.
+func javaDeclarationHead(trimmed string) bool {
+	open := strings.IndexByte(trimmed, '(')
+	if open < 0 {
+		return false
+	}
+	head := trimmed[:open]
+	// Statements reach here without their `;` (the line splitter strips it),
+	// so `String name = request.getParameter(...)` also ends in `)`. A
+	// declaration head has no assignment and no dotted call, and does not
+	// start with a statement keyword.
+	if strings.ContainsAny(head, "=.") {
+		return false
+	}
+	fields := strings.Fields(head)
+	if len(fields) < 2 {
+		return false
+	}
+	switch fields[0] {
+	case "return", "new", "throw", "else", "case", "assert", "yield":
+		return false
+	}
+	return true
 }
 
 // braceDelta returns the net change in `{`/`}` nesting for a code segment.
