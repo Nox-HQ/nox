@@ -30,23 +30,23 @@ func TestJavaFlagsSecurityUseOfRandom(t *testing.T) {
 }
 
 func TestJavaIgnoresBenignOrSecureRandomness(t *testing.T) {
-	for name, src := range map[string]string{
-		"SecureRandom":                      "package p;\nimport java.security.SecureRandom;\nclass A {\n  void f() {\n    long token = new SecureRandom().nextLong();\n  }\n}\n",
-		"SecureRandom behind a Random type": "package p;\nimport java.util.Random;\nimport java.security.SecureRandom;\nclass A {\n  Random r = new SecureRandom();\n  void f() {\n    long token = r.nextLong();\n  }\n}\n",
-		"SecureRandom.getInstance":          "package p;\nclass A {\n  void f() throws Exception {\n    long token = java.security.SecureRandom.getInstance(\"SHA1PRNG\").nextLong();\n  }\n}\n",
-		"neutral use":                       javaClass("  void f() {\n    int n = new Random().nextInt(10);\n    System.out.println(n);\n  }"),
-		"jitter vetoes":                     javaClass("  void refreshToken() {\n    long backoffMillis = new Random().nextInt(1000);\n    Thread.sleep(backoffMillis);\n  }"),
-		"picking an element":                javaClass("  void f(java.util.List<String> keys) {\n    String key = keys.get(new Random().nextInt(keys.size()));\n  }"),
-		"comment":                           javaClass("  void f() {\n    // long token = new Random().nextLong();\n  }"),
-		"string":                            javaClass("  void f() {\n    String doc = \"long token = new Random().nextLong();\";\n  }"),
-		"another package's Random":          "package p;\nimport org.example.Random;\nclass A {\n  void f() {\n    long token = new Random().nextLong();\n  }\n}\n",
-		"a duration is not a secret (Kafka SASL)":      javaClass("  void f() {\n    double pctToUse = 0.8 + RNG.nextDouble() * 0.1;\n    long sessionLifetimeMsToUse = (long) (lifetime * pctToUse);\n  }\n  static final Random RNG = new Random();"),
-		"an index is a pick (Kafka SmokeTestDriver)":   javaClass("  void f() {\n    final int index = new Random().nextInt(numKeys);\n    final String key = keys[index];\n  }"),
-		"scrubbing a secret on close (Keycloak vault)": javaClass("  public void close() {\n    for (int i = 0; i < this.secretArray.length; i++) {\n      this.secretArray[i] = (char) java.util.concurrent.ThreadLocalRandom.current().nextInt();\n    }\n  }"),
-		"forward hop stops at reassignment":            javaClass("  void f() {\n    long v = new Random().nextLong();\n    v = 0;\n    String sessionKey = Long.toString(v);\n  }"),
+	for _, c := range []struct{ name, src string }{
+		{"SecureRandom", "package p;\nimport java.security.SecureRandom;\nclass A {\n  void f() {\n    long token = new SecureRandom().nextLong();\n  }\n}\n"},
+		{"SecureRandom behind a Random type", "package p;\nimport java.util.Random;\nimport java.security.SecureRandom;\nclass A {\n  Random r = new SecureRandom();\n  void f() {\n    long token = r.nextLong();\n  }\n}\n"},
+		{"SecureRandom.getInstance", "package p;\nclass A {\n  void f() throws Exception {\n    long token = java.security.SecureRandom.getInstance(\"SHA1PRNG\").nextLong();\n  }\n}\n"},
+		{"neutral use", javaClass("  void f() {\n    int n = new Random().nextInt(10);\n    System.out.println(n);\n  }")},
+		{"jitter vetoes", javaClass("  void refreshToken() {\n    long backoffMillis = new Random().nextInt(1000);\n    Thread.sleep(backoffMillis);\n  }")},
+		{"picking an element", javaClass("  void f(java.util.List<String> keys) {\n    String key = keys.get(new Random().nextInt(keys.size()));\n  }")},
+		{"comment", javaClass("  void f() {\n    // long token = new Random().nextLong();\n  }")},
+		{"string", javaClass("  void f() {\n    String doc = \"long token = new Random().nextLong();\";\n  }")},
+		{"another package's Random", "package p;\nimport org.example.Random;\nclass A {\n  void f() {\n    long token = new Random().nextLong();\n  }\n}\n"},
+		{"a duration is not a secret (Kafka SASL)", javaClass("  void f() {\n    double pctToUse = 0.8 + RNG.nextDouble() * 0.1;\n    long sessionLifetimeMsToUse = (long) (lifetime * pctToUse);\n  }\n  static final Random RNG = new Random();")},
+		{"an index is a pick (Kafka SmokeTestDriver)", javaClass("  void f() {\n    final int index = new Random().nextInt(numKeys);\n    final String key = keys[index];\n  }")},
+		{"scrubbing a secret on close (Keycloak vault)", javaClass("  public void close() {\n    for (int i = 0; i < this.secretArray.length; i++) {\n      this.secretArray[i] = (char) java.util.concurrent.ThreadLocalRandom.current().nextInt();\n    }\n  }")},
+		{"forward hop stops at reassignment", javaClass("  void f() {\n    long v = new Random().nextLong();\n    v = 0;\n    String sessionKey = Long.toString(v);\n  }")},
 	} {
-		t.Run(name, func(t *testing.T) {
-			if got := scanGo(t, "src/main/java/A.java", src); len(got) != 0 {
+		t.Run(c.name, func(t *testing.T) {
+			if got := scanGo(t, "src/main/java/A.java", c.src); len(got) != 0 {
 				t.Fatalf("want no finding, got %+v", got)
 			}
 		})
