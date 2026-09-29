@@ -34,6 +34,17 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 	seen := map[string]struct{}{}
 	for idx, p := range codeParts {
 		if strings.TrimSpace(p) == "" {
+			// A string literal is blank in the code view. It still occupies
+			// its position: skipping it shifted every later slot down by one,
+			// so `q("SELECT ?", source())` read the source as the first
+			// argument, and the interprocedural pass mapped arguments to the
+			// wrong parameters.
+			// Keyword-ness is read from the code view, where the literal's
+			// text is blank: `"… WHERE id=?"` is not `name=value`.
+			if idx < len(rawParts) && strings.TrimSpace(rawParts[idx]) != "" && !isKeywordArg(p) {
+				info.positionalVars = append(info.positionalVars, nil)
+				info.positionalArgs = append(info.positionalArgs, p)
+			}
 			continue
 		}
 		trimmed := strings.TrimSpace(p)
