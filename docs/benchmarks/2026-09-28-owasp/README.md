@@ -19,7 +19,8 @@ benchmark file. Semgrep runs `p/default` with metrics off.
 |---|---:|---:|
 | Python, v1.42.0 | 10.9 | 10.7 |
 | **Python, `main` after #752–#757** | **49.3** | 10.7 |
-| **Java, `main`** | **14.1** | **34.9** |
+| Java, v1.44.0 | 14.1 | 34.9 |
+| **Java, `main` after #763, #764, #766** | **39.6** | 34.9 |
 
 ## Python (BenchmarkPython 0.1, 1,230 cases)
 
@@ -66,30 +67,40 @@ key-sensitive container taint (recorded in the roady spec).
 ## Java (BenchmarkJava 1.2, 2,740 cases)
 
 Commit `20cbf3d` of OWASP-Benchmark/BenchmarkJava, `src/main/java` scanned.
+Measured first at v1.44.0 (14.1), then again after the Java work that
+measurement prompted (2026-09-29).
 
-| category | cases | nox TPR / FPR | nox | Semgrep TPR / FPR | Semgrep |
-|---|---:|---|---:|---|---:|
-| sqli | 504 | 15% / 11% | 4 | 93% / 73% | **20** |
-| weakrand | 493 | 0% / 0% | 0 | 100% / 0% | **100** |
-| xss | 455 | 28% / 15% | 13 | 82% / 52% | **30** |
-| pathtraver | 268 | 20% / 16% | 4 | 90% / 79% | **12** |
-| cmdi | 251 | 52% / 42% | **10** | 93% / 87% | 6 |
-| crypto | 246 | 55% / 0% | **55** | 0% / 0% | 0 |
-| hash | 236 | 69% / 0% | 69 | 69% / 0% | 69 |
-| trustbound | 126 | 0% / 0% | 0 | 52% / 42% | **10** |
-| securecookie | 67 | 0% / 0% | 0 | 100% / 0% | **100** |
-| ldapi | 59 | 0% / 0% | 0 | 96% / 88% | **9** |
-| xpathi | 35 | 0% / 0% | 0 | 93% / 65% | **28** |
-| **average** | | | **14.1** | | **34.9** |
+| category | cases | v1.44.0 | `main` TPR / FPR | `main` | Semgrep TPR / FPR | Semgrep |
+|---|---:|---:|---|---:|---|---:|
+| sqli | 504 | 4 | 68% / 32% | **36** | 93% / 73% | 20 |
+| weakrand | 493 | 0 | 100% / 0% | 100 | 100% / 0% | 100 |
+| xss | 455 | 13 | 46% / 22% | 24 | 82% / 52% | **30** |
+| pathtraver | 268 | 4 | 39% / 21% | **18** | 90% / 79% | 12 |
+| cmdi | 251 | 10 | 63% / 31% | **32** | 93% / 87% | 6 |
+| crypto | 246 | 55 | 55% / 0% | **55** | 0% / 0% | 0 |
+| hash | 236 | 69 | 69% / 0% | 69 | 69% / 0% | 69 |
+| trustbound | 126 | 0 | 0% / 0% | 0 | 52% / 42% | **10** |
+| securecookie | 67 | 0 | 100% / 0% | 100 | 100% / 0% | 100 |
+| ldapi | 59 | 0 | 0% / 0% | 0 | 96% / 88% | **9** |
+| xpathi | 35 | 0 | 0% / 0% | 0 | 93% / 65% | **28** |
+| **average** | | **14.1** | | **39.6** | | **34.9** |
 
-nox is behind on Java, and the table says where. Two categories account for
-most of the gap: **weakrand** and **securecookie**, where Semgrep scores 100
-and nox has no Java rule; `CRYPTO-002` and `HARDEN-003` are Go and Python only.
-**ldapi and xpathi** have no Java sinks yet. On the flow categories nox's
-detection rate is low (sqli 15%, xss 28%, pathtraver 20%), while Semgrep's is
-high at false-positive rates of 50–88%. Both gaps are recorded in the roady
-spec, with measurement on real Java repositories required before any rule
-ships.
+What moved it, each also measured on Kafka, Keycloak, Jenkins and 90 GitHub
+servlet files:
+
+| change | PR | effect here |
+|---|---|---|
+| `CRYPTO-002` and `HARDEN-003` for Java | #763 | weakrand and securecookie 0 → 100 |
+| `prepareStatement` was a SQL *sanitizer*; now a sink, with Spring `JdbcTemplate` and six more request sources | #764 | sqli 4 → 14 |
+| Java branch model with constant pruning, multi-line method headers, container stores, standard JVM properties not sources | #766 | sqli 14 → 36, cmdi 11 → 32, pathtraver 6 → 18, xss 14 → 24 |
+
+What remains, all recorded in the roady spec: **ldapi and xpathi** need Java
+sinks that can tell an LDAP `search` or an XPath `evaluate` from any other
+(Python does this with receiver bindings Java does not have yet);
+**trustbound** is opt-in in nox by design (see the Python section); and
+**xss** trails because Semgrep reports most of the benchmark's writes at a 52%
+false-positive rate, while nox's remaining misses are mostly the list-index
+and map-key idioms that need key-sensitive containers.
 
 ## Limits
 
