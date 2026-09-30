@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -17,6 +18,21 @@ type Engine struct {
 	// optIn holds the IDs of OptIn rules this scan enabled. An OptIn rule not
 	// in it is skipped outright, so a rule nobody enabled costs nothing.
 	optIn map[string]bool
+	// keywords answers every rule's keyword pre-filter in one pass per file
+	// (see keywordindex.go). Built on first use, and again if rules were
+	// added since.
+	keywords atomic.Pointer[keywordIndex]
+}
+
+// keywordIndex returns the index for rules, building it when the rule set has
+// grown since the last build.
+func (e *Engine) keywordIndex(rules []*Rule) *keywordIndex {
+	if x := e.keywords.Load(); x != nil && x.rules == len(rules) {
+		return x
+	}
+	x := newKeywordIndex(rules)
+	e.keywords.Store(x)
+	return x
 }
 
 // EnableOptIn turns on the OptIn rules named in ids. IDs that name no OptIn
@@ -62,7 +78,12 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// Lazily computed for KeywordTokens rules, which check the byte before a
 	// match.
 	var lineStarts []int
-	for _, rule := range e.rules.Rules() {
+	// Which keywords the file contains, computed once when the first rule
+	// with keywords gets that far.
+	var present []bool
+	var index *keywordIndex
+	all := e.rules.Rules()
+	for i, rule := range all {
 		if rule.OptIn && !e.optIn[rule.ID] {
 			continue
 		}
@@ -74,18 +95,25 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			if contentLower == nil {
 				contentLower = bytes.ToLower(content)
 			}
-			// A Rule built directly rather than through RuleSet.Add has no
-			// cached copy; lower on the fly so both paths behave identically.
-			kws := rule.keywordsLower
-			if len(kws) != len(rule.Keywords) {
-				kws = loweredKeywords(rule.Keywords)
-			}
 			if rule.KeywordTokens {
+				// A Rule built directly rather than through RuleSet.Add has
+				// no cached copy; lower on the fly so both paths behave
+				// identically.
+				kws := rule.keywordsLower
+				if len(kws) != len(rule.Keywords) {
+					kws = loweredKeywords(rule.Keywords)
+				}
 				if !containsAnyKeywordToken(contentLower, kws) {
 					continue
 				}
-			} else if !containsAnyKeyword(contentLower, kws) {
-				continue
+			} else {
+				if present == nil {
+					index = e.keywordIndex(all)
+					present = index.present(contentLower)
+				}
+				if !index.anyPresent(present, i) {
+					continue
+				}
 			}
 		}
 
@@ -445,17 +473,6 @@ func startsAtToken(content []byte, lineStarts []int, line, col int) bool {
 	}
 	at := lineStarts[line-1] + col - 1
 	return at <= 0 || at > len(content) || !isAlphanumericByte(content[at-1])
-}
-
-// containsAnyKeyword returns true if content contains at least one of the
-// keywords. Content must be lowercase; keywords are lowered automatically.
-func containsAnyKeyword(contentLower []byte, keywords [][]byte) bool {
-	for _, kw := range keywords {
-		if bytes.Contains(contentLower, kw) {
-			return true
-		}
-	}
-	return false
 }
 
 // loweredKeywords lower-cases a rule's keywords for the pre-filter. Called

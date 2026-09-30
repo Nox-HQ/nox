@@ -43,9 +43,10 @@ func TestPrefilterIsCaseInsensitiveBothWays(t *testing.T) {
 		{"absent", "twilio", "stripe_key = 1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := containsAnyKeyword([]byte(tc.content), loweredKeywords([]string{tc.keyword}))
+			x := newKeywordIndex([]*Rule{{Keywords: []string{tc.keyword}}})
+			got := x.anyPresent(x.present([]byte(tc.content)), 0)
 			if got != tc.want {
-				t.Errorf("containsAnyKeyword(%q, %q) = %v, want %v",
+				t.Errorf("keyword index (%q, %q) = %v, want %v",
 					tc.content, tc.keyword, got, tc.want)
 			}
 		})
