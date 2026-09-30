@@ -2088,6 +2088,120 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "Rails redirect_to a request-derived value"
+        },
+        {
+          "call": "delete_by",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "destroy_by",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "delete_all",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "update_all",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "calculate",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "maximum",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "minimum",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "Arel.sql",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "SqlLiteral.new",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.async_exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.exec_params",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.async_exec_params",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "select_all",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "select_one",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "select_value",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "select_rows",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
         }
       ],
       "sanitizers": [

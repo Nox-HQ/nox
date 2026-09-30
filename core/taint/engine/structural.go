@@ -794,10 +794,32 @@ func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map
 func (e *StructuralEngine) resolveSink(lang, rawCall string) (taint.Sink, bool) {
 	for _, key := range suffixKeys(rawCall) {
 		if s, ok := e.cat.IsSink(lang, key); ok {
+			if receiverDisqualifies(lang, rawCall, key) {
+				return taint.Sink{}, false
+			}
 			return s, true
 		}
 	}
 	return taint.Sink{}, false
+}
+
+// rubyKernelSinks are Ruby's Kernel command sinks. They are called without a
+// receiver (or through Kernel/Process); matched by suffix, `conn.exec(sql)` on
+// a pg connection and any object's own `exec` method read as command
+// injection.
+var rubyKernelSinks = map[string]bool{"exec": true, "system": true, "spawn": true}
+
+// receiverDisqualifies reports a receiver that makes a bare-name sink some
+// other object's method.
+func receiverDisqualifies(lang, rawCall, key string) bool {
+	if lang != "ruby" || !rubyKernelSinks[key] || rawCall == key {
+		return false
+	}
+	switch strings.TrimSuffix(rawCall, "."+key) {
+	case "Kernel", "Process":
+		return false
+	}
+	return true
 }
 
 // resolveSource returns the source introduced by st, matching both its call
@@ -1304,6 +1326,9 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// value as a bind parameter (2nd+ positional) rather than interpolating it
 		// into the SQL string (1st positional), e.g. `where("id = ?", id)`.
 		"where", "find_by_sql", "exec_query", "execute",
+		"delete_by", "destroy_by", "delete_all", "update_all",
+		"select_all", "select_one", "select_value", "select_rows",
+		"pg.exec_params", "pg.async_exec_params",
 		// Perl DBI: `$dbh->do("... ?", undef, $id)` and
 		// `$dbh->prepare("... ?")` + bind pass the tainted value as a placeholder
 		// bind argument (2nd+ positional), not interpolated into the SQL string

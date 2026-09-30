@@ -129,6 +129,9 @@ func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 	case lexctx.LangJava:
 		// Declared-type receiver bindings only; see receivers.go.
 		return aliasTable{names: javaReceiverBindings(content), sep: "."}
+	case lexctx.LangRuby:
+		// Constructor-made receiver bindings only; see receivers.go.
+		return aliasTable{names: rubyReceiverBindings(content), sep: "."}
 	case lexctx.LangClojure:
 		return aliasTable{names: clojureAliases(content), sep: "/"}
 	case lexctx.LangElixir:

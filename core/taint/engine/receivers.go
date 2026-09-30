@@ -161,3 +161,16 @@ func javascriptReceiverBindings(content []byte) map[string]string {
 	}
 	return out
 }
+
+// rubyPGConnection binds a local made by the pg gem -- `conn = PG.connect(...)`,
+// `PG::Connection.new(...)` -- to `pg`, so its exec/exec_params/prepare are
+// the catalog's pg sinks and a `conn` of any other kind is not.
+var rubyPGConnection = regexp.MustCompile(`(?m)^\s*@?([A-Za-z_]\w*)\s*=\s*PG(?:::Connection)?\s*\.\s*(?:connect|new|open)\b`)
+
+func rubyReceiverBindings(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, m := range rubyPGConnection.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "pg"
+	}
+	return out
+}
