@@ -1467,6 +1467,10 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// engine, never parsed as XPath, so a taint that reaches only them is
 		// the safe parameterized form.
 		return info.FirstArgTainted
+	case "http.ServeFile":
+		// ServeFile(w, r, name): the request is an argument, so it is tainted
+		// on every call; only a tainted NAME is a traversal.
+		return positionalSlotTainted(info, 2)
 	case "elementpath.select", "elementpath.iter_select":
 		// select(root, path, ...): the document is arg 0 and may well be
 		// user-supplied XML; the injection is a tainted PATH, arg 1.

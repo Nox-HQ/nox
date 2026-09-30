@@ -350,3 +350,42 @@ func TestRandRuleRegistered(t *testing.T) {
 		t.Error("remediation does not state that the rule misses neutrally-named generators")
 	}
 }
+
+// TestForwardHop covers a draw into a neutral name whose next use names it:
+// the value becomes a remember-me key one assignment later.
+func TestForwardHop(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      int
+	}{
+		{
+			name: "neutral draw, then a key",
+			src:  "package m\nimport (\"fmt\"; \"math/rand\")\nfunc f() string { value := rand.Float64(); rememberMeKey := fmt.Sprintf(\"%.6f\", value); return rememberMeKey }",
+			want: 1,
+		},
+		{
+			name: "generator built in place",
+			src:  "package m\nimport (\"fmt\"; \"math/rand\"; \"time\")\nfunc f() string { rnd := rand.New(rand.NewSource(time.Now().UnixNano())).Float64(); sessionToken := fmt.Sprint(rnd); return sessionToken }",
+			want: 1,
+		},
+		{
+			name: "neutral draw, then a benign use",
+			src:  "package m\nimport (\"math/rand\"; \"time\")\nfunc f() { n := rand.Intn(100); retryDelay := time.Duration(n) * time.Millisecond; time.Sleep(retryDelay) }",
+			want: 0,
+		},
+		{
+			name: "neutral draw, then a neutral name",
+			src:  "package m\nimport (\"fmt\"; \"math/rand\")\nfunc f() string { v := rand.Intn(6); label := fmt.Sprint(v); return label }",
+			want: 0,
+		},
+		{
+			name: "only the first later reader counts",
+			src:  "package m\nimport (\"fmt\"; \"math/rand\")\nfunc f() (string, string) { v := rand.Intn(6); face := fmt.Sprint(v); token := face; return face, token }",
+			want: 0,
+		},
+	} {
+		if got := scanGo(t, "m.go", c.src); len(got) != c.want {
+			t.Errorf("%s: got %d findings, want %d", c.name, len(got), c.want)
+		}
+	}
+}
