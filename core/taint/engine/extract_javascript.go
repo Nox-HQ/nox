@@ -55,7 +55,9 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// Recognize a data-flow statement into the CURRENT (innermost) unit. A
 		// function-header line carries no statement we need (its own call, e.g.
 		// app.get(...), is not a sink); structural lines carry only scaffolding.
-		if !isHeader && !isJSStructuralLine(trimmed) {
+		if st, ok := jsReturnStatement(ll); ok && !isHeader {
+			stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+		} else if !isHeader && !isJSStructuralLine(trimmed) {
 			if st, ok := recognizeStatement(langJavaScript, ll); ok {
 				stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
 			}
@@ -334,4 +336,30 @@ func rewriteInlineRequire(ll logicalLine) logicalLine {
 		copy(raw[m[0]:m[1]], repl)
 	}
 	return logicalLine{line: ll.line, code: string(code), raw: string(raw)}
+}
+
+// jsReturnStatement recognizes `return <expr>` as a statement whose returns
+// are the expression's variables, keeping the calls in it. A return was listed
+// as scaffolding since the JavaScript engine's first version, so every sink
+// written as a return value was skipped: `return res.send(q)`, `return
+// res.status(400).json(...)`, `return db.query(sql)` -- the ordinary way to
+// end an Express handler. A bare `return` and a return of a function
+// expression are not statements.
+func jsReturnStatement(ll logicalLine) (stmtDraft, bool) {
+	trimmed := strings.TrimSpace(ll.code)
+	if !strings.HasPrefix(trimmed, "return ") && !strings.HasPrefix(trimmed, "return(") {
+		return stmtDraft{}, false
+	}
+	kw := strings.Index(ll.code, "return")
+	inner := logicalLine{line: ll.line, code: blankRange(ll.code, kw, kw+len("return")), raw: ll.raw}
+	if len(ll.raw) == len(ll.code) {
+		inner.raw = blankRange(ll.raw, kw, kw+len("return"))
+	}
+	st, ok := recognizeStatement(langJavaScript, inner)
+	if !ok {
+		return stmtDraft{}, false
+	}
+	st.assigns = ""
+	st.returns = append([]string(nil), st.reads...)
+	return st, true
 }
