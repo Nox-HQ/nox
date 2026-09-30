@@ -345,6 +345,17 @@ func (e *StructuralEngine) forwardPass(
 				info = firstArgTaintFromState(info, tainted, inline)
 			}
 
+			// An HTTP client call is server-side request forgery when the URL
+			// is tainted. Any argument used to count, so `requests.get(url,
+			// headers=auth)` with an API key from the environment in a header
+			// was reported as SSRF -- on llama_index, crewAI and others, and
+			// more often once summaries carried a getter's source to its
+			// callers. Decided on the taint state, like firstArgTaintFromState.
+			if slot, known := ssrfURLSlot[sink.Call]; known && hasInfo && len(info.PositionalVars) > 0 &&
+				!slotTaintedInState(info, slot, tainted, inline) {
+				continue
+			}
+
 			// Unknown shape (no SinkArgInfo at all) is dangerous — we never suppress
 			// on missing evidence.
 			if hasInfo && !e.sinkArgShapeDangerous(&sink, info) {
@@ -1017,6 +1028,24 @@ func firstArgTaintFromState(info taint.SinkArgInfo, tainted map[string]taintInfo
 	return info
 }
 
+// slotTaintedInState reports whether positional argument slot holds a
+// variable the taint state marks, or an inline source.
+func slotTaintedInState(info taint.SinkArgInfo, slot int, tainted map[string]taintInfo, inline map[string]inlineOperand) bool {
+	if slot < len(info.PositionalVars) {
+		for _, v := range info.PositionalVars[slot] {
+			if _, ok := tainted[v]; ok {
+				return true
+			}
+		}
+	}
+	for _, op := range inline {
+		if op.slot == slot {
+			return true
+		}
+	}
+	return false
+}
+
 func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
 	out := info
 	out.TaintedArgVars = append([]string(nil), info.TaintedArgVars...)
@@ -1683,3 +1712,21 @@ var extractPanics atomic.Int64
 // ExtractPanics reports how many files' extraction has panicked in this
 // process, so a caller can surface the loss rather than hide it.
 func ExtractPanics() int64 { return extractPanics.Load() }
+
+// ssrfURLSlot is, for the HTTP client sinks whose signatures are known, the
+// positional argument that holds the URL. A sink not listed keeps the
+// any-argument rule.
+var ssrfURLSlot = map[string]int{
+	// Python
+	"requests.get": 0, "requests.post": 0, "requests.put": 0, "requests.patch": 0,
+	"requests.delete": 0, "requests.head": 0, "requests.options": 0,
+	"requests.request": 1, "urllib.request.urlopen": 0, "urlopen": 0,
+	"httpx.get": 0, "httpx.post": 0, "httpx.put": 0, "httpx.delete": 0, "httpx.request": 1,
+	// JavaScript
+	"fetch": 0, "axios.get": 0, "axios.post": 0, "http.get": 0, "https.get": 0,
+	// Go
+	"http.Get": 0, "http.Post": 0, "http.Head": 0, "http.NewRequest": 1,
+	// C# / Ruby
+	"HttpClient.GetAsync": 0, "GetAsync": 0, "WebClient.DownloadString": 0, "DownloadString": 0,
+	"HTTParty.get": 0, "Faraday.get": 0, "URI.open": 0,
+}
