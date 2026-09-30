@@ -52,6 +52,7 @@ import (
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
+	taintengine "github.com/nox-hq/nox/core/taint/engine"
 	"github.com/nox-hq/nox/core/vex"
 )
 
@@ -698,8 +699,18 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		},
 	}
+	extractPanicsBefore := taintengine.ExtractPanics()
 	if err := runAnalyzerTasks(ctx, tasks, opts.Sequential); err != nil {
 		return nil, err
+	}
+	// A file whose taint extraction panicked was skipped rather than taking
+	// the scan down (taintengine.ExtractUnits); its absence is recorded, not
+	// silent. The counter is process-wide, so concurrent scans in one
+	// process (the MCP server) may each see the other's.
+	if n := taintengine.ExtractPanics() - extractPanicsBefore; n > 0 {
+		degradations.Add(degradeTaintExtraction,
+			fmt.Sprintf("taint extraction failed on %d file(s) and was skipped for them", n),
+			"taint-flow and agent-flow findings for those files are absent from this scan")
 	}
 
 	// Phase 2c: Apply GitHub Actions context-aware downgrades across all
@@ -1048,6 +1059,9 @@ func parseFeedRefresh(s string) (time.Duration, error) {
 	}
 	return time.ParseDuration(s)
 }
+
+// degradeTaintExtraction marks files whose taint extraction was abandoned.
+const degradeTaintExtraction = degrade.Kind("taint_extraction")
 
 // recordConfigDegradations reports .nox.yaml keys nox does not act on.
 //

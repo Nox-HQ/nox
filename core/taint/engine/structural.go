@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/taint"
@@ -15,8 +16,18 @@ import (
 // It is the substrate the design doc calls for: it turns files into function-
 // scoped, ordered statement lists, consulting only lexctx (never the catalog).
 // filePath and language are attached to every Unit so findings can be located.
-func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Unit {
-	drafts := extractUnits(lang, content)
+func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []taint.Unit) {
+	// Extraction is a heuristic recognizer over arbitrary source. A defect in
+	// it must cost this file's flows, never the scan: a panic here ran on an
+	// analyzer goroutine and took every other finding down with it (found on
+	// WordPress, where a PHP line's code and raw views had drifted apart).
+	defer func() {
+		if r := recover(); r != nil {
+			units = nil
+			extractPanics.Add(1)
+		}
+	}()
+	drafts := extractUnitsFn(lang, content)
 	// A sink is named in the catalog by its qualified path, and the recognizers
 	// record a call exactly as written — so `from os import system; system(x)`
 	// matched nothing. Expanding through the file's imports is what lets an
@@ -32,7 +43,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) []taint.Uni
 		// Reflected XSS through a route's return: see xss_python.go.
 		applyFlaskReturns(drafts, content)
 	}
-	units := make([]taint.Unit, 0, len(drafts))
+	units = make([]taint.Unit, 0, len(drafts))
 	for i := range drafts {
 		d := drafts[i]
 		// A named function with no statements is still kept: the interprocedural
@@ -1624,3 +1635,13 @@ func weakMerge(old, updated taintInfo) taintInfo {
 	merged.cleared = cleared
 	return merged
 }
+
+// extractUnitsFn is extractUnits, swappable so a test can make it panic.
+var extractUnitsFn = extractUnits
+
+// extractPanics counts files whose extraction panicked and was abandoned.
+var extractPanics atomic.Int64
+
+// ExtractPanics reports how many files' extraction has panicked in this
+// process, so a caller can surface the loss rather than hide it.
+func ExtractPanics() int64 { return extractPanics.Load() }
