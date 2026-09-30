@@ -52,3 +52,28 @@ func TestInsecureCookieJava(t *testing.T) {
 		}
 	}
 }
+
+func TestInsecureCookieGo(t *testing.T) {
+	wrap := func(body string) string {
+		return "package p\n\nimport \"net/http\"\n\nfunc h(w http.ResponseWriter, r *http.Request) {\n" + body + "\n}\n"
+	}
+	for _, c := range []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"literal Secure false", wrap(`http.SetCookie(w, &http.Cookie{Name: "sid", Value: v, Secure: false})`), 1},
+		{"literal Secure true", wrap(`http.SetCookie(w, &http.Cookie{Name: "sid", Secure: true})`), 0},
+		{"omitted flag", wrap(`http.SetCookie(w, &http.Cookie{Name: "sid"})`), 0},
+		{"config-driven", wrap(`http.SetCookie(w, &http.Cookie{Name: "sid", Secure: cfg.Secure})`), 0},
+		{"field assigned false", wrap("c := http.Cookie{Name: \"sid\"}\nc.Secure = false\nhttp.SetCookie(w, &c)"), 1},
+		{"another struct's Secure", wrap("opts := Options{}\nopts.Secure = false"), 0},
+		{"gin SetCookie secure false", wrap(`c.SetCookie("sid", v, 3600, "/", "example.com", false, true)`), 1},
+		{"gin SetCookie secure true", wrap(`c.SetCookie("sid", v, 3600, "/", "example.com", true, true)`), 0},
+		{"commented out", wrap(`// http.SetCookie(w, &http.Cookie{Secure: false})`), 0},
+	} {
+		if got := scanGoCookies("h.go", []byte(c.src)); len(got) != c.want {
+			t.Errorf("%s: got %d findings, want %d", c.name, len(got), c.want)
+		}
+	}
+}

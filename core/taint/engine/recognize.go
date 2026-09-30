@@ -62,6 +62,14 @@ func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
 
 	// Extract every call chain and its argument text from the expression side.
 	calls := extractCalls(lang, exprCode, rawExpr)
+	// A store into a property is a sink when the property is one:
+	// `el.innerHTML = q`, `resp.StatusDescription = msg`. It is recorded as a
+	// call of the property with the right-hand side as its argument, so the
+	// catalog decides, exactly as for a call; a property no sink names is a
+	// call nothing matches.
+	if target, value, valueRaw, ok := propertyStore(code, ll.raw); ok {
+		calls = append(calls, callChain{callee: target, codeArgs: value, rawArgs: valueRaw})
+	}
 	for i := range calls {
 		st.calls = append(st.calls, calls[i].callee)
 	}
@@ -360,8 +368,17 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 	i := 0
 	n := len(code)
 	aligned := len(raw) == len(code)
+	// A method called on a call's result -- `res.status(400).send(body)`,
+	// `builder.where(x).execute()` -- continues the chain it was called on,
+	// so its callee is `res.status.send`, not a bare `send` with no receiver.
+	// Catalog lookups try every suffix, so what matched `send` still does.
+	lastEnd, lastCallee := -1, ""
 	for i < n {
-		if !isIdentStart(code[i]) {
+		prefix := ""
+		if code[i] == '.' && i == lastEnd && lastCallee != "" && i+1 < n && isIdentStart(code[i+1]) {
+			prefix = lastCallee + "."
+			i++
+		} else if !isIdentStart(code[i]) {
 			i++
 			continue
 		}
@@ -369,7 +386,7 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 		for i < n && (isIdentPart(code[i]) || code[i] == '.') {
 			i++
 		}
-		chain := code[start:i]
+		chain := prefix + code[start:i]
 		j := i
 		for j < n && (code[j] == ' ' || code[j] == '\t') {
 			j++
@@ -394,6 +411,7 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 			calls = append(calls, extractCalls(langPython, codeArgs, rawArgs)...)
 		}
 		i = end
+		lastEnd, lastCallee = end, callee
 	}
 	return calls
 }
@@ -480,9 +498,12 @@ func suffixKeys(chain string) []string {
 }
 
 var receiverTaintLangs = map[langKind]bool{
-	langSwift: true,
-	langCPP:   true,
-	langDart:  true,
+	// C#: ADO.NET builds a query in a property, `cmd.CommandText = sql;
+	// cmd.ExecuteNonQuery();`, and DirectorySearcher's Filter the same way.
+	langCSharp: true,
+	langSwift:  true,
+	langCPP:    true,
+	langDart:   true,
 }
 
 func dottedAssignRoot(left string) (string, bool) {
@@ -661,15 +682,121 @@ func rubyStateSigilName(code string) string {
 // pyAugmentedAssign matches `name op= expr` for Python's augmented operators.
 var pyAugmentedAssign = regexp.MustCompile(`^\s*([A-Za-z_]\w*)\s*(?:\*\*|//|<<|>>|[-+*/%@&|^])=[^=]`)
 
-// augmentedAssignRoot returns the target of a Python augmented assignment.
-// Other recognizer languages share the gap and are not changed here: each
-// needs its own measurement before its behaviour moves.
+// cAugmentedAssign matches `target op= expr` for the C-family compound
+// operators. The target is a name, a dotted field (`cmd.CommandText`) or one
+// subscript (`parts[i]`); which of the last two bind anything depends on the
+// language (receiverTaintLangs, containerTaintLangs).
+var cAugmentedAssign = regexp.MustCompile(`^\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*|[A-Za-z_]\w*\s*\[[^\]]*\])\s*(?:<<|>>|\?\?|[-+*/%&|^])=[^=]`)
+
+// cAugmentedLangs are the languages whose compound assignment `x += y` is
+// matched by cAugmentedAssign. PHP's `.=` arrives as `+=` after its
+// normalization; Go has its own AST extractor.
+var cAugmentedLangs = map[langKind]bool{
+	langJava: true, langJavaScript: true, langPHP: true, langCSharp: true,
+	langCPP: true, langRust: true, langScala: true, langKotlin: true,
+	langSwift: true, langDart: true, langGroovy: true, langRuby: true,
+	langPowerShell: true,
+}
+
+// augmentedAssignRoot returns the variable a compound assignment updates:
+// `sql += user` keeps what sql held and adds what user holds, exactly like
+// `sql = sql + user`. Python has its own operator set; the C-family languages
+// share one. Before the C-family case, `sql += param` in Java, C#, PHP or
+// JavaScript assigned nothing and the taint it carried was dropped -- the
+// ordinary way SQL and HTML are built in a loop.
 func augmentedAssignRoot(lang langKind, code string) (string, bool) {
-	if lang != langPython {
+	if lang == langPython {
+		if m := pyAugmentedAssign.FindStringSubmatch(code); m != nil {
+			return m[1], true
+		}
 		return "", false
 	}
-	if m := pyAugmentedAssign.FindStringSubmatch(code); m != nil {
-		return m[1], true
+	if !cAugmentedLangs[lang] {
+		return "", false
+	}
+	m := cAugmentedAssign.FindStringSubmatch(code)
+	if m == nil {
+		return "", false
+	}
+	target := strings.Join(strings.Fields(m[1]), "")
+	switch {
+	case isSimpleIdent(target):
+		return target, true
+	case strings.Contains(target, "["):
+		if containerTaintLangs[lang] {
+			return containerAssignRoot(target)
+		}
+	case receiverTaintLangs[lang]:
+		return dottedAssignRoot(target)
 	}
 	return "", false
+}
+
+// propertySinks are the properties a store into is a sink. A store is not a
+// call: matching every property against the call sinks by name read
+// `exports.fetch = fetch` in a polyfill as SSRF.
+var propertySinks = map[string]bool{
+	"innerHTML": true, "outerHTML": true, "srcdoc": true, // DOM
+	"href":              true, // location.href; the catalog names the receiver
+	"StatusDescription": true, // ASP.NET Response
+}
+
+// propertyStore splits `a.b.prop = value` (a top-level single `=`, the target
+// a dotted chain ending in a property) into the target chain, with any call
+// arguments in it dropped (`document.getElementById("x").innerHTML` ->
+// "document.getElementById.innerHTML"), and the value in both views.
+func propertyStore(code, raw string) (target, value, valueRaw string, ok bool) {
+	eq := -1
+	depth := 0
+	for i := 0; i < len(code) && eq < 0; i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '=':
+			if depth != 0 {
+				continue
+			}
+			if i+1 < len(code) && (code[i+1] == '=' || code[i+1] == '>') {
+				return "", "", "", false
+			}
+			if i > 0 && strings.IndexByte("=!<>:+-*/%&|^?", code[i-1]) >= 0 {
+				return "", "", "", false
+			}
+			eq = i
+		}
+	}
+	if eq < 0 {
+		return "", "", "", false
+	}
+	left := strings.TrimSpace(code[:eq])
+	var chain strings.Builder
+	for i := 0; i < len(left); i++ {
+		c := left[i]
+		switch {
+		case c == '(':
+			end := matchParen(left, i)
+			if end < 0 {
+				return "", "", "", false
+			}
+			i = end
+		case isIdentPart(c) || c == '.':
+			chain.WriteByte(c)
+		case c == ' ' || c == '\t':
+		default:
+			return "", "", "", false
+		}
+	}
+	target = strings.Trim(chain.String(), ".")
+	dot := strings.LastIndexByte(target, '.')
+	if dot <= 0 || !isIdentStart(target[dot+1]) || !propertySinks[target[dot+1:]] {
+		return "", "", "", false
+	}
+	value = code[eq+1:]
+	valueRaw = value
+	if len(raw) == len(code) {
+		valueRaw = raw[eq+1:]
+	}
+	return target, value, valueRaw, true
 }

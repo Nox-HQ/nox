@@ -260,6 +260,16 @@ func scanInsecureRandom(fs *findings.FindingSet, art discovery.Artifact, content
 
 		ctx := contextNames(call, stack)
 		hit, vetoed := classify(ctx, isIndexDraw(call))
+		if !vetoed && hit == "" {
+			// A draw into a neutral name (`value := rand.Float64()`) takes its
+			// meaning from where that name goes next, as in the Java rule:
+			// `rememberMeKey := fmt.Sprintf("%.0f", value)`. One hop, the first
+			// later assignment in the function that reads it; every name on the
+			// way can still veto.
+			if next := forwardHop(call, stack); len(next) > 0 {
+				hit, vetoed = classify(append(ctx, next...), isIndexDraw(call))
+			}
+		}
 		if vetoed || hit == "" {
 			return true
 		}
@@ -349,6 +359,13 @@ func weakRandCall(call *ast.CallExpr, pkgNames, rngVars map[string]bool) (string
 	case *ast.Ident:
 		if pkgNames[x.Name] || rngVars[x.Name] {
 			return fn, true
+		}
+	case *ast.CallExpr:
+		// A draw on a generator built in place: `rand.New(src).Float64()`.
+		if inner, ok := x.Fun.(*ast.SelectorExpr); ok && inner.Sel.Name == "New" {
+			if id, ok := inner.X.(*ast.Ident); ok && pkgNames[id.Name] {
+				return fn, true
+			}
 		}
 	case *ast.SelectorExpr:
 		// A generator held in a field: `s.rng.Intn(n)`.
@@ -582,4 +599,91 @@ func identWords(id string) []string {
 	}
 	flush()
 	return out
+}
+
+// forwardHop returns the names of the first later assignment in the enclosing
+// function that reads the variable a draw was assigned to, or nil when the
+// draw is not assigned to a single variable.
+func forwardHop(call *ast.CallExpr, stack []ast.Node) []ctxName {
+	var assigned string
+	var at token.Pos
+	var body *ast.BlockStmt
+	for i := len(stack) - 1; i >= 0; i-- {
+		switch node := stack[i].(type) {
+		case *ast.AssignStmt:
+			if assigned == "" && len(node.Lhs) == 1 {
+				if id, ok := node.Lhs[0].(*ast.Ident); ok && id.Name != "_" {
+					assigned, at = id.Name, node.End()
+				}
+			}
+		case *ast.ValueSpec:
+			if assigned == "" && len(node.Names) == 1 && node.Names[0].Name != "_" {
+				assigned, at = node.Names[0].Name, node.End()
+			}
+		case *ast.FuncDecl:
+			body = node.Body
+		case *ast.FuncLit:
+			body = node.Body
+		}
+		if body != nil {
+			break
+		}
+	}
+	if assigned == "" || body == nil {
+		return nil
+	}
+	var next []ctxName
+	found := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		if found || n == nil {
+			return !found
+		}
+		var lhs []string
+		var rhs []ast.Expr
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			if x.Pos() < at {
+				return true
+			}
+			for _, l := range x.Lhs {
+				lhs = append(lhs, trailingName(l))
+			}
+			rhs = x.Rhs
+		case *ast.ValueSpec:
+			if x.Pos() < at {
+				return true
+			}
+			for _, nm := range x.Names {
+				lhs = append(lhs, nm.Name)
+			}
+			rhs = x.Values
+		default:
+			return true
+		}
+		if !readsName(rhs, assigned) {
+			return true
+		}
+		for _, name := range lhs {
+			if name != "" && name != "_" {
+				next = append(next, ctxName{name: name, role: roleValue})
+			}
+		}
+		found = true
+		return false
+	})
+	return next
+}
+
+// readsName reports whether any expression mentions the identifier name.
+func readsName(exprs []ast.Expr, name string) bool {
+	seen := false
+	for _, e := range exprs {
+		ast.Inspect(e, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && id.Name == name {
+				seen = true
+			}
+			return !seen
+		})
+	}
+	return seen
 }

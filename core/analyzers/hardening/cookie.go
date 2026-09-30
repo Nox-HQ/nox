@@ -30,8 +30,9 @@ import (
 // either: that is a deployment switch, usually the right one.
 //
 // Java: `cookie.setSecure(false)` on a javax/jakarta servlet Cookie, and
-// Spring's `ResponseCookie.from(…).secure(false)`. The same rule: only the
-// literal false, only as written.
+// Spring's `ResponseCookie.from(…).secure(false)`. Go: an http.Cookie with
+// `Secure: false`, and gin's SetCookie with secure false (cookie_go.go). The
+// same rule: only the literal false, only as written.
 //
 // Test paths are skipped, as for HARDEN-001: tests set cookies over plain
 // HTTP to local servers on purpose.
@@ -49,7 +50,7 @@ func insecureCookieRule() *rules.Rule {
 	return &rules.Rule{
 		ID:          ruleInsecureCookie,
 		Version:     "1.0",
-		Description: "Cookie set with the Secure flag explicitly disabled (Python secure=False, Java setSecure(false))",
+		Description: "Cookie set with the Secure flag explicitly disabled (Python secure=False, Java setSecure(false), Go Secure: false)",
 		// Medium: the cookie's contents decide the impact -- a session cookie
 		// sent in the clear is takeover, a UI preference is nothing -- and
 		// the call does not say which.

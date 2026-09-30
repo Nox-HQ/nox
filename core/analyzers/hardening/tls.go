@@ -207,6 +207,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			}
 			continue
 		}
+		// Insecure cookie flags (HARDEN-003); see cookie_go.go.
+		for _, f := range scanGoCookies(art.Path, content) {
+			fs.Add(f)
+		}
 		if !hasTrigger(content) {
 			continue
 		}

@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // extractJavaScript turns JS/TS logical lines into unit drafts with PER-FUNCTION
 // scoping. JavaScript has no single lexically-clean function-header shape (function
@@ -26,6 +29,9 @@ import "strings"
 // headers a flat recognizer cannot parse degrade to the enclosing scope, which is
 // the same conservative merge as before — never a hidden same-function flow.
 func extractJavaScript(lines []logicalLine) []unitDraft {
+	for i := range lines {
+		lines[i] = rewriteInlineRequire(lines[i])
+	}
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 
@@ -49,7 +55,26 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// Recognize a data-flow statement into the CURRENT (innermost) unit. A
 		// function-header line carries no statement we need (its own call, e.g.
 		// app.get(...), is not a sink); structural lines carry only scaffolding.
-		if !isHeader && !isJSStructuralLine(trimmed) {
+		// A function passed as an argument -- `cp.exec(cmd, (err) => {`,
+		// `fs.readFile(p, function (e, d) {` -- makes the line a header, but
+		// the call it is passed to is a statement of the enclosing scope:
+		// `exec(cmd, callback)` is how Node runs a command.
+		if isHeader {
+			if call, ok := jsCallBeforeCallback(ll); ok {
+				if st, ok := recognizeStatement(langJavaScript, call); ok {
+					stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+				}
+			}
+		}
+		if st, ok := jsReturnStatement(ll); ok && !isHeader {
+			stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+		} else if binds, ok := jsDestructuring(ll); ok && !isHeader {
+			for _, b := range binds {
+				if st, ok := recognizeStatement(langJavaScript, b); ok {
+					stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+				}
+			}
+		} else if !isHeader && !isJSStructuralLine(trimmed) {
 			if st, ok := recognizeStatement(langJavaScript, ll); ok {
 				stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
 			}
@@ -65,6 +90,13 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// openDepth) land in the new unit.
 		if isHeader {
 			u := &unitDraft{funcName: name, params: params}
+			// Next.js App Router: a route handler or page receives the
+			// route's dynamic segments and query as a destructured
+			// `{ params }` / `{ searchParams }` argument -- request data.
+			for _, m := range jsNextRouteArgs.FindAllStringSubmatch(ll.code, -1) {
+				u.stmts = append(u.stmts, stmtDraft{line: ll.line, assigns: m[1],
+					chains: []string{"nextjs." + m[1]}, sinkArgs: map[string]sinkArgDraft{}})
+			}
 			units = append(units, u)
 			stack = append(stack, frame{unit: u, openDepth: depth})
 		}
@@ -297,4 +329,224 @@ func isJSStructuralLine(trimmed string) bool {
 		}
 	}
 	return false
+}
+
+// jsNextRouteArgs finds `params` / `searchParams` destructured from a
+// function's parameters: `GET(req, { params })`, `Page({ params,
+// searchParams })`.
+var jsNextRouteArgs = regexp.MustCompile(`[{,]\s*(params|searchParams)\s*[,}:]`)
+
+// jsInlineRequire matches `require("mod")` in the raw view; the module name
+// is a string literal, blanked in the code view.
+var jsInlineRequire = regexp.MustCompile(`\brequire\s*\(\s*["']([A-Za-z_$][\w$]*)["']\s*\)`)
+
+// rewriteInlineRequire replaces `require("child_process")` with the module
+// name, right-aligned in the same span, in both views: an inline require
+// then reads as the module, so `require("child_process").exec(cmd)` is the
+// catalog's child_process.exec. Only a module whose name is an identifier is
+// rewritten; the span keeps its length, so the views stay aligned.
+func rewriteInlineRequire(ll logicalLine) logicalLine {
+	if len(ll.raw) != len(ll.code) || !strings.Contains(ll.code, "require") {
+		return ll
+	}
+	locs := jsInlineRequire.FindAllStringSubmatchIndex(ll.raw, -1)
+	if locs == nil {
+		return ll
+	}
+	code, raw := []byte(ll.code), []byte(ll.raw)
+	for _, m := range locs {
+		if !strings.HasPrefix(ll.code[m[0]:], "require") {
+			continue // the match is inside a string or comment
+		}
+		name := ll.raw[m[2]:m[3]]
+		span := m[1] - m[0]
+		repl := strings.Repeat(" ", span-len(name)) + name
+		copy(code[m[0]:m[1]], repl)
+		copy(raw[m[0]:m[1]], repl)
+	}
+	return logicalLine{line: ll.line, code: string(code), raw: string(raw)}
+}
+
+// jsReturnStatement recognizes `return <expr>` as a statement whose returns
+// are the expression's variables, keeping the calls in it. A return was listed
+// as scaffolding since the JavaScript engine's first version, so every sink
+// written as a return value was skipped: `return res.send(q)`, `return
+// res.status(400).json(...)`, `return db.query(sql)` -- the ordinary way to
+// end an Express handler. A bare `return` and a return of a function
+// expression are not statements.
+func jsReturnStatement(ll logicalLine) (stmtDraft, bool) {
+	trimmed := strings.TrimSpace(ll.code)
+	if !strings.HasPrefix(trimmed, "return ") && !strings.HasPrefix(trimmed, "return(") {
+		return stmtDraft{}, false
+	}
+	kw := strings.Index(ll.code, "return")
+	inner := logicalLine{line: ll.line, code: blankRange(ll.code, kw, kw+len("return")), raw: ll.raw}
+	if len(ll.raw) == len(ll.code) {
+		inner.raw = blankRange(ll.raw, kw, kw+len("return"))
+	}
+	st, ok := recognizeStatement(langJavaScript, inner)
+	if !ok {
+		return stmtDraft{}, false
+	}
+	st.assigns = ""
+	st.returns = append([]string(nil), st.reads...)
+	return st, true
+}
+
+// jsDestructuring expands `const { a, b: c, ...rest } = expr` and
+// `[x, y] = expr` into one assignment per bound name, each from the whole
+// right-hand side. The recognizer takes only a bare name as an assignment
+// target, so destructuring bound nothing and the taint stopped there --
+// `const { name } = req.body`, the ordinary Express idiom, and
+// `const { file } = await params` in a Next.js route. Each name gets the
+// whole value's taint: element-insensitive, as containers are elsewhere.
+func jsDestructuring(ll logicalLine) ([]logicalLine, bool) {
+	code := ll.code
+	lead := len(code) - len(strings.TrimLeft(code, " \t"))
+	i := lead
+	for _, kw := range []string{"const ", "let ", "var "} {
+		if strings.HasPrefix(code[i:], kw) {
+			i += len(kw)
+			break
+		}
+	}
+	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+		i++
+	}
+	if i >= len(code) || (code[i] != '{' && code[i] != '[') {
+		return nil, false
+	}
+	closing := matchParen(code, i)
+	if closing < 0 {
+		return nil, false
+	}
+	eq := closing + 1
+	for eq < len(code) && (code[eq] == ' ' || code[eq] == '\t') {
+		eq++
+	}
+	if eq >= len(code) || code[eq] != '=' || (eq+1 < len(code) && (code[eq+1] == '=' || code[eq+1] == '>')) {
+		return nil, false
+	}
+	names := jsPatternNames(code[i+1 : closing])
+	if len(names) == 0 {
+		return nil, false
+	}
+	rhsCode := code[eq+1:]
+	rhsRaw := rhsCode
+	if len(ll.raw) == len(code) {
+		rhsRaw = ll.raw[eq+1:]
+	}
+	// The first name is bound from the value, the rest from the first: the
+	// right-hand side's calls run once, as written. Copying it per name made
+	// each copy a separate evaluation, so a sink in it was reached once per
+	// bound name -- and a later copy read what an earlier one had bound.
+	out := make([]logicalLine, 0, len(names))
+	out = append(out, logicalLine{line: ll.line, code: names[0] + " =" + rhsCode, raw: names[0] + " =" + rhsRaw})
+	for _, n := range names[1:] {
+		out = append(out, logicalLine{line: ll.line, code: n + " = " + names[0], raw: n + " = " + names[0]})
+	}
+	return out, true
+}
+
+// jsPatternNames returns the names a destructuring pattern binds: a key, the
+// alias after `key:`, a `...rest`, and the names of nested patterns; defaults
+// (`= value`) are not names.
+func jsPatternNames(pattern string) []string {
+	var out []string
+	for _, part := range splitTopLevel(pattern, ',') {
+		part = strings.TrimSpace(part)
+		if eq := topLevelKeyword(part, "="); eq >= 0 {
+			part = strings.TrimSpace(part[:eq])
+		}
+		part = strings.TrimPrefix(part, "...")
+		if colon := topLevelKeyword(part, ":"); colon >= 0 {
+			part = strings.TrimSpace(part[colon+1:])
+		}
+		if part == "" {
+			continue
+		}
+		if part[0] == '{' || part[0] == '[' {
+			if end := matchParen(part, 0); end > 0 {
+				out = append(out, jsPatternNames(part[1:end])...)
+			}
+			continue
+		}
+		if isSimpleIdent(part) {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// splitTopLevel splits s on sep outside brackets.
+func splitTopLevel(s string, sep byte) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case sep:
+			if depth == 0 {
+				out = append(out, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, s[start:])
+}
+
+// jsCallBeforeCallback returns the call a function-expression argument is
+// passed to, cut where the function begins and closed: `c = cp.exec(cmd,
+// opts, function (err) {` -> `c = cp.exec(cmd, opts, )`. ok is false when
+// the function is not inside an open call.
+func jsCallBeforeCallback(ll logicalLine) (logicalLine, bool) {
+	code := ll.code
+	start := -1
+	if k := strings.LastIndex(code, "function"); k >= 0 {
+		start = k
+	} else if arrow := strings.LastIndex(code, "=>"); arrow >= 0 {
+		j := arrow - 1
+		for j >= 0 && (code[j] == ' ' || code[j] == '\t') {
+			j--
+		}
+		switch {
+		case j >= 0 && code[j] == ')':
+			depth := 0
+			for ; j >= 0; j-- {
+				if code[j] == ')' {
+					depth++
+				} else if code[j] == '(' {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+			}
+			start = j
+		case j >= 0 && isIdentPart(code[j]):
+			for j >= 0 && isIdentPart(code[j]) {
+				j--
+			}
+			start = j + 1
+		}
+		// `async (x) =>` / `async x =>`
+		if pre := strings.TrimRight(code[:max(start, 0)], " \t"); strings.HasSuffix(pre, "async") {
+			start = len(pre) - len("async")
+		}
+	}
+	if start <= 0 {
+		return logicalLine{}, false
+	}
+	prefix := code[:start]
+	if strings.Count(prefix, "(") <= strings.Count(prefix, ")") {
+		return logicalLine{}, false
+	}
+	raw := ll.raw
+	if len(raw) != len(code) {
+		raw = code
+	}
+	return logicalLine{line: ll.line, code: prefix + ")", raw: raw[:start] + ")"}, true
 }
