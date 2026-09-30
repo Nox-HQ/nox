@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 229,
+  "version": 230,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -973,12 +973,16 @@
       "elapsed_minutes": 0
     },
     "task-97": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "PR #781 merged as 9a2b03c"
+      ],
       "started_at": "2026-09-30T18:05:16.728118+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-09-30T18:19:25.791323+02:00",
+      "elapsed_minutes": 14
     }
   },
-  "updated_at": "2026-09-30T18:05:16.728118+02:00"
+  "updated_at": "2026-09-30T18:19:25.791324+02:00"
 }
