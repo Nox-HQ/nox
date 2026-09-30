@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 214,
+  "version": 216,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -886,6 +886,17 @@
       "completed_at": "2026-09-30T08:02:47.708959+02:00",
       "elapsed_minutes": 17
     },
+    "task-88": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Java XPath/LDAP sinks via declared-type receiver bindings: OWASP Java xpathi 0 -\u003e 38, ldapi 0 -\u003e 38, average 41.2 -\u003e 48.2 (Semgrep 34.9); Kafka/Keycloak/Jenkins unchanged; tests fail with bindings disabled."
+      ],
+      "started_at": "2026-09-30T08:30:28.339051+02:00",
+      "completed_at": "2026-09-30T08:35:44.912485+02:00",
+      "elapsed_minutes": 5
+    },
     "task-9": {
       "status": "verified",
       "path": "",
@@ -896,5 +907,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-30T08:02:47.70896+02:00"
+  "updated_at": "2026-09-30T08:35:44.912486+02:00"
 }

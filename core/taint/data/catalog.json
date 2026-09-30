@@ -2228,6 +2228,27 @@
       ],
       "sinks": [
         {
+          "call": "xpath_object.evaluate",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "javax.xml.xpath.XPath.evaluate(expression, item): the expression is arg 0; the local is bound by its declared type (receivers.go)"
+        },
+        {
+          "call": "xpath_object.compile",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008",
+          "note": "XPath.compile(expression)"
+        },
+        {
+          "call": "ldap_dircontext.search",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009",
+          "note": "javax.naming.directory.DirContext.search(name, filter, ...): a local declared DirContext / InitialDirContext / LdapContext"
+        },
+        {
           "call": "prepareStatement",
           "vuln_class": "sql_injection",
           "cwe": "CWE-89",
@@ -2423,6 +2444,27 @@
         }
       ],
       "sanitizers": [
+        {
+          "call": "encodeForLDAP",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "encodeForDN",
+          "neutralizes": [
+            "ldap_injection"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "encodeForXPath",
+          "neutralizes": [
+            "xpath_injection"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
         {
           "call": "Util.escape",
           "neutralizes": [

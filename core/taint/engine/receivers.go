@@ -79,3 +79,27 @@ func pythonReceiverBindings(content []byte) map[string]string {
 	}
 	return out
 }
+
+// Java receiver bindings, by declared type. Java states a local's type, so an
+// XPath evaluator or an LDAP directory context is known from its declaration
+// -- `javax.xml.xpath.XPath xp = xpf.newXPath();`, `DirContext ctx = ...` --
+// and only calls on such a local are XPath or LDAP sinks. Keyed on the method
+// name alone, `evaluate` and `search` would match expression engines, search
+// indexes and every other API that uses the words.
+var (
+	javaXPathDecl = regexp.MustCompile(`(?:^|[^\w.])(?:javax\s*\.\s*xml\s*\.\s*xpath\s*\.\s*)?XPath\s+([A-Za-z_]\w*)\s*=`)
+	javaLDAPDecl  = regexp.MustCompile(`(?:^|[^\w.])(?:javax\s*\.\s*naming\s*\.\s*(?:directory|ldap)\s*\.\s*)?(?:Initial)?(?:Dir|Ldap)Context\s+([A-Za-z_]\w*)\s*=`)
+)
+
+// javaReceiverBindings maps each local declared as an XPath or an LDAP
+// directory context to the receiver name the catalog uses for it.
+func javaReceiverBindings(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, m := range javaXPathDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "xpath_object"
+	}
+	for _, m := range javaLDAPDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "ldap_dircontext"
+	}
+	return out
+}

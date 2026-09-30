@@ -1423,7 +1423,9 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// language discriminator: a quoted/validated shell file invocation leaves
 		// both false and is still suppressed.
 		return info.ShellTrue || info.FirstArgTainted
-	case "xpath", "etree.XPath", "etree.XPathEvaluator", "elementpath.Selector":
+	case "xpath", "etree.XPath", "etree.XPathEvaluator", "elementpath.Selector",
+		// Java: XPath.evaluate(expression, item) and XPath.compile(expression).
+		"xpath_object.evaluate", "xpath_object.compile":
 		// The query is the first argument. XPath variables are passed as
 		// keywords -- `root.xpath("//u[@id=$id]", id=v)` -- and bound by the
 		// engine, never parsed as XPath, so a taint that reaches only them is
