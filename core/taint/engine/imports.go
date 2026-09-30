@@ -117,16 +117,35 @@ func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 		}
 		return aliasTable{names: names, sep: "."}
 	case lexctx.LangJavaScript:
-		return aliasTable{names: javascriptAliases(content), sep: "."}
+		names := javascriptAliases(content)
+		// An import says what a name is; a driver handle only fills in names
+		// no import claims. See receivers.go.
+		for local, kind := range javascriptReceiverBindings(content) {
+			if _, imported := names[local]; !imported {
+				names[local] = kind
+			}
+		}
+		return aliasTable{names: names, sep: "."}
 	case lexctx.LangJava:
 		// Declared-type receiver bindings only; see receivers.go.
 		return aliasTable{names: javaReceiverBindings(content), sep: "."}
+	case lexctx.LangRuby:
+		// Constructor-made receiver bindings only; see receivers.go.
+		return aliasTable{names: rubyReceiverBindings(content), sep: "."}
 	case lexctx.LangClojure:
 		return aliasTable{names: clojureAliases(content), sep: "/"}
 	case lexctx.LangElixir:
 		return aliasTable{names: elixirAliases(content), sep: "."}
 	case lexctx.LangCSharp:
-		return aliasTable{names: csharpAliases(content), sep: "."}
+		names := csharpAliases(content)
+		// A `using` alias says what a name is; a declared type only fills in
+		// names no alias claims. See receivers.go.
+		for local, kind := range csharpReceiverBindings(content) {
+			if _, aliased := names[local]; !aliased {
+				names[local] = kind
+			}
+		}
+		return aliasTable{names: names, sep: "."}
 	default:
 		// Every other language keeps today's behaviour. Go resolves its own
 		// aliases in the AST extractor; the rest were probed and either show no

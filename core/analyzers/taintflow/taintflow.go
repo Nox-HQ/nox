@@ -27,6 +27,7 @@ import (
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
+	"github.com/nox-hq/nox/core/source"
 	"github.com/nox-hq/nox/core/taint"
 	"github.com/nox-hq/nox/core/taint/engine"
 )
@@ -172,6 +173,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
+			continue
+		}
+		// A generated or minified file (a bundle, a vendored dist build) is
+		// not code this repository wrote, and the line recognizer reads a
+		// minified line as one enormous statement. The banner must lead the
+		// file: a hand-written tool that emits it as data is not generated.
+		if source.IsGeneratedHeader(content) {
 			continue
 		}
 		a.scanFile(fs, art.Path, lang, content)
