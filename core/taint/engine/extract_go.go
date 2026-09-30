@@ -340,6 +340,7 @@ func (ex *goExtractor) emitReturn(u *unitDraft, st *ast.ReturnStmt) {
 	finalizeStmt(&out)
 	// The returned variables are exactly the free identifiers of the expressions.
 	out.returns = append([]string(nil), out.reads...)
+	out.isReturn = true
 	if stmtIsEmpty(&out) {
 		return
 	}
@@ -758,7 +759,7 @@ func finalizeStmt(st *stmtDraft) {
 // stmtIsEmpty reports whether a statement carries nothing the engine can use.
 func stmtIsEmpty(st *stmtDraft) bool {
 	return st.assigns == "" && len(st.calls) == 0 && len(st.reads) == 0 &&
-		len(st.chains) == 0 && len(st.returns) == 0
+		len(st.chains) == 0 && len(st.returns) == 0 && !st.isReturn
 }
 
 // renderCallChain renders a call's Fun expression into the dotted callee chain the

@@ -46,6 +46,10 @@ type Statement struct {
 	// pass can decide whether a parameter flows to a function's return value.
 	// Empty for non-return statements. The intraprocedural engine ignores it.
 	Returns []string
+	// IsReturn marks a return statement, including one that returns a
+	// constant or nothing (whose Returns is empty). The summary pass needs
+	// every return to decide that a function is a getter of a source.
+	IsReturn bool
 	// Expr is the code view (string literals blanked) of the expression this
 	// statement assigns to Assigns, or "" when the substrate does not carry it.
 	// The StructuralEngine scans it like a sink argument: a sanitizer wrapping

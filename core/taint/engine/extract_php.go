@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // extractPHP turns PHP logical lines into unit drafts. PHP has clean, lexically
 // unambiguous function headers (`function name($a, $b) {`), so — like Python and
@@ -19,22 +22,33 @@ import "strings"
 // sinks. Scoping folds nested/anonymous functions into the enclosing unit, which
 // is conservative (it can only merge scopes, never split a real flow).
 func extractPHP(lines []logicalLine) []unitDraft {
+	norm := make([]logicalLine, len(lines))
+	for i := range lines {
+		norm[i] = normalizePHPLine(lines[i])
+	}
+	// Branch model: the Java one (java_branches.go), which reads C-family
+	// headers -- if / else if / elseif / else, loops, switch and case -- on
+	// the normalized lines. Before it, a statement in an if arm was a strong
+	// update, so `if (ok($x)) { $x = $x; } else { $x = ""; }` wiped the taint
+	// the other arm keeps: measured on the NIST SARD PHP suite, that one shape
+	// hid most of its SQL injection and XSS cases.
+	jb := newJavaBranches(norm)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	depth := 0
 
-	for _, raw := range lines {
-		ll := normalizePHPLine(raw)
+	for li, ll := range norm {
+		orig := lines[li]
 		code := strings.TrimSpace(ll.code)
 		if code == "" {
 			continue
 		}
-		if isPHPStructuralLine(code) {
-			if g, ok := conditionGuard(langPHP, ll); ok {
-				cur.guards = append(cur.guards, g)
-			}
-			continue
-		}
+		before := depth
+		depth += braceDelta(code)
+		depthHere := before - (len(code) - len(strings.TrimLeft(code, "}")))
+		jb.enter(depthHere)
+
 		if name, params, ok := phpFuncHeader(code); ok {
 			u := &unitDraft{funcName: name, params: params}
 			units = append(units, u)
@@ -55,7 +69,47 @@ func extractPHP(lines []logicalLine) []unitDraft {
 			}
 			continue
 		}
-		phpRecognizeInto(cur, ll)
+
+		// A case label in a switch body: resolve it, then treat any statement
+		// after the colon like any other.
+		if sw := jb.innermostSwitch(); sw != nil && (strings.HasPrefix(code, "case ") || strings.HasPrefix(code, "default")) {
+			if rest := jb.caseLabel(sw, ll.raw); rest != "" {
+				if colon := strings.IndexByte(ll.code, ':'); colon >= 0 {
+					phpStatement(cur, jb, subLine(ll, colon+1), subLine(orig, colon+1), branchTaken)
+				}
+			}
+			continue
+		}
+
+		if isPHPStructuralLine(code) || isPHPStructuralLine(strings.TrimLeft(code, "} \t")) {
+			// `if (settype($x, "integer"))` converts $x whichever arm runs.
+			if name, ok := phpSettypeNumeric(orig.raw); ok && jb.state() != branchDead {
+				cur.stmts = append(cur.stmts, stmtDraft{line: ll.line, assigns: name,
+					conditional: jb.state() == branchMaybe, sinkArgs: map[string]sinkArgDraft{}})
+			}
+			if g, ok := conditionGuard(langPHP, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
+			if h, ok := parseJavaHeader(ll); ok {
+				st := jb.header(h, depthHere)
+				switch {
+				case h.rest != "":
+					// `if (c) stmt;` / `else stmt;` on one line.
+					phpStatement(cur, jb, subLine(ll, h.restAt), subLine(orig, h.restAt), st)
+				case !h.opens:
+					// `if (c)` with the statement on the next line.
+					jb.pending = &st
+				}
+			}
+			continue
+		}
+
+		arm := branchTaken
+		if jb.pending != nil {
+			arm = *jb.pending
+			jb.pending = nil
+		}
+		phpStatement(cur, jb, ll, orig, arm)
 	}
 
 	out := make([]unitDraft, 0, len(units))
@@ -63,6 +117,40 @@ func extractPHP(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// phpStatement recognizes one statement under the branch model: dropped in an
+// arm that cannot run, conditional in one that may not.
+//
+// orig is the same line before PHP normalization, which turns the `.`
+// concatenation operator into `+`: the numeric-conversion shapes below must
+// tell arithmetic from concatenation, so they read the original.
+func phpStatement(cur *unitDraft, jb *javaBranches, ll, orig logicalLine, arm branchState) {
+	state := combineStates(jb.state(), arm)
+	if sw := jb.innermostSwitch(); sw != nil {
+		sw.statement(strings.TrimSpace(ll.code))
+	}
+	if state == branchDead {
+		return
+	}
+	if name, ok := phpNumericAssign(orig); ok {
+		// The assignee holds a number, which carries no injection.
+		cur.stmts = append(cur.stmts, stmtDraft{line: ll.line, assigns: name,
+			conditional: state == branchMaybe, sinkArgs: map[string]sinkArgDraft{}})
+		return
+	}
+	ll = jb.rewriteJavaTernary(ll)
+	ll = blankLiteralTernaries(ll)
+	before := len(cur.stmts)
+	phpRecognizeInto(cur, ll)
+	notRedirect := phpHeaderIsNotLocation(orig.raw)
+	for i := before; i < len(cur.stmts); i++ {
+		cur.stmts[i].conditional = state == branchMaybe
+		if notRedirect {
+			dropCall(&cur.stmts[i], "header")
+		}
+		jb.learn(ll, cur.stmts[i].assigns)
+	}
 }
 
 // phpRecognizeInto recognizes one normalized PHP logical line into unit u,
@@ -155,17 +243,78 @@ func promotePHPSuperglobals(st *stmtDraft) {
 }
 
 // normalizePHPLine rewrites a logical line's code and raw views into the shape
-// the shared recognizer understands: `->` → `.`, the `$` sigil removed, and the
-// `echo`/`print` statement constructs turned into call syntax. Both views are
-// transformed identically so their byte offsets stay mutually aligned (the
-// recognizer slices raw by offsets found in code); the 1-based line number is
-// preserved unchanged.
+// the shared recognizer understands: `->` -> `.`, the concatenation `.` -> `+`,
+// the `$` sigil removed (or `_` for a keyword-named variable), and the
+// `echo`/`print` constructs turned into call syntax. The line number is kept.
+//
+// Every rewrite is decided on the CODE view and applied as the same byte edit
+// at the same offset to both views, so they stay aligned: the recognizer
+// slices raw by offsets it found in code. Rewriting each view as a string --
+// what this once did -- also rewrote the `$`, `->` and `.` inside comments
+// and string literals in the raw view only, where the code view is blank,
+// and drifted the views apart on 90,292 lines of a 7,249-file PHP corpus
+// (WordPress, Roundcube, OpenCart): every raw slice on those lines read the
+// wrong text, and a header slice past the end panicked.
 func normalizePHPLine(ll logicalLine) logicalLine {
-	return logicalLine{
-		line: ll.line,
-		code: normalizePHPExpr(ll.code),
-		raw:  normalizePHPExpr(ll.raw),
+	if len(ll.code) != len(ll.raw) {
+		// Views that arrive misaligned cannot be edited in lockstep.
+		return logicalLine{line: ll.line, code: normalizePHPExpr(ll.code), raw: normalizePHPExpr(ll.raw)}
 	}
+	code, raw := ll.code, ll.raw
+	oc := make([]byte, 0, len(code)+2)
+	or := make([]byte, 0, len(raw)+2)
+	emit := func(b byte) { oc, or = append(oc, b), append(or, b) }
+
+	// echo/print without parentheses: the whitespace after the keyword
+	// becomes `(`, and a `)` closes the line.
+	trimmed := strings.TrimLeft(code, " \t")
+	indent := len(code) - len(trimmed)
+	echoAt := -1
+	for _, kw := range []string{"echo", "print"} {
+		rest := strings.TrimPrefix(trimmed, kw)
+		if rest != trimmed && rest != "" && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != "" {
+			echoAt = indent + len(kw)
+			break
+		}
+	}
+
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case i == echoAt:
+			emit('(')
+		case c == '-' && i+1 < len(code) && code[i+1] == '>':
+			emit('.')
+			i++
+		case c == '$':
+			j := i + 1
+			for j < len(code) && isIdentPart(code[j]) {
+				j++
+			}
+			// `$string` would read as the keyword `string` once the sigil
+			// is gone; see phpKeywordVars.
+			if name := code[i+1 : j]; name != "this" && isKeyword(name) {
+				emit('_')
+			}
+		case c == '.' && !isDecimalPoint(code, i):
+			// A bare `.` in PHP code is concatenation (members are `->`);
+			// a decimal point has a digit on both sides.
+			emit('+')
+		default:
+			oc, or = append(oc, c), append(or, raw[i])
+		}
+	}
+	if echoAt >= 0 {
+		emit(')')
+	}
+	return logicalLine{line: ll.line, code: string(oc), raw: string(or)}
+}
+
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+
+// isDecimalPoint reports a `.` with a digit on both sides.
+func isDecimalPoint(code string, i int) bool {
+	return i > 0 && isDigit(code[i-1]) && i+1 < len(code) && isDigit(code[i+1])
 }
 
 // normalizePHPExpr applies the PHP→shared-recognizer rewrites to one text view.
@@ -183,8 +332,38 @@ func normalizePHPExpr(s string) string {
 	s = rewriteEchoPrint(s)
 	s = rewritePHPConcat(s)
 	s = strings.ReplaceAll(s, "->", ".")
+	s = phpKeywordVars(s)
 	s = strings.ReplaceAll(s, "$", "")
 	return s
+}
+
+// phpKeywordVars renames a variable whose name is a keyword in the shared
+// recognizer's list -- `$string`, `$type`, `$match`, `$default`, `$object` --
+// to `_string` and so on. The `$` sigil makes every one of them a variable in
+// PHP, but once it is removed the recognizer drops the bare word as a keyword,
+// and with it every read of the variable: `$string = $_POST['x'];
+// unserialize($string)` reported nothing. The `$` becomes `_`, so the views
+// keep their length. `$this` is left alone: it is the object, not a value a
+// statement assigns.
+func phpKeywordVars(s string) string {
+	if !strings.Contains(s, "$") {
+		return s
+	}
+	b := []byte(s)
+	for i := 0; i < len(b); i++ {
+		if b[i] != '$' {
+			continue
+		}
+		j := i + 1
+		for j < len(b) && isIdentPart(b[j]) {
+			j++
+		}
+		if name := string(b[i+1 : j]); name != "this" && isKeyword(name) {
+			b[i] = '_'
+		}
+		i = j - 1
+	}
+	return string(b)
 }
 
 // rewritePHPConcat replaces the PHP string-concatenation operator `.` with `+`
@@ -234,11 +413,15 @@ func rewriteEchoPrint(s string) string {
 		if rest[0] != ' ' && rest[0] != '\t' {
 			return s
 		}
-		arg := strings.TrimSpace(rest)
-		if arg == "" {
+		if strings.TrimSpace(rest) == "" {
 			return s
 		}
-		return indent + kw + "(" + arg + ")"
+		// The whitespace after the keyword becomes `(` and a `)` is appended,
+		// so the code and raw views -- which differ where a trailing comment
+		// is blanked in one and not the other -- change by the same bytes at
+		// the same offsets and stay aligned. Trimming the argument, as this
+		// once did, trimmed the two views differently.
+		return indent + kw + "(" + rest[1:] + ")"
 	}
 	return s
 }
@@ -354,9 +537,181 @@ func phpReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	inner := logicalLine{line: ll.line, code: exprCode, raw: exprRaw}
 	st, ok := recognizeStatement(langPHP, inner)
 	if !ok {
-		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
+		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
+}
+
+// Numeric conversion in PHP.
+//
+// A value converted to a number carries no injection: `(int) $x`, `$x += 0`,
+// `settype($x, "integer")`, `filter_var($x, FILTER_VALIDATE_INT)`. These are
+// how PHP code most often makes request input safe for a query or a command,
+// and nox knew only intval/floatval. Each shape below is exact: the whole
+// right-hand side must be the conversion, so `(int) $a . $b` -- a number
+// concatenated with a string -- is not one.
+var (
+	phpCastAssign  = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*\(\s*(?:int|integer|float|double|bool|boolean)\s*\)\s*\$[A-Za-z_]\w*(?:\[[^\]]*\])?\s*;?\s*$`)
+	phpArithUpdate = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*[-+*/%]=\s*\d[0-9.]*\s*;?\s*$`)
+	phpArithAssign = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*(?:\$[A-Za-z_]\w*|[0-9][0-9.]*)(?:\s*[-+*/%]\s*(?:\$[A-Za-z_]\w*|[0-9][0-9.]*))+\s*;?\s*$`)
+	phpFilterNum   = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*filter_var\s*\([^;]*,\s*FILTER_(?:SANITIZE_NUMBER_INT|SANITIZE_NUMBER_FLOAT|VALIDATE_INT|VALIDATE_FLOAT|VALIDATE_BOOLEAN|VALIDATE_BOOL)\b[^;]*\)\s*;?\s*$`)
+	phpSettype     = regexp.MustCompile(`\bsettype\s*\(\s*\$([A-Za-z_]\w*)\s*,\s*["'](?:int|integer|float|double|bool|boolean)["']\s*\)`)
+)
+
+// phpNumericAssign reports a statement that assigns a number to a variable.
+// The shapes are matched on the code view before normalization (strings
+// blanked, so text inside a literal never matches); settype's type name is a
+// string literal, so that one is read from the raw view, and only on a line
+// the code view shows is a settype call.
+func phpNumericAssign(ll logicalLine) (string, bool) {
+	for _, re := range []*regexp.Regexp{phpCastAssign, phpArithUpdate, phpArithAssign, phpFilterNum} {
+		if m := re.FindStringSubmatch(ll.code); m != nil {
+			return m[1], true
+		}
+	}
+	if strings.HasPrefix(strings.TrimSpace(ll.code), "settype") {
+		if m := phpSettype.FindStringSubmatch(ll.raw); m != nil {
+			return m[1], true
+		}
+	}
+	return "", false
+}
+
+// phpSettypeNumeric reports `settype($x, "integer")` in a control-flow
+// header: the conversion happens when the condition is evaluated, before any
+// arm runs.
+func phpSettypeNumeric(code string) (string, bool) {
+	m := phpSettype.FindStringSubmatch(code)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
+// phpHeaderLiteral matches a header() call whose first argument opens with a
+// string literal, capturing the literal's first characters.
+var phpHeaderLiteral = regexp.MustCompile(`\bheader\s*\(\s*["']\s*([A-Za-z-]*)`)
+
+// phpHeaderIsNotLocation reports a header() call that sets some header other
+// than Location. header() is an open-redirect sink only for a Location
+// header; `header("$protocol 400 Bad Request")` or `header("Etag: $etag")`
+// redirects nowhere, and on WordPress were a third of its header findings.
+// A header name that is not written as a literal is kept, since it may be
+// Location.
+func phpHeaderIsNotLocation(raw string) bool {
+	m := phpHeaderLiteral.FindStringSubmatch(raw)
+	return len(m) == 2 && !strings.EqualFold(m[1], "location")
+}
+
+// dropCall removes a call, and its argument record, from a statement.
+func dropCall(st *stmtDraft, call string) {
+	kept := st.calls[:0]
+	for _, c := range st.calls {
+		if c != call {
+			kept = append(kept, c)
+		}
+	}
+	st.calls = kept
+	delete(st.sinkArgs, call)
+}
+
+// blankLiteralTernaries blanks the condition of every `c ? A : B` whose two
+// arms are literals -- blank in the code view -- wherever it appears: `echo
+// ('all' === $tab ? ' class="tabs"' : "")` prints a literal, and the
+// condition's variable does not reach the output. rewriteJavaTernary handles
+// the assignment form; this is the expression form, as a call argument.
+func blankLiteralTernaries(ll logicalLine) logicalLine {
+	code := ll.code
+	if !strings.Contains(code, "?") {
+		return ll
+	}
+	b, r := []byte(code), []byte(ll.raw)
+	aligned := len(r) == len(b)
+	for q := 0; q < len(b); q++ {
+		if b[q] != '?' || (q+1 < len(b) && (b[q+1] == '?' || b[q+1] == ':' || b[q+1] == '-')) || (q > 0 && b[q-1] == '?') {
+			continue
+		}
+		colon, end := ternaryArms(b, q)
+		if colon < 0 || hasIdent(b[q+1:colon]) || hasIdent(b[colon+1:end]) {
+			continue
+		}
+		start := ternaryCondStart(b, q)
+		for k := start; k < q; k++ {
+			b[k] = ' '
+			if aligned {
+				r[k] = ' '
+			}
+		}
+	}
+	if !aligned {
+		return logicalLine{line: ll.line, code: string(b), raw: ll.raw}
+	}
+	return logicalLine{line: ll.line, code: string(b), raw: string(r)}
+}
+
+// ternaryArms finds the `:` of the ternary whose `?` is at q, and the end of
+// its second arm, at the same bracket depth; colon is -1 when there is none.
+func ternaryArms(b []byte, q int) (colon, end int) {
+	depth := 0
+	colon = -1
+	for k := q + 1; k < len(b); k++ {
+		switch b[k] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth == 0 {
+				return colon, k
+			}
+			depth--
+		case ':':
+			if depth == 0 && colon < 0 {
+				colon = k
+			}
+		case ',', ';':
+			if depth == 0 {
+				return colon, k
+			}
+		}
+	}
+	return colon, len(b)
+}
+
+// ternaryCondStart returns where the condition before the `?` at q begins:
+// just after the enclosing open bracket, a comma, or an assignment.
+func ternaryCondStart(b []byte, q int) int {
+	depth := 0
+	for k := q - 1; k >= 0; k-- {
+		switch b[k] {
+		case ')', ']', '}':
+			depth++
+		case '(', '[', '{':
+			if depth == 0 {
+				return k + 1
+			}
+			depth--
+		case ',', ';':
+			if depth == 0 {
+				return k + 1
+			}
+		case '=':
+			if depth == 0 && (k+1 >= len(b) || b[k+1] != '=') && (k == 0 || !strings.ContainsRune("=!<>", rune(b[k-1]))) {
+				return k + 1
+			}
+		}
+	}
+	return 0
+}
+
+// hasIdent reports whether code contains an identifier character sequence
+// that starts a name (not a digit).
+func hasIdent(code []byte) bool {
+	for _, c := range code {
+		if isIdentStart(c) {
+			return true
+		}
+	}
+	return false
 }

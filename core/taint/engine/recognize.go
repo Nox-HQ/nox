@@ -534,6 +534,10 @@ var containerTaintLangs = map[langKind]bool{
 	// Python: `m['k'] = param; bar = m['k']` -- the OWASP Benchmark for
 	// Python routes injection cases through element stores like this.
 	langPython: true,
+	// PHP: `$a['k'] = $_GET['x']` and the append form `$a[] = $x`. Arrays are
+	// PHP's only container, so a store into one is how request data is
+	// collected before a query is built from it.
+	langPHP: true,
 	// Java is NOT here: `arr[0] = param` reaches splitAssignment's Java
 	// declaration-type stripping, which mangles the subscripted target, so an
 	// array element store is still unmodelled. Java's collections and
