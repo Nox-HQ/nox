@@ -722,6 +722,15 @@ func augmentedAssignRoot(lang langKind, code string) (string, bool) {
 	return "", false
 }
 
+// propertySinks are the properties a store into is a sink. A store is not a
+// call: matching every property against the call sinks by name read
+// `exports.fetch = fetch` in a polyfill as SSRF.
+var propertySinks = map[string]bool{
+	"innerHTML": true, "outerHTML": true, "srcdoc": true, // DOM
+	"href":              true, // location.href; the catalog names the receiver
+	"StatusDescription": true, // ASP.NET Response
+}
+
 // propertyStore splits `a.b.prop = value` (a top-level single `=`, the target
 // a dotted chain ending in a property) into the target chain, with any call
 // arguments in it dropped (`document.getElementById("x").innerHTML` ->
@@ -771,7 +780,7 @@ func propertyStore(code, raw string) (target, value, valueRaw string, ok bool) {
 	}
 	target = strings.Trim(chain.String(), ".")
 	dot := strings.LastIndexByte(target, '.')
-	if dot <= 0 || !isIdentStart(target[dot+1]) {
+	if dot <= 0 || !isIdentStart(target[dot+1]) || !propertySinks[target[dot+1:]] {
 		return "", "", "", false
 	}
 	value = code[eq+1:]

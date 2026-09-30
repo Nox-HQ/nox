@@ -43,3 +43,12 @@ func TestInlineBodyElseArms(t *testing.T) {
 		t.Fatalf("want one flow at line 5, got %+v", flows)
 	}
 }
+
+// TestPropertyStoresOnlyForPropertySinks: a store is a sink only for a
+// property that is one; a polyfill assigning `fetch` is not SSRF.
+func TestPropertyStoresOnlyForPropertySinks(t *testing.T) {
+	src := "function install(g, req) {\n  const fetch = req.query.u;\n  g.fetch = fetch;\n  exports.fetch = fetch;\n}\n"
+	if got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(src)))); len(got) != 0 {
+		t.Errorf("got %v, want none", got)
+	}
+}
