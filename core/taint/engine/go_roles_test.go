@@ -276,3 +276,23 @@ func TestGoFileSinksAndMapKeys(t *testing.T) {
 }`, nil},
 	})
 }
+
+// TestGoWriterSinkDestination: fmt.Fprint* and io.WriteString are XSS only
+// when they write to the response.
+func TestGoWriterSinkDestination(t *testing.T) {
+	runGoCases(t, []goCase{
+		{"to the response writer", goImports + `func h(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "<p>%s</p>", r.FormValue("q"))
+}`, []string{"TAINT-003"}},
+		{"to a response writer under another name", goImports + `func h(out http.ResponseWriter, r *http.Request) {
+	io.WriteString(out, r.FormValue("q"))
+}`, []string{"TAINT-003"}},
+		{"to stderr", goImports + `func h(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(os.Stderr, "bad request %s\n", r.FormValue("q"))
+}`, nil},
+		{"to a buffer", goImports + `func h(w http.ResponseWriter, r *http.Request) {
+	var buf bytes.Buffer
+	fmt.Fprintln(&buf, r.FormValue("q"))
+}`, nil},
+	})
+}

@@ -593,7 +593,8 @@ func (ex *goExtractor) collectExpr(st *stmtDraft, e ast.Expr) {
 		// fires. The fmt.Fprint*/io.WriteString string-writers and template.HTML
 		// bypass need no literal gate — a tainted string reaching them IS reflected
 		// content — so they always register and are gated only by taint.
-		if callee != "" && (!isGoRawWriteSink(callee) || xssWriteArgIsHTML(x)) {
+		if callee != "" && (!isGoRawWriteSink(callee) || xssWriteArgIsHTML(x)) &&
+			(!isGoWriterSink(callee) || ex.writesResponse(x)) {
 			st.calls = appendUnique(st.calls, callee)
 			st.sinkArgs[callee] = ex.callArgInfo(x)
 		}
@@ -862,6 +863,30 @@ func isStringLiteral(e ast.Expr) bool {
 // gated, and template.HTML is an unconditional bypass sink.
 func isGoRawWriteSink(callee string) bool {
 	return strings.HasSuffix(callee, ".Write")
+}
+
+// isGoWriterSink reports the string-writer XSS sinks whose first argument is
+// the destination: fmt.Fprint* and io.WriteString.
+func isGoWriterSink(callee string) bool {
+	switch callee {
+	case "fmt.Fprintf", "fmt.Fprint", "fmt.Fprintln", "io.WriteString":
+		return true
+	}
+	return false
+}
+
+// writesResponse reports whether a writer sink's destination is the HTTP
+// response: a name whose declared type is http.ResponseWriter (or a framework
+// field holding one), or one the catalog already calls w. The catalog notes
+// say these sinks are XSS when the first argument is the response writer;
+// before this was enforced, `fmt.Fprintf(os.Stderr, "…%v", err)` in an error
+// handler was reported as XSS.
+func (ex *goExtractor) writesResponse(call *ast.CallExpr) bool {
+	if len(call.Args) == 0 {
+		return false
+	}
+	dst := ex.roles.canon(renderCallChain(call.Args[0]))
+	return dst == "w" || strings.HasPrefix(dst, "w.")
 }
 
 // xssWriteArgIsHTML reports whether a write call carries the reflected-HTML shape:
