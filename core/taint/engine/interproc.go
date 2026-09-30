@@ -75,6 +75,10 @@ type funcSummary struct {
 	// parameter i passed through (for Via provenance when the return is later
 	// sunk). Nearest-caller first.
 	returnVia map[int][]string
+	// returnsSource is set when the function returns a value tainted by a real
+	// source it reads itself -- a getter such as `function input() { return
+	// $_GET['q']; }` -- whatever its arguments. Nil when it does not.
+	returnsSource *taintInfo
 }
 
 // newFuncSummary returns an empty summary for name.
@@ -187,6 +191,32 @@ func (e *StructuralEngine) computeSummaries(lang string, units []taint.Unit) map
 // return, and which classes it was sanitized for.
 func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[string]*funcSummary) *funcSummary {
 	sum := newFuncSummary(u.FuncName)
+	// Unseeded: does a source the function reads itself reach a return? The
+	// first returned variable in sorted order decides, so the summary is
+	// deterministic.
+	if res := e.forwardPass(lang, u, map[string]taintInfo{}, summaries); len(res.returned) > 0 {
+		for _, rv := range sortedReads(res.returned) {
+			if ti, ok := res.state[rv]; ok && ti.src.Kind != taint.SourceKind("parameter") {
+				ret := cloneTaintInfo(ti)
+				sum.returnsSource = &ret
+				break
+			}
+		}
+	}
+	// A source returned directly -- `return $_GET['q'];`, `return
+	// request.args.get("q")` -- binds no variable for the pass to track.
+	if sum.returnsSource == nil {
+		for i := range u.Stmts {
+			st := &u.Stmts[i]
+			if len(st.Returns) == 0 {
+				continue
+			}
+			if src, ok := e.resolveSource(lang, st); ok {
+				sum.returnsSource = &taintInfo{src: src, srcLine: st.Line, cleared: map[taint.VulnClass]bool{}}
+				break
+			}
+		}
+	}
 	for idx, param := range u.Params {
 		// Seed: parameter `param` is tainted by a synthetic "parameter" source.
 		seed := map[string]taintInfo{
@@ -233,6 +263,12 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 func summaryEqual(a, b *funcSummary) bool {
 	if a == nil || b == nil {
 		return a == b
+	}
+	if (a.returnsSource == nil) != (b.returnsSource == nil) {
+		return false
+	}
+	if a.returnsSource != nil && a.returnsSource.src.Call != b.returnsSource.src.Call {
+		return false
 	}
 	if len(a.returnsTaintedIf) != len(b.returnsTaintedIf) {
 		return false

@@ -661,7 +661,16 @@ func containsWord(code, ident string) bool {
 func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement, tainted map[string]taintInfo, summaries map[string]*funcSummary) (taintInfo, bool) {
 	for _, rawCall := range sortedReads(st.Calls) {
 		sum := resolveLocalCallee(rawCall, summaries)
-		if sum == nil || len(sum.returnsTaintedIf) == 0 {
+		if sum == nil {
+			continue
+		}
+		// A getter returns request data whatever it is passed.
+		if sum.returnsSource != nil {
+			ti := cloneTaintInfo(*sum.returnsSource)
+			ti.via = append([]string{sum.name}, ti.via...)
+			return ti, true
+		}
+		if len(sum.returnsTaintedIf) == 0 {
 			continue
 		}
 		info, ok := lookupSinkArg(st, rawCall)
