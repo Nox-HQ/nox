@@ -16,6 +16,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -172,242 +173,253 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 // collects all findings into a deduplicated FindingSet. If any artifact cannot
 // be read, scanning stops and the error is returned.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
+	// Files are independent, so they are scanned on every core; results come
+	// back in artifact order, so the finding set is built exactly as the
+	// sequential loop built it. parallel.Map also honours cancellation between
+	// artifacts: a scan over a large tree can run for a long time, and nothing
+	// inside a file's scan touches ctx.
+	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) ([]findings.Finding, error) {
+		return a.scanArtifact(artifacts[i])
+	})
+	if err != nil {
+		return nil, err
+	}
 	fs := findings.NewFindingSet()
-
-	for _, artifact := range artifacts {
-		// Honour cancellation between artifacts. A scan over a large tree can
-		// run for a long time; without this the analyzer would keep reading
-		// files after the caller's context was cancelled or its deadline
-		// passed, since nothing inside the loop touches ctx.
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	for _, found := range perFile {
+		for i := range found {
+			fs.Add(found[i])
 		}
+	}
+	fs.Deduplicate()
+	return fs, nil
+}
 
-		// Skip lock files, checksums, minified bundles and tool state dirs
-		// wholesale: their content-addressed hashes match both the entropy
-		// rules and the provider-key regexes, producing thousands of false
-		// positives. This mirrors gitleaks / trufflehog / detect-secrets.
-		if isGeneratedSecretsPath(artifact.Path) {
+// scanArtifact scans one file and returns the findings that survive the
+// refiners, in the order they are to be added.
+func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding, error) {
+	var out []findings.Finding
+	// Skip lock files, checksums, minified bundles and tool state dirs
+	// wholesale: their content-addressed hashes match both the entropy
+	// rules and the provider-key regexes, producing thousands of false
+	// positives. This mirrors gitleaks / trufflehog / detect-secrets.
+	if isGeneratedSecretsPath(artifact.Path) {
+		return nil, nil
+	}
+
+	content, err := os.ReadFile(artifact.AbsPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
+	}
+	if strings.EqualFold(filepath.Ext(artifact.Path), ".ipynb") {
+		content = unescapeNotebookQuotes(content)
+	}
+
+	results, err := a.ScanFile(artifact.Path, content)
+	if err != nil {
+		return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
+	}
+
+	// Collapse the provider-rule-vs-generic-rule pileup: when several
+	// secret rules match the SAME token span on a line, keep only the
+	// most-specific (provider) finding and drop the generic entropy/keyword
+	// duplicates. This is the dominant precision drag on real secrets — one
+	// GitHub/Slack/Stripe token otherwise emits 5-8 findings.
+	var deduped []suppression
+	results, deduped = dedupBySpecificity(results, a.spec, content)
+	a.recordSuppressions(artifact.Path, deduped)
+
+	// Drop matches that fall inside an embedded data blob (a base64 SVG, a
+	// data: URI) in a source file — a 32-char run inside such a blob is never
+	// a real credential and is the dominant secret false-positive class. This
+	// only fires on lexable source (Python/JS/TS); comments and ordinary
+	// string literals (where a real hardcoded secret lives) are kept.
+	//
+	// Also drop obvious documentation placeholders ("your-api-key-here",
+	// "changeme", "<...>", "postgres://USER:PASSWORD@host", all-x/all-zero
+	// masks) — these are not live credentials and mirror the
+	// gitleaks/trufflehog/detect-secrets example allowlists.
+	lang := lexctx.LangFromPath(artifact.Path)
+	// Computed once per file, and only for a file that is one: the marker
+	// scan reads at most the first 64 KB and returns nil for everything
+	// else, so a repository with no cassettes pays a substring search.
+	var credentialSpans []byteSpan
+	isRecording := isHTTPRecording(artifact.Path, content)
+	if isRecording {
+		credentialSpans = credentialBearingSpans(content)
+	}
+	for i := range results {
+		// Every drop below records WHY before it drops. The reason is known
+		// only here, and a refiner that discards it produces a result
+		// indistinguishable from one that had nothing to discard — which is
+		// precisely the failure the refutation corpus exists to catch and
+		// the reasoning store exists to make auditable.
+		candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
+			results[i].Location.StartLine, results[i].Location.StartColumn)
+
+		// Almost all of a recorded HTTP exchange is traffic rather than
+		// credential material: response headers and bodies, request
+		// bodies, cookies in either direction. The part that is not is a
+		// request header that authenticates the request, and the request
+		// URI. So an ENTROPY rule — whose whole claim is that some bytes
+		// are random, and a recording is full of random bytes that are not
+		// credentials — is confined to those. Every rule that encodes a
+		// vendor's credential format has established what it found and is
+		// left to fire anywhere in the recording, including a request body,
+		// which is where an OAuth client_secret would sit.
+		if isRecording && entropyOnlyRules[results[i].RuleID] &&
+			!inSpan(credentialSpans, lexctx.LineColToOffset(content,
+				results[i].Location.StartLine, results[i].Location.StartColumn)) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match is high-entropy bytes in a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear — recorded traffic is full of random bytes that are not credentials")
 			continue
 		}
 
-		content, err := os.ReadFile(artifact.AbsPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
+		if inEmbeddedBlob(lang, content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
+			continue
 		}
-		if strings.EqualFold(filepath.Ext(artifact.Path), ".ipynb") {
-			content = unescapeNotebookQuotes(content)
+		// inEmbeddedBlob consults lexctx, which reports LangUnknown for
+		// markup and stylesheets — so an inline `data:` URI in .html/.css/.md
+		// was never covered. The marker is unambiguous in raw bytes.
+		if inDataURIPayload(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match lies inside a data: URI payload")
+			continue
 		}
-
-		results, err := a.ScanFile(artifact.Path, content)
-		if err != nil {
-			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
+		if inBase64ImageString(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match lies inside a string that is a base64-encoded image")
+			continue
 		}
-
-		// Collapse the provider-rule-vs-generic-rule pileup: when several
-		// secret rules match the SAME token span on a line, keep only the
-		// most-specific (provider) finding and drop the generic entropy/keyword
-		// duplicates. This is the dominant precision drag on real secrets — one
-		// GitHub/Slack/Stripe token otherwise emits 5-8 findings.
-		var deduped []suppression
-		results, deduped = dedupBySpecificity(results, a.spec, content)
-		a.recordSuppressions(artifact.Path, deduped)
-
-		// Drop matches that fall inside an embedded data blob (a base64 SVG, a
-		// data: URI) in a source file — a 32-char run inside such a blob is never
-		// a real credential and is the dominant secret false-positive class. This
-		// only fires on lexable source (Python/JS/TS); comments and ordinary
-		// string literals (where a real hardcoded secret lives) are kept.
-		//
-		// Also drop obvious documentation placeholders ("your-api-key-here",
-		// "changeme", "<...>", "postgres://USER:PASSWORD@host", all-x/all-zero
-		// masks) — these are not live credentials and mirror the
-		// gitleaks/trufflehog/detect-secrets example allowlists.
-		lang := lexctx.LangFromPath(artifact.Path)
-		// Computed once per file, and only for a file that is one: the marker
-		// scan reads at most the first 64 KB and returns nil for everything
-		// else, so a repository with no cassettes pays a substring search.
-		var credentialSpans []byteSpan
-		isRecording := isHTTPRecording(artifact.Path, content)
-		if isRecording {
-			credentialSpans = credentialBearingSpans(content)
+		if inModelCiphertext(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match lies inside ciphertext a model API issued (a thinking signature or encrypted reasoning)")
+			continue
 		}
-		for i := range results {
-			// Every drop below records WHY before it drops. The reason is known
-			// only here, and a refiner that discards it produces a result
-			// indistinguishable from one that had nothing to discard — which is
-			// precisely the failure the refutation corpus exists to catch and
-			// the reasoning store exists to make auditable.
-			candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
-				results[i].Location.StartLine, results[i].Location.StartColumn)
-
-			// Almost all of a recorded HTTP exchange is traffic rather than
-			// credential material: response headers and bodies, request
-			// bodies, cookies in either direction. The part that is not is a
-			// request header that authenticates the request, and the request
-			// URI. So an ENTROPY rule — whose whole claim is that some bytes
-			// are random, and a recording is full of random bytes that are not
-			// credentials — is confined to those. Every rule that encodes a
-			// vendor's credential format has established what it found and is
-			// left to fire anywhere in the recording, including a request body,
-			// which is where an OAuth client_secret would sit.
-			if isRecording && entropyOnlyRules[results[i].RuleID] &&
-				!inSpan(credentialSpans, lexctx.LineColToOffset(content,
-					results[i].Location.StartLine, results[i].Location.StartColumn)) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match is high-entropy bytes in a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear — recorded traffic is full of random bytes that are not credentials")
-				continue
-			}
-
-			if inEmbeddedBlob(lang, content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
-				continue
-			}
-			// inEmbeddedBlob consults lexctx, which reports LangUnknown for
-			// markup and stylesheets — so an inline `data:` URI in .html/.css/.md
-			// was never covered. The marker is unambiguous in raw bytes.
-			if inDataURIPayload(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match lies inside a data: URI payload")
-				continue
-			}
-			if inBase64ImageString(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match lies inside a string that is a base64-encoded image")
-				continue
-			}
-			if inModelCiphertext(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match lies inside ciphertext a model API issued (a thinking signature or encrypted reasoning)")
-				continue
-			}
-			// Drop a bare provider-prefix match with no token body — the literal
-			// `"glpat-"` or the `sk_live_` inside a `// prefix (ghp_, sk_live_, …)`
-			// comment that a pattern-vocabulary file must name. A live credential
-			// always carries a 20+ char high-entropy body; a match that is only the
-			// prefix is a reference, never a leaked secret. This is deliberately
-			// narrower than dropping every comment/string match: a FULL token in a
-			// comment (a genuinely leaked credential) is still kept, because its
-			// matched value is more than the bare prefix.
-			if isBareProviderPrefix(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match is a bare provider prefix with no token body; a live credential always carries a 20+ character high-entropy body")
-				continue
-			}
-			if isPlaceholderFinding(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the matched VALUE is a documentation placeholder, read from the literal rather than inferred from the identifier")
-				continue
-			}
-			// A reference to where the secret lives is what the remediation
-			// for a hardcoded secret tells you to write. See reference.go for
-			// why only a value that is ENTIRELY a reference qualifies.
-			if isReferenceFinding(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the matched value is entirely a reference to where the secret is stored — a template variable, a secret-manager lookup or an environment interpolation with no literal fallback — not the secret itself")
-				continue
-			}
-			// A vendor-binding rule's value that runs on into a call, an
-			// attribute or an index is a code identifier's prefix, not a
-			// credential. See binding.go.
-			if continuesAsIdentifier(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the matched value is the start of a code identifier that continues into a call, attribute or index; a credential ends where it is written")
-				continue
-			}
-			// A secret shown inside a display-text HTML/JSX attribute
-			// (`placeholder=`, `aria-label=`, `title=`) is the instruction
-			// telling a user what to paste, not key material the repository
-			// holds.
-			if inDisplayTextAttribute(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match sits in a display-text HTML/JSX attribute, so it is the instruction telling a user what to paste, not key material this repository holds")
-				continue
-			}
-			// An assignment-shaped config-field rule that matched inside a
-			// comment found prose describing a field, not a field being
-			// assigned. Provider rules are untouched — a full token in a
-			// comment is a real leak.
-			// A hex value the document labels as a digest is a digest, and a
-			// hex run inside a URL path is how that URL names something. See
-			// hexlabel.go: between them they account for 121 of the 122
-			// SEC-163 findings measured across the rule-diff corpus.
-			if isLabelledDigest(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the value is labelled as a digest by the field or variable it sits under, so it is the output of a hash function rather than key material; entropy cannot tell the two apart because both are uniform over the same 16 symbols")
-				continue
-			}
-			if inURLPath(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the hex run is a path segment of a URL, so it is how that URL names a resource rather than a credential the repository holds")
-				continue
-			}
-			if dropConfigFieldRuleInComment(lang, content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
-				continue
-			}
-			a.corroborate(candidate, content, &results[i])
-			fs.Add(results[i])
+		// Drop a bare provider-prefix match with no token body — the literal
+		// `"glpat-"` or the `sk_live_` inside a `// prefix (ghp_, sk_live_, …)`
+		// comment that a pattern-vocabulary file must name. A live credential
+		// always carries a 20+ char high-entropy body; a match that is only the
+		// prefix is a reference, never a leaked secret. This is deliberately
+		// narrower than dropping every comment/string match: a FULL token in a
+		// comment (a genuinely leaked credential) is still kept, because its
+		// matched value is more than the bare prefix.
+		if isBareProviderPrefix(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match is a bare provider prefix with no token body; a live credential always carries a 20+ character high-entropy body")
+			continue
 		}
-
-		// Scan decoded base64/hex content for encoded secrets.
-		//
-		// A decoded finding does not go through the refiners above, and they
-		// split into two kinds that must not be confused:
-		//
-		//   - The POSITIONAL ones (embedded blob, data: URI) must never apply.
-		//     Every decoded finding sits inside an encoded segment by
-		//     construction, so asking "is this inside a blob?" answers yes for
-		//     all of them and would delete the decode feature outright.
-		//     DecodeAndScan has its own blob check instead (decodedIsBlob),
-		//     asked of the decoded bytes rather than their position.
-		//
-		//   - The VALUE ones (placeholder, bare provider prefix) ask about the
-		//     matched value, which is answerable from the decoded plaintext —
-		//     but only before relocation, since afterwards the location names
-		//     base64 text. They are not applied, and that is an inconsistency:
-		//     `AWS_SECRET_ACCESS_KEY = "xxxx…"` is refuted as a placeholder in
-		//     plaintext and reported as SEC-002 CRITICAL when base64-wrapped.
-		//
-		// Measured 2026-09-26 across all 25 rule-diff corpus entries: the
-		// decode path produces findings in exactly one place, crewAI's
-		// cassettes (107), and the recording gate below drops every one. No
-		// decoded finding reaches output anywhere in the corpus, and none is a
-		// placeholder or a bare prefix. So the inconsistency is real on a
-		// constructed input and inert on 25 real repositories, which is why it
-		// is written down here rather than closed with a mechanism nothing
-		// exercises. If a decoded placeholder is ever reported, the fix is to
-		// ask isPlaceholderFinding and isBareProviderPrefix of the decoded
-		// bytes inside DecodeAndScan, before relocateToSegment — no new
-		// judgement, just the plaintext verdict extended to the same value.
-		//
-		// The recording gate IS applied, because it is the one filter that asks
-		// a question the relocation preserves the answer to: the encoding
-		// segment's position in the document is exactly what decides whether
-		// this is a request header or recorded traffic.
-		//
-		// It found 107 findings the gate had otherwise missed on crewAI — base64
-		// OpenTelemetry payloads in cassette request bodies, decoded, scanned,
-		// and relocated back onto the body they came from.
-		decodedResults := DecodeAndScan(content, artifact.Path, a.engine)
-		for i := range decodedResults {
-			if isRecording && entropyOnlyRules[decodedResults[i].RuleID] &&
-				!inSpan(credentialSpans, lexctx.LineColToOffset(content,
-					decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn)) {
-				a.refute(reasoning.Candidate(decodedResults[i].RuleID, artifact.Path,
-					decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn),
-					evidence.KindStatic,
-					"the match is high-entropy bytes decoded out of a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear")
-				continue
-			}
-			fs.Add(decodedResults[i])
+		if isPlaceholderFinding(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the matched VALUE is a documentation placeholder, read from the literal rather than inferred from the identifier")
+			continue
 		}
+		// A reference to where the secret lives is what the remediation
+		// for a hardcoded secret tells you to write. See reference.go for
+		// why only a value that is ENTIRELY a reference qualifies.
+		if isReferenceFinding(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the matched value is entirely a reference to where the secret is stored — a template variable, a secret-manager lookup or an environment interpolation with no literal fallback — not the secret itself")
+			continue
+		}
+		// A vendor-binding rule's value that runs on into a call, an
+		// attribute or an index is a code identifier's prefix, not a
+		// credential. See binding.go.
+		if continuesAsIdentifier(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the matched value is the start of a code identifier that continues into a call, attribute or index; a credential ends where it is written")
+			continue
+		}
+		// A secret shown inside a display-text HTML/JSX attribute
+		// (`placeholder=`, `aria-label=`, `title=`) is the instruction
+		// telling a user what to paste, not key material the repository
+		// holds.
+		if inDisplayTextAttribute(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match sits in a display-text HTML/JSX attribute, so it is the instruction telling a user what to paste, not key material this repository holds")
+			continue
+		}
+		// An assignment-shaped config-field rule that matched inside a
+		// comment found prose describing a field, not a field being
+		// assigned. Provider rules are untouched — a full token in a
+		// comment is a real leak.
+		// A hex value the document labels as a digest is a digest, and a
+		// hex run inside a URL path is how that URL names something. See
+		// hexlabel.go: between them they account for 121 of the 122
+		// SEC-163 findings measured across the rule-diff corpus.
+		if isLabelledDigest(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the value is labelled as a digest by the field or variable it sits under, so it is the output of a hash function rather than key material; entropy cannot tell the two apart because both are uniform over the same 16 symbols")
+			continue
+		}
+		if inURLPath(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the hex run is a path segment of a URL, so it is how that URL names a resource rather than a credential the repository holds")
+			continue
+		}
+		if dropConfigFieldRuleInComment(lang, content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
+			continue
+		}
+		a.corroborate(candidate, content, &results[i])
+		out = append(out, results[i])
 	}
 
-	fs.Deduplicate()
-	return fs, nil
+	// Scan decoded base64/hex content for encoded secrets.
+	//
+	// A decoded finding does not go through the refiners above, and they
+	// split into two kinds that must not be confused:
+	//
+	//   - The POSITIONAL ones (embedded blob, data: URI) must never apply.
+	//     Every decoded finding sits inside an encoded segment by
+	//     construction, so asking "is this inside a blob?" answers yes for
+	//     all of them and would delete the decode feature outright.
+	//     DecodeAndScan has its own blob check instead (decodedIsBlob),
+	//     asked of the decoded bytes rather than their position.
+	//
+	//   - The VALUE ones (placeholder, bare provider prefix) ask about the
+	//     matched value, which is answerable from the decoded plaintext —
+	//     but only before relocation, since afterwards the location names
+	//     base64 text. They are not applied, and that is an inconsistency:
+	//     `AWS_SECRET_ACCESS_KEY = "xxxx…"` is refuted as a placeholder in
+	//     plaintext and reported as SEC-002 CRITICAL when base64-wrapped.
+	//
+	// Measured 2026-09-26 across all 25 rule-diff corpus entries: the
+	// decode path produces findings in exactly one place, crewAI's
+	// cassettes (107), and the recording gate below drops every one. No
+	// decoded finding reaches output anywhere in the corpus, and none is a
+	// placeholder or a bare prefix. So the inconsistency is real on a
+	// constructed input and inert on 25 real repositories, which is why it
+	// is written down here rather than closed with a mechanism nothing
+	// exercises. If a decoded placeholder is ever reported, the fix is to
+	// ask isPlaceholderFinding and isBareProviderPrefix of the decoded
+	// bytes inside DecodeAndScan, before relocateToSegment — no new
+	// judgement, just the plaintext verdict extended to the same value.
+	//
+	// The recording gate IS applied, because it is the one filter that asks
+	// a question the relocation preserves the answer to: the encoding
+	// segment's position in the document is exactly what decides whether
+	// this is a request header or recorded traffic.
+	//
+	// It found 107 findings the gate had otherwise missed on crewAI — base64
+	// OpenTelemetry payloads in cassette request bodies, decoded, scanned,
+	// and relocated back onto the body they came from.
+	decodedResults := DecodeAndScan(content, artifact.Path, a.engine)
+	for i := range decodedResults {
+		if isRecording && entropyOnlyRules[decodedResults[i].RuleID] &&
+			!inSpan(credentialSpans, lexctx.LineColToOffset(content,
+				decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn)) {
+			a.refute(reasoning.Candidate(decodedResults[i].RuleID, artifact.Path,
+				decodedResults[i].Location.StartLine, decodedResults[i].Location.StartColumn),
+				evidence.KindStatic,
+				"the match is high-entropy bytes decoded out of a recorded HTTP exchange, outside the request headers and URI where a credential this repository holds would appear")
+			continue
+		}
+		out = append(out, decodedResults[i])
+	}
+	return out, nil
 }
 
 // isPlaceholderFinding reports whether a finding's matched value is an obvious

@@ -16,6 +16,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/rules/structural"
@@ -413,27 +414,33 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	index := structural.NewIndex()
 	contents := make(map[string][]byte, len(artifacts))
 
-	var collected []findings.Finding
-	for _, artifact := range artifacts {
-		// Honour cancellation between artifacts — see the note in the secrets
-		// analyzer: nothing else in this loop consults ctx.
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
+	// Files are read and scanned on every core (see core/parallel, which also
+	// honours cancellation between artifacts); the index and the collected
+	// findings are then built in artifact order, as the sequential loop did.
+	type scanned struct {
+		content []byte
+		results []findings.Finding
+	}
+	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) (scanned, error) {
+		artifact := artifacts[i]
 		content, err := os.ReadFile(artifact.AbsPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
+			return scanned{}, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}
-
 		results, err := a.ScanFile(artifact.Path, content)
 		if err != nil {
-			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
+			return scanned{}, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
-
-		index.Add(artifact.Path, content)
-		contents[artifact.Path] = content
-		collected = append(collected, results...)
+		return scanned{content, results}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var collected []findings.Finding
+	for i, artifact := range artifacts {
+		index.Add(artifact.Path, perFile[i].content)
+		contents[artifact.Path] = perFile[i].content
+		collected = append(collected, perFile[i].results...)
 	}
 
 	collected = a.refuteCompanionsFoundInOtherFiles(index, contents, collected)

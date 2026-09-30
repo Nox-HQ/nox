@@ -497,6 +497,20 @@
       "id": "java-taint-branch-model-and-constant-condition-pruning",
       "title": "Java taint: branch model and constant-condition pruning",
       "description": "The Java extractor has no branch model: the last assignment wins, there is no weak update in an if/else or switch, and no constant-condition pruning (Python got both, #757). On the OWASP Benchmark for Java, constant conditions and constant switches account for 98 of 204 false positives in sqli/cmdi/xss/pathtraver after the JDBC catalog fix; list-index and map-key idioms (key-sensitive containers) are most of the rest. Needs Java block structure (brace-less if/else, switch with fall-through, ternaries) before the Python evaluator can be reused. Measure on Kafka/Keycloak/Jenkins and the GitHub servlet sample, as the JDBC fix was.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "competitive-scan-speed",
+      "title": "Competitive scan speed",
+      "description": "nox was the slowest tool per scan in the 2026-09-27 head-to-head (1,466 s on seven repositories against Semgrep's 959 s). Measured at v1.46.0 offline: 988 s, with llama_index and vercel/ai running on one core because each analyzer walked its files sequentially and the secrets analyzer was the long pole. Goal: per-scan wall time at or below Semgrep p/default on the same corpus, with findings byte-identical (fingerprints included) before and after every speed change. Published as a benchmark with wall time, CPU and peak memory per tool.",
+      "requirements": [],
+      "source": {}
+    },
+    {
+      "id": "per-language-labelled-benchmark-accuracy",
+      "title": "Per-language labelled benchmark accuracy",
+      "description": "Python (56.1) and Java (48.2) are measured on the OWASP Benchmarks. Every other taint language is unmeasured. Measure each language on the best neutral labelled suite that exists, scored per CWE as Youden's index against Semgrep p/default: Go on flawgarden go-owasp-converted (1,513 OWASP-style cases, pinned at 985fb705), PHP on NIST SARD PHP Vulnerability Test Suite (42,212 cases), C# on NIST Juliet C# 1.3 with vulnomicon truth.sarif. JavaScript/TypeScript, Ruby, Rust and Swift have only vendor-authored fixtures (CodeQL); those are reported separately and labelled as bias risk. Kotlin and Scala have no labelled suite. Close the gaps each measurement shows, with every change also measured on real repositories and no rule removed.",
       "requirements": null,
       "source": {}
     }

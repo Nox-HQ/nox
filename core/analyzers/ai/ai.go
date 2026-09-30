@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/source"
 
 	"github.com/nox-hq/nox-core/degrade"
@@ -244,174 +245,35 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	fs := findings.NewFindingSet()
 	inv := NewInventory()
 
-	for _, artifact := range artifacts {
-		// Honour cancellation between artifacts — see the note in the secrets
-		// analyzer: nothing else in this loop consults ctx.
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-
-		content, err := os.ReadFile(artifact.AbsPath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
-		}
-
-		// Skip machine-generated / minified blobs: a `.ts` file whose body is
-		// a 1.4 MB minified bundle (e.g. vite build output embedded as a string
-		// export) is not human-authored AI code, and the path-glob filter can't
-		// catch it by name. Content rules (AI-*, MCP-*) only produce noise here;
-		// dependency/secrets analyzers run separately and are unaffected.
-		if source.IsGenerated(content) {
+	// Files are scanned on every core (see core/parallel, which also honours
+	// cancellation between artifacts). Each file's findings and inventory
+	// contributions are then merged in artifact order, exactly as the
+	// sequential loop merged them: the inventory's model merge depends on it.
+	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) (*fileScan, error) {
+		return a.scanArtifact(artifacts[i])
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, out := range perFile {
+		if out == nil {
 			continue
 		}
-
-		// Scan for AI security rule violations.
-		results, err := a.ScanFile(artifact.Path, content)
-		if err != nil {
-			return nil, nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
+		for i := range out.findings {
+			fs.Add(out.findings[i])
 		}
-		// Drop matches that land in a comment or a data-blob string in lexable
-		// source: an AI/MCP code pattern quoted in a comment or embedded in a
-		// base64 blob is not executing code, so it's noise (this is the AI-012
-		// -on-changelog-prose false-positive class). Unlike the secrets analyzer,
-		// comments are dropped here because a code pattern in a comment is never a
-		// real code path.
-		lang := lexctx.LangFromPath(artifact.Path)
-		for i := range results {
-			// Each drop below records WHY before it drops, exactly as the
-			// secrets refiners do. The kinds differ and the difference is the
-			// point: a lexer region is deterministic, a proximity check is not,
-			// and a ledger that called them both the same thing would be
-			// asserting more than either established.
-			candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
-				results[i].Location.StartLine, results[i].Location.StartColumn)
-
-			if suppressNonCode(lang, content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the match lies outside code — in a comment, a string literal or an embedded blob")
-				continue
-			}
-			// MCP-009/010 report tool metadata. A phrase that is the value of
-			// an agent's input is a test of an injection defence, not metadata;
-			// see isAgentInputValue for why this is structural, not proximate.
-			if (results[i].RuleID == "MCP-009" || results[i].RuleID == "MCP-010") &&
-				isAgentInputValue(content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"the phrase is the value of an agent's input, not tool metadata")
-				continue
-			}
-			// AI-002 (prompt string concatenation of user input) fires on any
-			// interpolated-format-string-plus-user-variable shape, but that shape
-			// is just as common in a parameterised SQL call as in a real prompt.
-			// Require an actual prompt/LLM context near the match so a
-			// parameterised SQL execute call isn't reported as prompt injection.
-			if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
-				// Heuristic, not static: this is a proximity check over
-				// surrounding text, and calling it deterministic would claim
-				// the analysis established something it only estimated.
-				a.refute(candidate, evidence.KindHeuristic,
-					"no prompt or LLM context near the match, so the interpolation is not a prompt")
-				continue
-			}
-			// AI-006 asserts that a prompt or LLM response reaches a log
-			// (CWE-532). A call whose arguments are all constant text logs no
-			// value at all, so the word "prompt" in its message is a sentence,
-			// not a leak — see logsOnlyConstantText.
-			if results[i].RuleID == "AI-006" && logsOnlyConstantText(lang, content, &results[i]) {
-				a.refute(candidate, evidence.KindStatic,
-					"every argument to the logging call is constant text, so the call logs no value and there is no prompt to leak")
-				continue
-			}
-			// The lexical check above sees text, not meaning: an argument that
-			// is a NAME is code, so `fmt.Print(bashCompletion)` reads as a value
-			// being logged even when that name is bound by `const`. Resolving
-			// the name answers what lexing cannot — a compile-time constant is
-			// fixed before the program runs, so it cannot hold a runtime prompt
-			// or a model response.
-			//
-			// Only a DETERMINED constant refutes. An unresolved name, a var, a
-			// language with no evaluator: all stay reported, because refuting
-			// drops a finding and "I could not tell" is not "there is nothing
-			// here".
-			if results[i].RuleID == "AI-006" {
-				offset := lexctx.LineColToOffset(content, results[i].Location.StartLine, results[i].Location.StartColumn)
-				if r := consteval.CallArgumentsAreConstant(artifact.Path, content, offset); r.Determined && r.Constant {
-					// The evidence kind follows the BASIS, because the two are
-					// not the same fact. A language keyword (`const`, `final`,
-					// `val`) makes immutability a property of the program and
-					// the claim static. Python and Ruby have no such keyword,
-					// so the answer rests on the name being bound once under a
-					// naming convention — real, checkable, and weaker. Filing
-					// the second as static would put a keyword's certainty
-					// behind a convention.
-					kind, why := evidence.KindStatic,
-						"every argument to the logging call is declared immutable, so the call cannot carry a runtime prompt or model response"
-					if r.Basis == consteval.BasisSingleBinding {
-						kind, why = evidence.KindHeuristic,
-							"every argument to the logging call is bound once in this file, to a literal, under the language's constant naming convention, so the call carries no runtime prompt or model response"
-					}
-					a.refute(candidate, kind, why)
-					continue
-				}
-			}
-			// AI-049 asserts an eval/code-execution sink (CWE-95). A call
-			// executing a SQL statement is a database sink, and the AI token
-			// the rule gated on is a column name inside the query text — see
-			// isSQLStatementExec.
-			if results[i].RuleID == "AI-049" && isSQLStatementExec(content, &results[i]) {
-				a.refute(candidate, evidence.KindHeuristic,
-					"the call executes a SQL statement, so the AI token the rule gated on is a column name inside the query text")
-				continue
-			}
-			// Survived every refiner above. Record what that means: the match
-			// was inspected and is in real code, and for the rules with a
-			// context requirement, that the context nox required was present.
-			a.corroborate(candidate, "the match was inspected and lies in code, not in a comment, string literal or embedded blob")
-			switch results[i].RuleID {
-			case "AI-002":
-				a.corroborate(candidate, "a prompt or LLM context was found near the interpolation, so it is a prompt rather than an unrelated formatted string")
-			case "AI-006":
-				a.corroborate(candidate, "the logging call carries a non-constant argument, so it logs a value that could be a prompt or response")
-			case "AI-049":
-				a.corroborate(candidate, "the call is a code-execution sink rather than a SQL statement whose AI token is a column name")
-			}
-			fs.Add(results[i])
+		if !out.inventory {
+			continue
 		}
-
-		// Agent tool-use lattice (OWASP LLM06 Excessive Agency): detect dangerous tool
-		// combinations registered in the same source file.
-		latticeFindings := scanAgentLattice(artifact.Path, content)
-		for i := range latticeFindings {
-			fs.Add(latticeFindings[i])
+		for _, c := range out.components {
+			inv.Add(c)
 		}
-
-		// Extract inventory entries. AIComponent artifacts (prompts/, agents/,
-		// mcp.json, *.prompt) get full extraction. Non-AIComponent source
-		// files participate too when their content contains an AI SDK
-		// marker — this catches the common case of LLM/embedding calls
-		// scattered throughout a polyglot service codebase.
-		isAIComp := artifact.Type == discovery.AIComponent
-		if isAIComp || (isSourceFile(artifact.Path) && isLikelyAIContent(content)) {
-			if isAIComp {
-				for _, c := range extractComponents(artifact.Path, content) {
-					inv.Add(c)
-				}
-			}
-
-			inv.AddModels(extractModelReferences(artifact.Path, content))
-			inv.PromptTemplates = append(inv.PromptTemplates, extractPromptTemplates(artifact.Path, content)...)
-			inv.ToolMatrix = append(inv.ToolMatrix, extractToolPermissions(artifact.Path, content, a.deg)...)
-
-			// Polyglot SDK invocation discovery — captures `client.chat.
-			// completions.create(model="gpt-4o")` style call sites that
-			// extractModelReferences misses. The two overlap more often than
-			// "misses" suggests: `model="gpt-4o"` satisfies the config pattern
-			// here and the invocation pattern there, so these merge into the
-			// existing entry rather than appending a second one.
-			inv.AddModels(extractSDKInvocations(artifact.Path, content))
-			for _, comp := range extractFrameworkComponents(artifact.Path, content) {
-				inv.Add(comp)
-			}
+		inv.AddModels(out.models)
+		inv.PromptTemplates = append(inv.PromptTemplates, out.prompts...)
+		inv.ToolMatrix = append(inv.ToolMatrix, out.tools...)
+		inv.AddModels(out.sdkModels)
+		for _, comp := range out.frameworks {
+			inv.Add(comp)
 		}
 	}
 
@@ -420,6 +282,181 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, inv, nil
+}
+
+// fileScan is one file's contribution to the AI scan: its findings, and what it
+// adds to the inventory when it is an AI component or AI-bearing source.
+type fileScan struct {
+	findings   []findings.Finding
+	inventory  bool
+	components []Component
+	models     []ModelReference
+	prompts    []PromptTemplate
+	tools      []ToolPermissionSet
+	sdkModels  []ModelReference
+	frameworks []Component
+}
+
+// scanArtifact scans one file. It returns nil for a file it skips.
+func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) {
+	out := &fileScan{}
+	content, err := os.ReadFile(artifact.AbsPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
+	}
+
+	// Skip machine-generated / minified blobs: a `.ts` file whose body is
+	// a 1.4 MB minified bundle (e.g. vite build output embedded as a string
+	// export) is not human-authored AI code, and the path-glob filter can't
+	// catch it by name. Content rules (AI-*, MCP-*) only produce noise here;
+	// dependency/secrets analyzers run separately and are unaffected.
+	if source.IsGenerated(content) {
+		return nil, nil
+	}
+
+	// Scan for AI security rule violations.
+	results, err := a.ScanFile(artifact.Path, content)
+	if err != nil {
+		return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
+	}
+	// Drop matches that land in a comment or a data-blob string in lexable
+	// source: an AI/MCP code pattern quoted in a comment or embedded in a
+	// base64 blob is not executing code, so it's noise (this is the AI-012
+	// -on-changelog-prose false-positive class). Unlike the secrets analyzer,
+	// comments are dropped here because a code pattern in a comment is never a
+	// real code path.
+	lang := lexctx.LangFromPath(artifact.Path)
+	for i := range results {
+		// Each drop below records WHY before it drops, exactly as the
+		// secrets refiners do. The kinds differ and the difference is the
+		// point: a lexer region is deterministic, a proximity check is not,
+		// and a ledger that called them both the same thing would be
+		// asserting more than either established.
+		candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
+			results[i].Location.StartLine, results[i].Location.StartColumn)
+
+		if suppressNonCode(lang, content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the match lies outside code — in a comment, a string literal or an embedded blob")
+			continue
+		}
+		// MCP-009/010 report tool metadata. A phrase that is the value of
+		// an agent's input is a test of an injection defence, not metadata;
+		// see isAgentInputValue for why this is structural, not proximate.
+		if (results[i].RuleID == "MCP-009" || results[i].RuleID == "MCP-010") &&
+			isAgentInputValue(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the phrase is the value of an agent's input, not tool metadata")
+			continue
+		}
+		// AI-002 (prompt string concatenation of user input) fires on any
+		// interpolated-format-string-plus-user-variable shape, but that shape
+		// is just as common in a parameterised SQL call as in a real prompt.
+		// Require an actual prompt/LLM context near the match so a
+		// parameterised SQL execute call isn't reported as prompt injection.
+		if results[i].RuleID == "AI-002" && !hasPromptContext(content, &results[i]) {
+			// Heuristic, not static: this is a proximity check over
+			// surrounding text, and calling it deterministic would claim
+			// the analysis established something it only estimated.
+			a.refute(candidate, evidence.KindHeuristic,
+				"no prompt or LLM context near the match, so the interpolation is not a prompt")
+			continue
+		}
+		// AI-006 asserts that a prompt or LLM response reaches a log
+		// (CWE-532). A call whose arguments are all constant text logs no
+		// value at all, so the word "prompt" in its message is a sentence,
+		// not a leak — see logsOnlyConstantText.
+		if results[i].RuleID == "AI-006" && logsOnlyConstantText(lang, content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"every argument to the logging call is constant text, so the call logs no value and there is no prompt to leak")
+			continue
+		}
+		// The lexical check above sees text, not meaning: an argument that
+		// is a NAME is code, so `fmt.Print(bashCompletion)` reads as a value
+		// being logged even when that name is bound by `const`. Resolving
+		// the name answers what lexing cannot — a compile-time constant is
+		// fixed before the program runs, so it cannot hold a runtime prompt
+		// or a model response.
+		//
+		// Only a DETERMINED constant refutes. An unresolved name, a var, a
+		// language with no evaluator: all stay reported, because refuting
+		// drops a finding and "I could not tell" is not "there is nothing
+		// here".
+		if results[i].RuleID == "AI-006" {
+			offset := lexctx.LineColToOffset(content, results[i].Location.StartLine, results[i].Location.StartColumn)
+			if r := consteval.CallArgumentsAreConstant(artifact.Path, content, offset); r.Determined && r.Constant {
+				// The evidence kind follows the BASIS, because the two are
+				// not the same fact. A language keyword (`const`, `final`,
+				// `val`) makes immutability a property of the program and
+				// the claim static. Python and Ruby have no such keyword,
+				// so the answer rests on the name being bound once under a
+				// naming convention — real, checkable, and weaker. Filing
+				// the second as static would put a keyword's certainty
+				// behind a convention.
+				kind, why := evidence.KindStatic,
+					"every argument to the logging call is declared immutable, so the call cannot carry a runtime prompt or model response"
+				if r.Basis == consteval.BasisSingleBinding {
+					kind, why = evidence.KindHeuristic,
+						"every argument to the logging call is bound once in this file, to a literal, under the language's constant naming convention, so the call carries no runtime prompt or model response"
+				}
+				a.refute(candidate, kind, why)
+				continue
+			}
+		}
+		// AI-049 asserts an eval/code-execution sink (CWE-95). A call
+		// executing a SQL statement is a database sink, and the AI token
+		// the rule gated on is a column name inside the query text — see
+		// isSQLStatementExec.
+		if results[i].RuleID == "AI-049" && isSQLStatementExec(content, &results[i]) {
+			a.refute(candidate, evidence.KindHeuristic,
+				"the call executes a SQL statement, so the AI token the rule gated on is a column name inside the query text")
+			continue
+		}
+		// Survived every refiner above. Record what that means: the match
+		// was inspected and is in real code, and for the rules with a
+		// context requirement, that the context nox required was present.
+		a.corroborate(candidate, "the match was inspected and lies in code, not in a comment, string literal or embedded blob")
+		switch results[i].RuleID {
+		case "AI-002":
+			a.corroborate(candidate, "a prompt or LLM context was found near the interpolation, so it is a prompt rather than an unrelated formatted string")
+		case "AI-006":
+			a.corroborate(candidate, "the logging call carries a non-constant argument, so it logs a value that could be a prompt or response")
+		case "AI-049":
+			a.corroborate(candidate, "the call is a code-execution sink rather than a SQL statement whose AI token is a column name")
+		}
+		out.findings = append(out.findings, results[i])
+	}
+
+	// Agent tool-use lattice (OWASP LLM06 Excessive Agency): detect dangerous tool
+	// combinations registered in the same source file.
+	out.findings = append(out.findings, scanAgentLattice(artifact.Path, content)...)
+
+	// Extract inventory entries. AIComponent artifacts (prompts/, agents/,
+	// mcp.json, *.prompt) get full extraction. Non-AIComponent source
+	// files participate too when their content contains an AI SDK
+	// marker — this catches the common case of LLM/embedding calls
+	// scattered throughout a polyglot service codebase.
+	isAIComp := artifact.Type == discovery.AIComponent
+	if isAIComp || (isSourceFile(artifact.Path) && isLikelyAIContent(content)) {
+		out.inventory = true
+		if isAIComp {
+			out.components = extractComponents(artifact.Path, content)
+		}
+
+		out.models = extractModelReferences(artifact.Path, content)
+		out.prompts = extractPromptTemplates(artifact.Path, content)
+		out.tools = extractToolPermissions(artifact.Path, content, a.deg)
+
+		// Polyglot SDK invocation discovery — captures `client.chat.
+		// completions.create(model="gpt-4o")` style call sites that
+		// extractModelReferences misses. The two overlap more often than
+		// "misses" suggests: `model="gpt-4o"` satisfies the config pattern
+		// here and the invocation pattern there, so these merge into the
+		// existing entry rather than appending a second one.
+		out.sdkModels = extractSDKInvocations(artifact.Path, content)
+		out.frameworks = extractFrameworkComponents(artifact.Path, content)
+	}
+	return out, nil
 }
 
 // extractComponents inspects the content of an AI component artifact and

@@ -15,6 +15,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -192,30 +193,29 @@ func precededByDecimalPoint(content []byte, lineStarts []int, f findings.Finding
 // data patterns, and collects all findings into a deduplicated FindingSet. If
 // any artifact cannot be read, scanning stops and the error is returned.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
-	fs := findings.NewFindingSet()
-
-	for _, artifact := range artifacts {
-		// Honour cancellation between artifacts — see the note in the secrets
-		// analyzer: nothing else in this loop consults ctx.
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
+	// Files are scanned on every core and collected in artifact order; see
+	// core/parallel. parallel.Map also honours cancellation between artifacts.
+	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) ([]findings.Finding, error) {
+		artifact := artifacts[i]
 		content, err := os.ReadFile(artifact.AbsPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading artifact %s: %w", artifact.Path, err)
 		}
-
 		results, err := a.ScanFile(artifact.Path, content)
 		if err != nil {
 			return nil, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
-
+		return results, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	fs := findings.NewFindingSet()
+	for _, results := range perFile {
 		for i := range results {
 			fs.Add(results[i])
 		}
 	}
-
 	fs.Deduplicate()
 	return fs, nil
 }

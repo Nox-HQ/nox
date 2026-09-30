@@ -3,6 +3,107 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-89",
+      "title": "Analyzers scan files on every core",
+      "description": "Per-file work in secrets, AI, IaC and data analyzers runs through an ordered bounded worker pool (core/parallel.Map); results merged in artifact order so findings and fingerprints are identical. Race-detector scan and seven-repo equality check.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "competitive-scan-speed",
+      "source": {}
+    },
+    {
+      "id": "task-90",
+      "title": "Per-rule regex cost after parallelism",
+      "description": "Re-profile the seven repositories after task-89; fix the costliest rules with exact transformations (keyword tokens, literal-prefix plans) and prove identical findings.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-89"
+      ],
+      "feature_id": "competitive-scan-speed",
+      "source": {}
+    },
+    {
+      "id": "task-91",
+      "title": "Speed benchmark against Semgrep, gitleaks, TruffleHog",
+      "description": "Publish wall time, CPU and peak memory per tool on the seven pinned repositories, nox offline and online.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-89",
+        "task-90"
+      ],
+      "feature_id": "competitive-scan-speed",
+      "source": {}
+    },
+    {
+      "id": "task-92",
+      "title": "Go: go-owasp-converted benchmark and gaps",
+      "description": "Score nox and Semgrep on flawgarden go-owasp-converted @985fb705 per CWE; close the largest gaps; measure every change on real Go repositories.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
+      "id": "task-93",
+      "title": "PHP: SARD PHP Vulnerability Test Suite and gaps",
+      "description": "Score nox and Semgrep on the 42,212 SARD PHP cases per CWE, split by input kind (HTTP request vs file/command output); close the gaps.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
+      "id": "task-94",
+      "title": "C#: Juliet C# 1.3 and gaps",
+      "description": "Score function-region level with vulnomicon truth.sarif on the injection and crypto CWEs; close the gaps.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": [],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
+      "id": "task-95",
+      "title": "JavaScript/TypeScript: CodeQL fixtures (bias-labelled)",
+      "description": "Score on CodeQL JS Security/CWE-* fixtures (Express handlers) line-level, reported separately as vendor-authored; close gaps that also hold on real Node repositories.",
+      "priority": "medium",
+      "estimate": "L",
+      "depends_on": [],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
+      "id": "task-96",
+      "title": "Ruby, Rust, Swift: CodeQL fixtures smoke scores",
+      "description": "Score on CodeQL fixtures, reported as vendor-authored and small.",
+      "priority": "low",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
+      "id": "task-97",
+      "title": "Publish the per-language scorecard",
+      "description": "docs/benchmarks: one table per language, neutral suites in the headline, vendor fixtures separate, Kotlin/Scala listed as unmeasurable.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-92",
+        "task-93",
+        "task-94",
+        "task-95",
+        "task-96"
+      ],
+      "feature_id": "per-language-labelled-benchmark-accuracy",
+      "source": {}
+    },
+    {
       "id": "task-88",
       "title": "Java XPath and LDAP sinks via receiver bindings",
       "description": "Java receiver bindings (a local made by XPathFactory.newXPath() / new InitialDirContext / DirContext lookups) so XPath.evaluate/compile and DirContext.search are sinks without matching every evaluate/search. Measure on BenchmarkJava xpathi/ldapi and real repositories.",
