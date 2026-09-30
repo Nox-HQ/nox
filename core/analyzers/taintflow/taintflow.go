@@ -177,9 +177,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		// A generated or minified file (a bundle, a vendored dist build) is
 		// not code this repository wrote, and the line recognizer reads a
-		// minified line as one enormous statement; the secrets and AI
-		// analyzers skip it for the same reason.
-		if source.IsGenerated(content) {
+		// minified line as one enormous statement. The banner must lead the
+		// file: a hand-written tool that emits it as data is not generated.
+		if source.IsGeneratedHeader(content) {
 			continue
 		}
 		a.scanFile(fs, art.Path, lang, content)
