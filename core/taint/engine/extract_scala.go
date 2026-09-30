@@ -361,10 +361,11 @@ func scalaReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	inner := logicalLine{line: ll.line, code: exprCode, raw: exprRaw}
 	st, ok := recognizeStatement(langScala, inner)
 	if !ok {
-		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
+		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
 }
 
@@ -380,6 +381,7 @@ func scalaReturnFromExpr(ll logicalLine) (stmtDraft, bool) {
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
 }
 

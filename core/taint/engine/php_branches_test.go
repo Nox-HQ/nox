@@ -177,3 +177,17 @@ func TestPHPWordPressShapes(t *testing.T) {
 		{"absint", "<?php\n$id = absint( $_GET['id'] );\nmysql_query( \"SELECT * FROM t WHERE id = $id\" );\n", nil},
 	})
 }
+
+// TestGetterNeedsEveryReturn: a function that returns request data on one
+// path and a constant on another is not a getter of that data.
+func TestGetterNeedsEveryReturn(t *testing.T) {
+	sink := "\nmysql_query(\"SELECT \" . $t);\n"
+	runPHPCases(t, []phpCase{
+		{"mixed returns", "<?php\nfunction v($type) {\n  if ($type == 'env') {\n    return $_SERVER['X'];\n  }\n  return 'fixed';\n}\n$t = v('a');" + sink, nil},
+		{"every return is request data", "<?php\nfunction v($k) {\n  if ($k) {\n    return $_GET['a'];\n  }\n  return $_POST['b'];\n}\n$t = v(1);" + sink, []string{"TAINT-001"}},
+	})
+	src := "from flask import request\nimport os\ndef arg():\n    return request.args.get('q')\ndef h():\n    q = arg()\n    os.system(q)\n"
+	if got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.py", lexctx.LangPython, []byte(src)))); strings.Join(got, ",") != "TAINT-002" {
+		t.Errorf("python getter: got %v", got)
+	}
+}

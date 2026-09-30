@@ -90,6 +90,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 		Reads:       append([]string(nil), d.reads...),
 		Chains:      append([]string(nil), d.chains...),
 		Returns:     append([]string(nil), d.returns...),
+		IsReturn:    d.isReturn,
 		Expr:        d.expr,
 	}
 	if len(d.sinkArgs) > 0 {

@@ -428,9 +428,10 @@ func javaReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	if !ok {
 		// A bare `return;` still needs a statement so the analyzer sees the line;
 		// it carries no reads and no returns.
-		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
+		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
 }

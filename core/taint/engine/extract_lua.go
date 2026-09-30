@@ -228,9 +228,10 @@ func luaReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	inner := logicalLine{line: ll.line, code: exprCode, raw: exprRaw}
 	st, ok := recognizeStatement(langLua, inner)
 	if !ok {
-		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
+		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
 }
