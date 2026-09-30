@@ -47,3 +47,20 @@ func TestJavaScriptCallWithCallback(t *testing.T) {
 		}
 	}
 }
+
+// TestCurrentLocationIsNotAnOpenRedirect: a URL built from the current page's
+// own URL stays on its origin; its hash is attacker text.
+func TestCurrentLocationIsNotAnOpenRedirect(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      []string
+	}{
+		{"rebuilt current URL", "function f(el) {\n  const url = new URL(window.location.href);\n  url.searchParams.set('sort', el.value);\n  window.location.replace(url.href);\n}\n", nil},
+		{"hash as the target", "function f() {\n  const t = location.hash.slice(1);\n  location.href = t;\n}\n", []string{"TAINT-007"}},
+	} {
+		got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(c.src))))
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}

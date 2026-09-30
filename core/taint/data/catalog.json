@@ -724,15 +724,27 @@
         },
         {
           "call": "window.location",
-          "kind": "http_query"
+          "kind": "http_query",
+          "not_for": [
+            "open_redirect"
+          ],
+          "note": "the current page's own URL: navigating to it, or to a URL built from it, stays on the page's origin, so it is not an open redirect (location.search and location.hash are separate sources and stay one)"
         },
         {
           "call": "document.location",
-          "kind": "http_query"
+          "kind": "http_query",
+          "not_for": [
+            "open_redirect"
+          ],
+          "note": "the current page's own URL: navigating to it, or to a URL built from it, stays on the page's origin, so it is not an open redirect (location.search and location.hash are separate sources and stay one)"
         },
         {
           "call": "document.URL",
-          "kind": "http_query"
+          "kind": "http_query",
+          "not_for": [
+            "open_redirect"
+          ],
+          "note": "the current page's own URL: navigating to it, or to a URL built from it, stays on the page's origin, so it is not an open redirect (location.search and location.hash are separate sources and stay one)"
         },
         {
           "call": "URLSearchParams.get",
@@ -856,7 +868,11 @@
         },
         {
           "call": "location.href",
-          "kind": "http_query"
+          "kind": "http_query",
+          "not_for": [
+            "open_redirect"
+          ],
+          "note": "the current page's own URL: navigating to it, or to a URL built from it, stays on the page's origin, so it is not an open redirect (location.search and location.hash are separate sources and stay one)"
         },
         {
           "call": "location.pathname",
