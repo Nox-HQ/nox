@@ -84,13 +84,23 @@ type prefixPlan struct {
 //     and at the previous match's end). That point is a start, so it is the
 //     leftmost one.
 //
+// Two runs in a row, `C1{0,m1}C2{0,m2}R` (SEC-286's `[\w.-]{0,50}?(?i:[\w.-]
+// {0,50}?…`), are taken only when C1 is within C2. Then walking back over as
+// much of C2 as allowed, and from there over C1, reaches the furthest start:
+// a split point later than the greedy one leaves C2 characters for the C1 run,
+// which, being in C1 too, only spend that run's allowance sooner.
+//
 // The match itself is then the full pattern anchored there, as for a literal
 // start. Walking back needs rune boundaries that agree with the forward
 // search, so the path is used only on valid UTF-8.
 type leadRun struct {
-	class    []rune // C's ranges, as syntax.Regexp.Rune: lo, hi pairs
-	max      int    // at most this many runes of C; -1 for no bound
+	runs     []classRun // in pattern order
 	anchored *regexp.Regexp
+}
+
+type classRun struct {
+	class []rune // the class's ranges, as syntax.Regexp.Rune: lo, hi pairs
+	max   int    // at most this many runes of it; -1 for no bound
 }
 
 type literalPrefix struct {
@@ -173,11 +183,21 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	if re.Op != syntax.OpConcat || len(re.Sub) < 2 {
 		return nil
 	}
-	run := re.Sub[0]
-	if run.Op != syntax.OpRepeat || run.Min != 0 || run.Sub[0].Op != syntax.OpCharClass {
+	var runs []classRun
+	for len(runs) < 2 && len(runs) < len(re.Sub)-1 {
+		run := re.Sub[len(runs)]
+		if run.Op != syntax.OpRepeat || run.Min != 0 || run.Sub[0].Op != syntax.OpCharClass {
+			break
+		}
+		if len(runs) > 0 && !classWithin(runs[0].class, run.Sub[0].Rune) {
+			return nil
+		}
+		runs = append(runs, classRun{class: run.Sub[0].Rune, max: run.Max})
+	}
+	if len(runs) == 0 {
 		return nil
 	}
-	rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[1:]}
+	rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[len(runs):]}
 	if len(rest.Sub) == 1 {
 		rest = rest.Sub[0]
 	}
@@ -195,7 +215,7 @@ func buildLeadPlan(pattern string) *prefixPlan {
 		prefixes: p.prefixes,
 		anchored: p.anchored,
 		maxLen:   maxBytes(re),
-		lead:     &leadRun{class: run.Sub[0].Rune, max: run.Max, anchored: anchored},
+		lead:     &leadRun{runs: runs, anchored: anchored},
 	}
 }
 
@@ -463,7 +483,7 @@ func (p *prefixPlan) cost(content []byte, starts []int) int {
 		if p.maxLen >= 0 && p.maxLen < n {
 			n = p.maxLen
 		}
-		if p.lead != nil && p.lead.max != 0 {
+		if p.lead != nil {
 			n += p.lead.backBytes()
 		}
 		total += n
@@ -541,26 +561,53 @@ func (l *leadRun) findAll(rest *prefixPlan, content []byte, starts []int, submat
 	return out
 }
 
-// runStart walks back from t over runes of the class, at most max of them and
-// not before floor, and returns where the run begins.
+// runStart walks back from t over the runs, last first, each over at most its
+// max runes of its class and none before floor, and returns where the first
+// run begins.
 func (l *leadRun) runStart(content []byte, t, floor int) int {
 	s := t
-	for n := 0; (l.max < 0 || n < l.max) && s > floor; n++ {
-		r, size := utf8.DecodeLastRune(content[floor:s])
-		if !inClass(r, l.class) {
-			break
+	for i := len(l.runs) - 1; i >= 0; i-- {
+		run := l.runs[i]
+		for n := 0; (run.max < 0 || n < run.max) && s > floor; n++ {
+			r, size := utf8.DecodeLastRune(content[floor:s])
+			if !inClass(r, run.class) {
+				break
+			}
+			s -= size
 		}
-		s -= size
 	}
 	return s
 }
 
 // backBytes bounds the bytes runStart walks back over.
 func (l *leadRun) backBytes() int {
-	if l.max < 0 {
-		return 0 // unbounded: the rest of the line already dominates
+	total := 0
+	for _, run := range l.runs {
+		if run.max < 0 {
+			return total // unbounded: the rest of the line already dominates
+		}
+		total += run.max * utf8.UTFMax
 	}
-	return l.max * utf8.UTFMax
+	return total
+}
+
+// classWithin reports whether every rune of class a is in class b. Parsed
+// classes are sorted with adjacent ranges merged, so each range of a must lie
+// inside one range of b.
+func classWithin(a, b []rune) bool {
+	for i := 0; i+1 < len(a); i += 2 {
+		inside := false
+		for j := 0; j+1 < len(b); j += 2 {
+			if a[i] >= b[j] && a[i+1] <= b[j+1] {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			return false
+		}
+	}
+	return true
 }
 
 func inClass(r rune, ranges []rune) bool {

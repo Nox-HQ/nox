@@ -90,6 +90,9 @@ func TestLeadClassPathEdgeCases(t *testing.T) {
 		{`(?i)[\w.-]{0,50}?(?:[Ss]umo)=([a-z]{2})`, "sumo=ab SUMO=cd xSumo=ef"},
 		{`(?i)[\w.-]{0,10}?(?:okta)=(\w{2})`, "abKokta=cd é_okta=ef"},
 		{`(?i)[\w.-]{0,50}?(?:okta)(?:=|$)`, "a.okta= b_okta"},
+		// Two runs, the first class within the second (SEC-286's shape).
+		{`[\w.-]{0,3}?(?i:[\w.-]{0,2}?(?:okta))=(\w{2})`, "abcdefokta=xy ..okta=zz a-b.c-d.okta=ww"},
+		{`[\w]{0,50}?(?i:[\w.-]{0,3}?(?:[Ss]umo))=(\w{2})`, "abc.-.sumo=xy abc..-.sumo=zz xyz.sumo=ww"},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
@@ -119,7 +122,7 @@ func TestLeadClassPathDeclines(t *testing.T) {
 		`[\w.-]{2,50}?okta=x`,           // a run with a minimum: the start is not the run's
 		`[\w]{0,50}?\bokta=x`,           // the literal opens with a boundary
 		`[\w]{0,50}?(?:okta)?=x`,        // the literal is optional
-		`[\w.-]{0,50}?[\w]{0,5}?okta=x`, // two runs
+		`[\w.-]{0,50}?[\w]{0,5}?okta=x`, // two runs, the first class wider
 	} {
 		if planFor(p) != nil {
 			t.Errorf("%q got a plan", p)
