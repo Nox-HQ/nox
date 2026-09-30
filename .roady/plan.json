@@ -3,6 +3,28 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-88",
+      "title": "Java XPath and LDAP sinks via receiver bindings",
+      "description": "Java receiver bindings (a local made by XPathFactory.newXPath() / new InitialDirContext / DirContext lookups) so XPath.evaluate/compile and DirContext.search are sinks without matching every evaluate/search. Measure on BenchmarkJava xpathi/ldapi and real repositories.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-87"
+      ],
+      "feature_id": "java-taint-xpath-ldap-sinks-and-flow-recall",
+      "source": {}
+    },
+    {
+      "id": "task-87",
+      "title": "Key-sensitive container taint for literal keys (Python and Java)",
+      "description": "m['keyB'] = param; bar = m['keyA'] and map.put(\"keyB\", param); map.get(\"keyA\"), plus configparser set/get: track taint per literal key; a non-literal key or a whole-container taint falls back to the whole container so nothing is lost. Measure on both OWASP benchmarks and A/B on the real-repository corpora.",
+      "priority": "high",
+      "estimate": "L",
+      "depends_on": null,
+      "feature_id": "key-sensitive-container-taint-for-literal-keys",
+      "source": {}
+    },
+    {
       "id": "task-86",
       "title": "Java taint: branch model, method scoping, container stores",
       "description": "Brace-less branches, weak updates and constant pruning for Java; multi-line method headers; Java container mutators; standard JVM properties not sources; sanitizer wrapping a local helper's argument honoured in every language. Measure on BenchmarkJava, the GitHub servlet sample and Kafka/Keycloak/Jenkins.",

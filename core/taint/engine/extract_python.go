@@ -9,6 +9,8 @@ import "strings"
 // conservative (it can only ever merge scopes, never split a real flow) and
 // keeps the recognizer simple.
 func extractPython(lines []logicalLine) []unitDraft {
+	// Literal-keyed containers become one variable per key; see keyed.go.
+	rewriteKeyedContainers(langPython, lines)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
