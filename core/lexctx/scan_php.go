@@ -18,11 +18,12 @@ package lexctx
 //     (scanBlockComment, shared with the Go/JS scanners, encodes exactly this).
 //   - single-quoted strings `'…'` — backslash escapes ONLY `\'` and `\\`; there
 //     is no `$` interpolation, so a `$var` inside stays string.
-//   - double-quoted strings `"…"` — backslash escapes the usual set; they DO
-//     interpolate `$var` / `{…}`, but for lexical classification we treat the
-//     whole literal as string (an interpolated `$var` inside a `"…"` is a data
-//     read the taint recognizer catches elsewhere; the classifier only needs to
-//     know "this is not top-level code").
+//   - double-quoted strings `"…"` — backslash escapes the usual set; they
+//     interpolate `$var`, `$var[k]`, `$obj->p`, `{$expr}` and `${name}`, and
+//     each such hole is emitted as CODE (emitPHPInterpolated), as the Ruby,
+//     Dart and Swift scanners do for theirs. An interpolated variable is a
+//     data read: `"SELECT * FROM '$id'"` carries $id into the query, and a
+//     scanner that called the whole literal string hid it from taint.
 //   - heredoc `<<<EOT … \nEOT` (interpolates) and nowdoc `<<<'EOT' … \nEOT` (no
 //     interpolation). Both span many lines and are the workhorse for embedding
 //     SQL/HTML blobs; the closing identifier must appear at the start of a line
@@ -90,11 +91,15 @@ func scanPHP(content []byte) []Region {
 			i = end
 		case c == '"':
 			end := scanPHPDoubleQuoted(content, i)
-			b.emit(i, end, KindString)
+			emitPHPInterpolated(content, i, end, &b)
 			i = end
 		case c == '<' && isPHPHeredocStart(content, i):
 			end := scanPHPHeredoc(content, i)
-			b.emit(i, end, KindString)
+			if isPHPNowdoc(content, i) {
+				b.emit(i, end, KindString)
+			} else {
+				emitPHPInterpolated(content, i, end, &b)
+			}
 			i = end
 		default:
 			b.emit(i, i+1, KindCode)
@@ -202,10 +207,8 @@ func scanPHPSingleQuoted(content []byte, start int) int {
 
 // scanPHPDoubleQuoted returns the offset just past a double-quoted string opening
 // at content[start]. Backslash escapes the next byte. Interpolation of `$var` and
-// `{…}` is left inside the string region: the classifier only needs code vs
-// non-code, and the taint recognizer reads interpolated variables from the raw
-// text separately. Runs to the matching quote or EOF (PHP double-quoted strings
-// may span newlines).
+// Interpolation holes are classified by emitPHPInterpolated. Runs to the
+// matching quote or EOF (PHP double-quoted strings may span newlines).
 func scanPHPDoubleQuoted(content []byte, start int) int {
 	n := len(content)
 	i := start + 1
@@ -316,3 +319,89 @@ func isPHPIdentStart(c byte) bool { return asciiIdentStart(c) }
 
 // isPHPIdentPart reports whether c can continue a PHP identifier.
 func isPHPIdentPart(c byte) bool { return asciiIdentPart(c) }
+
+// isPHPNowdoc reports whether the heredoc opener at content[start] is a nowdoc
+// (`<<<'ID'`), which interpolates nothing.
+func isPHPNowdoc(content []byte, start int) bool {
+	j := start + 3
+	for j < len(content) && (content[j] == ' ' || content[j] == '\t') {
+		j++
+	}
+	return j < len(content) && content[j] == '\''
+}
+
+// emitPHPInterpolated classifies an interpolating literal content[start:end]
+// (a double-quoted string or a heredoc): the literal text is string, each
+// interpolation hole is code.
+//
+//	"$name"       -> `$name` code
+//	"$a[k]"       -> `$a[k]` code (simple syntax: one subscript)
+//	"$o->p"       -> `$o->p` code (simple syntax: one property)
+//	"{$expr}"     -> `$expr` code, the braces string
+//	"${name}"     -> `name` code, `${` and `}` string
+//
+// A backslash escapes the next byte, so `\$x` is literal text.
+func emitPHPInterpolated(content []byte, start, end int, b *regionBuilder) {
+	run := start
+	i := start
+	for i < end {
+		c := content[i]
+		switch {
+		case c == '\\':
+			i += 2
+			continue
+		case c == '$' && i+1 < end && isPHPIdentStart(content[i+1]):
+			j := i + 1
+			for j < end && isPHPIdentPart(content[j]) {
+				j++
+			}
+			switch {
+			case j < end && content[j] == '[':
+				if k := indexByteFrom(content, j, end, ']'); k > 0 {
+					j = k + 1
+				}
+			case j+2 < end && content[j] == '-' && content[j+1] == '>' && isPHPIdentStart(content[j+2]):
+				j += 2
+				for j < end && isPHPIdentPart(content[j]) {
+					j++
+				}
+			}
+			b.emit(run, i, KindString)
+			b.emit(i, j, KindCode)
+			i, run = j, j
+			continue
+		case c == '{' && i+1 < end && content[i+1] == '$':
+			k := indexByteFrom(content, i+1, end, '}')
+			if k < 0 {
+				i++
+				continue
+			}
+			b.emit(run, i+1, KindString)
+			b.emit(i+1, k, KindCode)
+			i, run = k, k
+			continue
+		case c == '$' && i+1 < end && content[i+1] == '{':
+			k := indexByteFrom(content, i+2, end, '}')
+			if k < 0 {
+				i++
+				continue
+			}
+			b.emit(run, i+2, KindString)
+			b.emit(i+2, k, KindCode)
+			i, run = k, k
+			continue
+		}
+		i++
+	}
+	b.emit(run, end, KindString)
+}
+
+// indexByteFrom returns the index of the first c in content[from:end], or -1.
+func indexByteFrom(content []byte, from, end int, c byte) int {
+	for k := from; k < end; k++ {
+		if content[k] == c {
+			return k
+		}
+	}
+	return -1
+}
