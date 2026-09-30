@@ -413,14 +413,26 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 // no assignment in it, and nothing inside it was ever found.
 type bracketNest struct {
 	stack []byte // '(' '[' , 'b' block brace, 'l' literal brace
-	prev  byte   // the last non-space code byte seen
+	prev  byte   // the last non-space token: a punctuation byte, or 'a' for a word
+	word  string // that word, when prev is 'a'
+	cur   []byte // the identifier being read
 }
+
+// blockKeywords open a block with a brace that follows them directly.
+var blockKeywords = map[string]bool{"else": true, "try": true, "finally": true, "do": true}
 
 // feed consumes one physical line and reports whether the logical line
 // continues onto the next.
 func (n *bracketNest) feed(code string) bool {
 	for i := 0; i < len(code); i++ {
 		c := code[i]
+		if isIdentPart(c) {
+			n.cur = append(n.cur, c)
+			continue
+		}
+		if len(n.cur) > 0 {
+			n.word, n.prev, n.cur = string(n.cur), 'a', n.cur[:0]
+		}
 		switch c {
 		case '(', '[':
 			n.stack = append(n.stack, c)
@@ -430,7 +442,7 @@ func (n *bracketNest) feed(code string) bool {
 			// A brace matters only inside a paren or bracket.
 			if len(n.stack) > 0 {
 				kind := byte('l')
-				if n.prev == ')' || n.prev == '>' {
+				if n.prev == ')' || n.prev == '>' || (n.prev == 'a' && blockKeywords[n.word]) {
 					kind = 'b'
 				}
 				n.stack = append(n.stack, kind)
@@ -441,8 +453,11 @@ func (n *bracketNest) feed(code string) bool {
 			}
 		}
 		if c != ' ' && c != '\t' {
-			n.prev = c
+			n.prev, n.word = c, ""
 		}
+	}
+	if len(n.cur) > 0 {
+		n.word, n.prev, n.cur = string(n.cur), 'a', n.cur[:0]
 	}
 	return len(n.stack) > 0 && n.stack[len(n.stack)-1] != 'b'
 }

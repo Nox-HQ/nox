@@ -33,3 +33,13 @@ func TestInlineHandlerBodies(t *testing.T) {
 		}
 	}
 }
+
+// TestInlineBodyElseArms: `} else {`, `try {` and `else{` inside a callback
+// open blocks, so each arm's statements stay on their own lines.
+func TestInlineBodyElseArms(t *testing.T) {
+	src := "app.get('/', function (req, res) {\n  if (req.query.a) {\n    res.send('ok');\n  } else {\n    res.send('FOO: ' + req.params.id);\n  }\n  try {\n    res.send('x');\n  } finally{\n    res.send('y');\n  }\n});\n"
+	flows := NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(src)))
+	if len(flows) != 1 || flows[0].SinkLine != 5 {
+		t.Fatalf("want one flow at line 5, got %+v", flows)
+	}
+}
