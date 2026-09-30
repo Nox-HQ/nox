@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.46.0] - 2026-09-30
+
+Java XPath and LDAP injection, and container taint that tracks literal keys.
+On the OWASP Benchmark for Java the average score goes from 39.6 to 48.2
+(Semgrep `p/default`: 34.9), and for Python from 49.3 to 56.1 (Semgrep:
+10.7); taint findings on 11 real repositories are unchanged, and rule-diff's
+25-repository corpus shows no rule-level change.
 
 ### Added
 
@@ -21,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Semgrep `p/default`: 34.9). No change on Kafka, Keycloak or Jenkins.
 
 ### Fixed
+
+- **brace-expansion 5.0.9 -> 5.0.12 in the VS Code extension** (#770). Two
+  high advisories (GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) were published
+  against the transitive dependency and failed nox's own pre-push self-scan.
 
 - **Container taint tracks literal keys (Python and Java).** A value stored
   under one key tainted the whole container: `m['keyB'] = param; bar =
