@@ -602,7 +602,7 @@ var phpHeaderLiteral = regexp.MustCompile(`\bheader\s*\(\s*["']\s*([A-Za-z-]*)`)
 // Location.
 func phpHeaderIsNotLocation(raw string) bool {
 	m := phpHeaderLiteral.FindStringSubmatch(raw)
-	return m != nil && !strings.EqualFold(m[1], "location")
+	return len(m) == 2 && !strings.EqualFold(m[1], "location")
 }
 
 // dropCall removes a call, and its argument record, from a statement.
@@ -619,7 +619,7 @@ func dropCall(st *stmtDraft, call string) {
 
 // blankLiteralTernaries blanks the condition of every `c ? A : B` whose two
 // arms are literals -- blank in the code view -- wherever it appears: `echo
-// ('all' === $tab ? ' class="tabs"' : '')` prints a literal, and the
+// ('all' === $tab ? ' class="tabs"' : "")` prints a literal, and the
 // condition's variable does not reach the output. rewriteJavaTernary handles
 // the assignment form; this is the expression form, as a call argument.
 func blankLiteralTernaries(ll logicalLine) logicalLine {
