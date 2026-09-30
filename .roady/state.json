@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 217,
+  "version": 229,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -898,11 +898,15 @@
       "elapsed_minutes": 5
     },
     "task-89": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "#776: 856 s -\u003e 335 s on seven repos, findings identical"
+      ],
       "started_at": "2026-09-30T12:12:26.288443+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-09-30T18:04:23.826337+02:00",
+      "elapsed_minutes": 351
     },
     "task-9": {
       "status": "verified",
@@ -912,7 +916,69 @@
         "SARIF 2.1.0 reporter fully implemented in core/report/sarif/ with GitHub Code Scanning compatibility, rule catalog generation, deterministic output, fingerprint preservation, and 24 passing tests"
       ],
       "elapsed_minutes": 0
+    },
+    "task-92": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "#778: Go 7.3 -\u003e 35.6 (Semgrep 22.1)"
+      ],
+      "started_at": "2026-09-30T18:04:23.852624+02:00",
+      "completed_at": "2026-09-30T18:04:36.01122+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-93": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "#780: PHP -0.0 -\u003e 4.6, HTTP input 12.3 (Semgrep 0.0/0.1)"
+      ],
+      "started_at": "2026-09-30T18:04:23.880353+02:00",
+      "completed_at": "2026-09-30T18:04:45.489207+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-94": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "#779: Juliet C# 16.7 -\u003e 24.8, in scope 82.6 (Semgrep 0.3/1.4)"
+      ],
+      "started_at": "2026-09-30T18:04:23.917169+02:00",
+      "completed_at": "2026-09-30T18:04:51.587862+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-95": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "#779: JS recall on CodeQL fixtures XSS 6-\u003e24%, path 1-\u003e55%, SSRF 8-\u003e46%"
+      ],
+      "started_at": "2026-09-30T18:04:56.712644+02:00",
+      "completed_at": "2026-09-30T18:05:02.783165+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-96": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "#779: Ruby SQL 0-\u003e37%; Rust/Swift scored and published (Swift sources are the gap)"
+      ],
+      "started_at": "2026-09-30T18:05:09.110742+02:00",
+      "completed_at": "2026-09-30T18:05:16.709689+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-97": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-09-30T18:05:16.728118+02:00",
+      "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-30T12:12:26.288443+02:00"
+  "updated_at": "2026-09-30T18:05:16.728118+02:00"
 }
