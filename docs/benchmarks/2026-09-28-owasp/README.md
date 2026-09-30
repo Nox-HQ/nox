@@ -18,31 +18,33 @@ benchmark file. Semgrep runs `p/default` with metrics off.
 | | nox | Semgrep `p/default` |
 |---|---:|---:|
 | Python, v1.42.0 | 10.9 | 10.7 |
-| **Python, `main` after #752–#757** | **49.3** | 10.7 |
+| Python, v1.45.0 (after #752–#757) | 49.3 | 10.7 |
+| **Python, v1.46.0** | **56.1** | 10.7 |
 | Java, v1.44.0 | 14.1 | 34.9 |
-| **Java, `main` after #763, #764, #766** | **39.6** | 34.9 |
+| Java, v1.45.0 (after #763, #764, #766) | 39.6 | 34.9 |
+| **Java, v1.46.0** | **48.2** | 34.9 |
 
 ## Python (BenchmarkPython 0.1, 1,230 cases)
 
 Commit `f129148` of OWASP-Benchmark/BenchmarkPython.
 
-| category | cases | v1.42.0 | `main` TPR / FPR | `main` | Semgrep TPR / FPR | Semgrep |
+| category | cases | v1.42.0 | v1.46.0 TPR / FPR | v1.46.0 | Semgrep TPR / FPR | Semgrep |
 |---|---:|---:|---|---:|---|---:|
 | weakrand | 326 | 0 | 100% / 0% | **100** | 0% / 0% | 0 |
-| xpathi | 186 | 0 | 61% / 23% | **38** | 0% / 0% | 0 |
-| pathtraver | 168 | 11 | 34% / 14% | **20** | 3% / 2% | 1 |
+| xpathi | 186 | 0 | 67% / 24% | **43** | 0% / 0% | 0 |
+| pathtraver | 168 | 11 | 43% / 14% | **29** | 3% / 2% | 1 |
 | hash | 151 | 100 | 100% / 0% | **100** | 52% / 0% | 52 |
-| xss | 89 | 0 | 45% / 10% | **35** | 0% / 28% | −28 |
+| xss | 89 | 0 | 48% / 9% | **40** | 0% / 28% | −28 |
 | deserialization | 54 | 28 | 61% / 3% | 58 | 100% / 33% | **67** |
-| codeinj | 53 | 5 | 60% / 33% | **27** | 100% / 100% | 0 |
+| codeinj | 53 | 5 | 60% / 30% | **30** | 100% / 100% | 0 |
 | securecookie | 39 | 0 | 100% / 0% | **100** | 100% / 100% | 0 |
 | trustbound | 37 | 0 | 0% / 0% | 0 | 0% / 0% | 0 |
-| redirect | 34 | 9 | 62% / 38% | **23** | 8% / 5% | 3 |
+| redirect | 34 | 9 | 69% / 33% | **36** | 8% / 5% | 3 |
 | ldapi | 29 | 0 | 62% / 0% | **62** | 0% / 0% | 0 |
-| xxe | 28 | 0 | 62% / 15% | **48** | 0% / 0% | 0 |
-| cmdi | 20 | 0 | 54% / 14% | **40** | 54% / 100% | −46 |
-| sqli | 16 | 0 | 40% / 0% | 40 | 100% / 0% | **100** |
-| **average** | | **10.9** | | **49.3** | | **10.7** |
+| xxe | 28 | 0 | 62% / 5% | **57** | 0% / 0% | 0 |
+| cmdi | 20 | 0 | 69% / 0% | **69** | 54% / 100% | −46 |
+| sqli | 16 | 0 | 60% / 0% | 60 | 100% / 0% | **100** |
+| **average** | | **10.9** | | **56.1** | | **10.7** |
 
 What moved it, each change measured on real repositories as well as here:
 
@@ -55,14 +57,12 @@ What moved it, each change measured on real repositories as well as here:
 | `HARDEN-003` cookie `secure=False` | #755 | securecookie 0 → 100 |
 | Flask route returns as XSS sinks; `x += y` carries taint | #756 | xss 0 → 23; cmdi, deserialization, xpathi, ldapi, redirect, pathtraver up |
 | Constant-condition branch pruning | #757 | FPR down in eight categories, no detection rate moved |
+| Key-sensitive containers (literal keys) | #771 | 49.3 → 56.1: fewer false positives, and sqli 40% → 60% and cmdi 54% → 69% detection, since a constant store no longer overwrites a tainted key |
 
 **trustbound stays at 0 by choice.** `TAINT-011` (untrusted data stored in the
 session) exists but is opt-in: enabled, it finds 44% of these cases at a 42%
 false-positive rate, and in real Flask code it fires on ordinary login flows.
-**sqli and deserialization** trail Semgrep on detection; which idioms the
-missed cases use has not been analysed yet. The largest remaining source of
-false positives is known: list-index and configparser-key idioms, which need
-key-sensitive container taint (recorded in the roady spec).
+**sqli and deserialization** trail Semgrep on detection (60% and 61% against its 100%); which idioms the missed cases use has not been analysed yet.
 
 ## Java (BenchmarkJava 1.2, 2,740 cases)
 
@@ -70,20 +70,20 @@ Commit `20cbf3d` of OWASP-Benchmark/BenchmarkJava, `src/main/java` scanned.
 Measured first at v1.44.0 (14.1), then again after the Java work that
 measurement prompted (2026-09-29).
 
-| category | cases | v1.44.0 | `main` TPR / FPR | `main` | Semgrep TPR / FPR | Semgrep |
+| category | cases | v1.44.0 | v1.46.0 TPR / FPR | v1.46.0 | Semgrep TPR / FPR | Semgrep |
 |---|---:|---:|---|---:|---|---:|
-| sqli | 504 | 4 | 68% / 32% | **36** | 93% / 73% | 20 |
+| sqli | 504 | 4 | 68% / 26% | **42** | 93% / 73% | 20 |
 | weakrand | 493 | 0 | 100% / 0% | 100 | 100% / 0% | 100 |
-| xss | 455 | 13 | 46% / 22% | 24 | 82% / 52% | **30** |
-| pathtraver | 268 | 4 | 39% / 21% | **18** | 90% / 79% | 12 |
-| cmdi | 251 | 10 | 63% / 31% | **32** | 93% / 87% | 6 |
+| xss | 455 | 13 | 46% / 20% | 26 | 82% / 52% | **30** |
+| pathtraver | 268 | 4 | 39% / 16% | **23** | 90% / 79% | 12 |
+| cmdi | 251 | 10 | 63% / 26% | **38** | 93% / 87% | 6 |
 | crypto | 246 | 55 | 55% / 0% | **55** | 0% / 0% | 0 |
 | hash | 236 | 69 | 69% / 0% | 69 | 69% / 0% | 69 |
 | trustbound | 126 | 0 | 0% / 0% | 0 | 52% / 42% | **10** |
 | securecookie | 67 | 0 | 100% / 0% | 100 | 100% / 0% | 100 |
-| ldapi | 59 | 0 | 0% / 0% | 0 | 96% / 88% | **9** |
-| xpathi | 35 | 0 | 0% / 0% | 0 | 93% / 65% | **28** |
-| **average** | | **14.1** | | **39.6** | | **34.9** |
+| ldapi | 59 | 0 | 63% / 25% | **38** | 96% / 88% | 9 |
+| xpathi | 35 | 0 | 73% / 35% | **38** | 93% / 65% | 28 |
+| **average** | | **14.1** | | **48.2** | | **34.9** |
 
 What moved it, each also measured on Kafka, Keycloak, Jenkins and 90 GitHub
 servlet files:
@@ -93,14 +93,10 @@ servlet files:
 | `CRYPTO-002` and `HARDEN-003` for Java | #763 | weakrand and securecookie 0 → 100 |
 | `prepareStatement` was a SQL *sanitizer*; now a sink, with Spring `JdbcTemplate` and six more request sources | #764 | sqli 4 → 14 |
 | Java branch model with constant pruning, multi-line method headers, container stores, standard JVM properties not sources | #766 | sqli 14 → 36, cmdi 11 → 32, pathtraver 6 → 18, xss 14 → 24 |
+| Key-sensitive containers | #771 | 39.6 → 41.2 |
+| XPath and LDAP sinks by declared type | #772 | xpathi 0 → 38, ldapi 0 → 38; 41.2 → 48.2 |
 
-What remains, all recorded in the roady spec: **ldapi and xpathi** need Java
-sinks that can tell an LDAP `search` or an XPath `evaluate` from any other
-(Python does this with receiver bindings Java does not have yet);
-**trustbound** is opt-in in nox by design (see the Python section); and
-**xss** trails because Semgrep reports most of the benchmark's writes at a 52%
-false-positive rate, while nox's remaining misses are mostly the list-index
-and map-key idioms that need key-sensitive containers.
+What remains: **trustbound** is opt-in in nox by design (see the Python section), and **xss** trails Semgrep, which reports most of the benchmark's writes at a 52% false-positive rate. On the injection categories nox scores higher with a lower detection rate than Semgrep, which reports 50–88% of the safe cases.
 
 ## Limits
 
