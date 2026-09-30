@@ -2892,6 +2892,96 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "Location: header built from request input"
+        },
+        {
+          "call": "simplexml.xpath",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "domxpath.query",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "domxpath.evaluate",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "ldap_search",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "ldap_list",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "ldap_read",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "pdo.prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli.prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli.real_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli.multi_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli_multi_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "mysqli_real_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pg_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "sqlite_query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "http_redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
         }
       ],
       "sanitizers": [

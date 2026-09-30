@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // extractPHP turns PHP logical lines into unit drafts. PHP has clean, lexically
 // unambiguous function headers (`function name($a, $b) {`), so — like Python and
@@ -19,22 +22,33 @@ import "strings"
 // sinks. Scoping folds nested/anonymous functions into the enclosing unit, which
 // is conservative (it can only merge scopes, never split a real flow).
 func extractPHP(lines []logicalLine) []unitDraft {
+	norm := make([]logicalLine, len(lines))
+	for i := range lines {
+		norm[i] = normalizePHPLine(lines[i])
+	}
+	// Branch model: the Java one (java_branches.go), which reads C-family
+	// headers -- if / else if / elseif / else, loops, switch and case -- on
+	// the normalized lines. Before it, a statement in an if arm was a strong
+	// update, so `if (ok($x)) { $x = $x; } else { $x = ""; }` wiped the taint
+	// the other arm keeps: measured on the NIST SARD PHP suite, that one shape
+	// hid most of its SQL injection and XSS cases.
+	jb := newJavaBranches(norm)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	depth := 0
 
-	for _, raw := range lines {
-		ll := normalizePHPLine(raw)
+	for li, ll := range norm {
+		orig := lines[li]
 		code := strings.TrimSpace(ll.code)
 		if code == "" {
 			continue
 		}
-		if isPHPStructuralLine(code) {
-			if g, ok := conditionGuard(langPHP, ll); ok {
-				cur.guards = append(cur.guards, g)
-			}
-			continue
-		}
+		before := depth
+		depth += braceDelta(code)
+		depthHere := before - (len(code) - len(strings.TrimLeft(code, "}")))
+		jb.enter(depthHere)
+
 		if name, params, ok := phpFuncHeader(code); ok {
 			u := &unitDraft{funcName: name, params: params}
 			units = append(units, u)
@@ -55,7 +69,47 @@ func extractPHP(lines []logicalLine) []unitDraft {
 			}
 			continue
 		}
-		phpRecognizeInto(cur, ll)
+
+		// A case label in a switch body: resolve it, then treat any statement
+		// after the colon like any other.
+		if sw := jb.innermostSwitch(); sw != nil && (strings.HasPrefix(code, "case ") || strings.HasPrefix(code, "default")) {
+			if rest := jb.caseLabel(sw, ll.raw); rest != "" {
+				if colon := strings.IndexByte(ll.code, ':'); colon >= 0 {
+					phpStatement(cur, jb, subLine(ll, colon+1), subLine(orig, colon+1), branchTaken)
+				}
+			}
+			continue
+		}
+
+		if isPHPStructuralLine(code) || isPHPStructuralLine(strings.TrimLeft(code, "} \t")) {
+			// `if (settype($x, "integer"))` converts $x whichever arm runs.
+			if name, ok := phpSettypeNumeric(orig.raw); ok && jb.state() != branchDead {
+				cur.stmts = append(cur.stmts, stmtDraft{line: ll.line, assigns: name,
+					conditional: jb.state() == branchMaybe, sinkArgs: map[string]sinkArgDraft{}})
+			}
+			if g, ok := conditionGuard(langPHP, ll); ok {
+				cur.guards = append(cur.guards, g)
+			}
+			if h, ok := parseJavaHeader(ll); ok {
+				st := jb.header(h, depthHere)
+				switch {
+				case h.rest != "":
+					// `if (c) stmt;` / `else stmt;` on one line.
+					phpStatement(cur, jb, subLine(ll, h.restAt), subLine(orig, h.restAt), st)
+				case !h.opens:
+					// `if (c)` with the statement on the next line.
+					jb.pending = &st
+				}
+			}
+			continue
+		}
+
+		arm := branchTaken
+		if jb.pending != nil {
+			arm = *jb.pending
+			jb.pending = nil
+		}
+		phpStatement(cur, jb, ll, orig, arm)
 	}
 
 	out := make([]unitDraft, 0, len(units))
@@ -63,6 +117,35 @@ func extractPHP(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// phpStatement recognizes one statement under the branch model: dropped in an
+// arm that cannot run, conditional in one that may not.
+//
+// orig is the same line before PHP normalization, which turns the `.`
+// concatenation operator into `+`: the numeric-conversion shapes below must
+// tell arithmetic from concatenation, so they read the original.
+func phpStatement(cur *unitDraft, jb *javaBranches, ll, orig logicalLine, arm branchState) {
+	state := combineStates(jb.state(), arm)
+	if sw := jb.innermostSwitch(); sw != nil {
+		sw.statement(strings.TrimSpace(ll.code))
+	}
+	if state == branchDead {
+		return
+	}
+	if name, ok := phpNumericAssign(orig); ok {
+		// The assignee holds a number, which carries no injection.
+		cur.stmts = append(cur.stmts, stmtDraft{line: ll.line, assigns: name,
+			conditional: state == branchMaybe, sinkArgs: map[string]sinkArgDraft{}})
+		return
+	}
+	ll = jb.rewriteJavaTernary(ll)
+	before := len(cur.stmts)
+	phpRecognizeInto(cur, ll)
+	for i := before; i < len(cur.stmts); i++ {
+		cur.stmts[i].conditional = state == branchMaybe
+		jb.learn(ll, cur.stmts[i].assigns)
+	}
 }
 
 // phpRecognizeInto recognizes one normalized PHP logical line into unit u,
@@ -183,8 +266,38 @@ func normalizePHPExpr(s string) string {
 	s = rewriteEchoPrint(s)
 	s = rewritePHPConcat(s)
 	s = strings.ReplaceAll(s, "->", ".")
+	s = phpKeywordVars(s)
 	s = strings.ReplaceAll(s, "$", "")
 	return s
+}
+
+// phpKeywordVars renames a variable whose name is a keyword in the shared
+// recognizer's list -- `$string`, `$type`, `$match`, `$default`, `$object` --
+// to `_string` and so on. The `$` sigil makes every one of them a variable in
+// PHP, but once it is removed the recognizer drops the bare word as a keyword,
+// and with it every read of the variable: `$string = $_POST['x'];
+// unserialize($string)` reported nothing. The `$` becomes `_`, so the views
+// keep their length. `$this` is left alone: it is the object, not a value a
+// statement assigns.
+func phpKeywordVars(s string) string {
+	if !strings.Contains(s, "$") {
+		return s
+	}
+	b := []byte(s)
+	for i := 0; i < len(b); i++ {
+		if b[i] != '$' {
+			continue
+		}
+		j := i + 1
+		for j < len(b) && isIdentPart(b[j]) {
+			j++
+		}
+		if name := string(b[i+1 : j]); name != "this" && isKeyword(name) {
+			b[i] = '_'
+		}
+		i = j - 1
+	}
+	return string(b)
 }
 
 // rewritePHPConcat replaces the PHP string-concatenation operator `.` with `+`
@@ -359,4 +472,50 @@ func phpReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
 	return st, true
+}
+
+// Numeric conversion in PHP.
+//
+// A value converted to a number carries no injection: `(int) $x`, `$x += 0`,
+// `settype($x, "integer")`, `filter_var($x, FILTER_VALIDATE_INT)`. These are
+// how PHP code most often makes request input safe for a query or a command,
+// and nox knew only intval/floatval. Each shape below is exact: the whole
+// right-hand side must be the conversion, so `(int) $a . $b` -- a number
+// concatenated with a string -- is not one.
+var (
+	phpCastAssign  = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*\(\s*(?:int|integer|float|double|bool|boolean)\s*\)\s*\$[A-Za-z_]\w*(?:\[[^\]]*\])?\s*;?\s*$`)
+	phpArithUpdate = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*[-+*/%]=\s*\d[0-9.]*\s*;?\s*$`)
+	phpArithAssign = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*(?:\$[A-Za-z_]\w*|[0-9][0-9.]*)(?:\s*[-+*/%]\s*(?:\$[A-Za-z_]\w*|[0-9][0-9.]*))+\s*;?\s*$`)
+	phpFilterNum   = regexp.MustCompile(`^\s*\$([A-Za-z_]\w*)\s*=\s*filter_var\s*\([^;]*,\s*FILTER_(?:SANITIZE_NUMBER_INT|SANITIZE_NUMBER_FLOAT|VALIDATE_INT|VALIDATE_FLOAT|VALIDATE_BOOLEAN|VALIDATE_BOOL)\b[^;]*\)\s*;?\s*$`)
+	phpSettype     = regexp.MustCompile(`\bsettype\s*\(\s*\$([A-Za-z_]\w*)\s*,\s*["'](?:int|integer|float|double|bool|boolean)["']\s*\)`)
+)
+
+// phpNumericAssign reports a statement that assigns a number to a variable.
+// The shapes are matched on the code view before normalization (strings
+// blanked, so text inside a literal never matches); settype's type name is a
+// string literal, so that one is read from the raw view, and only on a line
+// the code view shows is a settype call.
+func phpNumericAssign(ll logicalLine) (string, bool) {
+	for _, re := range []*regexp.Regexp{phpCastAssign, phpArithUpdate, phpArithAssign, phpFilterNum} {
+		if m := re.FindStringSubmatch(ll.code); m != nil {
+			return m[1], true
+		}
+	}
+	if strings.HasPrefix(strings.TrimSpace(ll.code), "settype") {
+		if m := phpSettype.FindStringSubmatch(ll.raw); m != nil {
+			return m[1], true
+		}
+	}
+	return "", false
+}
+
+// phpSettypeNumeric reports `settype($x, "integer")` in a control-flow
+// header: the conversion happens when the condition is evaluated, before any
+// arm runs.
+func phpSettypeNumeric(code string) (string, bool) {
+	m := phpSettype.FindStringSubmatch(code)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
