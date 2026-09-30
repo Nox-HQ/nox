@@ -153,9 +153,12 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	// literal is tried only where the literal occurs (see prefixplan.go);
 	// every other pattern is scanned in full.
 	var locs [][]int
-	switch plan := planFor(rule.Pattern); {
-	case plan != nil && plan.usable(content):
-		locs = plan.findAll(content, shapeGroup > 0)
+	planned := false
+	if plan := planFor(rule.Pattern); plan != nil {
+		locs, planned = plan.match(content, shapeGroup > 0)
+	}
+	switch {
+	case planned:
 	case shapeGroup > 0:
 		locs = re.FindAllSubmatchIndex(content, -1)
 	default:
