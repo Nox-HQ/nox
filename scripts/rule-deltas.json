@@ -27,5 +27,12 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "TAINT-003",
+      "classification": "applicability-narrowed",
+      "pr": 778,
+      "reason": "TAINT-003 on Go's fmt.Fprint*/io.WriteString is reflected XSS only when the writer is the HTTP response; the catalog note said so and nothing enforced it. On the corpus: chronos 1 -> 0, the dropped finding `fmt.Fprintf(os.Stderr, \"error: %s\\n\", ce.Message)` in cmd/chronos/main.go's exitWithError, an error printed to stderr. On 15 Go repositories the same change drops Gitea's `fmt.Fprintln(os.Stderr, err)` in services/gitproxy/server.go; nothing written to a response writer is dropped (TestGoWriterSinkDestination)."
+    }
+  ]
 }
