@@ -228,7 +228,7 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			if lang == langRuby {
 				left = stripRubyStateSigil(left)
 			}
-			if isSimpleIdent(left) {
+			if isSimpleIdentIn(lang, left) {
 				return left, right
 			}
 			// An assignment to a member FIELD (`task.arguments = [...]`) binds no

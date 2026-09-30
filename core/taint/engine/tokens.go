@@ -109,7 +109,7 @@ func isKeyword(s string) bool {
 // attribute tail. This is what "reads a variable" means for propagation — a
 // tainted var mentioned anywhere in an expression propagates. Deterministic and
 // deduplicated.
-func freeIdentifiers(_ langKind, code string) []string {
+func freeIdentifiers(lang langKind, code string) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	i := 0
@@ -131,7 +131,7 @@ func freeIdentifiers(_ langKind, code string) []string {
 		if start > 0 && code[start-1] == '.' {
 			continue
 		}
-		if isKeyword(name) {
+		if isReservedIn(lang, name) {
 			continue
 		}
 		if _, dup := seen[name]; !dup {
