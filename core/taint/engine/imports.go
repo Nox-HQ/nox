@@ -146,6 +146,9 @@ func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 			}
 		}
 		return aliasTable{names: names, sep: "."}
+	case lexctx.LangPHP:
+		// Constructor-made receiver bindings; see receivers.go.
+		return aliasTable{names: phpReceiverBindings(content), sep: "."}
 	default:
 		// Every other language keeps today's behaviour. Go resolves its own
 		// aliases in the AST extractor; the rest were probed and either show no

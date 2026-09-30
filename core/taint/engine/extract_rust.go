@@ -377,10 +377,11 @@ func rustReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st, ok := recognizeStatement(langRust, normalizeRust(inner))
 	if !ok {
 		// A bare `return;` still needs a statement so the analyzer sees the line.
-		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}}, true
+		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true
 	}
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
+	st.isReturn = true
 	return st, true
 }
 

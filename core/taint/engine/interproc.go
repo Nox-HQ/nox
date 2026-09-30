@@ -75,6 +75,10 @@ type funcSummary struct {
 	// parameter i passed through (for Via provenance when the return is later
 	// sunk). Nearest-caller first.
 	returnVia map[int][]string
+	// returnsSource is set when the function returns a value tainted by a real
+	// source it reads itself -- a getter such as `function input() { return
+	// $_GET['q']; }` -- whatever its arguments. Nil when it does not.
+	returnsSource *taintInfo
 }
 
 // newFuncSummary returns an empty summary for name.
@@ -187,6 +191,13 @@ func (e *StructuralEngine) computeSummaries(lang string, units []taint.Unit) map
 // return, and which classes it was sanitized for.
 func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[string]*funcSummary) *funcSummary {
 	sum := newFuncSummary(u.FuncName)
+	// Unseeded: is the function a GETTER of a source -- does every return in
+	// it return a value a source it reads itself taints? One return of
+	// request data among others returning constants or computed values
+	// (`parse_variable($type, $name)` returning $_SERVER[$name] for one type
+	// and literals otherwise) is not a getter, and summarizing it as one
+	// tainted every call. The first source in line order names the summary.
+	sum.returnsSource = e.getterSource(lang, u, summaries)
 	for idx, param := range u.Params {
 		// Seed: parameter `param` is tainted by a synthetic "parameter" source.
 		seed := map[string]taintInfo{
@@ -234,6 +245,12 @@ func summaryEqual(a, b *funcSummary) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
+	if (a.returnsSource == nil) != (b.returnsSource == nil) {
+		return false
+	}
+	if a.returnsSource != nil && a.returnsSource.src.Call != b.returnsSource.src.Call {
+		return false
+	}
 	if len(a.returnsTaintedIf) != len(b.returnsTaintedIf) {
 		return false
 	}
@@ -257,4 +274,44 @@ func summaryEqual(a, b *funcSummary) bool {
 		}
 	}
 	return true
+}
+
+// getterSource returns the source a function returns from every one of its
+// return statements, or nil when some return carries something else or the
+// function has none. A return is source-returning when it names a source
+// directly (`return $_GET['q']`) or returns a variable the unseeded pass
+// leaves tainted by a real source.
+func (e *StructuralEngine) getterSource(lang string, u *taint.Unit, summaries map[string]*funcSummary) *taintInfo {
+	res := e.forwardPass(lang, u, map[string]taintInfo{}, summaries)
+	var first *taintInfo
+	returns := 0
+	for i := range u.Stmts {
+		st := &u.Stmts[i]
+		if !st.IsReturn {
+			continue
+		}
+		returns++
+		var found *taintInfo
+		if src, ok := e.resolveSource(lang, st); ok {
+			found = &taintInfo{src: src, srcLine: st.Line, cleared: map[taint.VulnClass]bool{}}
+		} else {
+			for _, rv := range sortedReads(st.Returns) {
+				if ti, ok := res.state[rv]; ok && ti.src.Kind != taint.SourceKind("parameter") {
+					c := cloneTaintInfo(ti)
+					found = &c
+					break
+				}
+			}
+		}
+		if found == nil {
+			return nil
+		}
+		if first == nil {
+			first = found
+		}
+	}
+	if returns == 0 {
+		return nil
+	}
+	return first
 }

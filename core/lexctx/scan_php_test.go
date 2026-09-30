@@ -199,3 +199,28 @@ func TestPHPRegionsCover(t *testing.T) {
 	regions := Classify(LangPHP, []byte(src))
 	regionsCover(t, regions, len(src))
 }
+
+// TestPHPInterpolationHolesAreCode: a variable interpolated into a
+// double-quoted string or heredoc is a data read, so it is code; the text
+// around it, and everything in a single-quoted string or nowdoc, is string.
+func TestPHPInterpolationHolesAreCode(t *testing.T) {
+	for _, c := range []struct {
+		src, sub string
+		want     Kind
+	}{
+		{`<?php $q = "SELECT * FROM '$tainted'";`, `$tainted`, KindCode},
+		{`<?php $q = "SELECT * FROM '$tainted'";`, `SELECT`, KindString},
+		{`<?php $q = "id={$row['id']}";`, `$row['id']`, KindCode},
+		{`<?php $q = "id=${name}";`, `name`, KindCode},
+		{`<?php $q = "x $obj->field y";`, `$obj->field`, KindCode},
+		{`<?php $q = "a $arr[key] b";`, `$arr[key]`, KindCode},
+		{`<?php $q = "cost \$price";`, `$price`, KindString},
+		{`<?php $q = 'no $interp here';`, `$interp`, KindString},
+		{"<?php $q = <<<EOT\nhello $who\nEOT;\n", `$who`, KindCode},
+		{"<?php $q = <<<'EOT'\nhello $who\nEOT;\n", `$who`, KindString},
+	} {
+		if k := kindOfSubstring(t, LangPHP, c.src, c.sub); k != c.want {
+			t.Errorf("%q in %q: got %v, want %v", c.sub, c.src, k, c.want)
+		}
+	}
+}

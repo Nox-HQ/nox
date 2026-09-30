@@ -104,6 +104,34 @@ func javaReceiverBindings(content []byte) map[string]string {
 	return out
 }
 
+// PHP receiver bindings, from what made the value. The catalog names PHP's
+// database and XML sinks by receiver -- mysqli.query, pdo.query -- and chains
+// match as written, so `$conn = new mysqli(...); $conn->query($q)`, the most
+// common way to write it, matched nothing. A local assigned from a
+// constructor or factory of one of these classes stands for the receiver name
+// the catalog uses.
+var phpReceiverMakers = []struct {
+	re   *regexp.Regexp
+	kind string
+}{
+	{regexp.MustCompile(`\$([A-Za-z_]\w*)\s*=\s*(?:new\s+\\?mysqli\s*\(|mysqli_connect\s*\(|mysqli_init\s*\()`), "mysqli"},
+	{regexp.MustCompile(`\$([A-Za-z_]\w*)\s*=\s*new\s+\\?PDO\s*\(`), "pdo"},
+	{regexp.MustCompile(`\$([A-Za-z_]\w*)\s*=\s*(?:new\s+\\?SimpleXMLElement\s*\(|simplexml_load_(?:file|string)\s*\()`), "simplexml"},
+	{regexp.MustCompile(`\$([A-Za-z_]\w*)\s*=\s*new\s+\\?DOMXPath\s*\(`), "domxpath"},
+}
+
+// phpReceiverBindings maps each local made by one of phpReceiverMakers to the
+// receiver name the catalog uses for it.
+func phpReceiverBindings(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, m := range phpReceiverMakers {
+		for _, g := range m.re.FindAllSubmatch(content, -1) {
+			out[string(g[1])] = m.kind
+		}
+	}
+	return out
+}
+
 // C# receiver bindings, by declared type. The catalog names ASP.NET's request
 // and response by the property name the page and controller base classes
 // expose -- Request.QueryString, Response.Write -- so a handler that takes

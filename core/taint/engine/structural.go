@@ -90,6 +90,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 		Reads:       append([]string(nil), d.reads...),
 		Chains:      append([]string(nil), d.chains...),
 		Returns:     append([]string(nil), d.returns...),
+		IsReturn:    d.isReturn,
 		Expr:        d.expr,
 	}
 	if len(d.sinkArgs) > 0 {
@@ -345,6 +346,18 @@ func (e *StructuralEngine) forwardPass(
 				info = firstArgTaintFromState(info, tainted, inline)
 			}
 
+			// An HTTP client call is server-side request forgery when the URL
+			// is tainted. Any argument used to count, so `requests.get(url,
+			// headers=auth)` with an API key from the environment in a header
+			// was reported as SSRF -- on llama_index, crewAI and others, and
+			// more often once summaries carried a getter's source to its
+			// callers. Decided on the taint state, like firstArgTaintFromState.
+			valueSlot, slotted := sinkValueSlot[sink.Call]
+			slotted = slotted && hasInfo && len(info.PositionalVars) > 0
+			if slotted && !slotTaintedInState(info, valueSlot, tainted, inline) {
+				continue
+			}
+
 			// Unknown shape (no SinkArgInfo at all) is dangerous — we never suppress
 			// on missing evidence.
 			if hasInfo && !e.sinkArgShapeDangerous(&sink, info) {
@@ -371,6 +384,12 @@ func (e *StructuralEngine) forwardPass(
 			argVars := info.TaintedArgVars
 			if len(argVars) == 0 {
 				argVars = st.Reads
+			}
+			if slotted {
+				// The finding names what reached the dangerous argument, not
+				// whatever else the call was passed: the URL, not an API key
+				// in its headers.
+				argVars = slotVars(info, valueSlot, inline)
 			}
 			for _, v := range argVars {
 				ti, isTainted := tainted[v]
@@ -661,7 +680,16 @@ func containsWord(code, ident string) bool {
 func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement, tainted map[string]taintInfo, summaries map[string]*funcSummary) (taintInfo, bool) {
 	for _, rawCall := range sortedReads(st.Calls) {
 		sum := resolveLocalCallee(rawCall, summaries)
-		if sum == nil || len(sum.returnsTaintedIf) == 0 {
+		if sum == nil {
+			continue
+		}
+		// A getter returns request data whatever it is passed.
+		if sum.returnsSource != nil {
+			ti := cloneTaintInfo(*sum.returnsSource)
+			ti.via = append([]string{sum.name}, ti.via...)
+			return ti, true
+		}
+		if len(sum.returnsTaintedIf) == 0 {
 			continue
 		}
 		info, ok := lookupSinkArg(st, rawCall)
@@ -1006,6 +1034,24 @@ func firstArgTaintFromState(info taint.SinkArgInfo, tainted map[string]taintInfo
 	}
 	info.FirstArgTainted = false
 	return info
+}
+
+// slotTaintedInState reports whether positional argument slot holds a
+// variable the taint state marks, or an inline source.
+func slotTaintedInState(info taint.SinkArgInfo, slot int, tainted map[string]taintInfo, inline map[string]inlineOperand) bool {
+	if slot < len(info.PositionalVars) {
+		for _, v := range info.PositionalVars[slot] {
+			if _, ok := tainted[v]; ok {
+				return true
+			}
+		}
+	}
+	for _, op := range inline {
+		if op.slot == slot {
+			return true
+		}
+	}
+	return false
 }
 
 func withInlineOperands(info taint.SinkArgInfo, inline map[string]inlineOperand) taint.SinkArgInfo {
@@ -1674,3 +1720,48 @@ var extractPanics atomic.Int64
 // ExtractPanics reports how many files' extraction has panicked in this
 // process, so a caller can surface the loss rather than hide it.
 func ExtractPanics() int64 { return extractPanics.Load() }
+
+// slotVars returns the variables, and inline sources, in one argument slot.
+func slotVars(info taint.SinkArgInfo, slot int, inline map[string]inlineOperand) []string {
+	var out []string
+	if slot < len(info.PositionalVars) {
+		out = append(out, info.PositionalVars[slot]...)
+	}
+	for name, op := range inline {
+		if op.slot == slot {
+			out = append(out, name)
+		}
+	}
+	sortStrings(out)
+	return out
+}
+
+// sinkValueSlot is, for the sinks whose signatures are known, the positional
+// argument that carries the dangerous value: the URL of an HTTP client call,
+// the path of a file call. A tainted value elsewhere -- a header, the data
+// written -- is not the vulnerability; `fs.writeFileSync(path, body)` with a
+// downloaded body was reported as path traversal. A sink not listed keeps the
+// any-argument rule.
+var sinkValueSlot = map[string]int{
+	// Paths: the first argument of the file calls.
+	"fs.writeFile": 0, "fs.writeFileSync": 0, "fs.appendFile": 0, "fs.appendFileSync": 0,
+	"fs.readFile": 0, "fs.readFileSync": 0, "fs.createReadStream": 0, "fs.createWriteStream": 0,
+	"fs.promises.readFile": 0, "fs.promises.writeFile": 0, "fs.unlink": 0, "fs.unlinkSync": 0,
+	"file_put_contents": 0, "file_get_contents": 0, "fopen": 0, "readfile": 0,
+	"File.WriteAllText": 0, "File.ReadAllText": 0, "File.ReadAllBytes": 0, "File.Open": 0,
+	"os.WriteFile": 0, "ioutil.WriteFile": 0, "os.OpenFile": 0, "os.Create": 0,
+	// Not a bare `open`: Python's takes the path first, Perl's third.
+	// URLs.
+	// Python
+	"requests.get": 0, "requests.post": 0, "requests.put": 0, "requests.patch": 0,
+	"requests.delete": 0, "requests.head": 0, "requests.options": 0,
+	"requests.request": 1, "urllib.request.urlopen": 0, "urlopen": 0,
+	"httpx.get": 0, "httpx.post": 0, "httpx.put": 0, "httpx.delete": 0, "httpx.request": 1,
+	// JavaScript
+	"fetch": 0, "axios.get": 0, "axios.post": 0, "http.get": 0, "https.get": 0,
+	// Go
+	"http.Get": 0, "http.Post": 0, "http.Head": 0, "http.NewRequest": 1,
+	// C# / Ruby
+	"HttpClient.GetAsync": 0, "GetAsync": 0, "WebClient.DownloadString": 0, "DownloadString": 0,
+	"HTTParty.get": 0, "Faraday.get": 0, "URI.open": 0,
+}
