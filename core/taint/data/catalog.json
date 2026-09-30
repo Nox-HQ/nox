@@ -992,6 +992,20 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "Express redirect to a request-derived value"
+        },
+        {
+          "call": "innerHTML",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "a property store: `el.innerHTML = value` parses value as HTML whatever the element is called"
+        },
+        {
+          "call": "outerHTML",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "a property store: `el.innerHTML = value` parses value as HTML whatever the element is called"
         }
       ],
       "sanitizers": [

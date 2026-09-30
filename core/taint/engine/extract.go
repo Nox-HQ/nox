@@ -344,6 +344,7 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 	var out []logicalLine
 	lineNo := 1
 	depth := 0
+	var nest bracketNest
 	var codeBuf, rawBuf strings.Builder
 	startLine := 1
 	flush := func() {
@@ -371,10 +372,16 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 		codeBuf.WriteString(codeSeg)
 		rawBuf.WriteString(rawSeg)
 
-		depth += bracketDelta(codeSeg, bracesAreBlocks)
+		continued := false
+		if bracesAreBlocks {
+			continued = nest.feed(codeSeg)
+		} else {
+			depth += bracketDelta(codeSeg, bracesAreBlocks)
+			continued = depth > 0
+		}
 		backslashCont := strings.HasSuffix(strings.TrimRight(codeSeg, " \t"), "\\")
 
-		if depth <= 0 && !backslashCont {
+		if !continued && !backslashCont {
 			flush()
 			depth = 0
 			lineStart = true
@@ -390,6 +397,65 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 	}
 	flush()
 	return out
+}
+
+// bracketNest tracks open brackets across the physical lines of a
+// brace-block language, to decide whether a line continues onto the next.
+//
+// Parens and square brackets continue a statement: a call or a list spanning
+// lines is one logical line. Braces delimit blocks and are ignored -- except
+// inside parens, where one of two things happens. An object literal
+// (`res.json({`) continues the call it is an argument of. A function body
+// (`app.get("/", (req, res) => {`, `function (req, res) {`, `run(() -> {`)
+// ends the line: the body's statements are statements of their own. Before
+// this, the body was merged into the call around it, so an inline Express
+// handler -- the ordinary way to write one -- was a single "statement" with
+// no assignment in it, and nothing inside it was ever found.
+type bracketNest struct {
+	stack []byte // '(' '[' , 'b' block brace, 'l' literal brace
+	prev  byte   // the last non-space code byte seen
+}
+
+// feed consumes one physical line and reports whether the logical line
+// continues onto the next.
+func (n *bracketNest) feed(code string) bool {
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch c {
+		case '(', '[':
+			n.stack = append(n.stack, c)
+		case ')', ']':
+			n.pop(func(k byte) bool { return k == '(' || k == '[' })
+		case '{':
+			// A brace matters only inside a paren or bracket.
+			if len(n.stack) > 0 {
+				kind := byte('l')
+				if n.prev == ')' || n.prev == '>' {
+					kind = 'b'
+				}
+				n.stack = append(n.stack, kind)
+			}
+		case '}':
+			if len(n.stack) > 0 {
+				n.pop(func(k byte) bool { return k == 'b' || k == 'l' })
+			}
+		}
+		if c != ' ' && c != '\t' {
+			n.prev = c
+		}
+	}
+	return len(n.stack) > 0 && n.stack[len(n.stack)-1] != 'b'
+}
+
+// pop removes brackets down to and including the innermost one of the kind
+// match accepts; an unmatched closer is ignored.
+func (n *bracketNest) pop(match func(byte) bool) {
+	for i := len(n.stack) - 1; i >= 0; i-- {
+		if match(n.stack[i]) {
+			n.stack = n.stack[:i]
+			return
+		}
+	}
 }
 
 // bracketDelta returns the net change in continuation-bracket depth for a code
