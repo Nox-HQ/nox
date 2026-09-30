@@ -161,3 +161,19 @@ func TestPHPNormalizationKeepsViewsAligned(t *testing.T) {
 		_ = extractUnits(lexctx.LangPHP, b) // must not panic
 	}
 }
+
+// TestPHPWordPressShapes: WordPress's escaping functions sanitize, a header
+// that is not Location redirects nowhere, and a literal ternary prints a
+// literal.
+func TestPHPWordPressShapes(t *testing.T) {
+	runPHPCases(t, []phpCase{
+		{"esc_html output", "<?php\n$n = $_GET['n'];\necho '<b>' . esc_html( $n ) . '</b>';\n", nil},
+		{"unescaped output", "<?php\n$n = $_GET['n'];\necho '<b>' . $n . '</b>';\n", []string{"TAINT-003"}},
+		{"status header", "<?php\n$p = $_SERVER['SERVER_PROTOCOL'];\nheader( \"$p 400 Bad Request\" );\n", nil},
+		{"location header", "<?php\n$u = $_GET['next'];\nheader( 'Location: ' . $u );\n", []string{"TAINT-007"}},
+		{"header name in a variable", "<?php\n$u = $_GET['next'];\nheader( $u );\n", []string{"TAINT-007"}},
+		{"literal ternary in echo", "<?php\n$tab = $_GET['tab'];\necho ( 'all' === $tab ? ' class=\"tabs\"' : '' );\n", nil},
+		{"ternary with a tainted arm", "<?php\n$tab = $_GET['tab'];\necho ( $tab ? $tab : 'none' );\n", []string{"TAINT-003"}},
+		{"absint", "<?php\n$id = absint( $_GET['id'] );\nmysql_query( \"SELECT * FROM t WHERE id = $id\" );\n", nil},
+	})
+}

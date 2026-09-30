@@ -3071,6 +3071,156 @@
           "neutralizes": [
             "command_injection"
           ]
+        },
+        {
+          "call": "esc_html",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_attr",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_textarea",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_js",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_html__",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_attr__",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "esc_url",
+          "neutralizes": [
+            "xss",
+            "open_redirect"
+          ]
+        },
+        {
+          "call": "esc_url_raw",
+          "neutralizes": [
+            "open_redirect"
+          ]
+        },
+        {
+          "call": "wp_kses",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "wp_kses_post",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "wp_kses_data",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "sanitize_text_field",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "sanitize_textarea_field",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "sanitize_email",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "sanitize_title",
+          "neutralizes": [
+            "xss",
+            "path_traversal"
+          ]
+        },
+        {
+          "call": "sanitize_key",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf",
+            "xss",
+            "open_redirect",
+            "ldap_injection",
+            "xpath_injection"
+          ]
+        },
+        {
+          "call": "sanitize_file_name",
+          "neutralizes": [
+            "path_traversal"
+          ]
+        },
+        {
+          "call": "absint",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "ssrf",
+            "xss",
+            "open_redirect",
+            "ldap_injection",
+            "xpath_injection"
+          ]
+        },
+        {
+          "call": "esc_sql",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "wpdb.prepare",
+          "neutralizes": [
+            "sql_injection"
+          ]
+        },
+        {
+          "call": "wp_validate_redirect",
+          "neutralizes": [
+            "open_redirect"
+          ]
+        },
+        {
+          "call": "wp_sanitize_redirect",
+          "neutralizes": [
+            "open_redirect"
+          ]
         }
       ],
       "checks": [

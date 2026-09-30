@@ -140,10 +140,15 @@ func phpStatement(cur *unitDraft, jb *javaBranches, ll, orig logicalLine, arm br
 		return
 	}
 	ll = jb.rewriteJavaTernary(ll)
+	ll = blankLiteralTernaries(ll)
 	before := len(cur.stmts)
 	phpRecognizeInto(cur, ll)
+	notRedirect := phpHeaderIsNotLocation(orig.raw)
 	for i := before; i < len(cur.stmts); i++ {
 		cur.stmts[i].conditional = state == branchMaybe
+		if notRedirect {
+			dropCall(&cur.stmts[i], "header")
+		}
 		jb.learn(ll, cur.stmts[i].assigns)
 	}
 }
@@ -583,4 +588,129 @@ func phpSettypeNumeric(code string) (string, bool) {
 		return "", false
 	}
 	return m[1], true
+}
+
+// phpHeaderLiteral matches a header() call whose first argument opens with a
+// string literal, capturing the literal's first characters.
+var phpHeaderLiteral = regexp.MustCompile(`\bheader\s*\(\s*["']\s*([A-Za-z-]*)`)
+
+// phpHeaderIsNotLocation reports a header() call that sets some header other
+// than Location. header() is an open-redirect sink only for a Location
+// header; `header("$protocol 400 Bad Request")` or `header("Etag: $etag")`
+// redirects nowhere, and on WordPress were a third of its header findings.
+// A header name that is not written as a literal is kept, since it may be
+// Location.
+func phpHeaderIsNotLocation(raw string) bool {
+	m := phpHeaderLiteral.FindStringSubmatch(raw)
+	return m != nil && !strings.EqualFold(m[1], "location")
+}
+
+// dropCall removes a call, and its argument record, from a statement.
+func dropCall(st *stmtDraft, call string) {
+	kept := st.calls[:0]
+	for _, c := range st.calls {
+		if c != call {
+			kept = append(kept, c)
+		}
+	}
+	st.calls = kept
+	delete(st.sinkArgs, call)
+}
+
+// blankLiteralTernaries blanks the condition of every `c ? A : B` whose two
+// arms are literals -- blank in the code view -- wherever it appears: `echo
+// ('all' === $tab ? ' class="tabs"' : '')` prints a literal, and the
+// condition's variable does not reach the output. rewriteJavaTernary handles
+// the assignment form; this is the expression form, as a call argument.
+func blankLiteralTernaries(ll logicalLine) logicalLine {
+	code := ll.code
+	if !strings.Contains(code, "?") {
+		return ll
+	}
+	b, r := []byte(code), []byte(ll.raw)
+	aligned := len(r) == len(b)
+	for q := 0; q < len(b); q++ {
+		if b[q] != '?' || (q+1 < len(b) && (b[q+1] == '?' || b[q+1] == ':' || b[q+1] == '-')) || (q > 0 && b[q-1] == '?') {
+			continue
+		}
+		colon, end := ternaryArms(b, q)
+		if colon < 0 || hasIdent(b[q+1:colon]) || hasIdent(b[colon+1:end]) {
+			continue
+		}
+		start := ternaryCondStart(b, q)
+		for k := start; k < q; k++ {
+			b[k] = ' '
+			if aligned {
+				r[k] = ' '
+			}
+		}
+	}
+	if !aligned {
+		return logicalLine{line: ll.line, code: string(b), raw: ll.raw}
+	}
+	return logicalLine{line: ll.line, code: string(b), raw: string(r)}
+}
+
+// ternaryArms finds the `:` of the ternary whose `?` is at q, and the end of
+// its second arm, at the same bracket depth; colon is -1 when there is none.
+func ternaryArms(b []byte, q int) (colon, end int) {
+	depth := 0
+	colon = -1
+	for k := q + 1; k < len(b); k++ {
+		switch b[k] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth == 0 {
+				return colon, k
+			}
+			depth--
+		case ':':
+			if depth == 0 && colon < 0 {
+				colon = k
+			}
+		case ',', ';':
+			if depth == 0 {
+				return colon, k
+			}
+		}
+	}
+	return colon, len(b)
+}
+
+// ternaryCondStart returns where the condition before the `?` at q begins:
+// just after the enclosing open bracket, a comma, or an assignment.
+func ternaryCondStart(b []byte, q int) int {
+	depth := 0
+	for k := q - 1; k >= 0; k-- {
+		switch b[k] {
+		case ')', ']', '}':
+			depth++
+		case '(', '[', '{':
+			if depth == 0 {
+				return k + 1
+			}
+			depth--
+		case ',', ';':
+			if depth == 0 {
+				return k + 1
+			}
+		case '=':
+			if depth == 0 && (k+1 >= len(b) || b[k+1] != '=') && (k == 0 || !strings.ContainsRune("=!<>", rune(b[k-1]))) {
+				return k + 1
+			}
+		}
+	}
+	return 0
+}
+
+// hasIdent reports whether code contains an identifier character sequence
+// that starts a name (not a digit).
+func hasIdent(code []byte) bool {
+	for _, c := range code {
+		if isIdentStart(c) {
+			return true
+		}
+	}
+	return false
 }
