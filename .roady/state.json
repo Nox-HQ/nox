@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 230,
+  "version": 233,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -917,6 +917,24 @@
       ],
       "elapsed_minutes": 0
     },
+    "task-90": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #783 merged as 9b92720: CPU 1,771s -\u003e 968s on seven repos, identical findings; equivalence over 55,714 files"
+      ],
+      "started_at": "2026-09-30T19:19:53.181218+02:00",
+      "completed_at": "2026-09-30T23:24:29.213273+02:00",
+      "elapsed_minutes": 244
+    },
+    "task-91": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-09-30T23:24:29.242707+02:00",
+      "elapsed_minutes": 0
+    },
     "task-92": {
       "status": "done",
       "path": "",
@@ -984,5 +1002,5 @@
       "elapsed_minutes": 14
     }
   },
-  "updated_at": "2026-09-30T18:19:25.791324+02:00"
+  "updated_at": "2026-09-30T23:24:29.242707+02:00"
 }
