@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -20,11 +21,15 @@ func findUnit(t *testing.T, units []unitDraft, name string) unitDraft {
 }
 
 // stmtWithCall returns the first statement in u that invokes call.
+// stmtWithCall finds the statement calling call, as the whole callee or its
+// dotted suffix: a method on a call's result carries the chain it was called
+// on (`Runtime.getRuntime().exec` is `Runtime.getRuntime.exec`), and the
+// catalog matches it by suffix the same way.
 func stmtWithCall(t *testing.T, u unitDraft, call string) stmtDraft {
 	t.Helper()
 	for i := range u.stmts {
 		for _, c := range u.stmts[i].calls {
-			if c == call {
+			if c == call || strings.HasSuffix(c, "."+call) {
 				return u.stmts[i]
 			}
 		}

@@ -368,8 +368,17 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 	i := 0
 	n := len(code)
 	aligned := len(raw) == len(code)
+	// A method called on a call's result -- `res.status(400).send(body)`,
+	// `builder.where(x).execute()` -- continues the chain it was called on,
+	// so its callee is `res.status.send`, not a bare `send` with no receiver.
+	// Catalog lookups try every suffix, so what matched `send` still does.
+	lastEnd, lastCallee := -1, ""
 	for i < n {
-		if !isIdentStart(code[i]) {
+		prefix := ""
+		if code[i] == '.' && i == lastEnd && lastCallee != "" && i+1 < n && isIdentStart(code[i+1]) {
+			prefix = lastCallee + "."
+			i++
+		} else if !isIdentStart(code[i]) {
 			i++
 			continue
 		}
@@ -377,7 +386,7 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 		for i < n && (isIdentPart(code[i]) || code[i] == '.') {
 			i++
 		}
-		chain := code[start:i]
+		chain := prefix + code[start:i]
 		j := i
 		for j < n && (code[j] == ' ' || code[j] == '\t') {
 			j++
@@ -402,6 +411,7 @@ func extractCalls(_ langKind, code, raw string) []callChain {
 			calls = append(calls, extractCalls(langPython, codeArgs, rawArgs)...)
 		}
 		i = end
+		lastEnd, lastCallee = end, callee
 	}
 	return calls
 }
