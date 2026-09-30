@@ -2857,6 +2857,42 @@
         {
           "call": "Console.ReadLine",
           "kind": "stdin"
+        },
+        {
+          "call": "Request.Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.RouteValues",
+          "kind": "http_path"
+        },
+        {
+          "call": "Request.QueryString.Get",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.RawUrl",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.Url",
+          "kind": "http_query"
+        },
+        {
+          "call": "Request.UserAgent",
+          "kind": "http_header"
+        },
+        {
+          "call": "Request.UrlReferrer",
+          "kind": "http_header"
+        },
+        {
+          "call": "Request.Body",
+          "kind": "http_body"
+        },
+        {
+          "call": "Request.InputStream",
+          "kind": "http_body"
         }
       ],
       "sinks": [
@@ -2999,6 +3035,145 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003"
+        },
+        {
+          "call": "XPathNavigator.Evaluate",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XPathNavigator.Select",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XPathNavigator.SelectSingleNode",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XPathNavigator.Compile",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XPathExpression.Compile",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XmlNode.SelectNodes",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "XmlNode.SelectSingleNode",
+          "vuln_class": "xpath_injection",
+          "cwe": "CWE-643",
+          "rule_id": "TAINT-008"
+        },
+        {
+          "call": "DirectorySearcher.FindOne",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "DirectorySearcher.FindAll",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "DirectorySearcher",
+          "vuln_class": "ldap_injection",
+          "cwe": "CWE-90",
+          "rule_id": "TAINT-009"
+        },
+        {
+          "call": "Response.Redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "Response.RedirectPermanent",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "Redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "File.WriteAllText",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "File.Delete",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "File.OpenRead",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "File.ReadAllLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileInfo",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "StreamWriter",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Directory.GetFiles",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Response.WriteFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Response.TransmitFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Response.StatusDescription",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "a property store; the status description is rendered in the error page"
         }
       ],
       "sanitizers": [
@@ -3064,6 +3239,14 @@
             "path_traversal"
           ],
           "note": "strips directory components; pair with an allow-base check"
+        },
+        {
+          "call": "SecurityElement.Escape",
+          "neutralizes": [
+            "xpath_injection",
+            "xss"
+          ],
+          "note": "escapes & < > \" ' -- a value inside a quoted XPath literal or HTML text cannot close it"
         }
       ]
     },

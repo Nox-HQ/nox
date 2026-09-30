@@ -126,7 +126,15 @@ func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 	case lexctx.LangElixir:
 		return aliasTable{names: elixirAliases(content), sep: "."}
 	case lexctx.LangCSharp:
-		return aliasTable{names: csharpAliases(content), sep: "."}
+		names := csharpAliases(content)
+		// A `using` alias says what a name is; a declared type only fills in
+		// names no alias claims. See receivers.go.
+		for local, kind := range csharpReceiverBindings(content) {
+			if _, aliased := names[local]; !aliased {
+				names[local] = kind
+			}
+		}
+		return aliasTable{names: names, sep: "."}
 	default:
 		// Every other language keeps today's behaviour. Go resolves its own
 		// aliases in the AST extractor; the rest were probed and either show no

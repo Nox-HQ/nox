@@ -103,3 +103,37 @@ func javaReceiverBindings(content []byte) map[string]string {
 	}
 	return out
 }
+
+// C# receiver bindings, by declared type. The catalog names ASP.NET's request
+// and response by the property name the page and controller base classes
+// expose -- Request.QueryString, Response.Write -- so a handler that takes
+// them as parameters, `void Bad(HttpRequest req, HttpResponse resp)`, or holds
+// them in a local, matched nothing. A name declared with one of these types
+// stands for the catalog's receiver.
+var csharpTypedDecl = []struct {
+	re   *regexp.Regexp
+	kind string
+}{
+	{regexp.MustCompile(`(?:^|[^\w.])(?:System\s*\.\s*Web\s*\.\s*)?(?:HttpRequest|HttpRequestBase|HttpRequestWrapper)\s+([A-Za-z_]\w*)\s*[,)=;]`), "Request"},
+	{regexp.MustCompile(`(?:^|[^\w.])(?:System\s*\.\s*Web\s*\.\s*)?(?:HttpResponse|HttpResponseBase|HttpResponseWrapper)\s+([A-Za-z_]\w*)\s*[,)=;]`), "Response"},
+	// XPath and LDAP are keyed on the declared type for the reason Java's are
+	// (see javaReceiverBindings): Evaluate, Select and FindOne are too generic
+	// to be sinks by method name.
+	{regexp.MustCompile(`(?:^|[^\w.])XPathNavigator\s+([A-Za-z_]\w*)\s*[,)=;]`), "XPathNavigator"},
+	{regexp.MustCompile(`(?:^|[^\w.])(?:XmlDocument|XmlNode|XmlElement)\s+([A-Za-z_]\w*)\s*[,)=;]`), "XmlNode"},
+	{regexp.MustCompile(`(?:^|[^\w.])DirectorySearcher\s+([A-Za-z_]\w*)\s*[,)=;]`), "DirectorySearcher"},
+}
+
+// csharpReceiverBindings maps each name declared as an HTTP request or
+// response to the receiver name the catalog uses for it.
+func csharpReceiverBindings(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, d := range csharpTypedDecl {
+		for _, m := range d.re.FindAllSubmatch(content, -1) {
+			if name := string(m[1]); name != d.kind {
+				out[name] = d.kind
+			}
+		}
+	}
+	return out
+}

@@ -488,9 +488,12 @@ func suffixKeys(chain string) []string {
 }
 
 var receiverTaintLangs = map[langKind]bool{
-	langSwift: true,
-	langCPP:   true,
-	langDart:  true,
+	// C#: ADO.NET builds a query in a property, `cmd.CommandText = sql;
+	// cmd.ExecuteNonQuery();`, and DirectorySearcher's Filter the same way.
+	langCSharp: true,
+	langSwift:  true,
+	langCPP:    true,
+	langDart:   true,
 }
 
 func dottedAssignRoot(left string) (string, bool) {
