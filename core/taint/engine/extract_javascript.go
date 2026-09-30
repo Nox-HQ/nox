@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // extractJavaScript turns JS/TS logical lines into unit drafts with PER-FUNCTION
 // scoping. JavaScript has no single lexically-clean function-header shape (function
@@ -26,6 +29,9 @@ import "strings"
 // headers a flat recognizer cannot parse degrade to the enclosing scope, which is
 // the same conservative merge as before — never a hidden same-function flow.
 func extractJavaScript(lines []logicalLine) []unitDraft {
+	for i := range lines {
+		lines[i] = rewriteInlineRequire(lines[i])
+	}
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 
@@ -297,4 +303,35 @@ func isJSStructuralLine(trimmed string) bool {
 		}
 	}
 	return false
+}
+
+// jsInlineRequire matches `require("mod")` in the raw view; the module name
+// is a string literal, blanked in the code view.
+var jsInlineRequire = regexp.MustCompile(`\brequire\s*\(\s*["']([A-Za-z_$][\w$]*)["']\s*\)`)
+
+// rewriteInlineRequire replaces `require("child_process")` with the module
+// name, right-aligned in the same span, in both views: an inline require
+// then reads as the module, so `require("child_process").exec(cmd)` is the
+// catalog's child_process.exec. Only a module whose name is an identifier is
+// rewritten; the span keeps its length, so the views stay aligned.
+func rewriteInlineRequire(ll logicalLine) logicalLine {
+	if len(ll.raw) != len(ll.code) || !strings.Contains(ll.code, "require") {
+		return ll
+	}
+	locs := jsInlineRequire.FindAllStringSubmatchIndex(ll.raw, -1)
+	if locs == nil {
+		return ll
+	}
+	code, raw := []byte(ll.code), []byte(ll.raw)
+	for _, m := range locs {
+		if !strings.HasPrefix(ll.code[m[0]:], "require") {
+			continue // the match is inside a string or comment
+		}
+		name := ll.raw[m[2]:m[3]]
+		span := m[1] - m[0]
+		repl := strings.Repeat(" ", span-len(name)) + name
+		copy(code[m[0]:m[1]], repl)
+		copy(raw[m[0]:m[1]], repl)
+	}
+	return logicalLine{line: ll.line, code: string(code), raw: string(raw)}
 }

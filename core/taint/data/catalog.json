@@ -773,6 +773,94 @@
         {
           "call": "process.stdin.on",
           "kind": "stdin"
+        },
+        {
+          "call": "req.url",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.originalUrl",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.path",
+          "kind": "http_path"
+        },
+        {
+          "call": "req.param",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.header",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.url",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.params",
+          "kind": "http_path"
+        },
+        {
+          "call": "request.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "ctx.query",
+          "kind": "http_query"
+        },
+        {
+          "call": "ctx.params",
+          "kind": "http_path"
+        },
+        {
+          "call": "ctx.request.query",
+          "kind": "http_query"
+        },
+        {
+          "call": "ctx.querystring",
+          "kind": "http_query"
+        },
+        {
+          "call": "ctx.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "event.body",
+          "kind": "http_body"
+        },
+        {
+          "call": "event.queryStringParameters",
+          "kind": "http_query"
+        },
+        {
+          "call": "event.pathParameters",
+          "kind": "http_path"
+        },
+        {
+          "call": "event.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "document.cookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "document.referrer",
+          "kind": "http_header"
+        },
+        {
+          "call": "window.name",
+          "kind": "user_input"
+        },
+        {
+          "call": "location.href",
+          "kind": "http_query"
+        },
+        {
+          "call": "location.pathname",
+          "kind": "http_path"
         }
       ],
       "sinks": [
@@ -1006,6 +1094,216 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "a property store: `el.innerHTML = value` parses value as HTML whatever the element is called"
+        },
+        {
+          "call": "child_process.execFileSync",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "child_process.spawnSync",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "child_process.fork",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execa",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execa.command",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "execa.commandSync",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002"
+        },
+        {
+          "call": "db.run",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.all",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.get",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.each",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.exec",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "pool.execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "connection.execute",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "sequelize.literal",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "res.write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "res.end",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "insertAdjacentHTML",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "document.writeln",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "location.href",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "window.location.href",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "location.assign",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "location.replace",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "fs.writeFileSync",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.unlink",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.unlinkSync",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.readdir",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.readdirSync",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.createWriteStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.promises.readFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "fs.promises.writeFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "res.download",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "vm.runInContext",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005"
+        },
+        {
+          "call": "vm.Script",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005"
         }
       ],
       "sanitizers": [
@@ -1102,6 +1400,37 @@
           "call": "sanitize-filename",
           "neutralizes": [
             "path_traversal"
+          ]
+        },
+        {
+          "call": "escape",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "the legacy global: percent-encodes < > \" ' &"
+        },
+        {
+          "call": "encodeURI",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "validator.escape",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "lodash.escape",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "_.escape",
+          "neutralizes": [
+            "xss"
           ]
         }
       ],

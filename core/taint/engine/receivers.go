@@ -137,3 +137,27 @@ func csharpReceiverBindings(content []byte) map[string]string {
 	}
 	return out
 }
+
+// JavaScript receiver bindings, from what made the value. The catalog names
+// Node's SQL sinks by receiver -- db.query, pool.query, connection.query -- so
+// `const client = new pg.Client(); client.query(sql)` or `const conn = await
+// mysql.createConnection(cfg)` matched nothing. `query` alone is far too
+// generic to be a sink (GraphQL clients, query builders, URL helpers), so the
+// handle is bound from the driver call that made it.
+var jsReceiverMakers = regexp.MustCompile(`(?:^|[\s;(,])(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:` +
+	`new\s+(?:[A-Za-z_$][\w$]*\.)?(?:Client|Pool)\s*\(` + // pg
+	`|(?:[A-Za-z_$][\w$]*\.)?create(?:Connection|Pool)\s*\(` + // mysql, mysql2
+	`|new\s+(?:[A-Za-z_$][\w$]*\.)?Database\s*\(` + // sqlite3, better-sqlite3
+	`|[A-Za-z_$]*(?:pool|Pool)\.(?:connect|getConnection)\s*\(\s*\)` + // a pooled connection
+	`)`)
+
+// javascriptReceiverBindings maps each local made by a SQL driver to `db`.
+func javascriptReceiverBindings(content []byte) map[string]string {
+	out := map[string]string{}
+	for _, m := range jsReceiverMakers.FindAllSubmatch(content, -1) {
+		if name := string(m[1]); name != "db" {
+			out[name] = "db"
+		}
+	}
+	return out
+}

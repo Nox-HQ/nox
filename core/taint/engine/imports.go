@@ -117,7 +117,15 @@ func importAliases(lang lexctx.Lang, content []byte) aliasTable {
 		}
 		return aliasTable{names: names, sep: "."}
 	case lexctx.LangJavaScript:
-		return aliasTable{names: javascriptAliases(content), sep: "."}
+		names := javascriptAliases(content)
+		// An import says what a name is; a driver handle only fills in names
+		// no import claims. See receivers.go.
+		for local, kind := range javascriptReceiverBindings(content) {
+			if _, imported := names[local]; !imported {
+				names[local] = kind
+			}
+		}
+		return aliasTable{names: names, sep: "."}
 	case lexctx.LangJava:
 		// Declared-type receiver bindings only; see receivers.go.
 		return aliasTable{names: javaReceiverBindings(content), sep: "."}
