@@ -64,3 +64,12 @@ func TestCurrentLocationIsNotAnOpenRedirect(t *testing.T) {
 		}
 	}
 }
+
+// TestDestructuringEvaluatesOnce: the value's calls run once however many
+// names the pattern binds.
+func TestDestructuringEvaluatesOnce(t *testing.T) {
+	src := "const fs = require('fs');\nasync function f() {\n  const { text, usage, finishReason } = await generateText({\n    messages: [{ type: 'text', text: 'hi' }, { data: fs.readFileSync('./data/cat.png') }],\n  });\n}\n"
+	if got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(src)))); len(got) != 0 {
+		t.Errorf("got %v, want none", got)
+	}
+}

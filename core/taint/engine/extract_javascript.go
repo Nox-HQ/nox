@@ -436,9 +436,14 @@ func jsDestructuring(ll logicalLine) ([]logicalLine, bool) {
 	if len(ll.raw) == len(code) {
 		rhsRaw = ll.raw[eq+1:]
 	}
+	// The first name is bound from the value, the rest from the first: the
+	// right-hand side's calls run once, as written. Copying it per name made
+	// each copy a separate evaluation, so a sink in it was reached once per
+	// bound name -- and a later copy read what an earlier one had bound.
 	out := make([]logicalLine, 0, len(names))
-	for _, n := range names {
-		out = append(out, logicalLine{line: ll.line, code: n + " =" + rhsCode, raw: n + " =" + rhsRaw})
+	out = append(out, logicalLine{line: ll.line, code: names[0] + " =" + rhsCode, raw: names[0] + " =" + rhsRaw})
+	for _, n := range names[1:] {
+		out = append(out, logicalLine{line: ll.line, code: n + " = " + names[0], raw: n + " = " + names[0]})
 	}
 	return out, true
 }
