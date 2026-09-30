@@ -16,6 +16,10 @@ import "strings"
 // never split a real flow). Anything outside a method — field initializers, the
 // rare top-level statement — accumulates into the module unit (funcName "").
 func extractCSharp(lines []logicalLine) []unitDraft {
+	// Branch model: the Java one (java_branches.go); C#'s if/else, loops,
+	// switch/case and ternaries have Java's syntax. Before it, an assignment
+	// in an if arm was a strong update.
+	jb := newJavaBranches(lines)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
@@ -25,53 +29,85 @@ func extractCSharp(lines []logicalLine) []unitDraft {
 	// ends. methodDepth is -1 when not inside a recognized method.
 	depth := 0
 	methodDepth := -1
+	leave := func() {
+		if methodDepth >= 0 && depth <= methodDepth {
+			cur = module
+			methodDepth = -1
+		}
+	}
 
 	for _, ll := range lines {
 		trimmed := strings.TrimSpace(ll.code)
 		if trimmed == "" {
 			continue
 		}
-
-		// A `return ...;` line is a statement, never a declaration header — check it
-		// first so a `return new Foo(x)` is not misread as a header named `Foo`.
-		if st, ok := csharpReturnStatement(ll); ok {
-			cur.stmts = append(cur.stmts, st)
-			depth += braceDelta(trimmed)
-			if methodDepth >= 0 && depth <= methodDepth {
-				cur = module
-				methodDepth = -1
-			}
-			continue
-		}
+		before := depth
+		depthHere := before - (len(trimmed) - len(strings.TrimLeft(trimmed, "}")))
+		jb.enter(depthHere)
 
 		// A method header opens a new unit. It must be recognized BEFORE the
 		// generic statement recognizer so the header identifiers (method name,
 		// parameters) are never read as a data-flow call. A header may or may not
 		// carry its opening `{` on the same line (K&R vs Allman brace style); the
-		// body's `{` is counted by braceDelta whichever line it lands on.
-		if name, params, ok := csharpMethodHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
-			units = append(units, u)
-			cur = u
-			methodDepth = depth
-			depth += braceDelta(trimmed)
+		// body's `{` is counted by braceDelta whichever line it lands on. A
+		// `return ...;` line is never a header (`return new Foo(x)`).
+		if !strings.HasPrefix(trimmed, "return") {
+			if name, params, ok := csharpMethodHeader(trimmed); ok {
+				u := &unitDraft{funcName: name, params: params}
+				units = append(units, u)
+				cur = u
+				methodDepth = depth
+				depth += braceDelta(trimmed)
+				continue
+			}
+		}
+		depth += braceDelta(trimmed)
+
+		// A case label in a switch body: resolve it, then treat any statement
+		// after the colon like any other.
+		if sw := jb.innermostSwitch(); sw != nil && (strings.HasPrefix(trimmed, "case ") || strings.HasPrefix(trimmed, "default")) {
+			if rest := jb.caseLabel(sw, ll.raw); rest != "" {
+				if colon := strings.IndexByte(ll.code, ':'); colon >= 0 {
+					csharpStatement(cur, jb, subLine(ll, colon+1), branchTaken)
+				}
+			}
+			leave()
 			continue
 		}
 
-		// Recognize a statement in the current scope before adjusting depth, so a
-		// statement on the same logical line as its braces is still captured.
-		if !isCSharpStructuralLine(trimmed) {
-			if st, ok := recognizeStatement(langCSharp, ll); ok {
-				cur.stmts = append(cur.stmts, st)
+		if isCSharpStructuralLine(trimmed) || isCSharpStructuralLine(strings.TrimLeft(trimmed, "} \t")) {
+			// `using (var r = new StreamReader(path))` declares and opens in
+			// the header; `foreach (var x in items)` binds x from items.
+			if inner, loop, ok := csharpHeaderStatement(ll); ok {
+				// A loop's element is bound only if the loop runs.
+				arm := branchTaken
+				if loop {
+					arm = branchMaybe
+				}
+				csharpStatement(cur, jb, inner, arm)
 			}
+			if h, ok := parseJavaHeader(ll); ok {
+				st := jb.header(h, depthHere)
+				switch {
+				case h.rest != "":
+					// `if (c) stmt;` / `else stmt;` on one line.
+					csharpStatement(cur, jb, subLine(ll, h.restAt), st)
+				case !h.opens:
+					// `if (c)` with the statement on the next line.
+					jb.pending = &st
+				}
+			}
+			leave()
+			continue
 		}
 
-		depth += braceDelta(trimmed)
-		// Leaving the method body returns to module scope.
-		if methodDepth >= 0 && depth <= methodDepth {
-			cur = module
-			methodDepth = -1
+		arm := branchTaken
+		if jb.pending != nil {
+			arm = *jb.pending
+			jb.pending = nil
 		}
+		csharpStatement(cur, jb, ll, arm)
+		leave()
 	}
 
 	out := make([]unitDraft, 0, len(units))
@@ -79,6 +115,29 @@ func extractCSharp(lines []logicalLine) []unitDraft {
 		out = append(out, *u)
 	}
 	return out
+}
+
+// csharpStatement recognizes one statement under the branch model: dropped in
+// an arm that cannot run, conditional in one that may not.
+func csharpStatement(cur *unitDraft, jb *javaBranches, ll logicalLine, arm branchState) {
+	state := combineStates(jb.state(), arm)
+	if sw := jb.innermostSwitch(); sw != nil {
+		sw.statement(strings.TrimSpace(ll.code))
+	}
+	if state == branchDead {
+		return
+	}
+	ll = jb.rewriteJavaTernary(ll)
+	st, ok := csharpReturnStatement(ll)
+	if !ok {
+		st, ok = recognizeStatement(langCSharp, ll)
+	}
+	if !ok {
+		return
+	}
+	st.conditional = state == branchMaybe
+	cur.stmts = append(cur.stmts, st)
+	jb.learn(ll, st.assigns)
 }
 
 // csharpMethodHeader returns the method name and its positional parameter names
@@ -286,4 +345,61 @@ func csharpReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
 	return st, true
+}
+
+// csharpHeaderStatement returns the statement a `using (...)` or
+// `foreach (... in ...)` header carries, as its own line: the declaration of a
+// using, and for a foreach `x = items` (the element holds the collection's
+// values). loop reports the foreach form. A header that carries none reports
+// ok false.
+func csharpHeaderStatement(ll logicalLine) (stmt logicalLine, loop, ok bool) {
+	code := ll.code
+	lead := len(code) - len(strings.TrimLeft(code, " \t}"))
+	rest := code[lead:]
+	var kw string
+	switch {
+	case strings.HasPrefix(rest, "using"):
+		kw = "using"
+	case strings.HasPrefix(rest, "foreach"):
+		kw = "foreach"
+	default:
+		return logicalLine{}, false, false
+	}
+	open := strings.IndexByte(code[lead:], '(')
+	if open < 0 || strings.TrimSpace(rest[len(kw):open]) != "" {
+		return logicalLine{}, false, false
+	}
+	open += lead
+	closing := matchParen(code, open)
+	if closing < 0 {
+		return logicalLine{}, false, false
+	}
+	inner := logicalLine{line: ll.line,
+		code: blankRange(blankRange(code, 0, open+1), closing, len(code)),
+		raw:  blankRange(blankRange(ll.raw, 0, min(open+1, len(ll.raw))), min(closing, len(ll.raw)), len(ll.raw))}
+	if kw == "using" {
+		if !strings.Contains(inner.code, "=") {
+			return logicalLine{}, false, false
+		}
+		return inner, false, true
+	}
+	// foreach (T x in items): rewrite to `x = items` in place, keeping the
+	// views aligned by blanking the declared type and the `in`.
+	in := topLevelKeyword(inner.code, " in ")
+	if in < 0 {
+		return logicalLine{}, false, false
+	}
+	decl := strings.Fields(inner.code[:in])
+	if len(decl) == 0 {
+		return logicalLine{}, false, false
+	}
+	name := decl[len(decl)-1]
+	if !isSimpleIdent(name) {
+		return logicalLine{}, false, false
+	}
+	b := []byte(strings.Repeat(" ", len(inner.code)))
+	copy(b[open+1:], name)
+	b[in+1] = '='
+	copy(b[in+4:], inner.code[in+4:closing])
+	return logicalLine{line: ll.line, code: string(b), raw: string(b)}, true, true
 }
