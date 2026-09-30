@@ -182,8 +182,9 @@ func oops( {
 	_ = units
 }
 
-// TestExtractGoReceiverMethodParams covers a method with a receiver: the receiver
-// name is the first parameter (position matters for interproc summaries).
+// TestExtractGoReceiverMethodParams covers a method with a receiver: the
+// parameters are the call's positional arguments, so the receiver is not one
+// of them (a call `s.handle(x)` passes only x).
 func TestExtractGoReceiverMethodParams(t *testing.T) {
 	src := []byte(`package s
 
@@ -195,8 +196,8 @@ func (s *Server) handle(input string) {
 `)
 	units := extractUnits(lexctx.LangGo, src)
 	u := findUnit(t, units, "handle")
-	if len(u.params) != 2 || u.params[0] != "s" || u.params[1] != "input" {
-		t.Errorf("params = %v, want [s input] (receiver first)", u.params)
+	if len(u.params) != 1 || u.params[0] != "input" {
+		t.Errorf("params = %v, want [input]", u.params)
 	}
 }
 

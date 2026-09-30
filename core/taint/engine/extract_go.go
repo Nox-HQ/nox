@@ -31,7 +31,8 @@ func extractGo(content []byte) []unitDraft {
 		return nil
 	}
 
-	ex := &goExtractor{fset: fset}
+	ex := &goExtractor{fset: fset, roles: newGoRoles(file)}
+	fileConsts := goFileConsts(file)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 
@@ -39,6 +40,10 @@ func extractGo(content []byte) []unitDraft {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			u := &unitDraft{funcName: d.Name.Name, params: ex.funcParams(d)}
+			ex.roles.enterFunc(d)
+			ex.consts = goFuncConsts(d.Body, fileConsts)
+			ex.body = d.Body
+			ex.requestMaps = map[string]bool{}
 			if d.Body != nil {
 				ex.walkBlock(u, d.Body.List)
 			}
@@ -62,6 +67,50 @@ func extractGo(content []byte) []unitDraft {
 type goExtractor struct {
 	fset      *token.FileSet
 	tmpserial int
+	// roles rewrites receivers of a known declared type to the catalog's
+	// canonical name (see go_roles.go).
+	roles *goRoles
+	// consts and cond drive the branch model (see go_branches.go): the
+	// current function's constant names, and how many branch bodies deep the
+	// walk is — a statement inside one is a weak update.
+	consts goConstEnv
+	cond   int
+	// body is the function being walked, for the slice-literal model.
+	body *ast.BlockStmt
+	// requestMaps are the locals holding a request map (see isRequestMap).
+	requestMaps map[string]bool
+}
+
+// goRequestMaps are the request fields and accessors that are maps keyed by
+// client-chosen names.
+var goRequestMaps = map[string]bool{
+	"r.URL.Query": true, "r.Form": true, "r.PostForm": true, "r.Header": true,
+	"r.Trailer": true, "r.MultipartForm.Value": true,
+}
+
+// isRequestMap reports whether e is a request map or a local holding one.
+func (ex *goExtractor) isRequestMap(e ast.Expr) bool {
+	if id, ok := e.(*ast.Ident); ok && ex.requestMaps[id.Name] {
+		return true
+	}
+	return goRequestMaps[ex.roles.canon(renderCallChain(e))]
+}
+
+// trackRequestMaps records which locals an assignment leaves holding a
+// request map.
+func (ex *goExtractor) trackRequestMaps(st *ast.AssignStmt) {
+	if ex.requestMaps == nil || len(st.Lhs) != len(st.Rhs) {
+		return
+	}
+	for i, l := range st.Lhs {
+		if id, ok := l.(*ast.Ident); ok {
+			if ex.isRequestMap(st.Rhs[i]) {
+				ex.requestMaps[id.Name] = true
+			} else {
+				delete(ex.requestMaps, id.Name)
+			}
+		}
+	}
 }
 
 // line returns the 1-based source line of a position.
@@ -69,17 +118,16 @@ func (ex *goExtractor) line(pos token.Pos) int {
 	return ex.fset.Position(pos).Line
 }
 
-// funcParams returns the receiver (if any) followed by the positional parameter
-// names in declaration order — the ordering the interprocedural summary pass maps
-// caller-argument position onto. A blank (`_`) or unnamed slot is kept as "" so
-// positions do not shift.
+// funcParams returns the positional parameter names in declaration order — the
+// ordering the interprocedural summary pass maps caller-argument position onto.
+// A blank (`_`) or unnamed slot is kept as "" so positions do not shift.
+//
+// The receiver is not a parameter here. A method is called as `x.m(a)`, whose
+// positional arguments are only `a`; listing the receiver first bound every
+// argument one slot off, so `bar := t.m(param)` resolved param to the receiver
+// and a helper that provably returns a constant still tainted its result.
 func (ex *goExtractor) funcParams(d *ast.FuncDecl) []string {
 	var params []string
-	if d.Recv != nil {
-		for _, f := range d.Recv.List {
-			params = append(params, fieldNames(f)...)
-		}
-	}
 	if d.Type != nil && d.Type.Params != nil {
 		for _, f := range d.Type.Params.List {
 			params = append(params, fieldNames(f)...)
@@ -108,7 +156,20 @@ func fieldNames(f *ast.Field) []string {
 // keeping everything in the same unit (straight-line, no CFG — the engine's
 // documented limit).
 func (ex *goExtractor) walkBlock(u *unitDraft, stmts []ast.Stmt) {
+	// Slice literals whose elements this block can follow (see go_lists.go).
+	var lists map[string][]ast.Expr
+	if ex.body != nil {
+		for name := range ex.eligibleLists(stmts, ex.body) {
+			if lists == nil {
+				lists = map[string][]ast.Expr{}
+			}
+			lists[name] = nil
+		}
+	}
 	for _, s := range stmts {
+		if lists != nil {
+			ex.trackList(s, lists)
+		}
 		ex.walkStmt(u, s)
 	}
 }
@@ -118,6 +179,14 @@ func (ex *goExtractor) walkStmt(u *unitDraft, s ast.Stmt) {
 	switch st := s.(type) {
 	case *ast.AssignStmt:
 		ex.emitAssign(u, st)
+		ex.roles.assign(st.Lhs, st.Rhs)
+		ex.trackRequestMaps(st)
+	case *ast.DeclStmt:
+		// `var x = expr` / `var x T` inside a function.
+		if gd, ok := st.Decl.(*ast.GenDecl); ok && gd.Tok == token.VAR {
+			ex.walkGenDecl(u, gd)
+			ex.roles.declare(ex.roles.fn, gd)
+		}
 	case *ast.ExprStmt:
 		if call, ok := st.X.(*ast.CallExpr); ok {
 			ex.emitCallStmt(u, call, ex.line(st.Pos()))
@@ -125,33 +194,43 @@ func (ex *goExtractor) walkStmt(u *unitDraft, s ast.Stmt) {
 	case *ast.ReturnStmt:
 		ex.emitReturn(u, st)
 	case *ast.IfStmt:
-		if st.Init != nil {
-			ex.walkStmt(u, st.Init)
-		}
-		ex.emitGuard(u, st.Cond)
-		if st.Body != nil {
-			ex.walkBlock(u, st.Body.List)
-		}
-		if st.Else != nil {
-			ex.walkStmt(u, st.Else)
-		}
+		ex.walkIf(u, st)
 	case *ast.ForStmt:
 		if st.Init != nil {
 			ex.walkStmt(u, st.Init)
 		}
 		if st.Body != nil {
+			ex.cond++
 			ex.walkBlock(u, st.Body.List)
+			ex.cond--
 		}
 	case *ast.RangeStmt:
+		ex.cond++
+		// The element variable holds the ranged collection's values, so
+		// `for _, c := range r.Cookies()` binds c from the source. The key of a
+		// slice is an index and carries nothing, so only the value is bound.
+		if v, ok := st.Value.(*ast.Ident); ok && v.Name != "_" && st.X != nil {
+			ex.emitAssignExprs(u, []ast.Expr{st.Value}, []ast.Expr{st.X}, ex.line(st.Pos()))
+		}
+		// Ranging over a request map (query, form, headers) binds the KEY
+		// too: the parameter names are the client's as much as the values.
+		if k, ok := st.Key.(*ast.Ident); ok && k.Name != "_" && ex.isRequestMap(st.X) {
+			ex.emitAssignExprs(u, []ast.Expr{st.Key}, []ast.Expr{st.X}, ex.line(st.Pos()))
+		}
 		if st.Body != nil {
 			ex.walkBlock(u, st.Body.List)
 		}
+		ex.cond--
 	case *ast.SwitchStmt:
+		ex.walkSwitch(u, st)
+	case *ast.TypeSwitchStmt:
 		if st.Init != nil {
 			ex.walkStmt(u, st.Init)
 		}
 		if st.Body != nil {
+			ex.cond++
 			ex.walkBlock(u, st.Body.List)
+			ex.cond--
 		}
 	case *ast.CaseClause:
 		ex.walkBlock(u, st.Body)
@@ -196,8 +275,10 @@ func (ex *goExtractor) emitAssignExprs(u *unitDraft, lhs, rhs []ast.Expr, line i
 	st.line = line
 	st.sinkArgs = map[string]sinkArgDraft{}
 	st.assigns = ex.primaryLHS(lhs)
+	st.conditional = ex.cond > 0
 
 	ex.collectExprs(&st, rhs)
+	ex.roles.canonStmt(&st)
 	finalizeStmt(&st)
 	if stmtIsEmpty(&st) {
 		return
@@ -214,6 +295,7 @@ func (ex *goExtractor) emitCallStmt(u *unitDraft, call *ast.CallExpr, line int) 
 	st.line = line
 	st.sinkArgs = map[string]sinkArgDraft{}
 	ex.collectExprs(&st, []ast.Expr{call})
+	ex.roles.canonStmt(&st)
 	finalizeStmt(&st)
 	if stmtIsEmpty(&st) {
 		return
@@ -231,6 +313,7 @@ func (ex *goExtractor) emitGuard(u *unitDraft, cond ast.Expr) {
 	g.line = ex.line(cond.Pos())
 	g.sinkArgs = map[string]sinkArgDraft{}
 	ex.collectExprs(&g, []ast.Expr{cond})
+	ex.roles.canonStmt(&g)
 	finalizeStmt(&g)
 	if len(g.calls) == 0 {
 		return
@@ -253,6 +336,7 @@ func (ex *goExtractor) emitReturn(u *unitDraft, st *ast.ReturnStmt) {
 	out.line = line
 	out.sinkArgs = map[string]sinkArgDraft{}
 	ex.collectExprs(&out, st.Results)
+	ex.roles.canonStmt(&out)
 	finalizeStmt(&out)
 	// The returned variables are exactly the free identifiers of the expressions.
 	out.returns = append([]string(nil), out.reads...)
@@ -350,8 +434,11 @@ func (ex *goExtractor) hoistWithinCalls(u *unitDraft, e ast.Expr, line int) {
 		case *ast.ParenExpr:
 			ex.hoistWithinCalls(u, x.X, line)
 		case *ast.BinaryExpr:
-			ex.hoistWithinCalls(u, x.X, line)
-			ex.hoistWithinCalls(u, x.Y, line)
+			// A source accessor inside a concatenation (`"SELECT " +
+			// r.FormValue("id")`) is hoisted like a direct argument, so the
+			// sink sees a tracked variable rather than an untracked call.
+			x.X = ex.hoistOperand(u, x.X, line)
+			x.Y = ex.hoistOperand(u, x.Y, line)
 		case *ast.UnaryExpr:
 			ex.hoistWithinCalls(u, x.X, line)
 		}
@@ -387,6 +474,24 @@ func (ex *goExtractor) hoistWithinCalls(u *unitDraft, e ast.Expr, line int) {
 	}
 }
 
+// hoistOperand hoists an operand of a binary expression when it is a pure
+// selector chain or a source-accessor call, returning the expression to use in
+// its place; any other operand is descended as usual.
+func (ex *goExtractor) hoistOperand(u *unitDraft, e ast.Expr, line int) ast.Expr {
+	if chain := pureSelectorChain(e); chain != "" {
+		tmp := ex.newTemp()
+		ex.emitSyntheticSource(u, tmp, e, chain, line)
+		return &ast.Ident{NamePos: e.Pos(), Name: tmp}
+	}
+	if acc, ok := accessorSourceCall(e); ok {
+		tmp := ex.newTemp()
+		ex.emitSyntheticSourceCall(u, tmp, acc, line)
+		return &ast.Ident{NamePos: e.Pos(), Name: tmp}
+	}
+	ex.hoistWithinCalls(u, e, line)
+	return e
+}
+
 // accessorSourceCall reports whether e is a source-accessor call safe to hoist
 // into a synthetic source assignment: a CallExpr whose callee is a pure selector
 // chain of at least two segments (r.FormValue, r.Header.Get) and whose arguments
@@ -419,6 +524,7 @@ func accessorSourceCall(e ast.Expr) (*ast.CallExpr, bool) {
 func (ex *goExtractor) emitSyntheticSourceCall(u *unitDraft, tmp string, call *ast.CallExpr, line int) {
 	st := stmtDraft{line: line, assigns: tmp, sinkArgs: map[string]sinkArgDraft{}}
 	ex.collectExprs(&st, []ast.Expr{call})
+	ex.roles.canonStmt(&st)
 	finalizeStmt(&st)
 	if stmtIsEmpty(&st) {
 		return
@@ -434,7 +540,7 @@ func (ex *goExtractor) emitSyntheticSource(u *unitDraft, tmp string, arg ast.Exp
 		line:     line,
 		assigns:  tmp,
 		sinkArgs: map[string]sinkArgDraft{},
-		chains:   []string{chain},
+		chains:   []string{ex.roles.canon(chain)},
 	}
 	// Record the chain's head identifier as a read so read-propagation still holds
 	// if the head itself is (transitively) tainted.
@@ -468,6 +574,13 @@ func (ex *goExtractor) collectExpr(st *stmtDraft, e ast.Expr) {
 	case nil:
 		return
 	case *ast.CallExpr:
+		// `new(T)` allocates a zero value of a type: it neither reads data nor
+		// calls anything the catalog or a summary could know, and recording it
+		// made `new(T).m(x)` a two-call statement whose method summary was
+		// never applied.
+		if id, ok := x.Fun.(*ast.Ident); ok && id.Name == "new" {
+			return
+		}
 		callee := renderCallChain(x.Fun)
 		// A raw `.Write` XSS-to-response sink (w.Write([]byte(...))) fires only on the
 		// reflected-HTML shape: a tainted value combined with a string LITERAL in the
@@ -756,11 +869,38 @@ func isGoRawWriteSink(callee string) bool {
 // "<div>%s</div>" or an HTML concatenation "<b>"+user+"</b>", including inside a
 // []byte(...) conversion). A bare write of a single precomputed value — w.Write(out)
 // — has no literal and is not treated as XSS. Deterministic, AST-only.
+//
+// A write of a STRING converted to bytes (`w.Write([]byte(bar))`) also counts:
+// that is the handler writing text it holds, the reflected case with no markup
+// around it. What stays gated is a write of a value that is already bytes —
+// command output, file contents, a JSON encoding — which is reported at its own
+// upstream sink.
 func xssWriteArgIsHTML(call *ast.CallExpr) bool {
 	for _, arg := range call.Args {
-		if exprContainsStringLiteral(arg) {
+		if exprContainsStringLiteral(arg) || isBytesOfString(arg) {
 			return true
 		}
+	}
+	return false
+}
+
+// isBytesOfString reports whether e is `[]byte(x)` for a named string value
+// x: an identifier or a field, the text a handler holds.
+func isBytesOfString(e ast.Expr) bool {
+	call, ok := e.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	arr, ok := call.Fun.(*ast.ArrayType)
+	if !ok || arr.Len != nil {
+		return false
+	}
+	if elt, ok := arr.Elt.(*ast.Ident); !ok || elt.Name != "byte" {
+		return false
+	}
+	switch call.Args[0].(type) {
+	case *ast.Ident, *ast.SelectorExpr:
+		return true
 	}
 	return false
 }

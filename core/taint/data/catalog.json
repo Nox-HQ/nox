@@ -1158,6 +1158,210 @@
         {
           "call": "os.Args",
           "kind": "argv"
+        },
+        {
+          "call": "r.URL.Path",
+          "kind": "http_query"
+        },
+        {
+          "call": "r.URL.String",
+          "kind": "http_query"
+        },
+        {
+          "call": "r.RequestURI",
+          "kind": "http_query"
+        },
+        {
+          "call": "r.Referer",
+          "kind": "http_header"
+        },
+        {
+          "call": "r.UserAgent",
+          "kind": "http_header"
+        },
+        {
+          "call": "r.Cookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "r.Cookies",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "r.Header",
+          "kind": "http_header"
+        },
+        {
+          "call": "r.Header.Values",
+          "kind": "http_header"
+        },
+        {
+          "call": "r.Form",
+          "kind": "http_body"
+        },
+        {
+          "call": "r.PostForm",
+          "kind": "http_body"
+        },
+        {
+          "call": "r.MultipartForm",
+          "kind": "http_body"
+        },
+        {
+          "call": "r.PathValue",
+          "kind": "http_path"
+        },
+        {
+          "call": "r.URL.Query.Get",
+          "kind": "http_query"
+        },
+        {
+          "call": "beego.GetString",
+          "kind": "http_query"
+        },
+        {
+          "call": "beego.GetStrings",
+          "kind": "http_query"
+        },
+        {
+          "call": "beego.GetCookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "beego.GetSecureCookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "beego.Input",
+          "kind": "http_query"
+        },
+        {
+          "call": "beego.Ctx.Input.Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "beego.Ctx.Input.Param",
+          "kind": "http_path"
+        },
+        {
+          "call": "beego.Ctx.Input.Header",
+          "kind": "http_header"
+        },
+        {
+          "call": "beego.Ctx.Input.Cookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "beego.Ctx.Input.RequestBody",
+          "kind": "http_body"
+        },
+        {
+          "call": "beego.Ctx.GetCookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "gin.Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "gin.DefaultQuery",
+          "kind": "http_query"
+        },
+        {
+          "call": "gin.GetQuery",
+          "kind": "http_query"
+        },
+        {
+          "call": "gin.QueryArray",
+          "kind": "http_query"
+        },
+        {
+          "call": "gin.QueryMap",
+          "kind": "http_query"
+        },
+        {
+          "call": "gin.Param",
+          "kind": "http_path"
+        },
+        {
+          "call": "gin.PostForm",
+          "kind": "http_body"
+        },
+        {
+          "call": "gin.DefaultPostForm",
+          "kind": "http_body"
+        },
+        {
+          "call": "gin.GetPostForm",
+          "kind": "http_body"
+        },
+        {
+          "call": "gin.PostFormArray",
+          "kind": "http_body"
+        },
+        {
+          "call": "gin.GetHeader",
+          "kind": "http_header"
+        },
+        {
+          "call": "gin.Cookie",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "gin.GetRawData",
+          "kind": "http_body"
+        },
+        {
+          "call": "echo.QueryParam",
+          "kind": "http_query"
+        },
+        {
+          "call": "echo.QueryParams",
+          "kind": "http_query"
+        },
+        {
+          "call": "echo.QueryString",
+          "kind": "http_query"
+        },
+        {
+          "call": "echo.FormValue",
+          "kind": "http_body"
+        },
+        {
+          "call": "echo.FormParams",
+          "kind": "http_body"
+        },
+        {
+          "call": "echo.Param",
+          "kind": "http_path"
+        },
+        {
+          "call": "fiber.Query",
+          "kind": "http_query"
+        },
+        {
+          "call": "fiber.Params",
+          "kind": "http_path"
+        },
+        {
+          "call": "fiber.FormValue",
+          "kind": "http_body"
+        },
+        {
+          "call": "fiber.Get",
+          "kind": "http_header"
+        },
+        {
+          "call": "fiber.Body",
+          "kind": "http_body"
+        },
+        {
+          "call": "fiber.Cookies",
+          "kind": "http_cookie"
+        },
+        {
+          "call": "fiber.OriginalURL",
+          "kind": "http_query"
         }
       ],
       "sinks": [
@@ -1337,6 +1541,105 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "the redirect target is taken from the request; an absolute attacker-controlled URL sends the user off-site"
+        },
+        {
+          "call": "db.Prepare",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "the prepared statement's SQL text; the later Stmt.Query/Exec arguments are bind parameters"
+        },
+        {
+          "call": "db.PrepareContext",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "the prepared statement's SQL text; the later Stmt.Query/Exec arguments are bind parameters"
+        },
+        {
+          "call": "os.Create",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Stat",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Lstat",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.WriteFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "ioutil.WriteFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Remove",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.RemoveAll",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Mkdir",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.MkdirAll",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Rename",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.Chmod",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "os.ReadDir",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "ioutil.ReadDir",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "http.ServeFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "the path is the third argument; the request passed as the second is not a path"
         }
       ],
       "sanitizers": [
@@ -1374,7 +1677,8 @@
             "command_injection",
             "sql_injection",
             "path_traversal",
-            "code_injection"
+            "code_injection",
+            "xss"
           ],
           "note": "numeric coercion removes injection metacharacters"
         },
@@ -1384,7 +1688,58 @@
             "command_injection",
             "sql_injection",
             "path_traversal",
-            "code_injection"
+            "code_injection",
+            "xss"
+          ]
+        },
+        {
+          "call": "html.EscapeString",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "template.HTMLEscapeString",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "template.JSEscapeString",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "template.HTMLEscaper",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "strconv.Quote",
+          "neutralizes": [
+            "xss"
+          ]
+        },
+        {
+          "call": "strconv.ParseFloat",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "xss"
+          ]
+        },
+        {
+          "call": "strconv.ParseBool",
+          "neutralizes": [
+            "command_injection",
+            "sql_injection",
+            "path_traversal",
+            "code_injection",
+            "xss"
           ]
         }
       ],
