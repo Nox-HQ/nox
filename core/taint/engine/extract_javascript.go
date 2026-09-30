@@ -57,6 +57,12 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// app.get(...), is not a sink); structural lines carry only scaffolding.
 		if st, ok := jsReturnStatement(ll); ok && !isHeader {
 			stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+		} else if binds, ok := jsDestructuring(ll); ok && !isHeader {
+			for _, b := range binds {
+				if st, ok := recognizeStatement(langJavaScript, b); ok {
+					stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+				}
+			}
 		} else if !isHeader && !isJSStructuralLine(trimmed) {
 			if st, ok := recognizeStatement(langJavaScript, ll); ok {
 				stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
@@ -73,6 +79,13 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// openDepth) land in the new unit.
 		if isHeader {
 			u := &unitDraft{funcName: name, params: params}
+			// Next.js App Router: a route handler or page receives the
+			// route's dynamic segments and query as a destructured
+			// `{ params }` / `{ searchParams }` argument -- request data.
+			for _, m := range jsNextRouteArgs.FindAllStringSubmatch(ll.code, -1) {
+				u.stmts = append(u.stmts, stmtDraft{line: ll.line, assigns: m[1],
+					chains: []string{"nextjs." + m[1]}, sinkArgs: map[string]sinkArgDraft{}})
+			}
 			units = append(units, u)
 			stack = append(stack, frame{unit: u, openDepth: depth})
 		}
@@ -307,6 +320,11 @@ func isJSStructuralLine(trimmed string) bool {
 	return false
 }
 
+// jsNextRouteArgs finds `params` / `searchParams` destructured from a
+// function's parameters: `GET(req, { params })`, `Page({ params,
+// searchParams })`.
+var jsNextRouteArgs = regexp.MustCompile(`[{,]\s*(params|searchParams)\s*[,}:]`)
+
 // jsInlineRequire matches `require("mod")` in the raw view; the module name
 // is a string literal, blanked in the code view.
 var jsInlineRequire = regexp.MustCompile(`\brequire\s*\(\s*["']([A-Za-z_$][\w$]*)["']\s*\)`)
@@ -362,4 +380,104 @@ func jsReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.assigns = ""
 	st.returns = append([]string(nil), st.reads...)
 	return st, true
+}
+
+// jsDestructuring expands `const { a, b: c, ...rest } = expr` and
+// `[x, y] = expr` into one assignment per bound name, each from the whole
+// right-hand side. The recognizer takes only a bare name as an assignment
+// target, so destructuring bound nothing and the taint stopped there --
+// `const { name } = req.body`, the ordinary Express idiom, and
+// `const { file } = await params` in a Next.js route. Each name gets the
+// whole value's taint: element-insensitive, as containers are elsewhere.
+func jsDestructuring(ll logicalLine) ([]logicalLine, bool) {
+	code := ll.code
+	lead := len(code) - len(strings.TrimLeft(code, " \t"))
+	i := lead
+	for _, kw := range []string{"const ", "let ", "var "} {
+		if strings.HasPrefix(code[i:], kw) {
+			i += len(kw)
+			break
+		}
+	}
+	for i < len(code) && (code[i] == ' ' || code[i] == '\t') {
+		i++
+	}
+	if i >= len(code) || (code[i] != '{' && code[i] != '[') {
+		return nil, false
+	}
+	closing := matchParen(code, i)
+	if closing < 0 {
+		return nil, false
+	}
+	eq := closing + 1
+	for eq < len(code) && (code[eq] == ' ' || code[eq] == '\t') {
+		eq++
+	}
+	if eq >= len(code) || code[eq] != '=' || (eq+1 < len(code) && (code[eq+1] == '=' || code[eq+1] == '>')) {
+		return nil, false
+	}
+	names := jsPatternNames(code[i+1 : closing])
+	if len(names) == 0 {
+		return nil, false
+	}
+	rhsCode := code[eq+1:]
+	rhsRaw := rhsCode
+	if len(ll.raw) == len(code) {
+		rhsRaw = ll.raw[eq+1:]
+	}
+	out := make([]logicalLine, 0, len(names))
+	for _, n := range names {
+		out = append(out, logicalLine{line: ll.line, code: n + " =" + rhsCode, raw: n + " =" + rhsRaw})
+	}
+	return out, true
+}
+
+// jsPatternNames returns the names a destructuring pattern binds: a key, the
+// alias after `key:`, a `...rest`, and the names of nested patterns; defaults
+// (`= value`) are not names.
+func jsPatternNames(pattern string) []string {
+	var out []string
+	for _, part := range splitTopLevel(pattern, ',') {
+		part = strings.TrimSpace(part)
+		if eq := topLevelKeyword(part, "="); eq >= 0 {
+			part = strings.TrimSpace(part[:eq])
+		}
+		part = strings.TrimPrefix(part, "...")
+		if colon := topLevelKeyword(part, ":"); colon >= 0 {
+			part = strings.TrimSpace(part[colon+1:])
+		}
+		if part == "" {
+			continue
+		}
+		if part[0] == '{' || part[0] == '[' {
+			if end := matchParen(part, 0); end > 0 {
+				out = append(out, jsPatternNames(part[1:end])...)
+			}
+			continue
+		}
+		if isSimpleIdent(part) {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// splitTopLevel splits s on sep outside brackets.
+func splitTopLevel(s string, sep byte) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case sep:
+			if depth == 0 {
+				out = append(out, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, s[start:])
 }

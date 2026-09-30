@@ -861,6 +861,34 @@
         {
           "call": "location.pathname",
           "kind": "http_path"
+        },
+        {
+          "call": "nextjs.params",
+          "kind": "http_path"
+        },
+        {
+          "call": "nextjs.searchParams",
+          "kind": "http_query"
+        },
+        {
+          "call": "request.json",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.json",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.formData",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.text",
+          "kind": "http_body"
+        },
+        {
+          "call": "nextUrl.searchParams",
+          "kind": "http_query"
         }
       ],
       "sinks": [
