@@ -238,17 +238,78 @@ func promotePHPSuperglobals(st *stmtDraft) {
 }
 
 // normalizePHPLine rewrites a logical line's code and raw views into the shape
-// the shared recognizer understands: `->` → `.`, the `$` sigil removed, and the
-// `echo`/`print` statement constructs turned into call syntax. Both views are
-// transformed identically so their byte offsets stay mutually aligned (the
-// recognizer slices raw by offsets found in code); the 1-based line number is
-// preserved unchanged.
+// the shared recognizer understands: `->` -> `.`, the concatenation `.` -> `+`,
+// the `$` sigil removed (or `_` for a keyword-named variable), and the
+// `echo`/`print` constructs turned into call syntax. The line number is kept.
+//
+// Every rewrite is decided on the CODE view and applied as the same byte edit
+// at the same offset to both views, so they stay aligned: the recognizer
+// slices raw by offsets it found in code. Rewriting each view as a string --
+// what this once did -- also rewrote the `$`, `->` and `.` inside comments
+// and string literals in the raw view only, where the code view is blank,
+// and drifted the views apart on 90,292 lines of a 7,249-file PHP corpus
+// (WordPress, Roundcube, OpenCart): every raw slice on those lines read the
+// wrong text, and a header slice past the end panicked.
 func normalizePHPLine(ll logicalLine) logicalLine {
-	return logicalLine{
-		line: ll.line,
-		code: normalizePHPExpr(ll.code),
-		raw:  normalizePHPExpr(ll.raw),
+	if len(ll.code) != len(ll.raw) {
+		// Views that arrive misaligned cannot be edited in lockstep.
+		return logicalLine{line: ll.line, code: normalizePHPExpr(ll.code), raw: normalizePHPExpr(ll.raw)}
 	}
+	code, raw := ll.code, ll.raw
+	oc := make([]byte, 0, len(code)+2)
+	or := make([]byte, 0, len(raw)+2)
+	emit := func(b byte) { oc, or = append(oc, b), append(or, b) }
+
+	// echo/print without parentheses: the whitespace after the keyword
+	// becomes `(`, and a `)` closes the line.
+	trimmed := strings.TrimLeft(code, " \t")
+	indent := len(code) - len(trimmed)
+	echoAt := -1
+	for _, kw := range []string{"echo", "print"} {
+		rest := strings.TrimPrefix(trimmed, kw)
+		if rest != trimmed && rest != "" && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != "" {
+			echoAt = indent + len(kw)
+			break
+		}
+	}
+
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case i == echoAt:
+			emit('(')
+		case c == '-' && i+1 < len(code) && code[i+1] == '>':
+			emit('.')
+			i++
+		case c == '$':
+			j := i + 1
+			for j < len(code) && isIdentPart(code[j]) {
+				j++
+			}
+			// `$string` would read as the keyword `string` once the sigil
+			// is gone; see phpKeywordVars.
+			if name := code[i+1 : j]; name != "this" && isKeyword(name) {
+				emit('_')
+			}
+		case c == '.' && !isDecimalPoint(code, i):
+			// A bare `.` in PHP code is concatenation (members are `->`);
+			// a decimal point has a digit on both sides.
+			emit('+')
+		default:
+			oc, or = append(oc, c), append(or, raw[i])
+		}
+	}
+	if echoAt >= 0 {
+		emit(')')
+	}
+	return logicalLine{line: ll.line, code: string(oc), raw: string(or)}
+}
+
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+
+// isDecimalPoint reports a `.` with a digit on both sides.
+func isDecimalPoint(code string, i int) bool {
+	return i > 0 && isDigit(code[i-1]) && i+1 < len(code) && isDigit(code[i+1])
 }
 
 // normalizePHPExpr applies the PHP→shared-recognizer rewrites to one text view.
@@ -347,11 +408,15 @@ func rewriteEchoPrint(s string) string {
 		if rest[0] != ' ' && rest[0] != '\t' {
 			return s
 		}
-		arg := strings.TrimSpace(rest)
-		if arg == "" {
+		if strings.TrimSpace(rest) == "" {
 			return s
 		}
-		return indent + kw + "(" + arg + ")"
+		// The whitespace after the keyword becomes `(` and a `)` is appended,
+		// so the code and raw views -- which differ where a trailing comment
+		// is blanked in one and not the other -- change by the same bytes at
+		// the same offsets and stay aligned. Trimming the argument, as this
+		// once did, trimmed the two views differently.
+		return indent + kw + "(" + rest[1:] + ")"
 	}
 	return s
 }

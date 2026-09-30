@@ -3,6 +3,8 @@ package engine
 import (
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // phpCase is one PHP source and the rule IDs it must report (nil: none).
@@ -137,4 +139,25 @@ func TestPHPContainersGettersAndNames(t *testing.T) {
 		{"variable named string", "<?php\n$string = $_POST['x'];\n$t = $string;" + sink, []string{"TAINT-001"}},
 		{"variable named type", "<?php\n$type = $_GET['t'];\n$t = \"SELECT * FROM $type\";" + sink, []string{"TAINT-001"}},
 	})
+}
+
+// TestPHPNormalizationKeepsViewsAligned: `$`, `->` and `.` inside comments
+// and strings are not code, so normalization must not rewrite them in the
+// raw view alone. Drifted views read the wrong raw text and, on WordPress,
+// panicked the scan.
+func TestPHPNormalizationKeepsViewsAligned(t *testing.T) {
+	for _, src := range []string{
+		"<?php\n/** @var WP_Site $blog_details */\n$x = 1;\n",
+		"<?php\necho '<p class=\"lead-in\">' . $a->b . '</p>'; // $c->d . e\n",
+		"<?php\nif ( $x ) echo \"$y->z\"; // trailing $comment.\n",
+		"<?php\n$q = \"SELECT $a.b FROM t\" . $c; # 1.5 -> x\n",
+	} {
+		b := []byte(src)
+		for _, ll := range splitSemicolons(logicalLines(b, lexctx.Classify(lexctx.LangPHP, b), true)) {
+			if n := normalizePHPLine(ll); len(n.code) != len(n.raw) {
+				t.Errorf("views drifted on %q: code %d bytes, raw %d", ll.raw, len(n.code), len(n.raw))
+			}
+		}
+		_ = extractUnits(lexctx.LangPHP, b) // must not panic
+	}
 }

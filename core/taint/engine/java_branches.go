@@ -208,7 +208,7 @@ func parseJavaHeader(ll logicalLine) (javaHeader, bool) {
 		if closing < 0 {
 			return h, false
 		}
-		h.cond = ll.raw[open+1 : closing]
+		h.cond = rawSpan(ll, open+1, closing)
 		i = closing + 1
 	}
 	tail := strings.TrimSpace(code[i:])
@@ -218,7 +218,7 @@ func parseJavaHeader(ll logicalLine) (javaHeader, bool) {
 	case strings.HasSuffix(tail, "{") && !strings.Contains(tail, ";"):
 		h.opens = true
 	default:
-		h.rest = strings.TrimSpace(ll.raw[i:])
+		h.rest = strings.TrimSpace(rawSpan(ll, i, len(ll.code)))
 		h.restAt = i + (len(code[i:]) - len(strings.TrimLeft(code[i:], " \t")))
 	}
 	return h, true
@@ -451,4 +451,15 @@ func subLine(ll logicalLine, at int) logicalLine {
 		return logicalLine{line: ll.line}
 	}
 	return logicalLine{line: ll.line, code: blankRange(ll.code, 0, at), raw: blankRange(ll.raw, 0, min(at, len(ll.raw)))}
+}
+
+// rawSpan returns ll.raw[from:to], clipped to the raw view. The views are
+// built byte-aligned, but a rewrite that changes one and not the other must
+// cost a wrong slice, never a panic that takes the whole scan down.
+func rawSpan(ll logicalLine, from, to int) string {
+	to = min(to, len(ll.raw))
+	if from < 0 || from >= to {
+		return ""
+	}
+	return ll.raw[from:to]
 }
