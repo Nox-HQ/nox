@@ -25,6 +25,8 @@ import "strings"
 func extractJava(lines []logicalLine) []unitDraft {
 	// Standard JVM properties are not untrusted input; see java_properties.go.
 	neutralizeStandardProperties(lines)
+	// Literal-keyed maps become one variable per key; see keyed.go.
+	rewriteKeyedContainers(langJava, lines)
 	// Branch model; see java_branches.go.
 	jb := newJavaBranches(lines)
 	module := &unitDraft{funcName: ""}

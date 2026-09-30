@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 212,
+  "version": 214,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -875,6 +875,17 @@
       "completed_at": "2026-09-29T22:13:12.262449+02:00",
       "elapsed_minutes": 0
     },
+    "task-87": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "Keyed containers (Python dict/configparser, Java Map): OWASP Python 49.3 -\u003e 56.1, Java 39.6 -\u003e 41.2; 220 taint findings on 11 real repos identical; GitHub servlet sample identical; tests falsified by disabling the rewrite."
+      ],
+      "started_at": "2026-09-30T07:45:37.030685+02:00",
+      "completed_at": "2026-09-30T08:02:47.708959+02:00",
+      "elapsed_minutes": 17
+    },
     "task-9": {
       "status": "verified",
       "path": "",
@@ -885,5 +896,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-29T22:13:12.26245+02:00"
+  "updated_at": "2026-09-30T08:02:47.70896+02:00"
 }

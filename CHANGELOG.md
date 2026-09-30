@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Container taint tracks literal keys (Python and Java).** A value stored
+  under one key tainted the whole container: `m['keyB'] = param; bar =
+  m['keyA']` read as tainted, and so did `map.put("keyB", param); map.get("keyA")`
+  and configparser's `set`/`get`. Worse, a later store of a constant under
+  another key overwrote the whole container and dropped the tainted key. A
+  container that is created empty and only ever stored into and read with
+  literal keys is now one variable per key. Any other use -- passing it
+  whole, a non-literal key, `update`/`putAll`, a non-empty initializer --
+  keeps whole-container taint, so a flow is only dropped where it provably
+  cannot happen. OWASP Benchmark for Python 49.3 -> 56.1 (detection rises in
+  sqli, cmdi, xpathi and path traversal as well as fewer false positives);
+  Java 39.6 -> 41.2 (Semgrep `p/default`: 10.7 and 34.9). No change on 11
+  real repositories (220 taint findings) or the 90-file GitHub servlet
+  sample.
+
 ## [1.45.0] - 2026-09-29
 
 Java catches up. Predictable randomness and `setSecure(false)` cookies are
