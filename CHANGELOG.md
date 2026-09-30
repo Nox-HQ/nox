@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **XPath and LDAP injection in Java (`TAINT-008`, `TAINT-009`).** A local
+  declared as `javax.xml.xpath.XPath` or as a `DirContext` /
+  `InitialDirContext` / `LdapContext` is now known by its type, and
+  `xp.evaluate(expression, ...)`, `xp.compile(expression)` and
+  `ctx.search(name, filter, ...)` on it are sinks -- keyed on the method name
+  alone, `evaluate` and `search` would match expression engines and search
+  indexes. XPath is judged on its expression argument. ESAPI's
+  `encodeForXPath`, `encodeForLDAP` and `encodeForDN` sanitize. OWASP
+  Benchmark for Java: xpathi 0 -> 38, ldapi 0 -> 38, average 41.2 -> 48.2
+  (Semgrep `p/default`: 34.9). No change on Kafka, Keycloak or Jenkins.
+
 ### Fixed
 
 - **Container taint tracks literal keys (Python and Java).** A value stored
