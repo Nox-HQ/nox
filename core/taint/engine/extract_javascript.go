@@ -55,6 +55,17 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// Recognize a data-flow statement into the CURRENT (innermost) unit. A
 		// function-header line carries no statement we need (its own call, e.g.
 		// app.get(...), is not a sink); structural lines carry only scaffolding.
+		// A function passed as an argument -- `cp.exec(cmd, (err) => {`,
+		// `fs.readFile(p, function (e, d) {` -- makes the line a header, but
+		// the call it is passed to is a statement of the enclosing scope:
+		// `exec(cmd, callback)` is how Node runs a command.
+		if isHeader {
+			if call, ok := jsCallBeforeCallback(ll); ok {
+				if st, ok := recognizeStatement(langJavaScript, call); ok {
+					stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
+				}
+			}
+		}
 		if st, ok := jsReturnStatement(ll); ok && !isHeader {
 			stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
 		} else if binds, ok := jsDestructuring(ll); ok && !isHeader {
@@ -480,4 +491,57 @@ func splitTopLevel(s string, sep byte) []string {
 		}
 	}
 	return append(out, s[start:])
+}
+
+// jsCallBeforeCallback returns the call a function-expression argument is
+// passed to, cut where the function begins and closed: `c = cp.exec(cmd,
+// opts, function (err) {` -> `c = cp.exec(cmd, opts, )`. ok is false when
+// the function is not inside an open call.
+func jsCallBeforeCallback(ll logicalLine) (logicalLine, bool) {
+	code := ll.code
+	start := -1
+	if k := strings.LastIndex(code, "function"); k >= 0 {
+		start = k
+	} else if arrow := strings.LastIndex(code, "=>"); arrow >= 0 {
+		j := arrow - 1
+		for j >= 0 && (code[j] == ' ' || code[j] == '\t') {
+			j--
+		}
+		switch {
+		case j >= 0 && code[j] == ')':
+			depth := 0
+			for ; j >= 0; j-- {
+				if code[j] == ')' {
+					depth++
+				} else if code[j] == '(' {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+			}
+			start = j
+		case j >= 0 && isIdentPart(code[j]):
+			for j >= 0 && isIdentPart(code[j]) {
+				j--
+			}
+			start = j + 1
+		}
+		// `async (x) =>` / `async x =>`
+		if pre := strings.TrimRight(code[:max(start, 0)], " \t"); strings.HasSuffix(pre, "async") {
+			start = len(pre) - len("async")
+		}
+	}
+	if start <= 0 {
+		return logicalLine{}, false
+	}
+	prefix := code[:start]
+	if strings.Count(prefix, "(") <= strings.Count(prefix, ")") {
+		return logicalLine{}, false
+	}
+	raw := ll.raw
+	if len(raw) != len(code) {
+		raw = code
+	}
+	return logicalLine{line: ll.line, code: prefix + ")", raw: raw[:start] + ")"}, true
 }

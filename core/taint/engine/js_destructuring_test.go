@@ -28,3 +28,22 @@ func TestJavaScriptDestructuringAndNextRoutes(t *testing.T) {
 		}
 	}
 }
+
+// TestJavaScriptCallWithCallback: the call a callback is passed to is still
+// a sink.
+func TestJavaScriptCallWithCallback(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      []string
+	}{
+		{"exec with a function callback", "const cp = require('child_process');\nfunction h(req) {\n  var c = cp.exec(req.query.cmd, {}, function (err) {\n    console.log(err);\n  });\n}\n", []string{"TAINT-002"}},
+		{"exec with an arrow callback", "const cp = require('child_process');\nfunction h(req) {\n  cp.exec('ls ' + req.query.d, (err, out) => {\n    console.log(out);\n  });\n}\n", []string{"TAINT-002"}},
+		{"readFile with an async arrow", "const fs = require('fs');\nfunction h(req) {\n  fs.readFile(req.query.p, async (e, d) => {\n    console.log(d);\n  });\n}\n", []string{"TAINT-004"}},
+		{"a constant command with a callback", "const cp = require('child_process');\nfunction h(req) {\n  cp.exec('ls', (err, out) => {\n    console.log(req.query.x);\n  });\n}\n", nil},
+	} {
+		got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(c.src))))
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
