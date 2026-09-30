@@ -107,6 +107,9 @@ func toPyExpr(expr string) string {
 	e = javaCharAt.ReplaceAllString(e, "[$1]")
 	e = javaEquals.ReplaceAllString(e, "($1 == $2)")
 	e = javaContains.ReplaceAllString(e, "($2 in $1)")
+	// PHP and JavaScript's strict comparisons compare like == on the
+	// literals the evaluator accepts.
+	e = strings.NewReplacer("===", "==", "!==", "!=").Replace(e)
 	e = strings.NewReplacer("&&", " and ", "||", " or ", "!=", "\x00", "!", " not ").Replace(e)
 	return strings.ReplaceAll(e, "\x00", "!=")
 }
@@ -176,6 +179,10 @@ func parseJavaHeader(ll logicalLine) (javaHeader, bool) {
 	case strings.HasPrefix(rest, "else if") || strings.HasPrefix(rest, "else  if"):
 		h.kind = "elseif"
 		i += strings.Index(rest, "if") + 2
+	case strings.HasPrefix(rest, "elseif"):
+		// PHP's one-word form.
+		h.kind = "elseif"
+		i += len("elseif")
 	case strings.HasPrefix(rest, "else"):
 		h.kind = "else"
 		i += len("else")
@@ -415,7 +422,16 @@ func (b *javaBranches) rewriteJavaTernary(ll logicalLine) logicalLine {
 	colon += q
 	v, ok := b.eval(pyEvalText(ll, eq+1, q))
 	if !ok {
-		return ll
+		// The condition is unknown, so the value is one of the two arms --
+		// but it is never the condition itself: `$x = $x == 'a' ? 'a' : 'b'`
+		// assigns a literal whichever way it goes. Blank the condition so its
+		// reads do not flow into the assignee. The short form `a ?: b`
+		// returns the condition's own value, so it is left alone.
+		if q+1 < len(code) && code[q+1] == ':' {
+			return ll
+		}
+		return logicalLine{line: ll.line, code: blankRange(code, eq+1, q+1),
+			raw: blankRange(ll.raw, eq+1, min(q+1, len(ll.raw)))}
 	}
 	end := len(code)
 	for end > colon && (code[end-1] == ';' || code[end-1] == ' ') {
