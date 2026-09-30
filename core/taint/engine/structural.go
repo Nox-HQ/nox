@@ -351,8 +351,9 @@ func (e *StructuralEngine) forwardPass(
 			// was reported as SSRF -- on llama_index, crewAI and others, and
 			// more often once summaries carried a getter's source to its
 			// callers. Decided on the taint state, like firstArgTaintFromState.
-			if slot, known := ssrfURLSlot[sink.Call]; known && hasInfo && len(info.PositionalVars) > 0 &&
-				!slotTaintedInState(info, slot, tainted, inline) {
+			valueSlot, slotted := sinkValueSlot[sink.Call]
+			slotted = slotted && hasInfo && len(info.PositionalVars) > 0
+			if slotted && !slotTaintedInState(info, valueSlot, tainted, inline) {
 				continue
 			}
 
@@ -382,6 +383,12 @@ func (e *StructuralEngine) forwardPass(
 			argVars := info.TaintedArgVars
 			if len(argVars) == 0 {
 				argVars = st.Reads
+			}
+			if slotted {
+				// The finding names what reached the dangerous argument, not
+				// whatever else the call was passed: the URL, not an API key
+				// in its headers.
+				argVars = slotVars(info, valueSlot, inline)
 			}
 			for _, v := range argVars {
 				ti, isTainted := tainted[v]
@@ -1713,10 +1720,37 @@ var extractPanics atomic.Int64
 // process, so a caller can surface the loss rather than hide it.
 func ExtractPanics() int64 { return extractPanics.Load() }
 
-// ssrfURLSlot is, for the HTTP client sinks whose signatures are known, the
-// positional argument that holds the URL. A sink not listed keeps the
+// slotVars returns the variables, and inline sources, in one argument slot.
+func slotVars(info taint.SinkArgInfo, slot int, inline map[string]inlineOperand) []string {
+	var out []string
+	if slot < len(info.PositionalVars) {
+		out = append(out, info.PositionalVars[slot]...)
+	}
+	for name, op := range inline {
+		if op.slot == slot {
+			out = append(out, name)
+		}
+	}
+	sortStrings(out)
+	return out
+}
+
+// sinkValueSlot is, for the sinks whose signatures are known, the positional
+// argument that carries the dangerous value: the URL of an HTTP client call,
+// the path of a file call. A tainted value elsewhere -- a header, the data
+// written -- is not the vulnerability; `fs.writeFileSync(path, body)` with a
+// downloaded body was reported as path traversal. A sink not listed keeps the
 // any-argument rule.
-var ssrfURLSlot = map[string]int{
+var sinkValueSlot = map[string]int{
+	// Paths: the first argument of the file calls.
+	"fs.writeFile": 0, "fs.writeFileSync": 0, "fs.appendFile": 0, "fs.appendFileSync": 0,
+	"fs.readFile": 0, "fs.readFileSync": 0, "fs.createReadStream": 0, "fs.createWriteStream": 0,
+	"fs.promises.readFile": 0, "fs.promises.writeFile": 0, "fs.unlink": 0, "fs.unlinkSync": 0,
+	"file_put_contents": 0, "file_get_contents": 0, "fopen": 0, "readfile": 0,
+	"File.WriteAllText": 0, "File.ReadAllText": 0, "File.ReadAllBytes": 0, "File.Open": 0,
+	"os.WriteFile": 0, "ioutil.WriteFile": 0, "os.OpenFile": 0, "os.Create": 0,
+	// Not a bare `open`: Python's takes the path first, Perl's third.
+	// URLs.
 	// Python
 	"requests.get": 0, "requests.post": 0, "requests.put": 0, "requests.patch": 0,
 	"requests.delete": 0, "requests.head": 0, "requests.options": 0,

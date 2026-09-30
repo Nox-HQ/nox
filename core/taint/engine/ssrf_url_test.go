@@ -29,3 +29,30 @@ func TestSSRFNeedsATaintedURL(t *testing.T) {
 		}
 	}
 }
+
+// TestPathSinksNeedATaintedPath: writing tainted data to a fixed path is not
+// path traversal; writing anything to a tainted path is.
+func TestPathSinksNeedATaintedPath(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      []string
+	}{
+		{"tainted data, fixed path", "function h(req) {\n  const body = req.body.text;\n  fs.writeFile('/tmp/out.txt', body);\n}\n", nil},
+		{"tainted path", "function h(req) {\n  const p = req.query.p;\n  fs.writeFile(p, 'x');\n}\n", []string{"TAINT-004"}},
+	} {
+		got := ruleIDs(NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.js", lexctx.LangJavaScript, []byte(c.src))))
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestSlotGateNamesTheSlotsSource: the finding names what reached the URL,
+// not an API key passed alongside it.
+func TestSlotGateNamesTheSlotsSource(t *testing.T) {
+	src := "import os, requests\nfrom flask import request\ndef f():\n    key = os.environ['KEY']\n    u = request.args.get('u')\n    return requests.get(u, headers={'k': key})\n"
+	flows := NewStructuralEngine(nil).AnalyzeFile(ExtractUnits("a.py", lexctx.LangPython, []byte(src)))
+	if len(flows) != 1 || flows[0].SourceVar != "u" {
+		t.Fatalf("want one flow from u, got %+v", flows)
+	}
+}
