@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 233,
+  "version": 238,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -18,6 +18,13 @@
       "evidence": [
         "Dependency scanner fully implemented in core/analyzers/deps/ with 4 lockfile parsers (Go, npm, Python, Ruby), PackageInventory, ScanArtifacts integration, and 21 passing tests. OSV API calls deferred as follow-up."
       ],
+      "elapsed_minutes": 0
+    },
+    "task-101": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-10-01T11:18:17.648591+02:00",
       "elapsed_minutes": 0
     },
     "task-11": {
@@ -1000,7 +1007,29 @@
       "started_at": "2026-09-30T18:05:16.728118+02:00",
       "completed_at": "2026-09-30T18:19:25.791323+02:00",
       "elapsed_minutes": 14
+    },
+    "task-98": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #786 merged as 0bd67bd"
+      ],
+      "started_at": "2026-10-01T10:32:56.575889+02:00",
+      "completed_at": "2026-10-01T11:18:04.837919+02:00",
+      "elapsed_minutes": 45
+    },
+    "task-99": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #786 merged as 0bd67bd: analyzers and stages gated; scoped findings equal full-scan findings per scope on 7 repos"
+      ],
+      "started_at": "2026-10-01T11:18:08.884932+02:00",
+      "completed_at": "2026-10-01T11:18:13.542332+02:00",
+      "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-09-30T23:24:29.242707+02:00"
+  "updated_at": "2026-10-01T11:18:17.648591+02:00"
 }
