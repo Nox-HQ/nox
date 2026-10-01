@@ -163,8 +163,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	// Gather declared packages from manifests and first-party module roots from
 	// the source tree before evaluating any import.
-	manifests := make(map[string][]byte)
-	configs := make(map[string][]byte)
+	declared := newDeclaredSet()
+	aliases := newAliasSet()
 	local := make(map[string]struct{})
 	pkgDirs := make(map[string]struct{})
 	for i := range artifacts {
@@ -172,12 +172,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		base := filepath.Base(art.Path)
 		if isManifest(base) {
 			if content, err := os.ReadFile(art.AbsPath); err == nil {
-				manifests[art.Path] = content
+				addDeclared(declared, art.Path, content)
 			}
 		}
 		if isPathAliasConfig(base) {
 			if content, err := os.ReadFile(art.AbsPath); err == nil {
-				configs[art.Path] = content
+				aliases.add(content)
 			}
 		}
 		if art.Type == discovery.Source {
@@ -192,8 +192,6 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	for root := range topLevelPackages(pkgDirs) {
 		local[root] = struct{}{}
 	}
-	declared := collectDeclared(manifests)
-	aliases := collectPathAliases(configs)
 
 	for i := range artifacts {
 		if err := ctx.Err(); err != nil {

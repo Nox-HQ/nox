@@ -209,45 +209,52 @@ var pyReqNameRe = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*)`)
 func collectDeclared(files map[string][]byte) *declaredSet {
 	d := newDeclaredSet()
 	for path, content := range files {
-		base := strings.ToLower(filepath.Base(path))
-		switch {
-		case base == "package.json":
-			parsePackageJSON(content, d)
-		case base == "package-lock.json":
-			parsePackageLock(content, d)
-		// Lockfiles carry the TRANSITIVE closure; a manifest carries only what
-		// the project asked for directly. SLOP-001 reports an import that
-		// resolves to nothing declared, so reading manifests alone makes every
-		// transitive dependency a phantom import.
-		//
-		// Measured on the pinned corpus: `typing_extensions` was SLOP-001's
-		// single largest name at 104 findings, `pydantic_core` 29, `botocore` 6
-		// -- all real, all installed, all present in a lockfile nox was not
-		// reading. `typing-extensions` appears 25 times in llama_index's
-		// uv.lock alone. npm was already covered by package-lock.json; the
-		// Python ecosystem had no lockfile reader at all, and pnpm and yarn
-		// were missing on the npm side.
-		case base == "poetry.lock" || base == "uv.lock" || base == "pdm.lock":
-			parsePyLockTOML(content, d)
-		case base == "pipfile.lock":
-			parsePipfileLock(content, d)
-		case base == "pnpm-lock.yaml" || base == "pnpm-lock.yml":
-			parsePnpmLock(content, d)
-		case base == "yarn.lock":
-			parseYarnLock(content, d)
-		case base == "requirements.txt" || strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"):
-			parseRequirements(content, d)
-		case base == "pyproject.toml":
-			parsePyprojectDeps(content, d)
-		case base == "pipfile":
-			parsePipfile(content, d)
-		case base == "setup.py":
-			parseSetupPy(content, d)
-		case base == "setup.cfg":
-			parseSetupCfg(content, d)
-		}
+		addDeclared(d, path, content)
 	}
 	return d
+}
+
+// addDeclared records what one manifest or lockfile declares. ScanArtifacts
+// calls it as each file is read, so no manifest is held after it is parsed:
+// llama_index's lockfiles alone came to 568 MB when they were all read first.
+func addDeclared(d *declaredSet, path string, content []byte) {
+	base := strings.ToLower(filepath.Base(path))
+	switch {
+	case base == "package.json":
+		parsePackageJSON(content, d)
+	case base == "package-lock.json":
+		parsePackageLock(content, d)
+	// Lockfiles carry the TRANSITIVE closure; a manifest carries only what
+	// the project asked for directly. SLOP-001 reports an import that
+	// resolves to nothing declared, so reading manifests alone makes every
+	// transitive dependency a phantom import.
+	//
+	// Measured on the pinned corpus: `typing_extensions` was SLOP-001's
+	// single largest name at 104 findings, `pydantic_core` 29, `botocore` 6
+	// -- all real, all installed, all present in a lockfile nox was not
+	// reading. `typing-extensions` appears 25 times in llama_index's
+	// uv.lock alone. npm was already covered by package-lock.json; the
+	// Python ecosystem had no lockfile reader at all, and pnpm and yarn
+	// were missing on the npm side.
+	case base == "poetry.lock" || base == "uv.lock" || base == "pdm.lock":
+		parsePyLockTOML(content, d)
+	case base == "pipfile.lock":
+		parsePipfileLock(content, d)
+	case base == "pnpm-lock.yaml" || base == "pnpm-lock.yml":
+		parsePnpmLock(content, d)
+	case base == "yarn.lock":
+		parseYarnLock(content, d)
+	case base == "requirements.txt" || strings.HasPrefix(base, "requirements") && strings.HasSuffix(base, ".txt"):
+		parseRequirements(content, d)
+	case base == "pyproject.toml":
+		parsePyprojectDeps(content, d)
+	case base == "pipfile":
+		parsePipfile(content, d)
+	case base == "setup.py":
+		parseSetupPy(content, d)
+	case base == "setup.cfg":
+		parseSetupCfg(content, d)
+	}
 }
 
 func parsePackageJSON(content []byte, d *declaredSet) {

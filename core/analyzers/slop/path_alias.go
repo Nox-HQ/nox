@@ -65,33 +65,40 @@ func isPathAliasConfig(base string) bool {
 // code, and SLOP-001 is a low-confidence heuristic whose false positives land
 // on developers who did nothing wrong.
 func collectPathAliases(configs map[string][]byte) *aliasSet {
-	set := &aliasSet{exact: make(map[string]struct{})}
+	set := newAliasSet()
 	for _, content := range configs {
-		var cfg struct {
-			CompilerOptions struct {
-				Paths map[string]json.RawMessage `json:"paths"`
-			} `json:"compilerOptions"`
-		}
-		if err := json.Unmarshal(stripJSONC(content), &cfg); err != nil {
-			continue
-		}
-		for pattern := range cfg.CompilerOptions.Paths {
-			star := strings.IndexByte(pattern, '*')
-			switch {
-			case star < 0:
-				set.exact[pattern] = struct{}{}
-			case star == 0:
-				// `"*": [...]` maps every unresolved specifier onto the source
-				// tree. Honouring it would silence the whole rule for this
-				// project, so it is ignored: a catch-all says nothing about any
-				// particular import.
-				continue
-			default:
-				set.prefixes = append(set.prefixes, pattern[:star])
-			}
-		}
+		set.add(content)
 	}
 	return set
+}
+
+func newAliasSet() *aliasSet { return &aliasSet{exact: make(map[string]struct{})} }
+
+// add records the path aliases one tsconfig/jsconfig declares.
+func (a *aliasSet) add(content []byte) {
+	var cfg struct {
+		CompilerOptions struct {
+			Paths map[string]json.RawMessage `json:"paths"`
+		} `json:"compilerOptions"`
+	}
+	if err := json.Unmarshal(stripJSONC(content), &cfg); err != nil {
+		return
+	}
+	for pattern := range cfg.CompilerOptions.Paths {
+		star := strings.IndexByte(pattern, '*')
+		switch {
+		case star < 0:
+			a.exact[pattern] = struct{}{}
+		case star == 0:
+			// `"*": [...]` maps every unresolved specifier onto the source
+			// tree. Honouring it would silence the whole rule for this
+			// project, so it is ignored: a catch-all says nothing about any
+			// particular import.
+			continue
+		default:
+			a.prefixes = append(a.prefixes, pattern[:star])
+		}
+	}
 }
 
 // stripJSONC removes the comments and trailing commas that tsconfig files carry
