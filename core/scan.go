@@ -2580,6 +2580,14 @@ func recordAnalysisLimitations(fs *findings.FindingSet, target string, store *re
 	}
 
 	for filePath, idx := range byFile {
+		// The markers are source constructs, and the limitation they record is
+		// on following code. A lockfile or manifest is not code: on one,
+		// `ctypes` or `importlib-metadata` is a dependency's name, not a call,
+		// and llama_index's 609 vulnerable lockfiles (580 MB) were read in full
+		// to label 749 VULN findings with limitations no analysis had.
+		if LanguageForExtension(filePath) == "" {
+			continue
+		}
 		full := filePath
 		if !filepath.IsAbs(full) {
 			full = filepath.Join(ConfigRoot(target), full)

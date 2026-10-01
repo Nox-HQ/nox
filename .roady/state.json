@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 246,
+  "version": 247,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -63,6 +63,19 @@
       "started_at": "2026-10-01T12:40:14.437115+02:00",
       "completed_at": "2026-10-01T12:40:14.451512+02:00",
       "elapsed_minutes": 0
+    },
+    "task-104": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "started_at": "2026-10-01T15:17:02.897267+02:00",
+      "elapsed_minutes": 0,
+      "lease": {
+        "holder": "Felix Geelhaar",
+        "session": "8f0fbc3c-a74f-45f2-9308-5a83795ffb42",
+        "expires_at": "2026-10-01T17:17:02.897267+02:00",
+        "renewed_at": "2026-10-01T15:17:02.897267+02:00"
+      }
     },
     "task-11": {
       "status": "verified",
@@ -1072,5 +1085,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-10-01T12:40:14.451513+02:00"
+  "updated_at": "2026-10-01T15:17:02.897267+02:00"
 }
