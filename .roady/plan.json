@@ -3,6 +3,78 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-98",
+      "title": "Scope model, --only/--skip and scan.analyzers",
+      "description": "Define scopes (secrets, code, deps, iac, ai, data, supply-chain) and the analyzers, discovery needs and post-analysis stages each one requires, including cross-scope dependencies (reachability, SBOM, AI inventory). CLI --only/--skip and scan.analyzers in .nox.yaml, flag over config; unknown scope names are an error, not a no-op.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
+      "id": "task-99",
+      "title": "Gate analyzers and stages before they run",
+      "description": "Analyzers outside the scope are not constructed and get no task; intel/OSV lookups, SBOM, AI inventory, call graph, GHA context and plugin passes run only for the scopes that need them. skip_analyzer without paths gates up front too. Findings for a scope are byte-identical (fingerprints included) to the full scan's findings for that scope on the seven pinned repos.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [
+        "task-98"
+      ],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
+      "id": "task-100",
+      "title": "Scope-aware discovery",
+      "description": "Discovery opens only the files the selected scopes read: manifests and lockfiles for deps, configs for iac, source for code, every text file for secrets. Measured: files read and wall time per scope.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-99"
+      ],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
+      "id": "task-101",
+      "title": "Every output records the scope",
+      "description": "findings.json, SARIF run properties, the summary line, MCP and the HTML report state which scopes ran and which did not, so a scoped scan never reads as a clean full scan. Policy gates and baselines see the scope.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-99"
+      ],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
+      "id": "task-102",
+      "title": "One read per file across analyzers",
+      "description": "Measure how often the rule-engine analyzers (secrets, data, ai, iac) each read and lower-case the same file; if material, share one read per file. Applies to the full scan too.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [
+        "task-99"
+      ],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
+      "id": "task-103",
+      "title": "Per-scope speed benchmark and docs",
+      "description": "--only secrets against gitleaks and TruffleHog, --only code against Semgrep, the full scan against Semgrep + gitleaks, on the seven pinned repos at idle load: wall, CPU, peak memory. Document scopes in docs/usage.md.",
+      "priority": "high",
+      "estimate": "S",
+      "depends_on": [
+        "task-100",
+        "task-101",
+        "task-102"
+      ],
+      "feature_id": "scoped-scans",
+      "source": {}
+    },
+    {
       "id": "task-89",
       "title": "Analyzers scan files on every core",
       "description": "Per-file work in secrets, AI, IaC and data analyzers runs through an ordered bounded worker pool (core/parallel.Map); results merged in artifact order so findings and fingerprints are identical. Race-detector scan and seven-repo equality check.",
