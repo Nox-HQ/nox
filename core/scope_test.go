@@ -183,6 +183,13 @@ func TestScopeIsStatedInEveryArtifact(t *testing.T) {
 		if want := len(c.scopes.Skipped()); n != want {
 			t.Errorf("full=%v: %d SARIF scope notifications, want %d", c.scopes.Full(), n, want)
 		}
+		page, err := res.HTMLReporter("test").Generate(res.Findings)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(page), "Not scanned:"); got != c.want {
+			t.Errorf("full=%v: report.html names what was not scanned=%v", c.scopes.Full(), got)
+		}
 	}
 }
 

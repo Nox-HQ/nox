@@ -56,6 +56,7 @@ tr:hover td{background:#1c2128}
 .badge.info{background:rgba(88,166,255,.15);color:#58a6ff}
 .file-path{color:#58a6ff;font-family:monospace;font-size:13px}
 .msg{max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scope-note{background:rgba(210,153,34,.12);border:1px solid #d29922;color:#e3b341;border-radius:6px;padding:12px 16px;margin-bottom:24px}
 .no-findings{text-align:center;padding:48px;color:#8b949e;font-size:16px}
 footer{text-align:center;padding:24px 0;color:#484f58;font-size:12px;border-top:1px solid #30363d;margin-top:32px}
 </style>
@@ -69,7 +70,9 @@ footer{text-align:center;padding:24px 0;color:#484f58;font-size:12px;border-top:
 <div>{{.GeneratedAt}}</div>
 </div>
 </header>
-
+{{if .NotScanned}}
+<div class="scope-note">Not scanned: {{.NotScanned}}. This was a scoped scan; no findings for these is not an all-clear.</div>
+{{end}}
 <div class="summary">
 <div class="card total"><div class="count">{{.Counts.Total}}</div><div class="label">Total</div></div>
 <div class="card critical"><div class="count">{{.Counts.Critical}}</div><div class="label">Critical</div></div>
