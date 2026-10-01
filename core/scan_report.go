@@ -27,6 +27,7 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 		return rep
 	}
 	rep.SASTLanguages = r.SASTProfile
+	rep.Scope = r.Scope.report()
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
@@ -69,5 +70,8 @@ func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
 	}
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
+	if sc := r.Scope.report(); sc != nil {
+		rep.NotScanned = sc.NotScanned
+	}
 	return rep
 }

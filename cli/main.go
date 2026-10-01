@@ -487,6 +487,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		sortFlag              string
 		evidenceOutFlag       string
 		hypothesesOutFlag     string
+		onlyFlag              string
+		skipFlag              string
 	)
 	scanFS.BoolVar(&historyFlag, "history", false, "scan git history for secrets in past commits")
 	scanFS.IntVar(&historyDepthFlag, "history-depth", 0, "max number of commits to scan (0 = unlimited)")
@@ -506,6 +508,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// Without this, an incomplete scan exits 0 exactly like a clean one.
 	scanFS.BoolVar(&failOnDegraded, "fail-on-degraded", false, "exit non-zero if any check could not complete (OSV lookup, plugin, lockfile parse)")
 	scanFS.BoolVar(&offlineFlag, "offline", false, "guarantee zero network: disable every feature that could make an outbound connection (no API, no token, no telemetry)")
+	scanFS.StringVar(&onlyFlag, "only", "", "scan only these scopes, comma-separated: secrets, code, deps, iac, ai, data, supply-chain (default: all). Other scopes do not run at all, and the reports say so")
+	scanFS.StringVar(&skipFlag, "skip", "", "scan every scope except these, comma-separated (see --only)")
 	scanFS.StringVar(&sortFlag, "sort", "deterministic", "findings.json order: 'deterministic' (rule/path/line) or 'priority' (severity, then reachability, then confidence — most actionable first)")
 	// Off by default. The evidence a scan gathers lives out-of-band and is
 	// discarded when the scan ends, for the memory reason measured in
@@ -598,7 +602,18 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Println("[discover] walking directory...")
 	}
 
+	scopes, err := nox.ResolveScopes(strings.Split(onlyFlag, ","), strings.Split(skipFlag, ","))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	if historyFlag && !scopes.Has(nox.ScopeSecrets) {
+		fmt.Fprintln(os.Stderr, "error: --history scans for secrets only; the scopes given exclude secrets")
+		return 2
+	}
+
 	opts := nox.ScanOptions{
+		Scopes:             scopes,
 		CustomRulesPath:    rulesPath,
 		DisableOSV:         noOSVFlag,
 		Offline:            offlineFlag,
@@ -723,12 +738,24 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	pkgCount := len(result.Inventory.Packages())
 
 	if !quiet {
+		// A scope that did not run has no count, not a count of zero.
+		deps := fmt.Sprintf("%d dependencies", pkgCount)
+		if !result.Scope.Has(nox.ScopeDeps) {
+			deps = "dependencies not scanned"
+		}
+		aiComponents := fmt.Sprintf("%d AI components", len(result.AIInventory.Components))
+		if !result.Scope.Has(nox.ScopeAI) {
+			aiComponents = "AI components not scanned"
+		}
 		if suppressedCount > 0 {
-			fmt.Printf("[results] %d findings (%d suppressed), %d dependencies, %d AI components\n",
-				findingCount, suppressedCount, pkgCount, len(result.AIInventory.Components))
+			fmt.Printf("[results] %d findings (%d suppressed), %s, %s\n",
+				findingCount, suppressedCount, deps, aiComponents)
 		} else {
-			fmt.Printf("[results] %d findings, %d dependencies, %d AI components\n",
-				findingCount, pkgCount, len(result.AIInventory.Components))
+			fmt.Printf("[results] %d findings, %s, %s\n", findingCount, deps, aiComponents)
+		}
+		if !result.Scope.Full() {
+			fmt.Printf("[scope] scanned: %s; not scanned: %s (recorded in findings.json meta)\n",
+				joinScopes(result.Scope.Ran()), joinScopes(result.Scope.Skipped()))
 		}
 		if summary := familySummary(activeFindings); summary != "" {
 			fmt.Printf("[families] %s\n", summary)
@@ -794,6 +821,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "cdx":
 			path := filepath.Join(outputDir, "sbom.cdx.json")
+			if !result.Scope.Has(nox.ScopeDeps) {
+				// An SBOM from a scan that read no lockfile would list no
+				// components: a claim that the project has no dependencies.
+				if formatFlag != "all" {
+					fmt.Fprintln(os.Stderr, "error: --format cdx needs the deps scope, which this scan did not run")
+					return 2
+				}
+				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
+				continue
+			}
 			r := sbom.NewCycloneDXReporter(version)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
@@ -805,6 +842,16 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "spdx":
 			path := filepath.Join(outputDir, "sbom.spdx.json")
+			if !result.Scope.Has(nox.ScopeDeps) {
+				// An SBOM from a scan that read no lockfile would list no
+				// components: a claim that the project has no dependencies.
+				if formatFlag != "all" {
+					fmt.Fprintln(os.Stderr, "error: --format spdx needs the deps scope, which this scan did not run")
+					return 2
+				}
+				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
+				continue
+			}
 			r := sbom.NewSPDXReporter(version)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
@@ -987,4 +1034,12 @@ func emitHypotheses(result *nox.ScanResult, target, path string, quiet bool) {
 	fmt.Fprintf(os.Stderr, "hypotheses: wrote %s (%d question(s) from %d scenario(s)) — "+
 		"nothing was tested; run them with `nox attack run --plan %s --authorize`\n",
 		path, len(plan.Hypotheses), len(plan.Scenarios), path)
+}
+
+func joinScopes(ss []nox.Scope) string {
+	names := make([]string, len(ss))
+	for i, s := range ss {
+		names[i] = string(s)
+	}
+	return strings.Join(names, ", ")
 }

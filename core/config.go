@@ -211,6 +211,11 @@ type ScanSettings struct {
 	// shipping source. It is a *bool so the absent/zero case can default to
 	// enabled (parity with auto_install): nil ⇒ on, set false ⇒ off.
 	ContextDowngrade *bool `yaml:"context_downgrade"`
+	// Scopes and SkipScopes narrow every scan of this project to some
+	// concerns (see core/scope.go); --only/--skip on the command line take
+	// precedence. Unknown scope names fail the scan.
+	Scopes     []string `yaml:"scopes"`
+	SkipScopes []string `yaml:"skip_scopes"`
 }
 
 // SASTConfig declares the per-language SAST depth strategy. nox targets ~15

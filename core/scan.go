@@ -89,6 +89,10 @@ type ScanResult struct {
 	// "what depth did this scan give each language?" and is copied into the
 	// report meta so the decision is visible in the artifact, not just in config.
 	SASTProfile map[string]string
+	// Scope is what this scan looked at. A scan without a scope has no
+	// findings for it because it did not look, not because there are none;
+	// every output states it (see scope.go).
+	Scope ScopeSet
 
 	// Degradations lists the parts of the scan that could not run. An empty
 	// slice means every configured check completed; a non-empty one means the
@@ -235,6 +239,10 @@ type ScanOptions struct {
 	// .nox.yaml config values.
 	CustomRulesPath string
 
+	// Scopes narrows the scan to some concerns (see scope.go). The zero value
+	// scans everything.
+	Scopes ScopeSet
+
 	// DisableOSV disables OSV.dev vulnerability lookups for dependency
 	// scanning. When true, the scan runs fully offline with no network
 	// calls.
@@ -364,6 +372,16 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
+	// Scopes from .nox.yaml apply when the caller set none; an unknown name
+	// fails here rather than scanning more or less than was asked.
+	if opts.Scopes.Full() && (len(cfg.Scan.Scopes) > 0 || len(cfg.Scan.SkipScopes) > 0) {
+		set, err := ResolveScopes(cfg.Scan.Scopes, cfg.Scan.SkipScopes)
+		if err != nil {
+			return nil, fmt.Errorf("loading config: scan.scopes: %w", err)
+		}
+		opts.Scopes = set
+	}
+
 	// Fail loudly on an invalid policy gate keyword. An unrecognized fail_on
 	// silently disables the gate — a capitalized "High" or a typo turns CI
 	// green on critical findings — so reject it at load rather than at exit.
@@ -459,7 +477,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Whether dependency scanning may reach the network at all. Named once and
 	// used by both the disable switch and the intelligence wiring below, so the
 	// two cannot drift into disagreeing about what "offline" means.
-	vulnLookupEnabled := !opts.Offline && !opts.DisableOSV && !cfg.Scan.OSV.Disabled
+	// A scan without the deps scope makes no lookups at all.
+	vulnLookupEnabled := !opts.Offline && !opts.DisableOSV && !cfg.Scan.OSV.Disabled &&
+		opts.Scopes.Has(ScopeDeps)
 
 	depsOpts := []deps.AnalyzerOption{
 		deps.WithDegradations(degradations),
@@ -527,7 +547,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// misconfigured or tampered feed fails closed — the predictive dimension
 	// stays off and the failure is recorded as a visible degradation.
 	var slopOpts []slop.Option
-	if fp := cfg.Scan.Slop.Feed; fp != "" {
+	if fp := cfg.Scan.Slop.Feed; fp != "" && opts.Scopes.Has(ScopeSupplyChain) {
 		if loaded, ferr := loadSlopFeed(ctx, target, cfg.Scan.Slop, opts.Offline); ferr != nil {
 			degradations.Add(degrade.SlopFeed,
 				fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", fp, ferr),
@@ -547,7 +567,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// A signature database that fails to parse leaves every VARIANT-* rule
 	// unable to match. The scan would otherwise report zero variant findings
 	// and look clean.
-	if err := variantsAnalyzer.LoadErr(); err != nil {
+	if err := variantsAnalyzer.LoadErr(); err != nil && opts.Scopes.RunsAnalyzer("variants") {
 		degradations.Add(degrade.VulnData,
 			fmt.Sprintf("CVE-variant signatures could not be loaded: %v", err),
 			"no VARIANT-* detection ran; known CVE variants in this codebase would not be reported")
@@ -579,32 +599,35 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Each analyzer is wrapped as a uniform task so sequential and parallel
 	// execution share one code path. The ai/deps tasks also capture their
 	// inventories into the shared collectors.
-	tasks := []analyzerTask{
-		func(c context.Context) error {
+	all := []struct {
+		analyzer string
+		run      analyzerTask
+	}{
+		{"secrets", func(c context.Context) error {
 			fs, err := secretsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"data", func(c context.Context) error {
 			fs, err := dataAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"iac", func(c context.Context) error {
 			fs, err := iacAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"ai", func(c context.Context) error {
 			fs, inv, err := aiAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -614,8 +637,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			aiInventory = inv
 			mu.Unlock()
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"deps", func(c context.Context) error {
 			inv, fs, err := depsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -625,79 +648,86 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			inventory = inv
 			mu.Unlock()
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"weakcrypto", func(c context.Context) error {
 			fs, err := cryptoAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"fileperms", func(c context.Context) error {
 			fs, err := filepermsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"hardening", func(c context.Context) error {
 			fs, err := hardeningAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"memsafe", func(c context.Context) error {
 			fs, err := memsafeAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"slop", func(c context.Context) error {
 			fs, err := slopAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"variants", func(c context.Context) error {
 			fs, err := variantsAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"taintflow", func(c context.Context) error {
 			fs, err := taintflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"agentflow", func(c context.Context) error {
 			fs, err := agentflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
-		func(c context.Context) error {
+		}},
+		{"provenance", func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
 			addFindings(fs)
 			return nil
-		},
+		}},
+	}
+	// Only the analyzers of the scan's scopes run (see scope.go).
+	var tasks []analyzerTask
+	for _, t := range all {
+		if opts.Scopes.RunsAnalyzer(t.analyzer) {
+			tasks = append(tasks, t.run)
+		}
 	}
 	extractPanicsBefore := taintengine.ExtractPanics()
 	if err := runAnalyzerTasks(ctx, tasks, opts.Sequential); err != nil {
@@ -738,49 +768,34 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		inventory = &deps.PackageInventory{}
 	}
 
-	// Merge all analyzer rule sets for SARIF reporting.
+	// Merge the rule sets of the analyzers that ran, for SARIF reporting: a
+	// scoped scan lists only the rules it could have reported.
 	allRules := rules.NewRuleSet()
-	for _, r := range secretsAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range dataAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range iacAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range aiAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range depsAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range cryptoAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range filepermsAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range hardeningAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range memsafeAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range slopAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range variantsAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range taintflowAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range agentflowAnalyzer.Rules().Rules() {
-		allRules.Add(r)
-	}
-	for _, r := range provenanceAnalyzer.Rules().Rules() {
-		allRules.Add(r)
+	for _, rs := range []struct {
+		analyzer string
+		rules    *rules.RuleSet
+	}{
+		{"secrets", secretsAnalyzer.Rules()},
+		{"data", dataAnalyzer.Rules()},
+		{"iac", iacAnalyzer.Rules()},
+		{"ai", aiAnalyzer.Rules()},
+		{"deps", depsAnalyzer.Rules()},
+		{"weakcrypto", cryptoAnalyzer.Rules()},
+		{"fileperms", filepermsAnalyzer.Rules()},
+		{"hardening", hardeningAnalyzer.Rules()},
+		{"memsafe", memsafeAnalyzer.Rules()},
+		{"slop", slopAnalyzer.Rules()},
+		{"variants", variantsAnalyzer.Rules()},
+		{"taintflow", taintflowAnalyzer.Rules()},
+		{"agentflow", agentflowAnalyzer.Rules()},
+		{"provenance", provenanceAnalyzer.Rules()},
+	} {
+		if !opts.Scopes.RunsAnalyzer(rs.analyzer) {
+			continue
+		}
+		for _, r := range rs.rules.Rules() {
+			allRules.Add(r)
+		}
 	}
 
 	// Phase 2b: Load and merge custom rules (CLI flag > config > none).
@@ -836,7 +851,10 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// cycle). Plugin failures are non-fatal — the built-in scan still completes.
 	var pluginEnrichments []findings.Enrichment
 	var pluginGraphs []graph.Graph
-	if ScanPluginHook != nil {
+	// Plugins declare no scope, so a scoped scan cannot tell which of its
+	// scopes a plugin serves; they run in full scans only, and the result
+	// records that they did not run (ScanResult.Scope).
+	if ScanPluginHook != nil && opts.Scopes.Full() {
 		out, hookErr := ScanPluginHook(ctx, target, cfg.Plugins.Required)
 		if hookErr != nil {
 			slog.WarnContext(ctx, "analysis plugins failed; continuing with built-in findings only", "error", hookErr)
@@ -878,7 +896,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// scan just produced, so they run here, after the built-in analyzers and
 	// the scan-tool plugins but before refinement, so their findings and
 	// enrichments are deduped, suppressed, and policy-gated like any other.
-	if PostScanPluginHook != nil {
+	if PostScanPluginHook != nil && opts.Scopes.Full() {
 		postResult := &ScanResult{Findings: allFindings, Inventory: inventory, AIInventory: aiInventory}
 		if hookErr := PostScanPluginHook(ctx, postResult, target, cfg.Plugins.Required); hookErr != nil {
 			slog.WarnContext(ctx, "post-scan plugins failed; continuing with findings so far", "error", hookErr)
@@ -898,7 +916,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// per-file regex engine — like the agentflow and plugin passes — and merge
 	// in before refinement, so their findings are deduped, suppressed, and
 	// policy-gated like any other. Non-fatal per file.
-	runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
+	if opts.Scopes.Has(ScopeAI) {
+		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
+	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
 	// conditional severity, dedup, inline suppressions, terraform plan,
@@ -955,6 +975,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Graphs:             pluginGraphs,
 		Inventory:          inventory,
 		AIInventory:        aiInventory,
+		Scope:              opts.Scopes,
 		PolicyResult:       policyResult,
 		Rules:              allRules,
 		Degradations:       degradations.Items(),
@@ -1393,7 +1414,7 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 	allFindings.Deduplicate()
 	allFindings.SortDeterministic()
 
-	applySuppressions(allFindings, target, deg, scanned)
+	applySuppressions(allFindings, target, deg, scanned, opts.Scopes)
 
 	// Scan a terraform plan if provided. A plan path is only ever set because
 	// the operator asked for it, so a plan that cannot be read or parsed is an
@@ -1917,7 +1938,7 @@ func withdrawnWaiverNote(ids []string) string {
 // Every waiver found here is by definition unused: the file produced no
 // finding for it to suppress. Expired and doc-example directives are excluded
 // on the same grounds as the main path.
-func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degrade.Degradations, scanned []string) {
+func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degrade.Degradations, scanned []string, scopes ScopeSet) {
 	if len(scanned) == 0 {
 		return
 	}
@@ -1946,6 +1967,9 @@ func sweepWaiversInCleanFiles(byFile map[string][]int, target string, deg *degra
 				continue
 			}
 			if s.Expires != nil && timeNow().After(*s.Expires) {
+				continue
+			}
+			if !scopes.WaiverRulesRan(s.RuleIDs) {
 				continue
 			}
 			reportUnusedWaiver(deg, rel, s.Line, s.RuleIDs,
@@ -1979,7 +2003,7 @@ func suppressionCovers(s suppress.Suppression, f *findings.Finding) bool {
 // applySuppressions reads files that have findings and marks suppressed
 // findings. scanned lists every file the scan looked at, so waivers in files
 // that produced no finding are still checked — see sweepWaiversInCleanFiles.
-func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations, scanned []string) {
+func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degradations, scanned []string, scopes ScopeSet) {
 	// Group findings by file.
 	byFile := make(map[string][]int)
 	items := fs.Findings()
@@ -1987,7 +2011,7 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 		byFile[items[i].Location.FilePath] = append(byFile[items[i].Location.FilePath], i)
 	}
 
-	defer sweepWaiversInCleanFiles(byFile, target, deg, scanned)
+	defer sweepWaiversInCleanFiles(byFile, target, deg, scanned, scopes)
 
 	for filePath, indices := range byFile {
 		// A finding with no file path has no file to read suppressions from —
@@ -2087,6 +2111,11 @@ func applySuppressions(fs *findings.FindingSet, target string, deg *degrade.Degr
 			// showing the syntax, not a waiver anyone expects to apply — reporting
 			// it as unused is pure noise. nox's own README trips this.
 			if suppressions[si].DocExample {
+				continue
+			}
+			// A waiver for a rule this scan's scopes did not run matched
+			// nothing because nothing was looked for; it is not unused.
+			if !scopes.WaiverRulesRan(suppressions[si].RuleIDs) {
 				continue
 			}
 			reportUnusedWaiver(deg, filePath, suppressions[si].Line, suppressions[si].RuleIDs,
@@ -2214,36 +2243,6 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.De
 		if m.Match(&f) != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
 		}
-	}
-}
-
-// analyzerRulePatterns returns the rule-ID wildcard patterns owned by a named
-// analyzer, used to implement the skip_analyzer action. Unknown analyzer names
-// return nil so the action is a safe no-op.
-func analyzerRulePatterns(analyzer string) []string {
-	switch analyzer {
-	case "secrets":
-		return []string{"SEC-*"}
-	case "ai":
-		return []string{"AI-*", "MCP-*"}
-	case "iac":
-		return []string{"IAC-*"}
-	case "data":
-		return []string{"DATA-*"}
-	case "deps":
-		return []string{"VULN-*", "CONT-*", "LIC-*"}
-	case "slop":
-		return []string{"SLOP-*"}
-	case "variants":
-		return []string{"VARIANT-*"}
-	case "taintflow":
-		return []string{"TAINT-*"}
-	case "agentflow":
-		return []string{"AGENTFLOW-*"}
-	case "provenance":
-		return []string{"PROV-*"}
-	default:
-		return nil
 	}
 }
 

@@ -196,6 +196,12 @@ type Reporter struct {
 	// claim of full coverage.
 	Capabilities []report.CapabilityCoverage
 
+	// NotScanned lists the scopes a scoped scan left out, rendered as
+	// execution notifications beside the capability ones: Code Scanning shows
+	// a secrets-only run with no dependency alerts exactly like a full run
+	// whose dependencies are clean, and this is the difference.
+	NotScanned []string
+
 	// CompetenceProfiles resolves each finding's CompetenceProfile ID into the
 	// capabilities that did not conclude about it.
 	//
@@ -324,10 +330,18 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 // limit as a warning is how a signal gets filtered out by the people who most
 // need to read it.
 func (r *Reporter) buildInvocations() []Invocation {
-	if len(r.Capabilities) == 0 {
+	if len(r.Capabilities) == 0 && len(r.NotScanned) == 0 {
 		return nil
 	}
 	var notes []Notification
+	for _, s := range r.NotScanned {
+		notes = append(notes, Notification{
+			Descriptor: &ReportingDescriptorReference{ID: "nox/scope/not-scanned"},
+			Level:      "note",
+			Message: Message{Text: fmt.Sprintf("%s: not scanned in this run (--only/--skip or scan.scopes). "+
+				"No result here means nox did not look, not that there is nothing to find.", s)},
+		})
+	}
 	for _, c := range r.Capabilities {
 		var id, text string
 		switch {

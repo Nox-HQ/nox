@@ -46,6 +46,10 @@ const (
 
 type scanInput struct {
 	Path string `json:"path"`
+	// Only and Skip narrow the scan to some scopes (secrets, code, deps, iac,
+	// ai, data, supply-chain), as --only/--skip do on the command line.
+	Only []string `json:"only,omitempty"`
+	Skip []string `json:"skip,omitempty"`
 }
 type getFindingsInput struct {
 	Format string `json:"format,omitempty"`
@@ -221,7 +225,9 @@ func (s *Server) Serve() error {
 
 func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("scan").
-		Description("Scan a directory for security findings, dependencies, and AI components").
+		Description("Scan a directory for security findings, dependencies, and AI components. " +
+			"Optional only/skip narrow it to scopes (secrets, code, deps, iac, ai, data, supply-chain); " +
+			"scopes left out do not run, and the findings report says which those were").
 		ReadOnly().
 		Handler(s.handleScan)
 
@@ -531,7 +537,11 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 	// not. An agent surface is precisely where being able to ask "why" is worth
 	// the cost, and the ledger is held out-of-band so a finding still carries
 	// no extra bytes.
-	result, err := nox.RunScanWithOptions(input.Path, nox.ScanOptions{RecordReasoning: true})
+	scopes, err := nox.ResolveScopes(input.Only, input.Skip)
+	if err != nil {
+		return "Error: " + err.Error(), nil
+	}
+	result, err := nox.RunScanWithOptions(input.Path, nox.ScanOptions{RecordReasoning: true, Scopes: scopes})
 	if err != nil {
 		return "Error: scan failed: " + err.Error(), nil
 	}
@@ -542,6 +552,17 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 	pkgCount := len(result.Inventory.Packages())
 	aiCount := len(result.AIInventory.Components)
 
+	if !result.Scope.Full() {
+		var ran, skipped []string
+		for _, sc := range result.Scope.Ran() {
+			ran = append(ran, string(sc))
+		}
+		for _, sc := range result.Scope.Skipped() {
+			skipped = append(skipped, string(sc))
+		}
+		return fmt.Sprintf("Scan complete: %d findings. Scanned: %s. Not scanned: %s, so no result about them is an all-clear.",
+			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), nil
+	}
 	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %d AI components",
 		findingCount, pkgCount, aiCount), nil
 }
@@ -597,6 +618,10 @@ func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, e
 	pc := s.getCache("")
 	if pc == nil {
 		return "Error: no scan results available — run the scan tool first", nil
+	}
+
+	if !pc.result.Scope.Has(nox.ScopeDeps) {
+		return "Error: the last scan did not include the deps scope, so there is no SBOM; scan again with deps", nil
 	}
 
 	format := input.Format

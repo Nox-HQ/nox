@@ -65,6 +65,11 @@ type Meta struct {
 	// indistinguishable from a scan that never looked. Omitted when the scan
 	// was complete.
 	Degradations []Degradation `json:"degradations,omitempty"`
+	// Scope records which concerns a scoped scan (`--only`/`--skip`,
+	// scan.scopes) looked at and which it did not. A scan without the deps
+	// scope has no dependency findings because it never read a lockfile, and
+	// this is where the artifact says so. Omitted for a full scan.
+	Scope *ScanScope `json:"scope,omitempty"`
 	// Capabilities records which analysis questions this scan could ask, and
 	// how many of them it actually answered.
 	//
@@ -293,6 +298,8 @@ type JSONReporter struct {
 	// recorded verbatim in the report Meta. Set it from ScanResult.SASTProfile
 	// before Generate to make the depth strategy auditable in the artifact.
 	SASTLanguages map[string]string
+	// Scope is set for a scoped scan; nil for a full one.
+	Scope *ScanScope
 	// Degradations are the scan's incomplete checks. Set from
 	// ScanResult.Degradations before Generate so a consumer reading only the
 	// artifact can tell a clean scan from one that could not run.
@@ -347,6 +354,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			Offline:       r.Offline,
 			SASTLanguages: r.SASTLanguages,
 			Degradations:  r.Degradations,
+			Scope:         r.Scope,
 			Capabilities:  r.Capabilities,
 
 			CompetenceProfiles: r.CompetenceProfiles,
@@ -367,4 +375,13 @@ func (r *JSONReporter) WriteToFile(fs *findings.FindingSet, path string) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// ScanScope is what a scoped scan looked at (see Meta.Scope).
+type ScanScope struct {
+	Scanned    []string `json:"scanned"`
+	NotScanned []string `json:"not_scanned"`
+	// PluginsRun is false in every scoped scan: a plugin declares no scope,
+	// so a scoped scan cannot tell which of its scopes the plugin serves.
+	PluginsRun bool `json:"plugins_run"`
 }
