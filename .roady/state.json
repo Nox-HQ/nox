@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 239,
+  "version": 246,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -20,6 +20,17 @@
       ],
       "elapsed_minutes": 0
     },
+    "task-100": {
+      "status": "done",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "Measured, no change needed: discovery opens no files (stat-only walk, 0.15-0.42 s on vercel/ai, llama_index, crewAI, 1-4% of a scoped scan); analyzers outside the scope never read their files since #786"
+      ],
+      "started_at": "2026-10-01T12:40:14.372087+02:00",
+      "completed_at": "2026-10-01T12:40:14.38748+02:00",
+      "elapsed_minutes": 0
+    },
     "task-101": {
       "status": "done",
       "path": "",
@@ -30,6 +41,28 @@
       "started_at": "2026-10-01T11:18:17.648591+02:00",
       "completed_at": "2026-10-01T11:30:54.645908+02:00",
       "elapsed_minutes": 12
+    },
+    "task-102": {
+      "status": "done",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "Measured, not built: os.ReadFile 4.2% and bytes.ToLower 0.8% of llama_index scan CPU; sharing reads across concurrent analyzers would hold contents until the slowest finishes, the retention #789 removed (3.6 -\u003e 1.3 GB)"
+      ],
+      "started_at": "2026-10-01T12:40:14.405085+02:00",
+      "completed_at": "2026-10-01T12:40:14.420194+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-103": {
+      "status": "done",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "PR #788 merged: --only secrets 27 s (gitleaks 73 s, TruffleHog 10 s), --only code 33 s (Semgrep 141 s), full 93 s offline, load-gated; scopes documented in docs/usage.md (#786)"
+      ],
+      "started_at": "2026-10-01T12:40:14.437115+02:00",
+      "completed_at": "2026-10-01T12:40:14.451512+02:00",
+      "elapsed_minutes": 0
     },
     "task-11": {
       "status": "verified",
@@ -940,11 +973,15 @@
       "elapsed_minutes": 244
     },
     "task-91": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "PR #788 merged as 092075a: load-gated wall/CPU/memory for nox offline+online, Semgrep, gitleaks, TruffleHog on seven repos"
+      ],
       "started_at": "2026-09-30T23:24:29.242707+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-10-01T12:40:14.353649+02:00",
+      "elapsed_minutes": 795
     },
     "task-92": {
       "status": "done",
@@ -1035,5 +1072,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-10-01T11:30:54.645909+02:00"
+  "updated_at": "2026-10-01T12:40:14.451513+02:00"
 }
