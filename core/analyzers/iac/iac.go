@@ -417,9 +417,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Files are read and scanned on every core (see core/parallel, which also
 	// honours cancellation between artifacts); the index and the collected
 	// findings are then built in artifact order, as the sequential loop did.
+	//
+	// Each file is parsed for the index where it is read, and its bytes are kept
+	// only when the cross-file pass below will look at them again: when one of
+	// its findings comes from a rule that names a companion. Keeping every
+	// file's bytes until the merge held 722 MB on llama_index.
 	type scanned struct {
-		content []byte
-		results []findings.Finding
+		resources []structural.Resource
+		content   []byte // nil unless refuteCompanionsFoundInOtherFiles needs it
+		results   []findings.Finding
 	}
 	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) (scanned, error) {
 		artifact := artifacts[i]
@@ -431,15 +437,21 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return scanned{}, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
-		return scanned{content, results}, nil
+		out := scanned{resources: structural.ParseResources(content), results: results}
+		if a.hasCompanionFinding(results) {
+			out.content = content
+		}
+		return out, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	var collected []findings.Finding
 	for i, artifact := range artifacts {
-		index.Add(artifact.Path, perFile[i].content)
-		contents[artifact.Path] = perFile[i].content
+		index.AddResources(artifact.Path, perFile[i].resources)
+		if perFile[i].content != nil {
+			contents[artifact.Path] = perFile[i].content
+		}
 		collected = append(collected, perFile[i].results...)
 	}
 
@@ -456,6 +468,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	fs.Deduplicate()
 	return fs, nil
+}
+
+// hasCompanionFinding reports whether any finding comes from a rule that names
+// a companion, the only findings refuteCompanionsFoundInOtherFiles re-reads
+// their file for.
+func (a *Analyzer) hasCompanionFinding(results []findings.Finding) bool {
+	for i := range results {
+		if rule, ok := a.engine.Rules().ByID(results[i].RuleID); ok && len(rule.AbsenceCompanionTypes) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // refuteCompanionsFoundInOtherFiles drops a cross-resource finding when the
