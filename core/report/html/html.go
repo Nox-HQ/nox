@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
@@ -17,6 +18,10 @@ import (
 // Reporter generates standalone HTML reports from scan findings.
 type Reporter struct {
 	ToolVersion string
+	// NotScanned lists the scopes a scoped scan left out. The page names
+	// them above the counts: a report whose totals cover only some concerns
+	// must not read as a clean bill for the rest.
+	NotScanned []string
 }
 
 // NewReporter returns an HTML reporter configured with the given tool version.
@@ -53,6 +58,7 @@ type reportData struct {
 	Counts      severityCounts
 	Findings    []findingRow
 	SevPercents severityPercents
+	NotScanned  string
 }
 
 type severityPercents struct {
@@ -126,6 +132,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		Counts:      counts,
 		Findings:    rows,
 		SevPercents: percents,
+		NotScanned:  strings.Join(r.NotScanned, ", "),
 	}
 
 	tmpl, err := template.New("report").Funcs(template.FuncMap{

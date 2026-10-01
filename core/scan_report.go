@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/nox-hq/nox/core/report"
+	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sarif"
 )
 
@@ -70,6 +71,19 @@ func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
 	}
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
+	if sc := r.Scope.report(); sc != nil {
+		rep.NotScanned = sc.NotScanned
+	}
+	return rep
+}
+
+// HTMLReporter returns a report.html reporter that names the scopes a scoped
+// scan left out, as the JSON and SARIF reporters do.
+func (r *ScanResult) HTMLReporter(version string) *htmlreport.Reporter {
+	rep := htmlreport.NewReporter(version)
+	if r == nil {
+		return rep
+	}
 	if sc := r.Scope.report(); sc != nil {
 		rep.NotScanned = sc.NotScanned
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/nox-hq/nox/core/hypothesize"
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
-	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/server"
 )
@@ -863,7 +862,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "html":
 			path := filepath.Join(outputDir, "report.html")
-			r := htmlreport.NewReporter(version)
+			r := result.HTMLReporter(version)
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
