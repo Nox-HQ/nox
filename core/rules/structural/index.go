@@ -60,15 +60,24 @@ func NewIndex() *Index { return &Index{} }
 // effort at "what else did this scan see", and a file it cannot read simply
 // does not participate.
 func (ix *Index) Add(path string, content []byte) {
-	if ix == nil {
-		return
-	}
+	ix.AddResources(path, ParseResources(content))
+}
+
+// ParseResources returns the resources content declares, or nil when it does
+// not parse or models no schema this package knows. Split from Add so a caller
+// can parse on many cores and index in a fixed order, without holding every
+// file's bytes until the index is built.
+func ParseResources(content []byte) []Resource {
 	docs, err := Parse(content)
 	if err != nil {
-		return
+		return nil
 	}
-	resources := Resources(docs)
-	if len(resources) == 0 {
+	return Resources(docs)
+}
+
+// AddResources records resources parsed from path, as Add would.
+func (ix *Index) AddResources(path string, resources []Resource) {
+	if ix == nil || len(resources) == 0 {
 		return
 	}
 	ix.entries = append(ix.entries, indexEntry{path: path, resources: resources})
