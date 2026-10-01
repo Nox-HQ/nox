@@ -3,6 +3,16 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-104",
+      "title": "Online dependency lookups: find and cut the 84 s on llama_index",
+      "description": "Online nox takes 122 s on llama_index against 39 s offline (load-gated, #788); --only deps takes 94 s there and 83 s of CPU across all seven repos, so the time is waiting on the network. Measure request counts, sizes and latency per stage (intelligence query, OSV verification, advisory hydration, cache hits), then cut it without losing a finding: the verified-superset guarantee and every advisory stay. Findings byte-identical before and after on the seven repos.",
+      "priority": "high",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "competitive-scan-speed",
+      "source": {}
+    },
+    {
       "id": "task-98",
       "title": "Scope model, --only/--skip and scan.analyzers",
       "description": "Define scopes (secrets, code, deps, iac, ai, data, supply-chain) and the analyzers, discovery needs and post-analysis stages each one requires, including cross-scope dependencies (reachability, SBOM, AI inventory). CLI --only/--skip and scan.analyzers in .nox.yaml, flag over config; unknown scope names are an error, not a no-op.",
