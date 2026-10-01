@@ -133,6 +133,12 @@ Kotlin and Scala have no labelled suite at all.
 
 ## Scan speed
 
+> **Correction (2026-10-01):** the times below were measured on a busy
+> machine and are inflated for every tool. Semgrep's 905 s is 141 s on an idle
+> machine. Load-gated numbers, with gitleaks and TruffleHog added, are in
+> [2026-10-01-speed](../2026-10-01-speed/). The ranking holds; the absolute
+> numbers do not.
+
 Same machine (10 cores), one tool at a time, nothing else running, on the seven
 pinned repositories of the [2026-09-27 head-to-head](../2026-09-27-head-to-head/).
 nox covers secrets, dependencies, code, IaC and AI in one pass; Semgrep is code
