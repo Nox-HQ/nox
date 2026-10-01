@@ -65,6 +65,8 @@ nox scan <path> [flags]
 | `--output` | `.` | Output directory for report files |
 | `--quiet`, `-q` | `false` | Suppress all output except errors |
 | `--verbose`, `-v` | `false` | Enable verbose output |
+| `--only` | all scopes | Scan only these scopes, comma-separated (see [Scopes](#scopes)) |
+| `--skip` | none | Scan every scope except these |
 
 **Examples:**
 
@@ -95,14 +97,55 @@ nox scan . --offline
 
 # Order findings by priority (severity, then reachability) instead of rule/path
 nox scan . --sort priority
+
+# Only secrets, as a drop-in for a secrets scanner
+nox scan . --only secrets
+
+# Everything except dependency lookups
+nox scan . --skip deps
 ```
+
+#### Scopes
+
+A full scan covers every concern in one pass. `--only` and `--skip` (or
+`scan.scopes` / `scan.skip_scopes` in `.nox.yaml`; the flags win) narrow it:
+
+| Scope | What runs | Rule IDs |
+|-------|-----------|----------|
+| `secrets` | secret detection | `SEC-*` |
+| `code` | taint flow, agent flow, CVE variants, weak crypto, hardening, memory safety | `TAINT-*`, `AGENTFLOW-*`, `VARIANT-*`, `CRYPTO-*`, `HARDEN-*`, `MEMSAFE-*` |
+| `deps` | lockfiles, vulnerability lookups (NOX Intelligence, verified against OSV.dev), licences, SBOM | `VULN-*`, `CONT-*`, `LIC-*` |
+| `iac` | infrastructure-as-code and file permissions | `IAC-*`, `PERM-*` |
+| `ai` | AI and MCP rules, the AI inventory | `AI-*`, `MCP-*` |
+| `data` | sensitive data in code | `DATA-*` |
+| `supply-chain` | slopsquatting and provenance | `SLOP-*`, `PROV-*` |
+
+A scope that is left out does not run at all. Its analyzers are not run,
+and the stages that only serve it are skipped too: vulnerability lookups, SBOM
+and AI inventory. So a scoped scan costs what its scopes cost, not a full scan
+with findings hidden. A scoped scan's findings are exactly the full scan's
+findings for those scopes.
+
+A scoped scan always says what it left out, because no findings for a scope
+it did not run is not an all-clear:
+
+- `findings.json` carries `meta.scope` (`scanned`, `not_scanned`, `plugins_run`);
+- SARIF carries one `nox/scope/not-scanned` notification per scope left out;
+- the summary line prints `[scope] scanned: …; not scanned: …`;
+- `--format cdx`/`spdx` without the `deps` scope is an error rather than an
+  empty SBOM, and `--format all` skips the SBOM with a note.
+
+Plugins run in full scans only: a plugin declares no scope. Custom rules
+(`--rules`) always run. Unknown scope names are an error. A `nox:ignore`
+waiver for a rule outside the scan's scopes is not reported as unused,
+because that rule was not run.
 
 The scan pipeline:
 
 1. Loads `.nox.yaml` from the target directory (if present)
 2. Discovers artifacts by walking the directory tree
 3. Respects `.gitignore` patterns and `.nox.yaml` exclude patterns
-4. Runs all analyzers: secrets, IaC, AI security, dependencies
+4. Runs the analyzers of the selected scopes (all by default): secrets, code, dependencies, IaC, AI security, data, supply chain
 5. Applies rule disabling and severity overrides from config
 6. Deduplicates findings by fingerprint
 7. Sorts deterministically for reproducible output
@@ -1990,9 +2033,9 @@ nox serve --allowed-paths /path/to/project
 
 | Tool | Description | Input |
 |------|-------------|-------|
-| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it) |
+| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it); optional `only`, `skip` (lists of [scopes](#scopes)) |
 | `get_findings` | Get findings from last scan | `format` (`json` or `sarif`, default: `json`) |
-| `get_sbom` | Get SBOM from last scan | `format` (`cdx` or `spdx`, default: `cdx`) |
+| `get_sbom` | Get SBOM from last scan (an error if that scan left out `deps`) | `format` (`cdx` or `spdx`, default: `cdx`) |
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
