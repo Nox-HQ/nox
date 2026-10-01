@@ -85,6 +85,40 @@ these seven repositories).
 - **Online variance.** Lookup time depends on the network and on the intelligence
   service's cache; the two passes differed by up to 30%.
 
+## Update: after #789 and #791 (main 7733c3c)
+
+Two fixes followed from the numbers above, and both were re-measured the same
+way (load-gated, two passes, faster kept; highest starting load 2.96; raw:
+[`results-7733c3c.txt`](results-7733c3c.txt), harness
+[`scripts/run-online.sh`](scripts/run-online.sh)):
+
+- **Peak memory (#789).** The IaC and slop analyzers held every file's bytes
+  until they finished: 722 MB and 568 MB on llama_index.
+- **Online time (#791).** The 84 s online cost on llama_index was not the
+  network. A reachability step read every file with a finding and
+  regex-matched it for source constructs, and online those files are the 609
+  lockfiles the vulnerability findings point at (580 MB, 49 s of CPU on one
+  core). The same lockfiles went through the waiver scan (11 s). It also
+  labelled 749 findings with limitations no analysis had.
+
+| Repository | nox offline | nox online | nox `--only deps` (online) |
+|---|---:|---:|---:|
+| anthropic-sdk-python | 4.1 s | 5.7 s | 5.1 s |
+| agent-go | 1.3 s | 3.2 s | 2.7 s |
+| crewAI | 21.9 s | 21.3 s | 4.9 s |
+| mcp python-sdk | 5.2 s | 5.2 s | 3.4 s |
+| openai-python | 6.4 s | 6.6 s | 2.7 s |
+| llama_index | 31.4 s | 44.7 s | 23.3 s |
+| vercel/ai | 12.1 s | 23.7 s | 19.7 s |
+| **Wall, total** | **82 s** (was 93) | **110 s** (was 193) | 62 s (was 135) |
+| CPU, total | 579 s | 583 s | 11 s (was 83) |
+| Peak memory | 1.27 GB (was 3.5) | 1.28 GB (was 3.6) | 172 MB |
+
+Online nox now takes 110 s for every concern, against 141 s for Semgrep's code
+scan alone. What online still costs over offline is the vulnerability service's
+response time: on llama_index two batches of about 1,000 queries take about 11 s
+each, sent one after the other, where OSV.dev answers the same batch in 1.4-1.8 s.
+
 ## Correction to 2026-09-30
 
 The speed table in [2026-09-30-languages](../2026-09-30-languages/#scan-speed)
