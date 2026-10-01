@@ -178,6 +178,13 @@ func directiveTailOK(rest string) bool {
 // all suppressions found. Each suppression targets either the same line
 // (trailing comment) or the next non-blank, non-comment line.
 func ScanForSuppressions(content []byte, filePath string) []Suppression {
+	// Every directive contains the literal "nox:" (suppressionRE requires it),
+	// so a file or line without it holds none. Checked before any regex: the
+	// pattern has no literal prefix, and running it over every line of the
+	// lockfiles a VULN finding points at cost llama_index 11 s.
+	if !bytes.Contains(content, []byte("nox:")) {
+		return nil
+	}
 	var result []Suppression
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
@@ -208,6 +215,9 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 		lineNum := i + 1
 		if isMarkdown && isFence(strings.TrimSpace(line)) {
 			inFence = !inFence
+		}
+		if !strings.Contains(line, "nox:") {
+			continue
 		}
 		loc := suppressionRE.FindStringSubmatchIndex(line)
 		if loc == nil {
