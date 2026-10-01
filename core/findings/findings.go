@@ -646,7 +646,20 @@ func (fs *FindingSet) SortDeterministic() {
 		if a.Location.StartLine != b.Location.StartLine {
 			return a.Location.StartLine < b.Location.StartLine
 		}
-		return a.Fingerprint < b.Fingerprint
+		if a.Fingerprint != b.Fingerprint {
+			return a.Fingerprint < b.Fingerprint
+		}
+		// A v2 fingerprint ignores position, so two matches of the same text
+		// on one line tie on everything above. Without these the sort is not
+		// a total order and their order follows whatever order the analyzers
+		// produced them in -- which changed between builds on llama_index.
+		if a.Location.StartColumn != b.Location.StartColumn {
+			return a.Location.StartColumn < b.Location.StartColumn
+		}
+		if a.Location.EndLine != b.Location.EndLine {
+			return a.Location.EndLine < b.Location.EndLine
+		}
+		return a.Location.EndColumn < b.Location.EndColumn
 	})
 }
 
