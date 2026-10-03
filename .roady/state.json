@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 249,
+  "version": 250,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -76,17 +76,15 @@
       "elapsed_minutes": 117
     },
     "task-105": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "Felix Geelhaar",
+      "evidence": [
+        "PR #796 merged as 2df9fa3: llama_index peak RSS 1,311 -\u003e 790 MB (Semgrep 968 MB), findings identical on seven repos"
+      ],
       "started_at": "2026-10-03T10:50:34.820024+02:00",
-      "elapsed_minutes": 0,
-      "lease": {
-        "holder": "Felix Geelhaar",
-        "session": "0ddc02c9-92b7-47c4-b32b-c22397068e62",
-        "expires_at": "2026-10-03T12:50:34.820025+02:00",
-        "renewed_at": "2026-10-03T10:50:34.820025+02:00"
-      }
+      "completed_at": "2026-10-03T11:19:47.665384+02:00",
+      "elapsed_minutes": 29
     },
     "task-11": {
       "status": "verified",
@@ -1096,5 +1094,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-10-03T10:50:34.820024+02:00"
+  "updated_at": "2026-10-03T11:19:47.665385+02:00"
 }

@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.0] - 2026-10-03
+
+Taint analysis measured on a labelled suite for every language that has one,
+scans that can be narrowed to one concern, and a scan that is faster and
+smaller than Semgrep's while covering more. Load-gated on the seven pinned
+benchmark repositories: a full scan takes 89 s offline and 97 s online, against
+141 s for Semgrep `p/default`, which scans code only; peak memory is 790 MB on
+llama_index, against Semgrep's 968 MB.
+
+### Added
+
+- **Scoped scans: `--only` / `--skip`** (#786, #787). `nox scan --only secrets`
+  or `--skip deps`, `scan.scopes` / `scan.skip_scopes` in `.nox.yaml`, and
+  `only` / `skip` on the MCP `scan` tool. The scopes are `secrets`, `code`,
+  `deps`, `iac`, `ai`, `data` and `supply-chain`. A scope left out does not
+  run at all: no analyzers, no lockfile reads or vulnerability lookups without
+  `deps`, no plugins. Every output says what was not scanned: `meta.scope` in
+  findings.json, `nox/scope/not-scanned` notes in SARIF, the summary line and
+  report.html. `--format cdx`/`spdx` without `deps` is an error rather than an
+  empty SBOM. A scoped scan's findings are exactly the full scan's findings for
+  its scopes (checked on the seven benchmark repositories). `--only secrets`
+  takes 27 s on them (gitleaks 73 s, TruffleHog 10 s); `--only code` takes 33 s
+  (Semgrep 141 s).
+- **Go taint on the OWASP Benchmark port** (#778): 7.3 -> 35.6 (Semgrep 22.1),
+  with receiver types, branch-aware definite assignment, element-sensitive
+  slice literals and `HARDEN-003` for Go cookies.
+- **C#, JavaScript/TypeScript and Ruby measured** (#779): NIST Juliet C# 16.7
+  -> 24.8, and 82.6 on its in-scope cases (Semgrep 0.3 and 1.4). JavaScript and
+  Ruby recall is measured on CodeQL's own test cases, read as a floor.
+- **PHP on NIST SARD** (#780): -0.0 -> 4.6, and 12.3 on HTTP-input cases
+  (Semgrep 0.0 and 0.1), with getter summaries and URL/path argument gates.
+- Per-language scorecard and load-gated speed benchmarks: `docs/benchmarks/`
+  2026-09-30-languages and 2026-10-01-speed.
+
+### Changed
+
+- **Faster rule matching** (#783). Vendor-token rules
+  (`(?i)[\w.-]{0,50}?(?:okta)...`) are matched from their literal, a candidate
+  scan yields to the full scan when it would cost more, and every keyword
+  pre-filter is answered in one pass per file. Total CPU on the seven
+  repositories 1,771 s -> 968 s, with identical findings.
+- **Analyzers use every core** (#776).
+- **Online dependency lookups** (#794): nox-core v0.3.2 sends batches four at a
+  time, and a failed batch no longer loses the batches after it.
+- **`scan.analyzer_rules` `skip_analyzer`** now knows `weakcrypto`,
+  `fileperms`, `hardening` and `memsafe`, and removes `AGENT-*` with `ai`; it
+  silently did nothing for those before.
+
+### Fixed
+
+- **Online scans labelled lockfiles with analysis limitations** (#791). Every
+  file with a finding was read and matched for reflection, dynamic loading and
+  FFI; online, those are the lockfiles vulnerability findings point at, where
+  `ctypes` and `importlib-metadata` are package names. 749 findings on
+  llama_index carried limitations no analysis had, and the read cost 49 s of
+  CPU. Limitations now come from source files only.
+- **Peak memory** (#789, #796). The IaC and slopsquat analyzers held every
+  file's contents until they finished, and declared package names kept whole
+  lockfiles alive as substrings: llama_index 3.6 GB -> 790 MB.
+- **The deterministic finding order was not a total order** (#789). Two matches
+  of the same text on one line could come out in either order between builds.
+- **A panic in one file's taint extraction no longer ends the scan** (#775);
+  the file is skipped and the scan reports a degradation.
+- **Reserved words are judged per language** (#777).
+- **Waivers for rules a scoped scan did not run** are no longer reported as
+  unused (#786).
+
 ## [1.46.0] - 2026-09-30
 
 Java XPath and LDAP injection, and container taint that tracks literal keys.
