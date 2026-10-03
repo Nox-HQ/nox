@@ -150,10 +150,10 @@ func (d *declaredSet) addNPM(name string) {
 	if name == "" {
 		return
 	}
-	d.npm[name] = struct{}{}
+	put(d.npm, name)
 	// A declared @types/foo type stub vouches for the runtime package foo.
 	if strings.HasPrefix(name, "@types/") {
-		d.npm[strings.TrimPrefix(name, "@types/")] = struct{}{}
+		put(d.npm, strings.TrimPrefix(name, "@types/"))
 	}
 }
 
@@ -163,12 +163,22 @@ func (d *declaredSet) addPyPI(name string) {
 	if name == "" {
 		return
 	}
-	d.pypi[name] = struct{}{}
+	put(d.pypi, name)
 	// A namespace-package distribution (zope.interface, backports.zoneinfo,
 	// sphinxcontrib.spelling) is imported through its namespace root; the
 	// dotted name is what identifies it as one.
 	if i := strings.IndexByte(raw, '.'); i > 0 {
-		d.pypi[normalizePyPI(raw[:i])] = struct{}{}
+		put(d.pypi, normalizePyPI(raw[:i]))
+	}
+}
+
+// put adds name to set as a copy. Names come out of a manifest as substrings
+// of the whole file, and a map key that is a substring keeps the file alive:
+// llama_index's declared set held 480 MB of uv.lock text through a few
+// thousand names. Only a new key is copied.
+func put(set map[string]struct{}, name string) {
+	if _, ok := set[name]; !ok {
+		set[strings.Clone(name)] = struct{}{}
 	}
 }
 

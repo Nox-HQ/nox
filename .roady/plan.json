@@ -3,6 +3,16 @@
   "spec_id": "nox",
   "tasks": [
     {
+      "id": "task-105",
+      "title": "Full-scan peak memory below Semgrep's",
+      "description": "After #789 the full scan peaks at 1.0-1.3 GB on llama_index against Semgrep's ~0.97 GB (load-gated, #795). Profile the in-use heap at peak, find what is held longer than needed, and cut it without changing a finding; A/B on the seven pinned repos.",
+      "priority": "medium",
+      "estimate": "M",
+      "depends_on": [],
+      "feature_id": "competitive-scan-speed",
+      "source": {}
+    },
+    {
       "id": "task-104",
       "title": "Online dependency lookups: find and cut the 84 s on llama_index",
       "description": "Online nox takes 122 s on llama_index against 39 s offline (load-gated, #788); --only deps takes 94 s there and 83 s of CPU across all seven repos, so the time is waiting on the network. Measure request counts, sizes and latency per stage (intelligence query, OSV verification, advisory hydration, cache hits), then cut it without losing a finding: the verified-superset guarantee and every advisory stay. Findings byte-identical before and after on the seven repos.",
