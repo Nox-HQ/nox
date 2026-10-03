@@ -1,0 +1,46 @@
+package PKG
+
+import (
+	"encoding/json"
+	"os"
+	"reflect"
+	"testing"
+)
+
+// TestDumpRulesReflect writes EVERY exported, serialisable field of every
+// built rule, discovered by reflection so the same file works on any version
+// of the Rule struct. A function-valued field is recorded as present/absent.
+func TestDumpRulesReflect(t *testing.T) {
+	path := os.Getenv("NOX_RULE_DUMP_REFLECT")
+	if path == "" {
+		t.Skip("set NOX_RULE_DUMP_REFLECT")
+	}
+	var out []map[string]any
+	for _, r := range RULES {
+		v := reflect.ValueOf(r).Elem()
+		m := map[string]any{}
+		for i := 0; i < v.NumField(); i++ {
+			f := v.Type().Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			fv := v.Field(i)
+			if fv.Kind() == reflect.Func {
+				m[f.Name] = !fv.IsNil()
+				continue
+			}
+			m[f.Name] = fv.Interface()
+		}
+		out = append(out, m)
+	}
+	if len(out) == 0 {
+		t.Fatal("empty rule set")
+	}
+	b, err := json.MarshalIndent(out, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -1,0 +1,1797 @@
+{
+ "v1.35.0": {
+  "vendor_invariants": [
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "case_insensitive"
+    ],
+    "n": 419,
+    "support": 418,
+    "confidence": 0.998,
+    "lineages": 242,
+    "lineage_support": 241,
+    "lineage_confidence": 0.996,
+    "exceptions": [
+     "SEC-184"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "case_insensitive"
+    ],
+    "n": 334,
+    "support": 333,
+    "confidence": 0.997,
+    "lineages": 173,
+    "lineage_support": 172,
+    "lineage_confidence": 0.994,
+    "exceptions": [
+     "SEC-412"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 334,
+    "support": 333,
+    "confidence": 0.997,
+    "lineages": 173,
+    "lineage_support": 172,
+    "lineage_confidence": 0.994,
+    "exceptions": [
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 454,
+    "support": 452,
+    "confidence": 0.996,
+    "lineages": 274,
+    "lineage_support": 272,
+    "lineage_confidence": 0.993,
+    "exceptions": [
+     "SEC-198",
+     "SEC-239"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 334,
+    "support": 332,
+    "confidence": 0.994,
+    "lineages": 173,
+    "lineage_support": 171,
+    "lineage_confidence": 0.988,
+    "exceptions": [
+     "SEC-082",
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "secret_shape"
+    ],
+    "consequent": [
+     "bare_token"
+    ],
+    "n": 160,
+    "support": 159,
+    "confidence": 0.994,
+    "lineages": 42,
+    "lineage_support": 41,
+    "lineage_confidence": 0.976,
+    "exceptions": [
+     "SEC-437"
+    ]
+   },
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 419,
+    "support": 416,
+    "confidence": 0.993,
+    "lineages": 242,
+    "lineage_support": 239,
+    "lineage_confidence": 0.988,
+    "exceptions": [
+     "SEC-002",
+     "SEC-014",
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 419,
+    "support": 416,
+    "confidence": 0.993,
+    "lineages": 242,
+    "lineage_support": 239,
+    "lineage_confidence": 0.988,
+    "exceptions": [
+     "SEC-002",
+     "SEC-082",
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "keyword_in_pattern"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 504,
+    "support": 500,
+    "confidence": 0.992,
+    "lineages": 293,
+    "lineage_support": 289,
+    "lineage_confidence": 0.986,
+    "exceptions": [
+     "SEC-050",
+     "SEC-059",
+     "SEC-239",
+     "SEC-272"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "assignment_binding"
+    ],
+    "n": 334,
+    "support": 331,
+    "confidence": 0.991,
+    "lineages": 173,
+    "lineage_support": 170,
+    "lineage_confidence": 0.983,
+    "exceptions": [
+     "SEC-211",
+     "SEC-254",
+     "SEC-412"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 196,
+    "support": 194,
+    "confidence": 0.99,
+    "lineages": 176,
+    "lineage_support": 174,
+    "lineage_confidence": 0.989,
+    "exceptions": [
+     "SEC-198",
+     "SEC-272"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 454,
+    "support": 449,
+    "confidence": 0.989,
+    "lineages": 274,
+    "lineage_support": 269,
+    "lineage_confidence": 0.982,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-014",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 454,
+    "support": 449,
+    "confidence": 0.989,
+    "lineages": 274,
+    "lineage_support": 269,
+    "lineage_confidence": 0.982,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 857,
+    "support": 845,
+    "confidence": 0.986,
+    "lineages": 521,
+    "lineage_support": 510,
+    "lineage_confidence": 0.979,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-024",
+     "SEC-030",
+     "SEC-038",
+     "SEC-051",
+     "SEC-052",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104",
+     "SEC-142"
+    ]
+   },
+   {
+    "antecedent": [
+     "keyword_in_pattern"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 504,
+    "support": 497,
+    "confidence": 0.986,
+    "lineages": 293,
+    "lineage_support": 286,
+    "lineage_confidence": 0.976,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-024",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 196,
+    "support": 191,
+    "confidence": 0.974,
+    "lineages": 176,
+    "lineage_support": 171,
+    "lineage_confidence": 0.972,
+    "exceptions": [
+     "SEC-001",
+     "SEC-083",
+     "SEC-103",
+     "SEC-123",
+     "SEC-156"
+    ]
+   },
+   {
+    "antecedent": [
+     "format_prefix"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 280,
+    "support": 269,
+    "confidence": 0.961,
+    "lineages": 240,
+    "lineage_support": 230,
+    "lineage_confidence": 0.958,
+    "exceptions": [
+     "SEC-008",
+     "SEC-024",
+     "SEC-030",
+     "SEC-038",
+     "SEC-051",
+     "SEC-052",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104",
+     "SEC-142"
+    ]
+   },
+   {
+    "antecedent": [
+     "word_boundary"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 75,
+    "support": 71,
+    "confidence": 0.947,
+    "lineages": 62,
+    "lineage_support": 58,
+    "lineage_confidence": 0.935,
+    "exceptions": [
+     "SEC-001",
+     "SEC-013",
+     "SEC-003",
+     "SEC-147"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "assignment_binding"
+    ],
+    "n": 454,
+    "support": 418,
+    "confidence": 0.921,
+    "lineages": 274,
+    "lineage_support": 241,
+    "lineage_confidence": 0.88,
+    "exceptions": [
+     "SEC-008",
+     "SEC-104",
+     "SEC-168",
+     "SEC-177",
+     "SEC-187",
+     "SEC-189",
+     "SEC-193",
+     "SEC-194",
+     "SEC-195",
+     "SEC-196",
+     "SEC-198",
+     "SEC-199",
+     "SEC-206",
+     "SEC-207",
+     "SEC-208",
+     "SEC-210",
+     "SEC-211",
+     "SEC-235",
+     "SEC-236",
+     "SEC-237",
+     "SEC-239",
+     "SEC-244",
+     "SEC-245",
+     "SEC-248",
+     "SEC-254",
+     "SEC-258",
+     "SEC-282",
+     "SEC-294",
+     "SEC-297",
+     "SEC-309",
+     "SEC-310",
+     "SEC-324",
+     "SEC-326",
+     "SEC-327",
+     "SEC-335",
+     "SEC-351"
+    ]
+   },
+   {
+    "antecedent": [],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 857,
+    "support": 783,
+    "confidence": 0.914,
+    "lineages": 521,
+    "lineage_support": 463,
+    "lineage_confidence": 0.889,
+    "exceptions": [
+     "SEC-001",
+     "SEC-002",
+     "SEC-006",
+     "SEC-007",
+     "SEC-008",
+     "SEC-010",
+     "SEC-011",
+     "SEC-013",
+     "SEC-014",
+     "SEC-015",
+     "SEC-003",
+     "SEC-016",
+     "SEC-017",
+     "SEC-018",
+     "SEC-019",
+     "SEC-020",
+     "SEC-022",
+     "SEC-023",
+     "SEC-024",
+     "SEC-028",
+     "SEC-030",
+     "SEC-031",
+     "SEC-032",
+     "SEC-033",
+     "SEC-034",
+     "SEC-035",
+     "SEC-036",
+     "SEC-037",
+     "SEC-038",
+     "SEC-039",
+     "SEC-040",
+     "SEC-041",
+     "SEC-042",
+     "SEC-043",
+     "SEC-045",
+     "SEC-046",
+     "SEC-047",
+     "SEC-049",
+     "SEC-050",
+     "SEC-051",
+     "SEC-052",
+     "SEC-054",
+     "SEC-055",
+     "SEC-056",
+     "SEC-057",
+     "SEC-058",
+     "SEC-059",
+     "SEC-062",
+     "SEC-066",
+     "SEC-067",
+     "SEC-071",
+     "SEC-077",
+     "SEC-083",
+     "SEC-089",
+     "SEC-092",
+     "SEC-093",
+     "SEC-094",
+     "SEC-098",
+     "SEC-103",
+     "SEC-104",
+     "SEC-115",
+     "SEC-117",
+     "SEC-119",
+     "SEC-123",
+     "SEC-124",
+     "SEC-127",
+     "SEC-132",
+     "SEC-142",
+     "SEC-143",
+     "SEC-147",
+     "SEC-153",
+     "SEC-156",
+     "SEC-157",
+     "SEC-160"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "keyword_in_pattern"
+    ],
+    "n": 196,
+    "support": 178,
+    "confidence": 0.908,
+    "lineages": 176,
+    "lineage_support": 158,
+    "lineage_confidence": 0.898,
+    "exceptions": [
+     "SEC-103",
+     "SEC-156",
+     "SEC-164",
+     "SEC-168",
+     "SEC-179",
+     "SEC-198",
+     "SEC-199",
+     "SEC-248",
+     "SEC-260",
+     "SEC-261",
+     "SEC-262",
+     "SEC-273",
+     "SEC-274",
+     "SEC-300",
+     "SEC-309",
+     "SEC-338",
+     "SEC-350",
+     "SEC-351"
+    ]
+   }
+  ]
+ },
+ "head_863dccc": {
+  "vendor_invariants": [
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "case_insensitive"
+    ],
+    "n": 567,
+    "support": 566,
+    "confidence": 0.998,
+    "lineages": 285,
+    "lineage_support": 284,
+    "lineage_confidence": 0.996,
+    "exceptions": [
+     "SEC-184"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "case_insensitive"
+    ],
+    "n": 486,
+    "support": 485,
+    "confidence": 0.998,
+    "lineages": 219,
+    "lineage_support": 218,
+    "lineage_confidence": 0.995,
+    "exceptions": [
+     "SEC-412"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 602,
+    "support": 600,
+    "confidence": 0.997,
+    "lineages": 317,
+    "lineage_support": 315,
+    "lineage_confidence": 0.994,
+    "exceptions": [
+     "SEC-198",
+     "SEC-239"
+    ]
+   },
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 567,
+    "support": 564,
+    "confidence": 0.995,
+    "lineages": 285,
+    "lineage_support": 282,
+    "lineage_confidence": 0.989,
+    "exceptions": [
+     "SEC-002",
+     "SEC-082",
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 321,
+    "support": 319,
+    "confidence": 0.994,
+    "lineages": 207,
+    "lineage_support": 205,
+    "lineage_confidence": 0.99,
+    "exceptions": [
+     "SEC-198",
+     "SEC-272"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 321,
+    "support": 319,
+    "confidence": 0.994,
+    "lineages": 207,
+    "lineage_support": 205,
+    "lineage_confidence": 0.99,
+    "exceptions": [
+     "SEC-082",
+     "SEC-083"
+    ]
+   },
+   {
+    "antecedent": [
+     "keyword_in_pattern"
+    ],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 646,
+    "support": 642,
+    "confidence": 0.994,
+    "lineages": 335,
+    "lineage_support": 331,
+    "lineage_confidence": 0.988,
+    "exceptions": [
+     "SEC-050",
+     "SEC-059",
+     "SEC-239",
+     "SEC-272"
+    ]
+   },
+   {
+    "antecedent": [
+     "quoted_value"
+    ],
+    "consequent": [
+     "assignment_binding"
+    ],
+    "n": 486,
+    "support": 483,
+    "confidence": 0.994,
+    "lineages": 219,
+    "lineage_support": 216,
+    "lineage_confidence": 0.986,
+    "exceptions": [
+     "SEC-211",
+     "SEC-254",
+     "SEC-412"
+    ]
+   },
+   {
+    "antecedent": [
+     "assignment_binding"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 567,
+    "support": 563,
+    "confidence": 0.993,
+    "lineages": 285,
+    "lineage_support": 281,
+    "lineage_confidence": 0.986,
+    "exceptions": [
+     "SEC-002",
+     "SEC-014",
+     "SEC-083",
+     "SEC-446"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 602,
+    "support": 597,
+    "confidence": 0.992,
+    "lineages": 317,
+    "lineage_support": 312,
+    "lineage_confidence": 0.984,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [
+     "secret_shape"
+    ],
+    "consequent": [
+     "assignment_binding"
+    ],
+    "n": 127,
+    "support": 126,
+    "confidence": 0.992,
+    "lineages": 32,
+    "lineage_support": 31,
+    "lineage_confidence": 0.969,
+    "exceptions": [
+     "SEC-437"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 602,
+    "support": 596,
+    "confidence": 0.99,
+    "lineages": 317,
+    "lineage_support": 311,
+    "lineage_confidence": 0.981,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-014",
+     "SEC-083",
+     "SEC-104",
+     "SEC-446"
+    ]
+   },
+   {
+    "antecedent": [
+     "keyword_in_pattern"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 646,
+    "support": 639,
+    "confidence": 0.989,
+    "lineages": 335,
+    "lineage_support": 328,
+    "lineage_confidence": 0.979,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-024",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 831,
+    "support": 820,
+    "confidence": 0.987,
+    "lineages": 520,
+    "lineage_support": 509,
+    "lineage_confidence": 0.979,
+    "exceptions": [
+     "SEC-002",
+     "SEC-008",
+     "SEC-024",
+     "SEC-030",
+     "SEC-038",
+     "SEC-051",
+     "SEC-052",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [],
+    "consequent": [
+     "assignment_binding",
+     "format_prefix"
+    ],
+    "n": 831,
+    "support": 819,
+    "confidence": 0.986,
+    "lineages": 520,
+    "lineage_support": 508,
+    "lineage_confidence": 0.977,
+    "exceptions": [
+     "SEC-028",
+     "SEC-050",
+     "SEC-059",
+     "SEC-149",
+     "SEC-198",
+     "SEC-239",
+     "SEC-272",
+     "SEC-419",
+     "SEC-420",
+     "SEC-421",
+     "SEC-450",
+     "SEC-523"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 321,
+    "support": 316,
+    "confidence": 0.984,
+    "lineages": 207,
+    "lineage_support": 202,
+    "lineage_confidence": 0.976,
+    "exceptions": [
+     "SEC-001",
+     "SEC-083",
+     "SEC-103",
+     "SEC-123",
+     "SEC-156"
+    ]
+   },
+   {
+    "antecedent": [
+     "word_boundary"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 212,
+    "support": 205,
+    "confidence": 0.967,
+    "lineages": 101,
+    "lineage_support": 94,
+    "lineage_confidence": 0.931,
+    "exceptions": [
+     "SEC-001",
+     "SEC-003",
+     "SEC-013",
+     "SEC-147",
+     "SEC-446",
+     "SEC-562",
+     "SEC-661"
+    ]
+   },
+   {
+    "antecedent": [
+     "format_prefix"
+    ],
+    "consequent": [
+     "severity=high"
+    ],
+    "n": 268,
+    "support": 258,
+    "confidence": 0.963,
+    "lineages": 239,
+    "lineage_support": 229,
+    "lineage_confidence": 0.958,
+    "exceptions": [
+     "SEC-008",
+     "SEC-024",
+     "SEC-030",
+     "SEC-038",
+     "SEC-051",
+     "SEC-052",
+     "SEC-077",
+     "SEC-082",
+     "SEC-083",
+     "SEC-104"
+    ]
+   },
+   {
+    "antecedent": [
+     "capture_group"
+    ],
+    "consequent": [
+     "keyword_in_pattern"
+    ],
+    "n": 321,
+    "support": 303,
+    "confidence": 0.944,
+    "lineages": 207,
+    "lineage_support": 189,
+    "lineage_confidence": 0.913,
+    "exceptions": [
+     "SEC-103",
+     "SEC-156",
+     "SEC-164",
+     "SEC-168",
+     "SEC-179",
+     "SEC-198",
+     "SEC-199",
+     "SEC-248",
+     "SEC-260",
+     "SEC-261",
+     "SEC-262",
+     "SEC-273",
+     "SEC-274",
+     "SEC-300",
+     "SEC-309",
+     "SEC-338",
+     "SEC-350",
+     "SEC-351"
+    ]
+   },
+   {
+    "antecedent": [
+     "case_insensitive"
+    ],
+    "consequent": [
+     "assignment_binding"
+    ],
+    "n": 602,
+    "support": 566,
+    "confidence": 0.94,
+    "lineages": 317,
+    "lineage_support": 284,
+    "lineage_confidence": 0.896,
+    "exceptions": [
+     "SEC-008",
+     "SEC-104",
+     "SEC-168",
+     "SEC-177",
+     "SEC-187",
+     "SEC-189",
+     "SEC-193",
+     "SEC-194",
+     "SEC-195",
+     "SEC-196",
+     "SEC-198",
+     "SEC-199",
+     "SEC-206",
+     "SEC-207",
+     "SEC-208",
+     "SEC-210",
+     "SEC-211",
+     "SEC-235",
+     "SEC-236",
+     "SEC-237",
+     "SEC-239",
+     "SEC-244",
+     "SEC-245",
+     "SEC-248",
+     "SEC-254",
+     "SEC-258",
+     "SEC-282",
+     "SEC-294",
+     "SEC-297",
+     "SEC-309",
+     "SEC-310",
+     "SEC-324",
+     "SEC-326",
+     "SEC-327",
+     "SEC-335",
+     "SEC-351"
+    ]
+   },
+   {
+    "antecedent": [
+     "word_boundary"
+    ],
+    "consequent": [
+     "keyword_in_pattern"
+    ],
+    "n": 212,
+    "support": 196,
+    "confidence": 0.925,
+    "lineages": 101,
+    "lineage_support": 85,
+    "lineage_confidence": 0.842,
+    "exceptions": [
+     "SEC-003",
+     "SEC-164",
+     "SEC-168",
+     "SEC-179",
+     "SEC-198",
+     "SEC-199",
+     "SEC-213",
+     "SEC-248",
+     "SEC-309",
+     "SEC-338",
+     "SEC-350",
+     "SEC-351",
+     "SEC-435",
+     "SEC-544",
+     "SEC-575",
+     "SEC-661"
+    ]
+   },
+   {
+    "antecedent": [],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 831,
+    "support": 756,
+    "confidence": 0.91,
+    "lineages": 520,
+    "lineage_support": 459,
+    "lineage_confidence": 0.883,
+    "exceptions": [
+     "SEC-001",
+     "SEC-002",
+     "SEC-003",
+     "SEC-006",
+     "SEC-007",
+     "SEC-008",
+     "SEC-010",
+     "SEC-011",
+     "SEC-013",
+     "SEC-014",
+     "SEC-015",
+     "SEC-016",
+     "SEC-017",
+     "SEC-018",
+     "SEC-019",
+     "SEC-020",
+     "SEC-022",
+     "SEC-023",
+     "SEC-024",
+     "SEC-028",
+     "SEC-030",
+     "SEC-031",
+     "SEC-032",
+     "SEC-033",
+     "SEC-034",
+     "SEC-035",
+     "SEC-036",
+     "SEC-037",
+     "SEC-038",
+     "SEC-039",
+     "SEC-040",
+     "SEC-041",
+     "SEC-042",
+     "SEC-043",
+     "SEC-045",
+     "SEC-046",
+     "SEC-047",
+     "SEC-049",
+     "SEC-050",
+     "SEC-051",
+     "SEC-052",
+     "SEC-054",
+     "SEC-055",
+     "SEC-056",
+     "SEC-057",
+     "SEC-058",
+     "SEC-059",
+     "SEC-062",
+     "SEC-066",
+     "SEC-067",
+     "SEC-071",
+     "SEC-077",
+     "SEC-083",
+     "SEC-089",
+     "SEC-092",
+     "SEC-093",
+     "SEC-094",
+     "SEC-098",
+     "SEC-103",
+     "SEC-104",
+     "SEC-117",
+     "SEC-119",
+     "SEC-123",
+     "SEC-124",
+     "SEC-127",
+     "SEC-132",
+     "SEC-143",
+     "SEC-147",
+     "SEC-153",
+     "SEC-156",
+     "SEC-157",
+     "SEC-160",
+     "SEC-446",
+     "SEC-562",
+     "SEC-661"
+    ]
+   },
+   {
+    "antecedent": [
+     "keyword_in_pattern"
+    ],
+    "consequent": [
+     "confidence=medium"
+    ],
+    "n": 646,
+    "support": 585,
+    "confidence": 0.906,
+    "lineages": 335,
+    "lineage_support": 288,
+    "lineage_confidence": 0.86,
+    "exceptions": [
+     "SEC-001",
+     "SEC-002",
+     "SEC-007",
+     "SEC-008",
+     "SEC-010",
+     "SEC-011",
+     "SEC-013",
+     "SEC-014",
+     "SEC-015",
+     "SEC-016",
+     "SEC-017",
+     "SEC-018",
+     "SEC-019",
+     "SEC-020",
+     "SEC-022",
+     "SEC-023",
+     "SEC-024",
+     "SEC-031",
+     "SEC-032",
+     "SEC-033",
+     "SEC-034",
+     "SEC-035",
+     "SEC-036",
+     "SEC-037",
+     "SEC-039",
+     "SEC-040",
+     "SEC-041",
+     "SEC-042",
+     "SEC-043",
+     "SEC-045",
+     "SEC-046",
+     "SEC-047",
+     "SEC-049",
+     "SEC-050",
+     "SEC-055",
+     "SEC-056",
+     "SEC-057",
+     "SEC-059",
+     "SEC-062",
+     "SEC-066",
+     "SEC-067",
+     "SEC-071",
+     "SEC-077",
+     "SEC-083",
+     "SEC-089",
+     "SEC-092",
+     "SEC-093",
+     "SEC-094",
+     "SEC-098",
+     "SEC-104",
+     "SEC-117",
+     "SEC-119",
+     "SEC-123",
+     "SEC-124",
+     "SEC-127",
+     "SEC-132",
+     "SEC-143",
+     "SEC-147",
+     "SEC-157",
+     "SEC-446",
+     "SEC-562"
+    ]
+   }
+  ],
+  "structural_exception_labels": [
+   {
+    "rule": "SEC-003",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-008",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "credential-file marker: the matched JSON carries a private key"
+   },
+   {
+    "rule": "SEC-028",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-050",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-059",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-103",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-104",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "credential-file marker: the matched JSON carries a private key"
+   },
+   {
+    "rule": "SEC-149",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-156",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-164",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-168",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-177",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-179",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-184",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "curl -u/--user flags are case-sensitive; binding without (?i) is correct"
+   },
+   {
+    "rule": "SEC-187",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-189",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-193",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-194",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-195",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-196",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-198",
+    "invariant_kinds": [
+     "co-occurrence",
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-199",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-206",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-207",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-208",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-210",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-211",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "PHP `=>` binding not recognised by the extractor"
+   },
+   {
+    "rule": "SEC-213",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-235",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-236",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-237",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-239",
+    "invariant_kinds": [
+     "co-occurrence",
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-244",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-245",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-248",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-254",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "Kubernetes Secret manifest: binding is YAML structure the extractor does not read"
+   },
+   {
+    "rule": "SEC-258",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-260",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-261",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-262",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-272",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "structured credential format with no literal prefix (separator, infix or suffix)"
+   },
+   {
+    "rule": "SEC-273",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-274",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-282",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-294",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-297",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-300",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-309",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-310",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-324",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-326",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-327",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-335",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-338",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-350",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-351",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-412",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "1 implementation deviation, no consequence",
+    "reason": "only case-sensitive quoted-value rule; SEC-002 reports every spelling and owns the span"
+   },
+   {
+    "rule": "SEC-419",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "3 proposition question",
+    "reason": "matches an Azure identifier (/subscriptions/, /tenants/, any UUID), not a credential"
+   },
+   {
+    "rule": "SEC-420",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "3 proposition question",
+    "reason": "matches an Azure identifier (/subscriptions/, /tenants/, any UUID), not a credential"
+   },
+   {
+    "rule": "SEC-421",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "3 proposition question",
+    "reason": "matches an Azure identifier (/subscriptions/, /tenants/, any UUID), not a credential"
+   },
+   {
+    "rule": "SEC-435",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-437",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "2 valid exceptional",
+    "reason": "prefixed token (xox[baprs]-) carrying the shape filter"
+   },
+   {
+    "rule": "SEC-450",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "unresolved",
+    "reason": "LogRocket `1/[a-z0-9]{32}`: needs the vendor format to judge"
+   },
+   {
+    "rule": "SEC-523",
+    "invariant_kinds": [
+     "design"
+    ],
+    "label": "3 proposition question",
+    "reason": "matches an Azure identifier (/subscriptions/, /tenants/, any UUID), not a credential"
+   },
+   {
+    "rule": "SEC-544",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-575",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   },
+   {
+    "rule": "SEC-661",
+    "invariant_kinds": [
+     "co-occurrence"
+    ],
+    "label": "artifact",
+    "reason": "breaks only a co-occurrence invariant (style), or the extractor missed its structure"
+   }
+  ]
+ },
+ "retrospective_threshold_sweep_v1.35.0": [
+  {
+   "min_conf": 0.95,
+   "invariants": 7,
+   "flagged": 10,
+   "later_changed": 0,
+   "csp_five_flagged": 0
+  },
+  {
+   "min_conf": 0.9,
+   "invariants": 9,
+   "flagged": 54,
+   "later_changed": 0,
+   "csp_five_flagged": 0
+  },
+  {
+   "min_conf": 0.85,
+   "invariants": 9,
+   "flagged": 54,
+   "later_changed": 0,
+   "csp_five_flagged": 0
+  },
+  {
+   "min_conf": 0.8,
+   "invariants": 13,
+   "flagged": 143,
+   "later_changed": 0,
+   "csp_five_flagged": 0
+  },
+  {
+   "min_conf": 0.75,
+   "invariants": 16,
+   "flagged": 393,
+   "later_changed": 166,
+   "csp_five_flagged": 5
+  },
+  {
+   "min_conf": 0.7,
+   "invariants": 19,
+   "flagged": 491,
+   "later_changed": 171,
+   "csp_five_flagged": 5
+  }
+ ],
+ "prefix_or_binding_by_genealogy": {
+  "v1.35.0": {
+   "rules": "683/857 = 0.797",
+   "lineages": "466/521 = 0.894"
+  },
+  "head": {
+   "rules": "819/831 = 0.986",
+   "lineages": "508/520 = 0.977"
+  }
+ }
+}
