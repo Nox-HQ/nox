@@ -152,7 +152,11 @@ func credentialBearingSpans(content []byte) []byteSpan {
 		if m == nil {
 			continue
 		}
-		reqEnd := blockEnd(i, leadingWidth(lines[i]))
+		// Measured at the KEY's column: in `- request:` the dash is list
+		// syntax, and the sibling `  response:` sits at the key's column. At
+		// width 0 the response read as nested in the request, the next item's
+		// `- request:` as a continuation, and the block never closed.
+		reqEnd := blockEnd(i, keyColumn(lines[i]))
 		for j := i + 1; j < reqEnd; j++ {
 			switch {
 			case uriKeyRe.Match(lines[j]):
@@ -177,6 +181,23 @@ func credentialBearingSpans(content []byte) []byteSpan {
 		i = reqEnd - 1
 	}
 	return spans
+}
+
+// keyColumn is the column a YAML mapping key starts at: leading whitespace,
+// plus any `- ` sequence markers before it.
+func keyColumn(line []byte) int {
+	n := 0
+	for n < len(line) {
+		switch {
+		case line[n] == ' ' || line[n] == '\t':
+			n++
+		case line[n] == '-' && n+1 < len(line) && (line[n+1] == ' ' || line[n+1] == '\t'):
+			n += 2
+		default:
+			return n
+		}
+	}
+	return n
 }
 
 // leadingWidth counts leading spaces and tabs.
