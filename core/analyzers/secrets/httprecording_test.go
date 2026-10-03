@@ -314,3 +314,56 @@ func TestADecodedMatchIsGatedToo(t *testing.T) {
 			"so the assertion above cannot tell the gate from an empty scan")
 	}
 }
+
+// A response header is not a request header. In the standard vcrpy layout the
+// request key is a list item (`- request:`) and the response key a sibling
+// indented to its column (`  response:`). The block end measured the dash line
+// at width 0, so `response:` read as nested inside the request, the next
+// `- request:` as a continuation of the list, and the request block never
+// closed: every non-cookie header in the rest of the file -- response headers
+// included -- counted as credential-bearing, and the confinement of entropy
+// rules did nothing. The fixtures above carry only Set-Cookie response headers,
+// which the span code skips as cookies anyway, so they could not see it. Found
+// when a Cloudflare Report-To signature in a crewAI cassette surfaced as a
+// SEC-161 finding.
+func TestResponseHeadersAreNotCredentialBearing(t *testing.T) {
+	doc := []byte("interactions:\n" +
+		"- request:\n" +
+		"    headers:\n" +
+		"      authorization:\n" +
+		"      - Bearer REQUESTTOKEN\n" +
+		"    uri: https://a\n" +
+		"  response:\n" +
+		"    headers:\n" +
+		"      Report-To:\n" +
+		"      - '{\"url\":\"https://report?s=RESPONSESIG\"}'\n" +
+		"      X-Request-Id:\n" +
+		"      - RESPONSEID\n" +
+		"- request:\n" +
+		"    headers:\n" +
+		"      authorization:\n" +
+		"      - Bearer SECONDTOKEN\n" +
+		"    uri: https://b\n" +
+		"  response:\n" +
+		"    headers:\n" +
+		"      Server:\n" +
+		"      - SECONDSERVER\n")
+	spans := credentialBearingSpans(doc)
+	for needle, want := range map[string]bool{
+		"REQUESTTOKEN": true,
+		"SECONDTOKEN":  true,
+		"https://a":    true,
+		"https://b":    true,
+		"RESPONSESIG":  false,
+		"RESPONSEID":   false,
+		"SECONDSERVER": false,
+	} {
+		i := bytes.Index(doc, []byte(needle))
+		if i < 0 {
+			t.Fatalf("fixture lacks %q", needle)
+		}
+		if got := inSpan(spans, i); got != want {
+			t.Errorf("%q credential-bearing = %v, want %v", needle, got, want)
+		}
+	}
+}

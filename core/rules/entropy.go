@@ -838,7 +838,45 @@ func isCamelOrPascalCase(s string) bool {
 	if total == 0 {
 		return false
 	}
-	return float64(digits)/float64(total) <= 0.2
+	if float64(digits)/float64(total) > 0.2 {
+		return false
+	}
+	// ...but "mostly letters" is not enough: a uniformly random base62 token
+	// averages 16% digits and has case transitions everywhere, so the digit
+	// bar alone classified 66-82% of random 16-40 character credentials as
+	// identifiers, and the secret-shape filter dropped them. An identifier is
+	// made of WORDS -- lowercase runs like "Invalid" and "Reporter" -- while
+	// random text averages a lowercase run of ~1.7. At 2.5, random tokens
+	// classified as identifiers fall to 4-9.5%, and of 39,026 camelCase
+	// strings in this repository and the pinned corpus only 254 (0.65%) stop
+	// being classified so, most of them base64 image data that the blob and
+	// base64-image refiners handle. See shape_random_token_test.go.
+	return meanLowercaseRun(s) >= 2.5
+}
+
+// meanLowercaseRun is the average length of the maximal runs of lowercase
+// letters in s, or 0 when it has none.
+func meanLowercaseRun(s string) float64 {
+	runs, total, cur := 0, 0, 0
+	for _, r := range s {
+		if unicode.IsLower(r) {
+			cur++
+			continue
+		}
+		if cur > 0 {
+			runs++
+			total += cur
+			cur = 0
+		}
+	}
+	if cur > 0 {
+		runs++
+		total += cur
+	}
+	if runs == 0 {
+		return 0
+	}
+	return float64(total) / float64(runs)
 }
 
 // isMostlyDigits returns true if more than 70% of the characters in s are
