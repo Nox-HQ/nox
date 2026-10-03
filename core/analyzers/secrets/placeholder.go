@@ -52,6 +52,11 @@ var placeholderWords = []string{
 	"dummy",
 	"todo",
 	"redacted",
+	// Recorded-traffic scrubbers (vcrpy filter_* settings and hand-written
+	// before_record hooks) replace a token with FILTERED; crewAI's cassettes
+	// carry `ya29.FILTERED_ACCESS_TOKEN`, which a bound Google OAuth rule
+	// would otherwise report.
+	"filtered",
 	"sample",
 	"fixme",
 	// "PASTE YOUR PASSWORD HERE": the token list has your- and your_, and a
