@@ -12,6 +12,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -126,6 +127,12 @@ func printScanResults(target string, jsonOutput bool) {
 }
 
 func addDirsRecursive(watcher *fsnotify.Watcher, root string) error {
+	// filepath.Walk Lstats its root: a linked root registered nothing and
+	// `nox watch` never fired. See discovery.ResolveRoot.
+	root, err := discovery.ResolveRoot(root)
+	if err != nil {
+		return err
+	}
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil

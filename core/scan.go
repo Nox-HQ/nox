@@ -358,6 +358,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		return nil, err
 	}
 
+	// Resolved once, here, because discovery is not the only thing that walks
+	// the target: the call-graph builder does too, and a linked root made every
+	// such walk see nothing (discovery.ResolveRoot has the measurement).
+	target, err := discovery.ResolveRoot(target)
+	if err != nil {
+		return nil, err
+	}
+
 	// Load project config (LoadScanConfig resolves a single-file target to its
 	// directory, so `nox scan path/file.py` finds the project .nox.yaml).
 	cfg, err := LoadScanConfig(target)

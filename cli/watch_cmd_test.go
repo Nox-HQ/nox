@@ -182,3 +182,29 @@ func TestRunWatch_InvalidFlag(t *testing.T) {
 		t.Fatalf("expected exit code 2 for invalid flag, got %d", code)
 	}
 }
+
+// A watched root that is a symbolic link used to register NO directories:
+// filepath.Walk Lstats its root, so the link read as a non-directory and
+// `nox watch` never fired. It watches what the link points at now.
+func TestAddDirsRecursive_ThroughSymlinkedRoot(t *testing.T) {
+	realDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(realDir, "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "linked")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("creating watcher: %v", err)
+	}
+	defer func() { _ = watcher.Close() }()
+
+	if err := addDirsRecursive(watcher, link); err != nil {
+		t.Fatalf("addDirsRecursive: %v", err)
+	}
+	if list := watcher.WatchList(); len(list) != 3 {
+		t.Errorf("watching %d dirs through a link, want 3 (root, a, b): %v", len(list), list)
+	}
+}
