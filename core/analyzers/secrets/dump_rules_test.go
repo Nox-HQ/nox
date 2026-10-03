@@ -3,7 +3,11 @@ package secrets
 import (
 	"encoding/json"
 	"os"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // TestDumpRuleSet writes the BUILT secret rule set for offline analysis.
@@ -17,12 +21,21 @@ import (
 // the rule set. Anything reasoning about what rules actually do must read them
 // from the engine that runs them.
 //
-// It dumps EVERY field that can change what a rule matches. Three separate
-// wrong conclusions in this workstream came from a dump that omitted one:
-// RequireContextKeywords (so proximity-gated rules read as file-gated), then
-// Metadata (so SEC-161's 5.0-bit threshold and candidate_kinds were invisible
-// and it was filed as a bare-token rule). A partial dump does not produce a
-// partial answer, it produces a confident wrong one.
+// It dumps EVERY exported field of rules.Rule, found by reflection rather than
+// listed by hand. Three separate wrong conclusions in this workstream came from
+// a hand-written dump that omitted one: RequireContextKeywords (so
+// proximity-gated rules read as file-gated), then Metadata (so SEC-161's 5.0-bit
+// threshold and candidate_kinds were invisible and it was filed as a bare-token
+// rule). The hand-written list had since fallen behind again -- KeywordTokens,
+// OptIn, References, Retires and the absence fields were missing -- and nothing
+// noticed. A partial dump does not produce a partial answer, it produces a
+// confident wrong one, so the list is no longer something a person maintains.
+// TestRuleDumpCoversEveryField holds that.
+//
+// Keys are the fields' yaml tags, the same names the rule files use and that
+// scripts/secret-rule-inventory.py reads. A function-valued field cannot be
+// serialised, so it is reported as present or absent: ValidateMatch becomes
+// has_validate_match.
 //
 // Consumed by scripts/secret-rule-inventory.py; see
 // docs/design/secret-rule-inventory.md.
@@ -31,43 +44,9 @@ func TestDumpRuleSet(t *testing.T) {
 	if path == "" {
 		t.Skip("set NOX_RULE_DUMP=<path> to dump the built rule set")
 	}
-	type dumped struct {
-		ID                     string            `json:"id"`
-		Description            string            `json:"description"`
-		Pattern                string            `json:"pattern"`
-		MatcherType            string            `json:"matcher_type"`
-		Keywords               []string          `json:"keywords"`
-		RequireContextKeywords []string          `json:"require_context_keywords"`
-		ExcludeContextKeywords []string          `json:"exclude_context_keywords"`
-		HasValidateMatch       bool              `json:"has_validate_match"`
-		Severity               string            `json:"severity"`
-		Confidence             string            `json:"confidence"`
-		Tags                   []string          `json:"tags"`
-		Metadata               map[string]string `json:"metadata"`
-		FilePatterns           []string          `json:"file_patterns"`
-		IgnoreFilePatterns     []string          `json:"ignore_file_patterns"`
-		IgnoreInComments       bool              `json:"ignore_in_comments"`
-		Version                string            `json:"version"`
-		Remediation            string            `json:"remediation"`
-	}
-	var out []dumped
+	var out []map[string]any
 	for _, r := range NewAnalyzer().Rules().Rules() {
-		out = append(out, dumped{
-			ID: r.ID, Description: r.Description, Pattern: r.Pattern,
-			MatcherType: r.MatcherType, Keywords: r.Keywords,
-			RequireContextKeywords: r.RequireContextKeywords,
-			ExcludeContextKeywords: r.ExcludeContextKeywords,
-			HasValidateMatch:       r.ValidateMatch != nil,
-			Severity:               string(r.Severity),
-			Confidence:             string(r.Confidence),
-			Tags:                   r.Tags,
-			Metadata:               r.Metadata,
-			FilePatterns:           r.FilePatterns,
-			IgnoreFilePatterns:     r.IgnoreFilePatterns,
-			IgnoreInComments:       r.IgnoreInComments,
-			Version:                r.Version,
-			Remediation:            r.Remediation,
-		})
+		out = append(out, dumpRule(r))
 	}
 	if len(out) == 0 {
 		t.Fatal("the built rule set is empty; the dump would describe nothing")
@@ -80,4 +59,68 @@ func TestDumpRuleSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("wrote %d rules to %s", len(out), path)
+}
+
+// dumpRule maps every exported field of a rule to its yaml-tag name.
+func dumpRule(r *rules.Rule) map[string]any {
+	v := reflect.ValueOf(r).Elem()
+	m := make(map[string]any, v.NumField())
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Type().Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		fv := v.Field(i)
+		if fv.Kind() == reflect.Func {
+			m["has_"+snake(f.Name)] = !fv.IsNil()
+			continue
+		}
+		m[dumpKey(f)] = fv.Interface()
+	}
+	return m
+}
+
+func dumpKey(f reflect.StructField) string {
+	if tag, _, _ := strings.Cut(f.Tag.Get("yaml"), ","); tag != "" && tag != "-" {
+		return tag
+	}
+	return snake(f.Name)
+}
+
+func snake(name string) string {
+	var b strings.Builder
+	for i, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			c += 'a' - 'A'
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
+}
+
+// TestRuleDumpCoversEveryField fails when rules.Rule gains a field the dump
+// does not carry -- which, with reflection, can only happen if a field is
+// skipped deliberately. It is the check the hand-written list never had.
+func TestRuleDumpCoversEveryField(t *testing.T) {
+	typ := reflect.TypeOf(rules.Rule{})
+	exported := 0
+	for i := 0; i < typ.NumField(); i++ {
+		if typ.Field(i).IsExported() {
+			exported++
+		}
+	}
+	got := dumpRule(&rules.Rule{})
+	if len(got) != exported {
+		t.Errorf("dump carries %d keys for %d exported Rule fields: %v", len(got), exported, got)
+	}
+	for _, k := range []string{"id", "pattern", "metadata", "require_context_keywords",
+		"exclude_context_keywords", "file_patterns", "keyword_tokens", "opt_in", "references",
+		"has_validate_match"} {
+		if _, ok := got[k]; !ok {
+			t.Errorf("dump lacks %q, a key secret-rule-inventory.py or this file's history depends on", k)
+		}
+	}
 }

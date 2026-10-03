@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/nox-hq/nox/internal/testlink"
 )
 
 func TestAddDirsRecursive_FlatDir(t *testing.T) {
@@ -192,9 +193,7 @@ func TestAddDirsRecursive_ThroughSymlinkedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := filepath.Join(t.TempDir(), "linked")
-	if err := os.Symlink(realDir, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
+	testlink.Symlink(t, realDir, link)
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		t.Fatalf("creating watcher: %v", err)

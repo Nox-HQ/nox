@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testlink"
 )
 
 // A hand-assembled corpus is often links to clones that already exist. bench
@@ -20,9 +22,7 @@ func TestBenchProjects_FollowsLinkedDirectories(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(elsewhere, "clone"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(elsewhere, "clone"), filepath.Join(corpus, "linked")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
+	testlink.Symlink(t, filepath.Join(elsewhere, "clone"), filepath.Join(corpus, "linked"))
 	if err := os.WriteFile(filepath.Join(corpus, "notes.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
