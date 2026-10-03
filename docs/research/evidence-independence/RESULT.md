@@ -21,6 +21,26 @@ stays exactly as it is. This work found what it is: the **most conservative**
 of the measured collapses, an upper bound on the independent count. It is not
 an estimate of it.
 
+## Correction, 2026-10-03
+
+This document first described openai-python and anthropic-sdk-python as "both
+Stainless-generated", one generator family, and the M4 model was built on that.
+**At the commits scanned here, that is false.** openai-python carries 1,668
+"generated … by Castiron" headers, and anthropic-sdk-python carries 4 Stainless
+ones. The files the two SDKs share (`_compat.py`, `_models.py`) carry no
+generator header at all. At the older autocorpus refs, both SDKs *are*
+Stainless-generated.
+
+So the one piece of provenance this research supplied by hand was itself
+inferred, and wrong for the tree it described. That does not change the
+decision: repository-level family merging was already measured as wrong for 10
+of the 11 rules it touched. It does sharpen the conclusion. Provenance is a
+property of a pinned tree and has to be **declared and checked against that
+tree**, which is what `docs/design/corpus-provenance.md` and
+`nox bench --provenance` now do. Its manifest for this corpus
+(`docs/benchmarks/2026-09-15/provenance.yaml`) records the generator facts
+correctly.
+
 ## What was run
 
 The seven repositories of `docs/benchmarks/2026-09-15`, at their pinned
@@ -57,7 +77,7 @@ four scans.
 | M2 file copy | rule + whole-file content hash + line |
 | M2 authored | transitive union of path site, file copy and window |
 | M3 repo | rule + repository |
-| M4 family | rule + declared family (the openai and anthropic SDKs are both Stainless-generated) |
+| M4 family | rule + family: the openai and anthropic SDKs treated as one generator family (an inference, and a wrong one; see the correction below) |
 
 Material class (recorded / generated / test / docs / example / source) is a
 **label** on each unit. It is never a weight.
@@ -107,9 +127,10 @@ type, because a finding's location is not always its evidence.
 **2. Is the repository enough, or do project families matter?** Families
 matter, but only at **file** granularity.
 
-- In this corpus the openai and anthropic SDKs are one generator family. They
-  share generated `_compat.py` and `_models.py`, which gives 2 real
-  cross-repository SLOP-001 units.
+- The openai and anthropic SDKs share near-identical `_compat.py` and
+  `_models.py`, which gives 2 real cross-repository SLOP-001 units. Neither
+  file declares where it came from. (This bullet first called them "one
+  generator family"; see the correction below.)
 - Declaring the family at repository level merges findings in **11 rules**.
   For 10 of them the merged findings share no content: SEC-161 in one SDK's
   hand-written tests is not the same evidence as SEC-161 in the other's.

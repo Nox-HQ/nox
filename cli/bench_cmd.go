@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox/core/bench"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -103,12 +105,14 @@ func runBench(args []string) int {
 		quiet      bool
 		fmtFlag    string
 		autoCorpus bool
+		provPath   string
 	)
 	fs.StringVar(&corpusDir, "corpus", "corpus", "directory containing one subdirectory per project to scan")
 	fs.StringVar(&output, "output", "", "destination path (defaults to stdout)")
 	fs.BoolVar(&quiet, "quiet", false, "suppress per-project progress logs")
 	fs.StringVar(&fmtFlag, "format", "json", "report format: json or markdown")
 	fs.BoolVar(&autoCorpus, "autocorpus", false, "clone the curated benchmark corpus into a temp directory and scan that instead of --corpus")
+	fs.StringVar(&provPath, "provenance", "", "corpus provenance manifest (YAML): declared origins of parts of each project, carried into the report and used for nothing else")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -132,6 +136,19 @@ func runBench(args []string) int {
 	if len(projects) == 0 {
 		fmt.Fprintf(os.Stderr, "error: %s holds no project directories; bench scans one subdirectory (or link to one) per project\n", corpusDir)
 		return 2
+	}
+
+	// Validated against the trees BEFORE any scan, so a manifest that does not
+	// describe this corpus fails in seconds rather than after an hour of scans.
+	var declared bench.CorpusProvenance
+	if provPath != "" {
+		if declared, err = bench.LoadCorpusProvenance(provPath); err == nil {
+			err = declared.CheckCorpus(corpusDir, projects)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: invalid corpus provenance:\n%v\n", err)
+			return 2
+		}
 	}
 
 	exe, err := os.Executable()
@@ -161,7 +178,7 @@ func runBench(args []string) int {
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "[bench] scanning %s\n", project)
 		}
-		summary, err := scanProject(exe, project)
+		summary, err := benchScan(exe, project)
 		if err != nil {
 			report.Failed = append(report.Failed, FailedProject{Path: project, Error: err.Error()})
 			continue
@@ -172,6 +189,9 @@ func runBench(args []string) int {
 		// Resolved from the tree actually scanned, so it is right for a
 		// hand-assembled --corpus too, and pins a moving tag to one commit.
 		summary.Commit = gitHeadSHA(project)
+		// Attached after the scan, never passed to it: benchScan's signature is
+		// the guarantee that a declaration cannot change what is found.
+		summary.DeclaredProvenance = declared.Projects[name]
 		report.Projects = append(report.Projects, summary)
 	}
 
@@ -245,6 +265,12 @@ type ProjectSummary struct {
 	// version segments of a path. A documentation page carried in four
 	// languages across two released versions is one condition an author can
 	// fix, not eight, and raw counts rank it as eight.
+	//
+	// It is the MOST CONSERVATIVE of the collapses measured, and so an upper
+	// bound on independent evidence -- never an estimate of it. Content- and
+	// file-based collapses merge further and disagree with each other by up to
+	// 9x (docs/research/evidence-independence/RESULT.md); do not read a site as
+	// one independent observation.
 	BySite map[string]int `json:"by_site"`
 	// BySubject counts DISTINCT SUBJECTS per rule -- tier 3. Present only for
 	// rules that DECLARE what their finding is about (rules.SubjectKindKey); a
@@ -252,12 +278,23 @@ type ProjectSummary struct {
 	// rather than zero, so "no subjects" and "not declared" stay distinguishable.
 	BySubject map[string]int `json:"by_subject,omitempty"`
 	BySev     map[string]int `json:"by_severity"`
+
+	// DeclaredProvenance is what the corpus manifest SAYS about parts of this
+	// tree (--provenance). It is supplied, not measured, and nothing in nox
+	// reads it back: not the counts, not prevalence, not rule-review or
+	// calibrate. See core/bench/provenance.go.
+	DeclaredProvenance []bench.DeclaredSource `json:"declared_provenance,omitempty"`
 }
 
 type FailedProject struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
 }
+
+// benchScan is the scan each project gets. It is a variable only so tests can
+// observe exactly what a scan receives; it takes the binary and the tree and
+// nothing else.
+var benchScan = scanProject
 
 func scanProject(noxPath, project string) (ProjectSummary, error) {
 	tmpOut, err := os.MkdirTemp("", "nox-bench-*")
@@ -371,7 +408,8 @@ func aggregateRuleFireRates(report *BenchReport) {
 //
 //	Findings  how much output an operator sees          (noise)
 //	Repos     in how many projects the rule fires at all (prevalence)
-//	Sites     distinct conditions, locale/version copies collapsed
+//	Sites     authored occurrences, locale/version copies collapsed
+//	          (an upper bound on independent evidence, not an estimate)
 //
 // A rule with high Findings and Repos of 1 is one repository's shape. A rule
 // with Repos across the corpus and few Sites each is a broad, quiet rule. Only
@@ -509,7 +547,8 @@ func renderPrevalence(b *strings.Builder, report *BenchReport) {
 	}
 	b.WriteString("\n## Rule prevalence\n\n")
 	b.WriteString("Raw findings are what an operator sees. Authored occurrences collapse the\n")
-	b.WriteString("locale and version copies of a file, so one written line counts once.\n")
+	b.WriteString("locale and version copies of a file, so one written line counts once. That is\n")
+	b.WriteString("an upper bound on independent evidence, not an estimate of it.\n")
 	b.WriteString("Distinct security conditions are counted only for rules that DECLARE what their\n")
 	b.WriteString("finding is about; the rest read `not declared`. See renderPrevalence.\n\n")
 
@@ -583,6 +622,7 @@ func renderBenchMarkdown(report *BenchReport) string {
 		fmt.Fprintf(&b, "| %s | %d |\n", p.rule, p.count)
 	}
 	renderPrevalence(&b, report)
+	renderDeclaredProvenance(&b, report)
 
 	if len(report.Failed) > 0 {
 		b.WriteString("\n## Failed projects\n\n")
@@ -669,4 +709,32 @@ func benchProjects(corpusDir string) ([]string, error) {
 		}
 	}
 	return names, nil
+}
+
+// renderDeclaredProvenance lists what the corpus manifest declared, as it was
+// declared. It is a separate section, after every measurement, and it computes
+// nothing from them: no column above changes when a declaration is added.
+func renderDeclaredProvenance(b *strings.Builder, report *BenchReport) {
+	var rows []string
+	for i := range report.Projects {
+		p := &report.Projects[i]
+		for _, d := range p.DeclaredProvenance {
+			origin := d.Provenance.Source
+			if origin == "" {
+				origin = d.Provenance.Upstream + " (upstream)"
+			}
+			rows = append(rows, fmt.Sprintf("| %s | %#q | %s | %s | %s |",
+				filepath.Base(p.Path), d.Path, d.Provenance.Kind, origin, d.Provenance.Basis))
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString("\n## Declared provenance\n\n")
+	b.WriteString("Supplied by the corpus manifest, not measured. These declarations change no number in\n")
+	b.WriteString("this report; they say where parts of a tree came from, according to the project.\n\n")
+	b.WriteString("| Project | Path | Kind | Origin | Basis |\n|---|---|---|---|---|\n")
+	for _, r := range rows {
+		b.WriteString(r + "\n")
+	}
 }
