@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.0] - 2026-10-03
+
+Secret detection that reports what its evidence establishes. An audit of the
+rules whose pattern contained no credential corrected 46 of them by their
+claim -- none removed -- and constructing their true positives exposed three
+refiners that were hiding real credentials: long tokens in string literals,
+random tokens taken for camelCase identifiers, and response headers in
+recorded traffic treated as request headers.
+
+### Added
+
+- **Declared corpus provenance: `nox bench --provenance <manifest>`** (#800).
+  A corpus manifest can state where parts of a tree came from (`generated`,
+  `versioned`, `vendored`), each with the `basis` the project itself gives.
+  Declarations are validated against the scanned tree before any scan, carried
+  into the report as `declared_provenance` and shown in one markdown section,
+  and change nothing else -- no count, rule-review or calibration -- which
+  tests enforce. Independence is never inferred from findings: see
+  `docs/design/corpus-provenance.md` and the research behind it in
+  `docs/research/evidence-independence/` and
+  `docs/research/deviance-not-incorrectness/` (both decision B, no new metric
+  or rule-review signal).
+
+### Changed
+
+- **Credential-body audit: 46 secret rules corrected by their claim** (#807).
+  - 33 rules reporting cloud resource identifiers -- ARNs, S3/GCS/Azure URLs,
+    resource paths, endpoints, broker and mail URLs -- as High CWE-798
+    credentials are now **informational, CWE-1051**, with nothing to rotate.
+    Those whose evidence did not establish even the identifier now require it
+    (GKE resource names, Azure subscription and tenant GUIDs, actual `gs://`,
+    `amqp://` and `smtp://` URLs). SEC-519 matched a misspelt service segment
+    and could never fire; it is fixed together with its claim.
+  - SSH and PGP **public** keys (SEC-463, SEC-464) are informational.
+  - Six prefix-only rules (Bedrock, Google OAuth, Facebook, GitLab, Stripe,
+    SendGrid) now require the credential body, and match on the format literal
+    instead of invented keywords (`google_oauth`, `fb_oauth`) that meant
+    SEC-423 and SEC-424 reported no real token at all.
+  - SEC-469 (environment-variable secret), SEC-468 (`kubectl create secret
+    --from-literal`) and SEC-410 (inline `docker login` JSON key) now require
+    the value; SEC-416 reports the service-account email, as an identifier.
+  - SEC-085 (URL with embedded password) also covers `amqp(s)` and `smtp(s)`,
+    so a broker URL that carries a password is reported as a credential.
+  - Severity moves from High to info for the identifier and public-key rules,
+    so a `fail_on: high` gate no longer fails on them. Rules whose pattern
+    changed produce new fingerprints for their findings.
+
+### Fixed
+
+- **A scan whose target is a symbolic link scanned nothing and reported
+  clean** (#801): 0 findings through a link, 16 by the real path. Discovery,
+  the Go call graph, `bench --precision`, `watch` and `fix` now resolve a
+  linked root; a dangling link is an error.
+- **Credentials longer than 96 bytes in a string literal were never
+  reported** (#805). The data-blob heuristic assumed no credential is longer;
+  Anthropic admin keys, Vault batch tokens, Cloudflare Origin CA keys, Slack
+  configuration tokens and typical Google and Facebook access tokens are. A
+  rule that anchors a vendor format is no longer overruled by length; data:
+  URI payloads are still blobs.
+- **Most random credentials were dropped as "camelCase identifiers"** (#806):
+  66-82% of uniformly random 16-40 character tokens failed the secret-shape
+  filter. Identifiers must now also be made of words (mean lowercase run of at
+  least 2.5); 4-9% of random tokens remain affected.
+- **Recorded HTTP response headers counted as credential locations** (#806):
+  in the standard vcrpy layout the request block never closed, so the
+  confinement of entropy rules in cassettes did nothing.
+- `FILTERED` is a placeholder word, for scrubbed recordings (#807).
+- Symlink-dependent tests fail on CI instead of skipping silently, and the
+  rule dump carries every rule field (#804).
+
+On the release corpus (rule-diff against v1.47.0, 25 repositories) nothing
+drops. The rises are documentation examples in certbot's plugin docstrings
+(AWS's documented example key, example Cloudflare and Google credential files)
+and random test keys -- text the length heuristic used to hide in docstrings
+and that nox already reports in Markdown -- plus three GCP resource locations,
+now informational.
+
 ## [1.47.0] - 2026-10-03
 
 Taint analysis measured on a labelled suite for every language that has one,
