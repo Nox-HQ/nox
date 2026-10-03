@@ -1,0 +1,230 @@
+# Declared provenance for the curated benchmark corpus (`nox bench --autocorpus`).
+#
+#   nox bench --autocorpus --provenance docs/benchmarks/corpus-provenance.yaml
+#
+# Every entry is a SUPPLIED FACT, stated by the project itself at the pinned ref
+# in cli/bench_cmd.go (curatedAutoCorpus), and checked against that tree when the
+# bench runs. Nothing here is inferred, and nothing in nox computes anything from
+# it: the report carries these declarations and every number in it is unchanged.
+# See core/bench/provenance.go and docs/research/evidence-independence/RESULT.md.
+#
+# A directory claim covers every file under it, so it is made only where it is
+# true for every file: all 40 + 226 files under openai-python's resources/ and
+# types/ carry the Stainless header at v1.54.0, and all 11 + 112 of
+# anthropic-sdk-python's at v0.40.0.
+#
+# Deliberately NOT declared:
+#   - crewAI's translations. docs/docs.json declares en, pt-BR, ko and ar but no
+#     source language; which one the others came from would be a guess.
+#   - The other eleven projects. Nothing was found that they declare.
+version: 1
+projects:
+  openai--openai-python:
+    - path: src/openai/resources/
+      provenance: &openai_generated
+        kind: generated
+        upstream: https://storage.googleapis.com/stainless-sdk-openapi-specs/openai-2f8ca92b9b1879fd535b685e4767338413fcd533d42f3baac13a9c41da3fce35.yml
+        basis: 'every file carries "File generated from our OpenAPI spec by Stainless"; .stats.yml names the spec'
+    - path: src/openai/types/
+      provenance: *openai_generated
+  anthropics--anthropic-sdk-python:
+    - path: src/anthropic/resources/
+      provenance: &anthropic_generated
+        kind: generated
+        upstream: https://storage.googleapis.com/stainless-sdk-openapi-specs/anthropic-cf96271afd65b396dc71c4e897d1d55a9526c122e3890bc87b5ff33316c93853.yml
+        basis: 'every file carries "File generated from our OpenAPI spec by Stainless"; .stats.yml names the spec'
+    - path: src/anthropic/types/
+      provenance: *anthropic_generated
+  joaomdmoura--crewai:
+    # docs/docs.json declares one doc set in 39 versions, v1.15.21 the default
+    # ("Latest"). Each other version directory is declared against it.
+    - path: docs/edge/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: &crewai_versions 'docs/docs.json navigation.languages[].versions lists this version of the doc set; v1.15.21 is the declared default'
+    - path: docs/v1.15.20/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.19/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.18/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.17/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.16/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.15/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.14/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.13/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.12/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.11/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.10/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.9/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.8/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.7/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.6/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.5/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.4/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.3/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.2/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.1/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.15.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.7/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.6/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.5/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.4/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.3/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.2/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.1/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.14.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.13.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.12.2/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.12.1/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.12.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.11.1/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.11.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.10.1/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
+    - path: docs/v1.10.0/
+      provenance:
+        kind: versioned
+        source: docs/v1.15.21/
+        basis: *crewai_versions
