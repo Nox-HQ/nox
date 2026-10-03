@@ -299,7 +299,7 @@ func TestCorpusProvenanceHasOneReader(t *testing.T) {
 		}
 		for _, n := range needles {
 			if strings.Contains(string(src), n) {
-				readers = append(readers, filepath.ToSlash(strings.TrimPrefix(path, "../")))
+				readers = append(readers, strings.TrimPrefix(filepath.ToSlash(path), "../"))
 				break
 			}
 		}
