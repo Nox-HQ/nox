@@ -119,6 +119,40 @@ scan alone. What online still costs over offline is the vulnerability service's
 response time: on llama_index two batches of about 1,000 queries take about 11 s
 each, sent one after the other, where OSV.dev answers the same batch in 1.4-1.8 s.
 
+## Update: after the lookup fixes (nox a10cee0, intelligence v0.18.2)
+
+After that update, the online gap was the vulnerability service: about 11 s per
+batch of 1,000 queries, sent one after the other. Two changes closed it:
+
+- **nox-core v0.3.2 (#794):** batches are sent up to four at a time, and a
+  failed batch no longer loses the ones after it.
+- **NOX Intelligence v0.18.2:** hydrated advisories are cached, keyed on the
+  advisory and the `modified` stamp the batch reported. A batch now takes
+  3.2-3.7 s, against 1.85 s straight from OSV.dev.
+
+Measured the same way: load-gated, two passes, the faster kept. The highest
+starting load was 2.99. Raw: [`results-a10cee0.txt`](results-a10cee0.txt). The
+seven repositories were re-fetched at the same pinned commits.
+
+| Repository | nox offline | nox online | nox `--only deps` (online) |
+|---|---:|---:|---:|
+| anthropic-sdk-python | 4.4 s | 4.5 s | 2.8 s |
+| agent-go | 1.3 s | 4.4 s | 2.2 s |
+| crewAI | 24.9 s | 25.8 s | 6.0 s |
+| mcp python-sdk | 5.3 s | 5.3 s | 2.0 s |
+| openai-python | 6.7 s | 6.9 s | 1.9 s |
+| llama_index | 33.4 s | 37.4 s | 11.8 s |
+| vercel/ai | 12.7 s | 12.8 s | 8.9 s |
+| **Wall, total** | 89 s | **97 s** (was 110) | **35 s** (was 62) |
+| CPU, total | 601 s | 595 s | 11 s |
+| Peak memory | 1.32 GB | 1.04 GB | 265 MB |
+
+Online now costs 8 s over offline across the seven repositories, down from 28 s,
+and llama_index's online overhead is down from 84 s at the first measurement to
+4 s. The offline total moved from 82 s to 89 s. Nothing offline changed between
+the two builds, so that is run-to-run variance (crewAI alone accounts for 3 s
+of it), not a regression.
+
 ## Correction to 2026-09-30
 
 The speed table in [2026-09-30-languages](../2026-09-30-languages/#scan-speed)
