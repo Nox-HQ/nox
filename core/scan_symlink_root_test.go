@@ -8,6 +8,7 @@ import (
 
 	"github.com/nox-hq/nox/core/capability"
 	reportpkg "github.com/nox-hq/nox/core/report"
+	"github.com/nox-hq/nox/internal/testlink"
 )
 
 // A scan target that is a symbolic link used to report NOTHING. Discovery
@@ -26,9 +27,7 @@ import (
 
 func symlinkOrSkip(t *testing.T, target, link string) {
 	t.Helper()
-	if err := os.Symlink(target, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
+	testlink.Symlink(t, target, link)
 }
 
 func scanJSON(t *testing.T, target string) (report []byte, findings int) {

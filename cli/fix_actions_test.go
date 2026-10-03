@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testlink"
 )
 
 // fakeResolver returns scripted latest tag/sha per repo. tagSHA resolves an
@@ -472,9 +474,7 @@ func TestCollectActionPins_ThroughSymlinkedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := filepath.Join(t.TempDir(), "linked-repo")
-	if err := os.Symlink(realDir, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
+	testlink.Symlink(t, realDir, link)
 	want, got := collectActionPins(realDir), collectActionPins(link)
 	if len(want) != 1 || len(got) != 1 || got[0].repo != want[0].repo {
 		t.Errorf("pins: %d by the real path, %d through a link", len(want), len(got))

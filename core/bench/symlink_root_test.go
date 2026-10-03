@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testlink"
 )
 
 // `nox bench --precision <corpus>` reads its ground truth by walking the corpus
@@ -25,9 +27,7 @@ func linkedCorpus(t *testing.T, files map[string]string) (realDir, link string) 
 		}
 	}
 	link = filepath.Join(t.TempDir(), "linked-corpus")
-	if err := os.Symlink(realDir, link); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
+	testlink.Symlink(t, realDir, link)
 	return realDir, link
 }
 
