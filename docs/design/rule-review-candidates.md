@@ -346,6 +346,16 @@ asserts a floor on how many rules it actually analysed.
 
   Only then is it a question of whether it belongs here.
 
+  **Items 1 and 2 were measured on 2026-10-03, and neither has a
+  corpus-independent answer** (`docs/research/evidence-independence/RESULT.md`).
+  Four reasonable definitions of an authored occurrence disagree by 2× or more
+  on 6 of 33 frequently firing rules. Under normalisation the dominant
+  repository changes for 6 rules, AI-031 among them: after collapse, crewAI
+  holds 2–4 of its roughly 19 units and vercel/ai holds 12. A family declared
+  at repository level merges findings that share no content. `by_site` is the
+  most conservative of the collapses, an upper bound on independence, and stays
+  as shipped. The bar stays unbuilt.
+
 ## Running it
 
 ```bash
