@@ -24,8 +24,18 @@ func TestScanArtifacts_LexctxDropsEmbeddedBlob(t *testing.T) {
 		{"leaked-in-comment", "// note: " + key + "\n", 1},
 		{
 			"embedded-data-blob",
-			`const b = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /` + key + `/ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";` + "\n",
+			`const b = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB` + key + `CAYAAAAfFcSJAAAADUlEQVR42mNk";` + "\n",
 			0,
+		},
+		// A long string literal is not a blob for a rule that anchors a vendor
+		// format: the format establishes the credential. This case used to
+		// expect 0, encoding the premise that "96 bytes comfortably clears the
+		// longest real credentials" -- which kept five credential formats from
+		// ever being reported in a string (see blob_format_anchored_test.go).
+		{
+			"anchored-key-in-long-literal",
+			`const b = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /` + key + `/ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";` + "\n",
+			1,
 		},
 	}
 	for _, tc := range cases {

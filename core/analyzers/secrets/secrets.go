@@ -274,7 +274,23 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 			continue
 		}
 
-		if inEmbeddedBlob(lang, content, &results[i]) {
+		// A rule that anchors a vendor's credential format has established
+		// what it found, so the blob length heuristic does not overrule it --
+		// the same reasoning the recorded-exchange refiner above applies. The
+		// threshold's premise was that "96 bytes comfortably clears the longest
+		// real credentials"; it does not. An Anthropic admin key is 110 bytes,
+		// a Vault batch token 142+, a Slack configuration token 163+, a Google
+		// OAuth access token typically 150-250, and those rules could never
+		// report one written in a Python, JS or TS string. JWTs were exempted
+		// in lexctx for the same reason; this is the general case. Loose and
+		// entropy rules still defer to the heuristic, which is what it is for.
+		//
+		// The exemption covers a blob classified by LENGTH only. A data: URI
+		// payload is a blob by a strong signal, and a format match inside a
+		// base64 image is an accident, so it is still dropped.
+		if inEmbeddedBlob(lang, content, &results[i]) &&
+			(specificityOf(results[i].RuleID, a.spec) != specProviderDefault ||
+				inDataURIPayload(content, &results[i])) {
 			a.refute(candidate, evidence.KindStatic,
 				"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
 			continue
