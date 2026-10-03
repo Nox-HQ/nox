@@ -7,6 +7,7 @@
 package discovery
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -462,6 +463,32 @@ func matchesInclude(relSlash string, patterns []string) bool {
 	return false
 }
 
+// ResolveRoot returns the directory or file a scan root actually names.
+//
+// filepath.Walk and filepath.WalkDir Lstat their root, so a root that is itself
+// a symbolic link reads as a non-directory and is never descended: the walk
+// visits nothing and returns no error. A scan through a linked project therefore
+// found zero artifacts and reported clean -- the same result as a clean tree,
+// from never having looked (0 findings against 16 on anthropic-sdk-python
+// v0.40.0, reached through `nox bench`, which follows linked projects).
+//
+// Only the root is resolved. Links INSIDE the tree are still not followed, which
+// is deliberate and unchanged: following them can leave the project or loop.
+// A root that is not a link is returned exactly as given, so every ordinary scan
+// is untouched. A dangling link is an error rather than an empty tree.
+func ResolveRoot(root string) (string, error) {
+	info, err := os.Lstat(root)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		// A missing root is left for the caller to report as it always has.
+		return root, nil
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("scan root %s is a symbolic link that does not resolve: %w", root, err)
+	}
+	return resolved, nil
+}
+
 // NewWalker creates a Walker rooted at root with the DefaultClassifier
 // registered. It attempts to load .gitignore patterns from the root directory;
 // if no .gitignore exists the walker proceeds with no ignore patterns.
@@ -483,7 +510,11 @@ func NewWalker(root string) *Walker {
 // and returns the collected artifacts sorted by relative path. Directories
 // matching ignore patterns or named .git are skipped entirely.
 func (w *Walker) Walk() ([]Artifact, error) {
-	absRoot, err := filepath.Abs(w.Root)
+	root, err := ResolveRoot(w.Root)
+	if err != nil {
+		return nil, err
+	}
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}

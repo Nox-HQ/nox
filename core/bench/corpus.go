@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/nox-hq/nox/core/discovery"
 )
 
 // expectMarker is the inline annotation keyword. A line containing
@@ -74,8 +76,14 @@ func ParseCorpus(dir string) ([]Expectation, error) {
 		return nil, fmt.Errorf("bench: corpus path %q is not a directory", dir)
 	}
 
+	// Walked through its resolved path: WalkDir Lstats its root, so a linked
+	// corpus was never descended (discovery.ResolveRoot).
+	walkRoot, err := discovery.ResolveRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("bench: %w", err)
+	}
 	var expectations []Expectation
-	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(walkRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -85,7 +93,7 @@ func ParseCorpus(dir string) ([]Expectation, error) {
 		if docExtensions[strings.ToLower(filepath.Ext(path))] {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(walkRoot, path)
 		if err != nil {
 			return err
 		}
