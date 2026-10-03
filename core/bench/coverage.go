@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/discovery"
 )
 
 // A Branch is one way nox can decide that a candidate is NOT a finding.
@@ -190,16 +192,23 @@ func ParseCoverage(dir string) ([]CoverageClaim, error) {
 		return nil, fmt.Errorf("bench: coverage path %q is not a directory", dir)
 	}
 
+	// Named as the caller named it, and walked through its resolved path:
+	// WalkDir Lstats its root, so a linked corpus was never descended
+	// (discovery.ResolveRoot). Resolving first would rename the corpus.
 	corpus := filepath.Base(dir)
+	walkRoot, err := discovery.ResolveRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("bench: %w", err)
+	}
 	var claims []CoverageClaim
-	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(walkRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, relErr := filepath.Rel(dir, path)
+		rel, relErr := filepath.Rel(walkRoot, path)
 		if relErr != nil {
 			return relErr
 		}

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nox-hq/nox/core/discovery"
 )
 
 // usesRe matches a GitHub Actions `uses:` pin in a workflow file:
@@ -272,6 +274,11 @@ type rewrite struct {
 // them unrefreshed. Vendored and fixture trees are skipped — an old pin in a
 // fixture is the fixture.
 func collectActionPins(root string) []actionPin {
+	// The root walk below Lstats its root, so a linked repository yielded no
+	// composite-action pins. See discovery.ResolveRoot.
+	if resolved, err := discovery.ResolveRoot(root); err == nil {
+		root = resolved
+	}
 	var pins []actionPin
 	dirs := []string{filepath.Join(root, ".github", "workflows")}
 	// composite actions live under .github/actions/*/action.yml

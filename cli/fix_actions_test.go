@@ -457,3 +457,26 @@ func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
 		}
 	}
 }
+
+// A repository reached through a symbolic link has its composite-action pins
+// collected like any other. The root walk Lstats its root and used to see only
+// the link.
+func TestCollectActionPins_ThroughSymlinkedRoot(t *testing.T) {
+	realDir := t.TempDir()
+	p := filepath.Join(realDir, "actions", "remediate", "action.yml")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "runs:\n  using: composite\n  steps:\n    - uses: nested/action@v1.0.0\n"
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "linked-repo")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	want, got := collectActionPins(realDir), collectActionPins(link)
+	if len(want) != 1 || len(got) != 1 || got[0].repo != want[0].repo {
+		t.Errorf("pins: %d by the real path, %d through a link", len(want), len(got))
+	}
+}
