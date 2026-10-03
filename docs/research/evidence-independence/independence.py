@@ -65,7 +65,7 @@ def material(rel, lines):
 
 
 def h(*xs):
-    return hashlib.sha1("\x00".join(map(str, xs)).encode()).hexdigest()[:16]
+    return hashlib.sha256("\x00".join(map(str, xs)).encode()).hexdigest()[:16]
 
 
 def load(outdir, corpus):
@@ -83,7 +83,7 @@ def load(outdir, corpus):
             if ck not in memo:
                 if ls:
                     if (repo, rel) not in fmemo:
-                        fmemo[(repo, rel)] = hashlib.sha1("\n".join(ls).encode()).hexdigest()[:12]
+                        fmemo[(repo, rel)] = hashlib.sha256("\n".join(ls).encode()).hexdigest()[:12]
                     memo[ck] = (h(norm(" ".join(ls[s - 1:e]))), h(norm("\n".join(ls[max(0, s - 4):e + 3]))),
                                 fmemo[(repo, rel)], norm(" ".join(ls[s - 1:e]))[:200])
                 else:
