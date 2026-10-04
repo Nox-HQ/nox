@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strings"
+
+	"github.com/nox-hq/nox/core/findings"
 )
 
 // A JWT's header and claims are JSON, and RFC 7515 §3 and RFC 7519 §7.1 allow
@@ -77,12 +79,16 @@ func isUnsecuredJWTHeader(seg string) bool {
 	return strings.EqualFold(alg, "none")
 }
 
-// isNotUnsecuredJWT is the veto SEC-371, SEC-084 and SEC-251 share: an alg
-// "none" header is an Unsecured JWT (RFC 7519 §6), minted by anyone, so it is
-// not a credential (#820).
-func isNotUnsecuredJWT(m string) bool {
-	header, _, _ := strings.Cut(strings.TrimLeft(m, "\"'"), ".")
-	return !isUnsecuredJWTHeader(header)
+// isUnsecuredJWTFinding reports whether a finding's VALUE is an Unsecured JWT
+// (RFC 7519 §6): three segments whose header names alg "none". The value is
+// read as the placeholder refiner reads it (assignedValue), so a name-bound or
+// Bearer-header rule is judged by the token it carries, while a finding whose
+// value is something else that merely contains a token (a database URL with
+// a password before a token in its query) keeps its claim.
+func isUnsecuredJWTFinding(content []byte, f *findings.Finding) bool {
+	v := assignedValue(matchedValue(content, f))
+	parts := strings.Split(v, ".")
+	return len(parts) == 3 && isUnsecuredJWTHeader(parts[0])
 }
 
 // isSignedJWT reports whether s is a JWS compact serialisation whose header is a

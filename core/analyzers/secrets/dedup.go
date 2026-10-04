@@ -294,10 +294,42 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 			if specificityOf(fb.RuleID, spec) < specProviderDefault {
 				continue
 			}
-			if _, ok := owners[fb.RuleID]; !ok {
-				suppressed[ib] = true
-				*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fb, owners))
+			if _, ok := owners[fb.RuleID]; ok {
+				// Two JWT owners on one span report one token twice when a
+				// non-compact header precedes a compact JWT: SEC-952 reads the
+				// compact header as its claims and the compact claims as its
+				// signature, and all three decode. The compact owner's span is
+				// the complete token, so SEC-952 yields to it.
+				if loser := nonCompactLoser(fa, fb); loser != nil {
+					li := ia
+					if loser == fb {
+						li = ib
+					}
+					suppressed[li] = true
+					*dropped = append(*dropped, suppression{
+						dropped:  refTo(loser),
+						survivor: refTo(otherOf(loser, fa, fb)),
+						reason:   "two JWT owners overlap: the compact token is the complete JWT, and the non-compact match around it reads that token's header and claims as its own claims and signature, so the token is reported once, by its compact owner",
+					})
+					if li == ia {
+						break
+					}
+				}
+				continue
 			}
+			// A non-owner is dropped only when its VALUE is the token: a
+			// name-bound rule (KEY=<token>, Authorization: Bearer <token>)
+			// claims the same secret twice. One that merely overlaps it, such
+			// as a database URL whose password precedes a token in its query,
+			// claims something else, and dropping it lost that credential.
+			if !valueWithin(content, fb, fa) {
+				continue
+			}
+			suppressed[ib] = true
+			*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fb, owners))
+		}
+		if suppressed[ia] {
+			continue
 		}
 		// If fa itself is not an owner of the token it matched (a mis-attributed
 		// provider rule, e.g. Clerk firing on a Stripe key), drop it too — but
@@ -428,8 +460,10 @@ var canonicalOwners = []ownerEntry{
 	// claims more precisely than SEC-371 can (supabase.go), so all three own
 	// the prefix; each rule's validator decides which one a token is.
 	// SEC-952 owns a JWT in a non-compact layout, which may still start eyJ
-	// (a compact header over spaced claims); it and SEC-371 never match one
-	// span, so naming both cannot make two owners report one token.
+	// (a compact header over spaced claims). Its pattern never matches a
+	// compact JWT, but its span can OVERLAP one: a non-compact header placed
+	// before a compact token decodes as header, claims and signature. Where a
+	// compact owner and SEC-952 overlap, resolveOwners keeps the compact one.
 	{"eyJ", owned("SEC-371", "SEC-100", "SEC-105", "SEC-952")}, // JSON Web Token
 }
 
@@ -574,4 +608,36 @@ func spanBounds(f *findings.Finding) (start, end linePos) {
 		end.col = l.StartColumn
 	}
 	return start, end
+}
+
+// valueWithin reports whether the value b claims lies within a's matched
+// token. The value is read the way the placeholder refiner reads it
+// (assignedValue): the right-hand side of a binding, with an auth scheme word
+// dropped; a bare token is its own value.
+func valueWithin(content []byte, b, a *findings.Finding) bool {
+	v := assignedValue(matchedValue(content, b))
+	return v != "" && strings.Contains(matchedValue(content, a), v)
+}
+
+// compactJWTOwners are the owners whose pattern is the compact JWT; SEC-952
+// owns only non-compact layouts.
+var compactJWTOwners = map[string]bool{"SEC-371": true, "SEC-100": true, "SEC-105": true}
+
+// nonCompactLoser returns the SEC-952 finding of a SEC-952 / compact-owner
+// pair, or nil when the pair is anything else.
+func nonCompactLoser(a, b *findings.Finding) *findings.Finding {
+	switch {
+	case a.RuleID == "SEC-952" && compactJWTOwners[b.RuleID]:
+		return a
+	case b.RuleID == "SEC-952" && compactJWTOwners[a.RuleID]:
+		return b
+	}
+	return nil
+}
+
+func otherOf(x, a, b *findings.Finding) *findings.Finding {
+	if x == a {
+		return b
+	}
+	return a
 }

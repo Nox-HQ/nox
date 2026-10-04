@@ -951,7 +951,6 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     `eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`,
 			description: "JWT token detected",
 			cwe:         "CWE-798", keywords: []string{"eyj"},
-			validate:    isNotUnsecuredJWT,
 			remediation: "Do not hard-code JWT tokens. Use a proper authentication flow.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -2436,9 +2435,6 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     `\b(ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.[a-zA-Z0-9\/\\_-]{10,}={0,2})(?:[\x60'"\s;]|\\[nr]|$)`,
 			description: "Uncovered a JSON Web Token, which may lead to unauthorized access to web applications and sensitive user data.",
 			cwe:         "CWE-798", keywords: []string{"ey"},
-			// A signature next to an alg "none" header is not a signed token;
-			// the same veto SEC-371 and SEC-084 apply (jwt_layout.go).
-			validate:    isNotUnsecuredJWT,
 			remediation: "Imported from Gitleaks: jwt",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -3387,11 +3383,7 @@ func builtinSecretRules() []*rules.Rule {
 		// {"a":0}, 7. The signature stays open: a truncated one still leaks
 		// the claims. A real JWT clears both, so its match and fingerprint
 		// are unchanged.
-		//
-		// An alg "none" header is an Unsecured JWT (RFC 7519 §6): anyone can
-		// mint one, so it is not a credential (#820), whatever its case. The
-		// compact layout only; SEC-952 owns the others (jwt_layout.go).
-		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: sec371Pattern, description: "Detected JWT token", cwe: "CWE-798", keywords: sec371Keywords(), validate: func(m string) bool { return isNotUnsecuredJWT(m) && isNotSupabaseProjectKey(m) }, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: sec371Pattern, description: "Detected JWT token", cwe: "CWE-798", keywords: sec371Keywords(), validate: isNotSupabaseProjectKey, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-372", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws\.com/[^\s]+`, description: "AWS S3 object URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-373", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "S3 bucket URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3_bucket"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

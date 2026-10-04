@@ -326,6 +326,17 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 				"the match is a bare provider prefix with no token body; a live credential always carries a 20+ character high-entropy body")
 			continue
 		}
+		// An Unsecured JWT (RFC 7519 §6) names alg "none": anyone can mint
+		// one, so it authenticates nothing and is not a credential (#820).
+		// That is a fact about the token, not about the rule that found it,
+		// so it is decided here for every rule whose VALUE is such a token:
+		// the JWT rules, the name-bound vendor rules (AUTH0_TOKEN=,
+		// GF_API_KEY=), the Bearer-header rules and the entropy rules alike.
+		if isUnsecuredJWTFinding(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the matched value is an Unsecured JWT (RFC 7519 §6): its header names alg \"none\", so anyone can mint it and it authenticates nothing, which makes it a token's shape rather than a credential")
+			continue
+		}
 		if isPlaceholderFinding(content, &results[i]) {
 			a.refute(candidate, evidence.KindStatic,
 				"the matched VALUE is a documentation placeholder, read from the literal rather than inferred from the identifier")

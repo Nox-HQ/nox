@@ -138,6 +138,94 @@ func TestJWTLayoutLookalikesAreNotReported(t *testing.T) {
 	}
 }
 
+// unsecuredHosts are the bindings that name a token as a credential: vendor
+// rules keyed on the variable (AUTH0_TOKEN, GF_API_KEY), the Bearer-header
+// rules, and plain assignments the entropy rules read.
+func unsecuredHosts(tok string) []struct{ name, file, content string } {
+	return []struct{ name, file, content string }{
+		{"dotenv", ".env", "SESSION_TOKEN=" + tok + "\n"},
+		{"assignment", "config.py", `id_token = "` + tok + `"` + "\n"},
+		{"yaml", "config.yaml", "token: " + tok + "\n"},
+		{"env JWT", "jwt.env", "JWT=" + tok + "\n"},
+		{"curl bearer", "call.sh", `curl -H "Authorization: Bearer ` + tok + `" https://api.example.com/v1/me` + "\n"},
+		{"auth0 token", "auth0.env", "AUTH0_TOKEN=" + tok + "\n"},
+		{"grafana key", "grafana.env", "GF_API_KEY=" + tok + "\n"},
+	}
+}
+
+// An Unsecured JWT (RFC 7519 §6) is not a credential under ANY rule: the
+// refutation is about the token, so a vendor or Bearer rule keyed on the name
+// it is bound to must not report it either (review F2). A signed token in the
+// same hosts is still reported, so the refiner is not a blanket drop.
+func TestUnsecuredJWTIsNoRulesCredential(t *testing.T) {
+	enc := base64.RawURLEncoding.EncodeToString
+	for _, hdr := range []string{`{"alg":"none"}`, `{"alg":"NONE","typ":"JWT"}`, "{\n  \"alg\": \"None\"\n}"} {
+		tok := enc([]byte(hdr)) + "." + enc([]byte(seededClaims(40))) + "." + enc([]byte("0123456789abcdef0123456789abcdef"))
+		for _, h := range unsecuredHosts(tok) {
+			t.Run(hdr+"/"+h.name, func(t *testing.T) {
+				fs, _ := scanRecording(t, h.file, h.content)
+				for _, f := range fs.Findings() {
+					t.Errorf("%s reported an unsecured JWT (column %d)", f.RuleID, f.Location.StartColumn)
+				}
+			})
+		}
+	}
+	signed := seededOwnerJWT(41)
+	for _, h := range unsecuredHosts(signed) {
+		t.Run("signed/"+h.name, func(t *testing.T) {
+			fs, _ := scanRecording(t, h.file, h.content)
+			if len(fs.Findings()) == 0 {
+				t.Errorf("a signed JWT in %s is no longer reported", h.name)
+			}
+		})
+	}
+}
+
+// Owner resolution drops a non-owner only when its value IS the token. A
+// database URL whose password precedes a token in its query claims the
+// password: SEC-073 must survive beside the JWT finding, compact or not
+// (review F1; the compact half was a defect on main too).
+func TestTokenOwnerDoesNotDropAURLCredentialAroundIt(t *testing.T) {
+	for _, c := range []struct{ name, tok, owner string }{
+		{"compact", seededOwnerJWT(50), "SEC-371"},
+		{"non-compact", seededLayoutJWT(51, "{\n  \"alg\": \"HS256\"\n}", seededClaims(51)), "SEC-952"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			line := `DB = "postgres://svc:Xk9pQ2mZ7vR4tL8w@db.internal.io:5432/app?token=` + c.tok + `"` + "\n"
+			fs, _ := scanRecording(t, "db.py", line)
+			got := map[string]bool{}
+			for _, f := range fs.Findings() {
+				got[f.RuleID] = true
+			}
+			if !got["SEC-073"] {
+				t.Errorf("the database credential (SEC-073) was dropped; got %v", got)
+			}
+			if !got[c.owner] {
+				t.Errorf("the JWT (%s) was dropped; got %v", c.owner, got)
+			}
+		})
+	}
+}
+
+// A non-compact header placed before a compact JWT decodes as header, claims
+// and signature, so SEC-952's span overlaps SEC-371's on one token. The token
+// is reported once, by its compact owner (review F3).
+func TestNonCompactHeaderBeforeACompactJWTIsReportedOnce(t *testing.T) {
+	enc := base64.RawURLEncoding.EncodeToString
+	tok := seededOwnerJWT(60)
+	line := `t = "` + enc([]byte("{\n  \"alg\": \"HS256\"\n}")) + "." + tok + `"` + "\n"
+	fs, _ := scanRecording(t, "t.py", line)
+	var jwt []string
+	for _, f := range fs.Findings() {
+		if jwtClaimingRules[f.RuleID] {
+			jwt = append(jwt, f.RuleID)
+		}
+	}
+	if len(jwt) != 1 || jwt[0] != "SEC-371" {
+		t.Errorf("want exactly SEC-371, got %v", jwt)
+	}
+}
+
 // gluedHosts put a compact JWT where its left neighbour is lead-shaped. With a
 // widened SEC-371 the leftmost match started there and was vetoed, losing the
 // token (review F1). SEC-371 now keeps main's pattern, so this holds by
@@ -276,6 +364,9 @@ func TestAdversarialLinesScanInBoundedTime(t *testing.T) {
 	lines := map[string]string{
 		"jwt-leads.py": `x = "` + strings.Repeat("IHs", size/3) + `.eyJhYmNkZWZnaGlqa2xt.c2lnbmF0dXJl";` + "\n",
 		"arn-junk.tf":  `x = "` + strings.Repeat("arn:aws:s3:::b:", size/15) + `"` + "\n",
+		// SEC-952's worst case: one non-compact lead, a 100 KB run the
+		// pattern accepts as a header, and a match the validator vetoes.
+		"sec952-vetoed-run.md": "Token: `ewog" + strings.Repeat("A", size) + ".e30.c2lnbmF0dXJl`\n",
 	}
 	for name, content := range lines {
 		t.Run(name, func(t *testing.T) {
