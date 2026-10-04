@@ -191,3 +191,25 @@ func TestScanSkipsVendoredCode(t *testing.T) {
 		t.Errorf("project import must still be flagged; got %v", pkgs)
 	}
 }
+
+// The Z3 SMT solver's Python bindings install as the z3-solver distribution
+// and import as z3. A declared z3-solver must cover `import z3` and
+// `from z3 import …`, including in a subdirectory, and an undeclared z3 must
+// still be flagged: the mapping resolves a name, it does not exempt one.
+func TestScanZ3SolverImportResolvesToItsDistribution(t *testing.T) {
+	pkgs := findingsFor(t, map[string]string{
+		"requirements.txt": "z3-solver>=4.13\n",
+		"smt.py":           "import z3\n",
+		"toy/solve.py":     "from z3 import Solver, String\n",
+	})
+	if hasPkg(pkgs, "z3") {
+		t.Errorf("z3 is declared as z3-solver and must not be flagged; got %v", pkgs)
+	}
+	undeclared := findingsFor(t, map[string]string{
+		"requirements.txt": "requests\n",
+		"smt.py":           "import z3\n",
+	})
+	if !hasPkg(undeclared, "z3") {
+		t.Errorf("an undeclared z3 must still be flagged; got %v", undeclared)
+	}
+}
