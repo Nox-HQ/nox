@@ -117,8 +117,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1494 -> 1495 added TAINT-010 (XML external entity resolution).
 	// 1495 -> 1497 added HARDEN-003 (cookie secure=False) and TAINT-011
 	// (untrusted data stored in the session, opt-in).
-	if got := len(cat); got != 1497 {
-		t.Errorf("Catalog() returned %d rules, want 1497", got)
+	// 1497 -> 1498 added SEC-952, a JWT in a non-compact JSON layout.
+	if got := len(cat); got != 1498 {
+		t.Errorf("Catalog() returned %d rules, want 1498", got)
 	}
 }
 

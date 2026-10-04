@@ -4097,6 +4097,27 @@ func builtinSecretRules() []*rules.Rule {
 			secretShape: true, minEntropy: 3.5, shapeGroup: "1", genericFallback: true,
 			validate: isRandomLookingValue,
 		},
+		{
+			// A JWT whose header or claims JSON is not compact: pretty-printed,
+			// spaced, empty, or led by a non-letter key. RFC 7515 §3 and RFC
+			// 7519 §7.1 allow that whitespace with "no canonicalization", but
+			// such JSON does not encode as eyJ, so no JWT rule saw it. A rule
+			// of its own rather than a wider SEC-371: the widened leads are
+			// three-character base64 runs any text can contain, and a false
+			// start there must cost only this rule, never a compact token.
+			// Every match must decode as a signed JWT (isSignedJWT). Supabase
+			// keys are not excluded: Supabase issues them compact, so one in
+			// this layout is reported as a JWT rather than reclassified.
+			// The limit: a non-compact JWT glued directly after a lead-shaped
+			// run starts the match early, fails the decode, and is missed.
+			id: "SEC-952", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     nonCompactJWTPattern,
+			description: "JWT in a non-compact JSON layout",
+			cwe:         "CWE-798", keywords: nonCompactJWTKeywords(),
+			validate:    isSignedJWT,
+			remediation: "Rotate the exposed credential immediately",
+			references:  []string{"https://www.rfc-editor.org/rfc/rfc7519#section-7.1", "https://cwe.mitre.org/data/definitions/798.html"},
+		},
 	}
 
 	out := make([]*rules.Rule, 0, len(defs)+len(builtinEntropyRules()))

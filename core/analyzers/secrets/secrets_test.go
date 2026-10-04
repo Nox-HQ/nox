@@ -613,6 +613,8 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		// SEC-951: a padded base64 payload, like the GigaChat key.
 		// A padded base64 payload, like the GigaChat key the head-to-head found.
 		"SEC-951": "credentials = \"" + "ZjNhOWMxZTItN2I0ZC00YzhhLTk1ZTEt" + "MmQ2YjhmMGE0YzdlOmE4YjJ==\"\n",
+		// A JWT whose header is pretty-printed JSON: {\n  "alg": "HS256"\n}.
+		"SEC-952": "token = \"" + seededLayoutJWT(952, "{\n  \"alg\": \"HS256\"\n}", seededClaims(952)) + "\"\n",
 	}
 
 	// Entropy rules have FilePatterns restricting them to source-like files,
@@ -721,8 +723,9 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 func TestAllRules_Count(t *testing.T) {
 	rules := builtinSecretRules()
 	// 882 -> 883: SEC-951, the generic credential rule.
-	if len(rules) != 883 {
-		t.Fatalf("expected 883 built-in secret rules, got %d", len(rules))
+	// 883 -> 884: SEC-952, a JWT in a non-compact JSON layout.
+	if len(rules) != 884 {
+		t.Fatalf("expected 884 built-in secret rules, got %d", len(rules))
 	}
 }
 
