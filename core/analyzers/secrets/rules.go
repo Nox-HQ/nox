@@ -2391,7 +2391,16 @@ func builtinSecretRules() []*rules.Rule {
 
 		{
 			id: "SEC-251", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `\b(ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.(?:[a-zA-Z0-9\/\\_-]{10,}={0,2})?)(?:[\x60'"\s;]|\\[nr]|$)`,
+			// The signature segment is required. The gitleaks original made it
+			// optional, so it reported an Unsecured JWT (RFC 7519 §6: alg
+			// "none", empty signature) and a signed token cut off at its last
+			// dot, at high, as a credential. Neither is one: anyone can mint
+			// the first and nothing accepts the second. Whether a service
+			// ACCEPTS alg "none" is a question about the verifier, not about a
+			// token. Every signed token matches exactly as before
+			// (TestSEC251MatchesSignedJWTsExactlyAsBefore), so existing
+			// fingerprints do not move.
+			pattern:     `\b(ey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9\/\\_-]{17,}\.[a-zA-Z0-9\/\\_-]{10,}={0,2})(?:[\x60'"\s;]|\\[nr]|$)`,
 			description: "Uncovered a JSON Web Token, which may lead to unauthorized access to web applications and sensitive user data.",
 			cwe:         "CWE-798", keywords: []string{"ey"},
 			remediation: "Imported from Gitleaks: jwt",
