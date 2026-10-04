@@ -79,15 +79,21 @@ func isUnsecuredJWTHeader(seg string) bool {
 	return strings.EqualFold(alg, "none")
 }
 
-// isUnsecuredJWTFinding reports whether a finding's VALUE is an Unsecured JWT
-// (RFC 7519 §6): three segments whose header names alg "none". The value is
-// read as the placeholder refiner reads it (assignedValue), so a name-bound or
-// Bearer-header rule is judged by the token it carries, while a finding whose
-// value is something else that merely contains a token (a database URL with
-// a password before a token in its query) keeps its claim.
+// isUnsecuredJWTFinding reports whether a finding's claimed VALUE is part of
+// an Unsecured JWT (RFC 7519 §6): a three-segment token whose header names alg
+// "none". The value is read by the finding's shape (claimedValue), so a
+// name-bound or Authorization-header rule is judged by the token it carries,
+// while a finding whose value is something else that merely contains a token
+// (a database URL's own password, with a token in its query) keeps its claim.
+// The token is the whole dotted run around the value (jwtRunAround): a vendor
+// rule that matched only two segments of `<header>.<claims>.` is judged by the
+// token, empty signature included.
 func isUnsecuredJWTFinding(content []byte, f *findings.Finding) bool {
-	v := assignedValue(matchedValue(content, f))
-	parts := strings.Split(v, ".")
+	v, start := findingClaimedValue(content, f)
+	if v == "" {
+		return false
+	}
+	parts := strings.Split(jwtRunAround(content, v, start), ".")
 	return len(parts) == 3 && isUnsecuredJWTHeader(parts[0])
 }
 

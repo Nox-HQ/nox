@@ -298,8 +298,13 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 				// Two JWT owners on one span report one token twice when a
 				// non-compact header precedes a compact JWT: SEC-952 reads the
 				// compact header as its claims and the compact claims as its
-				// signature, and all three decode. The compact owner's span is
-				// the complete token, so SEC-952 yields to it.
+				// signature, and all three decode. SEC-952 yields to the
+				// compact owner, which reports the token exactly as main does.
+				// (Its span is not always the whole token: a non-compact
+				// header whose JSON nests `{"` at a 3-byte boundary carries an
+				// inner eyJ, and SEC-371 starts there -- main's span for that
+				// input.) Once fa is dropped here it is an owner, so the
+				// self-drop after this loop cannot record it a second time.
 				if loser := nonCompactLoser(fa, fb); loser != nil {
 					li := ia
 					if loser == fb {
@@ -327,9 +332,6 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 			}
 			suppressed[ib] = true
 			*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fb, owners))
-		}
-		if suppressed[ia] {
-			continue
 		}
 		// If fa itself is not an owner of the token it matched (a mis-attributed
 		// provider rule, e.g. Clerk firing on a Stripe key), drop it too — but
@@ -611,11 +613,13 @@ func spanBounds(f *findings.Finding) (start, end linePos) {
 }
 
 // valueWithin reports whether the value b claims lies within a's matched
-// token. The value is read the way the placeholder refiner reads it
-// (assignedValue): the right-hand side of a binding, with an auth scheme word
-// dropped; a bare token is its own value.
+// token. The value is read by b's shape (claimedValue): the Authorization
+// header's token, a URL's userinfo password, or the last binding's value. So
+// `KEY=<token>`, `curl -H "Accept: …" -H "Authorization: Bearer <token>"` and
+// `https://user:<token>@host` collapse onto the token's owner, while a URL
+// whose own password precedes a token in its query keeps its claim.
 func valueWithin(content []byte, b, a *findings.Finding) bool {
-	v := assignedValue(matchedValue(content, b))
+	v, _ := claimedValue(matchedValue(content, b))
 	return v != "" && strings.Contains(matchedValue(content, a), v)
 }
 
