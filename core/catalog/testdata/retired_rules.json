@@ -1,0 +1,232 @@
+[
+  {
+    "owner": "CONT-002",
+    "retired": "IAC-002",
+    "pattern": "(?im)^[ \\t]*FROM\\s+(?:--platform=\\S+\\s+)?(?:[a-zA-Z0-9._/-]+\\s*$|\\S+:latest\\b)"
+  },
+  {
+    "owner": "IAC-007",
+    "retired": "IAC-065",
+    "pattern": "(?i)Privileged\\s*:\\s*(true|\"true\")"
+  },
+  {
+    "owner": "IAC-145",
+    "retired": "IAC-176",
+    "pattern": "(?i)kind\\s*:\\s*Deployment"
+  },
+  {
+    "owner": "IAC-132",
+    "retired": "IAC-183",
+    "pattern": "(?i)kind\\s*:\\s*(Deployment|StatefulSet)"
+  },
+  {
+    "owner": "IAC-211",
+    "retired": "IAC-214",
+    "pattern": "(?i)name:\\s*['\"]?[a-z_]+\\.[a-z_]+['\"]?\\s*$"
+  },
+  {
+    "owner": "IAC-007",
+    "retired": "IAC-237",
+    "pattern": "(?i)privileged:\\s*true"
+  },
+  {
+    "owner": "IAC-036",
+    "retired": "IAC-283",
+    "pattern": "(?i)publicly_accessible\\s*=\\s*true"
+  },
+  {
+    "owner": "IAC-131",
+    "retired": "IAC-286",
+    "pattern": "(?i)kind:\\s*(?:Deployment|StatefulSet|DaemonSet)"
+  },
+  {
+    "owner": "IAC-030",
+    "retired": "IAC-287",
+    "pattern": "(?i)automountServiceAccountToken:\\s*true"
+  },
+  {
+    "owner": "IAC-026",
+    "retired": "IAC-291",
+    "pattern": "(?i)hostPID:\\s*true"
+  },
+  {
+    "owner": "IAC-027",
+    "retired": "IAC-292",
+    "pattern": "(?i)hostIPC:\\s*true"
+  },
+  {
+    "owner": "IAC-018",
+    "retired": "IAC-310",
+    "pattern": "(?i)continue-on-error:\\s*true"
+  },
+  {
+    "owner": "IAC-017",
+    "retired": "IAC-312",
+    "pattern": "(?i)set-output\\s+name="
+  },
+  {
+    "owner": "IAC-042",
+    "retired": "IAC-321",
+    "pattern": "(?i)enable_https_traffic_only\\s*=\\s*false"
+  },
+  {
+    "owner": "IAC-111",
+    "retired": "IAC-333",
+    "pattern": "(?i)enable_secure_boot\\s*=\\s*false"
+  },
+  {
+    "owner": "IAC-116",
+    "retired": "IAC-337",
+    "pattern": "(?i)require_ssl\\s*=\\s*false"
+  },
+  {
+    "owner": "IAC-360",
+    "retired": "IAC-374",
+    "pattern": "(?i)restartPolicy:\\s*['\"]?Never"
+  },
+  {
+    "owner": "SEC-007",
+    "retired": "SEC-115",
+    "pattern": "AIza[0-9A-Za-z\\-_]{35}"
+  },
+  {
+    "owner": "SEC-038",
+    "retired": "SEC-142",
+    "pattern": "access_token\\$production\\$[a-z0-9]{16}\\$[a-f0-9]{32}"
+  },
+  {
+    "owner": "SEC-161",
+    "retired": "SEC-163",
+    "pattern": "[0-9a-fA-F]{32,}"
+  },
+  {
+    "owner": "SEC-173",
+    "retired": "SEC-174",
+    "pattern": "(?i)[\\w.-]{0,50}?(?:bittrex)(?:[ \\t\\w.-]{0,20})[\\s'\\\"]{0,3}(?:=|\u003e|:{1,3}=|\\|\\||:|\u003c=|=\u003e|:=)[\\s'\\\"]{0,3}[\\w.=-]{8,}"
+  },
+  {
+    "owner": "SEC-035",
+    "retired": "SEC-318",
+    "pattern": "shpat_[a-fA-F0-9]{32}"
+  },
+  {
+    "owner": "SEC-036",
+    "retired": "SEC-319",
+    "pattern": "shpca_[a-fA-F0-9]{32}"
+  },
+  {
+    "owner": "SEC-037",
+    "retired": "SEC-320",
+    "pattern": "shppa_[a-fA-F0-9]{32}"
+  },
+  {
+    "owner": "SEC-034",
+    "retired": "SEC-321",
+    "pattern": "shpss_[a-fA-F0-9]{32}"
+  },
+  {
+    "owner": "SEC-153",
+    "retired": "SEC-376",
+    "pattern": "SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}"
+  },
+  {
+    "owner": "SEC-059",
+    "retired": "SEC-378",
+    "pattern": "[a-f0-9]{32}-us[0-9]{1,2}"
+  },
+  {
+    "owner": "SEC-508",
+    "retired": "SEC-411",
+    "pattern": "AKIA[0-9A-Z]{16}"
+  },
+  {
+    "owner": "SEC-007",
+    "retired": "SEC-415",
+    "pattern": "AIza[0-9A-Za-z\\-_]{35}"
+  },
+  {
+    "owner": "SEC-391",
+    "retired": "SEC-428",
+    "pattern": "-----BEGIN OPENSSH PRIVATE KEY-----"
+  },
+  {
+    "owner": "SEC-392",
+    "retired": "SEC-429",
+    "pattern": "-----BEGIN PGP PRIVATE KEY BLOCK-----"
+  },
+  {
+    "owner": "SEC-159",
+    "retired": "SEC-454",
+    "pattern": "[a-z0-9]{32}"
+  },
+  {
+    "owner": "SEC-158",
+    "retired": "SEC-455",
+    "pattern": "\\b[a-z0-9]{32}\\b"
+  },
+  {
+    "owner": "SEC-053",
+    "retired": "SEC-476",
+    "pattern": "[a-zA-Z0-9_-]{32}"
+  },
+  {
+    "owner": "SEC-014",
+    "retired": "SEC-533",
+    "pattern": "\\b[a-zA-Z0-9_-]{44}\\b"
+  },
+  {
+    "owner": "SEC-053",
+    "retired": "SEC-536",
+    "pattern": "[a-zA-Z0-9]{32}"
+  },
+  {
+    "owner": "SEC-087",
+    "retired": "SEC-542",
+    "pattern": "[a-zA-Z0-9]{32,}"
+  },
+  {
+    "owner": "SEC-109",
+    "retired": "SEC-546",
+    "pattern": "[a-zA-Z0-9]{32}"
+  },
+  {
+    "owner": "SEC-030",
+    "retired": "SEC-548",
+    "pattern": "sk_live_[a-zA-Z0-9]{24}"
+  },
+  {
+    "owner": "SEC-030",
+    "retired": "SEC-551",
+    "pattern": "sk_live_[a-zA-Z0-9]{24}"
+  },
+  {
+    "owner": "SEC-030",
+    "retired": "SEC-554",
+    "pattern": "sk_live_[a-zA-Z0-9]{24}"
+  },
+  {
+    "owner": "SEC-007",
+    "retired": "SEC-569",
+    "pattern": "\\b[a-zA-Z0-9]{24}\\b"
+  },
+  {
+    "owner": "SEC-159",
+    "retired": "SEC-662",
+    "pattern": "[a-zA-Z0-9]{32}"
+  },
+  {
+    "owner": "SEC-005",
+    "retired": "SEC-692",
+    "pattern": "\\b[a-zA-Z0-9]{32}\\b"
+  },
+  {
+    "owner": "SEC-005",
+    "retired": "SEC-696",
+    "pattern": "[a-zA-Z0-9]{32}"
+  },
+  {
+    "owner": "SEC-005",
+    "retired": "SEC-697",
+    "pattern": "\\b[a-zA-Z0-9]{32}\\b"
+  }
+]
