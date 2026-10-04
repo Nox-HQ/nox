@@ -67,7 +67,7 @@ func TestAudit_ResourceIdentifiersAreNotCredentials(t *testing.T) {
 		{"SEC-512", "fn.tf", `resource "aws_lambda_permission" "p" {}` + "\nfn = \"" + arn + "lambda:eu-west-1:123456789012:function:worker\"\n"},
 		{"SEC-513", "s3.tf", `resource "aws_s3_bucket_policy" "p" {}` + "\nres = \"" + arn + "s3:::my-bucket/*\"\n"},
 		{"SEC-514", "rds.tf", `resource "aws_rds_cluster" "c" {}` + "\ndb = \"" + arn + "rds:eu-west-1:123456789012:db:main\"\n"},
-		{"SEC-515", "ec2.tf", `resource "aws_ec2_tag" "t" {}` + "\nid = \"" + arn + "ec2:eu-west-1:123456789012:instance/i-0abc\"\n"},
+		{"SEC-515", "ec2.tf", `resource "aws_ec2_tag" "t" {}` + "\nid = \"" + arn + "ec2:eu-west-1:123456789012:instance/i-0123456789abcdef0\"\n"},
 		{"SEC-517", "ddb.tf", `resource "aws_dynamodb_table" "t" {}` + "\ntable = \"" + arn + "dynamodb:eu-west-1:123456789012:table/orders\"\n"},
 		{"SEC-518", "sqs.tf", `resource "aws_sqs_queue" "q" {}` + "\nqueue = \"" + arn + "sqs:eu-west-1:123456789012:jobs\"\n"},
 		// SEC-519 matched a misspelt service segment and could never fire. Fixing
