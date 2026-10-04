@@ -137,10 +137,15 @@ def h(s):
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
 
+def load(path):
+    """Read one of the harness's JSON outputs, named on the command line."""
+    with open(path) as f:
+        return json.load(f)
+
+
 def main():
-    outcomes = json.load(open(sys.argv[1]))
-    httpv = json.load(open(sys.argv[2]))
-    smt = json.load(open(sys.argv[3]))
+    # nox:ignore TAINT-004 -- a local research CLI: the person running it names the files it reads; there is no other party to the path
+    outcomes, httpv, smt = (load(p) for p in sys.argv[1:4])
 
     totals = collections.Counter(o["direction"] for o in outcomes)
     classes = collections.OrderedDict()
