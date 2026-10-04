@@ -101,6 +101,7 @@ var importToDist = map[string]string{
 	"wx":                "wxpython",
 	"ruamel":            "ruamel.yaml",
 	"_pytest":           "pytest",
+	"z3":                "z3-solver",
 	// pywin32 ships a family of extension modules under one distribution.
 	"win32security":    "pywin32",
 	"win32file":        "pywin32",
