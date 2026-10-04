@@ -1,0 +1,3 @@
+# Python dependency of the research scripts (toy/solve.py, nox_smt.py).
+# Measured with z3 5.1.0 (Homebrew bindings); the pip package is z3-solver.
+z3-solver>=4.13
