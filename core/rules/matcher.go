@@ -41,6 +41,12 @@ type MatchResult struct {
 	// difference is the whole point, so it must never be filled in by the
 	// regex path.
 	Structural string
+
+	// TrailLen is how many bytes at the end of MatchText the pattern's
+	// trailing lookahead-emulating boundary consumed (see trailing_boundary.go).
+	// They are context, not the matched value: the reported span excludes them
+	// and the fingerprint, computed from MatchText, keeps them.
+	TrailLen int
 }
 
 // StructuralClaimKey is the finding-metadata key carrying MatchResult.Structural.
@@ -174,6 +180,7 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	results := make([]MatchResult, 0, len(locs))
 	for _, loc := range locs {
 		mr := makeMatchResult(content, lineStarts, loc[0:2])
+		mr.TrailLen = trailLen(rule.Pattern, content[loc[0]:loc[1]])
 		if shapeGroup > 0 {
 			if lo, hi := loc[2*shapeGroup], loc[2*shapeGroup+1]; lo >= 0 && hi >= lo {
 				mr.ShapeText = string(content[lo:hi])
