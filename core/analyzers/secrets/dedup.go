@@ -505,17 +505,35 @@ func specificityOf(ruleID string, spec map[string]int) int {
 	return ruleSpecificityFallback(ruleID)
 }
 
-// spansOverlap reports whether two findings on the same line cover overlapping
-// column ranges. Two findings that touch the same token (share any column) are
-// considered the same issue for dedup purposes.
+// spansOverlap reports whether two findings starting on the same line cover
+// overlapping text. Two findings that touch the same token (share any column)
+// are considered the same issue for dedup purposes.
+//
+// Positions are compared as (line, column), not as columns: a span that
+// continues onto a later line (a PEM block, any multi-line match) ends at a
+// column on THAT line, and reading its EndColumn as a column of the start line
+// made a two-line span "end" before it began, so it overlapped nothing.
 func spansOverlap(a, b *findings.Finding) bool {
-	as, ae := a.Location.StartColumn, a.Location.EndColumn
-	bs, be := b.Location.StartColumn, b.Location.EndColumn
-	if ae == 0 {
-		ae = as
+	as, ae := spanBounds(a)
+	bs, be := spanBounds(b)
+	return !ae.before(bs) && !be.before(as)
+}
+
+type linePos struct{ line, col int }
+
+func (p linePos) before(q linePos) bool {
+	return p.line < q.line || (p.line == q.line && p.col < q.col)
+}
+
+func spanBounds(f *findings.Finding) (start, end linePos) {
+	l := f.Location
+	start = linePos{l.StartLine, l.StartColumn}
+	end = linePos{l.EndLine, l.EndColumn}
+	if l.EndLine < l.StartLine || l.EndLine == 0 {
+		end.line = l.StartLine
 	}
-	if be == 0 {
-		be = bs
+	if l.EndColumn == 0 && end.line == l.StartLine {
+		end.col = l.StartColumn
 	}
-	return as <= be && bs <= ae
+	return start, end
 }
