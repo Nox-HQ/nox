@@ -3102,9 +3102,33 @@ func builtinSecretRules() []*rules.Rule {
 
 		{
 			id: "SEC-335", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)\b(\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40}|[a-fA-F0-9]{40})\b)(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Sourcegraph is a code search and navigation engine.",
-			cwe:         "CWE-798", keywords: []string{"sgp_", "sourcegraph"},
+			// Sourcegraph generates an access token as 20 random bytes, hex
+			// encoded (internal/accesstoken GeneratePersonalAccessToken), and
+			// since 5.1.0 writes it as sgp_[<instance id>_]<40 hex>. Tokens
+			// issued before that carry no prefix and "will continue to work
+			// as-is" (CHANGELOG 5.1.0), so the legacy form is a real
+			// credential and stays covered.
+			//
+			// It is covered BOUND, not bare. The gitleaks import accepted any
+			// [a-f0-9]{40} in a file mentioning sourcegraph, and forty hex
+			// digits is also a git object name and a SHA-1 ETag: a README that
+			// pinned a commit beside the word Sourcegraph, a SHA-pinned
+			// `uses:` line, and an ETag under a CSP naming sourcegraph.com
+			// were all high-severity credentials. That is the pre-v1.36
+			// CSP/ETag construction, which the v1.36 binding pass did not
+			// reach here because this pattern is not anchorless (concrete-
+			// witness research, #814). A bare legacy token is
+			// byte-indistinguishable from a commit SHA, so the evidence for
+			// one has to be the name it is assigned to: a sourcegraph-named
+			// credential variable, or src-cli's SRC_ACCESS_TOKEN.
+			//
+			// The sgp_ alternatives are unchanged, so the match text, and the
+			// fingerprint, of every prefixed finding is too.
+			pattern:     `(?i)\b(\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40}|(?:sourcegraph[a-z0-9_.\-]*(?:token|key|secret|password|credential)|src_access_token)["']?[ \t]*[=:][ \t]*["']?[a-fA-F0-9]{40})\b)(?:[\x60'"\s;]|\\[nr]|$)`,
+			description: "Sourcegraph access token detected",
+			// src_access_token is a keyword so a file that only exports
+			// src-cli's variable is scanned at all.
+			cwe: "CWE-798", keywords: []string{"sgp_", "sourcegraph", "src_access_token"},
 			remediation: "Imported from Gitleaks: sourcegraph-access-token",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
