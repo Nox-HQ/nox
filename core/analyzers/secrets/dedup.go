@@ -250,6 +250,17 @@ func specificitySuppression(dropped, survivor *findings.Finding) suppression {
 // owners of that token. Generic entropy/keyword findings are untouched here —
 // they are handled by the specificity collapse in pass 2. order is the
 // (line,col,rule) sort; suppressed is updated in place.
+//
+// Only a provider-tier finding may anchor. A generic finding was an anchor
+// until #814 measured what that did: SEC-161's match on `value = "eyJ…"`
+// names the JWT prefix, the canonical owner SEC-371 had not fired (its file
+// keyword is "jwt"), so every JWT rule on the span was dropped as a
+// non-owner, and the generic finding — which pass 2 is meant to collapse
+// under any provider finding — was the only one left. The guard below that
+// keeps a non-owner anchor alive "so we never suppress the last finding on a
+// real secret" protected the anchor and not the findings it dropped; with a
+// provider-tier anchor it covers both, because the anchor survives whenever
+// no owner is present and it reports the same token.
 func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec map[string]int, content []byte, dropped *[]suppression) {
 	for a := 0; a < len(order); a++ {
 		ia := order[a]
@@ -257,6 +268,9 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 			continue
 		}
 		fa := &in[ia]
+		if specificityOf(fa.RuleID, spec) < specProviderDefault {
+			continue // a generic match does not get to say who owns a token
+		}
 		owners := ownersForValue(matchedValue(content, fa))
 		if owners == nil {
 			continue // fa's token isn't a recognised provider token
