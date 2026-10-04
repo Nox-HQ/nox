@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -44,6 +45,14 @@ const (
 // Anything else -- a user session token (whose issuer is the project's auth
 // URL and which carries no ref), another issuer's token, a lookalike that
 // does not decode -- returns "", which claims nothing.
+//
+// The three claims are read by exact key, once each. encoding/json's struct
+// decoding matches keys case-insensitively and lets the last duplicate win,
+// so {"role":"service_role","ROLE":"anon"} would have read as anon, while
+// PostgREST reads "role" case-sensitively and acts as service_role. A payload
+// that spells any of the three in another case, or repeats one, is ambiguous
+// about the very thing being decided, so it is not treated as a project key
+// at all and stays an ordinary JWT finding.
 func supabaseKeyRole(value string) string {
 	parts := strings.Split(strings.Trim(value, `"'`), ".")
 	if len(parts) != 3 {
@@ -53,26 +62,90 @@ func supabaseKeyRole(value string) string {
 	if err != nil {
 		return ""
 	}
-	var claims struct {
-		Iss  string `json:"iss"`
-		Ref  string `json:"ref"`
-		Role string `json:"role"`
-	}
-	if json.Unmarshal(raw, &claims) != nil {
+	claims, ok := exactClaims(raw, "iss", "ref", "role")
+	if !ok || claims["iss"] != "supabase" || claims["ref"] == "" {
 		return ""
 	}
-	if claims.Iss != "supabase" || claims.Ref == "" {
-		return ""
-	}
-	switch claims.Role {
+	switch claims["role"] {
 	case supabaseRoleAnon, supabaseRoleServiceRole:
-		return claims.Role
+		return claims["role"]
 	}
 	return ""
 }
 
-// isSupabaseAnonKey is SEC-105's claim: the value is a Supabase anon key.
-func isSupabaseAnonKey(value string) bool { return supabaseKeyRole(value) == supabaseRoleAnon }
+// exactClaims reads the named string members of the JSON object raw. It
+// fails if raw is not one object, if a named member is not a string or
+// appears more than once, or if any key equals a name under case folding
+// without equalling it exactly.
+func exactClaims(raw []byte, names ...string) (map[string]string, bool) {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		return nil, false
+	}
+	out := map[string]string{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, false
+		}
+		key, _ := tok.(string)
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return nil, false
+		}
+		folded := strings.ToLower(key)
+		if !want[folded] {
+			continue
+		}
+		if key != folded {
+			return nil, false // a case variant of a claim being decided
+		}
+		if _, dup := out[key]; dup {
+			return nil, false
+		}
+		var s string
+		if json.Unmarshal(v, &s) != nil {
+			return nil, false
+		}
+		out[key] = s
+	}
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('}') {
+		return nil, false
+	}
+	return out, true
+}
+
+// supabasePublishablePrefix opens Supabase's current publishable key, the
+// replacement for the anon JWT; the API keys guide documents the prefix
+// ("sb_publishable_...") and that the key is safe to expose. The body is not
+// documented, so the prefix is the whole claim.
+const supabasePublishablePrefix = "sb_publishable_"
+
+// isSupabaseAnonKey is SEC-105's claim: the value is a Supabase anon key
+// (decoded) or a publishable key (by its documented prefix).
+func isSupabaseAnonKey(value string) bool {
+	v := strings.Trim(value, `"'`)
+	return strings.HasPrefix(v, supabasePublishablePrefix) || supabaseKeyRole(v) == supabaseRoleAnon
+}
+
+// isNotEvidentlyPublicValue is SEC-775's veto. SEC-775 reads the anon slot by
+// NAME, and a name is not evidence that what it holds is public: a secret key
+// pasted there, or an opaque value nox cannot decode, keeps the credential
+// claim. Only a value that is public on its face -- the documented
+// publishable prefix -- is vetoed, and SEC-105 claims it instead. A decoded
+// anon JWT never reaches here as a separate finding: SEC-105 owns its span.
+func isNotEvidentlyPublicValue(match string) bool {
+	i := strings.LastIndexAny(match, "=:")
+	if i < 0 {
+		return true
+	}
+	v := strings.Trim(strings.TrimSpace(match[i+1:]), `"'`)
+	return !strings.HasPrefix(v, supabasePublishablePrefix)
+}
 
 // isSupabaseServiceRoleKey is SEC-100's claim: the value is a Supabase
 // service_role key.
