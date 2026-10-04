@@ -165,11 +165,14 @@ func TestDetect_PrivateKeyHeader(t *testing.T) {
 		name    string
 		content string
 	}{
-		{"RSA", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA..."},
-		{"EC", "-----BEGIN EC PRIVATE KEY-----\nMHQC..."},
-		{"DSA", "-----BEGIN DSA PRIVATE KEY-----\nMIIBuw..."},
-		{"OPENSSH", "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blbn..."},
-		{"generic", "-----BEGIN PRIVATE KEY-----\nMIIEvg..."},
+		// A header is reported by the key under it, not by itself: a parser
+		// constant or a docstring names the header with no key (see
+		// TestPrivateKeyRulesNeedTheKey). These carry a body for that reason.
+		{"RSA", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA" + blobBody(64, b64std) + "\n"},
+		{"EC", "-----BEGIN EC PRIVATE KEY-----\nMHQC" + blobBody(64, b64std) + "\n"},
+		{"DSA", "-----BEGIN DSA PRIVATE KEY-----\nMIIBuw" + blobBody(64, b64std) + "\n"},
+		{"OPENSSH", "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blbn" + blobBody(64, b64std) + "\n"},
+		{"generic", "-----BEGIN PRIVATE KEY-----\nMIIEvg" + blobBody(64, b64std) + "\n"},
 	}
 
 	for _, tt := range tests {
@@ -303,7 +306,7 @@ func TestScanArtifacts_MixedFiles(t *testing.T) {
 	// Clean file with no secrets.
 	cleanFile := writeFile(t, dir, "clean.go", "package main\n\nfunc main() {}\n")
 	// File with a private key header.
-	keyFile := writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA...\n-----END RSA PRIVATE KEY-----\n")
+	keyFile := writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA"+blobBody(64, b64std)+"\n-----END RSA PRIVATE KEY-----\n")
 
 	artifacts := []discovery.Artifact{
 		{Path: "secret.env", AbsPath: secretFile, Type: discovery.Config, Size: 40},
@@ -420,7 +423,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-001": "aws_access_key_id = " + "AKIA" + "IOSFODNN7EXAMPLE\n",
 		"SEC-002": "AWS_SECRET_ACCESS_KEY = " + "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
 		"SEC-003": "token=" + "ghp_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\n",
-		"SEC-004": "-----BEGIN RSA " + "PRIVATE KEY-----\n",
+		"SEC-004": "-----BEGIN RSA " + "PRIVATE KEY-----\n" + blobBody(64, b64std) + "\n",
 		"SEC-005": "api_key = \"" + "abcdef1234567890abcdef\"\n",
 		"SEC-006": "amzn" + ".mws." + "12345678-1234-1234-1234-123456789abc\n",
 		"SEC-007": "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\n",
@@ -494,7 +497,7 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-075": "firebase_api_key = \"" + "AIza" + "SyD-abcdefghijklmnopqrstuvwxyz12345\"\n",
 		"SEC-076": "redis://" + "default:mypassword@redis.example.com:6379\n",
 		"SEC-077": "AGE-SECRET-KEY-" + "1QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L" + "QPZRY9X8GF2TVDW0S3JN54KHCE6M\n",
-		"SEC-078": "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----\n",
+		"SEC-078": "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----\n\n" + blobBody(64, b64std) + "\n",
 		"SEC-079": "password = \"mysecret\" " + "cert.p12\n",
 		"SEC-080": "password = \"" + "mysecretpassword\"\n",
 		"SEC-081": "secret = \"" + "ABCDEFGHIJKLMNOP\"\n",

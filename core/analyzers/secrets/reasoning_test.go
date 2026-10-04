@@ -38,7 +38,7 @@ var refutationCases = []refutationCase{
 	{
 		name:       "display-text attribute",
 		file:       "form.jsx",
-		content:    "export const F = () => <input placeholder=\"-----BEGIN RSA PRIVATE KEY-----MIIEpAIBAAKCAQEA7Zx\" />;\n",
+		content:    "export const F = () => <input placeholder=\"-----BEGIN RSA PRIVATE KEY-----\\nMIIEpAIBAAKCAQEA" + blobBody(64, b64std) + "\" />;\n",
 		wantReason: "display-text HTML/JSX attribute",
 	},
 	{

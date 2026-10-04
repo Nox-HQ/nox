@@ -767,7 +767,7 @@ func builtinSecretRules() []*rules.Rule {
 		// -----------------------------------------------------------------
 		{
 			id: "SEC-004", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY-----`,
+			pattern:     `-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`,
 			description: "Private key header detected",
 			cwe:         "CWE-321", keywords: []string{"-----begin"},
 			remediation: "Remove the private key from source control. Store keys in a secrets manager or use encrypted key storage. Regenerate the key pair if it was committed.",
@@ -784,7 +784,7 @@ func builtinSecretRules() []*rules.Rule {
 		{
 			id: "SEC-078", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
 			// nox:ignore SEC-078 -- rule definition, not a real finding
-			pattern:     `(?i)-----BEGIN PGP PRIVATE KEY BLOCK-----`,
+			pattern:     `(?i)-----BEGIN PGP PRIVATE KEY BLOCK-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`,
 			description: "PGP Private Key Block detected",
 			cwe:         "CWE-321", keywords: []string{"pgp private key"},
 			remediation: "Remove the PGP private key from source control. Revoke and regenerate the key pair.",
@@ -900,7 +900,15 @@ func builtinSecretRules() []*rules.Rule {
 		// there is to find in one.
 		{
 			id: "SEC-082", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(authorization|auth)\s*[=:]\s*(?:[-\[]\s*)?['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
+			// The key may be quoted: `"Authorization": "Bearer ..."` is how a
+			// header is written in JSON, a dict or a fetch() options object, and
+			// requiring [=:] straight after the key meant none of those was
+			// ever seen. The value must be a token: every one of this rule's
+			// 107 findings on the pinned corpus was a placeholder (alice-token,
+			// token123, null), and `BEDROCK_AUTH=bearer python` reported
+			// "python". isBearerTokenValue asks what SEC-951 asks of a value.
+			pattern:     `(?i)(authorization|auth)["']?\s*[=:]\s*(?:[-\[]\s*)?['"]?Bearer\s+[A-Za-z0-9\-_.~+/]+=*['"]?`,
+			validate:    isBearerTokenValue,
 			description: "Bearer token detected",
 			cwe:         "CWE-798", keywords: []string{"bearer"},
 			remediation: "Do not hard-code bearer tokens. Use environment variables or a token refresh mechanism.",
@@ -3289,9 +3297,9 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-387", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `refresh[_-]?token\s*[=:]\s*['\"][A-Za-z0-9_-]{20,}['\"]`, description: "Detected Generic Refresh Token", cwe: "CWE-798", keywords: []string{"refresh_token"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-388", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `bearer\s+[A-Za-z0-9_-]{20,}`, description: "Detected Bearer Token", cwe: "CWE-798", keywords: []string{"bearer_token"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-389", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `authorization\s*:\s*[A-Za-z0-9_-]{20,}`, description: "Detected Authorization Header", cwe: "CWE-798", keywords: []string{"authorization"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-390", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----`, description: "Detected Private Key", cwe: "CWE-798", keywords: []string{"private_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-391", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`, description: "Detected OpenSSH Private Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-428", Pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`}}},
-		{id: "SEC-392", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`, description: "Detected PGP Private Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-429", Pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`}}},
+		{id: "SEC-390", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "Detected Private Key", cwe: "CWE-798", keywords: []string{"private_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-391", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN OPENSSH PRIVATE KEY-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "Detected OpenSSH Private Key", cwe: "CWE-798", keywords: []string{"openssh_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-428", Pattern: `-----BEGIN OPENSSH PRIVATE KEY-----`}}},
+		{id: "SEC-392", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "Detected PGP Private Key", cwe: "CWE-798", keywords: []string{"pgp_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, retires: []rules.RetiredRule{{ID: "SEC-429", Pattern: `-----BEGIN PGP PRIVATE KEY BLOCK-----`}}},
 		{id: "SEC-393", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `dd_api_key=[a-z0-9]{32}`, description: "Detected Datadog API Key", cwe: "CWE-798", keywords: []string{"datadog"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-394", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `dd_app_key=[a-z0-9]{40}`, description: "Detected Datadog App Key", cwe: "CWE-798", keywords: []string{"datadog_app"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-395", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-f0-9]{40}`, description: "Detected New Relic API Key", cwe: "CWE-798", keywords: []string{"newrelic"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3327,8 +3335,8 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-423", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `ya29\.[0-9A-Za-z_-]{20,}`, description: "Detected Google OAuth access token", cwe: "CWE-798", keywords: []string{"ya29."}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-424", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `EAACEdEose0cBA[0-9A-Za-z]{20,}`, description: "Detected Facebook access token", cwe: "CWE-798", keywords: []string{"eaacedeose0cba"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-425", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `login\.microsoftonline`, description: "Microsoft identity platform endpoint (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"ms_oauth"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-426", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN RSA PRIVATE KEY-----`, description: "Detected RSA Private Key", cwe: "CWE-798", keywords: []string{"rsa_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-427", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN EC PRIVATE KEY-----`, description: "Detected EC Private Key", cwe: "CWE-798", keywords: []string{"ec_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-426", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN RSA PRIVATE KEY-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "Detected RSA Private Key", cwe: "CWE-798", keywords: []string{"rsa_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-427", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN EC PRIVATE KEY-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "Detected EC Private Key", cwe: "CWE-798", keywords: []string{"ec_key"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-434", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `bootstrap\.servers`, description: "Kafka bootstrap servers setting (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"kafka"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		// The pattern carried a single body character (`gh[pousr]_[A-Za-z0-9_]`),
 		// so any five-character run beginning `ghs_` was a high-severity GitHub
@@ -3393,12 +3401,12 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-461", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `amqps?://[^\s\'"/@]+(?:/[^\s\'"@]*)?(?:[\s\'"]|$)`, description: "AMQP broker URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"amqp"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-462", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `smtps?://[^\s\'"/@]+(?:/[^\s\'"@]*)?(?:[\s\'"]|$)`, description: "SMTP server URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"smtp"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-463", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `ssh-rsa AAAA`, description: "SSH public key (public by design, not a credential)", cwe: "", keywords: []string{"ssh"}, remediation: "Public keys are meant to be shared: nothing to rotate. Confirm the key should be trusted wherever it is installed.", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-464", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PUBLIC KEY BLOCK-----`, description: "PGP public key block (public by design, not a credential)", cwe: "", keywords: []string{"gpg"}, remediation: "Public keys are meant to be shared: nothing to rotate. Confirm the key should be trusted wherever it is installed.", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-464", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `-----BEGIN PGP PUBLIC KEY BLOCK-----[ \t]*(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z][A-Za-z-]*: [^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\r?\n|(?:\\r)?\\n)?[A-Za-z0-9+/=]{40,}`, description: "PGP public key block (public by design, not a credential)", cwe: "", keywords: []string{"gpg"}, remediation: "Public keys are meant to be shared: nothing to rotate. Confirm the key should be trusted wherever it is installed.", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-465", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `arn:aws:iam::`, description: "AWS IAM ARN (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"aws_iam"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-466", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `arn:aws:secretsmanager:`, description: "AWS Secrets Manager ARN (where a secret is stored, not the secret)", cwe: "CWE-1051", keywords: []string{"aws_secret"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-467", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `projects/[a-z0-9-]+/serviceAccounts/`, description: "Detected GCP Service Account", cwe: "CWE-798", keywords: []string{"gcp_iam"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-468", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `kubectl\s+create\s+secret\s+generic\s+\S+[^\n]*?--from-literal=[^=\s]+=["\']?([^\s"\'$]{6,})`, description: "Kubernetes secret value given inline to kubectl create secret", cwe: "CWE-798", keywords: []string{"kubectl create secret"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, shapeGroup: "1"},
-		{id: "SEC-469", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[A-Z0-9_]*(?:TOKEN|API_KEY|SECRET)=["\']?([A-Za-z0-9_\-./+]{12,})`, description: "Detected Environment Variable Secret", cwe: "CWE-798", keywords: []string{"token=", "api_key=", "secret="}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, shapeGroup: "1"},
+		{id: "SEC-469", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `\b[A-Z0-9_]*(?:TOKEN|API_KEY|SECRET)=["\']?([A-Za-z0-9_\-./+]{12,})`, description: "Detected Environment Variable Secret", cwe: "CWE-798", keywords: []string{"token=", "api_key=", "secret="}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}, secretShape: true, shapeGroup: "1", validate: isEnvSecretValue},
 		{id: "SEC-471", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{64}`, description: "Detected DigitalOcean Token", cwe: "CWE-798", keywords: []string{"digitalocean_token"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-472", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)\blinode[a-z0-9_ .\-]*[=:][ \t]*["\x27]?[A-Za-z0-9_-]{64}`, description: "Detected Linode Token", cwe: "CWE-798", keywords: []string{"linode"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-473", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[A-Za-z0-9_-]{36}`, description: "Detected Vultr API Token", cwe: "CWE-798", keywords: []string{"vultr_token"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -4396,7 +4404,34 @@ func isRandomLookingValue(match string) bool {
 	if open < 0 {
 		return true
 	}
-	value := m[open+1:]
+	return randomLookingValue(m[open+1:])
+}
+
+// isBearerTokenValue keeps a bearer match only when the token is one: long
+// enough to be issued (16+), and not made of words or an example. See SEC-082.
+func isBearerTokenValue(match string) bool {
+	i := strings.LastIndex(strings.ToLower(match), "bearer")
+	if i < 0 {
+		return true
+	}
+	tok := strings.Trim(strings.TrimSpace(match[i+len("bearer"):]), "\"'")
+	return len(tok) >= 16 && randomLookingValue(tok)
+}
+
+// isEnvSecretValue asks of SEC-469's NAME=value what SEC-951 asks of a
+// credential-named key: is the value random-looking, rather than words, an
+// example or a keyboard placeholder (dapi1234567890abcdef).
+func isEnvSecretValue(match string) bool {
+	i := strings.Index(match, "=")
+	if i < 0 {
+		return true
+	}
+	return randomLookingValue(strings.Trim(match[i+1:], "\"'"))
+}
+
+// randomLookingValue is the value test SEC-951 introduced, shared by every
+// rule that binds a credential-NAMED key rather than a vendor format.
+func randomLookingValue(value string) bool {
 	if isPublishedOrExampleValue(value) {
 		return false
 	}
