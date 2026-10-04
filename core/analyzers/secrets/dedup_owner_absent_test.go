@@ -47,9 +47,9 @@ func TestOwnerResolutionWithoutTheOwner(t *testing.T) {
 		name, file, content string
 		want                []string // one of these must report the token
 	}{
-		{"jwt, no owner keyword", "a.py", `value = "` + jwt + "\"\n", []string{"SEC-084", "SEC-251", "SEC-371"}},
+		{"jwt, no owner keyword", "a.py", `value = "` + jwt + "\"\n", []string{"SEC-371"}},
 		{"jwt, owner keyword present", "b.py", `jwt_value = "` + jwt + "\"\n", []string{"SEC-371"}},
-		{"jwt in prose", "c.md", "Token: `" + jwt + "`\n", []string{"SEC-084"}},
+		{"jwt in prose", "c.md", "Token: `" + jwt + "`\n", []string{"SEC-371"}},
 		{"aws key id", "d.py", `value = "AKIA` + seededBody(1, b32, 16) + "\"\n", []string{"SEC-001", "SEC-508"}},
 		{"github pat", "e.py", `value = "ghp_` + seededBody(2, alnum, 36) + "\"\n", []string{"SEC-003"}},
 		{"gitlab pat", "f.py", `value = "glpat-` + seededBody(3, alnum, 20) + "\"\n", []string{"SEC-018"}},
