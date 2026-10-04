@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.1] - 2026-10-04
+
+Three secret rules that reported placeholders now report what their evidence
+establishes, and retired-rule fingerprints are protected by a test.
+
+### Fixed
+
+- **SEC-082 (Bearer token) reported placeholders** (#810). Every one of its 107
+  findings on the pinned corpus was one -- `alice-token`, `token123`, `null`,
+  and `python` read from `BEDROCK_AUTH=bearer python`. The value must now be a
+  token: 16+ characters and random-looking by the test SEC-951 applies to a
+  credential-named value. A quoted header key -- `"Authorization": "Bearer
+  ..."`, the JSON, dict and fetch() form -- is now matched; it never was.
+- **Private-key header rules reported a header with no key** (#810). A header
+  named in a docstring or declared as a parser constant was a Critical
+  finding. SEC-004, 078, 390-392, 426, 427 and the informational SEC-464 now
+  need the key body: after a line break, an escaped `\n` as in a JSON
+  service-account file, or PGP armor headers.
+- **SEC-469 (environment-variable secret)** asks the same value question as
+  SEC-951, which already treats a keyboard placeholder such as
+  `dapi1234567890abcdef` as an example (#810).
+- **Retired-rule patterns are now held frozen** (#811). They reproduce the
+  fingerprints baselines, VEX statements and `nox:ignore` comments were
+  written against; a test now fails if one changes or disappears.
+
+On the release corpus (rule-diff against v1.48.0, 25 repositories) SEC-082
+drops three findings, each read: a doc comment's next-line `//` taken as the
+token, `env-token` in a test, `alice-token` in documentation. Nothing rises.
+
 ## [1.48.0] - 2026-10-03
 
 Secret detection that reports what its evidence establishes. An audit of the

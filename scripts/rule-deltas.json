@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.48.0",
+  "nox_release": "v1.48.1",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -27,12 +27,5 @@
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
   },
-  "entries": [
-    {
-      "rule": "SEC-082",
-      "classification": "refined-away",
-      "pr": 810,
-      "reason": "SEC-082 reported any run of token characters after `Bearer` as a hard-coded bearer token; on the pinned seven-repository corpus all 107 of its findings were placeholders. The value must now be a token: 16+ characters and random-looking by the test SEC-951 applies to a credential-named value. The three drops on this corpus: chronos internal/api/middleware.go:54, a doc comment `\"Authorization: Bearer` whose `\\s+` crossed the line break and read the next line's `//` as the token; anthropic-sdk-python tests/lib/test_google_cloud.py:515, `Authorization: Bearer env-token` in a test; mcp-python-sdk docs/run/authorization.md:101, `Authorization: Bearer alice-token` in documentation. A real token is still reported (TestBearerRuleNeedsAToken), and a quoted header key -- `\"Authorization\": \"Bearer ...\"` -- is now matched where it was not."
-    }
-  ]
+  "entries": []
 }
