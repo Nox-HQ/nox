@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -35,12 +36,20 @@ func TestAJWTIsOwnedBySEC371WhateverItsFileIsCalled(t *testing.T) {
 	if strings.Contains(strings.ToLower(tok), "jwt") {
 		t.Fatal("the seeded token itself contains \"jwt\"; pick another seed")
 	}
-	hosts := []struct{ name, file, content string }{
-		{"assignment, neutral name", "config.py", `value = "` + tok + `"` + "\n"},
-		{"assignment, jwt in the name", "config.py", `jwt_value = "` + tok + `"` + "\n"},
-		{"prose", "README.md", "Token: `" + tok + "`\n"},
-		{"yaml", "config.yaml", "session:\n  value: " + tok + "\n"},
-		{"curl bearer header", "call.sh", `curl -H "Authorization: Bearer ` + tok + `" https://api.example.com/v1/me` + "\n"},
+	hosts := []struct {
+		name, file, content string
+		// atLineEnd: the token is the last thing on its line, which is where
+		// SEC-251's duplicate survives (see below).
+		atLineEnd bool
+	}{
+		{"assignment, neutral name", "config.py", `value = "` + tok + `"` + "\n", false},
+		{"assignment, jwt in the name", "config.py", `jwt_value = "` + tok + `"` + "\n", false},
+		{"prose", "README.md", "Token: `" + tok + "`\n", false},
+		{"curl bearer header", "call.sh", `curl -H "Authorization: Bearer ` + tok + `" https://api.example.com/v1/me` + "\n", false},
+		{"yaml", "config.yaml", "session:\n  value: " + tok + "\n", true},
+		{"shell export", "env.sh", "export TOKEN=" + tok + "\n", true},
+		{"http request header", "request.http", "GET https://api.example.com/v1/me\nAuthorization: Bearer " + tok + "\n", true},
+		{"dotenv", ".env", "NEXT_PUBLIC_SUPABASE_ANON_KEY=" + tok + "\n", true},
 	}
 	for _, h := range hosts {
 		t.Run(h.name, func(t *testing.T) {
@@ -64,14 +73,15 @@ func TestAJWTIsOwnedBySEC371WhateverItsFileIsCalled(t *testing.T) {
 			if len(got) == 1 {
 				return
 			}
-			if h.name == "yaml" && len(got) == 2 {
-				// SEC-251's gitleaks terminator consumes the newline, so its
-				// span ends at column 1 of the NEXT line, and spansOverlap
-				// compares columns only: [10,1] overlaps nothing, and the
-				// duplicate survives dedup. Present on main before this
-				// change too (as SEC-251 beside SEC-161). A dedup defect of its
-				// own, tracked separately rather than encoded here.
-				t.Skipf("known: SEC-251 survives beside SEC-371 (span crosses a line end): %v", got)
+			// Any JWT that ends its line: SEC-251's gitleaks terminator
+			// consumes the newline, so its span ends at column 1 of the NEXT
+			// line, and spansOverlap compares columns only, so the span reads
+			// as [start,1] and overlaps nothing. The duplicate survives dedup.
+			// Present on main too (beside SEC-161/SEC-084), and fixed at its
+			// root in the span/overlap work, not here. Only SEC-251 may be the
+			// extra finding: any other survivor is a failure, not this defect.
+			if h.atLineEnd && len(got) == 2 && slices.Contains(got, "SEC-251") {
+				t.Skipf("known: SEC-251 survives beside SEC-371 when the JWT ends its line (its span crosses the line end): %v", got)
 			}
 			t.Errorf("want exactly SEC-371 on the token, got %v", got)
 		})
