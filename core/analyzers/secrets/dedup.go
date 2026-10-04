@@ -437,8 +437,26 @@ func ownersForValue(value string) map[string]struct{} {
 			return canonicalOwners[i].owners
 		}
 	}
+	// A JWT whose JSON is not compact does not start eyJ (see jwt_layout.go),
+	// and its leads are three-character base64 runs any random key can start
+	// with, so they cannot be prefixes here. Structure can: a value that
+	// decodes as a signed JWT has SEC-371 as its owner, whatever its lead.
+	if isSignedJWT(strings.TrimRight(v, `"'`)) {
+		return jwtOwners
+	}
 	return nil
 }
+
+// jwtOwners is the eyJ entry's owner set, shared so the two ways of
+// recognising a JWT cannot name different owners.
+var jwtOwners = func() map[string]struct{} {
+	for _, e := range canonicalOwners {
+		if e.prefix == "eyJ" {
+			return e.owners
+		}
+	}
+	panic("canonicalOwners has no eyJ entry")
+}()
 
 // isBareProviderPrefix reports whether a finding matched only a provider prefix
 // (e.g. `glpat-`, `sk_live_`) with no credential body following it — the shape a

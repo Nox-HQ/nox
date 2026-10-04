@@ -3351,7 +3351,14 @@ func builtinSecretRules() []*rules.Rule {
 		// {"a":0}, 7. The signature stays open: a truncated one still leaks
 		// the claims. A real JWT clears both, so its match and fingerprint
 		// are unchanged.
-		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`, description: "Detected JWT token", cwe: "CWE-798", keywords: []string{"eyj"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		//
+		// eyJ is only the compact layout. RFC 7515/7519 let the header and
+		// claims JSON carry whitespace, and a pretty-printed, spaced or empty
+		// one encodes otherwise (see jwt_layout.go), so no JWT rule saw it.
+		// The pattern now admits those leads; isSEC371Match leaves compact
+		// matches as they were and requires every other one to decode as a
+		// signed JWT.
+		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: sec371Pattern, validate: isSEC371Match, description: "Detected JWT token", cwe: "CWE-798", keywords: sec371Keywords, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-372", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws\.com/[^\s]+`, description: "AWS S3 object URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-373", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "S3 bucket URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3_bucket"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
