@@ -424,7 +424,10 @@ var canonicalOwners = []ownerEntry{
 	// severity. This became reachable only once LooksLikeJWT stopped the
 	// data-blob refiner dropping real JWTs — before that, all three were
 	// suppressed upstream and never reached dedup.
-	{"eyJ", owned("SEC-371")}, // JSON Web Token
+	// A Supabase project key is a JWT whose decoded role SEC-100 or SEC-105
+	// claims more precisely than SEC-371 can (supabase.go), so all three own
+	// the prefix; each rule's validator decides which one a token is.
+	{"eyJ", owned("SEC-371", "SEC-100", "SEC-105")}, // JSON Web Token
 }
 
 // ownersForValue returns the owner rule-ID set for a matched value, or nil if
