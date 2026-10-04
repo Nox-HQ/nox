@@ -117,3 +117,18 @@ func TestARNRules_TrailingPunctuation(t *testing.T) {
 		}
 	}
 }
+
+// An IAM path segment and the name are 1+ characters (IAM identifiers):
+// "role/" with nothing after it, or "role/a//b", names no role. allBytes
+// rejects the empty string, which is what holds this; the test pins it.
+func TestIAMRoleARN_RejectsEmptySegments(t *testing.T) {
+	const prefix = "arn:aws:iam::123456789012:"
+	for _, res := range []string{"role/", "role/svc//deploy", "role//deploy"} {
+		if isIAMRoleARN(prefix + res) {
+			t.Errorf("accepted %q", prefix+res)
+		}
+	}
+	if !isIAMRoleARN(prefix + "role/svc/deploy") {
+		t.Errorf("rejected a valid role ARN with a path")
+	}
+}

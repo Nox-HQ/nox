@@ -132,7 +132,7 @@ func isRDSInstanceARN(arn string) bool {
 		return false
 	}
 	id := parts[3]
-	if len(id) == 0 || len(id) > 63 || !(id[0] >= 'a' && id[0] <= 'z' || id[0] >= 'A' && id[0] <= 'Z') {
+	if id == "" || len(id) > 63 || !isASCIILetter(id[0]) {
 		return false
 	}
 	return !strings.HasSuffix(id, "-") && !strings.Contains(id, "--") && allBytes(id, nameBytes("-"))
@@ -163,12 +163,12 @@ func isIAMARN(arn string) bool {
 
 // iamPathName accepts an optional path ("a/b/") and a name of 1-max
 // characters over [\w+=,.@-]; neither may be empty between slashes.
-func iamPathName(path string, max int) bool {
+func iamPathName(path string, maxName int) bool {
 	segs := strings.Split(path, "/")
 	for i, seg := range segs {
 		limit := 512
 		if i == len(segs)-1 {
-			limit = max
+			limit = maxName
 		}
 		if len(seg) > limit || !allBytes(seg, nameBytes("_+=,.@-")) {
 			return false
@@ -283,3 +283,5 @@ func isSQSQueueARN(arn string) bool {
 	}
 	return allBytes(strings.TrimSuffix(name, ".fifo"), nameBytes("_-"))
 }
+
+func isASCIILetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
