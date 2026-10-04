@@ -3335,7 +3335,23 @@ func builtinSecretRules() []*rules.Rule {
 		// -----------------------------------------------------------------
 		// Additional custom rules (SEC-356 to SEC-410) - Database, JWT, Cloud
 		// -----------------------------------------------------------------
-		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`, description: "Detected JWT token", cwe: "CWE-798", keywords: []string{"jwt"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-371 is the canonical owner of the eyJ prefix in dedup's owner
+		// table, so it must run wherever a JWT is. Its keyword was "jwt", the
+		// vendor-name key this batch gave every rule, and a JWT does not
+		// contain that word: the owner ran only when an identifier nearby
+		// happened to, and the same token was SEC-371 high, SEC-084 medium or
+		// SEC-161 medium depending on its variable's name. "eyj" is the
+		// prefix every JWT carries, and SEC-084's keyword.
+		//
+		// Running it everywhere exposed that the owner dedup calls the
+		// "tightest pattern" had `+` segments, so eyJ-.eyJ-.- was a high JWT.
+		// The minimums are what a JWT must contain: a JOSE header names "alg"
+		// (RFC 7515 §4.1.1), so the shortest is {"alg":""}, 11 characters
+		// after eyJ; the shortest claims object that encodes as eyJ is
+		// {"a":0}, 7. The signature stays open: a truncated one still leaks
+		// the claims. A real JWT clears both, so its match and fingerprint
+		// are unchanged.
+		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`, description: "Detected JWT token", cwe: "CWE-798", keywords: []string{"eyj"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-372", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws\.com/[^\s]+`, description: "AWS S3 object URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-373", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "S3 bucket URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3_bucket"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
