@@ -628,6 +628,18 @@ func (a *Analyzer) corroborate(subject evidence.Subject, content []byte, f *find
 		}
 	}
 
+	// The third: an age identity's Bech32 checksum, which BIP-173 specifies
+	// completely. A failed one is recorded and not acted on, like the others.
+	if consistent, applicable := verifyAgeIdentity(value); applicable {
+		if consistent {
+			a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the identity's Bech32 checksum verifies, so the value is internally consistent as an age secret key", nil)
+		} else {
+			a.reasoning.Refute(subject, evidence.KindStatic, "nox-scan", "secrets",
+				"the value carries an age identity prefix and length but its Bech32 checksum does not verify, so it is not an age secret key")
+		}
+	}
+
 	if prefix, ok := recognisedProviderPrefix(strings.TrimLeft(value, `"'`)); ok {
 		a.support(subject, "the value carries the recognised provider prefix "+prefix+
 			" and a token body, so it is not a bare vocabulary reference")
