@@ -1991,7 +1991,7 @@ func TestHandleListFindings_Pagination(t *testing.T) {
 	writeFile(t, dir, "secrets.env",
 		"A=AKIAIOSFODNN7EXAMPLE\nB=AKIAWXYZ234567ABCDEF\n")
 	writeFile(t, dir, "id_rsa",
-		"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+		"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA"+strings.Repeat("Qk9VTkRBUlk", 5)+"\n-----END RSA PRIVATE KEY-----\n")
 
 	s := New("0.1.0", nil)
 	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
@@ -2058,7 +2058,7 @@ func TestHandleSummary(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFile(t, dir, "secrets.env", "A=AKIAIOSFODNN7EXAMPLE\n")
-	writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n")
+	writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA"+strings.Repeat("Qk9VTkRBUlk", 5)+"\n-----END RSA PRIVATE KEY-----\n")
 	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
 		t.Fatalf("scan failed: %v / %s", err, r)
 	}

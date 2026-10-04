@@ -176,13 +176,15 @@ func TestPrivateKeyHeaderInDisplayAttribute(t *testing.T) {
 		{
 			name: "real private key in a Go source constant",
 			file: "key.go",
-			src:  "package p\n\nconst k = `-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----`\n",
+			src:  "package p\n\nconst k = `-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA" + blobBody(64, b64std) + "\n-----END RSA PRIVATE KEY-----`\n",
 			want: true,
 		},
 		{
 			name: "private key pasted into a value attribute",
 			file: "ui.tsx",
-			src:  "export const K = () => (\n  <input value=\"-----BEGIN RSA PRIVATE KEY-----\" />\n);\n",
+			// The key itself, with its line breaks written as \n -- a header
+			// alone is not key material (TestPrivateKeyRulesNeedTheKey).
+			src:  "export const K = () => (\n  <input value=\"-----BEGIN RSA PRIVATE KEY-----\\n" + blobBody(64, b64std) + "\\n-----END RSA PRIVATE KEY-----\" />\n);\n",
 			want: true,
 		},
 	}
