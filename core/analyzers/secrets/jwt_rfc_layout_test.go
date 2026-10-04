@@ -1,20 +1,27 @@
 package secrets
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/nox-hq/nox/core/discovery"
 )
 
 // RFC 7515 §3 and RFC 7519 §7.1: the JOSE header and the claims set are JSON
 // that "MAY contain whitespace and/or line breaks", and "no canonicalization
-// need be performed". Only a compact `{"` encodes as eyJ, so a signed JWT whose
-// JSON is pretty-printed, spaced or empty was matched by no JWT rule. These
-// build such tokens from a seed and require SEC-371, the canonical owner, to
-// report each one exactly once, in every host, without moving compact tokens.
+// need be performed". Only a compact `{"` + letter encodes as eyJ, so a signed
+// JWT whose JSON is pretty-printed, spaced, empty or led by a non-letter key
+// was matched by no JWT rule. These build such tokens from a seed and require
+// SEC-952 to report each one exactly once, in every host, while SEC-371 keeps
+// main's exact behaviour on compact tokens.
 
 func seededLayoutJWT(seed int64, header, claims string) string {
 	r := rand.New(rand.NewSource(seed))
@@ -62,9 +69,9 @@ func layoutHosts(tok string) []struct{ name, file, content string } {
 
 // jwtClaimingRules are the rules that claim a JWT, plus the generic entropy
 // rules that report one when no JWT rule does.
-var jwtClaimingRules = map[string]bool{"SEC-371": true, "SEC-084": true, "SEC-251": true, "SEC-161": true, "SEC-162": true}
+var jwtClaimingRules = map[string]bool{"SEC-371": true, "SEC-952": true, "SEC-084": true, "SEC-251": true, "SEC-161": true, "SEC-162": true}
 
-func TestRFCValidJWTLayoutsAreOwnedBySEC371(t *testing.T) {
+func TestRFCValidJWTLayoutsAreReportedBySEC952(t *testing.T) {
 	for i, l := range rfcLayouts {
 		tok := seededLayoutJWT(int64(7100+i), l.header, l.claims)
 		if h, c, _ := strings.Cut(tok, "."); strings.HasPrefix(h, "eyJ") && strings.HasPrefix(c, "eyJ") {
@@ -79,16 +86,17 @@ func TestRFCValidJWTLayoutsAreOwnedBySEC371(t *testing.T) {
 						got = append(got, f.RuleID)
 					}
 				}
-				if len(got) != 1 || got[0] != "SEC-371" {
-					t.Errorf("want exactly SEC-371 on the token, got %v", got)
+				if len(got) != 1 || got[0] != "SEC-952" {
+					t.Errorf("want exactly SEC-952 on the token, got %v", got)
 				}
 			})
 		}
 	}
 }
 
-// Widening the leads must not widen the claim: what is reported has to decode
-// to a JOSE header naming a signing algorithm, with a signature present.
+// Widening the leads must not widen the claim: what SEC-952 reports has to
+// decode to a JOSE header naming a signing algorithm, with a signature present,
+// and no JWT rule reports an alg "none" header in any layout or case.
 func TestJWTLayoutLookalikesAreNotReported(t *testing.T) {
 	r := rand.New(rand.NewSource(7199))
 	const b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -107,29 +115,33 @@ func TestJWTLayoutLookalikesAreNotReported(t *testing.T) {
 		{"pretty header, alg none", enc([]byte("{\n  \"alg\": \"none\"\n}")) + "." + enc([]byte(seededClaims(10))) + "." + rnd(43)},
 		{"pretty header, no signature", enc([]byte("{\n  \"alg\": \"HS256\"\n}")) + "." + enc([]byte(seededClaims(11))) + "."},
 		{"spaced claims, not an object", enc([]byte(`{"alg":"HS256"}`)) + "." + enc([]byte(" [1,2,3]")) + "." + rnd(43)},
-		// alg "none" in every case and layout (F4): an unsecured JWT is not a
-		// credential, compact or not, under any JWT rule.
 		{"compact, alg none", enc([]byte(`{"alg":"none"}`)) + "." + enc([]byte(seededClaims(20))) + "." + rnd(43)},
 		{"compact, alg NONE", enc([]byte(`{"alg":"NONE","typ":"JWT"}`)) + "." + enc([]byte(seededClaims(21))) + "." + rnd(43)},
 		{"spaced header, alg None", enc([]byte(`{ "alg": "None" }`)) + "." + enc([]byte(seededClaims(22))) + "." + rnd(43)},
+		// The review's case: a vetoed alg-none token whose header nests an
+		// object that encodes, mid-header, as a fresh eyJ. Nothing may report
+		// the inner run as a JWT starting mid-token.
+		{"alg none, nested object in header", enc([]byte(`{"alg":"none","k":{"ab":"cdefghijklmn"}}`)) + "." + enc([]byte(seededClaims(23))) + "." + rnd(43)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fs, _ := scanRecording(t, "README.md", "Token: `"+c.tok+"`\n")
-			for _, f := range fs.Findings() {
-				if f.RuleID == "SEC-371" || f.RuleID == "SEC-084" || f.RuleID == "SEC-251" {
-					t.Errorf("%s reported a string that is not a signed JWT", f.RuleID)
+			for _, h := range layoutHosts(c.tok) {
+				fs, _ := scanRecording(t, h.file, h.content)
+				for _, f := range fs.Findings() {
+					switch f.RuleID {
+					case "SEC-371", "SEC-952", "SEC-084", "SEC-251", "SEC-100", "SEC-105":
+						t.Errorf("%s: %s reported a string that is not a signed JWT (column %d)", h.name, f.RuleID, f.Location.StartColumn)
+					}
 				}
 			}
 		})
 	}
 }
 
-// gluedHosts put a compact JWT where its left neighbour is lead-shaped: a
-// base64 run containing ey[A-D] or ew[k-r] directly before it, or a preceding
-// lead-led segment ending in a dot. RE2 returns the leftmost match, so a
-// widened lead there started the match early; the validator rejected it, and
-// the real token was never tried (review F1).
+// gluedHosts put a compact JWT where its left neighbour is lead-shaped. With a
+// widened SEC-371 the leftmost match started there and was vetoed, losing the
+// token (review F1). SEC-371 now keeps main's pattern, so this holds by
+// construction; it stays as the regression guard.
 func gluedHosts(tok string) []struct{ name, file, content string } {
 	return []struct{ name, file, content string }{
 		{"glued after a base64 run containing eyA", "a.py", "cacheKeyA" + tok + "\n"},
@@ -139,8 +151,6 @@ func gluedHosts(tok string) []struct{ name, file, content string } {
 	}
 }
 
-// TestCompactJWTsKeepSEC371WhenGlued: in every glued host the compact token is
-// still SEC-371, at the same span and fingerprint as written alone.
 func TestCompactJWTsKeepSEC371WhenGlued(t *testing.T) {
 	for seed := int64(0); seed < 12; seed++ {
 		tok := seededOwnerJWT(seed)
@@ -170,24 +180,38 @@ func TestCompactJWTsKeepSEC371WhenGlued(t *testing.T) {
 	}
 }
 
-// A compact JWT's SEC-371 match, and therefore its fingerprint, must not move.
-func TestSEC371MatchesCompactJWTsExactlyAsBefore(t *testing.T) {
-	before := regexp.MustCompile(`eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`)
-	var after *regexp.Regexp
+// mainSEC371Pattern is SEC-371's pattern on main, written out: the rule must
+// keep it exactly, so every compact match and fingerprint stays where it was.
+const mainSEC371Pattern = `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`
+
+func TestSEC371KeepsMainsPattern(t *testing.T) {
 	for _, r := range NewAnalyzer().Rules().Rules() {
 		if r.ID == "SEC-371" {
-			after = regexp.MustCompile(r.Pattern)
+			if r.Pattern != mainSEC371Pattern {
+				t.Fatalf("SEC-371's pattern moved:\n got  %s\n want %s", r.Pattern, mainSEC371Pattern)
+			}
+			return
 		}
 	}
-	if after == nil {
-		t.Fatal("SEC-371 not in the built rule set")
-	}
+	t.Fatal("SEC-371 not in the built rule set")
+}
+
+// SEC-952 and SEC-371 never match one span: every SEC-952 match has a
+// non-compact header or claims lead, and SEC-371's requires both compact.
+func TestSEC952NeverMatchesACompactJWT(t *testing.T) {
+	re := regexp.MustCompile(nonCompactJWTPattern)
+	compact := regexp.MustCompile(mainSEC371Pattern)
 	for seed := int64(0); seed < 40; seed++ {
 		tok := seededOwnerJWT(seed)
-		for _, h := range layoutHosts(tok) {
-			b, a := before.FindAllStringIndex(h.content, -1), after.FindAllStringIndex(h.content, -1)
-			if fmt.Sprint(a) != fmt.Sprint(b) {
-				t.Fatalf("seed %d %s: compact match moved %v -> %v", seed, h.name, b, a)
+		for _, h := range append(layoutHosts(tok), gluedHosts(tok)...) {
+			for _, loc := range re.FindAllStringIndex(h.content, -1) {
+				m := h.content[loc[0]:loc[1]]
+				if compact.MatchString(m) && strings.Count(m, ".") == 2 {
+					hd, c, _ := strings.Cut(m, ".")
+					if strings.HasPrefix(hd, "eyJ") && strings.HasPrefix(c, "eyJ") {
+						t.Fatalf("seed %d %s: SEC-952 matched a compact JWT %q", seed, h.name, m)
+					}
+				}
 			}
 		}
 	}
@@ -225,5 +249,48 @@ func TestIsSignedJWTGuards(t *testing.T) {
 		if got := isSignedJWT(c.tok); got != c.want {
 			t.Errorf("%s: isSignedJWT = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// An ARN list is validated as the whole greedy run (arn.go); a rule must not
+// report an ARN that starts mid-run. The rejected engine retry did exactly
+// that, reporting only the last role of the list.
+func TestARNListIsNotReportedMidRun(t *testing.T) {
+	const arn = "arn:aws:iam::123456789012:role/"
+	line := `ROLES="` + arn + "alpha," + arn + "beta," + arn + "gamma" + `"` + "\n"
+	fs, _ := scanRecording(t, "roles.env", line)
+	first := strings.Index(line, "arn:") + 1
+	for _, f := range fs.Findings() {
+		if strings.HasPrefix(f.RuleID, "SEC-") && f.Location.StartColumn > first {
+			t.Errorf("%s reports an ARN starting mid-list at column %d", f.RuleID, f.Location.StartColumn)
+		}
+	}
+}
+
+// TestAdversarialLinesScanInBoundedTime: lead-shaped junk must not make the
+// scan superlinear. The JWT line is the review's input (an engine retry took
+// 369 s on it at 100 KB); the ARN line exercises a validated rule the same
+// way. The bound is generous: on main each takes well under a second.
+func TestAdversarialLinesScanInBoundedTime(t *testing.T) {
+	const size = 100 << 10
+	lines := map[string]string{
+		"jwt-leads.py": `x = "` + strings.Repeat("IHs", size/3) + `.eyJhYmNkZWZnaGlqa2xt.c2lnbmF0dXJl";` + "\n",
+		"arn-junk.tf":  `x = "` + strings.Repeat("arn:aws:s3:::b:", size/15) + `"` + "\n",
+	}
+	for name, content := range lines {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, name)
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			if _, err := NewAnalyzer().ScanArtifacts(context.Background(), []discovery.Artifact{{Path: name, AbsPath: path}}); err != nil {
+				t.Fatal(err)
+			}
+			if d := time.Since(start); d > 10*time.Second {
+				t.Fatalf("scanning %d bytes took %s", len(content), d)
+			}
+		})
 	}
 }

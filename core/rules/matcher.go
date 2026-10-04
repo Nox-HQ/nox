@@ -19,11 +19,6 @@ type MatchResult struct {
 	Column    int
 	MatchText string
 
-	// validated: the matcher already applied rule.ValidateMatch to this
-	// result (RegexMatcher.revalidate), so the engine must not call the
-	// predicate a second time.
-	validated bool
-
 	// ShapeText is the part of the match that is supposed to BE the credential,
 	// when the rule names one via Metadata["shape_group"]. A bound vendor rule
 	// matches `nexmo = "<token>"`, so scoring the whole match for secret shape
@@ -178,13 +173,6 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	if len(locs) == 0 {
 		return nil
 	}
-	if rule.ValidateMatch != nil {
-		locs = m.revalidate(re, rule, content, locs, shapeGroup > 0)
-		if len(locs) == 0 {
-			return nil
-		}
-	}
-	validated := rule.ValidateMatch != nil
 	// Line offsets only once there is something to place; most rules match
 	// nothing in most files. Reuses the shared helpers (computeLineStarts /
 	// makeMatchResult) that AbsenceMatcher already uses.
@@ -192,7 +180,6 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	results := make([]MatchResult, 0, len(locs))
 	for _, loc := range locs {
 		mr := makeMatchResult(content, lineStarts, loc[0:2])
-		mr.validated = validated
 		mr.TrailLen = trailLen(rule.Pattern, content[loc[0]:loc[1]])
 		if shapeGroup > 0 {
 			if lo, hi := loc[2*shapeGroup], loc[2*shapeGroup+1]; lo >= 0 && hi >= lo {
@@ -209,96 +196,6 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		results = filterByPublisherAllowlist(results, rule)
 	}
 	return results
-}
-
-// revalidate applies rule.ValidateMatch here, where a vetoed match can still be
-// replaced. FindAll returns leftmost, non-overlapping matches, so a match the
-// validator rejects used to hide every match that overlaps it: a JWT pattern
-// that admits a whitespace-JSON lead started its leftmost match at a lead-shaped
-// run earlier on the line ("cacheKeyA" contains "eyA"), the validator rejected
-// that, and the real token inside it was never tried.
-//
-// When nothing is vetoed the locations are returned untouched, so a rule whose
-// matches all validate reports exactly what it did before. Otherwise the scan
-// is redone: a match that validates is kept and the scan resumes at its end, as
-// FindAll would; a vetoed one resumes one byte after its START, so an
-// overlapping later match is found.
-//
-// Resuming mid-text loses the preceding byte that `\b`, `^` and `\B` read. A
-// candidate found at the very start of a resumed slice is therefore re-checked
-// against the anchored form `\A(?s:.)(?:pattern)` over one byte of context; it
-// has the same capture groups, so submatch indices carry over.
-//
-// The predicate is called once per distinct span, however often the rescan
-// meets it, so a rule sees each candidate exactly once.
-func (m *RegexMatcher) revalidate(re *regexp.Regexp, rule *Rule, content []byte, locs [][]int, sub bool) [][]int {
-	verdicts := map[[2]int]bool{}
-	ok := func(loc []int) bool {
-		k := [2]int{loc[0], loc[1]}
-		v, seen := verdicts[k]
-		if !seen {
-			v = rule.ValidateMatch(string(content[loc[0]:loc[1]]))
-			verdicts[k] = v
-		}
-		return v
-	}
-	vetoed := false
-	for _, loc := range locs {
-		if !ok(loc) {
-			vetoed = true
-		}
-	}
-	if !vetoed {
-		return locs
-	}
-	anchored, err := m.regexCache.compile(`\A(?s:.)(?:`+rule.Pattern+`)`, "anchored pattern")
-	if err != nil {
-		return nil
-	}
-	find := func(r *regexp.Regexp, b []byte) []int {
-		if sub {
-			return r.FindSubmatchIndex(b)
-		}
-		return r.FindIndex(b)
-	}
-	var out [][]int
-	for pos := 0; pos <= len(content); {
-		loc := find(re, content[pos:])
-		if loc == nil {
-			break
-		}
-		offset(loc, pos)
-		if loc[0] == pos && pos > 0 {
-			ctx := find(anchored, content[pos-1:])
-			if ctx == nil {
-				pos++
-				continue
-			}
-			offset(ctx, pos-1)
-			ctx[0] = pos // the context byte is not part of the match
-			loc = ctx
-		}
-		if !ok(loc) {
-			pos = loc[0] + 1
-			continue
-		}
-		out = append(out, loc)
-		if loc[1] > loc[0] {
-			pos = loc[1]
-		} else {
-			pos = loc[1] + 1
-		}
-	}
-	return out
-}
-
-// offset shifts every set index of a match by d.
-func offset(loc []int, d int) {
-	for i := range loc {
-		if loc[i] >= 0 {
-			loc[i] += d
-		}
-	}
 }
 
 // filterByPublisherAllowlist drops matches whose `<publisher>/<name>@<ref>`

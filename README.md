@@ -140,9 +140,9 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1497 built-in rules** across five analyzer suites:
+Nox ships with **1498 built-in rules** across five analyzer suites:
 
-### Secrets (883 rules)
+### Secrets (884 rules)
 
 Detects hardcoded secrets, API keys, tokens, and credentials across **25+ categories** (competitive with TruffleHog):
 

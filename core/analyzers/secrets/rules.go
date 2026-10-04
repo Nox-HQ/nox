@@ -49,6 +49,18 @@ type secretRule struct {
 	genericFallback bool
 }
 
+// sec371Pattern is SEC-371's JWT pattern, defined once. SEC-371 leaves every
+// Supabase project key to SEC-100 and SEC-105, which is only safe while they
+// match at least what SEC-371 matches: a key reached by SEC-371's pattern
+// alone would be excluded there and claimed by nothing. So both take this
+// definition rather than a copy, and TestSupabaseRulesCoverEverythingSEC371Matches
+// holds the invariant on the built rule set.
+const sec371Pattern = `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`
+
+// sec371Keywords returns SEC-371's keyword pre-filter. A function, not a
+// shared slice, so a rule that appends to its copy cannot change another's.
+func sec371Keywords() []string { return []string{"eyj"} }
+
 // builtinSecretRules returns all built-in secret detection rules.
 func builtinSecretRules() []*rules.Rule {
 	defs := []secretRule{
@@ -1100,7 +1112,7 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     sec371Pattern,
 			description: "Supabase service_role key detected (bypasses Row Level Security)",
 			cwe:         "CWE-798", keywords: sec371Keywords(),
-			validate:    func(m string) bool { return isSEC371Match(m) && isSupabaseServiceRoleKey(m) },
+			validate:    isSupabaseServiceRoleKey,
 			remediation: "Rotate the key in the Supabase dashboard now: it bypasses every Row Level Security policy and gives full access to the project's data. Keep it server-side only (never in a browser, a shipped app or source control); load it from a secrets manager or environment, and prefer an sb_secret_ key.",
 			references:  []string{"https://supabase.com/docs/guides/getting-started/api-keys", "https://supabase.com/docs/guides/auth/jwt-fields", "https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -1156,7 +1168,7 @@ func builtinSecretRules() []*rules.Rule {
 			pattern:     `(?:` + sec371Pattern + `)|\bsb_publishable_[A-Za-z0-9_-]{16,}`,
 			description: "Supabase anon key (public by design; access is governed by Row Level Security)",
 			cwe:         "CWE-284", keywords: append(sec371Keywords(), supabasePublishablePrefix),
-			validate:    isSEC105Match,
+			validate:    isSupabaseAnonKey,
 			remediation: "Not a secret: Supabase documents the anon (publishable) key as safe to expose in client code, so there is nothing to rotate. Anyone holding it reaches exactly what Row Level Security allows: confirm RLS is enabled, with policies for the anon role, on every table and storage bucket it can query.",
 			references:  []string{"https://supabase.com/docs/guides/getting-started/api-keys", "https://supabase.com/docs/guides/auth/jwt-fields", "https://cwe.mitre.org/data/definitions/284.html"},
 		},
@@ -3376,13 +3388,10 @@ func builtinSecretRules() []*rules.Rule {
 		// the claims. A real JWT clears both, so its match and fingerprint
 		// are unchanged.
 		//
-		// eyJ is only the compact layout. RFC 7515/7519 let the header and
-		// claims JSON carry whitespace, and a pretty-printed, spaced or empty
-		// one encodes otherwise (see jwt_layout.go), so no JWT rule saw it.
-		// The pattern now admits those leads; isSEC371Match keeps compact
-		// matches as they were (an unsecured header aside) and requires every
-		// other one to decode as a signed JWT.
-		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: sec371Pattern, description: "Detected JWT token", cwe: "CWE-798", keywords: sec371Keywords(), validate: func(m string) bool { return isSEC371Match(m) && isNotSupabaseProjectKey(m) }, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// An alg "none" header is an Unsecured JWT (RFC 7519 §6): anyone can
+		// mint one, so it is not a credential (#820), whatever its case. The
+		// compact layout only; SEC-952 owns the others (jwt_layout.go).
+		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: sec371Pattern, description: "Detected JWT token", cwe: "CWE-798", keywords: sec371Keywords(), validate: func(m string) bool { return isNotUnsecuredJWT(m) && isNotSupabaseProjectKey(m) }, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-372", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws\.com/[^\s]+`, description: "AWS S3 object URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-373", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "S3 bucket URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3_bucket"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -4095,6 +4104,27 @@ func builtinSecretRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 			secretShape: true, minEntropy: 3.5, shapeGroup: "1", genericFallback: true,
 			validate: isRandomLookingValue,
+		},
+		{
+			// A JWT whose header or claims JSON is not compact: pretty-printed,
+			// spaced, empty, or led by a non-letter key. RFC 7515 §3 and RFC
+			// 7519 §7.1 allow that whitespace with "no canonicalization", but
+			// such JSON does not encode as eyJ, so no JWT rule saw it. A rule
+			// of its own rather than a wider SEC-371: the widened leads are
+			// three-character base64 runs any text can contain, and a false
+			// start there must cost only this rule, never a compact token.
+			// Every match must decode as a signed JWT (isSignedJWT). Supabase
+			// keys are not excluded: Supabase issues them compact, so one in
+			// this layout is reported as a JWT rather than reclassified.
+			// The limit: a non-compact JWT glued directly after a lead-shaped
+			// run starts the match early, fails the decode, and is missed.
+			id: "SEC-952", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			pattern:     nonCompactJWTPattern,
+			description: "JWT in a non-compact JSON layout",
+			cwe:         "CWE-798", keywords: nonCompactJWTKeywords(),
+			validate:    isSignedJWT,
+			remediation: "Rotate the exposed credential immediately",
+			references:  []string{"https://www.rfc-editor.org/rfc/rfc7519#section-7.1", "https://cwe.mitre.org/data/definitions/798.html"},
 		},
 	}
 

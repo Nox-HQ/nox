@@ -41,7 +41,7 @@ func rawPayloadJWT(payload string) string {
 
 // prettySupabaseJWT is seededSupabaseJWT with a pretty-printed header and
 // payload: RFC-valid JSON that does not encode as eyJ, which the shared JWT
-// pattern admits since #826. The role claim must not depend on the layout.
+// pattern does not cover: SEC-952 reports it (#826).
 func prettySupabaseJWT(seed int64, payload map[string]any) string {
 	r := rand.New(rand.NewSource(seed))
 	enc := base64.RawURLEncoding
@@ -143,12 +143,15 @@ func TestSupabaseKeysReportWhatTheyAre(t *testing.T) {
 		{"publishable key in a browser client", "p2.ts", `createClient(url, "sb_publishable_` + seededBody(106, sbAlphabet, 40) + `");` + "\n", want{"SEC-105", findings.SeverityLow}},
 		// Controls: only a Supabase project key is reclassified.
 		{"another issuer's anon-role JWT", "other.ts", `const token = "` + other + `";` + "\n", want{"SEC-371", findings.SeverityHigh}},
-		// The same claims with RFC-valid, non-compact JSON (#826): the widened
-		// JWT pattern reaches them, so the role rules must too.
-		{"pretty service_role key in prose", "pnotes.md", "Rotated key: `" + prettySvc + "`\n", want{"SEC-100", findings.SeverityCritical}},
-		{"pretty service_role key in the anon slot", "pmixup.env", "NEXT_PUBLIC_SUPABASE_ANON_KEY=" + prettySvc + "\n", want{"SEC-100", findings.SeverityCritical}},
-		{"pretty service_role key in server code", "padmin.ts", `const admin = createClient(url, "` + prettySvc + `");` + "\n", want{"SEC-100", findings.SeverityCritical}},
-		{"pretty anon key in a browser client", "pclient.ts", `createClient(url, "` + prettyAnon + `");` + "\n", want{"SEC-105", findings.SeverityLow}},
+		// The same claims with RFC-valid, non-compact JSON (#826). Supabase
+		// issues its keys compact, so SEC-100/105 keep SEC-371's compact
+		// pattern; a non-compact one is reported as a JWT by SEC-952, at high,
+		// whatever its role: nothing vanishes and nothing is downgraded.
+		{"pretty service_role key in prose", "pnotes.md", "Rotated key: `" + prettySvc + "`\n", want{"SEC-952", findings.SeverityHigh}},
+		{"pretty service_role key in the anon slot", "pmixup.env", "NEXT_PUBLIC_SUPABASE_ANON_KEY=" + prettySvc + "\n", want{"SEC-952", findings.SeverityHigh}},
+		{"pretty service_role key in server code", "padmin.ts", `const admin = createClient(url, "` + prettySvc + `");` + "\n", want{"SEC-952", findings.SeverityHigh}},
+		{"pretty service_role key, name-bound", "psvc.env", "SUPABASE_SERVICE_ROLE_KEY=" + prettySvc + "\n", want{"SEC-952", findings.SeverityHigh}},
+		{"pretty anon key in a browser client", "pclient.ts", `createClient(url, "` + prettyAnon + `");` + "\n", want{"SEC-952", findings.SeverityHigh}},
 	}
 	for _, c := range cases {
 		got := line1Findings(t, c.file, c.body)

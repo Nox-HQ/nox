@@ -8,16 +8,15 @@ import (
 
 // A JWT's header and claims are JSON, and RFC 7515 §3 and RFC 7519 §7.1 allow
 // that JSON whitespace and line breaks with "no canonicalization". Only the
-// compact `{"` + letter encodes as eyJ, which is what every JWT rule anchored
-// on, so a signed token whose JSON was pretty-printed, spaced or empty was
-// matched by none of them: in prose and configuration it was not reported at
-// all, and in an assignment only the generic entropy rule saw it.
+// compact `{"` + letter encodes as eyJ, which is what SEC-371 and every other
+// JWT rule anchor on, so a signed token whose JSON was pretty-printed, spaced,
+// empty or led by a non-letter key was matched by none of them.
 //
-// The leads below are the base64url of the first bytes such JSON can start
-// with. Three input bytes become four characters, and the third character
-// depends on the byte after `{`:
+// SEC-952 reports those. The leads below are the base64url of the first bytes
+// such JSON can start with. Three input bytes become four characters, and the
+// third character depends on the byte after `{`:
 //
-//	{"  + key byte 0x40-0x7F   eyJ   (the compact form: letters, _ )
+//	{"  + key byte 0x40-0x7F   eyJ   (the compact form, SEC-371's)
 //	{"  + key byte 0x00-0x3F   eyI   (digits, $, -, space ...)
 //	{"  + key byte 0x80-0xFF   ey[KL] (a UTF-8 key)
 //	{   + space                ey[A-D]
@@ -31,63 +30,39 @@ import (
 // The model's limit: a run of two or more whitespace characters before the
 // object, other than CRLF, is not admitted. No JWT library observed emits one.
 //
-// The leads say where a JWT may begin, not that one does: every match that is
-// not the compact form must pass isSignedJWT, so the widened pattern cannot
-// report a lookalike the compact one would not.
+// SEC-952's pattern matches only tokens SEC-371's cannot: a non-compact header
+// lead, or a compact header followed by non-compact claims. So the two never
+// report one span, and a false start on a lead-shaped run (the leads are
+// three-character base64 runs any text can contain) can only cost SEC-952,
+// never a compact token.
 const (
-	jwtObjectLead = `ey[A-DI-L]|ew[k-r0-3]`
-	jwtSpaceLead  = `IH[s-v]|CX[s-v]|Cn[s-v]|DX[s-v]|DQp7`
-	jwtHeaderLead = `(?:` + jwtObjectLead + `|` + jwtSpaceLead + `)`
-	jwtClaimsLead = `(?:` + jwtObjectLead + `|` + jwtSpaceLead + `|e3[0-3])`
+	ncObjectLead = `ey[A-DIKL]|ew[k-r0-3]`
+	ncSpaceLead  = `IH[s-v]|CX[s-v]|Cn[s-v]|DX[s-v]|DQp7`
+	ncLead       = ncObjectLead + `|` + ncSpaceLead
+	jwtBody      = `[A-Za-z0-9_-]`
 
-	// sec371Pattern is SEC-371's JWT pattern, defined once: SEC-100 and
-	// SEC-105 take it too, because SEC-371 leaves every Supabase project key
-	// to them, which is only safe while they match at least what SEC-371
-	// matches (TestSupabaseRulesCoverEverythingSEC371Matches).
-	//
-	// The compact form's minimums are unchanged (11 after the header lead, 7
-	// after the claims lead), so a compact JWT's match and fingerprint do not
-	// move; only the empty-object claims lead may stand alone.
-	sec371Pattern = jwtHeaderLead + `[A-Za-z0-9_-]{11,}\.` +
-		`(?:e3[0-3][A-Za-z0-9_-]*|` + jwtClaimsLead + `[A-Za-z0-9_-]{7,})` +
-		`\.[A-Za-z0-9_-]+`
+	// Claims after a non-compact header: any lead, the compact one included.
+	anyClaims = `(?:e3[0-3]` + jwtBody + `*|(?:eyJ|` + ncLead + `)` + jwtBody + `{7,})`
+	// Claims after a compact header: only a non-compact lead, or SEC-371
+	// would match it too.
+	ncClaims = `(?:e3[0-3]` + jwtBody + `*|(?:` + ncLead + `)` + jwtBody + `{7,})`
+
+	// The minimums are SEC-371's: 11 after the header lead, 7 after the
+	// claims lead; only the empty-object claims lead may stand alone.
+	nonCompactJWTPattern = `(?:(?:` + ncLead + `)` + jwtBody + `{11,}\.` + anyClaims +
+		`|eyJ` + jwtBody + `{11,}\.` + ncClaims + `)\.` + jwtBody + `+`
 )
 
-// sec371Keywords returns the file pre-filter: every header lead, lowercased,
-// so every JWT the pattern can match contains one of them. A function, not a
-// shared slice, so a rule that appends to its copy cannot change another's.
-func sec371Keywords() []string {
+// nonCompactJWTKeywords is SEC-952's file pre-filter: every header lead the
+// pattern can start with, lowercased, eyj included for the compact-header,
+// non-compact-claims case.
+func nonCompactJWTKeywords() []string {
 	return []string{
 		"eya", "eyb", "eyc", "eyd", "eyi", "eyj", "eyk", "eyl",
 		"ewk", "ewl", "ewm", "ewn", "ewo", "ewp", "ewq", "ewr", "ew0", "ew1", "ew2", "ew3",
 		"ihs", "iht", "ihu", "ihv", "cxs", "cxt", "cxu", "cxv",
 		"cns", "cnt", "cnu", "cnv", "dxs", "dxt", "dxu", "dxv", "dqp7",
 	}
-}
-
-// isSEC371Match keeps SEC-371's compact matches as they were and holds every
-// other layout to the structure that makes it a signed JWT.
-//
-// A compact match is not decoded beyond its header, on purpose: since #819 a
-// truncated signature or an undecodable claims segment still leaks enough to
-// report, and the compact pattern's minimums already carry the claim. What a
-// compact match may not be is an unsecured JWT (RFC 7519 §6): alg "none" is
-// minted by anyone, so it is not a credential in any layout (#820).
-func isSEC371Match(m string) bool {
-	header, rest, _ := strings.Cut(m, ".")
-	if strings.HasPrefix(header, "eyJ") && strings.HasPrefix(rest, "eyJ") {
-		return !isUnsecuredJWTHeader(header)
-	}
-	return isSignedJWT(m)
-}
-
-// isSEC105Match is SEC-105's claim: a publishable key by its documented
-// prefix, or an anon key that is a JWT SEC-371 would report.
-func isSEC105Match(m string) bool {
-	if strings.HasPrefix(strings.Trim(m, `"'`), supabasePublishablePrefix) {
-		return isSupabaseAnonKey(m)
-	}
-	return isSEC371Match(m) && isSupabaseAnonKey(m)
 }
 
 // isUnsecuredJWTHeader reports whether a header segment decodes to a JOSE
@@ -102,9 +77,9 @@ func isUnsecuredJWTHeader(seg string) bool {
 	return strings.EqualFold(alg, "none")
 }
 
-// isNotUnsecuredJWT is the veto SEC-084 and SEC-251, the other JWT rules,
-// share with SEC-371: whatever else a match is, an alg-none header is not a
-// credential.
+// isNotUnsecuredJWT is the veto SEC-371, SEC-084 and SEC-251 share: an alg
+// "none" header is an Unsecured JWT (RFC 7519 §6), minted by anyone, so it is
+// not a credential (#820).
 func isNotUnsecuredJWT(m string) bool {
 	header, _, _ := strings.Cut(strings.TrimLeft(m, "\"'"), ".")
 	return !isUnsecuredJWTHeader(header)
@@ -112,8 +87,8 @@ func isNotUnsecuredJWT(m string) bool {
 
 // isSignedJWT reports whether s is a JWS compact serialisation whose header is a
 // JSON object naming a signing algorithm other than "none", whose claims set is
-// a JSON object, and whose signature is present. An unsecured JWT (RFC 7519 §6)
-// is minted by anyone, so it is not a credential (see #820).
+// a JSON object, and whose signature is present. It is SEC-952's whole claim,
+// and dedup's way to recognise a JWT that does not start eyJ.
 func isSignedJWT(s string) bool {
 	parts := strings.Split(s, ".")
 	if len(parts) != 3 || parts[2] == "" {

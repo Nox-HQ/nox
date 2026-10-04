@@ -427,7 +427,10 @@ var canonicalOwners = []ownerEntry{
 	// A Supabase project key is a JWT whose decoded role SEC-100 or SEC-105
 	// claims more precisely than SEC-371 can (supabase.go), so all three own
 	// the prefix; each rule's validator decides which one a token is.
-	{"eyJ", owned("SEC-371", "SEC-100", "SEC-105")}, // JSON Web Token
+	// SEC-952 owns a JWT in a non-compact layout, which may still start eyJ
+	// (a compact header over spaced claims); it and SEC-371 never match one
+	// span, so naming both cannot make two owners report one token.
+	{"eyJ", owned("SEC-371", "SEC-100", "SEC-105", "SEC-952")}, // JSON Web Token
 }
 
 // ownersForValue returns the owner rule-ID set for a matched value, or nil if
@@ -443,7 +446,7 @@ func ownersForValue(value string) map[string]struct{} {
 	// A JWT whose JSON is not compact does not start eyJ (see jwt_layout.go),
 	// and its leads are three-character base64 runs any random key can start
 	// with, so they cannot be prefixes here. Structure can: a value that
-	// decodes as a signed JWT has SEC-371 as its owner, whatever its lead.
+	// decodes as a signed JWT has the JWT owners, whatever its lead.
 	if isSignedJWT(strings.TrimRight(v, `"'`)) {
 		return jwtOwners
 	}
