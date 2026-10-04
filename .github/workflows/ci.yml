@@ -472,14 +472,21 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # `-run '^$'` runs the fuzz target alone. Without it `go test -fuzz`
+      # first runs every ordinary test in the package under the same
+      # -timeout, and core/rules' TestPrefixPlanMatchesFindAll alone takes
+      # 25s-4m depending on load: the job timed out before fuzzing began, on
+      # main, at least since 7b15aa9. The ordinary tests run in the Test job.
+      # Target names are anchored because -fuzz is a regex that must match
+      # exactly one fuzz function.
       - name: Fuzz rule engine
-        run: go test -fuzz FuzzScanFile -fuzztime 30s -timeout 120s ./core/rules/
+        run: go test -run '^$' -fuzz '^FuzzScanFile$' -fuzztime 30s -timeout 120s ./core/rules/
 
       - name: Fuzz keyword matching
-        run: go test -fuzz FuzzContainsAnyKeyword -fuzztime 30s -timeout 120s ./core/rules/
+        run: go test -run '^$' -fuzz '^FuzzContainsAnyKeyword$' -fuzztime 30s -timeout 120s ./core/rules/
 
       - name: Fuzz secrets analyzer
-        run: go test -fuzz FuzzScanArtifacts -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
+        run: go test -run '^$' -fuzz '^FuzzScanArtifacts$' -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
 
   deps-audit:
     name: Nox dependency CVE audit
