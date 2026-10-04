@@ -3119,16 +3119,26 @@ func builtinSecretRules() []*rules.Rule {
 			// reach here because this pattern is not anchorless (concrete-
 			// witness research, #814). A bare legacy token is
 			// byte-indistinguishable from a commit SHA, so the evidence for
-			// one has to be the name it is assigned to: a sourcegraph-named
-			// credential variable, or src-cli's SRC_ACCESS_TOKEN.
+			// one has to be the slot it is written into. See
+			// sourcegraphLegacyBinding for the slots.
 			//
-			// The sgp_ alternatives are unchanged, so the match text, and the
-			// fingerprint, of every prefixed finding is too.
-			pattern:     `(?i)\b(\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40}|(?:sourcegraph[a-z0-9_.\-]*(?:token|key|secret|password|credential)|src_access_token)["']?[ \t]*[=:][ \t]*["']?[a-fA-F0-9]{40})\b)(?:[\x60'"\s;]|\\[nr]|$)`,
+			// The sgp_ alternatives match exactly what they did before, so
+			// prefixed findings keep their match text and fingerprints. A
+			// legacy finding's match now starts at its binding, so its
+			// fingerprint changes: a baseline or waiver written against one
+			// re-fires once.
+			pattern: `(?i)` + sourcegraphLegacyBinding + `([a-fA-F0-9]{40})(?:[\x60'"\s;,}\]]|\\[nr]|$)` +
+				`|\b(\b(sgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}|sgp_[a-fA-F0-9]{40})\b)(?:[\x60'"\s;]|\\[nr]|$)`,
 			description: "Sourcegraph access token detected",
 			// src_access_token is a keyword so a file that only exports
 			// src-cli's variable is scanned at all.
-			cwe: "CWE-798", keywords: []string{"sgp_", "sourcegraph", "src_access_token"},
+			//
+			// The binding is evidence for the name, not the value, so the
+			// value is still judged on its own: see isSourcegraphLegacyValue.
+			// The secret-shape filter cannot do that here -- it rejects every
+			// 40-hex string as a commit SHA (rules/entropy.go), which is all a
+			// legacy token is -- so this rule keeps the provider tier it had.
+			cwe: "CWE-798", keywords: []string{"sgp_", "sourcegraph", "src_access_token"}, validate: isSourcegraphLegacyValue,
 			remediation: "Imported from Gitleaks: sourcegraph-access-token",
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
@@ -4248,6 +4258,59 @@ func bindVendorKeyword(keywords []string, shape string) string {
 		return shape
 	}
 	return `(?i)\b(?:` + strings.Join(alts, "|") + `)[a-z0-9_ .\-]*["']?[ \t]*[=:][ \t]*["']?(` + shape + `)`
+}
+
+// sourcegraphCredentialName is a name whose meaning is "a Sourcegraph
+// credential": sourcegraph, at most one qualifier, then a credential noun,
+// anywhere in an identifier (APP_SOURCEGRAPH_TOKEN), or src-cli's
+// SRC_ACCESS_TOKEN. It is deliberately narrower than bindVendorKeyword's
+// `<vendor>[a-z0-9_ .\-]*`, under which sourcegraph_commit and
+// sourcegraph_cache_key are credential names and a commit SHA a credential --
+// the false positive this binding exists to remove.
+const sourcegraphCredentialName = `(?:[a-z0-9]+[_.\-])*(?:sourcegraph[_.\-]?(?:(?:access|api|auth|personal|user)[_.\-]?)?(?:token|key|secret|password|pat)|src[_.\-]?access[_.\-]?token)`
+
+// sourcegraphLegacyBinding is the set of slots in which an unprefixed 40-hex
+// value is a Sourcegraph token rather than a digest. Each ends where the value
+// begins, so the value is the next capture group.
+//
+//   - an assignment to a credential name: `=`, `:`, `:=`, Ruby's `=>`, with the
+//     name optionally quoted or closing a subscript (`config[:name] =>`);
+//   - nested YAML: a `token` key inside a `sourcegraph:` block (the block is
+//     indented lines, so a dedented sibling ends it);
+//   - a Kubernetes env entry: `name: <credential name>` with `value:` on the
+//     next line;
+//   - src-cli's config file, whose struct reads `json:"accessToken"`
+//     (sourcegraph/src-cli cmd/src/main.go, configFromFile). This one is bound
+//     by the key alone, inside a file the keyword gate already established
+//     mentions Sourcegraph; it is case-sensitive so `access_token` in an
+//     unrelated block of the same file is not taken for it. A 40-hex token of
+//     another vendor written there would be attributed to Sourcegraph -- still
+//     a credential, under the wrong name.
+const sourcegraphLegacyBinding = `(?:` +
+	`\b` + sourcegraphCredentialName + `[\]"']{0,2}[ \t]*(?:=>|:=|[=:])[ \t]*["']?` +
+	`|\bsourcegraph[ \t]*:[ \t]*\r?\n(?:[ \t]+[^\r\n]*\r?\n){0,8}?[ \t]+(?:access[_.\-]?)?token[ \t]*:[ \t]*["']?` +
+	`|\bname[ \t]*:[ \t]*["']?` + sourcegraphCredentialName + `["']?[ \t]*\r?\n[ \t]*-?[ \t]*value[ \t]*:[ \t]*["']?` +
+	`|"(?-i:accessToken)"[ \t]*:[ \t]*"` +
+	`)`
+
+var sourcegraphHexRun = regexp.MustCompile(`[a-fA-F0-9]{40}`)
+
+// isSourcegraphLegacyValue keeps a bound legacy match only when its 40-hex
+// value is not a placeholder or a documentation example. The placeholder
+// refiner reads the whole match, which for a bound rule now starts at the
+// variable name, so on its own it no longer recognises
+// `sourcegraph_token: 0000…` -- the value has to be asked directly. An sgp_
+// match passes through: its handling is unchanged.
+func isSourcegraphLegacyValue(match string) bool {
+	if strings.Contains(strings.ToLower(match), "sgp_") {
+		return true
+	}
+	runs := sourcegraphHexRun.FindAllString(match, -1)
+	if len(runs) == 0 {
+		return true
+	}
+	v := runs[len(runs)-1]
+	return !placeholderCandidate(v) && !isPublishedOrExampleValue(v)
 }
 
 func isAnchorlessPattern(pattern string) bool {
