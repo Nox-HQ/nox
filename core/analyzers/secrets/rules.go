@@ -775,7 +775,19 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-077", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:     `AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}`,
+			// The C2SP age spec defines two identities, both Bech32 over a
+			// 32-byte payload (58 data characters with the checksum): X25519
+			// with HRP AGE-SECRET-KEY- and the ML-KEM768-X25519 hybrid with
+			// AGE-SECRET-KEY-PQ-. This rule predates the hybrid and matched
+			// only the first, so the spec's own PQ example went unreported in
+			// an age-keygen file (concrete-witness research, #814).
+			//
+			// Bech32 is single-case in EITHER case (BIP-173), so a lowercase
+			// identity is an identity; nothing known writes one, and covering
+			// it costs no precision behind a prefix this specific. Mixed case
+			// is not Bech32 and is not matched. The checksum is verified as
+			// evidence, not as a gate: see verifyAgeIdentity.
+			pattern:     `AGE-SECRET-KEY-(?:PQ-)?1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}|age-secret-key-(?:pq-)?1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}`,
 			description: "Age secret key detected",
 			cwe:         "CWE-321", keywords: []string{"age-secret-key"},
 			remediation: "Remove the secret key from source and regenerate with 'age-keygen'.",

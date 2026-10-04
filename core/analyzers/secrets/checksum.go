@@ -140,3 +140,75 @@ func verifyJWT(value string) (consistent, applicable bool) {
 	// two cannot disagree about what a JWT is.
 	return lexctx.LooksLikeJWT(value), true
 }
+
+// bech32Charset is BIP-173's data alphabet, in value order.
+const bech32Charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+// ageIdentityHRPs are the C2SP age spec's two identity HRPs, lowercased.
+var ageIdentityHRPs = []string{"age-secret-key-", "age-secret-key-pq-"}
+
+// ageIdentityDataLen is a 32-byte payload in 5-bit groups (52) plus the
+// 6-character checksum.
+const ageIdentityDataLen = 58
+
+// verifyAgeIdentity reports whether value is an age identity whose Bech32
+// checksum verifies, and whether the check APPLIED.
+//
+// It is the third deterministic signal here and the best-founded: the GitHub
+// checksum's input and digit order had to be established against published
+// tokens, while Bech32 is specified completely by BIP-173, and age.md names it
+// ("Bech32 ... the checksum is always computed over the lowercase string").
+// Three-valued like the others: a value that is not single-case, does not
+// carry an age identity HRP, or does not carry exactly 58 Bech32 data
+// characters is not something this can speak about.
+func verifyAgeIdentity(value string) (consistent, applicable bool) {
+	v := strings.Trim(value, `"'`)
+	lower := strings.ToLower(v)
+	if v != lower && v != strings.ToUpper(v) {
+		return false, false // mixed case is not Bech32
+	}
+	sep := strings.LastIndexByte(lower, '1')
+	if sep < 0 {
+		return false, false
+	}
+	hrp, data := lower[:sep], lower[sep+1:]
+	known := false
+	for _, h := range ageIdentityHRPs {
+		known = known || hrp == h
+	}
+	if !known || len(data) != ageIdentityDataLen {
+		return false, false
+	}
+	values := make([]byte, 0, 2*len(hrp)+1+len(data))
+	for i := range len(hrp) {
+		values = append(values, hrp[i]>>5)
+	}
+	values = append(values, 0)
+	for i := range len(hrp) {
+		values = append(values, hrp[i]&31)
+	}
+	for i := range len(data) {
+		d := strings.IndexByte(bech32Charset, data[i])
+		if d < 0 {
+			return false, false
+		}
+		values = append(values, byte(d))
+	}
+	return bech32Polymod(values) == 1, true
+}
+
+// bech32Polymod is BIP-173's checksum function.
+func bech32Polymod(values []byte) uint32 {
+	gen := [5]uint32{0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3}
+	chk := uint32(1)
+	for _, v := range values {
+		top := chk >> 25
+		chk = (chk&0x1ffffff)<<5 ^ uint32(v)
+		for i := range 5 {
+			if top>>i&1 == 1 {
+				chk ^= gen[i]
+			}
+		}
+	}
+	return chk
+}
