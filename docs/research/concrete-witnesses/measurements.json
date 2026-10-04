@@ -1,0 +1,1346 @@
+{
+ "harness": {
+  "candidates": 1332,
+  "by_direction": {
+   "agree": 692,
+   "fp": 494,
+   "fn": 124,
+   "claim-gap": 22
+  }
+ },
+ "classes": [
+  {
+   "format": "github-token",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 12,
+   "replayed": 12,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-017",
+    "SEC-215",
+    "SEC-216",
+    "SEC-217"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "30980a792aaee27c",
+    "7d9326a2938497e3",
+    "9367888dfb624fcd",
+    "9776a95015a66f30"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "github-token",
+   "direction": "fp",
+   "class": "no-right-boundary",
+   "witnesses": 30,
+   "replayed": 30,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-003",
+    "SEC-017",
+    "SEC-217"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "10dc57690a7b4633",
+    "1278a6d5ca0fb1c4",
+    "278d1dd972f871c9",
+    "2f7edc2cd978bc63",
+    "3636c3a4c761dc9b",
+    "3bd208675b605738",
+    "56075961d148982b",
+    "778536260ddb0252",
+    "94afe0d9ad1b218c",
+    "f7059cbd2e703de9"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "github-token",
+   "direction": "fp",
+   "class": "underscore-in-body",
+   "witnesses": 12,
+   "replayed": 12,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-003",
+    "SEC-017"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "33426ab7bb9b18e8",
+    "4fc457408b949a12",
+    "c71072bc51be2198",
+    "debb091c2021f7dd"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "github-token",
+   "direction": "fp",
+   "class": "length-unbounded",
+   "witnesses": 18,
+   "replayed": 18,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-003",
+    "SEC-017"
+   ],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "3d6d39865402d0d0",
+    "8abecfc53d8ac69e",
+    "9cba283a9839d317",
+    "a886e2980f8acbfe",
+    "aec77552ff97345e",
+    "f7c2e64aa20aa529"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "aws-access-key-id",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "aws-credentials-file"
+   ],
+   "rules": [
+    "SEC-508",
+    "SEC-509"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "65ec5def85186b84",
+    "66f39f18f6233c9b",
+    "703eb78ae52e4286",
+    "7bde9634b3336fa3"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "aws-access-key-id",
+   "direction": "fn",
+   "class": "reference-under-specified",
+   "witnesses": 103,
+   "replayed": 103,
+   "hosts": [
+    "aws-credentials-file",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [],
+   "origins": [
+    "detector",
+    "ref-mutant",
+    "ref-valid"
+   ],
+   "inputs": [
+    "009276fdfed410bb",
+    "01b0155689937476",
+    "06ac10c041147d05",
+    "0f9259202d221480",
+    "1148a6c1a9c7ff8e",
+    "2d1cfcbbf341f8db",
+    "44db8befb0db65c3",
+    "5c0bc22a5fd7b95b",
+    "6239ef63c5883d07",
+    "6399e8902937800b",
+    "652af67709cea4b1",
+    "6e14ad8930709053",
+    "716b5d42d17d115b",
+    "7c86e5d418d36a6c",
+    "8244752adc20542f",
+    "835336ecc576e3a1",
+    "8ada66d65b7d90ad",
+    "9d4869d08851d44e",
+    "a0993519afd254da",
+    "a48a145b4fb10543",
+    "a5a9130b04effa17",
+    "bd520707c526527c",
+    "be88e0a84753d7c7",
+    "c1977fa84b8ba419",
+    "d5343ff56fd0e3b6",
+    "d9033e07a51f7b76",
+    "d9904c6299a0cb42",
+    "e0ef9cf769c3e553",
+    "ef519f6813546c47",
+    "f75939c2fa140f31"
+   ],
+   "label": "ref-mistake"
+  },
+  {
+   "format": "aws-access-key-id",
+   "direction": "fp",
+   "class": "undocumented-prefix",
+   "witnesses": 8,
+   "replayed": 8,
+   "hosts": [
+    "aws-credentials-file",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-001"
+   ],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "24eb4d0c3a6d2e80",
+    "f29f01eb76127bfc"
+   ],
+   "label": "unresolved"
+  },
+  {
+   "format": "aws-access-key-id",
+   "direction": "fn",
+   "class": "placeholder-filtered",
+   "witnesses": 6,
+   "replayed": 6,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "57028a916a4ba4e7",
+    "f23d88bb299a3591"
+   ],
+   "label": "ref-mistake"
+  },
+  {
+   "format": "twilio-api-key-sid",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 24,
+   "replayed": 24,
+   "hosts": [
+    "dotenv",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-057"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "1df21346695ec525",
+    "29db6207e710f171",
+    "3263cacf72f12133",
+    "41ce4407aa04d64b",
+    "8b3e11b5e8eac8b7",
+    "8c625fd058629f33"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "twilio-api-key-sid",
+   "direction": "fp",
+   "class": "no-right-boundary",
+   "witnesses": 16,
+   "replayed": 16,
+   "hosts": [
+    "dotenv",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-057"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "22c9397f2bda0c8e",
+    "37a05080e87ca4ab",
+    "4c2295400a663183",
+    "c275549301a90d52"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "aws-sns-topic-arn",
+   "direction": "fn",
+   "class": "keyword-gate",
+   "witnesses": 2,
+   "replayed": 2,
+   "hosts": [
+    "py-quoted"
+   ],
+   "rules": [],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "24122783b64a9535",
+    "dba410003903f686"
+   ],
+   "label": "unresolved"
+  },
+  {
+   "format": "aws-sns-topic-arn",
+   "direction": "fp",
+   "class": "literal-prefix-no-arn",
+   "witnesses": 7,
+   "replayed": 7,
+   "hosts": [
+    "py-quoted-aws_sns-name"
+   ],
+   "rules": [
+    "SEC-519"
+   ],
+   "origins": [
+    "detector",
+    "ref-mutant"
+   ],
+   "inputs": [
+    "a3b6d24651ebe995",
+    "c6a5428a4c8dfb8f",
+    "f8d718a199e22762"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "aws-sns-topic-arn",
+   "direction": "fn",
+   "class": "partition-unreported",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "py-quoted",
+    "py-quoted-aws_sns-name"
+   ],
+   "rules": [],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "95006cd2b9c395c6",
+    "fd755062e4b015f8"
+   ],
+   "label": "defect"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "age-keygen-file",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-077"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "45c465114965e625"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "fp",
+   "class": "no-right-boundary",
+   "witnesses": 8,
+   "replayed": 8,
+   "hosts": [
+    "age-keygen-file",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-077"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "6fd05c7d671402f9",
+    "da727879bfc31b72"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "fp",
+   "class": "checksum-unvalidated",
+   "witnesses": 24,
+   "replayed": 24,
+   "hosts": [
+    "age-keygen-file",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-077"
+   ],
+   "origins": [
+    "detector",
+    "ref-mutant"
+   ],
+   "inputs": [
+    "1c4740a72dcc34be",
+    "3b8ab0e60ec16d71",
+    "648cdb5bfde26560",
+    "6bd66aaa36e8537f",
+    "7b5f8253e909b178",
+    "d1c87ae73e93db98"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "claim-gap",
+   "class": "lowercase-only-generic",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-161",
+    "SEC-162"
+   ],
+   "origins": [
+    "ref-mutant",
+    "ref-valid"
+   ],
+   "inputs": [
+    "e79351a5ef0a50fb"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "fn",
+   "class": "lowercase-unreported",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "age-keygen-file",
+    "md-inline"
+   ],
+   "rules": [],
+   "origins": [
+    "ref-mutant",
+    "ref-valid"
+   ],
+   "inputs": [
+    "e79351a5ef0a50fb"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "claim-gap",
+   "class": "pq-hybrid-only-generic",
+   "witnesses": 2,
+   "replayed": 2,
+   "hosts": [
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-161"
+   ],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "75cd9d6e585e77f9"
+   ],
+   "label": "defect"
+  },
+  {
+   "format": "age-secret-key",
+   "direction": "fn",
+   "class": "pq-hybrid-unreported",
+   "witnesses": 2,
+   "replayed": 2,
+   "hosts": [
+    "age-keygen-file",
+    "md-inline"
+   ],
+   "rules": [],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "75cd9d6e585e77f9"
+   ],
+   "label": "defect"
+  },
+  {
+   "format": "pypi-api-token",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 12,
+   "replayed": 12,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "pypirc",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-046",
+    "SEC-302",
+    "SEC-503"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "1bebc2220b7e1d18",
+    "beeb6073c443f4d1",
+    "dbaad96eb8631d33"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "pypi-api-token",
+   "direction": "fp",
+   "class": "no-right-boundary",
+   "witnesses": 24,
+   "replayed": 24,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "pypirc",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-046",
+    "SEC-302",
+    "SEC-503"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "0dcdd80c9a057f53",
+    "1f905abb16a5ebd5",
+    "51757ca140decd8c",
+    "840f1dfa54bbcef9",
+    "8de0c9c0f7439510",
+    "a838a8e823f93937"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "pypi-api-token",
+   "direction": "fp",
+   "class": "partial-token",
+   "witnesses": 24,
+   "replayed": 24,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "pypirc",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-046",
+    "SEC-302",
+    "SEC-503"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "30e4d1fe386bea2d",
+    "58fdb9b9bc39d23c",
+    "75a735912966ea96",
+    "8998e3e06770d17c",
+    "92f7097f0ce8ab85",
+    "d399aa3b48253c52"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "pypi-api-token",
+   "direction": "fp",
+   "class": "base64-variant",
+   "witnesses": 4,
+   "replayed": 4,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "pypirc",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-046",
+    "SEC-302",
+    "SEC-503"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "b2959140220ea11c"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "pypi-api-token",
+   "direction": "fp",
+   "class": "structure-unvalidated",
+   "witnesses": 60,
+   "replayed": 60,
+   "hosts": [
+    "md-inline",
+    "py-quoted",
+    "pypirc",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-046",
+    "SEC-302",
+    "SEC-503"
+   ],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "1627a361e71a1c7d",
+    "24e9fed1999bbfb7",
+    "2d96f8036db0f8c6",
+    "3eb8ee29f8e15e67",
+    "4b587b777aa48d41",
+    "4c30bfa8d44ccfd8",
+    "50fe4a7746cfd788",
+    "5e1fb2a690ebfc28",
+    "89fa2f19ec9193ed",
+    "962cee5e4bb8af31",
+    "ad5d3678d97290a6",
+    "d351d58bab4992ce",
+    "fcafa155d9c1d461"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "claim-gap",
+   "class": "generic-entropy-wins-dedup",
+   "witnesses": 13,
+   "replayed": 13,
+   "hosts": [
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-161"
+   ],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "0b3ee243d80fda7c",
+    "2185a0f0b7528dcc",
+    "66222f3845d8b1f5",
+    "a3d714b28d49cbb9",
+    "af650431d317281a",
+    "c2d7d49c2105b415",
+    "dea06820034ae09e"
+   ],
+   "label": "defect"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "fp",
+   "class": "no-left-boundary",
+   "witnesses": 12,
+   "replayed": 12,
+   "hosts": [
+    "curl-bearer",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-084"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "44a9fc5c34f0fa2c",
+    "454a27eb7c79963b",
+    "cdaa9cf156d0c73a"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "fp",
+   "class": "unsecured-jwt-reported",
+   "witnesses": 24,
+   "replayed": 24,
+   "hosts": [
+    "curl-bearer",
+    "md-inline",
+    "py-quoted"
+   ],
+   "rules": [
+    "SEC-082",
+    "SEC-183",
+    "SEC-251"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "1155340380d5b145",
+    "173c7f0bf352d23e",
+    "57f2deb576cfbd3d",
+    "5aa801a01bd9faea",
+    "9d92e8c314aad2b8"
+   ],
+   "label": "unresolved"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "fp",
+   "class": "reference-tokenisation-too-strict",
+   "witnesses": 15,
+   "replayed": 15,
+   "hosts": [
+    "curl-bearer",
+    "md-inline",
+    "py-quoted"
+   ],
+   "rules": [
+    "SEC-082",
+    "SEC-084",
+    "SEC-183",
+    "SEC-251"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "32379d32423c2644",
+    "3ac396c48a570231",
+    "5a23bf3a2222e536",
+    "64b8c64f217475ff",
+    "89a9949a495cf7a6",
+    "a6628a165ac53575",
+    "e90aefe7c5d588ec"
+   ],
+   "label": "ref-mistake"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "fn",
+   "class": "rfc-valid-json-shape-unreported",
+   "witnesses": 3,
+   "replayed": 3,
+   "hosts": [
+    "md-inline"
+   ],
+   "rules": [],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "66222f3845d8b1f5",
+    "c2d7d49c2105b415",
+    "dea06820034ae09e"
+   ],
+   "label": "divergence"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "claim-gap",
+   "class": "other-specific-rule-owns",
+   "witnesses": 3,
+   "replayed": 3,
+   "hosts": [
+    "curl-bearer"
+   ],
+   "rules": [
+    "SEC-082",
+    "SEC-183"
+   ],
+   "origins": [
+    "ref-valid"
+   ],
+   "inputs": [
+    "66222f3845d8b1f5",
+    "c2d7d49c2105b415",
+    "dea06820034ae09e"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "jwt-jws-compact",
+   "direction": "fp",
+   "class": "structure-unvalidated",
+   "witnesses": 35,
+   "replayed": 35,
+   "hosts": [
+    "curl-bearer",
+    "md-inline",
+    "py-quoted",
+    "yaml-bare"
+   ],
+   "rules": [
+    "SEC-082",
+    "SEC-084",
+    "SEC-183",
+    "SEC-251"
+   ],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "07b6b52d3b04507a",
+    "1e918493add3f0e5",
+    "2152f27a8306fe1e",
+    "82c7bca2314f3b82",
+    "83ccb2b859a8aafe",
+    "94103010ab1f4ee8",
+    "a5474a04737c1cf4",
+    "bf3a1f3c1aa97404",
+    "cf394e18090a61ac",
+    "e2e2b87d8a823edf"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "pem-private-key",
+   "direction": "fp",
+   "class": "reference-format-not-proposition",
+   "witnesses": 40,
+   "replayed": 40,
+   "hosts": [
+    "json-escaped",
+    "raw-file",
+    "yaml-block-scalar"
+   ],
+   "rules": [
+    "SEC-004",
+    "SEC-162",
+    "SEC-299",
+    "SEC-390"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "02c4f96dc6299e6a",
+    "3a19fa5cb45fbae5",
+    "3bbdc00b3a96313c",
+    "48bf6a6651dabe89",
+    "5c8f749f229c3f67",
+    "65f7bcf3db5a5e67",
+    "6c5aa7960741bfcd",
+    "7059544a7c970b76",
+    "8d3a16224980c699",
+    "8fcefbd2a8d1165b",
+    "90fec32c97b8bc93",
+    "953f2fe4b37c7a92",
+    "a0fd2defd668c004",
+    "cbebaccebd25a11d",
+    "d56f528daa57240c",
+    "d5f416940e0bdd83"
+   ],
+   "label": "ref-mistake"
+  },
+  {
+   "format": "pem-private-key",
+   "direction": "fp",
+   "class": "partial-key-material",
+   "witnesses": 18,
+   "replayed": 18,
+   "hosts": [
+    "json-escaped",
+    "raw-file",
+    "yaml-block-scalar"
+   ],
+   "rules": [
+    "SEC-004",
+    "SEC-299",
+    "SEC-390"
+   ],
+   "origins": [
+    "ref-mutant"
+   ],
+   "inputs": [
+    "1539a818757acb7f",
+    "28ead85316aa7428",
+    "ae29d553264e6532",
+    "d3d2c911c1d033fb",
+    "dab5695ee607e79a",
+    "fcfc1699d64dba73"
+   ],
+   "label": "intentional"
+  },
+  {
+   "format": "pem-private-key",
+   "direction": "fp",
+   "class": "structure-unvalidated",
+   "witnesses": 59,
+   "replayed": 59,
+   "hosts": [
+    "json-escaped",
+    "raw-file",
+    "yaml-block-scalar"
+   ],
+   "rules": [
+    "SEC-004",
+    "SEC-299",
+    "SEC-390"
+   ],
+   "origins": [
+    "detector"
+   ],
+   "inputs": [
+    "06f00e53ee270036",
+    "0e49c5a339817bce",
+    "15708c5c4e9df515",
+    "225b953747846d63",
+    "2df1f898b9aa244e",
+    "3832a0b0e9db15f4",
+    "3b25e2151524db5d",
+    "3f541408ff2d8a2f",
+    "4e63c786bb5d3a7a",
+    "512d075961469a2a",
+    "51343f5a6e0e9602",
+    "5a1f06fb18a4e805",
+    "696ec907ad824e94",
+    "6bb1cbf8517490eb",
+    "715b1ace53d7e614",
+    "7ca235d5b74d2915",
+    "878d441f66fa4a07",
+    "8856d069a815f0c1",
+    "8973046dd3fdd499",
+    "9be412a10458f903",
+    "a399f9a56b7949e1",
+    "bc1a2d8c670ac09e",
+    "e61e4c5e388f69ee",
+    "ea67ca9eba8ee45a",
+    "ec879d8567b5e89c",
+    "ef62b76ba6af803e",
+    "f2db1c2d6e554321",
+    "f514f125f4eda2d4",
+    "fb97b78fef5d1c26"
+   ],
+   "label": "intentional"
+  }
+ ],
+ "http_values": {
+  "vendor_names": 736,
+  "files": 8832,
+  "by_rule": [
+   {
+    "rule": "SEC-161",
+    "witnesses": 202,
+    "replayed": 202,
+    "shapes": [
+     "js-conditional-get",
+     "json-fixture"
+    ],
+    "kinds": [
+     "etag-md5"
+    ],
+    "label": "intentional",
+    "note": "generic heuristic; a credential word anywhere on the line qualifies the value, so an ETag beside a key NAMED like a credential is reported"
+   },
+   {
+    "rule": "SEC-421",
+    "witnesses": 1,
+    "replayed": 1,
+    "shapes": [
+     "request-id-log"
+    ],
+    "kinds": [
+     "uuid"
+    ],
+    "label": "unresolved",
+    "note": "any UUID in a file naming azure_client; whether a client ID belongs in a credential scanner is a proposition question (deviance research, class 3)"
+   },
+   {
+    "rule": "SEC-335",
+    "witnesses": 1,
+    "replayed": 1,
+    "shapes": [
+     "http-dump"
+    ],
+    "kinds": [
+     "etag-sha1"
+    ],
+    "label": "defect",
+    "note": "bare 40-hex alternative gated by file keyword: any SHA-1 (ETag, git commit) in a file naming Sourcegraph"
+   }
+  ]
+ },
+ "smt_against_nox": [
+  {
+   "rule": "SEC-003",
+   "direction": "fp",
+   "len": 40,
+   "seconds": 0.09,
+   "nox_rules": [
+    "SEC-003"
+   ],
+   "replayed": true,
+   "input_sha256_16": "989b5d31ae455986"
+  },
+  {
+   "rule": "SEC-003",
+   "direction": "fp",
+   "len": 41,
+   "seconds": 0.09,
+   "nox_rules": [
+    "SEC-003"
+   ],
+   "replayed": true,
+   "input_sha256_16": "e8ac66aa076e46bf"
+  },
+  {
+   "rule": "SEC-003",
+   "direction": "fp",
+   "len": 42,
+   "seconds": 0.1,
+   "nox_rules": [
+    "SEC-003"
+   ],
+   "replayed": true,
+   "input_sha256_16": "2b3cf273ef0dd98e"
+  },
+  {
+   "rule": "SEC-003",
+   "direction": "fp",
+   "len": 43,
+   "seconds": 0.12,
+   "nox_rules": [
+    "SEC-003"
+   ],
+   "replayed": true,
+   "input_sha256_16": "587a36c61e6dc478"
+  },
+  {
+   "rule": "SEC-003",
+   "direction": "fp",
+   "len": 44,
+   "seconds": 0.11,
+   "nox_rules": [
+    "SEC-003"
+   ],
+   "replayed": true,
+   "input_sha256_16": "a0d71d59a6807a4b"
+  },
+  {
+   "rule": "SEC-003",
+   "direction": "fn",
+   "len": 40,
+   "seconds": 0.11,
+   "nox_rules": [
+    "SEC-217"
+   ],
+   "replayed": false,
+   "input_sha256_16": "f5da433f3764833c"
+  },
+  {
+   "rule": "SEC-057",
+   "direction": "fp",
+   "len": 35,
+   "seconds": 0.07,
+   "nox_rules": [
+    "SEC-057"
+   ],
+   "replayed": true,
+   "input_sha256_16": "71dcfa357bcd7c4f"
+  },
+  {
+   "rule": "SEC-057",
+   "direction": "fp",
+   "len": 36,
+   "seconds": 0.07,
+   "nox_rules": [
+    "SEC-057"
+   ],
+   "replayed": true,
+   "input_sha256_16": "a0c375f5f225b9b8"
+  },
+  {
+   "rule": "SEC-057",
+   "direction": "fp",
+   "len": 37,
+   "seconds": 0.08,
+   "nox_rules": [
+    "SEC-057"
+   ],
+   "replayed": true,
+   "input_sha256_16": "cd11c4d29a057155"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 40,
+   "seconds": 0.09,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "512147ad3227e465"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 41,
+   "seconds": 0.1,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "f7af5f65a3d675c0"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 42,
+   "seconds": 0.11,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "a83f9ae948c7cd6a"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 43,
+   "seconds": 0.13,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "ad31e94ea1b5f2d2"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 44,
+   "seconds": 0.13,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "a7185815ed13167f"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 45,
+   "seconds": 0.12,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "ab8d452a3552166b"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 46,
+   "seconds": 0.15,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "bd0c9f7d1f7e3895"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 47,
+   "seconds": 0.14,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "43b4417899a0dcef"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 48,
+   "seconds": 0.18,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "404c623f491ae88d"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 49,
+   "seconds": 0.21,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "62ec4555c472fc69"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 50,
+   "seconds": 0.2,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "7366740f9b22410a"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fp",
+   "len": 51,
+   "seconds": 0.21,
+   "nox_rules": [],
+   "replayed": false,
+   "input_sha256_16": "d2632d000f1a3d95"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 40,
+   "seconds": 0.1,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "bb51c591dcd4c612"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 41,
+   "seconds": 0.1,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "4aa885d6469408c2"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 42,
+   "seconds": 0.11,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "c0b7a9810ca78e62"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 43,
+   "seconds": 0.11,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "10279e958210e5fb"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 44,
+   "seconds": 0.12,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "c71568fdc2efaf0d"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 45,
+   "seconds": 0.12,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "76623682e818aeca"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 46,
+   "seconds": 0.13,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "652202e79de0f736"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 47,
+   "seconds": 0.14,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "3804af689531d8e5"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 48,
+   "seconds": 0.15,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "d74f0c8c22349fcc"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 49,
+   "seconds": 0.15,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "72a1f7c621c2c115"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 50,
+   "seconds": 0.16,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "c2272f85113cfe25"
+  },
+  {
+   "rule": "SEC-519",
+   "direction": "fn",
+   "len": 51,
+   "seconds": 0.17,
+   "nox_rules": [],
+   "replayed": true,
+   "input_sha256_16": "b4e88389be0c2eac"
+  }
+ ]
+}
