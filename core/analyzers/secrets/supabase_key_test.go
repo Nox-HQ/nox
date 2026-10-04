@@ -39,6 +39,18 @@ func rawPayloadJWT(payload string) string {
 	return enc.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." + enc.EncodeToString([]byte(payload)) + "." + enc.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 }
 
+// prettySupabaseJWT is seededSupabaseJWT with a pretty-printed header and
+// payload: RFC-valid JSON that does not encode as eyJ, which the shared JWT
+// pattern admits since #826. The role claim must not depend on the layout.
+func prettySupabaseJWT(seed int64, payload map[string]any) string {
+	r := rand.New(rand.NewSource(seed))
+	enc := base64.RawURLEncoding
+	p, _ := json.MarshalIndent(payload, "", "  ")
+	sig := make([]byte, 32)
+	r.Read(sig)
+	return enc.EncodeToString([]byte("{\n  \"alg\": \"HS256\",\n  \"typ\": \"JWT\"\n}")) + "." + enc.EncodeToString(p) + "." + enc.EncodeToString(sig)
+}
+
 func supabasePayload(role string) map[string]any {
 	return map[string]any{"iss": "supabase", "ref": "qzkfwmhtbpxrvlndcsoa", "role": role, "iat": 1759500000, "exp": 2075076000}
 }
@@ -96,6 +108,8 @@ func TestSupabaseKeysReportWhatTheyAre(t *testing.T) {
 	anon := seededSupabaseJWT(105, supabasePayload("anon"))
 	svc := seededSupabaseJWT(100, supabasePayload("service_role"))
 	other := seededSupabaseJWT(371, map[string]any{"iss": "https://auth.example.org", "sub": "u1", "role": "anon", "iat": 1759500000})
+	prettyAnon := prettySupabaseJWT(1105, supabasePayload("anon"))
+	prettySvc := prettySupabaseJWT(1100, supabasePayload("service_role"))
 
 	type want struct {
 		rule     string
@@ -129,6 +143,12 @@ func TestSupabaseKeysReportWhatTheyAre(t *testing.T) {
 		{"publishable key in a browser client", "p2.ts", `createClient(url, "sb_publishable_` + seededBody(106, sbAlphabet, 40) + `");` + "\n", want{"SEC-105", findings.SeverityLow}},
 		// Controls: only a Supabase project key is reclassified.
 		{"another issuer's anon-role JWT", "other.ts", `const token = "` + other + `";` + "\n", want{"SEC-371", findings.SeverityHigh}},
+		// The same claims with RFC-valid, non-compact JSON (#826): the widened
+		// JWT pattern reaches them, so the role rules must too.
+		{"pretty service_role key in prose", "pnotes.md", "Rotated key: `" + prettySvc + "`\n", want{"SEC-100", findings.SeverityCritical}},
+		{"pretty service_role key in the anon slot", "pmixup.env", "NEXT_PUBLIC_SUPABASE_ANON_KEY=" + prettySvc + "\n", want{"SEC-100", findings.SeverityCritical}},
+		{"pretty service_role key in server code", "padmin.ts", `const admin = createClient(url, "` + prettySvc + `");` + "\n", want{"SEC-100", findings.SeverityCritical}},
+		{"pretty anon key in a browser client", "pclient.ts", `createClient(url, "` + prettyAnon + `");` + "\n", want{"SEC-105", findings.SeverityLow}},
 	}
 	for _, c := range cases {
 		got := line1Findings(t, c.file, c.body)

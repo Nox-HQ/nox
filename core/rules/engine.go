@@ -135,7 +135,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			// Post-match predicate: the rule inspects its own match text and
 			// vetoes it. Runs before the line-windowed filters because it is
 			// the cheapest of the three and needs no line splitting.
-			if rule.ValidateMatch != nil && !rule.ValidateMatch(mr.MatchText) {
+			if rule.ValidateMatch != nil && !mr.validated && !rule.ValidateMatch(mr.MatchText) {
 				continue
 			}
 
