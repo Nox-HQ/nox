@@ -545,16 +545,19 @@ func isBinary(content []byte) bool {
 // the output from one that had not. The fingerprint reads only the start
 // line, so this changes what a reader sees and nothing a baseline keys on.
 func matchLocation(path string, mr MatchResult) findings.Location {
+	// A trailing lookahead-emulating boundary is context the pattern had to
+	// consume, not part of what it found (trailing_boundary.go).
+	span := mr.MatchText[:len(mr.MatchText)-mr.TrailLen]
 	loc := findings.Location{
 		FilePath:    path,
 		StartLine:   mr.Line,
 		EndLine:     mr.Line,
 		StartColumn: mr.Column,
-		EndColumn:   mr.Column + len(mr.MatchText),
+		EndColumn:   mr.Column + len(span),
 	}
-	if last := strings.LastIndexByte(mr.MatchText, '\n'); last >= 0 {
-		loc.EndLine += strings.Count(mr.MatchText, "\n")
-		loc.EndColumn = len(mr.MatchText) - last
+	if last := strings.LastIndexByte(span, '\n'); last >= 0 {
+		loc.EndLine += strings.Count(span, "\n")
+		loc.EndColumn = len(span) - last
 	}
 	return loc
 }
