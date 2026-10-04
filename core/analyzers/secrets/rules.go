@@ -1088,12 +1088,20 @@ func builtinSecretRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			id: "SEC-100", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(supabase[_-]?service[_-]?role[_-]?key|SUPABASE_SERVICE_ROLE_KEY)\s*[=:]\s*['"]?eyJ[A-Za-z0-9_-]{100,}['"]?`,
-			description: "Supabase Service Role Key detected",
-			cwe:         "CWE-798", keywords: []string{"supabase_service_role_key", "supabase-service-role-key"},
-			remediation: "Rotate the exposed key immediately. Use environment variables or a secrets manager.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			// A Supabase service_role key, identified by its decoded payload
+			// (supabase.go), not by the variable it is assigned to. It
+			// "bypasses every Row Level Security policy", so it is reported
+			// at critical wherever it is written -- including in the anon
+			// slot, where a name-bound rule would have read it as public.
+			// The pattern is SEC-371's JWT shape; SEC-371 leaves these to
+			// this rule (isNotSupabaseProjectKey).
+			id: "SEC-100", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
+			pattern:     `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`,
+			description: "Supabase service_role key detected (bypasses Row Level Security)",
+			cwe:         "CWE-798", keywords: []string{"eyj"},
+			validate:    isSupabaseServiceRoleKey,
+			remediation: "Rotate the key in the Supabase dashboard now: it bypasses every Row Level Security policy and gives full access to the project's data. Keep it server-side only (never in a browser, a shipped app or source control); load it from a secrets manager or environment, and prefer an sb_secret_ key.",
+			references:  []string{"https://supabase.com/docs/guides/getting-started/api-keys", "https://supabase.com/docs/guides/auth/jwt-fields", "https://cwe.mitre.org/data/definitions/798.html"},
 		},
 
 		// -----------------------------------------------------------------
@@ -1132,12 +1140,22 @@ func builtinSecretRules() []*rules.Rule {
 			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
 		},
 		{
-			id: "SEC-105", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)(supabase[_-]?anon[_-]?key|SUPABASE_ANON_KEY)\s*[=:]\s*['"]?eyJ[A-Za-z0-9_-]{100,}['"]?`,
-			description: "Supabase Anon Key detected",
-			cwe:         "CWE-798", keywords: []string{"supabase_anon_key", "supabase-anon-key"},
-			remediation: "Rotate the exposed key immediately. Use environment variables or a secrets manager.",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			// A Supabase anon key, identified by its decoded payload
+			// (supabase.go). Supabase documents it as public by design --
+			// "Safe to expose online ... source code" -- reaching only what
+			// Row Level Security allows. Reporting it as a leaked credential
+			// claimed something false and told users to rotate a key that is
+			// meant to ship in their client. What is worth knowing is that
+			// it is there and that RLS is what protects the data, so it is
+			// reported at low severity under the access-control CWE, with
+			// nothing to rotate.
+			id: "SEC-105", severity: findings.SeverityLow, confidence: findings.ConfidenceHigh,
+			pattern:     `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`,
+			description: "Supabase anon key (public by design; access is governed by Row Level Security)",
+			cwe:         "CWE-284", keywords: []string{"eyj"},
+			validate:    isSupabaseAnonKey,
+			remediation: "Not a secret: Supabase documents the anon (publishable) key as safe to expose in client code, so there is nothing to rotate. Anyone holding it reaches exactly what Row Level Security allows: confirm RLS is enabled, with policies for the anon role, on every table and storage bucket it can query.",
+			references:  []string{"https://supabase.com/docs/guides/getting-started/api-keys", "https://supabase.com/docs/guides/auth/jwt-fields", "https://cwe.mitre.org/data/definitions/284.html"},
 		},
 		{
 			id: "SEC-106", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
@@ -3351,7 +3369,7 @@ func builtinSecretRules() []*rules.Rule {
 		// {"a":0}, 7. The signature stays open: a truncated one still leaks
 		// the claims. A real JWT clears both, so its match and fingerprint
 		// are unchanged.
-		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`, description: "Detected JWT token", cwe: "CWE-798", keywords: []string{"eyj"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-371", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `eyJ[A-Za-z0-9_-]{11,}\.eyJ[A-Za-z0-9_-]{7,}\.[A-Za-z0-9_-]+`, description: "Detected JWT token", cwe: "CWE-798", keywords: []string{"eyj"}, validate: isNotSupabaseProjectKey, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-372", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3\.amazonaws\.com/[^\s]+`, description: "AWS S3 object URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-373", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `s3://[^\s]+`, description: "S3 bucket URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"s3_bucket"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3857,7 +3875,12 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-772", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)stytch[_-]?api[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Stytch api key", cwe: "CWE-798", keywords: []string{"stytch"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-773", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)kinde[_-]?api[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Kinde api key", cwe: "CWE-798", keywords: []string{"kinde"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-774", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)logto[_-]?api[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Logto api key", cwe: "CWE-798", keywords: []string{"logto"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-775", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)supabase[_-]?anon[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Supabase anon key", cwe: "CWE-798", keywords: []string{"supabase"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		// SEC-775 reads the anon slot by its NAME, so it covers values SEC-105
+		// cannot decode (an sb_publishable_ key, or one written some other
+		// way). The anon key is public by design, so the claim is the same as
+		// SEC-105's. A JWT in that slot is decoded instead: a service_role
+		// key there is SEC-100 at critical, and owns the span (dedup.go).
+		{id: "SEC-775", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium, pattern: `(?i)supabase[_-]?anon[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Supabase anon key (public by design; access is governed by Row Level Security)", cwe: "CWE-284", keywords: []string{"supabase"}, remediation: "Not a secret: Supabase documents the anon (publishable) key as safe to expose in client code, so there is nothing to rotate. Anyone holding it reaches exactly what Row Level Security allows: confirm RLS is enabled, with policies for the anon role, on every table and storage bucket it can query.", references: []string{"https://supabase.com/docs/guides/getting-started/api-keys", "https://cwe.mitre.org/data/definitions/284.html"}},
 		{id: "SEC-776", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)supabase[_-]?service[_-]?role[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Supabase service role key", cwe: "CWE-798", keywords: []string{"supabase_service"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-777", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)nhost[_-]?api[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Nhost api key", cwe: "CWE-798", keywords: []string{"nhost"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-778", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)appwrite[_-]?project[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Appwrite project secret", cwe: "CWE-798", keywords: []string{"appwrite"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

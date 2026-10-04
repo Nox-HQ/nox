@@ -521,14 +521,14 @@ func TestAllRules_PositiveMatch(t *testing.T) {
 		"SEC-097": "AIVEN_TOKEN = " + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx\n",
 		"SEC-098": "rnd_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh\n",
 		"SEC-099": "RAILWAY_TOKEN = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
-		"SEC-100": "SUPABASE_SERVICE_ROLE_KEY = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst\n",
+		"SEC-100": "SUPABASE_SERVICE_ROLE_KEY = " + seededSupabaseJWT(100, supabasePayload("service_role")) + "\n",
 
 		// Identity/Auth (SEC-101 to SEC-106)
 		"SEC-101": "AUTH0_TOKEN = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\n",
 		"SEC-102": "OKTA_TOKEN = " + "00ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmno\n",
 		"SEC-103": "sk_live_" + "ABCDEFGHIJKLMNOPQRSTUVWx\n",
 		"SEC-104": "\"type\": \"service_account\", " + "\"project_id\": \"my-firebase-project\"\n",
-		"SEC-105": "SUPABASE_ANON_KEY = " + "eyJ" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst\n",
+		"SEC-105": "SUPABASE_ANON_KEY = " + seededSupabaseJWT(105, supabasePayload("anon")) + "\n",
 		"SEC-106": "KEYCLOAK_SECRET = " + "abcdef12-3456-7890-abcd-ef1234567890\n",
 
 		// Observability (SEC-107 to SEC-112)

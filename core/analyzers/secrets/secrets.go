@@ -628,6 +628,20 @@ func (a *Analyzer) corroborate(subject evidence.Subject, content []byte, f *find
 		}
 	}
 
+	// A Supabase project key's role is in its payload, and SEC-100/SEC-105
+	// claim what they claim because of it (supabase.go). Recording the decoded
+	// role is what lets a reader see why an anon key was reported as public
+	// and a service_role key as critical, rather than taking the rule ID on
+	// trust. It says nothing about whether the key is live.
+	switch supabaseKeyRole(value) {
+	case supabaseRoleAnon:
+		a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "secrets",
+			"the JWT payload decodes to a Supabase project key (iss \"supabase\", a project ref) with role \"anon\": the publishable key, which Supabase documents as safe to expose and which reaches only what Row Level Security allows", nil)
+	case supabaseRoleServiceRole:
+		a.reasoning.Support(subject, evidence.KindStatic, "nox-scan", "secrets",
+			"the JWT payload decodes to a Supabase project key (iss \"supabase\", a project ref) with role \"service_role\", which bypasses every Row Level Security policy", nil)
+	}
+
 	// The third: an age identity's Bech32 checksum, which BIP-173 specifies
 	// completely. A failed one is recorded and not acted on, like the others.
 	if consistent, applicable := verifyAgeIdentity(value); applicable {
