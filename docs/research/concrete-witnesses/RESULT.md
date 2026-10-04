@@ -445,3 +445,56 @@ python3 adjudicate.py /tmp/cw/outcomes.json /tmp/cwh/httpvalues.json /tmp/cws/sm
 
 `measurements.json` identifies witnesses by sha256 only. Every input is
 credential-shaped by construction, and the seeded harness regenerates them.
+
+## Addendum, same day: the defects, fixed and re-measured
+
+Every defect and divergence this research adjudicated was fixed by its claim,
+with no rule removed. Each fix was reviewed independently on built binaries and
+merged:
+
+| PR | Fix |
+|---|---|
+| #816 | SEC-077 covers age's post-quantum and lowercase identities; Bech32 checksum recorded as evidence only |
+| #817 | SEC-519 covers every partition, matches only real ARNs, keyed on `:sns:` (the `aws_sns` gate was an import artefact) |
+| #822 | the 11 sibling ARN rules, same construction, per-service ARN shapes |
+| #815 | SEC-335 binds legacy 40-hex Sourcegraph tokens; SHAs and ETags no longer report |
+| #818 | dedup: only provider-tier findings decide ownership |
+| #819 | SEC-371 runs on every JWT; a JWT's severity no longer depends on the word `jwt` |
+| #820 | SEC-251 requires a signature (RFC 7519 §6), so unsigned JWTs are not credentials |
+| #821 | a rule's trailing lookahead stand-in is excluded from the span; dedup compares multi-line spans by position |
+
+Two of these came from fixing, not from the harness:
+- **#820** answered the "unresolved" unsigned-JWT class.
+- **#821** came up while fixing #819. 135 rules' spans swallowed the delimiter after the token, which hid duplicates from dedup.
+
+**Re-run on `2f2aaed`**, the same harness and seed, classes compared:
+
+| class | before | after |
+|---|---:|---:|
+| age PQ unreported / generic-only | 2 / 2 | 0 / 0 |
+| age lowercase unreported / generic-only | 4 / 4 | 0 / 0 |
+| SNS partition unreported | 4 | 0 |
+| SNS keyword gate | 2 | 0 |
+| unsigned JWT reported | 24 | 0 |
+| compact JWT reported only by generic SEC-161 | 7 | **0** |
+
+Two classes did not reach zero, and neither is a defect:
+- **The `generic-entropy-wins-dedup` bucket still holds 6 witnesses.** They are
+  the RFC-valid JWT shapes no JWT rule matches: a pretty-printed header,
+  whitespace before the claims, and empty claims. The adjudicator's classifier
+  files them in the same bucket as the dedup defect. That divergence is
+  unchanged and still open.
+- **SNS has 2 `aws-eusc` ARNs.** #817 deliberately includes the SDK-only
+  partitions; this reference follows the IAM docs.
+
+Class sizes elsewhere moved for expected reasons:
+- Lowercase age identities now match, so more checksum-invalid lowercase samples
+  report. The checksum is evidence, not a gate.
+- Three claiming rules changed pattern, so the seeded detector-path generator
+  proposes different candidates (1,362, previously 1,332).
+
+**Still open:**
+- the RFC-valid JWT shapes above;
+- whether published example tokens (jwt.io) should be suppressed;
+- whether public-by-design tokens (Supabase anon keys) belong in a secrets
+  scanner.
