@@ -21,6 +21,10 @@ func TestDedupEquivalenceSetsReachEveryBranch(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(827))
 	counts := map[string]int{}
+	// The anchor self-drop records the owner as its survivor, so it is
+	// counted where it happens rather than read off the record.
+	refSelfDropObserved = func() { counts["anchor self-drop"]++ }
+	defer func() { refSelfDropObserved = func() {} }()
 	for c := 0; c < 4000; c++ {
 		content, lines := equivalenceContent(r)
 		in := equivalenceFindings(r, lines, ruleIDs)
@@ -30,7 +34,9 @@ func TestDedupEquivalenceSetsReachEveryBranch(t *testing.T) {
 			case strings.HasPrefix(d.reason, "two JWT owners overlap"):
 				counts["jwt-owner tie-break"]++
 			case strings.HasPrefix(d.reason, "the matched token's prefix") && d.dropped == d.survivor:
-				counts["anchor self-drop"]++
+				// A generator duplicate identical to its anchor, dropped by
+				// the inner loop -- not the self-drop branch.
+				counts["duplicate-of-anchor drop"]++
 			case strings.HasPrefix(d.reason, "the matched token's prefix"):
 				counts["non-owner drop"]++
 			case strings.HasPrefix(d.reason, "a more specific rule"):

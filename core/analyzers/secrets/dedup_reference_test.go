@@ -11,6 +11,14 @@ import (
 // verbatim except for names, as the oracle for TestDedupMatchesReference.
 // The rewrite's contract is that its output -- survivors, their order, and
 // every suppression with its survivor and reason -- is identical.
+//
+// The one addition is refSelfDropObserved, called where an anchor that does
+// not own its token drops itself. That suppression names the owner as its
+// survivor, so it cannot be told from an ordinary non-owner drop by its
+// record; the coverage test counts it at its call site instead.
+
+// refSelfDropObserved is a no-op except while the coverage test counts.
+var refSelfDropObserved = func() {}
 
 func refDedupBySpecificity(in []findings.Finding, spec map[string]int, content []byte) ([]findings.Finding, []suppression) {
 	if len(in) < 2 {
@@ -173,6 +181,7 @@ func refResolveOwners(in []findings.Finding, order []int, suppressed []bool, spe
 		if _, ok := owners[fa.RuleID]; !ok && refOwnerPresent(in, order, suppressed, fa, owners) {
 			suppressed[ia] = true
 			*dropped = append(*dropped, refOwnerSuppression(in, order, suppressed, fa, fa, owners))
+			refSelfDropObserved()
 		}
 	}
 }

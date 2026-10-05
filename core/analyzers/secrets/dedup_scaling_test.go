@@ -71,16 +71,14 @@ func scanOneFile(tb testing.TB, name, content string) int {
 
 func BenchmarkScanCompactJWTs1MB(b *testing.B) {
 	content := compactJWTFile(1, 1<<20)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		scanOneFile(b, "tokens.py", content)
 	}
 }
 
 func BenchmarkScanPrettyJWTProse1MB(b *testing.B) {
 	content := prettyJWTProse(2, 1<<20)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		scanOneFile(b, "tokens.md", content)
 	}
 }
