@@ -180,7 +180,8 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 	// known provider, drop every OTHER provider finding overlapping its span
 	// that isn't a canonical owner of that token. Generic (non-provider)
 	// findings are left for pass 2.
-	resolveOwners(in, order, suppressed, spec, content, &dropped)
+	groupStart, groupEnd := lineGroups(in, order)
+	resolveOwners(in, order, groupStart, groupEnd, suppressed, spec, content, &dropped)
 
 	for a := 0; a < len(order); a++ {
 		ia := order[a]
@@ -244,6 +245,27 @@ func specificitySuppression(dropped, survivor *findings.Finding) suppression {
 	}
 }
 
+// lineGroups returns, for each position p in order, the bounds of the run of
+// positions sharing order[p]'s StartLine; runs are contiguous because order
+// is sorted by line first. Pass 1 only ever relates findings that start on
+// the same line, so each anchor scans its own run rather than every finding
+// in the file: 7,139 JWTs in one file were 7,139 full scans each.
+func lineGroups(in []findings.Finding, order []int) (start, end []int) {
+	start = make([]int, len(order))
+	end = make([]int, len(order))
+	for lo := 0; lo < len(order); {
+		hi := lo + 1
+		for hi < len(order) && in[order[hi]].Location.StartLine == in[order[lo]].Location.StartLine {
+			hi++
+		}
+		for p := lo; p < hi; p++ {
+			start[p], end[p] = lo, hi
+		}
+		lo = hi
+	}
+	return start, end
+}
+
 // resolveOwners implements pass 1 of dedupBySpecificity. For every finding
 // whose matched token names a known provider (by prefix), it suppresses all
 // OTHER provider findings on the same overlapping span that are not canonical
@@ -261,9 +283,14 @@ func specificitySuppression(dropped, survivor *findings.Finding) suppression {
 // real secret" protected the anchor and not the findings it dropped; with a
 // provider-tier anchor it covers both, because the anchor survives whenever
 // no owner is present and it reports the same token.
-func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec map[string]int, content []byte, dropped *[]suppression) {
+//
+// Every relation pass 1 considers is between findings on the same StartLine,
+// so it visits only fa's line group -- the same findings, in the same order,
+// as a scan of all of order that skips other lines.
+func resolveOwners(in []findings.Finding, order, groupStart, groupEnd []int, suppressed []bool, spec map[string]int, content []byte, dropped *[]suppression) {
 	for a := 0; a < len(order); a++ {
 		ia := order[a]
+		group := order[groupStart[a]:groupEnd[a]]
 		if suppressed[ia] {
 			continue
 		}
@@ -278,8 +305,7 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 		// fa names a provider; drop overlapping provider findings on this span
 		// that aren't canonical owners (including fa itself if, e.g., a Clerk
 		// rule matched a Stripe token).
-		for b := 0; b < len(order); b++ {
-			ib := order[b]
+		for _, ib := range group {
 			if ib == ia || suppressed[ib] {
 				continue
 			}
@@ -331,15 +357,15 @@ func resolveOwners(in []findings.Finding, order []int, suppressed []bool, spec m
 				continue
 			}
 			suppressed[ib] = true
-			*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fb, owners))
+			*dropped = append(*dropped, ownerSuppression(in, group, suppressed, fa, fb, owners))
 		}
 		// If fa itself is not an owner of the token it matched (a mis-attributed
 		// provider rule, e.g. Clerk firing on a Stripe key), drop it too — but
 		// only once at least one true owner is present on the span, so we never
 		// suppress the last finding on a real secret.
-		if _, ok := owners[fa.RuleID]; !ok && ownerPresent(in, order, suppressed, fa, owners) {
+		if _, ok := owners[fa.RuleID]; !ok && ownerPresent(in, group, suppressed, fa, owners) {
 			suppressed[ia] = true
-			*dropped = append(*dropped, ownerSuppression(in, order, suppressed, fa, fa, owners))
+			*dropped = append(*dropped, ownerSuppression(in, group, suppressed, fa, fa, owners))
 		}
 	}
 }

@@ -46,6 +46,20 @@ func Classify(lang Lang, content []byte) []Region {
 	if len(content) == 0 {
 		return nil
 	}
+	// A pinned file (see Pin) is classified once per language. Every caller
+	// reads the regions and none modifies them.
+	if p := pinnedFor(content); p != nil {
+		if r, ok := p.classify(lang); ok {
+			return r
+		}
+		r := classify(lang, content)
+		p.storeRegions(lang, r)
+		return r
+	}
+	return classify(lang, content)
+}
+
+func classify(lang Lang, content []byte) []Region {
 	switch lang {
 	case LangPython:
 		return scanPython(content)

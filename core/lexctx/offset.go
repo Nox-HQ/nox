@@ -11,6 +11,9 @@ package lexctx
 // content clamps to len(content); a non-positive line or column clamps to the
 // start of the addressed line. The result is always in [0, len(content)].
 func LineColToOffset(content []byte, line, col int) int {
+	if p := pinnedFor(content); p != nil {
+		return p.offset(line, col)
+	}
 	if line < 1 {
 		line = 1
 	}
@@ -45,6 +48,9 @@ func LineColToOffset(content []byte, line, col int) int {
 // offset past the end clamps to the end. It is the inverse direction of
 // LineColToOffset and the one implementation two analyzers had each rolled.
 func LineForOffset(content []byte, off int) int {
+	if p := pinnedFor(content); p != nil {
+		return p.line(off)
+	}
 	if off > len(content) {
 		off = len(content)
 	}

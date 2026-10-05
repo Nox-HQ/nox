@@ -213,6 +213,10 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 	if strings.EqualFold(filepath.Ext(artifact.Path), ".ipynb") {
 		content = unescapeNotebookQuotes(content)
 	}
+	// Every line/column lookup and lexical classification below, in dedup
+	// and the refiners, is answered from one index of this file rather than
+	// a walk from its first byte; see lexctx.Pin.
+	defer lexctx.Pin(content)()
 
 	results, err := a.ScanFile(artifact.Path, content)
 	if err != nil {
@@ -243,6 +247,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 	// scan reads at most the first 64 KB and returns nil for everything
 	// else, so a repository with no cassettes pays a substring search.
 	var credentialSpans []byteSpan
+	uriStarts := dataURIStarts(content)
 	isRecording := isHTTPRecording(artifact.Path, content)
 	if isRecording {
 		credentialSpans = credentialBearingSpans(content)
@@ -290,7 +295,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 		// base64 image is an accident, so it is still dropped.
 		if inEmbeddedBlob(lang, content, &results[i]) &&
 			(specificityOf(results[i].RuleID, a.spec) != specProviderDefault ||
-				inDataURIPayload(content, &results[i])) {
+				inDataURIPayloadAt(content, uriStarts, &results[i])) {
 			a.refute(candidate, evidence.KindStatic,
 				"the match lies inside an embedded data blob (base64 or data: URI) in lexable source, not in code or a string literal")
 			continue
@@ -298,7 +303,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 		// inEmbeddedBlob consults lexctx, which reports LangUnknown for
 		// markup and stylesheets — so an inline `data:` URI in .html/.css/.md
 		// was never covered. The marker is unambiguous in raw bytes.
-		if inDataURIPayload(content, &results[i]) {
+		if inDataURIPayloadAt(content, uriStarts, &results[i]) {
 			a.refute(candidate, evidence.KindStatic,
 				"the match lies inside a data: URI payload")
 			continue

@@ -33,33 +33,47 @@ var dataURIScheme = []byte("data:")
 // it on every self-scan. The marker is unambiguous in raw bytes, so this check
 // needs no language at all.
 func inDataURIPayload(content []byte, f *findings.Finding) bool {
+	return inDataURIPayloadAt(content, dataURIStarts(content), f)
+}
+
+// dataURIStarts returns the offset of every "data:" in content, ascending.
+// The scheme cannot overlap itself, so this is exactly the sequence a walk
+// that resumes after each occurrence visits.
+func dataURIStarts(content []byte) []int {
+	var starts []int
+	for off := 0; ; {
+		rel := bytes.Index(content[off:], dataURIScheme)
+		if rel < 0 {
+			return starts
+		}
+		starts = append(starts, off+rel)
+		off += rel + len(dataURIScheme)
+	}
+}
+
+// inDataURIPayloadAt is inDataURIPayload with the file's data: URI offsets
+// computed once by the caller. Searching the file afresh for every finding
+// read the whole file per finding when it held no data: URI at all -- the
+// common case -- which made a file's cost findings x size.
+func inDataURIPayloadAt(content []byte, uriStarts []int, f *findings.Finding) bool {
 	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
 	if start < 0 || start > len(content) {
 		return false
 	}
 
 	// Walk the data: URIs that begin before the match and test whether the
-	// match falls within one's payload. Files carry few data: URIs, and the
-	// scan stops at the first one starting after the match.
-	for off := 0; off < start; {
-		rel := bytes.Index(content[off:], dataURIScheme)
-		if rel < 0 {
-			return false
-		}
-		uriStart := off + rel
+	// match falls within one's payload.
+	for _, uriStart := range uriStarts {
 		if uriStart >= start {
 			return false
 		}
-
 		payloadStart, ok := base64PayloadStart(content, uriStart)
 		if !ok {
-			off = uriStart + len(dataURIScheme)
 			continue
 		}
 		if start >= payloadStart && start < payloadEnd(content, payloadStart) {
 			return true
 		}
-		off = uriStart + len(dataURIScheme)
 	}
 	return false
 }
