@@ -377,14 +377,14 @@ jobs:
       # branch-protection rule that blocks GITHUB_TOKEN pushes to main.
 
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         if: always()
         with:
           sarif_file: nox-results/results.sarif
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload
 
       - name: Upload scan results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI scan artifact, not a released binary; release artifacts are signed and attested in release.yml
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: nox-results
@@ -396,7 +396,7 @@ jobs:
         run: go test -bench . -benchtime 1x -run ^$ ./core/ | tee bench-results.txt
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: bench-results
@@ -446,7 +446,7 @@ jobs:
             .
 
       - name: Upload SARIF (PR-scoped)
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         if: always()
         with:
           sarif_file: nox-pr/results.sarif
@@ -454,7 +454,7 @@ jobs:
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload for the PR-scoped scan
 
       - name: Upload PR scan artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: nox-pr-results
@@ -523,7 +523,7 @@ jobs:
           python3 scripts/deps-audit.py nox-deps/findings.json nox-deps/fix-plan.txt
 
       - name: Upload dependency scan artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: nox-deps-audit
@@ -581,7 +581,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm
