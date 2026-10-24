@@ -1,0 +1,172 @@
+# Watching for new advisories: connect once, decide by policy
+
+A dependency can become vulnerable without a line of your code changing. This
+page is how nox notices that between pull requests, decides whether it matters
+to your application, and does exactly as much about it as you have allowed.
+
+## Connect to CI in one step
+
+```bash
+nox install-ci
+```
+
+writes `.github/workflows/nox.yml`, which does two things:
+
+| job | runs on | what it does |
+|---|---|---|
+| `scan` | every pull request and push | scans, uploads SARIF to Code Scanning, annotates the diff |
+| `advisories` | a daily schedule, and on demand | scans the code already merged, works out which advisories are **new since the previous scheduled run**, and acts on them according to your policy |
+
+Flags: `--branch`, `--cron`, `--nox-ref`, `--nox-version`, `--force`, `--print`.
+Third-party actions in the file are pinned to commits. The `nox-hq/nox` ref is a
+release tag; run `nox fix --actions` to pin it too. A development build of nox
+has no release tag and asks for `--nox-ref`.
+
+Commit the file and you are connected. With no further configuration the
+scheduled job only **reports**: a job summary, SARIF, and one issue per run that
+found something new.
+
+## The policy
+
+```yaml
+# .nox.yaml
+advisories:
+  policy: report          # report (default) | prepare | remediate
+
+  prepare:                # which new advisories get a pull request
+    min_severity: low           # critical | high | medium | low
+    min_relevance: undetermined # undetermined | symbol_used | call_reachable
+
+  remediate:              # which of those may also be auto-merged
+    min_severity: high
+    min_relevance: symbol_used
+    max_bump: minor             # patch | minor; a major bump is never merged unattended
+```
+
+`policy` is a ceiling. Each advisory goes only as far as its own gate allows,
+so `policy: remediate` does not mean everything is merged.
+
+| level | what happens to a new advisory that passes its gate |
+|---|---|
+| `report` | job summary, SARIF, an issue. Nothing else. |
+| `prepare` | also a pull request (`chore(security): nox remediation ...`) carrying the planned upgrade, opened by the existing `actions/remediate` action |
+| `remediate` | also `gh pr merge --auto`, and only when **every** advisory in that pull request passes the remediate gate |
+
+Nox never merges anything itself and never bypasses branch protection.
+`--auto` asks GitHub to merge when the branch's required checks and reviews are
+satisfied; if the repository has none, or does not allow auto-merge, the pull
+request stays open for a person. Pull requests opened with the default
+`GITHUB_TOKEN` do not trigger other workflows, so their required checks would
+never run: add a `NOX_TOKEN` secret (a fine-grained or GitHub App token with
+contents and pull-requests write) and the generated workflow uses it.
+
+An invalid value (`policy: remediat`) is an error and exits 2. It does not
+quietly fall back to the default.
+
+## How relevance is judged
+
+Relevance is the applicability ladder already on every dependency finding
+(`applicability`, `applicability_reached`), read honestly:
+
+| relevance | meaning | can pass a gate? |
+|---|---|---|
+| `call_reachable` | a call path reaches the affected code | yes |
+| `symbol_used` | the affected package is linked or imported by this build | yes |
+| `undetermined` | nox could not place the advisory against your code | yes, at `min_relevance: undetermined` |
+| `not_impacting` | a rung was **deterministically refuted** (e.g. Go: the build links no affected package) | never |
+
+**Undetermined is not "not affected".** Most npm and PyPI advisories are
+undetermined, because nox cannot see through a dependency. They are treated as
+possibly affecting you, and the reason says the question went unanswered. That
+is why the default prepare gate accepts them and the default remediate gate does
+not: opening a pull request for review costs little, merging on no evidence of
+use is a different bet. Loosen it deliberately:
+
+```yaml
+advisories:
+  policy: remediate
+  remediate:
+    min_relevance: undetermined
+```
+
+Only `not_impacting` lowers an advisory, and only to "reported with the
+reason". It is never acted on and never hidden.
+
+There is no KEV or EPSS gate. Nox does not carry exploited-in-the-wild data
+today, and a threshold on a field that is never populated would silently never
+fire.
+
+## Decision table
+
+For an advisory in the current scan. Rows are checked top to bottom; the first
+match decides. The reason is printed with every decision.
+
+| condition | action |
+|---|---|
+| baselined, or waived through VEX (`not_affected`, `fixed`) | none (waived) |
+| present in the previous run (by ecosystem, package and advisory id or alias) | none (known) |
+| the scan could not finish looking (a non-advisory degradation, e.g. `osv_lookup`) | report; exit 1 |
+| no previous run to compare against | report; nothing acted on |
+| policy is `report` | report |
+| relevance is `not_impacting` | report |
+| below `prepare.min_severity` or `prepare.min_relevance` | report |
+| no fixed version, unsupported ecosystem, or the fix is not a forward upgrade | report |
+| the fix crosses a major version | report (a person takes that bump) |
+| passes the prepare gate | **prepare** |
+| policy is `remediate`, passes the remediate gate, and the package move is within `max_bump` | **remediate** |
+
+The pull request holds only the advisories decided `prepare` or `remediate`,
+planned by the same planner `nox fix` uses, so a package with several advisories
+moves once, to the highest fix among them. Auto-merge is permitted only if all
+of them are `remediate`; one prepare-only advisory in the pull request holds the
+whole pull request for review. The bump is judged on the package's actual move,
+not on each advisory's own `fixed_in`.
+
+The decision is a pure function of the findings, the previous run and the
+policy. Same inputs, same decision, same order.
+
+## What "new" means
+
+`nox advisories --previous <findings.json>` compares this scan with the last
+scheduled run's `findings.json`, which the workflow keeps in the Actions cache.
+An advisory is **new** when it is active in this scan and neither its id nor
+any alias is already reported for that package in the previous run.
+
+- **Waived is not new.** A finding already marked `baselined` or `vex_*` by the
+  scan (your `.nox/baseline.json`, `--vex` document) is `waived`. A person
+  decided; it is shown, never acted on.
+- **Not keyed on the fingerprint.** The fingerprint hashes the message, which
+  carries the advisory summary and the applicability sentence; either changing
+  would make last week's advisory look newly disclosed.
+- **Not keyed on the version.** The same advisory still hitting an upgraded
+  package is the same advisory.
+- **No previous run is not "no advisories".** The first scheduled run, or a
+  cache miss, reports everything and acts on nothing. Otherwise adopting this
+  would open a pull request for every advisory you have ever had.
+- **A scan that could not look is not a quiet week.** If the vulnerability
+  lookup failed, `nox advisories` exits 1, acts on nothing, and the workflow
+  does not remember the run, so the next one still compares against the last
+  complete scan.
+
+The workflow saves this run for the next one as its last step, and only if every
+earlier step succeeded: a run that failed part-way must not make its advisories
+look known.
+
+GitHub evicts caches unused for seven days and disables scheduled workflows in
+repositories with no activity for sixty. The daily default keeps the cache warm.
+
+## Run it by hand
+
+```bash
+nox scan . --format json --output nox-results
+nox advisories --input nox-results/findings.json --previous last-week/findings.json
+nox advisories --policy prepare --prepare-findings prepare.json ...   # override .nox.yaml
+nox fix --input prepare.json --dry-run                                # what the pull request will contain
+```
+
+Output is `text`, `json` or `markdown` (`--format`). `--github` writes step
+outputs (`action`, `automerge`, `new-count`, `prepare-count`, `previous-run`,
+`incomplete`) and the job summary.
+
+Exit codes: 0 decided, 1 decided but the scan could not finish looking, 2 could
+not run.

@@ -748,6 +748,22 @@ nox fix --actions --input findings.json --root .
 nox fix --outdated --root .
 ```
 
+### advisories
+
+Decide what to do about a dependency advisory that was disclosed after the code
+was merged: report it, prepare a fix, or carry the fix as far as your policy
+allows.
+
+```bash
+nox install-ci      # writes .github/workflows/nox.yml: PR scan + scheduled advisory watch
+nox advisories --input findings.json --previous last-run/findings.json
+```
+
+The policy is the `advisories` block in `.nox.yaml` and defaults to `report`.
+Undetermined relevance is never read as "not affected". Full semantics, the
+decision table and how "new" is determined are in
+[advisory-policy.md](./advisory-policy.md).
+
 ### variants
 
 Report first-party code that reproduces the root-cause pattern of a known CVE —
@@ -1837,6 +1853,9 @@ inventory is not an all-clear.
 ## CI/CD Integration
 
 ### GitHub Actions
+
+To wire up everything below, including a scheduled watch for newly disclosed
+advisories, run `nox install-ci` (see [advisory-policy.md](./advisory-policy.md)).
 
 #### Using the Nox Action (recommended)
 
