@@ -74,7 +74,7 @@ reports/
   sbom.cdx.json        # CycloneDX SBOM with vulnerability enrichment
   sbom.spdx.json       # SPDX SBOM with security references
   report.html          # Standalone HTML report
-  ai.inventory.json    # AI component inventory (if detected)
+  ai.inventory.json    # AI component and model inventory (always written)
 ```
 
 ### Use in CI (GitHub Action)

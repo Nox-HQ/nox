@@ -742,7 +742,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if !result.Scope.Has(nox.ScopeDeps) {
 			deps = "dependencies not scanned"
 		}
-		aiComponents := fmt.Sprintf("%d AI components", len(result.AIInventory.Components))
+		aiComponents := result.AIInventory.Summary()
 		if !result.Scope.Has(nox.ScopeAI) {
 			aiComponents = "AI components not scanned"
 		}
@@ -830,7 +830,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
 				continue
 			}
-			r := sbom.NewCycloneDXReporter(version)
+			r := sbom.NewCycloneDXReporter(version).WithAIInventory(result.AIInventory)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -873,8 +873,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
-	// Always write AI inventory if components were found.
-	if len(result.AIInventory.Components) > 0 {
+	// Always write the AI inventory. An empty one still records which AI
+	// checks ran, so "found nothing" stays distinguishable from "did not look".
+	{
 		path := filepath.Join(outputDir, "ai.inventory.json")
 		if err := result.AIInventory.WriteFile(path); err != nil {
 			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)

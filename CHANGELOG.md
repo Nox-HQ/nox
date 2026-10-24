@@ -93,6 +93,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MCP and LSP alike. Each skipped file is named in an advisory
   `generated_report` degradation. Other tools' SARIF and SBOMs are still
   scanned: a gitleaks or semgrep SARIF carries the credential it matched.
+
+- **A detected LLM model was invisible.** An app calling
+  `openai.chat.completions.create({model: "gpt-4o"})`, in JavaScript or
+  Python, printed `0 AI components` and wrote no `ai.inventory.json`, even with
+  `--format all`. nox detected the model, but every output counted only
+  inventory components and models are kept separately. The console, the MCP
+  `scan` and `summary` tools, the dashboard and the AI-assist context now share one
+  count, components plus distinct models:
+  `1 AI component (1 model: gpt-4o via openai)`. `sbom.cdx.json` (CLI and MCP)
+  lists the same models as CycloneDX `machine-learning-model` components.
+
+- **`ai.inventory.json` is written on every scan.** It has a new `checks` field
+  (schema 2.1.0) that names the AI checks that ran. An empty inventory with
+  checks means nox found nothing; one without checks means the AI scope did not
+  run.
+
+- **No phantom models.** With models now visible, two detector gaps would have
+  shown up in the AI-BOM. A model call quoted in a comment was inventoried
+  (nox's own source listed a model named `gpt-...`), and in a file where
+  "openai" appears only in a comment, an ORM's `model: "Invoice"` counted as an
+  ML model. Model extractors now skip comments. In ordinary source, a
+  `model: "X"` assignment counts only when X is a recognised model family. SDK
+  call sites and `from_pretrained` keep their own evidence.
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what
