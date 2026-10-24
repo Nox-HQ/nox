@@ -1,0 +1,13 @@
+
+Nox Security Assessment
+
+No issues found in what was checked.
+
+Checks completed: secrets, application code, dependencies (3 packages), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
+
+Additional verification recommended:
+  - Runtime testing for agent "tools.py": 2 attack hypotheses (EXFIL-FS-NET, TOOL-UNAUTH), e.g. coerce the agent into invoking a tool the request was not authorized to use.
+
+Next steps:
+  - Plan the runtime tests (offline, sends nothing): nox attack plan . --findings ./findings.json --inventory ./ai.inventory.json
+  - Catch new issues before they are committed: nox install-hook
