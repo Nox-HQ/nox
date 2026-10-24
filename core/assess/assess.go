@@ -608,8 +608,8 @@ func verifications(in Input) []Verification {
 		return nil
 	}
 	byFP := map[string]findings.Finding{}
-	for i := range in.Findings {
-		byFP[in.Findings[i].Fingerprint] = in.Findings[i]
+	for fp, i := range findings.IndexByFingerprint(in.Findings) {
+		byFP[fp] = in.Findings[i]
 	}
 	type group struct {
 		v         Verification
