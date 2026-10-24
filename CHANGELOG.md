@@ -44,6 +44,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recorded advisory lookup is not read as "no known vulnerabilities", and
   waived findings keep a control at limited. Deterministic, offline, no scan;
   the same outputs give the same bytes. See `docs/compliance-iso27001.md`.
+
+- **`nox fix plan | apply | verify`: "can you fix these?" answered, and checked.**
+  `plan` takes every issue the assessment listed (same numbering) and says
+  which are safe to apply, which need review and why (a major upgrade, a
+  settings change that alters a deployed system), and which nox cannot fix and
+  exactly what each needs (a published fix, a decision about a prompt
+  boundary, a two-account test). `apply` makes the safe set (`--include-major`
+  and `--include-review` widen it), then re-runs the checks that produced the
+  targeted findings and reports each change as verified fixed, still present,
+  new finding introduced, could not verify, or not applied. "Fixed" is claimed
+  only when the check ran to completion and no longer reports the finding; an
+  upgrade to a release the advisory still affects is reported as still
+  present even though every fingerprint changed, and an offline run reports
+  dependency changes as not verified rather than fixed. `verify` re-runs the
+  checks after a change made by hand. `--format json` for CI. Built in
+  `core/remediate` on `core/assess` and `core/fix`; the MCP `fix_plan` tool
+  returns the same plan (`plan`, `text`) and the LSP attaches each finding's
+  entry to its diagnostic. MCP stays read-only: applying is a command a person
+  runs. The bare `nox fix` flags, and the remediation workflow that uses them,
+  are unchanged. The assessment's next step now points at `nox fix plan`.
 - **`nox scan` ends with an assessment instead of counts.** Issues are grouped
   by the action that resolves them: one line per upgrade the `nox fix` planner
   would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known

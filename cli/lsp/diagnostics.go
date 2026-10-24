@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/remediate"
 )
 
 // Position is a zero-based line/character offset in a text document.
@@ -25,6 +26,17 @@ type Diagnostic struct {
 	Code     string `json:"code"`
 	Source   string `json:"source"`
 	Message  string `json:"message"`
+	// Data carries the fix plan's verdict on the finding for a client that
+	// wants more than the message: whether nox can fix it, and how.
+	Data *FixData `json:"data,omitempty"`
+}
+
+// FixData is the fix plan's entry for one diagnostic.
+type FixData struct {
+	Item    int    `json:"item"`
+	Class   string `json:"class"`
+	Kind    string `json:"kind"`
+	Command string `json:"command,omitempty"`
 }
 
 // LSP DiagnosticSeverity values.
@@ -91,12 +103,30 @@ func findingToDiagnostic(f *findings.Finding) Diagnostic {
 	}
 }
 
+// annotated adds the fix plan's verdict to a diagnostic: a sentence in the
+// message an editor already shows, and the structured form in Data.
+func annotated(d Diagnostic, f *findings.Finding, plan remediate.Plan) Diagnostic {
+	a, ok := plan.AnnotationFor(f.Fingerprint)
+	if !ok {
+		return d
+	}
+	d.Message += "\n\nFix: " + a.Text
+	d.Data = &FixData{Item: a.N, Class: string(a.Class), Kind: string(a.Kind), Command: a.Command}
+	return d
+}
+
 // findingsToDiagnostics converts and stably sorts a set of findings into
 // diagnostics ordered by start line, then start column, then rule id.
 func findingsToDiagnostics(fs []findings.Finding) []Diagnostic {
+	return findingsToDiagnosticsWithPlan(fs, remediate.Plan{})
+}
+
+// findingsToDiagnosticsWithPlan is findingsToDiagnostics with each diagnostic
+// carrying what `nox fix plan` says about its finding.
+func findingsToDiagnosticsWithPlan(fs []findings.Finding, plan remediate.Plan) []Diagnostic {
 	diags := make([]Diagnostic, 0, len(fs))
 	for i := range fs {
-		diags = append(diags, findingToDiagnostic(&fs[i]))
+		diags = append(diags, annotated(findingToDiagnostic(&fs[i]), &fs[i], plan))
 	}
 	sort.SliceStable(diags, func(i, j int) bool {
 		a, b := diags[i], diags[j]

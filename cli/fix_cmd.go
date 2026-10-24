@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -24,6 +25,9 @@ import (
 // Each upgrade is applied in the directory of the manifest its finding named,
 // which in a monorepo is not the project root.
 func runFix(args []string) int {
+	if len(args) > 0 && fixSubcommands[args[0]] {
+		return runFixSub(args[0], args[1:])
+	}
 	fs := flag.NewFlagSet("fix", flag.ContinueOnError)
 	var (
 		inputPath    string
@@ -146,24 +150,24 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		if dir == "" {
 			continue
 		}
-		before, verifiable := treeDigest(dir, a.ecosystem)
-		if err := applyUpgrade(dir, a); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s (%s) in %s: %v\n", a.pkg, a.ecosystem, describeDir(manifestRoot, dir), err)
-			failed++
-			continue
-		}
-		if after, _ := treeDigest(dir, a.ecosystem); verifiable && after == before {
-			if alreadySatisfied(dir, a) {
-				fmt.Printf("satisfied: %s [%s] -> %s in %s — already at or above the fix; an earlier upgrade in this run moved it\n",
-					a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
-				continue
-			}
+		res, err := applyChecked(dir, a)
+		var noChange *noChangeError
+		switch {
+		case errors.As(err, &noChange):
 			// The finding exists because the installed version is vulnerable,
 			// so an upgrade that rewrote nothing did not fix it, whatever the
 			// tool's exit code said.
 			fmt.Fprintf(os.Stderr, "no change: %s [%s] -> %s in %s — the tool reported success but rewrote nothing; the version is likely held by an override or a parent constraint\n",
 				a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
 			failed++
+			continue
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "error: %s (%s) in %s: %v\n", a.pkg, a.ecosystem, describeDir(manifestRoot, dir), err)
+			failed++
+			continue
+		case res == upgradeSatisfied:
+			fmt.Printf("satisfied: %s [%s] -> %s in %s — already at or above the fix; an earlier upgrade in this run moved it\n",
+				a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
 			continue
 		}
 		tidied[[2]string{dir, a.ecosystem}] = true
@@ -204,6 +208,41 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	}
 
 	return 0
+}
+
+// upgradeResult is what applying one upgrade did.
+type upgradeResult int
+
+const (
+	// upgradeApplied means the package manager rewrote the manifests.
+	upgradeApplied upgradeResult = iota
+	// upgradeSatisfied means nothing needed rewriting: an earlier upgrade in the
+	// same run already moved the package to or past the fix.
+	upgradeSatisfied
+)
+
+// noChangeError is an upgrade the package manager accepted and did nothing
+// for. Reported as a failure: the version is vulnerable, so an upgrade that
+// rewrote nothing did not fix it, whatever the exit code said.
+type noChangeError struct{}
+
+func (*noChangeError) Error() string {
+	return "the package manager reported success but rewrote nothing; the version is likely held by an override or a parent constraint"
+}
+
+// applyChecked runs one upgrade in dir and checks that it did something.
+func applyChecked(dir string, a upgradeAction) (upgradeResult, error) {
+	before, verifiable := treeDigest(dir, a.ecosystem)
+	if err := applyUpgrade(dir, a); err != nil {
+		return upgradeApplied, err
+	}
+	if after, _ := treeDigest(dir, a.ecosystem); verifiable && after == before {
+		if alreadySatisfied(dir, a) {
+			return upgradeSatisfied, nil
+		}
+		return upgradeApplied, &noChangeError{}
+	}
+	return upgradeApplied, nil
 }
 
 type upgradeAction struct {

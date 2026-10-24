@@ -1,0 +1,27 @@
+
+Nox Fix Report
+
+5 changes checked by re-running the dependency checks.
+
+Verified fixed (2):
+  1. Upgrade axios 1.7.4 -> 1.20.0: fixes 2 known vulnerabilities (highest severity: high).
+     The re-run no longer reports any of the 2 findings this change targeted.
+  6. Upgrade pg 8.0.0 -> 8.0.1: fixes 1 known vulnerability (highest severity: low).
+     The re-run no longer reports the finding this change targeted.
+
+Still present (1):
+  5. Upgrade qs 6.13.0 -> 6.16.0: fixes 1 known vulnerability (highest severity: medium).
+     The finding it targeted is still reported after the change: qs is at 6.14.0, and 1 advisory still affects that version (GHSA-qs-0001).
+
+New finding introduced (1):
+  3. Upgrade jsonwebtoken 9.0.0 -> 9.0.2: fixes 1 known vulnerability (highest severity: high).
+     The change introduced 1 finding the original scan did not report. The finding it targeted is gone.
+     New: VULN-001 GHSA-jwt-NEW in jsonwebtoken@9.0.2
+
+Not applied (1):
+  2. Upgrade body-parser 1.20.3 -> 1.20.9: fixes 1 known vulnerability (highest severity: high).
+     Not applied: body-parser is transitive and a parent's version range excludes the fix. Its findings are unchanged.
+
+Not changed by nox, still yours to resolve: item 4.
+
+Verified fixed: 2 of 5 changes.
