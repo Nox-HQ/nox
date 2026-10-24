@@ -10,6 +10,7 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
@@ -57,6 +58,7 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"slop":       slop.NewAnalyzer().Rules(),
 		"variants":   variants.NewAnalyzer().Rules(),
 		"provenance": provenance.NewAnalyzer().Rules(),
+		"authz":      authz.NewAnalyzer().Rules(),
 		// Publish rules, but are absent from Catalog() — see
 		// TestEveryShippedRuleReachesTheCatalog.
 		"agentflow":  agentflow.NewAnalyzer().Rules(),
