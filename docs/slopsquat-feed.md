@@ -218,8 +218,13 @@ job and needs no `id-token` (Ed25519 signing is secret-based, not keyless OIDC).
 
 ## Regenerating the feed
 
-The feed is produced by `cmd/slopfeed`, the maintained port of the research
-prototype. It models how LLMs hallucinate names, generates the candidates, and
+The feed is produced by `cmd/slopfeed`, a thin command line over the generator
+in `github.com/nox-hq/nox-core/slopfeed/generate`. The feed format, its digest,
+and signing and verification live in `github.com/nox-hq/nox-core/slopfeed`,
+shared with the service that will publish the feed. In this repository,
+`core/analyzers/slop/feed` keeps only the CLI side: reading a local file, the
+bundled feed (`data/`), and the remote fetch with its verified cache. The
+generator models how LLMs hallucinate names, generates the candidates, and
 checks public registries **read-only, rate-limited, re-verifying every 404**:
 
 ```bash

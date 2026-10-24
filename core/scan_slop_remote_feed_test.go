@@ -10,15 +10,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nox-hq/nox/core/analyzers/slop/feed"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/findings"
 )
 
 // signedFeedJSON builds and signs a feed flagging the given entries.
-func signedFeedJSON(t *testing.T, priv ed25519.PrivateKey, entries ...feed.Entry) []byte {
+func signedFeedJSON(t *testing.T, priv ed25519.PrivateKey, entries ...slopfeed.Entry) []byte {
 	t.Helper()
-	f := &feed.Feed{
-		SchemaVersion: feed.SchemaVersion,
+	f := &slopfeed.Feed{
+		SchemaVersion: slopfeed.SchemaVersion,
 		Version:       "remote-2026.07.25",
 		GeneratedAt:   "2026-07-25T00:00:00Z",
 		Source:        "test",
@@ -40,7 +40,7 @@ func signedFeedJSON(t *testing.T, priv ed25519.PrivateKey, entries ...feed.Entry
 // altering the SLOP-001 baseline.
 func TestScanRemoteSignedFeedFiresSLOP002(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
-	body := signedFeedJSON(t, priv, feed.Entry{
+	body := signedFeedJSON(t, priv, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "unregistered high-risk", VerifiedAt: "2026-07-25",
 	})
@@ -54,7 +54,7 @@ func TestScanRemoteSignedFeedFiresSLOP002(t *testing.T) {
 		"app.py":           "import flask\nimport openai_utils\n",
 	})
 	// Pin the publisher's public key on disk and require a signature.
-	writeProjFile(t, root, "keys/slopfeed.pub.pem", feed.EncodePublicKeyPEM(pub))
+	writeProjFile(t, root, "keys/slopfeed.pub.pem", slopfeed.EncodePublicKeyPEM(pub))
 	writeProjFile(t, root, ".nox.yaml",
 		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
 			"    signature_key_path: keys/slopfeed.pub.pem\n"+
@@ -87,7 +87,7 @@ func TestScanRemoteSignedFeedFiresSLOP002(t *testing.T) {
 // a subsequent offline scan is served from the verified cache with no network.
 func TestScanRemoteFeedCachedServesOffline(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
-	body := signedFeedJSON(t, priv, feed.Entry{
+	body := signedFeedJSON(t, priv, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 	})
@@ -102,7 +102,7 @@ func TestScanRemoteFeedCachedServesOffline(t *testing.T) {
 	defer srv.Close()
 
 	root := writeProject(t, map[string]string{"app.py": "import openai_utils\n"})
-	writeProjFile(t, root, "keys/slopfeed.pub.pem", feed.EncodePublicKeyPEM(pub))
+	writeProjFile(t, root, "keys/slopfeed.pub.pem", slopfeed.EncodePublicKeyPEM(pub))
 	writeProjFile(t, root, ".nox.yaml",
 		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
 			"    signature_key_path: keys/slopfeed.pub.pem\n"+
@@ -127,7 +127,7 @@ func TestScanRemoteFeedCachedServesOffline(t *testing.T) {
 // rejected: no SLOP-002, a visible degradation, SLOP-001 intact, no crash.
 func TestScanRemoteTamperedFeedFailsClosed(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
-	body := signedFeedJSON(t, priv, feed.Entry{
+	body := signedFeedJSON(t, priv, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 	})
@@ -144,7 +144,7 @@ func TestScanRemoteTamperedFeedFailsClosed(t *testing.T) {
 	defer srv.Close()
 
 	root := writeProject(t, map[string]string{"app.py": "import openai_utils\n"})
-	writeProjFile(t, root, "keys/slopfeed.pub.pem", feed.EncodePublicKeyPEM(pub))
+	writeProjFile(t, root, "keys/slopfeed.pub.pem", slopfeed.EncodePublicKeyPEM(pub))
 	writeProjFile(t, root, ".nox.yaml",
 		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
 			"    signature_key_path: keys/slopfeed.pub.pem\n"+
@@ -178,7 +178,7 @@ func TestScanRemoteWrongIdentityFeedRejected(t *testing.T) {
 	pinnedPub, _, _ := ed25519.GenerateKey(nil)
 	// The attacker signs with their own key over a valid digest.
 	_, attackerPriv, _ := ed25519.GenerateKey(nil)
-	body := signedFeedJSON(t, attackerPriv, feed.Entry{
+	body := signedFeedJSON(t, attackerPriv, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 	})
@@ -188,7 +188,7 @@ func TestScanRemoteWrongIdentityFeedRejected(t *testing.T) {
 	defer srv.Close()
 
 	root := writeProject(t, map[string]string{"app.py": "import openai_utils\n"})
-	writeProjFile(t, root, "keys/slopfeed.pub.pem", feed.EncodePublicKeyPEM(pinnedPub))
+	writeProjFile(t, root, "keys/slopfeed.pub.pem", slopfeed.EncodePublicKeyPEM(pinnedPub))
 	writeProjFile(t, root, ".nox.yaml",
 		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
 			"    signature_key_path: keys/slopfeed.pub.pem\n"+
@@ -216,17 +216,19 @@ func TestScanRemoteWrongIdentityFeedRejected(t *testing.T) {
 // is rejected when require_signature is set.
 func TestScanRemoteUnsignedFeedWithRequireSignatureRejected(t *testing.T) {
 	// Build an UNSIGNED but digest-valid feed.
-	f := &feed.Feed{
-		SchemaVersion: feed.SchemaVersion,
+	f := &slopfeed.Feed{
+		SchemaVersion: slopfeed.SchemaVersion,
 		Version:       "unsigned",
 		GeneratedAt:   "2026-07-25T00:00:00Z",
 		Source:        "test",
-		Entries: []feed.Entry{{
+		Entries: []slopfeed.Entry{{
 			Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 			Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 		}},
 	}
-	f.SetDigest()
+	if err := f.SetDigest(); err != nil {
+		t.Fatal(err)
+	}
 	body, _ := json.Marshal(f)
 	pub, _, _ := ed25519.GenerateKey(nil)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -235,7 +237,7 @@ func TestScanRemoteUnsignedFeedWithRequireSignatureRejected(t *testing.T) {
 	defer srv.Close()
 
 	root := writeProject(t, map[string]string{"app.py": "import openai_utils\n"})
-	writeProjFile(t, root, "keys/slopfeed.pub.pem", feed.EncodePublicKeyPEM(pub))
+	writeProjFile(t, root, "keys/slopfeed.pub.pem", slopfeed.EncodePublicKeyPEM(pub))
 	writeProjFile(t, root, ".nox.yaml",
 		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
 			"    signature_key_path: keys/slopfeed.pub.pem\n"+
