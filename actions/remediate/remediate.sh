@@ -19,7 +19,7 @@ fi
 OUTPUT_DIR="${INPUT_OUTPUT:-nox-out}"
 MANIFEST_ROOT="${INPUT_MANIFEST_ROOT:-.}"
 INCLUDE_MAJOR="${INPUT_INCLUDE_MAJOR:-false}"
-FINDINGS_PATH="${OUTPUT_DIR}/findings.json"
+FINDINGS_PATH="${INPUT_FINDINGS_FILE:-${OUTPUT_DIR}/findings.json}"
 PLAN_PATH="${OUTPUT_DIR}/remediation-plan.txt"
 PR_BODY_PATH="${OUTPUT_DIR}/pr-body.md"
 
@@ -38,7 +38,7 @@ fi
 case "$cmd" in
   plan)
     set +e
-    nox fix --input "$FINDINGS_PATH" --root "$MANIFEST_ROOT" --dry-run "${extra_args[@]}" \
+    nox fix --input "$FINDINGS_PATH" --root "$MANIFEST_ROOT" --dry-run ${extra_args[@]+"${extra_args[@]}"} \
       | tee "$PLAN_PATH"
     plan_status=${PIPESTATUS[0]}
     set -e
@@ -76,7 +76,7 @@ case "$cmd" in
     ;;
 
   apply)
-    nox fix --input "$FINDINGS_PATH" --root "$MANIFEST_ROOT" "${extra_args[@]}"
+    nox fix --input "$FINDINGS_PATH" --root "$MANIFEST_ROOT" ${extra_args[@]+"${extra_args[@]}"}
     ;;
 
   *)

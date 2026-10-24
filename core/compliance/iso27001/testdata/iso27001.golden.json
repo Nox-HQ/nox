@@ -1,0 +1,638 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "tool_name": "nox",
+    "tool_version": "9.9.9",
+    "report": "iso27001-technical-evidence",
+    "standard": "ISO/IEC 27001:2022"
+  },
+  "notice": "This is technical evidence from an automated scan, offered as supporting material for an ISO/IEC 27001:2022 assessment. It does not decide whether any control is implemented or effective, it is not an audit, and it is not a certificate. Each statement cites the scan output it comes from; each control lists what that evidence cannot show.",
+  "provenance": {
+    "scan_tool_version": "1.2.3",
+    "scan_generated_at": "2026-10-24T17:18:36Z",
+    "scan_offline": false,
+    "scopes_scanned": [
+      "all"
+    ],
+    "degradations": 0,
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "artifacts": [
+      {
+        "name": "findings.json",
+        "kind": "findings",
+        "sha256": "aa"
+      },
+      {
+        "name": "sbom.cdx.json",
+        "kind": "sbom",
+        "sha256": "bb"
+      },
+      {
+        "name": "ai.inventory.json",
+        "kind": "ai-inventory",
+        "sha256": "cc"
+      }
+    ]
+  },
+  "summary": {
+    "controls": 16,
+    "supporting_evidence": 2,
+    "open_issues": 3,
+    "limited_evidence": 10,
+    "not_evidenced": 1
+  },
+  "controls": [
+    {
+      "id": "A.5.9",
+      "title": "Inventory of information and other associated assets",
+      "theme": "Organizational",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "statement": "Software bill of materials lists 12 component(s) in CycloneDX 1.5 format.",
+          "findings": 0,
+          "waived": 0
+        },
+        {
+          "artifact": "ai.inventory.json",
+          "statement": "AI component inventory lists 0 component(s) and 1 model reference(s), 1 of them not pinned to a version.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "Only software components and AI models/agents declared in this repository are listed; information assets, data stores, hardware and services are not.",
+        "An inventory shows what exists, not who owns it, how it is classified, or that it is kept current."
+      ],
+      "organizational_evidence": [
+        "ORG-ASSETS",
+        "ORG-DATA-CLASS"
+      ]
+    },
+    {
+      "id": "A.5.17",
+      "title": "Authentication information",
+      "theme": "Organizational",
+      "status": "supporting_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Secret scanning of the working tree ran (scope: secrets). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "A clean secret scan shows no recognizable credential was found in the scanned files; it does not show credentials are generated, stored, rotated or revoked well.",
+        "Secrets already committed to git history are only covered when a history scan was run, which findings.json does not record.",
+        "Password rules, multi-factor authentication and credential allocation are processes outside the repository."
+      ],
+      "organizational_evidence": [
+        "ORG-ACCESS",
+        "ORG-CRYPTO"
+      ]
+    },
+    {
+      "id": "A.5.19",
+      "title": "Information security in supplier relationships",
+      "theme": "Organizational",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "statement": "Software bill of materials lists 12 component(s) in CycloneDX 1.5 format.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "The bill of materials names third-party software suppliers; it shows nothing about the agreements, assessments or monitoring that govern the relationship."
+      ],
+      "organizational_evidence": [
+        "ORG-SUPPLIERS"
+      ]
+    },
+    {
+      "id": "A.5.21",
+      "title": "Managing information security in the ICT supply chain",
+      "theme": "Organizational",
+      "status": "supporting_evidence",
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "statement": "Software bill of materials lists 12 component(s) in CycloneDX 1.5 format.",
+          "findings": 0,
+          "waived": 0
+        },
+        {
+          "artifact": "findings.json",
+          "statement": "Supply-chain checks (slopsquatting, provenance, licenses, containers) ran (scope: supply-chain). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "Checks cover dependencies declared in lockfiles and manifests; build tooling, hosted services and vendored binaries outside them are not covered.",
+        "Provenance and typosquat checks flag risk signals; they do not verify a supplier's own security practices.",
+        "Requirements placed on suppliers and the process for acting on supply-chain change are not visible to a scan."
+      ],
+      "organizational_evidence": [
+        "ORG-SUPPLIERS",
+        "ORG-VULN-PROCESS"
+      ]
+    },
+    {
+      "id": "A.5.23",
+      "title": "Information security for use of cloud services",
+      "theme": "Organizational",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Infrastructure-as-code configuration checks ran (scope: iac). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "gaps": [
+        "Infrastructure-as-code configuration checks found nothing, but the scan outputs do not show that any files of this kind were present. No findings may mean there was nothing to check."
+      ],
+      "limits": [
+        "Only cloud configuration declared in files in this repository is checked; the deployed state of a cloud account is not observed.",
+        "Choice of provider, the shared-responsibility split, contractual terms and exit arrangements are outside what a scan can see."
+      ],
+      "organizational_evidence": [
+        "ORG-CLOUD",
+        "ORG-SUPPLIERS"
+      ]
+    },
+    {
+      "id": "A.5.34",
+      "title": "Privacy and protection of personal identifiable information (PII)",
+      "theme": "Organizational",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Sensitive-data handling checks ran (scope: data). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "gaps": [
+        "Sensitive-data handling checks found nothing, but the scan outputs do not show that any files of this kind were present. No findings may mean there was nothing to check."
+      ],
+      "limits": [
+        "Checks look for patterns that suggest personal data is handled unsafely in code; they cannot decide what is personal data in your context.",
+        "Lawful basis, records of processing, retention, data-subject rights and impact assessments are not visible to a scan."
+      ],
+      "organizational_evidence": [
+        "ORG-DATA-CLASS",
+        "ORG-PRIVACY"
+      ]
+    },
+    {
+      "id": "A.8.4",
+      "title": "Access to source code",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Secret scanning (credentials that would expose code or systems) ran (scope: secrets). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "Nox does not see who can read or write the repository, branch protection, review requirements or access reviews; those are repository-host settings.",
+        "The only technical evidence is indirect: whether credentials are committed to the working tree."
+      ],
+      "organizational_evidence": [
+        "ORG-ACCESS"
+      ]
+    },
+    {
+      "id": "A.8.8",
+      "title": "Management of technical vulnerabilities",
+      "theme": "Technological",
+      "status": "open_issues",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Dependency vulnerability checks against OSV.dev ran (scope: deps). 2 open finding(s): 1 high, 1 medium. 2 of them name a version that fixes them. Also 1 finding(s) baselined, suppressed or VEX-cleared.",
+          "findings": 2,
+          "waived": 1,
+          "rules": [
+            "VULN-001"
+          ]
+        },
+        {
+          "artifact": "sbom.cdx.json",
+          "statement": "Software bill of materials lists 12 component(s) in CycloneDX 1.5 format.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "gaps": [
+        "Dependency vulnerability checks against OSV.dev: 1 finding(s) are waived, baselined or VEX-cleared. Each is a decision to accept or defer a risk; the scan does not show who made it or why, and a reviewer will ask."
+      ],
+      "limits": [
+        "Only vulnerabilities in declared dependencies are covered; operating systems, base images not described in the repository, and running infrastructure are not.",
+        "A finding is a published advisory against a package version. Whether the vulnerable code is reachable in your application is a separate question the finding states per case.",
+        "Evidence of a vulnerability management process (who is told, how quickly it is fixed, which risks are accepted and by whom) is not in a scan."
+      ],
+      "organizational_evidence": [
+        "ORG-VULN-PROCESS",
+        "ORG-RISK"
+      ]
+    },
+    {
+      "id": "A.8.9",
+      "title": "Configuration management",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Infrastructure and file-permission configuration checks ran (scope: iac). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "gaps": [
+        "Infrastructure and file-permission configuration checks found nothing, but the scan outputs do not show that any files of this kind were present. No findings may mean there was nothing to check."
+      ],
+      "limits": [
+        "Checks cover configuration written in this repository against known-risky settings; they are not a baseline you approved.",
+        "Whether configuration in production matches the repository, and how changes to it are authorized, is not observed."
+      ],
+      "organizational_evidence": [
+        "ORG-CHANGE",
+        "ORG-CLOUD"
+      ]
+    },
+    {
+      "id": "A.8.12",
+      "title": "Data leakage prevention",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Sensitive-data and secret-exposure checks ran (scope: data). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "Static checks find code that may expose data; they are not a data-leakage-prevention control operating on networks, endpoints or mail.",
+        "Data classification and the rules for handling each class are organizational."
+      ],
+      "organizational_evidence": [
+        "ORG-DATA-CLASS"
+      ]
+    },
+    {
+      "id": "A.8.24",
+      "title": "Use of cryptography",
+      "theme": "Technological",
+      "status": "open_issues",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Weak or misused cryptography checks ran (scope: code). 1 open finding(s): 1 medium.",
+          "findings": 1,
+          "waived": 0,
+          "rules": [
+            "CRYPTO-001"
+          ]
+        }
+      ],
+      "limits": [
+        "Checks find weak algorithms, protocols and settings in code and configuration; they do not assess key generation, storage, rotation or retirement.",
+        "A policy on cryptography and the records of how keys are managed are organizational."
+      ],
+      "organizational_evidence": [
+        "ORG-CRYPTO"
+      ]
+    },
+    {
+      "id": "A.8.25",
+      "title": "Secure development life cycle",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Record of the security scan itself: a scan by nox 1.2.3 on 2026-10-24T17:18:36Z covered all scopes with 4 active finding(s) in total. It shows a security scan was run, not that one runs on every change.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "One scan shows that a security check ran once. It does not show the check runs on every change, that findings block release, or that the rules of the life cycle are defined."
+      ],
+      "organizational_evidence": [
+        "ORG-SDLC",
+        "ORG-CHANGE"
+      ]
+    },
+    {
+      "id": "A.8.26",
+      "title": "Application security requirements",
+      "theme": "Technological",
+      "status": "not_evidenced",
+      "evidence": [],
+      "limits": [
+        "Requirements are written down by people before code exists. Nothing a scan produces states, or tests conformance to, your requirements."
+      ],
+      "organizational_evidence": [
+        "ORG-REQUIREMENTS"
+      ]
+    },
+    {
+      "id": "A.8.27",
+      "title": "Secure system architecture and engineering principles",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "statement": "AI component inventory (models, agents, tools) lists 0 component(s) and 1 model reference(s), 1 of them not pinned to a version.",
+          "findings": 0,
+          "waived": 0
+        },
+        {
+          "artifact": "findings.json",
+          "statement": "AI, agent and MCP architecture checks ran (scope: ai). No open findings.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "limits": [
+        "Checks examine a few architectural risks in AI-enabled applications (tool exposure, trust boundaries); they are not a review of the architecture.",
+        "Documented principles, threat models and design reviews are organizational."
+      ],
+      "organizational_evidence": [
+        "ORG-ARCHITECTURE"
+      ]
+    },
+    {
+      "id": "A.8.28",
+      "title": "Secure coding",
+      "theme": "Technological",
+      "status": "open_issues",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Static analysis of application code ran (scope: code). 1 open finding(s): 1 high.",
+          "findings": 1,
+          "waived": 0,
+          "rules": [
+            "TAINT-AI-001"
+          ]
+        }
+      ],
+      "limits": [
+        "Static analysis finds a subset of defect classes in the languages it supports; absence of findings is not absence of defects.",
+        "Coding standards, developer training and code review practice are organizational."
+      ],
+      "organizational_evidence": [
+        "ORG-SDLC",
+        "ORG-TRAINING"
+      ]
+    },
+    {
+      "id": "A.8.29",
+      "title": "Security testing in development and acceptance",
+      "theme": "Technological",
+      "status": "limited_evidence",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "Record of the security scan itself: a scan by nox 1.2.3 on 2026-10-24T17:18:36Z covered all scopes with 4 active finding(s) in total. It shows a security scan was run, not that one runs on every change.",
+          "findings": 0,
+          "waived": 0
+        }
+      ],
+      "gaps": [
+        "No dynamic verification was performed in this scan: findings are static observations, none was confirmed exploitable or shown to be prevented. Run `nox attack` against a running target for runtime evidence."
+      ],
+      "limits": [
+        "Static scanning is one kind of security testing. Penetration tests, acceptance tests and test plans are not produced by it."
+      ],
+      "organizational_evidence": [
+        "ORG-TESTING"
+      ]
+    }
+  ],
+  "organizational_evidence_required": [
+    {
+      "id": "ORG-SCOPE",
+      "reference": "Clause 4.3",
+      "title": "ISMS scope",
+      "needed": "A statement of what the information security management system covers, and where this repository and the product built from it sit inside that boundary."
+    },
+    {
+      "id": "ORG-POLICY",
+      "reference": "Clause 5.2; A.5.1",
+      "title": "Information security policy",
+      "needed": "An approved policy and the topic-specific policies beneath it, communicated to the people they apply to."
+    },
+    {
+      "id": "ORG-ROLES",
+      "reference": "Clause 5.3; A.5.2",
+      "title": "Roles and responsibilities",
+      "needed": "Named owners for information security, including who owns security of this application."
+    },
+    {
+      "id": "ORG-RISK",
+      "reference": "Clauses 6.1.2, 6.1.3",
+      "title": "Risk assessment, treatment and Statement of Applicability",
+      "needed": "A documented risk method, a risk register that includes this application, treatment decisions with owners (including any accepted risk), and the Statement of Applicability that records which Annex A controls apply and why.",
+      "controls": [
+        "A.8.8"
+      ]
+    },
+    {
+      "id": "ORG-OBJECTIVES",
+      "reference": "Clause 6.2",
+      "title": "Security objectives",
+      "needed": "Measurable objectives and the records of how they are monitored."
+    },
+    {
+      "id": "ORG-TRAINING",
+      "reference": "Clauses 7.2, 7.3; A.6.3",
+      "title": "Competence, awareness and training",
+      "needed": "Records that developers and operators have the skills the role needs, including secure-coding training.",
+      "controls": [
+        "A.8.28"
+      ]
+    },
+    {
+      "id": "ORG-DOCS",
+      "reference": "Clause 7.5",
+      "title": "Documented information control",
+      "needed": "How documents and records are created, approved, versioned and retained, so that this assessment material is itself a controlled record."
+    },
+    {
+      "id": "ORG-AUDIT",
+      "reference": "Clauses 9.2, 9.3",
+      "title": "Internal audit and management review",
+      "needed": "An audit programme with reports, and minutes of management review of the system's performance."
+    },
+    {
+      "id": "ORG-IMPROVE",
+      "reference": "Clause 10",
+      "title": "Nonconformity and continual improvement",
+      "needed": "A record of nonconformities, corrective actions and their closure."
+    },
+    {
+      "id": "ORG-ASSETS",
+      "reference": "A.5.9; A.5.10",
+      "title": "Asset ownership",
+      "needed": "An inventory covering information, services and data stores beyond software components, each with an owner.",
+      "controls": [
+        "A.5.9"
+      ]
+    },
+    {
+      "id": "ORG-DATA-CLASS",
+      "reference": "A.5.12; A.5.13; A.5.10",
+      "title": "Data classification and handling",
+      "needed": "A classification scheme, labelling and handling rules, and evidence they are applied to this application's data.",
+      "controls": [
+        "A.5.9",
+        "A.5.34",
+        "A.8.12"
+      ]
+    },
+    {
+      "id": "ORG-PRIVACY",
+      "reference": "A.5.34",
+      "title": "Privacy records",
+      "needed": "Records of processing, lawful basis, retention rules and data-protection impact assessments for personal data this application handles.",
+      "controls": [
+        "A.5.34"
+      ]
+    },
+    {
+      "id": "ORG-ACCESS",
+      "reference": "A.5.15; A.5.18; A.8.2; A.8.3; A.8.4",
+      "title": "Access control and access reviews",
+      "needed": "An access control policy, evidence of periodic access reviews, joiner/mover/leaver records, and the repository-host settings that restrict who can read and change source code.",
+      "controls": [
+        "A.5.17",
+        "A.8.4"
+      ]
+    },
+    {
+      "id": "ORG-SUPPLIERS",
+      "reference": "A.5.19; A.5.20; A.5.21; A.5.22",
+      "title": "Supplier agreements and reviews",
+      "needed": "Supplier security requirements in contracts, assessments of the suppliers the software bill of materials implies, and how supplier service changes are monitored.",
+      "controls": [
+        "A.5.19",
+        "A.5.21",
+        "A.5.23"
+      ]
+    },
+    {
+      "id": "ORG-CLOUD",
+      "reference": "A.5.23",
+      "title": "Cloud service governance",
+      "needed": "A cloud-use policy, the shared-responsibility split agreed with each provider, and exit arrangements.",
+      "controls": [
+        "A.5.23",
+        "A.8.9"
+      ]
+    },
+    {
+      "id": "ORG-INCIDENT",
+      "reference": "A.5.24 to A.5.28",
+      "title": "Incident management",
+      "needed": "A documented incident process, roles, and records of incidents and exercises, including how a vulnerability disclosed in a dependency is handled."
+    },
+    {
+      "id": "ORG-CONTINUITY",
+      "reference": "A.5.29; A.5.30; A.8.13; A.8.14",
+      "title": "Continuity, backup and redundancy",
+      "needed": "Continuity plans and backup/restore test records for the systems this application runs on."
+    },
+    {
+      "id": "ORG-MONITORING",
+      "reference": "A.8.15; A.8.16",
+      "title": "Logging and monitoring",
+      "needed": "Evidence that production logs are collected, protected and reviewed, and that anomalies raise alerts someone acts on."
+    },
+    {
+      "id": "ORG-CRYPTO",
+      "reference": "A.8.24",
+      "title": "Cryptography and key management",
+      "needed": "A cryptography policy and records of how keys and secrets are generated, stored, rotated and revoked.",
+      "controls": [
+        "A.5.17",
+        "A.8.24"
+      ]
+    },
+    {
+      "id": "ORG-VULN-PROCESS",
+      "reference": "A.8.8",
+      "title": "Vulnerability management process",
+      "needed": "Time-to-remediate targets, triage records, and the approval trail for any vulnerability left unfixed.",
+      "controls": [
+        "A.5.21",
+        "A.8.8"
+      ]
+    },
+    {
+      "id": "ORG-CHANGE",
+      "reference": "A.8.9; A.8.32",
+      "title": "Change and configuration management",
+      "needed": "A change process with approvals, and configuration baselines that production is compared against.",
+      "controls": [
+        "A.8.9",
+        "A.8.25"
+      ]
+    },
+    {
+      "id": "ORG-SDLC",
+      "reference": "A.8.25; A.8.28",
+      "title": "Secure development procedure",
+      "needed": "A defined development life cycle with security gates, code review rules, and evidence they run on every change (for example CI configuration and review records).",
+      "controls": [
+        "A.8.25",
+        "A.8.28"
+      ]
+    },
+    {
+      "id": "ORG-REQUIREMENTS",
+      "reference": "A.8.26",
+      "title": "Application security requirements",
+      "needed": "Documented security requirements for this application and traceability from them to tests.",
+      "controls": [
+        "A.8.26"
+      ]
+    },
+    {
+      "id": "ORG-ARCHITECTURE",
+      "reference": "A.8.27",
+      "title": "Architecture principles and threat modelling",
+      "needed": "Documented secure-engineering principles and threat models or design reviews for this application.",
+      "controls": [
+        "A.8.27"
+      ]
+    },
+    {
+      "id": "ORG-TESTING",
+      "reference": "A.8.29",
+      "title": "Security testing plan and results",
+      "needed": "A testing plan, penetration test reports and acceptance-test records, with findings tracked to closure.",
+      "controls": [
+        "A.8.29"
+      ]
+    }
+  ]
+}

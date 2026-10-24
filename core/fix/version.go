@@ -166,6 +166,43 @@ func IsMajorBump(from, to string) bool {
 	return majorOf(from) != majorOf(to)
 }
 
+// Bump names how far a move travels.
+type Bump string
+
+// The bump kinds. BumpUnknown is a move nox cannot place, and callers must
+// treat it as the largest, not the smallest: an unplaceable move is exactly the
+// one nobody should apply unattended.
+const (
+	BumpPatch   Bump = "patch"
+	BumpMinor   Bump = "minor"
+	BumpMajor   Bump = "major"
+	BumpUnknown Bump = "unknown"
+)
+
+// BumpKind classifies the move from one version to another by the first
+// numeric component that differs. A version it cannot read, or an empty from,
+// is BumpUnknown rather than a guess at the smaller answer.
+func BumpKind(from, to string) Bump {
+	f, t := parseVersion(from), parseVersion(to)
+	if !f.ok || !t.ok {
+		return BumpUnknown
+	}
+	at := func(p parsedVersion, i int) int {
+		if i < len(p.nums) {
+			return p.nums[i]
+		}
+		return 0
+	}
+	switch {
+	case at(f, 0) != at(t, 0):
+		return BumpMajor
+	case at(f, 1) != at(t, 1):
+		return BumpMinor
+	default:
+		return BumpPatch
+	}
+}
+
 // majorOf returns the leading numeric segment of a version ("v1.2.3" -> "1").
 func majorOf(version string) string {
 	v := strings.TrimPrefix(version, "v")

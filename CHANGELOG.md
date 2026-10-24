@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A newly disclosed advisory gets exactly the response you configured.**
+  `nox install-ci` writes one workflow that scans pull requests and, on a daily
+  schedule, scans the merged code and works out which dependency advisories are
+  new since the previous scheduled run. `nox advisories` decides what to do
+  about each, from the `.nox.yaml` `advisories` block: `report` (the default:
+  job summary, SARIF, an issue), `prepare` (also a remediation pull request
+  carrying only the new advisories' upgrades, through `actions/remediate`) or
+  `remediate` (also permits `gh pr merge --auto`, only when every advisory in
+  that pull request passes the stricter gate and the package move is within
+  `max_bump`; GitHub's required checks decide whether it merges, and nothing
+  bypasses them). Gates are `min_severity` and `min_relevance`
+  (`undetermined`, `symbol_used`, `call_reachable`). Undetermined relevance is
+  treated as possibly affecting the application and the reason says so; only a
+  refuted `not_impacting` advisory is held at report. A waived or baselined
+  advisory is never new; with no previous run, or a scan whose lookup failed,
+  nothing is acted on and `nox advisories` says so. The decision is a pure
+  function in `core/advisory`. `actions/remediate` gains a `findings-file`
+  input, and `remediate.sh` no longer fails on bash 3.2 when no extra arguments
+  are set. See `docs/advisory-policy.md`.
+
+- **`nox compliance iso27001`, and an MCP tool `compliance_iso27001`.** Reads
+  the outputs of a scan already run (`findings.json`, an SBOM,
+  `ai.inventory.json`) and writes `iso27001.md` for a reviewer and
+  `iso27001.json` for tooling: for 16 ISO/IEC 27001:2022 Annex A controls, what
+  the scan shows with counts, rule IDs, source file and SHA-256, the gaps in
+  this run, what that evidence can never show, and a 25-item checklist of the
+  organizational evidence a repository cannot hold (risk assessment, ISMS
+  scope, access reviews, incident records, supplier agreements). It never
+  states that a control is met: statuses describe the evidence
+  (`supporting_evidence`, `open_issues`, `limited_evidence`, `not_evidenced`),
+  and a test rejects any status or word that claims more. An empty result only
+  counts when the outputs show something was there to check, a scan without a
+  recorded advisory lookup is not read as "no known vulnerabilities", and
+  waived findings keep a control at limited. Deterministic, offline, no scan;
+  the same outputs give the same bytes. See `docs/compliance-iso27001.md`.
 - **`nox scan` ends with an assessment instead of counts.** Issues are grouped
   by the action that resolves them: one line per upgrade the `nox fix` planner
   would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known

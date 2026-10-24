@@ -155,6 +155,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
+		fmt.Fprintf(os.Stderr, "  compliance <fw>  Technical evidence for a framework from scan outputs (iso27001)\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
@@ -172,6 +173,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  rule-review      List rule propositions worth a maintainer read\n")
 		fmt.Fprintf(os.Stderr, "  ci-gate          Decide whether a scan should fail a build (degradations, dead baseline, net-new)\n")
+		fmt.Fprintf(os.Stderr, "  advisories       Decide what to do about newly disclosed dependency advisories (report, prepare, remediate)\n")
+		fmt.Fprintf(os.Stderr, "  install-ci       Write a GitHub Actions workflow: scan on PRs, watch for new advisories on a schedule\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n")
@@ -220,6 +223,8 @@ func run(args []string) int {
 		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
+	case "compliance":
+		return runCompliance(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
 	case "mcp":
@@ -270,6 +275,10 @@ func run(args []string) int {
 		return runCalibrate(remaining[1:])
 	case "rule-review":
 		return runRuleReview(remaining[1:])
+	case "advisories":
+		return runAdvisories(remaining[1:])
+	case "install-ci":
+		return runInstallCI(remaining[1:])
 	case "install":
 		return runInstall(remaining[1:])
 	case "uri":

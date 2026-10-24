@@ -20,6 +20,7 @@
 
 # Golden test files: compared byte-for-byte, so a CRLF checkout fails them
 *.golden text eol=lf
+*.golden.* text eol=lf
 
 # Proto definitions
 *.proto text eol=lf

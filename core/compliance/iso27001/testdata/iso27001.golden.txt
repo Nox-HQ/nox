@@ -1,0 +1,33 @@
+ISO/IEC 27001:2022: technical evidence from your security scan
+
+Supporting evidence only: nox does not decide whether any control is implemented or effective.
+
+Based on a scan by nox 1.2.3 on 2026-10-24T17:18:36Z, repository at 0123456789ab.
+Evidence read: findings.json, sbom.cdx.json, ai.inventory.json
+
+Nox can evidence these (checks ran, nothing open):
+  A.5.17 Authentication information
+  A.5.21 Managing information security in the ICT supply chain
+
+Evidence exists, but issues are open:
+  A.8.8 Management of technical vulnerabilities (2 open finding(s))
+  A.8.24 Use of cryptography (1 open finding(s))
+  A.8.28 Secure coding (1 open finding(s))
+
+Nox sees only part of these:
+  A.5.9 Inventory of information and other associated assets (indirect evidence)
+  A.5.19 Information security in supplier relationships (indirect evidence)
+  A.5.23 Information security for use of cloud services (see gaps)
+  A.5.34 Privacy and protection of personal identifiable information (PII) (see gaps)
+  A.8.4 Access to source code (indirect evidence)
+  A.8.9 Configuration management (see gaps)
+  A.8.12 Data leakage prevention (indirect evidence)
+  A.8.25 Secure development life cycle (indirect evidence)
+  A.8.27 Secure system architecture and engineering principles (indirect evidence)
+  A.8.29 Security testing in development and acceptance (see gaps)
+
+Nox has no technical evidence for these:
+  A.8.26 Application security requirements
+
+Organizational evidence you still need: 25 items (policies, risk assessment, access reviews, incident records, supplier agreements and more).
+The checklist, with the evidence behind every claim above, is in the written report.
