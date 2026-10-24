@@ -48,35 +48,3 @@ func familySummary(items []findings.Finding) string {
 	}
 	return strings.Join(parts, ", ")
 }
-
-// printNextStepTips surfaces actionable follow-ups based on what the
-// scan produced. Tips fire only when the relevant signal is present so
-// repeat operators don't see noise.
-func printNextStepTips(items []findings.Finding, outputDir string) {
-	if len(items) == 0 {
-		return
-	}
-
-	hasFixable := 0
-	hasVuln := false
-	for i := range items {
-		f := &items[i]
-		if f.RuleID == "VULN-001" {
-			hasVuln = true
-			if f.Metadata["fixed_in"] != "" {
-				hasFixable++
-			}
-		}
-	}
-
-	if hasFixable > 0 {
-		fmt.Printf("[tip] %d dependency findings have a fixed_in version. Apply with:\n", hasFixable)
-		fmt.Printf("      nox fix --input %s/findings.json --dry-run\n", outputDir)
-	}
-	if hasVuln {
-		fmt.Printf("[tip] Baseline these findings as OpenVEX waivers:\n")
-		fmt.Printf("      nox vex init --input %s/findings.json\n", outputDir)
-	}
-	fmt.Printf("[tip] Block future regressions in CI with a pre-commit hook:\n")
-	fmt.Printf("      nox install-hook\n")
-}

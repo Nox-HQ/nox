@@ -1,6 +1,10 @@
 package lexctx
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/nox-hq/nox/core/internal/workcount"
+)
 
 // Kind labels the lexical role of a byte range.
 type Kind int
@@ -60,6 +64,7 @@ func Classify(lang Lang, content []byte) []Region {
 }
 
 func classify(lang Lang, content []byte) []Region {
+	workcount.Add(workcount.Lex, len(content))
 	switch lang {
 	case LangPython:
 		return scanPython(content)

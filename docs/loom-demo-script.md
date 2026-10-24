@@ -41,11 +41,11 @@ summary line:*
 > [families] AI / Prompt Injection (LLM01):2, AI / Embedding Leakage
 > (LLM06):2, AI / Agent Lattice (LLM07):3, MCP Hardening:2
 
-**"Eleven findings, grouped by category. Three Tip lines at the
-bottom telling me what to do next. No 1500-rule firehose; just what's
+**"Eleven findings, grouped by category. An assessment at the
+bottom telling me what to fix first and what to run next. No 1500-rule firehose; just what's
 relevant to this codebase."**
 
-*Scroll to the [tip] lines.*
+*Scroll to the Nox Security Assessment.*
 
 ---
 

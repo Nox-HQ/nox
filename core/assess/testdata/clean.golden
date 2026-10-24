@@ -1,0 +1,9 @@
+
+Nox Security Assessment
+
+No issues found in what was checked.
+
+Checks completed: secrets, application code, dependencies (none found), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
+
+Next steps:
+  - Catch new issues before they are committed: nox install-hook
