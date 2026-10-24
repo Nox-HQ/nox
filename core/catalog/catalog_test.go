@@ -120,8 +120,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1497 -> 1498 added SEC-952, a JWT in a non-compact JSON layout.
 	// 1498 -> 1499 added AUTHZ-001, possible broken object-level
 	// authorization in Express routes (opt-in).
-	if got := len(cat); got != 1499 {
-		t.Errorf("Catalog() returned %d rules, want 1499", got)
+	// 1499 -> 1502 adds IAC-502, IAC-503 (a credential-named environment
+	// variable with a literal value, Kubernetes/Helm and Compose), IAC-504
+	// (Terraform S3 public access block disabled) and MCP-025 (an MCP server
+	// launched from a package registry without a pinned version).
+	if got := len(cat); got != 1503 {
+		t.Errorf("Catalog() returned %d rules, want 1503", got)
 	}
 }
 

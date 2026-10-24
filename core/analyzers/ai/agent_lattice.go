@@ -39,6 +39,7 @@ const (
 	CapWebhookPost     CapabilityTag = "webhook_post"
 	CapDatabaseRead    CapabilityTag = "database_read"
 	CapDatabaseWrite   CapabilityTag = "database_write"
+	CapSQLExec         CapabilityTag = "sql_exec"
 	CapGitPush         CapabilityTag = "git_push"
 	CapReadSecret      CapabilityTag = "read_secret"
 	CapCloudIAMModify  CapabilityTag = "cloud_iam_modify"
@@ -189,6 +190,35 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
+// toolWindow is how far past a registration's name the extractor looks for the
+// tool's description and parameter schema.
+const toolWindow = 700
+
+// sqlParamRe finds a parameter that IS a SQL statement: a JSON-schema property
+// or a function parameter named sql / sql_query / sql_statement / raw_sql, as in
+// `properties: { sql: { type: "string" } }` or `def run(sql: str)`.
+var sqlParamRe = regexp.MustCompile(`(?i)["']?\b(?:sql|sql_query|sql_statement|sql_text|raw_sql)\b["']?\s*(?::|=)\s*(?:\{|str\b|string\b|z\.string|["']string["'])|\bdef\s+\w+\s*\([^)]*\b(?:sql|raw_sql|sql_query)\b\s*[:,)=]`)
+
+// genericQueryParamRe finds a parameter called `query` or `statement`. On its
+// own that is a search string; it only means SQL when the tool says so.
+var genericQueryParamRe = regexp.MustCompile(`(?i)["']?\b(?:query|statement)\b["']?\s*(?::|=)\s*(?:\{|str\b|string\b|z\.string|["']string["'])|\bdef\s+\w+\s*\([^)]*\b(?:query|statement)\b\s*[:,)=]`)
+
+var sqlWordRe = regexp.MustCompile(`(?i)\bsql\b`)
+
+// takesModelSuppliedSQL reports whether a tool registration declares a
+// parameter the model fills with a SQL statement.
+//
+// The evidence is the schema, not the name. A tool called `query_db` that
+// takes an `invoice_id` runs a fixed statement and is not this; a tool called
+// `ledger` whose only parameter is `sql` is. Names alone cannot tell them
+// apart, which is why classifyToolName has no tag for it.
+func takesModelSuppliedSQL(window []byte, description string) bool {
+	if sqlParamRe.Match(window) {
+		return true
+	}
+	return sqlWordRe.MatchString(description) && genericQueryParamRe.Match(window)
+}
+
 // extractTools walks the source content with the language-appropriate
 // patterns and returns every tool registration found.
 func extractTools(path string, content []byte) []extractedTool {
@@ -197,34 +227,63 @@ func extractTools(path string, content []byte) []extractedTool {
 		return nil
 	}
 
-	var tools []extractedTool
-	seen := map[string]bool{}
+	type registration struct {
+		start, nameEnd int
+		name           string
+	}
+	var regs []registration
 	for _, pat := range pats {
-		matches := pat.re.FindAllSubmatchIndex(content, -1)
-		for _, m := range matches {
-			if len(m) < 4 {
+		for _, m := range pat.re.FindAllSubmatchIndex(content, -1) {
+			if len(m) < 4 || m[2] == -1 {
 				continue
 			}
-			if m[2] == -1 {
-				continue
-			}
-			name := string(content[m[2]:m[3]])
-			if name == "" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			// Capture the description argument when present in a small
-			// window after the tool name.
-			desc := descriptionAfterMatch(content, m[1])
-			tools = append(tools, extractedTool{
-				name:        name,
-				line:        lexctx.LineForOffset(content, m[0]),
-				description: desc,
-				tags:        classifyToolName(name),
-			})
+			regs = append(regs, registration{start: m[0], nameEnd: m[1], name: string(content[m[2]:m[3]])})
 		}
 	}
+	// A registration's window ends where the next one begins, so a tool's
+	// parameters are never read from its neighbour's schema.
+	starts := make([]int, 0, len(regs))
+	for _, r := range regs {
+		starts = append(starts, r.start)
+	}
+	sort.Ints(starts)
+
+	var tools []extractedTool
+	seen := map[string]bool{}
+	for _, r := range regs {
+		if r.name == "" || seen[r.name] {
+			continue
+		}
+		seen[r.name] = true
+		// Capture the description argument when present in a small
+		// window after the tool name.
+		desc := descriptionAfterMatch(content, r.nameEnd)
+		tags := classifyToolName(r.name)
+		if takesModelSuppliedSQL(registrationWindow(content, r.nameEnd, r.start, starts), desc) {
+			tags = append(tags, CapSQLExec)
+		}
+		tools = append(tools, extractedTool{
+			name:        r.name,
+			line:        lexctx.LineForOffset(content, r.start),
+			description: desc,
+			tags:        tags,
+		})
+	}
 	return tools
+}
+
+// registrationWindow returns the bytes after a registration's name up to the
+// start of the next registration, capped at toolWindow.
+func registrationWindow(content []byte, nameEnd, start int, sortedStarts []int) []byte {
+	end := min(nameEnd+toolWindow, len(content))
+	i := sort.SearchInts(sortedStarts, start+1)
+	if i < len(sortedStarts) && sortedStarts[i] > nameEnd && sortedStarts[i] < end {
+		end = sortedStarts[i]
+	}
+	if nameEnd >= end {
+		return nil
+	}
+	return content[nameEnd:end]
 }
 
 // descriptionRe matches `description = "..."` / `description: "..."` /
@@ -318,6 +377,13 @@ var dangerousCombos = []dangerousCombo{
 		required: []CapabilityTag{CapPaymentInitiate},
 		reason:   "Agent can initiate payments without an explicit human_approval_required tool — financial risk",
 		cwe:      "CWE-840",
+	},
+	{
+		id:       "AI-AGENT-009",
+		severity: findings.SeverityHigh,
+		required: []CapabilityTag{CapSQLExec},
+		reason:   "Agent executes model-supplied SQL - the statement is the model's output, so a prompt injection chooses it and it can do whatever the connection's role can: read other tenants' rows, rewrite or drop tables",
+		cwe:      "CWE-89",
 	},
 }
 
