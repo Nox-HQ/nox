@@ -547,13 +547,29 @@ func idSources(l label) string {
 	return strings.Join(out, ",")
 }
 
+// idSourcePhrase names where the identifier came from, for the message:
+// "route path", "query string", "request body", or several joined by "and".
+func idSourcePhrase(l label) string {
+	var out []string
+	if l&lIDPath != 0 {
+		out = append(out, "route path")
+	}
+	if l&lIDQuery != 0 {
+		out = append(out, "query string")
+	}
+	if l&lIDBody != 0 {
+		out = append(out, "request body")
+	}
+	return strings.Join(out, " and ")
+}
+
 func newFinding(r *route, h fnRef, sink sinkHit, authn string) findings.Finding {
 	line := lineAt(h.file.lineStarts, sink.off)
 	routeLine := lineAt(r.file.lineStarts, r.offset)
 	method := strings.ToUpper(r.method)
 	msg := fmt.Sprintf(
-		"%s %s requires an authenticated caller (%s) but looks up a record by a caller-supplied id (%s) with no visible check that it belongs to the caller: possible broken object-level authorization (IDOR). Verify by requesting another user's record.",
-		method, r.path, authn, sink.method)
+		"%s %s requires an authenticated caller (%s) but looks up a record by an id the caller supplies in the %s, via %s(), with no visible check that it belongs to the caller: possible broken object-level authorization (IDOR). Verify by requesting another user's record.",
+		method, r.path, authn, idSourcePhrase(sink.idFrom), sink.method)
 	md := map[string]string{
 		"cwe":        "CWE-639",
 		"owasp_api":  "API1:2023",

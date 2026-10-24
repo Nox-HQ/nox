@@ -207,6 +207,32 @@ func TestCounterexamplesAreRecordedAsRefutations(t *testing.T) {
 	}
 }
 
+// The finding names where the identifier came from, separately from the
+// lookup call: a path parameter read through db.query() is a path id, not a
+// "query" one.
+func TestFindingNamesTheIdentifierSource(t *testing.T) {
+	cases := []struct{ fixture, source, phrase, sink string }{
+		{"inline_sql_route_auth", "path", "supplies in the route path, via query()", "query"},
+		{"query_id_lookup", "query", "supplies in the query string, via findById()", "findById"},
+		{"body_id_update", "body", "supplies in the request body, via findByIdAndUpdate()", "findByIdAndUpdate"},
+	}
+	for _, c := range cases {
+		t.Run(c.fixture, func(t *testing.T) {
+			fs := scanRoot(t, filepath.Join("testdata", "vulnerable", c.fixture), true)
+			if len(fs) != 1 {
+				t.Fatalf("got %d findings", len(fs))
+			}
+			f := fs[0]
+			if f.Metadata["id_source"] != c.source || f.Metadata["sink"] != c.sink {
+				t.Errorf("id_source/sink = %q/%q, want %q/%q", f.Metadata["id_source"], f.Metadata["sink"], c.source, c.sink)
+			}
+			if !strings.Contains(f.Message, c.phrase) {
+				t.Errorf("message %q does not contain %q", f.Message, c.phrase)
+			}
+		})
+	}
+}
+
 // Two scans of the same tree produce the same findings in the same order.
 func TestDeterministic(t *testing.T) {
 	for _, dir := range caseDirs(t, "vulnerable") {
