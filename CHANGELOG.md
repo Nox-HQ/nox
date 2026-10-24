@@ -167,6 +167,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox fix verify` blamed the user for the dependency directory the fix
+  created.** `nox fix apply` runs `npm`, which creates `node_modules/`; the next
+  scan then read `node_modules/combined-stream/yarn.lock` (a lockfile that
+  package publishes for its own development) as this project's manifest and
+  reported "Also new ... VULN-002 at node_modules/combined-stream/yarn.lock:1".
+  That happens on any plain `nox scan` of a tree whose `node_modules/` is not
+  gitignored (measured: 3 packages in the inventory from nested lockfiles, with
+  the project's own lockfile already naming every installed package). A
+  lockfile inside `node_modules/` is no longer a project manifest, in the
+  dependency scan, SBOM and licence pass alike; the directory is still scanned
+  for secrets and code. Separately, `fix verify` now lists any new finding
+  under `node_modules`, `.venv` or `site-packages` apart from the rest, labelled
+  as inside a directory a tool generated and not attributed to the change
+  (`new_in_generated_dirs` in JSON).
 - **Configurations that got worse used to scan the same as, or better than, the
   ones before them.** Measured on a hardened application and the same
   application after a "just for debugging" commit: seven insecure changes
