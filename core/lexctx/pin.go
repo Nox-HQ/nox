@@ -4,6 +4,8 @@ import (
 	"sort"
 	"sync"
 	"unsafe"
+
+	"github.com/nox-hq/nox/core/internal/workcount"
 )
 
 // Pin makes LineColToOffset, LineForOffset and Classify answer for exactly
@@ -69,6 +71,7 @@ func pinnedFor(content []byte) *pinned {
 
 func (p *pinned) lineStarts() []int {
 	p.once.Do(func() {
+		workcount.Add(workcount.OffsetWalk, len(p.content))
 		starts := []int{0}
 		for i, c := range p.content {
 			if c == '\n' {
