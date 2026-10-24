@@ -53,6 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   typosquats (`crossenv`, `mongose`, `colourama`, `python3-dateutil`, `djago`,
   `diango`, `setup-tools`) still fire.
 
+- **`results.sarif` differed between identical scans.** The taint rule
+  catalog kept the first sink a map iteration reached for each rule ID, and
+  TAINT-005 is shared by code_injection and unsafe_deserialization sinks, so
+  its descriptor (description, CWE, tags, helpUri) changed from run to run
+  and was wrong for the other class every time. TAINT-003 (xss and ssti) had
+  the same construction. Each shared ID's descriptor now names every class
+  and CWE it reports (TAINT-005: CWE-94, CWE-95, CWE-134, CWE-502), and the
+  taint catalog's listings are sorted. Rule IDs and fingerprints are
+  unchanged, so no Code Scanning alert moves. `nox explain` classifies a
+  finding by its own CWE before the rule's. With `SOURCE_DATE_EPOCH` set,
+  every report a scan writes is byte-identical across runs of one tree.
+
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what
