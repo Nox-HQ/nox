@@ -1,0 +1,44 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@erc6900/reference-implementation':
+        specifier: github:erc6900/reference-implementation#v0.8.0
+        version: https://codeload.github.com/erc6900/reference-implementation/tar.gz/c9b256cfd963a655179fa3cd9ea3f92c73cbfcdd
+      account-abstraction:
+        specifier: github:eth-infinitism/account-abstraction#v0.9.0
+        version: accountabstraction@https://codeload.github.com/eth-infinitism/account-abstraction/tar.gz/b36a1ed52ae00da6f8a4c8d50181e2877e4fa410
+      solady:
+        specifier: github:Vectorized/solady#v0.0.237
+        version: git+https://git@github.com:Vectorized/solady.git#eb227ea1c5eaa56296e7dd713eb165d5d75891dd
+    devDependencies:
+      pnpm:
+        specifier: ^9.15.0
+        version: 9.15.0
+      solhint:
+        specifier: ^3.6.2
+        version: 3.6.2(typescript@4.9.5)
+
+packages:
+
+  '@erc6900/reference-implementation@https://codeload.github.com/erc6900/reference-implementation/tar.gz/c9b256cfd963a655179fa3cd9ea3f92c73cbfcdd':
+    resolution: {tarball: https://codeload.github.com/erc6900/reference-implementation/tar.gz/c9b256cfd963a655179fa3cd9ea3f92c73cbfcdd}
+    version: 0.8.0
+
+  accountabstraction@https://codeload.github.com/eth-infinitism/account-abstraction/tar.gz/b36a1ed52ae00da6f8a4c8d50181e2877e4fa410:
+    resolution: {tarball: https://codeload.github.com/eth-infinitism/account-abstraction/tar.gz/b36a1ed52ae00da6f8a4c8d50181e2877e4fa410}
+    version: 0.9.0
+
+  solady@git+https://git@github.com:Vectorized/solady.git#eb227ea1c5eaa56296e7dd713eb165d5d75891dd:
+    resolution: {commit: eb227ea1c5eaa56296e7dd713eb165d5d75891dd, repo: git@github.com:Vectorized/solady.git, type: git}
+    version: 0.0.237
+
+  solhint@3.6.2:
+    resolution: {integrity: sha512-85EeLbmkcPwD+3JR7aEMKsVC9YrRSxd4qkXuMzrlf7+z2Eqdfm1wHWq1ffTuo5aDhoZxp2I9yF3QkxZOxOL7aQ==}
+    hasBin: true
