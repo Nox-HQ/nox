@@ -87,6 +87,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0 FP, from only three apps. The FPs are all resources shared by design,
   which source cannot tell apart, hence leads by default.
 
+### Changed
+
+- **The assessment describes what was not checked in capabilities, not plugins.**
+  `nox scan .` on an ordinary app used to say "Optional plugins are installed
+  but not enabled" and send the reader to pick from fifteen names. It now says
+  what would have been checked ("API abuse patterns (rate limiting, error detail)", "exposed
+  endpoints and admin or debug routes") and groups live testing (probing a
+  running app, inspecting a cluster, adversarial prompts) into one line that
+  points at `nox attack plan`. A plugin whose check core already performs
+  (container configuration, data-flow analysis), one measured to hurt
+  (reachability, pattern triage, pattern threat modelling) and one that only
+  annotates are no longer offered as gaps. Nothing is auto-enabled: all 15
+  installed plugins were run against six real trees and none earns it
+  (`docs/plugin-defaults.md`), and enabling by what happens to be installed
+  would make findings depend on the machine. The degradation is unchanged:
+  `findings.json` and `--verbose` still list every plugin that did not run,
+  and `--fail-on-degraded` behaves as before. Plugin knowledge is in
+  `core/plugincap`. Also: the `generated_report` degradation is worded as
+  "Reports nox wrote itself were not scanned" instead of leaking its kind.
+
 ### Fixed
 
 - **The slopsquat feed could not be pinned with the key the docs say to

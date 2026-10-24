@@ -26,6 +26,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/hypothesize"
+	"github.com/nox-hq/nox/core/plugincap"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -500,6 +501,7 @@ var kindHeadlines = map[string]string{
 	"lockfile_parse":     "Some dependency lockfiles could not be read",
 	"vuln_data_load":     "Vulnerability data could not be loaded",
 	"plugin":             "Some plugin checks did not run",
+	"generated_report":   "Reports nox wrote itself were not scanned",
 	"baseline":           "The baseline could not be applied",
 	"suppression":        "Some suppressions could not be applied",
 	"slop_feed":          "The package-hallucination feed was unavailable",
@@ -538,10 +540,7 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 	for _, k := range order {
 		g := groups[k]
 		if k.kind == "plugin" && !k.blocking {
-			out = append(out, Limit{
-				Summary: "Optional plugins are installed but not enabled for this project, so their checks did not run.",
-				Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
-			})
+			out = append(out, optionalChecks(g)...)
 			continue
 		}
 		head := kindHeadlines[k.kind]
@@ -556,6 +555,48 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 		out = append(out, Limit{
 			Summary:  head + ": " + sentence(g[0].Impact) + ".",
 			Blocking: k.blocking,
+		})
+	}
+	return out
+}
+
+// optionalChecks says, in capabilities, what installed-but-undeclared plugins
+// would have checked. The reader should not need to know what a plugin is, let
+// alone which one does what, so no plugin name appears here; the names stay in
+// the degradation's Detail (findings.json, --verbose).
+//
+// Only a gap is worth a line. A plugin whose check core already performs
+// (container configuration), one measured to hurt (reachability, which turns a
+// transitive dependency into "likely false positive"), and one that annotates
+// rather than checks leave nothing unchecked, so naming them under "Not
+// checked" would send the reader to enable something that duplicates or harms.
+// They remain accounted for: the full list is in the degradation itself.
+//
+// A detail this package cannot read (a producer other than the CLI) falls back
+// to the generic line rather than to silence.
+func optionalChecks(g []nox.Degradation) []Limit {
+	var names []string
+	for _, d := range g {
+		n, ok := plugincap.Undeclared(d.Detail)
+		if !ok {
+			return []Limit{{
+				Summary: "Optional checks are installed but not enabled for this project, so they did not run.",
+				Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+			}}
+		}
+		names = append(names, n...)
+	}
+	var out []Limit
+	if opt := plugincap.Capabilities(names, plugincap.Optional); len(opt) > 0 {
+		out = append(out, Limit{
+			Summary: "Optional checks are installed but not enabled, so they did not run: " + plugincap.Join(opt) + ".",
+			Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+		})
+	}
+	if live := plugincap.Capabilities(names, plugincap.Live); len(live) > 0 {
+		out = append(out, Limit{
+			Summary: "Live testing did not run (" + plugincap.Join(live) + "): it sends traffic to, or reads, a running system, so it needs your explicit go-ahead.",
+			Action:  "plan it with nox attack plan; nothing is sent until you add --authorize",
 		})
 	}
 	return out
