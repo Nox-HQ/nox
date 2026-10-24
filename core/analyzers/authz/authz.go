@@ -47,14 +47,16 @@
 // row-level security. Each cleared candidate is filed in the reasoning ledger
 // with its reason (RecordReasoningTo), never dropped silently.
 //
-// WHY OPT-IN. Measured on 22 pinned open-source Express apps (see the PR and
-// CHANGELOG for the counts): every finding on the ordinary apps was a real
-// authorization defect, but a quarter of the findings on deliberately
-// vulnerable apps were resources shared by design (a picture's likes, a
-// public profile, a shared product catalogue), a class no reader of source can
-// refute, and the ordinary apps that produced findings at all were three.
-// That is not enough to put a medium finding in front of every scan, so the
-// rule runs when scan.rules.enable names it.
+// LEADS BY DEFAULT, FINDINGS ON REQUEST. Measured on 22 pinned open-source
+// Express apps (see the PR and CHANGELOG for the counts): every finding on the
+// ordinary apps was a real authorization defect, but a quarter of the findings
+// on deliberately vulnerable apps were resources shared by design (a
+// picture's likes, a public profile, a shared product catalogue), a class no
+// reader of source can refute, and the ordinary apps that produced findings
+// at all were three. That is not enough to put a medium finding in front of
+// every scan. So by default each such route is a Lead, presented as a
+// two-account test to run, and scan.rules.enable: [AUTHZ-001] makes each a
+// finding instead.
 //
 // WHAT IT CANNOT SEE, and therefore why it says "possible": a check inside a
 // service the handler calls without passing the principal through a visible
@@ -96,10 +98,46 @@ import (
 const RuleID = "AUTHZ-001"
 
 // Analyzer is the object-level authorization analyzer.
+//
+// It runs on every scan that includes application code. What it produces
+// depends on whether AUTHZ-001 is enabled: enabled, each route that meets the
+// proposition is a finding; not enabled (the default), each is a Lead, which
+// the scan carries beside the findings and the assessment presents as
+// something to test. A lead is never a finding: it does not reach
+// findings.json, SARIF, the exit code or a fingerprint.
 type Analyzer struct {
 	enabled   bool
 	reasoning *reasoning.Store
+	leads     []Lead
+	routes    int
 }
+
+// Lead is a route that meets AUTHZ-001's proposition, reported as something to
+// verify rather than as a finding.
+type Lead struct {
+	// Method and Path name the route, Path including the prefix its router
+	// is mounted at when this reader resolved the mount.
+	Method string
+	Path   string
+	// FilePath and Line locate the record lookup.
+	FilePath string
+	Line     int
+	// IDSource is where the identifier comes from: path, query or body.
+	IDSource string
+}
+
+// Enabled reports whether AUTHZ-001 reports findings on this scan.
+func (a *Analyzer) Enabled() bool { return a.enabled }
+
+// Leads returns the routes the last ScanArtifacts call held as leads, sorted
+// by file and line. Empty when AUTHZ-001 is enabled: those routes are
+// findings, and a route is never both.
+func (a *Analyzer) Leads() []Lead { return a.leads }
+
+// RoutesRead is how many Express route registrations the last ScanArtifacts
+// call read. Zero means the scan saw no Express routes and has nothing to say
+// about authorization.
+func (a *Analyzer) RoutesRead() int { return a.routes }
 
 // RecordReasoningTo directs this analyzer's refutations at store: every route
 // that met the proposition's antecedent (authenticated, identifier-keyed
@@ -107,8 +145,8 @@ type Analyzer struct {
 // so stage accounting can count AUTHZ candidates against what was refuted.
 func (a *Analyzer) RecordReasoningTo(store *reasoning.Store) { a.reasoning = store }
 
-// NewAnalyzer returns the analyzer. AUTHZ-001 is opt-in: it reports only when
-// EnableOptIn names it (scan.rules.enable).
+// NewAnalyzer returns the analyzer. AUTHZ-001 is opt-in: it reports findings
+// only when EnableOptIn names it (scan.rules.enable), and leads otherwise.
 func NewAnalyzer() *Analyzer { return &Analyzer{} }
 
 // EnableOptIn turns AUTHZ-001 on when ids names it.
@@ -146,6 +184,8 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // handlers live in different files, and so does the middleware that guards
 // them.
 type index struct {
+	routes    int
+	leads     []Lead
 	files     map[string]*jsFile
 	order     []string
 	rls       bool
@@ -160,10 +200,13 @@ var rlsRe = regexp.MustCompile(`(?i)\benable\s+row\s+level\s+security\b|\bcreate
 // read in path order and findings are sorted.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
-	if !a.enabled {
-		return fs, nil
+	a.leads, a.routes = nil, 0
+	ix := &index{files: map[string]*jsFile{}}
+	if a.enabled {
+		// Refutations are filed only when the rule reports: in lead mode no
+		// AUTHZ candidate is a finding, so none belongs in stage accounting.
+		ix.reasoning = a.reasoning
 	}
-	ix := &index{files: map[string]*jsFile{}, reasoning: a.reasoning}
 	rls := false
 	ordered := make([]discovery.Artifact, len(artifacts))
 	copy(ordered, artifacts)
@@ -197,7 +240,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Row-level security moves the ownership check into the database, where
 	// no handler shows it: every candidate is refuted, and recorded as such.
 	ix.rls = rls
-	for _, f := range ix.findings() {
+	reported := ix.findings()
+	a.routes = ix.routes
+	if !a.enabled {
+		a.leads = ix.leads
+		return fs, nil
+	}
+	for _, f := range reported {
 		fs.Add(f)
 	}
 	return fs, nil
@@ -227,6 +276,8 @@ func (ix *index) findings() []findings.Finding {
 		params[p] = parseParamLoaders(f)
 	}
 	inherited := ix.inheritedMiddleware(uses)
+	prefixes := ix.mountPrefixes(uses)
+	ix.routes = len(routes)
 
 	// One handler can serve several routes. A subject is reported if ANY of
 	// its routes meets the proposition, and refuted only if every route that
@@ -288,7 +339,24 @@ func (ix *index) findings() []findings.Finding {
 		}
 		reported[subject] = true
 		out = append(out, newFinding(r, h, sink, authn))
+		ix.leads = append(ix.leads, Lead{
+			Method:   strings.ToUpper(r.method),
+			Path:     joinRoutePath(prefixes[r.file.path], r.path),
+			FilePath: h.file.path,
+			Line:     line,
+			IDSource: idSources(sink.idFrom),
+		})
 	}
+	sort.SliceStable(ix.leads, func(i, j int) bool {
+		a, b := ix.leads[i], ix.leads[j]
+		if a.FilePath != b.FilePath {
+			return a.FilePath < b.FilePath
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Method+" "+a.Path < b.Method+" "+b.Path
+	})
 	for _, subject := range subjects {
 		if rf := refuted[subject]; !reported[subject] {
 			ix.refute(rf.path, rf.line, rf.reason)
@@ -419,6 +487,55 @@ func (ix *index) inheritedMiddleware(uses map[string][]use) map[string][]mwRef {
 		}
 	}
 	return out
+}
+
+// mountPrefixes returns, per router file, the path prefix it is served under:
+// the first mount of it that this reader resolved, composed with the prefix
+// the mounting file is itself served under. A file mounted nowhere, or only
+// without a prefix, maps to "".
+func (ix *index) mountPrefixes(uses map[string][]use) map[string]string {
+	type mount struct{ parent, prefix string }
+	first := map[string]mount{}
+	for _, p := range ix.order {
+		for _, u := range uses[p] {
+			for _, t := range u.mounts {
+				if _, ok := first[t]; !ok {
+					first[t] = mount{p, u.prefix}
+				}
+			}
+		}
+	}
+	out := map[string]string{}
+	for _, p := range ix.order {
+		prefix, cur, seen := "", p, map[string]bool{}
+		for depth := 0; depth < 8 && !seen[cur]; depth++ {
+			seen[cur] = true
+			m, ok := first[cur]
+			if !ok {
+				break
+			}
+			prefix = joinRoutePath(m.prefix, prefix)
+			cur = m.parent
+		}
+		if prefix != "" {
+			out[p] = prefix
+		}
+	}
+	return out
+}
+
+// joinRoutePath joins a mount prefix and a route path: ("/api/invoices",
+// "/:id") is "/api/invoices/:id" and ("/api/invoices", "/") is
+// "/api/invoices".
+func joinRoutePath(prefix, p string) string {
+	prefix = strings.TrimRight(prefix, "/")
+	switch {
+	case prefix == "":
+		return p
+	case p == "" || p == "/":
+		return prefix
+	}
+	return prefix + "/" + strings.TrimLeft(p, "/")
 }
 
 var (

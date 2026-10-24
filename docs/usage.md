@@ -912,8 +912,10 @@ scan:
     # possible IDOR in an Express route: authenticated, a record looked up by
     # a caller-supplied id, and no visible check that it belongs to the caller
     # (CWE-639, medium severity, low confidence). It cannot tell a resource
-    # shared by design from an owned one, so confirm a finding by requesting
-    # another user's record. SEC-951, the generic "credential-named key with a
+    # shared by design from an owned one, so without this line those routes
+    # are not findings: the assessment lists them under "Additional
+    # verification recommended" as a two-account test, and no machine output,
+    # exit code or gate sees them. Named here, each is a finding. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
     enable: []   # e.g. [TAINT-011, AUTHZ-001]

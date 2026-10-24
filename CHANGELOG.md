@@ -25,35 +25,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[families]` and blocking `[degraded]` lines are unchanged, and so are
   findings.json, SARIF and the SBOMs: this is presentation only.
 
-- **AUTHZ-001: possible broken object-level authorization (IDOR, OWASP
-  API1:2023, CWE-639) in Express/koa-router JavaScript and TypeScript.
-  Opt-in** (`scan.rules.enable: [AUTHZ-001]`), medium severity, low
-  confidence, Exploitability POTENTIAL. It claims only this: a route that
-  requires an authenticated caller looks up a record by a caller-supplied id
-  (route parameter, query or body field), and nothing visible on that path
-  relates the record to the caller's principal. Routes, router-level and
-  prefix `use()` middleware, mounts across files, and handlers in other files
-  (wrappers, factories, controllers, DAOs) are resolved. Thirteen
+- **Possible IDOR leads (AUTHZ-001) in the assessment.** nox now reads
+  Express and koa-router JavaScript/TypeScript for routes that require an
+  authenticated caller, look up a record by a caller-supplied id (route
+  parameter, query or body field), and show nothing that relates the record
+  to the caller (OWASP API1:2023, CWE-639). By default each such route is a
+  **lead, not a finding**: the assessment lists it under "Additional
+  verification recommended" ("Authorization: GET /api/invoices/:id
+  (src/routes/invoices.js:14) loads a record by a caller-supplied id with no
+  visible ownership check. Test it with two user accounts..."), top five with
+  the rest under `--verbose`, and "Checks completed" says "authorization
+  (Express routes; leads only)" rather than claiming the check. Leads never
+  reach findings.json, SARIF (results or rule catalogue), the exit code,
+  gates or fingerprints: default-mode outputs are byte-identical to before.
+  They are carried on `ScanResult.Leads` for every adapter.
+  `scan.rules.enable: [AUTHZ-001]` makes each one a medium/low finding instead,
+  with no duplicate lead. Routes, router and prefix `use()` middleware, mounts
+  across files, and handlers in other files are resolved; thirteen
   counterexample classes clear a route (principal-scoped lookups, owner
-  fields, request-scoped clients, middleware context handed to the data
-  layer, comparisons with the principal, policy calls, 403s, role reads,
-  authorization/loader middleware, `router.param()`, row-level security), and
-  each cleared candidate is filed in the reasoning ledger with its reason.
-  Not a copy of the `api-abuse` plugin's approach (precision 0.000): that rule
-  judged whether a route was meant to be public; this one requires the
-  authentication that says it is not.
-  Measured on 22 pinned open-source Express apps, every finding read and
-  classified. Deliberately vulnerable apps (Juice Shop, dvws-node, NodeGoat,
-  DVNA, DVAPI, Pixi): 26 findings, 18 TP / 8 FP, recall 10 of 14 documented
-  BOLA instances. Ordinary apps: 17 findings on proshop-v2, mern-ecommerce and
-  mern-social, 12 object-level TPs and 5 missing admin checks (function-level,
-  still real defects), 0 FP; Directus, Ghost, kutt, Actual, CodiMD,
-  async-labs/saas, builderbook, uptime-kuma and five others produced none,
-  with 100+ authenticated id-keyed routes cleared by a counterexample. The 8 FPs
-  are all resources shared by design (a picture's likes, a public profile, a
-  product catalogue), which no reader of source can refute, and only three
-  ordinary apps produced findings at all, so the rule is opt-in rather than
-  default.
+  fields, request-scoped clients, middleware context passed to the data layer,
+  comparisons with the principal, policy calls, 403s, role reads,
+  authorization or loader middleware, `router.param()`, row-level security).
+  Measured on 22 pinned open-source Express apps, every candidate read:
+  deliberately vulnerable apps 18 TP / 8 FP, recall 10 of 14 documented BOLA
+  instances; ordinary apps 12 object-level TP plus 5 missing admin checks and
+  0 FP, from only three apps. The FPs are all resources shared by design,
+  which source cannot tell apart, hence leads by default.
 
 ### Fixed
 

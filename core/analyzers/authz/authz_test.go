@@ -233,6 +233,87 @@ func TestFindingNamesTheIdentifierSource(t *testing.T) {
 	}
 }
 
+// Not enabled (the default), every route the rule would report is a lead at
+// the same lookup, and nothing is a finding; enabled, every one is a finding
+// and none is a lead. A route is never both.
+func TestDefaultModeHoldsLeadsNotFindings(t *testing.T) {
+	for _, dir := range caseDirs(t, "vulnerable") {
+		t.Run(filepath.Base(dir), func(t *testing.T) {
+			want := expectedLines(t, dir)
+			arts, err := discovery.NewWalker(dir).Walk()
+			if err != nil {
+				t.Fatal(err)
+			}
+			a := NewAnalyzer()
+			fs, err := a.ScanArtifacts(context.Background(), arts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fs.Findings()) != 0 {
+				t.Fatalf("default mode reported %d findings", len(fs.Findings()))
+			}
+			var got []string
+			for _, l := range a.Leads() {
+				got = append(got, fmt.Sprintf("%s:%d", l.FilePath, l.Line))
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("leads = %v, want %v", got, want)
+			}
+			if a.RoutesRead() == 0 {
+				t.Error("no routes read")
+			}
+
+			on := NewAnalyzer()
+			on.EnableOptIn([]string{RuleID})
+			if _, err := on.ScanArtifacts(context.Background(), arts); err != nil {
+				t.Fatal(err)
+			}
+			if len(on.Leads()) != 0 {
+				t.Errorf("enabled rule also held leads: %+v", on.Leads())
+			}
+		})
+	}
+	for _, dir := range caseDirs(t, "safe") {
+		arts, err := discovery.NewWalker(dir).Walk()
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := NewAnalyzer()
+		if _, err := a.ScanArtifacts(context.Background(), arts); err != nil {
+			t.Fatal(err)
+		}
+		if len(a.Leads()) != 0 {
+			t.Errorf("%s: counterexample held as a lead: %+v", filepath.Base(dir), a.Leads())
+		}
+	}
+}
+
+// A lead names the route as it is served: a router mounted at a prefix in
+// another file carries that prefix.
+func TestLeadRouteIncludesTheMountPrefix(t *testing.T) {
+	arts, err := discovery.NewWalker(filepath.Join("testdata", "vulnerable", "mount_auth_other_file")).Walk()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := NewAnalyzer()
+	if _, err := a.ScanArtifacts(context.Background(), arts); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Leads()) != 1 || a.Leads()[0].Method != "DELETE" || a.Leads()[0].Path != "/api/notes/:noteId" || a.Leads()[0].IDSource != "path" {
+		t.Fatalf("leads = %+v, want DELETE /api/notes/:noteId from the path", a.Leads())
+	}
+	for _, c := range []struct{ prefix, path, want string }{
+		{"", "/:id", "/:id"},
+		{"/api/invoices", "/:id", "/api/invoices/:id"},
+		{"/api/invoices/", "/", "/api/invoices"},
+		{"/api", "/v1/:id", "/api/v1/:id"},
+	} {
+		if got := joinRoutePath(c.prefix, c.path); got != c.want {
+			t.Errorf("joinRoutePath(%q, %q) = %q, want %q", c.prefix, c.path, got, c.want)
+		}
+	}
+}
+
 // Two scans of the same tree produce the same findings in the same order.
 func TestDeterministic(t *testing.T) {
 	for _, dir := range caseDirs(t, "vulnerable") {
