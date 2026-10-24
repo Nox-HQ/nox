@@ -155,6 +155,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
+		fmt.Fprintf(os.Stderr, "  compliance <fw>  Technical evidence for a framework from scan outputs (iso27001)\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
@@ -164,7 +165,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
 		fmt.Fprintf(os.Stderr, "  vex <cmd>        OpenVEX waiver document tools (vex init)\n")
 		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
-		fmt.Fprintf(os.Stderr, "  fix              Apply OSV dep upgrades (--actions also bumps GitHub Actions pins)\n")
+		fmt.Fprintf(os.Stderr, "  fix              Plan, apply and verify fixes (fix plan | apply | verify); bare nox fix applies OSV dep upgrades\n")
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  analysis-capabilities  Report what this installation can establish, and what it cannot\n")
@@ -222,6 +223,8 @@ func run(args []string) int {
 		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
+	case "compliance":
+		return runCompliance(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
 	case "mcp":

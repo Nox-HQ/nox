@@ -26,6 +26,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/hypothesize"
+	"github.com/nox-hq/nox/core/plugincap"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -106,7 +107,21 @@ type Issue struct {
 	Confidence findings.Confidence
 	// Findings is how many findings it stands for.
 	Findings int
-	rank     int
+	// Fingerprints are the findings it stands for, in the scan's order. It lets
+	// a caller that acts on the issue (core/remediate) name exactly what the
+	// action is meant to clear, and later look for exactly that.
+	Fingerprints []string
+	// RuleID is the rule the findings share, for a code issue.
+	RuleID string
+	// Upgrade is the move that resolves a KindUpgrade or KindMajorUpgrade
+	// issue, the same action `nox fix` applies.
+	Upgrade *fix.UpgradeAction
+	// FixedIn is the best fixed version known for a KindNoFix issue, "" when
+	// none is published.
+	FixedIn string
+	// VulnClass is the taint class a code issue shares, "" otherwise.
+	VulnClass string
+	rank      int
 }
 
 // IssueKind classifies an issue by what resolves it.
@@ -215,6 +230,14 @@ func issues(in Input) []Issue {
 	return out
 }
 
+func fingerprints(ff []findings.Finding, idx []int) []string {
+	out := make([]string, len(idx))
+	for j, i := range idx {
+		out[j] = ff[i].Fingerprint
+	}
+	return out
+}
+
 // worst returns the highest severity and confidence over the findings at idx,
 // and marks them used.
 func worst(ff []findings.Finding, idx []int, used []bool) (findings.Severity, findings.Confidence) {
@@ -232,6 +255,10 @@ func worst(ff []findings.Finding, idx []int, used []bool) (findings.Severity, fi
 	return sev, conf
 }
 
+// MajorNote is what a major-version upgrade's summary adds to the usual line.
+// core/remediate trims it to state the same fact in its own words.
+const MajorNote = " A major version, so check for breaking changes; nox fix apply --include-major applies it."
+
 func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, used []bool) Issue {
 	sev, conf := worst(ff, a.Findings, used)
 	from := a.From
@@ -242,9 +269,11 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 		a.Package, from, a.To, inDir(a.Manifest),
 		plural(len(a.Findings), "known vulnerability", "known vulnerabilities"), sev)
 	if kind == KindMajorUpgrade {
-		s += " A major version, so check for breaking changes; nox fix applies it only with --include-major."
+		s += MajorNote
 	}
-	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings), rank: rank(sev, conf)}
+	up := a
+	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
+		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf)}
 }
 
 // inDir names the manifest's directory when it is not the scan root, so a
@@ -299,7 +328,8 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 				"Check the advisories for a workaround, or replace the package.",
 				name, inDir(k.manifest), vulns, sev)
 		}
-		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx), rank: rank(sev, conf)})
+		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
+			Fingerprints: fingerprints(ff, idx), FixedIn: fix.BestFix(fixes), rank: rank(sev, conf)})
 	}
 	return out
 }
@@ -332,7 +362,8 @@ func codeIssues(in Input, used []bool) []Issue {
 		title := issueTitle(in.Rules, group, k.class)
 		s := fmt.Sprintf("%s %s (%s severity, %s confidence).",
 			title, where(ff, idx), sev, confidenceOrUnknown(conf))
-		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx), rank: rank(sev, conf)})
+		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
+			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, rank: rank(sev, conf)})
 	}
 	return out
 }
@@ -500,6 +531,7 @@ var kindHeadlines = map[string]string{
 	"lockfile_parse":     "Some dependency lockfiles could not be read",
 	"vuln_data_load":     "Vulnerability data could not be loaded",
 	"plugin":             "Some plugin checks did not run",
+	"generated_report":   "Reports nox wrote itself were not scanned",
 	"baseline":           "The baseline could not be applied",
 	"suppression":        "Some suppressions could not be applied",
 	"slop_feed":          "The package-hallucination feed was unavailable",
@@ -538,10 +570,7 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 	for _, k := range order {
 		g := groups[k]
 		if k.kind == "plugin" && !k.blocking {
-			out = append(out, Limit{
-				Summary: "Optional plugins are installed but not enabled for this project, so their checks did not run.",
-				Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
-			})
+			out = append(out, optionalChecks(g)...)
 			continue
 		}
 		head := kindHeadlines[k.kind]
@@ -556,6 +585,48 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 		out = append(out, Limit{
 			Summary:  head + ": " + sentence(g[0].Impact) + ".",
 			Blocking: k.blocking,
+		})
+	}
+	return out
+}
+
+// optionalChecks says, in capabilities, what installed-but-undeclared plugins
+// would have checked. The reader should not need to know what a plugin is, let
+// alone which one does what, so no plugin name appears here; the names stay in
+// the degradation's Detail (findings.json, --verbose).
+//
+// Only a gap is worth a line. A plugin whose check core already performs
+// (container configuration), one measured to hurt (reachability, which turns a
+// transitive dependency into "likely false positive"), and one that annotates
+// rather than checks leave nothing unchecked, so naming them under "Not
+// checked" would send the reader to enable something that duplicates or harms.
+// They remain accounted for: the full list is in the degradation itself.
+//
+// A detail this package cannot read (a producer other than the CLI) falls back
+// to the generic line rather than to silence.
+func optionalChecks(g []nox.Degradation) []Limit {
+	var names []string
+	for _, d := range g {
+		n, ok := plugincap.Undeclared(d.Detail)
+		if !ok {
+			return []Limit{{
+				Summary: "Optional checks are installed but not enabled for this project, so they did not run.",
+				Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+			}}
+		}
+		names = append(names, n...)
+	}
+	var out []Limit
+	if opt := plugincap.Capabilities(names, plugincap.Optional); len(opt) > 0 {
+		out = append(out, Limit{
+			Summary: "Optional checks are installed but not enabled, so they did not run: " + plugincap.Join(opt) + ".",
+			Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+		})
+	}
+	if live := plugincap.Capabilities(names, plugincap.Live); len(live) > 0 {
+		out = append(out, Limit{
+			Summary: "Live testing did not run (" + plugincap.Join(live) + "): it sends traffic to, or reads, a running system, so it needs your explicit go-ahead.",
+			Action:  "plan it with nox attack plan; nothing is sent until you add --authorize",
 		})
 	}
 	return out
@@ -608,8 +679,8 @@ func verifications(in Input) []Verification {
 		return nil
 	}
 	byFP := map[string]findings.Finding{}
-	for i := range in.Findings {
-		byFP[in.Findings[i].Fingerprint] = in.Findings[i]
+	for fp, i := range findings.IndexByFingerprint(in.Findings) {
+		byFP[fp] = in.Findings[i]
 	}
 	type group struct {
 		v         Verification
@@ -672,28 +743,14 @@ func hypothesisWhere(h attack.Hypothesis, byFP map[string]findings.Finding) (str
 func nextSteps(in Input, r Report) []string {
 	var out []string
 	fp := in.FindingsPath
-	hasUpgrade, hasHeld := false, false
-	for _, is := range r.Issues {
-		switch is.Kind {
-		case KindUpgrade:
-			hasUpgrade = true
-		case KindMajorUpgrade:
-			hasHeld = true
-		}
-	}
-	if fp == "" && (hasUpgrade || hasHeld || len(r.Verify) > 0) {
+	if fp == "" && (len(r.Issues) > 0 || len(r.Verify) > 0) {
 		out = append(out, "Re-run with --format json to write findings.json; the commands below read it.")
 		fp = "findings.json"
 	}
-	if hasUpgrade {
-		out = append(out, "Preview the dependency upgrades: nox fix --input "+fp+" --dry-run")
-	}
-	if hasHeld {
-		verb := "Preview the major-version upgrades: "
-		if hasUpgrade {
-			verb = "Preview the major-version upgrades too: "
-		}
-		out = append(out, verb+"nox fix --input "+fp+" --dry-run --include-major")
+	if len(r.Issues) > 0 {
+		// One plan for everything above: what nox can fix as it is, what needs a
+		// look first, and what only the project's owner can supply.
+		out = append(out, "See what nox can fix, what needs your review, and what it cannot: nox fix plan --input "+fp)
 	}
 	if len(r.Verify) > 0 {
 		target := in.Target
