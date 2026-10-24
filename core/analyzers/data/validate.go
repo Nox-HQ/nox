@@ -236,3 +236,74 @@ func isPaymentCardNumber(matchText string) bool {
 	}
 	return sum%10 == 0
 }
+
+// ---------------------------------------------------------------------------
+// DATA-010 / DATA-011 / DATA-012 — identity document numbers
+// ---------------------------------------------------------------------------
+
+// documentNumberInMatch returns the value a DATA-010/011/012 match assigned:
+// the trailing run of upper-case letters, digits and hyphens. The patterns end
+// on that run and require a separator before it, so it is the whole value and
+// never part of the key.
+func documentNumberInMatch(matchText string) string {
+	i := len(matchText)
+	for i > 0 {
+		c := matchText[i-1]
+		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
+			break
+		}
+		i--
+	}
+	return matchText[i:]
+}
+
+// hasDigit reports whether s contains an ASCII digit.
+func hasDigit(s string) bool {
+	return strings.ContainsAny(s, "0123456789")
+}
+
+// isDocumentNumberMatch is the value check for the health-record and
+// driver's-licence rules: the assigned value must contain a digit.
+//
+// Both rules matched `[A-Z0-9-]{6,}` case-insensitively after the key, so any
+// identifier of six letters satisfied them: `patient_id =
+// request.args.get(...)` reported `request` as a medical record number, and
+// `license_number = license.number` reported `license` as a driver's licence.
+// Medical record numbers and every US state licence format (AAMVA DL/ID card
+// design standard) carry digits; an all-letters value is a word.
+func isDocumentNumberMatch(matchText string) bool {
+	return hasDigit(documentNumberInMatch(matchText))
+}
+
+// germanPassportLetters is the letter set of the German passport serial
+// number (Passverordnung; the BMI specimen is C01X00T47): vowels and the
+// easily confused B, D, Q and S are not used. The first character is always a
+// letter from germanPassportLead.
+const germanPassportLetters = "CFGHJKLMNPRTVWXYZ"
+
+const germanPassportLead = "CFGHJK"
+
+// isPassportNumberMatch is DATA-012's value check. A passport number contains
+// a digit -- US (9 digits, or a letter and 8 digits since 2021), UK (9
+// digits) -- with one documented exception: a German serial is nine
+// characters drawn from digits and germanPassportLetters, so about one in
+// forty has no digit at all. Those are accepted by their exact shape, which no
+// English word has (nine letters and no vowel).
+//
+// Without this check the rule reported `const passport = require('passport')`
+// -- every passport.js application -- as a high-severity passport number.
+func isPassportNumberMatch(matchText string) bool {
+	v := documentNumberInMatch(matchText)
+	if hasDigit(v) {
+		return true
+	}
+	if len(v) != 9 || !strings.ContainsRune(germanPassportLead, rune(v[0])) {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		if !strings.ContainsRune(germanPassportLetters, rune(v[i])) {
+			return false
+		}
+	}
+	return true
+}
