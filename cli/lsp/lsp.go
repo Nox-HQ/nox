@@ -22,6 +22,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/remediate"
 )
 
 // ScanFunc scans a single file path and returns the findings for it. It is a
@@ -247,7 +248,10 @@ func (s *Server) scanAndPublish(params json.RawMessage) error {
 	diags := []Diagnostic{}
 	if path, err := uriToPath(uri); err == nil {
 		if found, scanErr := s.scan(path); scanErr == nil {
-			diags = findingsToDiagnostics(found)
+			// The same plan `nox fix plan` prints, built from the same code, so
+			// the editor and the terminal give one answer to "can you fix this?".
+			plan := remediate.Build(remediate.Input{Findings: found, Root: filepath.Dir(path)})
+			diags = findingsToDiagnosticsWithPlan(found, plan)
 		}
 	}
 	return s.publishDiagnostics(uri, diags)

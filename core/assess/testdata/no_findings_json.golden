@@ -2,7 +2,7 @@
 Nox Security Assessment
 
 1 issue needs attention (1 finding).
-  1. Upgrade express 4.17.0 -> 5.0.0: fixes 1 known vulnerability (highest severity: high). A major version, so check for breaking changes; nox fix applies it only with --include-major.
+  1. Upgrade express 4.17.0 -> 5.0.0: fixes 1 known vulnerability (highest severity: high). A major version, so check for breaking changes; nox fix apply --include-major applies it.
 
 Checks completed: secrets, application code, dependencies (1 package), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
 
@@ -12,5 +12,5 @@ Not determined by this scan:
 
 Next steps:
   - Re-run with --format json to write findings.json; the commands below read it.
-  - Preview the major-version upgrades: nox fix --input findings.json --dry-run --include-major
+  - See what nox can fix, what needs your review, and what it cannot: nox fix plan --input findings.json
   - Catch new issues before they are committed: nox install-hook

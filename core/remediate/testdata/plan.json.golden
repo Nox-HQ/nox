@@ -1,0 +1,210 @@
+{
+  "items": [
+    {
+      "n": 1,
+      "class": "safe_to_apply",
+      "kind": "upgrade",
+      "title": "Upgrade axios 1.7.4 -\u003e 1.20.0: fixes 2 known vulnerabilities (highest severity: high).",
+      "why": "The fix is published and stays on the same major version (1.7.4 -\u003e 1.20.0), so it should not change how your code uses the package.",
+      "command": "npm install axios@1.20.0",
+      "severity": "high",
+      "findings": 2,
+      "fingerprints": [
+        "fp-a1",
+        "fp-a2"
+      ],
+      "rules": [
+        "VULN-001"
+      ],
+      "upgrade": {
+        "rule_id": "VULN-001",
+        "package": "axios",
+        "from": "1.7.4",
+        "to": "1.20.0",
+        "ecosystem": "npm",
+        "manifest": "package-lock.json"
+      }
+    },
+    {
+      "n": 2,
+      "class": "safe_to_apply",
+      "kind": "upgrade",
+      "title": "Upgrade body-parser 1.20.3 -\u003e 1.20.9: fixes 1 known vulnerability (highest severity: high).",
+      "why": "The fix is published and stays on the same major version (1.20.3 -\u003e 1.20.9), so it should not change how your code uses the package. It is not a package you list yourself, so nox asks npm to move it within the ranges the packages that use it allow; if one of them pins it lower, the change is not applied and the report says so.",
+      "command": "npm install body-parser@1.20.9",
+      "severity": "high",
+      "findings": 1,
+      "fingerprints": [
+        "fp-b1"
+      ],
+      "rules": [
+        "VULN-001"
+      ],
+      "upgrade": {
+        "rule_id": "VULN-001",
+        "package": "body-parser",
+        "from": "1.20.3",
+        "to": "1.20.9",
+        "ecosystem": "npm",
+        "manifest": "package-lock.json"
+      }
+    },
+    {
+      "n": 3,
+      "class": "needs_review",
+      "kind": "major_upgrade",
+      "title": "Upgrade express 4.17.0 -\u003e 5.0.0: fixes 1 known vulnerability (highest severity: high).",
+      "why": "The fix is a new major version (4.17.0 -\u003e 5.0.0). A major release is allowed to break code that uses the package, so check its release notes and run your tests.",
+      "command": "npm install express@5.0.0",
+      "severity": "high",
+      "findings": 1,
+      "fingerprints": [
+        "fp-e1"
+      ],
+      "rules": [
+        "VULN-001"
+      ],
+      "upgrade": {
+        "rule_id": "VULN-001",
+        "package": "express",
+        "from": "4.17.0",
+        "to": "5.0.0",
+        "ecosystem": "npm",
+        "manifest": "package-lock.json"
+      }
+    },
+    {
+      "n": 4,
+      "class": "needs_information",
+      "kind": "code",
+      "title": "GET /invoices/:id reads a record by id with no ownership check [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).",
+      "needs": "A two-account test. Create two users, have each own one record, then request the first user's record while signed in as the second. If it comes back, the endpoint lacks an ownership check. A static scan cannot see who owns a record, so only that test settles it.",
+      "severity": "high",
+      "findings": 1,
+      "fingerprints": [
+        "fp-authz"
+      ],
+      "rules": [
+        "AUTHZ-001"
+      ]
+    },
+    {
+      "n": 5,
+      "class": "needs_information",
+      "kind": "code",
+      "title": "Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).",
+      "needs": "A decision from you: what this input may do once it reaches the model. Keep it out of the system prompt, validate its shape and length, and limit the tools the model can call on its behalf. The right boundary depends on your feature, so nox does not guess it.",
+      "severity": "high",
+      "findings": 1,
+      "fingerprints": [
+        "fp-taint"
+      ],
+      "rules": [
+        "TAINT-AI-001"
+      ]
+    },
+    {
+      "n": 6,
+      "class": "needs_information",
+      "kind": "manual_upgrade",
+      "title": "Upgrade org.example:lib 1.0.0 to 1.0.5 or later yourself: fixes 1 known vulnerability (highest severity: medium); nox fix cannot apply this upgrade.",
+      "needs": "You to upgrade it: version 1.0.5 fixes it, but nox cannot apply upgrades for this kind of package (or this is not a move forward from the installed version). Make the upgrade with your package manager.",
+      "severity": "medium",
+      "findings": 1,
+      "fingerprints": [
+        "fp-m1"
+      ],
+      "rules": [
+        "VULN-001"
+      ]
+    },
+    {
+      "n": 7,
+      "class": "needs_review",
+      "kind": "content_patch",
+      "title": "Container runs in privileged mode [IAC-007] at k8s/pod.yaml:3 (medium severity, medium confidence).",
+      "why": "A one-line change to a single setting, but it changes how your deployed system behaves: the container may need privileged mode, and without it may fail to start.",
+      "command": "nox fix apply --include-review",
+      "severity": "medium",
+      "findings": 1,
+      "fingerprints": [
+        "fp-pod"
+      ],
+      "rules": [
+        "IAC-007"
+      ],
+      "patches": [
+        {
+          "rule_id": "IAC-007",
+          "file": "k8s/pod.yaml",
+          "line": 3,
+          "summary": "privileged: true → false",
+          "before": "privileged: true",
+          "after": "privileged: false",
+          "review": "the container may need privileged mode, and without it may fail to start"
+        }
+      ]
+    },
+    {
+      "n": 8,
+      "class": "safe_to_apply",
+      "kind": "actions_pin",
+      "title": "GitHub Action pinned to mutable tag instead of commit SHA [IAC-013] at .github/workflows/ci.yml:6 (medium severity, medium confidence).",
+      "why": "Pins each GitHub Action to the commit its tag points at, on the same major version, so the workflow runs the same code but a moved tag can no longer change it. Looking the commits up reaches GitHub; a GITHUB_TOKEN avoids its anonymous rate limit.",
+      "command": "nox fix apply",
+      "severity": "medium",
+      "findings": 1,
+      "fingerprints": [
+        "fp-pin"
+      ],
+      "rules": [
+        "IAC-013"
+      ]
+    },
+    {
+      "n": 9,
+      "class": "safe_to_apply",
+      "kind": "content_patch",
+      "title": "Workflow step suppresses failures with continue-on-error [IAC-018] at .github/workflows/ci.yml:5 (medium severity, medium confidence).",
+      "why": "A one-line change to a single setting, with one correct value. It changes what the pipeline reports, not what is deployed.",
+      "command": "nox fix apply",
+      "severity": "medium",
+      "findings": 1,
+      "fingerprints": [
+        "fp-coe"
+      ],
+      "rules": [
+        "IAC-018"
+      ],
+      "patches": [
+        {
+          "rule_id": "IAC-018",
+          "file": ".github/workflows/ci.yml",
+          "line": 5,
+          "summary": "continue-on-error: true → false",
+          "before": "continue-on-error: true",
+          "after": "continue-on-error: false"
+        }
+      ]
+    },
+    {
+      "n": 10,
+      "class": "needs_information",
+      "kind": "no_fix",
+      "title": "left-pad 1.0.0 has 1 known vulnerability with no fixed version published (highest severity: low). Check the advisories for a workaround, or replace the package.",
+      "needs": "A fixed version, which has not been published. Until then the choice is yours: use a workaround from the advisory, replace the package, or record the accepted risk as a reviewed waiver (nox vex init). Re-run nox scan when a fix is published.",
+      "severity": "low",
+      "findings": 1,
+      "fingerprints": [
+        "fp-l1"
+      ],
+      "rules": [
+        "VULN-001"
+      ]
+    }
+  ],
+  "finding_count": 11,
+  "safe_to_apply": 4,
+  "needs_review": 2,
+  "needs_information": 4
+}

@@ -98,7 +98,21 @@ type Issue struct {
 	Confidence findings.Confidence
 	// Findings is how many findings it stands for.
 	Findings int
-	rank     int
+	// Fingerprints are the findings it stands for, in the scan's order. It lets
+	// a caller that acts on the issue (core/remediate) name exactly what the
+	// action is meant to clear, and later look for exactly that.
+	Fingerprints []string
+	// RuleID is the rule the findings share, for a code issue.
+	RuleID string
+	// Upgrade is the move that resolves a KindUpgrade or KindMajorUpgrade
+	// issue, the same action `nox fix` applies.
+	Upgrade *fix.UpgradeAction
+	// FixedIn is the best fixed version known for a KindNoFix issue, "" when
+	// none is published.
+	FixedIn string
+	// VulnClass is the taint class a code issue shares, "" otherwise.
+	VulnClass string
+	rank      int
 }
 
 // IssueKind classifies an issue by what resolves it.
@@ -203,6 +217,14 @@ func issues(in Input) []Issue {
 	return out
 }
 
+func fingerprints(ff []findings.Finding, idx []int) []string {
+	out := make([]string, len(idx))
+	for j, i := range idx {
+		out[j] = ff[i].Fingerprint
+	}
+	return out
+}
+
 // worst returns the highest severity and confidence over the findings at idx,
 // and marks them used.
 func worst(ff []findings.Finding, idx []int, used []bool) (findings.Severity, findings.Confidence) {
@@ -220,6 +242,10 @@ func worst(ff []findings.Finding, idx []int, used []bool) (findings.Severity, fi
 	return sev, conf
 }
 
+// MajorNote is what a major-version upgrade's summary adds to the usual line.
+// core/remediate trims it to state the same fact in its own words.
+const MajorNote = " A major version, so check for breaking changes; nox fix apply --include-major applies it."
+
 func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, used []bool) Issue {
 	sev, conf := worst(ff, a.Findings, used)
 	from := a.From
@@ -230,9 +256,11 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 		a.Package, from, a.To, inDir(a.Manifest),
 		plural(len(a.Findings), "known vulnerability", "known vulnerabilities"), sev)
 	if kind == KindMajorUpgrade {
-		s += " A major version, so check for breaking changes; nox fix applies it only with --include-major."
+		s += MajorNote
 	}
-	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings), rank: rank(sev, conf)}
+	up := a
+	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
+		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf)}
 }
 
 // inDir names the manifest's directory when it is not the scan root, so a
@@ -287,7 +315,8 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 				"Check the advisories for a workaround, or replace the package.",
 				name, inDir(k.manifest), vulns, sev)
 		}
-		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx), rank: rank(sev, conf)})
+		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
+			Fingerprints: fingerprints(ff, idx), FixedIn: fix.BestFix(fixes), rank: rank(sev, conf)})
 	}
 	return out
 }
@@ -320,7 +349,8 @@ func codeIssues(in Input, used []bool) []Issue {
 		title := issueTitle(in.Rules, group, k.class)
 		s := fmt.Sprintf("%s %s (%s severity, %s confidence).",
 			title, where(ff, idx), sev, confidenceOrUnknown(conf))
-		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx), rank: rank(sev, conf)})
+		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
+			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, rank: rank(sev, conf)})
 	}
 	return out
 }
@@ -657,28 +687,14 @@ func hypothesisWhere(h attack.Hypothesis, byFP map[string]findings.Finding) (str
 func nextSteps(in Input, r Report) []string {
 	var out []string
 	fp := in.FindingsPath
-	hasUpgrade, hasHeld := false, false
-	for _, is := range r.Issues {
-		switch is.Kind {
-		case KindUpgrade:
-			hasUpgrade = true
-		case KindMajorUpgrade:
-			hasHeld = true
-		}
-	}
-	if fp == "" && (hasUpgrade || hasHeld || len(r.Verify) > 0) {
+	if fp == "" && (len(r.Issues) > 0 || len(r.Verify) > 0) {
 		out = append(out, "Re-run with --format json to write findings.json; the commands below read it.")
 		fp = "findings.json"
 	}
-	if hasUpgrade {
-		out = append(out, "Preview the dependency upgrades: nox fix --input "+fp+" --dry-run")
-	}
-	if hasHeld {
-		verb := "Preview the major-version upgrades: "
-		if hasUpgrade {
-			verb = "Preview the major-version upgrades too: "
-		}
-		out = append(out, verb+"nox fix --input "+fp+" --dry-run --include-major")
+	if len(r.Issues) > 0 {
+		// One plan for everything above: what nox can fix as it is, what needs a
+		// look first, and what only the project's owner can supply.
+		out = append(out, "See what nox can fix, what needs your review, and what it cannot: nox fix plan --input "+fp)
 	}
 	if len(r.Verify) > 0 {
 		target := in.Target

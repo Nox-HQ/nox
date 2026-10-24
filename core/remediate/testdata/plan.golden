@@ -1,0 +1,38 @@
+
+Nox Fix Plan
+
+10 issues in 11 findings: 4 can be applied as they are, 2 need your review, and 4 need something nox does not have.
+
+Safe to apply (4). Nothing here needs a decision from you.
+  1. Upgrade axios 1.7.4 -> 1.20.0: fixes 2 known vulnerabilities (highest severity: high).
+     Why: The fix is published and stays on the same major version (1.7.4 -> 1.20.0), so it should not change how your code uses the package.
+  2. Upgrade body-parser 1.20.3 -> 1.20.9: fixes 1 known vulnerability (highest severity: high).
+     Why: The fix is published and stays on the same major version (1.20.3 -> 1.20.9), so it should not change how your code uses the package. It is not a package you list yourself, so nox asks npm to move it within the ranges the packages that use it allow; if one of them pins it lower, the change is not applied and the report says so.
+  8. GitHub Action pinned to mutable tag instead of commit SHA [IAC-013] at .github/workflows/ci.yml:6 (medium severity, medium confidence).
+     Why: Pins each GitHub Action to the commit its tag points at, on the same major version, so the workflow runs the same code but a moved tag can no longer change it. Looking the commits up reaches GitHub; a GITHUB_TOKEN avoids its anonymous rate limit.
+  9. Workflow step suppresses failures with continue-on-error [IAC-018] at .github/workflows/ci.yml:5 (medium severity, medium confidence).
+     Why: A one-line change to a single setting, with one correct value. It changes what the pipeline reports, not what is deployed.
+     .github/workflows/ci.yml:5  continue-on-error: true → false
+
+Needs your review (2). Nox can prepare these, but a person should look first.
+  3. Upgrade express 4.17.0 -> 5.0.0: fixes 1 known vulnerability (highest severity: high).
+     Why: The fix is a new major version (4.17.0 -> 5.0.0). A major release is allowed to break code that uses the package, so check its release notes and run your tests.
+  7. Container runs in privileged mode [IAC-007] at k8s/pod.yaml:3 (medium severity, medium confidence).
+     Why: A one-line change to a single setting, but it changes how your deployed system behaves: the container may need privileged mode, and without it may fail to start.
+     k8s/pod.yaml:3  privileged: true → false
+
+Needs information, or cannot be fixed automatically (4). Nox will not guess at these.
+  4. GET /invoices/:id reads a record by id with no ownership check [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).
+     Needed: A two-account test. Create two users, have each own one record, then request the first user's record while signed in as the second. If it comes back, the endpoint lacks an ownership check. A static scan cannot see who owns a record, so only that test settles it.
+  5. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
+     Needed: A decision from you: what this input may do once it reaches the model. Keep it out of the system prompt, validate its shape and length, and limit the tools the model can call on its behalf. The right boundary depends on your feature, so nox does not guess it.
+  6. Upgrade org.example:lib 1.0.0 to 1.0.5 or later yourself: fixes 1 known vulnerability (highest severity: medium); nox fix cannot apply this upgrade.
+     Needed: You to upgrade it: version 1.0.5 fixes it, but nox cannot apply upgrades for this kind of package (or this is not a move forward from the installed version). Make the upgrade with your package manager.
+  10. left-pad 1.0.0 has 1 known vulnerability with no fixed version published (highest severity: low). Check the advisories for a workaround, or replace the package.
+     Needed: A fixed version, which has not been published. Until then the choice is yours: use a workaround from the advisory, replace the package, or record the accepted risk as a reviewed waiver (nox vex init). Re-run nox scan when a fix is published.
+
+Next steps:
+  - Apply the safe changes, then re-run the checks that found them: nox fix apply
+  - Apply the changes that need review too, once you have looked: nox fix apply --include-review
+  - Supply what the remaining issues need (listed above), then re-run nox scan
+  - Check a change you made by hand: nox fix verify

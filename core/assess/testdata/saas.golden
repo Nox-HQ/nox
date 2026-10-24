@@ -21,7 +21,7 @@ Additional verification recommended:
   - Runtime testing for src/routes/assistant.js:9 (TAINT-AI-001): 2 attack hypotheses (PI-DIRECT, PI-INDIRECT), e.g. make the model obey an instruction supplied through untrusted input.
 
 Next steps:
-  - Preview the dependency upgrades: nox fix --input ./findings.json --dry-run
+  - See what nox can fix, what needs your review, and what it cannot: nox fix plan --input ./findings.json
   - Plan the runtime tests (offline, sends nothing): nox attack plan . --findings ./findings.json
   - Record a reviewed, accepted risk as a waiver: nox vex init --input ./findings.json
   - Catch new issues before they are committed: nox install-hook
