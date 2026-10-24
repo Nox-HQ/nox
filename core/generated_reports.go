@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/parallel"
 )
 
 // degradeGeneratedReport marks files a scan did not read because nox wrote
@@ -29,11 +31,19 @@ const maxNamedReports = 20
 // See discovery.GeneratedReport for what counts as a report and why the
 // decision is made on content rather than on a name or a path.
 func skipGeneratedReports(artifacts []discovery.Artifact, deg *degrade.Degradations) []discovery.Artifact {
+	// One open and one prefix read per candidate file, spread across the cores;
+	// results come back in input order, so the kept set and the degradation
+	// text are what a sequential loop would produce. The function never fails,
+	// so neither does Map.
+	kinds, _ := parallel.Map(context.Background(), len(artifacts), func(i int) (string, error) {
+		kind, _ := discovery.GeneratedReport(artifacts[i].AbsPath)
+		return kind, nil
+	})
 	kept := artifacts[:0:0]
 	var skipped []string
-	for _, a := range artifacts {
-		if kind, ok := discovery.GeneratedReport(a.AbsPath); ok {
-			skipped = append(skipped, fmt.Sprintf("%s (%s)", a.Path, kind))
+	for i, a := range artifacts {
+		if kinds[i] != "" {
+			skipped = append(skipped, fmt.Sprintf("%s (%s)", a.Path, kinds[i]))
 			continue
 		}
 		kept = append(kept, a)

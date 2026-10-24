@@ -108,6 +108,12 @@ func sniffJSONReport(head []byte) string {
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return ""
 	}
+	// Every marker names nox, except the attack plan's schema version. Most
+	// JSON in a repository contains neither, and is rejected here without a
+	// regular expression being run over it.
+	if !bytes.Contains(head, []byte("nox")) && !bytes.Contains(head, []byte("attack-plan/")) {
+		return ""
+	}
 	switch {
 	case sniffSARIF.Match(head):
 		return "SARIF"
