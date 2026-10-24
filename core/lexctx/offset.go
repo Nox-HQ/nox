@@ -1,5 +1,7 @@
 package lexctx
 
+import "github.com/nox-hq/nox/core/internal/workcount"
+
 // LineColToOffset converts a 1-based line and 1-based column into a 0-based
 // byte offset into content. It is the bridge that lets analyzers which report
 // findings by (line, column) — as Nox's rules engine does — feed those findings
@@ -12,8 +14,17 @@ package lexctx
 // start of the addressed line. The result is always in [0, len(content)].
 func LineColToOffset(content []byte, line, col int) int {
 	if p := pinnedFor(content); p != nil {
+		workcount.Add(workcount.OffsetWalk, 1)
 		return p.offset(line, col)
 	}
+	off := walkToLineCol(content, line, col)
+	workcount.Add(workcount.OffsetWalk, off)
+	return off
+}
+
+// walkToLineCol is LineColToOffset's definition: a walk from byte 0, so its
+// cost is the offset it returns.
+func walkToLineCol(content []byte, line, col int) int {
 	if line < 1 {
 		line = 1
 	}
@@ -49,11 +60,13 @@ func LineColToOffset(content []byte, line, col int) int {
 // LineColToOffset and the one implementation two analyzers had each rolled.
 func LineForOffset(content []byte, off int) int {
 	if p := pinnedFor(content); p != nil {
+		workcount.Add(workcount.OffsetWalk, 1)
 		return p.line(off)
 	}
 	if off > len(content) {
 		off = len(content)
 	}
+	workcount.Add(workcount.OffsetWalk, off)
 	line := 1
 	for i := 0; i < off; i++ {
 		if content[i] == '\n' {
