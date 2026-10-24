@@ -22,7 +22,7 @@ Needs your review (2). Nox can prepare these, but a person should look first.
      k8s/pod.yaml:3  privileged: true → false
 
 Needs information, or cannot be fixed automatically (4). Nox will not guess at these.
-  4. GET /invoices/:id reads a record by id with no ownership check [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).
+  4. Possible broken object-level authorization: an authenticated route loads a record by a... [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).
      Needed: A two-account test. Create two users, have each own one record, then request the first user's record while signed in as the second. If it comes back, the endpoint lacks an ownership check. A static scan cannot see who owns a record, so only that test settles it.
   5. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
      Needed: A decision from you: what this input may do once it reaches the model. Keep it out of the system prompt, validate its shape and length, and limit the tools the model can call on its behalf. The right boundary depends on your feature, so nox does not guess it.

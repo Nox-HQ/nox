@@ -77,7 +77,7 @@
       "n": 4,
       "class": "needs_information",
       "kind": "code",
-      "title": "GET /invoices/:id reads a record by id with no ownership check [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).",
+      "title": "Possible broken object-level authorization: an authenticated route loads a record by a... [AUTHZ-001] at src/routes/invoices.js:14 (high severity, medium confidence).",
       "needs": "A two-account test. Create two users, have each own one record, then request the first user's record while signed in as the second. If it comes back, the endpoint lacks an ownership check. A static scan cannot see who owns a record, so only that test settles it.",
       "severity": "high",
       "findings": 1,
