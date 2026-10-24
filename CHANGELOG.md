@@ -65,6 +65,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   finding by its own CWE before the rule's. With `SOURCE_DATE_EPOCH` set,
   every report a scan writes is byte-identical across runs of one tree.
 
+- **pnpm lockfiles produced phantom packages.** The line-based reader took
+  any indented key containing `@` or `/` for a package, so every
+  `peerDependenciesMeta` child became one: `'@angular/core':` turned into
+  `@angular` at version `core`, in the inventory, both SBOMs, OSV and intel
+  lookups, and the typosquat check. On vercel/ai (6c6c221) that was 353
+  phantom components and 8 bogus VULN-002 findings. `pnpm-lock.yaml` is now
+  decoded as YAML and only `packages:` keys are read, in the 5.x, 6.0 and 9.0
+  layouts and in two-document lockfiles. The same change recovers real
+  packages the old reader mangled: names containing `_` (`string_decoder`,
+  `@types/babel__core`), v5 hashed peer suffixes (`vite@4.0.4_<hash>`), and
+  git/tarball dependencies, whose version is in a `version:` field rather
+  than the key. Package counts now equal the lockfile's own on vercel/ai,
+  vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
+  (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
+  three times, once per peer-suffixed version string; they are reported once.
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what

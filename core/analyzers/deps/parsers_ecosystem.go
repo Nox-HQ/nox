@@ -7,13 +7,14 @@ import (
 
 // Parsers for lockfile formats that nox classified but could not read. Until
 // these existed, a yarn, pnpm or poetry project produced an empty dependency
-// inventory and no vulnerability findings at all.
+// inventory and no vulnerability findings at all. pnpm's lives in
+// parsers_pnpm.go.
 //
-// All three are hand-written rather than YAML/TOML-decoded, deliberately: the
-// formats are only superficially YAML/TOML, versions differ in schema, and a
-// strict decoder rejects the whole file over one unexpected key — turning a
-// partial read into a total blind spot. These extract the two fields that
-// matter (name, resolved version) and skip what they do not recognise.
+// These two are hand-written rather than decoded: yarn v1 is not YAML at all,
+// and both extract the two fields that matter (name, resolved version) while
+// skipping what they do not recognise. pnpm-lock.yaml is different — it is
+// real YAML whose package entries hold nested mappings keyed by package names,
+// which a line scanner cannot tell from packages — so it is decoded.
 //
 // None of them returns an error for unrecognised content. A file that yields no
 // packages is reported as a degradation by the caller, which is more useful
@@ -127,102 +128,6 @@ func yarnSpecName(spec string) string {
 		return ""
 	}
 	return strings.TrimSpace(spec[:start+idx])
-}
-
-// parsePnpmLock extracts packages from a pnpm lockfile.
-//
-// Entries live under `packages:` keyed by path. Lockfile v6 and later write
-// "/name@version"; v5 and earlier write "/name/version". Both forms are in the
-// wild, and a scoped package contains a '/' in its own name, so the separator
-// has to be located from the right rather than split naively.
-func parsePnpmLock(content []byte) ([]Package, error) {
-	var pkgs []Package
-
-	inPackages := false
-	scanner := newLineScanner(bytes.NewReader(content))
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		// Top-level keys delimit sections. Only `packages:` is read: v9 also
-		// has a `snapshots:` section keyed identically, which would double
-		// every dependency, and `importers:` lists workspace members.
-		if !strings.HasPrefix(line, " ") {
-			inPackages = strings.HasPrefix(trimmed, "packages:")
-			continue
-		}
-		if !inPackages {
-			continue
-		}
-
-		// Package keys are indented and end in ':'. Lockfile v5 and v6 prefix
-		// them with '/'; v9 — the default since 2024 — dropped the slash, so
-		// requiring it silently yielded zero packages for most current pnpm
-		// projects.
-		if !strings.HasSuffix(trimmed, ":") {
-			continue
-		}
-
-		key := strings.TrimSuffix(trimmed, ":")
-		key = strings.Trim(key, `'"`)
-		key = strings.TrimPrefix(key, "/")
-
-		// Ignore nested keys such as `resolution:` and `peerDependencies:`,
-		// which are indented further and carry no version.
-		if !strings.Contains(key, "@") && !strings.Contains(key, "/") {
-			continue
-		}
-
-		key = stripPnpmPeerSuffix(key)
-
-		name, version := splitPnpmKey(key)
-		if name == "" || version == "" {
-			continue
-		}
-		pkgs = append(pkgs, Package{Name: name, Version: version, Ecosystem: "npm"})
-	}
-
-	return pkgs, nil
-}
-
-// stripPnpmPeerSuffix removes the peer-dependency qualifier pnpm appends to a
-// package key. v6+ writes "(react@18.2.0)"; v5 wrote "_react@16.8.0". Leaving
-// either attached corrupts both name and version, so no advisory can match.
-func stripPnpmPeerSuffix(key string) string {
-	if idx := strings.Index(key, "("); idx > 0 {
-		key = key[:idx]
-	}
-	if idx := strings.Index(key, "_"); idx > 0 {
-		// Only a peer qualifier, not a legitimate underscore in a package
-		// name: the qualifier always carries an '@' after the underscore.
-		if strings.Contains(key[idx:], "@") {
-			key = key[:idx]
-		}
-	}
-	return key
-}
-
-// splitPnpmKey separates a pnpm package key into name and version, accepting
-// both the "name@version" (v6+/v9) and "name/version" (v5) spellings.
-//
-// The v5 form is tried FIRST when the key has no '@' after the scope, because
-// "@scope/pkg/1.0.0" contains an '@' at index 0 that must not be treated as the
-// version separator.
-func splitPnpmKey(key string) (name, version string) {
-	// v6+/v9: "name@version", where a leading '@' is the scope marker.
-	if idx := strings.LastIndex(key, "@"); idx > 0 {
-		return key[:idx], key[idx+1:]
-	}
-	// v5: the version is the final path segment.
-	if idx := strings.LastIndex(key, "/"); idx > 0 {
-		return key[:idx], key[idx+1:]
-	}
-	return "", ""
 }
 
 // parsePoetryLock extracts packages from a poetry lockfile.
