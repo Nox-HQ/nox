@@ -977,10 +977,7 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 	items := pc.result.Findings.Findings()
 
 	// Build a lookup so the loop is O(N + M) instead of O(N*M).
-	byFP := make(map[string]int, len(items))
-	for i := range items {
-		byFP[items[i].Fingerprint] = i
-	}
+	byFP := findings.IndexByFingerprint(items)
 
 	resp := baselineAddManyResponse{Path: blPath}
 	for _, fp := range input.Fingerprints {

@@ -129,6 +129,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Which duplicate survived dedup depended on analyzer completion order.**
+  `Deduplicate` kept the first finding it met for a fingerprint and position,
+  and the analyzers hand their results over in goroutine completion order, so
+  two findings that tied on that key but differed in severity, confidence,
+  message or metadata could swap between runs. `DeduplicateFlows` and
+  `SortDeterministic` had the same gap (ties were left to input order), and the
+  MCP `baseline_add_many` tool and the assessment's verification list picked
+  "the last finding with this fingerprint" from slice order. All now use one
+  total order over findings (`core/findings/order.go`): the survivor is the
+  minimum under it, and fingerprint lookups take the greatest, which is the
+  finding they already took from a sorted result. Fingerprints, locations and
+  per-rule counts are unchanged; `kubernetes/examples` scans byte-identical
+  before and after.
 - **The slopsquat feed could not be pinned with the key the docs say to
   make.** `docs/slopsquat-feed.md` tells operators to pin the output of
   `openssl pkey -pubout`, a PKIX `PUBLIC KEY`. `scan.slop.signature_key_path`
