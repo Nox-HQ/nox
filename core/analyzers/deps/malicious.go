@@ -1,9 +1,22 @@
 // Package deps — malicious package detection for dependency scanning.
 //
-// This file implements typosquatting detection (comparing package names against
-// a curated list of popular packages) and known-malicious package lookup. Both
-// checks are driven by embedded data files that ship with the Nox binary,
-// keeping the scanner fully offline-capable.
+// This file implements typosquatting detection and known-malicious package
+// lookup. Both checks are driven by embedded data files that ship with the Nox
+// binary, keeping the scanner fully offline-capable.
+//
+// Typosquatting uses two datasets with two different roles:
+//
+//   - targets (data/popular_*.txt): a small curated list of the packages
+//     attackers imitate. A name one edit from a target is suspicious.
+//   - exemptions (data/established_*.txt): the top several thousand packages
+//     per ecosystem from a published ranking, generated and pinned by
+//     scripts/gen-typosquat-exemptions.py. A name in this set is established
+//     and is never reported as a typosquat.
+//
+// The targets used to be the exemption as well, so any established package
+// outside ~240 hand-picked names that sat one edit from one of them was
+// reported: openai (openapi), jws (ws), safer-buffer (safe-buffer). A
+// known-malicious name (data/known_malicious.json) is never exempt.
 package deps
 
 import (
@@ -14,7 +27,7 @@ import (
 	"sync"
 )
 
-//go:embed data/popular_npm.txt data/popular_pypi.txt data/known_malicious.json
+//go:embed data/popular_npm.txt data/popular_pypi.txt data/established_npm.txt data/established_pypi.txt data/known_malicious.json
 var dataFS embed.FS
 
 // dataLoadErrs records embedded-dataset load failures.
@@ -42,6 +55,9 @@ var (
 	// so DetectTyposquatting can answer "is this name itself a popular package?"
 	// in O(1) BEFORE doing any distance comparison.
 	popularSet map[string]map[string]struct{}
+	// establishedSet is the exemption set: normalized names of established
+	// packages per ecosystem, loaded with the targets under popularOnce.
+	establishedSet map[string]map[string]struct{}
 )
 
 // maliciousPackages holds lazy-loaded known malicious package names per ecosystem.
@@ -50,37 +66,74 @@ var (
 	maliciousPkgs map[string]map[string]struct{} // ecosystem → set of names
 )
 
-// loadPopular reads the embedded popular package lists. It is called exactly
-// once via sync.Once to avoid repeated file I/O.
+// typosquatEcosystems are the ecosystems VULN-002 covers.
+var typosquatEcosystems = []string{"npm", "pypi"}
+
+// loadPopular reads the embedded typosquatting targets and exemptions. It is
+// called exactly once via sync.Once to avoid repeated file I/O.
 func loadPopular() {
 	popularPkgs = make(map[string][]string)
 	popularSet = make(map[string]map[string]struct{})
+	establishedSet = make(map[string]map[string]struct{})
 
-	files := map[string]string{
-		"npm":  "data/popular_npm.txt",
-		"pypi": "data/popular_pypi.txt",
-	}
-
-	for eco, path := range files {
-		data, err := dataFS.ReadFile(path)
+	for _, eco := range typosquatEcosystems {
+		path := "data/popular_" + eco + ".txt"
+		names, err := readNameList(path)
 		if err != nil {
 			dataLoadErrs = append(dataLoadErrs,
 				fmt.Sprintf("popular-package list for %s (%s) could not be read: %v", eco, path, err))
+		} else {
+			popularPkgs[eco] = names
+			popularSet[eco] = normalizedSet(names)
+		}
+
+		// Without the exemption set every established package one edit from
+		// a target is reported, so a failed load is a degradation too.
+		path = "data/established_" + eco + ".txt"
+		names, err = readNameList(path)
+		if err != nil {
+			dataLoadErrs = append(dataLoadErrs,
+				fmt.Sprintf("established-package list for %s (%s) could not be read: %v", eco, path, err))
 			continue
 		}
-		var names []string
-		set := make(map[string]struct{})
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			names = append(names, line)
-			set[normalizeDistName(line)] = struct{}{}
-		}
-		popularPkgs[eco] = names
-		popularSet[eco] = set
+		establishedSet[eco] = normalizedSet(names)
 	}
+}
+
+// readNameList reads an embedded one-name-per-line file, skipping blank lines
+// and # comments.
+func readNameList(path string) ([]string, error) {
+	data, err := dataFS.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		names = append(names, line)
+	}
+	return names, nil
+}
+
+func normalizedSet(names []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		set[normalizeDistName(n)] = struct{}{}
+	}
+	return set
+}
+
+// isEstablished reports whether name is exempt from typosquatting: listed as
+// established and not known-malicious. Malicious wins because the exemption
+// set is ranked by downloads and dependents, and a typosquat can get popular.
+func isEstablished(name, ecosystem string) bool {
+	if _, ok := establishedSet[ecosystem][normalizeDistName(name)]; !ok {
+		return false
+	}
+	return !IsKnownMalicious(name, ecosystem)
 }
 
 // loadMalicious reads the embedded known malicious package list. It is called
@@ -168,8 +221,11 @@ func LevenshteinDistance(a, b string) int {
 // package and true if a potential typosquat is detected.
 //
 // An exact match (the package IS the popular package) returns ("", false)
-// because the real package is not a typosquat. Only supported ecosystems
-// (npm, pypi) are checked; all others return ("", false).
+// because the real package is not a typosquat. So does an established package
+// (see isEstablished): the evidence is name distance alone, and distance to a
+// target says nothing about a package that is itself among the most used in
+// its ecosystem. Only supported ecosystems (npm, pypi) are checked; all
+// others return ("", false).
 //
 // The threshold parameter controls the maximum Levenshtein distance that is
 // still considered suspicious. A value of 2 is recommended for general use; it
@@ -194,6 +250,9 @@ func DetectTyposquatting(name, ecosystem string, threshold int) (string, bool) {
 		if _, isPopular := set[lowerName]; isPopular {
 			return "", false
 		}
+	}
+	if isEstablished(name, ecosystem) {
+		return "", false
 	}
 
 	// Short names have many spurious neighbours at distance 2 (e.g. "abc" is

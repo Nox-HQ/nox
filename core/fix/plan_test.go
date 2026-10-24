@@ -176,3 +176,38 @@ func TestBestFix(t *testing.T) {
 		})
 	}
 }
+
+// The plan says which findings each move resolves, so a summary can say "one
+// upgrade fixes 33 advisories" without re-deriving the planner's grouping, and
+// so the findings no move resolves are named rather than lost.
+func TestPlanUpgradesAttributesFindings(t *testing.T) {
+	items := []findings.Finding{
+		vuln("npm", "axios", "1.7.4", "1.12.0"),
+		vuln("npm", "axios", "1.7.4", "1.20.0"),
+		{RuleID: "SEC-001"},
+		vuln("npm", "left-pad", "1.0.0", ""),
+		vuln("go", "example.com/x", "1.5.0", "2.0.0"),
+		vuln("maven", "org.x:y", "1.0.0", "1.1.0"),
+	}
+	plan := PlanUpgrades(items, Options{})
+
+	if len(plan.Actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(plan.Actions))
+	}
+	if got := plan.Actions[0].Findings; len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Errorf("the axios move should resolve findings [0 1], got %v", got)
+	}
+	if len(plan.Held) != 1 || plan.Held[0].Package != "example.com/x" ||
+		len(plan.Held[0].Findings) != 1 || plan.Held[0].Findings[0] != 4 {
+		t.Errorf("the major bump should be held with its finding, got %+v", plan.Held)
+	}
+	if got := plan.Unplanned; len(got) != 2 || got[0] != 3 || got[1] != 5 {
+		t.Errorf("unplanned should name the findings no move resolves [3 5], got %v", got)
+	}
+	// The counters are what the MCP fix_plan tool and `nox fix` already
+	// report; attribution must not move them.
+	if plan.Skipped != 2 || plan.MajorSkipped != 1 || plan.VulnCount != 5 {
+		t.Errorf("counters changed: skipped=%d majorSkipped=%d vulnCount=%d",
+			plan.Skipped, plan.MajorSkipped, plan.VulnCount)
+	}
+}

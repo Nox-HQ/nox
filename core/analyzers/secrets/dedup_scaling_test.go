@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/internal/workcount"
+	"github.com/nox-hq/nox/core/lexctx"
 )
 
 // The secrets pipeline's cost per file must not grow with findings x
@@ -83,46 +84,71 @@ func BenchmarkScanPrettyJWTProse1MB(b *testing.B) {
 	}
 }
 
-// TestDedupScalesWithFindingsPerFile is the regression bound. It measures
-// growth, not speed: the same input shape at 256 KB and at 1 MB, scanned
-// under the same machine load, must take well under the 16x a quadratic
-// pipeline needs for 4x the bytes -- linear is ~4x. A fixed wall-clock limit
-// was tried first and failed on a CI-like machine at load 25 on 10 cores,
-// where a linear 1 MB scan took 10.7 s. A loose absolute ceiling stays as a
-// backstop; the quadratic pipeline took 39 s and 22 s at 1 MB.
+// countScan scans one file with the work counters on and returns the
+// findings and the work each quadratic-prone operation did.
+func countScan(t *testing.T, name, content string) (int, workcount.Counts) {
+	t.Helper()
+	stop := workcount.Start()
+	n := scanOneFile(t, name, content)
+	return n, stop()
+}
+
+// TestDedupScalesWithFindingsPerFile is the regression bound. It counts
+// work, not time: the same input shape at 256 KB and at 1 MB must make each
+// operation that once went quadratic -- offset walks, lexing, the data: URI
+// search, dedup's comparisons -- do about 4x the work for 4x the bytes. A
+// quadratic one does ~16x.
+//
+// It used to decide by wall-clock ratio, best of 3, with a 60 s ceiling. That
+// flaked: Windows CI took 60.011 s for a linear 1 MB scan, and pre-push runs
+// at load 80-160 measured x12.1. Counts are the same on every machine and
+// under any load. Each of #827's fixes, reverted alone, grows its count
+// x15.9-x16.0: dropping the Pin (offset walks, and lexing for .py), scanning
+// every finding per dedup anchor, and searching for data: per finding.
 func TestDedupScalesWithFindingsPerFile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scans 2.5 MB")
 	}
-	// fastest of a few runs: noise only ever adds time.
-	timeScan := func(file, content string) (time.Duration, int) {
-		best, n := time.Duration(1<<62), 0
-		for range 3 {
-			start := time.Now()
-			n = scanOneFile(t, file, content)
-			best = min(best, time.Since(start))
-		}
-		return best, n
+	// The bound below is only as good as the counting, so first prove that a
+	// walk from byte 0 -- the cost a missing index pays -- is counted.
+	unpinned := []byte(strings.Repeat("x = 1\n", 100))
+	stop := workcount.Start()
+	lexctx.LineColToOffset(unpinned, 100, 1)
+	if got := stop()[workcount.OffsetWalk]; got != 99*6 {
+		t.Fatalf("an unpinned offset lookup walking %d bytes counted %d; the work counters are not wired", 99*6, got)
 	}
-	for _, c := range []struct {
-		name, file string
-		gen        func(seed int64, bytes int) string
-	}{
-		{"compact JWTs", "tokens.py", compactJWTFile},
-		{"pretty JWTs in prose", "tokens.md", prettyJWTProse},
-	} {
-		small, nSmall := timeScan(c.file, c.gen(1, 256<<10))
-		large, nLarge := timeScan(c.file, c.gen(1, 1<<20))
+
+	cases := []struct{ name, file string }{
+		{"compact JWTs", "tokens.py"},
+		{"pretty JWTs in prose", "tokens.md"},
+	}
+	gens := []func(seed int64, bytes int) string{compactJWTFile, prettyJWTProse}
+	for i, c := range cases {
+		smallContent, largeContent := gens[i](1, 256<<10), gens[i](1, 1<<20)
+		nSmall, small := countScan(t, c.file, smallContent)
+		nLarge, large := countScan(t, c.file, largeContent)
 		if nLarge < 4000 || nLarge < 3*nSmall {
 			t.Fatalf("%s: %d then %d findings; the inputs are meant to carry thousands, growing with size", c.name, nSmall, nLarge)
 		}
-		ratio := float64(large) / float64(small)
-		t.Logf("%s: %d findings in %v, %d in %v (x%.1f for x4 the bytes)", c.name, nSmall, small, nLarge, large, ratio)
-		if ratio > 8 {
-			t.Errorf("%s: 4x the bytes took x%.1f the time; the per-file pipeline is meant to be linear (~x4), not quadratic (~x16)", c.name, ratio)
+		growth := float64(len(largeContent)) / float64(len(smallContent))
+		// Both shapes carry thousands of findings, so both must convert
+		// offsets and deduplicate; Markdown is not lexed at all.
+		for _, k := range []workcount.Kind{workcount.OffsetWalk, workcount.DedupVisit} {
+			if small[k] == 0 || large[k] == 0 {
+				t.Errorf("%s: %v counted %d then %d; the scan is meant to do this work", c.name, k, small[k], large[k])
+			}
 		}
-		if large > 60*time.Second {
-			t.Errorf("%s: %v for 1 MB", c.name, large)
+		for _, k := range workcount.Kinds() {
+			if small[k] == 0 && large[k] == 0 {
+				continue
+			}
+			ratio := float64(large[k]) / float64(small[k])
+			t.Logf("%s: %v %d -> %d (x%.1f for x%.1f the bytes; %d -> %d findings)", c.name, k, small[k], large[k], ratio, growth, nSmall, nLarge)
+			// Linear is x1 the growth and quadratic x4; x2 leaves room for
+			// a per-finding constant that varies with the input's content.
+			if ratio > 2*growth {
+				t.Errorf("%s: %v grew x%.1f for x%.1f the bytes; the per-file pipeline is meant to be linear, not quadratic (~x%.0f)", c.name, k, ratio, growth, growth*growth)
+			}
 		}
 	}
 }
