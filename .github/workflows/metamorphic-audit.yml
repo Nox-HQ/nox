@@ -62,7 +62,7 @@ jobs:
         # Always keep the report + repros, green or red, as the maintainer's
         # worklist and an audit trail.
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1 # nox:ignore IAC-153 -- CI diagnostic triage bundle, not a released binary; release artifacts are signed and attested in release.yml
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2 # nox:ignore IAC-153 -- CI diagnostic triage bundle, not a released binary; release artifacts are signed and attested in release.yml
         with:
           name: metamorphic-triage
           path: sweep-out/
