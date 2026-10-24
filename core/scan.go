@@ -24,6 +24,7 @@ import (
 	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
@@ -168,6 +169,63 @@ type ScanResult struct {
 	// Empty on every committed corpus today, and structurally so rather than by
 	// luck — see adjudicate.Conflict for why, and for what makes it reachable.
 	Conflicts []adjudicate.Conflict
+
+	// Leads are things worth testing that this scan does not report as
+	// findings: today, the routes AUTHZ-001 holds when it is not enabled. A
+	// lead is not in Findings, so it reaches no machine output, exit code,
+	// gate or fingerprint; adapters present it (the CLI's assessment lists it
+	// under "Additional verification recommended").
+	Leads []Lead
+	// LeadChecks names each check that produces leads or opt-in findings and
+	// had something to read, in words that do not overclaim:
+	// "authorization (Express routes; leads only)". Empty when, for example,
+	// the scan saw no Express routes: it then says nothing about
+	// authorization.
+	LeadChecks []string
+}
+
+// Lead is one thing a scan found worth verifying by hand or at runtime,
+// carried beside the findings rather than among them. Adapter-neutral: the
+// CLI, MCP and LSP read the same values.
+type Lead struct {
+	// Category is what kind of check the lead calls for: "authorization".
+	Category string
+	// RuleID is the rule whose proposition the lead meets, which enabling
+	// that rule would report as a finding instead.
+	RuleID string
+	// Route is the HTTP method and path, e.g. "GET /api/invoices/:id".
+	Route string
+	// FilePath and Line locate the code the lead is about.
+	FilePath string
+	Line     int
+	// Statement says what the scan observed.
+	Statement string
+	// Test says how to settle it.
+	Test string
+}
+
+// authzLeads converts the authorization analyzer's output into leads and the
+// coverage line that goes with them.
+func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
+	if a.RoutesRead() == 0 {
+		return nil, nil
+	}
+	if a.Enabled() {
+		return nil, []string{"authorization (Express routes; " + authz.RuleID + " enabled, possible issues only)"}
+	}
+	leads = make([]Lead, 0, len(a.Leads()))
+	for _, l := range a.Leads() {
+		leads = append(leads, Lead{
+			Category:  "authorization",
+			RuleID:    authz.RuleID,
+			Route:     l.Method + " " + l.Path,
+			FilePath:  l.FilePath,
+			Line:      l.Line,
+			Statement: "loads a record by a caller-supplied id with no visible ownership check",
+			Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
+		})
+	}
+	return leads, []string{"authorization (Express routes; leads only)"}
 }
 
 // EvidenceArtifact assembles the replayable record of what this scan
@@ -588,6 +646,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	taintflowAnalyzer.RecordReasoningTo(reasons)
 	taintflowAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
 	agentflowAnalyzer := agentflow.NewAnalyzer()
+	authzAnalyzer := authz.NewAnalyzer()
+	authzAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
+	authzAnalyzer.RecordReasoningTo(reasons)
 	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
@@ -725,6 +786,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"authz", func(c context.Context) error {
+			fs, err := authzAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"provenance", func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
@@ -800,9 +869,16 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},
 		{"agentflow", agentflowAnalyzer.Rules()},
+		{"authz", authzAnalyzer.Rules()},
 		{"provenance", provenanceAnalyzer.Rules()},
 	} {
 		if !opts.Scopes.RunsAnalyzer(rs.analyzer) {
+			continue
+		}
+		// AUTHZ-001 not enabled produces leads, never findings, so it lists no
+		// rule in the scan's outputs either: SARIF's rule catalogue stays
+		// what it was before the analyzer existed.
+		if rs.analyzer == "authz" && !authzAnalyzer.Enabled() {
 			continue
 		}
 		for _, r := range rs.rules.Rules() {
@@ -974,7 +1050,15 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// actually concluded rather than an intermediate state.
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
+	var leads []Lead
+	var leadChecks []string
+	if opts.Scopes.RunsAnalyzer("authz") {
+		leads, leadChecks = authzLeads(authzAnalyzer)
+	}
+
 	return &ScanResult{
+		Leads:              leads,
+		LeadChecks:         leadChecks,
 		Capabilities:       capabilities,
 		Coverage:           coverage,
 		CompetenceProfiles: competenceProfiles,
