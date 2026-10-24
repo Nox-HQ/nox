@@ -288,6 +288,14 @@ func TestCorpusProvenanceHasOneReader(t *testing.T) {
 			case ".git", "node_modules", "testdata", "vendor":
 				return filepath.SkipDir
 			}
+			// A nested checkout (a git worktree under .claude/worktrees, say)
+			// is another copy of this repository, not a second reader: each
+			// one listed both allowed files again and failed every local push.
+			if path != ".." {
+				if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
+					return filepath.SkipDir
+				}
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
