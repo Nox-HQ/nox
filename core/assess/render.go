@@ -29,13 +29,14 @@ func Render(w io.Writer, r Report, opts RenderOptions) error {
 			fmt.Fprintf(b, "  - %s\n", u)
 		}
 	}
-	if len(r.Verify) > 0 {
+	if len(r.Verify) > 0 || len(r.Leads) > 0 {
 		b.WriteString("\nAdditional verification recommended:\n")
 		for _, v := range r.Verify {
 			fmt.Fprintf(b, "  - Runtime testing for %s: %s (%s), e.g. %s.\n",
 				v.Where, plural(v.Hypotheses, "attack hypothesis", "attack hypotheses"),
 				strings.Join(v.Scenarios, ", "), v.Objective)
 		}
+		renderLeads(b, r, opts.Limit)
 	}
 	if len(r.NextSteps) > 0 {
 		b.WriteString("\nNext steps:\n")
@@ -45,6 +46,29 @@ func Render(w io.Writer, r Report, opts RenderOptions) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// renderLeads lists the scan's leads, capped like the issues.
+func renderLeads(b *strings.Builder, r Report, limit int) {
+	shown := r.Leads
+	if limit > 0 && len(shown) > limit {
+		shown = shown[:limit]
+	}
+	for _, l := range shown {
+		fmt.Fprintf(b, "  - %s: %s (%s:%d) %s. %s\n",
+			capitalize(l.Category), l.Route, l.FilePath, l.Line, l.Statement, l.Test)
+	}
+	if rest := len(r.Leads) - len(shown); rest > 0 {
+		fmt.Fprintf(b, "  ...and %s; run with --verbose to list every one.\n",
+			plural(rest, "more route to test", "more routes to test"))
+	}
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func renderIssues(b *strings.Builder, r Report, limit int) {

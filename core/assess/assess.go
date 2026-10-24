@@ -57,6 +57,12 @@ type Input struct {
 	// InventoryPath is where ai.inventory.json was written, or "" when it was
 	// not. `nox attack plan` needs it for the agent-tool scenarios.
 	InventoryPath string
+	// Leads are things the scan holds worth testing that are not findings
+	// (nox.ScanResult.Leads). Never counted as issues.
+	Leads []nox.Lead
+	// LeadChecks are the coverage words for the checks that produce leads
+	// (nox.ScanResult.LeadChecks).
+	LeadChecks []string
 }
 
 // FromScan assembles an Input from a scan result. active is the finding list
@@ -73,6 +79,8 @@ func FromScan(r *nox.ScanResult, active []findings.Finding, target, findingsPath
 	}
 	in.Rules = r.Rules
 	in.Scope = r.Scope
+	in.Leads = r.Leads
+	in.LeadChecks = r.LeadChecks
 	in.Degradations = r.Degradations
 	if r.Inventory != nil {
 		in.Packages = len(r.Inventory.Packages())
@@ -168,6 +176,9 @@ type Report struct {
 	Undetermined []string
 	// Verify lists leads that need a runtime test.
 	Verify []Verification
+	// Leads are scan leads that need a manual test, in the scan's order
+	// (sorted by file and line).
+	Leads []nox.Lead
 	// NextSteps are commands, most useful first.
 	NextSteps []string
 }
@@ -179,6 +190,7 @@ func Build(in Input) Report {
 	r.Checked, r.NotChecked = coverage(in)
 	r.Undetermined = undetermined(in.Findings)
 	r.Verify = verifications(in)
+	r.Leads = in.Leads
 	r.NextSteps = nextSteps(in, r)
 	return r
 }
@@ -487,6 +499,9 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 		}
 		checked = append(checked, label)
 	}
+	// A lead check says what it read and that it yields leads, never that
+	// it checked: "authorization (Express routes; leads only)".
+	checked = append(checked, in.LeadChecks...)
 	for _, s := range in.Scope.Skipped() {
 		label := scopeLabels[s]
 		if label == "" {
