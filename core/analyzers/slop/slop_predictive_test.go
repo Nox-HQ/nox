@@ -5,26 +5,28 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/nox-hq/nox/core/analyzers/slop/feed"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/findings"
 )
 
 // loadedFeed builds an in-memory verified feed with the given entries.
-func loadedFeed(t *testing.T, entries ...feed.Entry) *feed.Loaded {
+func loadedFeed(t *testing.T, entries ...slopfeed.Entry) *slopfeed.Loaded {
 	t.Helper()
-	f := &feed.Feed{
-		SchemaVersion: feed.SchemaVersion,
+	f := &slopfeed.Feed{
+		SchemaVersion: slopfeed.SchemaVersion,
 		Version:       "test",
 		GeneratedAt:   "2026-07-25T00:00:00Z",
 		Source:        "test",
 		Entries:       entries,
 	}
-	f.SetDigest()
+	if err := f.SetDigest(); err != nil {
+		t.Fatal(err)
+	}
 	data, err := json.Marshal(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := feed.Parse(data, feed.VerifyOptions{})
+	loaded, err := slopfeed.Parse(data, slopfeed.VerifyOptions{})
 	if err != nil {
 		t.Fatalf("parse test feed: %v", err)
 	}
@@ -75,7 +77,7 @@ func TestNoFeedBaselineUnchanged(t *testing.T) {
 // matches a high-risk entry raises a distinct SLOP-002 predictive finding, and
 // the underlying SLOP-001 baseline finding is untouched.
 func TestFeedMatchEmitsPredictiveFinding(t *testing.T) {
-	fd := loadedFeed(t, feed.Entry{
+	fd := loadedFeed(t, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "unregistered high-risk", VerifiedAt: "2026-07-25",
 	})
@@ -111,7 +113,7 @@ func TestFeedMatchEmitsPredictiveFinding(t *testing.T) {
 // SLOP-001 stays silent (the import resolves to a manifest entry), but the
 // predictive rule must still warn — they may have installed the squat.
 func TestPredictiveFiresOnDeclaredPackage(t *testing.T) {
-	fd := loadedFeed(t, feed.Entry{
+	fd := loadedFeed(t, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "unregistered high-risk", VerifiedAt: "2026-07-25",
 	})
@@ -132,7 +134,7 @@ func TestPredictiveFiresOnDeclaredPackage(t *testing.T) {
 // TestPredictiveNoMatchNoFinding: an ordinary hallucinated import not in the
 // feed gets only the baseline SLOP-001, never a predictive finding.
 func TestPredictiveNoMatchNoFinding(t *testing.T) {
-	fd := loadedFeed(t, feed.Entry{
+	fd := loadedFeed(t, slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 	})
@@ -157,7 +159,7 @@ func TestPredictiveSeverityByTier(t *testing.T) {
 		{"medium", findings.SeverityLow},
 	}
 	for _, tc := range cases {
-		fd := loadedFeed(t, feed.Entry{
+		fd := loadedFeed(t, slopfeed.Entry{
 			Name: "ghostpkg", Ecosystem: "pypi", Pattern: "typo",
 			Risk: 0.7, Tier: tc.tier, Reason: "x", VerifiedAt: "2026-07-25",
 		})
@@ -172,7 +174,7 @@ func TestPredictiveSeverityByTier(t *testing.T) {
 // TestPredictiveDedupPerFile: multiple imports of the same feed name in one
 // file yield a single predictive finding.
 func TestPredictiveDedupPerFile(t *testing.T) {
-	fd := loadedFeed(t, feed.Entry{
+	fd := loadedFeed(t, slopfeed.Entry{
 		Name: "ghostpkg", Ecosystem: "pypi", Pattern: "typo",
 		Risk: 0.7, Tier: "high", Reason: "x", VerifiedAt: "2026-07-25",
 	})

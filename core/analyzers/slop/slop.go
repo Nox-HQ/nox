@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
-	"github.com/nox-hq/nox/core/analyzers/slop/feed"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/reasoning"
@@ -33,7 +33,7 @@ type Analyzer struct {
 	// check and nothing else — no feed means zero behavior change. When set, an
 	// imported name that matches a feed entry additionally raises a distinct
 	// SLOP-002 predictive finding; the SLOP-001 baseline is never altered.
-	feed *feed.Loaded
+	feed *slopfeed.Loaded
 
 	// reasoning receives the refutations. Nil until asked for, and every
 	// recording call is nil-safe.
@@ -65,7 +65,7 @@ type Option func(*Analyzer)
 
 // WithFeed attaches a verified predictive slopsquat blocklist. Passing a nil
 // feed is a no-op, so callers can wire it unconditionally.
-func WithFeed(f *feed.Loaded) Option {
+func WithFeed(f *slopfeed.Loaded) Option {
 	return func(a *Analyzer) {
 		if f != nil {
 			a.feed = f
@@ -123,9 +123,9 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // compromise, so a critical-tier target is reported High, not Critical.
 func predictiveSeverity(tier string) findings.Severity {
 	switch tier {
-	case feed.TierCritical:
+	case slopfeed.TierCritical:
 		return findings.SeverityHigh
-	case feed.TierHigh:
+	case slopfeed.TierHigh:
 		return findings.SeverityMedium
 	default: // medium and anything unexpected
 		return findings.SeverityLow
