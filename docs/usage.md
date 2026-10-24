@@ -1783,15 +1783,26 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 
 ### AI Inventory
 
-`ai.inventory.json` is automatically generated when AI components are detected. It catalogs:
+`ai.inventory.json` is written on every scan, next to the other reports. It catalogs:
 
 - MCP server configurations (`mcp.json`)
 - Prompt files (`.prompt`, `.prompt.md`)
 - Components in `/prompts/` and `/agents/` directories
+- Agent frameworks and vector stores used from source
+- Models the code calls (`model_provenance`), e.g. `openai.chat.completions.create({model: "gpt-4o"})`
+
+The console count is components plus distinct models:
+`[results] 44 findings, 123 dependencies, 1 AI component (1 model: gpt-4o via openai)`.
+The same models appear in `sbom.cdx.json` as `machine-learning-model` components.
+
+`checks` lists the AI checks that ran. An inventory with empty `components`
+and non-empty `checks` means nox looked and found nothing; empty `checks`
+means the AI scope did not run (for example `--skip ai`), so the empty
+inventory is not an all-clear.
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.1.0",
   "components": [
     {
       "name": "mcp.json",
@@ -1805,7 +1816,19 @@ Generated from dependency lockfile analysis. Supported ecosystems:
       "path": "prompts/system.prompt",
       "details": {}
     }
-  ]
+  ],
+  "model_provenance": [
+    {
+      "name": "gpt-4o",
+      "license": "Proprietary (OpenAI)",
+      "registry": "openai",
+      "path": "src/routes/assistant.js",
+      "line": 9,
+      "auth_env_var": "OPENAI_API_KEY",
+      "pinned": false
+    }
+  ],
+  "checks": ["ai_security_rules", "agent_tool_lattice", "mcp_config", "prompt_and_agent_files", "model_references", "sdk_invocations", "prompt_templates", "tool_permissions", "agent_frameworks"]
 }
 ```
 

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/report"
 )
@@ -54,13 +55,17 @@ type CDXLicenseWrapper struct {
 	License CDXLicense `json:"license"`
 }
 
-// CDXComponent represents a single dependency.
+// CDXComponent represents a single dependency or machine-learning model.
 type CDXComponent struct {
-	Type     string              `json:"type"`
-	BOMRef   string              `json:"bom-ref"`
-	Name     string              `json:"name"`
-	Version  string              `json:"version"`
-	PURL     string              `json:"purl"`
+	Type   string `json:"type"`
+	BOMRef string `json:"bom-ref"`
+	// Publisher is the model provider for a machine-learning-model component.
+	Publisher string `json:"publisher,omitempty"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	// PURL is omitted when the component has no package-URL type, as a model
+	// served by an API provider has none.
+	PURL     string              `json:"purl,omitempty"`
 	Licenses []CDXLicenseWrapper `json:"licenses,omitempty"`
 }
 
@@ -92,11 +97,59 @@ type CDXAffect struct {
 // CycloneDXReporter generates CycloneDX 1.5 JSON SBOMs.
 type CycloneDXReporter struct {
 	ToolVersion string
+	// aiInventory supplies the machine-learning-model components (the
+	// ML-BOM). Nil writes a dependency-only SBOM.
+	aiInventory *ai.Inventory
 }
 
 // NewCycloneDXReporter returns a reporter configured with the given tool version.
 func NewCycloneDXReporter(version string) *CycloneDXReporter {
 	return &CycloneDXReporter{ToolVersion: version}
+}
+
+// WithAIInventory adds the models in inv to the BOM as machine-learning-model
+// components, one per distinct model: the same set the scan summary counts, so
+// the console and the ML-BOM cannot disagree about which models an app uses.
+func (r *CycloneDXReporter) WithAIInventory(inv *ai.Inventory) *CycloneDXReporter {
+	r.aiInventory = inv
+	return r
+}
+
+// modelComponents renders the AI inventory's distinct models as CycloneDX
+// machine-learning-model components, in DistinctModels' deterministic order.
+func (r *CycloneDXReporter) modelComponents() []CDXComponent {
+	models := r.aiInventory.DistinctModels()
+	out := make([]CDXComponent, 0, len(models))
+	for i, m := range models {
+		comp := CDXComponent{
+			Type:    "machine-learning-model",
+			BOMRef:  fmt.Sprintf("model:%d", i),
+			Name:    m.Name,
+			Version: m.Version,
+			PURL:    modelPURL(m),
+		}
+		if m.Registry != "" && m.Registry != "unknown" {
+			comp.Publisher = m.Registry
+		}
+		if m.License != "" {
+			comp.Licenses = []CDXLicenseWrapper{{License: cdxLicenseFor(m.License)}}
+		}
+		out = append(out, comp)
+	}
+	return out
+}
+
+// modelPURL returns a package URL for a model when its registry has a purl
+// type. Only Hugging Face does; an API provider's model has no package URL.
+func modelPURL(m ai.ModelReference) string {
+	if m.Registry != "huggingface" {
+		return ""
+	}
+	name := strings.TrimPrefix(m.Name, "https://huggingface.co/")
+	if m.Version == "" {
+		return "pkg:huggingface/" + name
+	}
+	return "pkg:huggingface/" + name + "@" + m.Version
 }
 
 // Generate produces a CycloneDX JSON byte slice from the package inventory.
@@ -143,6 +196,7 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		}
 		components = append(components, comp)
 	}
+	components = append(components, r.modelComponents()...)
 
 	// Build vulnerability entries from inventory.
 	allVulns := inventory.AllVulnerabilities()

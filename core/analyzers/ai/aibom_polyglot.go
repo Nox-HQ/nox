@@ -99,6 +99,35 @@ func isLikelyAIContent(content []byte) bool {
 	return false
 }
 
+// commentsBlanked returns content with every comment byte except line breaks
+// replaced by a space, so a regex extractor reading it cannot match text that
+// only appears in a comment, and every offset and line number is unchanged.
+// Strings are kept: a model name is a string literal. Content in a language
+// lexctx cannot classify is returned as is.
+func commentsBlanked(lang lexctx.Lang, content []byte) []byte {
+	if lang == lexctx.LangUnknown {
+		return content
+	}
+	var out []byte
+	for _, r := range lexctx.Classify(lang, content) {
+		if r.Kind != lexctx.KindComment {
+			continue
+		}
+		if out == nil {
+			out = append([]byte(nil), content...)
+		}
+		for i := r.Start; i < r.End; i++ {
+			if out[i] != '\n' && out[i] != '\r' {
+				out[i] = ' '
+			}
+		}
+	}
+	if out == nil {
+		return content
+	}
+	return out
+}
+
 // indexBytes is a tiny stand-in for bytes.Index without importing the
 // bytes package at top-level (file-local helper).
 func indexBytes(haystack, needle []byte) int {

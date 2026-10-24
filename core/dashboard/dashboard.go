@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -91,6 +92,11 @@ func buildData(result *nox.ScanResult, version, basePath string) data {
 	}
 	for _, c := range result.AIInventory.Components {
 		d.AIComponents = append(d.AIComponents, aiComp{Type: c.Type, Name: c.Name})
+	}
+	// Models are AI components too; the dashboard lists the same distinct set
+	// the scan summary counts.
+	for _, m := range result.AIInventory.DistinctModels() {
+		d.AIComponents = append(d.AIComponents, aiComp{Type: "model", Name: ai.ModelLabel(m)})
 	}
 	// Baseline is best-effort: a project without one still renders.
 	if bl, err := baseline.Load(baseline.DefaultPath(basePath)); err == nil && bl.Len() > 0 {

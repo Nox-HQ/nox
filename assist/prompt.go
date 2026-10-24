@@ -113,8 +113,8 @@ func formatContext(result *core.ScanResult) string {
 	}
 
 	// AI components.
-	if len(result.AIInventory.Components) > 0 {
-		fmt.Fprintf(&b, "AI components: %d\n", len(result.AIInventory.Components))
+	if n := result.AIInventory.ComponentCount(); n > 0 {
+		fmt.Fprintf(&b, "AI components: %d\n", n)
 	}
 
 	return b.String()

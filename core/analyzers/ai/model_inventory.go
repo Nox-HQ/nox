@@ -30,6 +30,17 @@ type ModelReference struct {
 // extractModelReferences scans file content for ML model loading patterns and
 // returns discovered model references.
 func extractModelReferences(path string, content []byte) []ModelReference {
+	return extractModelReferencesIn(path, content, false)
+}
+
+// extractModelReferencesIn is extractModelReferences with a precision switch
+// for the config-style pattern. With requireKnownFamily set, a `model: "X"`
+// assignment is a model reference only when X names a recognised model family
+// (classifyModelRegistry is not "unknown"). The pattern alone cannot tell an
+// LLM from an ORM model name, and in ordinary source nothing else vouches for
+// it; from_pretrained and pipeline calls carry their own evidence and are
+// always kept.
+func extractModelReferencesIn(path string, content []byte, requireKnownFamily bool) []ModelReference {
 	var refs []ModelReference
 	text := string(content)
 
@@ -59,9 +70,13 @@ func extractModelReferences(path string, content []byte) []ModelReference {
 		if containsModel(refs, m[1]) {
 			continue
 		}
+		registry := classifyModelRegistry(m[1])
+		if requireKnownFamily && registry == "unknown" {
+			continue
+		}
 		refs = append(refs, ModelReference{
 			Name:     m[1],
-			Registry: classifyModelRegistry(m[1]),
+			Registry: registry,
 			License:  classifyModelLicense(m[1]),
 			Path:     path,
 		})
