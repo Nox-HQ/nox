@@ -155,6 +155,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
+		fmt.Fprintf(os.Stderr, "  compliance <fw>  Technical evidence for a framework from scan outputs (iso27001)\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
@@ -220,6 +221,8 @@ func run(args []string) int {
 		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
+	case "compliance":
+		return runCompliance(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
 	case "mcp":

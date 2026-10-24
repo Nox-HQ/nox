@@ -113,6 +113,17 @@ func TrackedFiles(dir string) ([]string, error) {
 	return splitZero(out), nil
 }
 
+// HeadCommit returns the full commit hash HEAD points at in the repository
+// containing dir, or an error when dir is not inside a git repository or the
+// repository has no commits.
+func HeadCommit(dir string) (string, error) {
+	out, err := runGit(dir, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
 func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
