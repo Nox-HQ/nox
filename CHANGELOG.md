@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`nox scan` ends with an assessment instead of counts.** Issues are grouped
+  by the action that resolves them: one line per upgrade the `nox fix` planner
+  would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known
+  vulnerabilities"), one per vulnerable package with no fix, one per rule for
+  code findings with file:line, ranked by severity times confidence, top five
+  shown (`--verbose` lists all). It then states which checks ran and which did
+  not (and the one action that enables each), what the scan could not settle
+  (reachability of dependency vulnerabilities, exploitability), the runtime
+  tests `nox attack plan` would build, and the next commands. Built in
+  `core/assess` from the shared `core/fix` planner and `core/hypothesize`, so
+  other adapters can render the same account. The `[tip]` lines are replaced;
+  the advisory "installed plugins not listed in plugins.required" `[degraded]`
+  line moves behind `--verbose` when the assessment is shown. `[results]`,
+  `[families]` and blocking `[degraded]` lines are unchanged, and so are
+  findings.json, SARIF and the SBOMs: this is presentation only.
+
 ### Fixed
 
 - **VULN-002 reported established packages as typosquats.** The ~240

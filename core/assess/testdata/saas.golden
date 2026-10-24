@@ -1,0 +1,27 @@
+
+Nox Security Assessment
+
+6 issues need attention (44 findings).
+  1. Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known vulnerabilities (highest severity: high).
+  2. Upgrade body-parser 1.20.3 -> 1.20.9: fixes 2 known vulnerabilities (highest severity: high).
+  3. Upgrade path-to-regexp 0.1.12 -> 0.1.13: fixes 1 known vulnerability (highest severity: high).
+  4. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
+  5. Upgrade qs 6.13.0 -> 6.16.0: fixes 4 known vulnerabilities (highest severity: medium).
+  ...and 1 more issue; run with --verbose to list every issue.
+
+Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
+Not checked:
+  - Optional plugins are installed but not enabled for this project, so their checks did not run. To enable: list the ones you want under plugins.required in .nox.yaml (--verbose names them).
+
+Not determined by this scan:
+  - Whether your code reaches the vulnerable code, for 40 dependency vulnerabilities; until upgraded, assume it does.
+  - Exploitability: none of the 44 findings was confirmed exploitable or shown to be prevented; they are potential issues.
+
+Additional verification recommended:
+  - Runtime testing for src/routes/assistant.js:9 (TAINT-AI-001): 2 attack hypotheses (PI-DIRECT, PI-INDIRECT), e.g. make the model obey an instruction supplied through untrusted input.
+
+Next steps:
+  - Preview the dependency upgrades: nox fix --input ./findings.json --dry-run
+  - Plan the runtime tests (offline, sends nothing): nox attack plan . --findings ./findings.json
+  - Record a reviewed, accepted risk as a waiver: nox vex init --input ./findings.json
+  - Catch new issues before they are committed: nox install-hook
