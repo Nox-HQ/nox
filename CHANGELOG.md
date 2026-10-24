@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.48.2] - 2026-10-24
+
+Fixes from the concrete-witness research (#814): secret rules now report what
+their format establishes, and a JWT in any RFC-valid layout has an owner.
+`nox fix --actions` no longer deletes the waiver on a pin it bumps.
+
+### Fixed
+
+- **`nox fix --actions` deleted waivers** (#836). Rewriting a pin replaced
+  its whole trailing comment with `# <tag>`, so a `# nox:ignore ...` after the
+  version was lost on every bump; remediation PR #835 lost three. The version
+  was also read from anywhere in the comment: `@v4 # nox:ignore IAC-001`
+  tracked "v1", and `# pinned for go1.26` held back a same-major upgrade as a
+  major jump. Only the comment's first word is the version now, and the rest
+  is kept.
+- **SEC-077 (age identity)** reports the spec's post-quantum
+  `AGE-SECRET-KEY-PQ-` identity and verifies the Bech32 checksum (#816).
+- **SEC-335 (Sourcegraph)** no longer reports any 40-hex value near the word
+  "sourcegraph"; a commit SHA or ETag was a high finding (#815).
+- **SEC-519 and the eleven sibling ARN rules** (SEC-414, 465, 466, 511-518)
+  require the service's full ARN, in every AWS partition. Their keyword was a
+  Terraform resource stem no ARN contains (#817, #822).
+- **SEC-251 (JWT)** no longer reports an unsigned (`alg: none`) or truncated
+  token as a credential (#820).
+- **SEC-371, the JWT owner,** runs wherever a JWT is. Its file keyword was
+  `jwt`, which a token does not contain (#819).
+- **A generic entropy finding** no longer wins ownership of a provider token
+  in dedup (#818).
+- **Trailing boundary groups** are context, not part of the reported span. In
+  135 rules the span included the consumed delimiter, so dedup missed overlaps
+  and one token was reported several times (#821).
+- **Supabase keys:** an anon key is reported as public by design, a
+  service_role key as critical (#825).
+- **SEC-952** reports a signed JWT whose JSON is RFC-valid but not compact
+  (spaced, pretty-printed), which no JWT rule matched (#826).
+- **SLOP-001** resolves `import z3` to the `z3-solver` distribution (#824).
+
+### Performance
+
+- **A file's secrets scan cost is linear in its findings** (#827). It grew
+  with findings x file size and findings x findings, so one crafted file in an
+  untrusted repository could stall a CI scan.
+
+On the release corpus (rule-diff against v1.48.1, 25 repositories) nothing
+drops. SEC-465, 513, 516 and 517 rise by 55 findings across podinfo,
+aws-cloudformation-templates and anthropic-sdk-python: ARNs in partitions the
+old literal prefix never matched.
+
 ## [1.48.1] - 2026-10-04
 
 Three secret rules that reported placeholders now report what their evidence
