@@ -40,6 +40,12 @@
       "classification": "value-shape-required",
       "pr": 853,
       "reason": "A passport number is upper-case and contains a digit (US: 9 digits or a letter and 8 digits; UK: 9 digits), or is a German serial of nine characters from the vowel-free PassV alphabet. Every corpus drop was read: all six are hackathon-starter's `const passport = require('passport')` / `require('passport-strategy')` lines, where the case-insensitive value class read `require` as the number. Generated real-format values in a passport-number key still fire, and the JSON key form (`\"passport_number\": ...`, `\"passport\": {\"number\": ...}`) now fires where it was missed before."
+    },
+    {
+      "rule": "IAC-296",
+      "classification": "duplicate-retired",
+      "pr": 862,
+      "reason": "IAC-296 asked to 'verify TLS termination' of every Ingress, with or without a tls block, and is retired into IAC-149, which reports the missing block and carries the alias. Both corpus drops were read. kubernetes/examples AI/model-serving-tensorflow/ingress.yaml has no tls block: IAC-296 and IAC-149 reported it on the same line, and IAC-149 still does. stefanprodan/podinfo charts/podinfo/templates/ingress.yaml renders its tls block under `{{- if .Values.ingress.tls }}`; a conditionally configured block is not a defect in the template, and 'verify' was the whole claim. No Ingress with no tls block lost its finding."
     }
   ]
 }

@@ -55,6 +55,11 @@
     "pattern": "(?i)hostIPC:\\s*true"
   },
   {
+    "owner": "IAC-149",
+    "retired": "IAC-296",
+    "pattern": "(?i)kind:\\s*Ingress"
+  },
+  {
     "owner": "IAC-018",
     "retired": "IAC-310",
     "pattern": "(?i)continue-on-error:\\s*true"

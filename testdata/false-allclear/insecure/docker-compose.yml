@@ -1,0 +1,7 @@
+services:
+  api:
+    image: ghcr.io/example/invoicely:1.0.0
+    environment:
+      - DB_PASSWORD=hunter2-prod-Passw0rd
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - LOG_LEVEL=info

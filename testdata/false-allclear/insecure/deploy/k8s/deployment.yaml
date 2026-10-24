@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoicely
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: invoicely}
+  template:
+    metadata:
+      labels: {app: invoicely}
+    spec:
+      hostNetwork: true
+      securityContext:
+        runAsNonRoot: false
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: app
+          image: ghcr.io/example/invoicely:1.0.0@sha256:1a526b97cace6b4006256570efa1a29cd1fe4b96a5301f8d48e87c5139438a45
+          ports: [{containerPort: 3000}]
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+            readOnlyRootFilesystem: false
+            runAsUser: 0
+            capabilities: {add: [SYS_ADMIN]}
+          resources:
+            limits: {cpu: 500m, memory: 256Mi}
+            requests: {cpu: 100m, memory: 128Mi}
+          env:
+            - name: DATABASE_PASSWORD
+              value: "hunter2-prod-Passw0rd"

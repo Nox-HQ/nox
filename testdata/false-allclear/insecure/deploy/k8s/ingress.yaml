@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: invoicely
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  rules:
+    - host: invoicely.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: invoicely, port: {number: 3000}}}

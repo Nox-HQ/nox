@@ -546,11 +546,13 @@ func TestRun_ScanWithAIComponents(t *testing.T) {
   "mcpServers": {
     "test": {
       "command": "npx",
-      "args": ["test-mcp"]
+      "args": ["test-mcp@1.0.0"]
     }
   }
 }
 `
+	// The package is pinned: this test is about a scan of an MCP config
+	// completing cleanly, and an unpinned `npx test-mcp` is MCP-025.
 	if err := os.WriteFile(filepath.Join(dir, "mcp.json"), []byte(mcpConfig), 0o644); err != nil {
 		t.Fatalf("writing mcp.json: %v", err)
 	}
