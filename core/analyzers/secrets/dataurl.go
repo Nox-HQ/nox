@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/internal/workcount"
 	"github.com/nox-hq/nox/core/lexctx"
 )
 
@@ -40,6 +41,7 @@ func inDataURIPayload(content []byte, f *findings.Finding) bool {
 // The scheme cannot overlap itself, so this is exactly the sequence a walk
 // that resumes after each occurrence visits.
 func dataURIStarts(content []byte) []int {
+	workcount.Add(workcount.DataURISearch, len(content))
 	var starts []int
 	for off := 0; ; {
 		rel := bytes.Index(content[off:], dataURIScheme)
