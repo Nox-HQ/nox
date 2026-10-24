@@ -58,6 +58,10 @@ inputs:
     description: 'Scan output directory'
     required: false
     default: 'nox-out'
+  findings-file:
+    description: 'Plan from this findings.json instead of the one the scan above writes. `nox advisories --prepare-findings` writes the file holding only the newly disclosed advisories its policy decided to fix.'
+    required: false
+    default: ''
   github-token:
     description: 'Token used to create the pull request (defaults to GITHUB_TOKEN)'
     required: false
@@ -96,6 +100,7 @@ runs:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
         INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+        INPUT_FINDINGS_FILE: ${{ inputs.findings-file }}
       run: bash "${{ github.action_path }}/remediate.sh" plan
 
     - name: Apply remediation
@@ -105,6 +110,7 @@ runs:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
         INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+        INPUT_FINDINGS_FILE: ${{ inputs.findings-file }}
       run: bash "${{ github.action_path }}/remediate.sh" apply
 
     - name: Verify changes

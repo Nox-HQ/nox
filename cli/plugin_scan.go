@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/plugincap"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
 )
@@ -88,11 +88,12 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		}
 	}
 	if len(undeclared) > 0 {
-		sort.Strings(undeclared)
+		// The detail keeps the plugin names for findings.json and --verbose;
+		// the assessment reads them back through plugincap to say which
+		// capabilities were not checked without naming a plugin.
 		missing = append(missing, core.Degradation{
-			Kind: degrade.Plugin,
-			Detail: fmt.Sprintf("%d installed plugin(s) are not listed in plugins.required and did not run: %s",
-				len(undeclared), strings.Join(undeclared, ", ")),
+			Kind:   degrade.Plugin,
+			Detail: plugincap.UndeclaredDetail(undeclared),
 			Impact: "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
 			// ADVISORY. This reports capability the operator declined, not
 			// something they rely on that failed — the opposite of every other
