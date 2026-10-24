@@ -45,6 +45,12 @@ scan:
     signature_key_path: keys/slopsquat.pub.pem  # PEM Ed25519 public key
 ```
 
+`signature_key_path` accepts either PEM form of an Ed25519 public key: the PKIX
+`PUBLIC KEY` that `openssl pkey -pubout` writes, or the raw `ED25519 PUBLIC KEY`
+that `cmd/slopfeed --pubkey-out` writes. (nox v1.48.2 and earlier accepted only
+the raw form and rejected the openssl one with "unexpected public key length:
+44".)
+
 To point at your own regenerated feed file instead of the bundled one:
 
 ```yaml

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The slopsquat feed could not be pinned with the key the docs say to
+  make.** `docs/slopsquat-feed.md` tells operators to pin the output of
+  `openssl pkey -pubout`, a PKIX `PUBLIC KEY`. `scan.slop.signature_key_path`
+  rejected it with "unexpected public key length: 44", so
+  `require_signature: true` could only be met with nox's own raw key form. Both
+  forms are now accepted. The feed format, digest, signing and the generator
+  moved to `github.com/nox-hq/nox-core/slopfeed` (v0.4.0), shared with the
+  service that will publish the feed; the CLI keeps only file, bundled and
+  remote loading, and `cmd/slopfeed` is now a thin command line over it with
+  the same flags and output.
 - **VULN-002 reported established packages as typosquats.** The ~240
   hand-picked popular names per ecosystem were both the targets a typosquat
   imitates and the only exemption, so any established package one edit from a

@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,6 +82,51 @@ func TestScanRemoteSignedFeedFiresSLOP002(t *testing.T) {
 		if d.Kind == "slop_feed" {
 			t.Fatalf("unexpected slop_feed degradation on a valid signed feed: %+v", d)
 		}
+	}
+}
+
+// TestScanPinsPKIXPublicKey pins the key in the form docs/slopsquat-feed.md
+// tells operators to produce, `openssl pkey -pubout`: a PKIX "PUBLIC KEY" block
+// with a 44-byte body. Through v1.48.2 nox rejected it with "unexpected public
+// key length: 44", so require_signature could only be met with nox's own raw
+// key encoding.
+func TestScanPinsPKIXPublicKey(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	body := signedFeedJSON(t, priv, slopfeed.Entry{
+		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
+		Risk: 0.82, Tier: "critical", Reason: "unregistered high-risk", VerifiedAt: "2026-07-25",
+	})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	der, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := writeProject(t, map[string]string{
+		"requirements.txt": "flask\n",
+		"app.py":           "import flask\nimport openai_utils\n",
+	})
+	writeProjFile(t, root, "keys/slopfeed.pub.pem",
+		string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})))
+	writeProjFile(t, root, ".nox.yaml",
+		"scan:\n  slop:\n    feed: "+srv.URL+"\n    require_signature: true\n"+
+			"    signature_key_path: keys/slopfeed.pub.pem\n"+
+			"    cache_dir: .nox/slopfeed-cache\n")
+
+	res, err := RunScanContext(context.Background(), root, ScanOptions{})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	for _, d := range res.Degradations {
+		if d.Kind == "slop_feed" {
+			t.Fatalf("a PKIX public key must verify the feed, got degradation: %+v", d)
+		}
+	}
+	if got := countRule(res, "SLOP-002"); got != 1 {
+		t.Fatalf("expected 1 SLOP-002 under the PKIX-pinned key, got %d", got)
 	}
 }
 
