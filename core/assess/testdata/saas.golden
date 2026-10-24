@@ -11,7 +11,8 @@ Nox Security Assessment
 
 Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
 Not checked:
-  - Optional plugins are installed but not enabled for this project, so their checks did not run. To enable: list the ones you want under plugins.required in .nox.yaml (--verbose names them).
+  - Optional checks are installed but not enabled, so they did not run: API authorization patterns, dependency freshness (needs the network), dependency-confusion exposure and exposed endpoints and admin or debug routes. To enable: list the ones you want under plugins.required in .nox.yaml (--verbose names them).
+  - Live testing did not run (adversarial prompts against a live chat endpoint, inspecting running Kubernetes workloads and probing a running web application): it sends traffic to, or reads, a running system, so it needs your explicit go-ahead. To enable: plan it with nox attack plan; nothing is sent until you add --authorize.
 
 Not determined by this scan:
   - Whether your code reaches the vulnerable code, for 40 dependency vulnerabilities; until upgraded, assume it does.
