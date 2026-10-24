@@ -9,6 +9,8 @@ import (
 
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 
+	"github.com/nox-hq/nox/core/advisory"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,6 +40,11 @@ type ScanConfig struct {
 	Cache      CacheSettings      `yaml:"cache"`
 	Plugins    PluginsConfig      `yaml:"plugins"`
 	Fix        FixSettings        `yaml:"fix"`
+
+	// Advisories decides what a scheduled run does about a newly disclosed
+	// dependency advisory: report, prepare a fix, or remediate. Read by
+	// `nox advisories`; the default is the least autonomous level.
+	Advisories advisory.Settings `yaml:"advisories"`
 
 	// PluginPolicy is the plugin sandbox policy. The scan engine never reads
 	// it — package plugin does, from this same file — but the schema lives
