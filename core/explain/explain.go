@@ -187,11 +187,15 @@ func cweSuffix(cwe string) string {
 	return " It is classified as " + cwe + "."
 }
 
+// cweOf classifies the finding by its own CWE before the rule's. A rule ID can
+// cover several weaknesses (TAINT-005: code injection and unsafe
+// deserialization), and its rule then names all of them; the finding names the
+// one it is.
 func cweOf(f findings.Finding, rule catalog.RuleMeta) string {
-	if rule.CWE != "" {
-		return rule.CWE
+	if cwe := f.Metadata["cwe"]; cwe != "" {
+		return cwe
 	}
-	return f.Metadata["cwe"]
+	return rule.CWE
 }
 
 // argument splits the ledger into what argued for the finding and what argued
