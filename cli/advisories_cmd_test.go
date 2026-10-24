@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -233,5 +234,150 @@ func TestInstallCIWritesOnceAndRefusesToOverwrite(t *testing.T) {
 	}
 	if rc := runInstallCI(append(args, "--force")); rc != 0 {
 		t.Fatalf("--force exit %d", rc)
+	}
+}
+
+// installCIWorkflow renders the workflow and returns its text and its
+// advisories job's steps, for the bot-token tests.
+type ciStep struct {
+	Name string            `yaml:"name"`
+	ID   string            `yaml:"id"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	Env  map[string]string `yaml:"env"`
+	With map[string]any    `yaml:"with"`
+	Run  string            `yaml:"run"`
+}
+
+func renderedAdvisoriesSteps(t *testing.T) (out string, steps map[string]ciStep) {
+	t.Helper()
+	d, err := resolveInstallCI("main", "17 5 * * *", "v1.2.3", "1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = renderInstallCI(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wf struct {
+		Jobs map[string]struct {
+			Steps []ciStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &wf); err != nil {
+		t.Fatalf("generated workflow is not YAML: %v", err)
+	}
+	steps = map[string]ciStep{}
+	for _, s := range wf.Jobs["advisories"].Steps {
+		steps[s.Name] = s
+	}
+	return out, steps
+}
+
+func TestInstallCIUsesAGitHubAppTokenWhenConfigured(t *testing.T) {
+	out, steps := renderedAdvisoriesSteps(t)
+	app := steps["Mint a short-lived GitHub App token"]
+	if app.ID != "app-token" || !strings.HasPrefix(app.Uses, "actions/create-github-app-token@") {
+		t.Fatalf("app-token step missing: %+v", app)
+	}
+	if !strings.HasSuffix(app.Uses, "@64ab729a6294000f5aa4a4bc0b73d1f32bc45510") || !strings.Contains(out, "# v3.3.0") {
+		t.Errorf("app-token action not pinned to the v3.3.0 commit: %s", app.Uses)
+	}
+	if app.If != "steps.bot.outputs.kind == 'app'" {
+		t.Errorf("app-token step must only run when the app secrets exist, if = %q", app.If)
+	}
+	// Minimum permissions, and nothing else.
+	perms := map[string]string{}
+	for k, v := range app.With {
+		if strings.HasPrefix(k, "permission-") {
+			perms[k] = v.(string)
+		}
+	}
+	want := map[string]string{"permission-contents": "write", "permission-pull-requests": "write", "permission-issues": "write"}
+	if len(perms) != len(want) {
+		t.Errorf("permissions = %v, want %v", perms, want)
+	}
+	for k, v := range want {
+		if perms[k] != v {
+			t.Errorf("%s = %q, want %q", k, perms[k], v)
+		}
+	}
+	rem := steps["Prepare the remediation pull request"]
+	if got := rem.With["github-token"]; got != "${{ steps.app-token.outputs.token || secrets.NOX_TOKEN || github.token }}" {
+		t.Errorf("remediate token order is app, pat, github; got %v", got)
+	}
+}
+
+func TestInstallCITokenChoiceNeverExposesASecret(t *testing.T) {
+	_, steps := renderedAdvisoriesSteps(t)
+	bot := steps["Choose the token that opens pull requests"]
+	for k, v := range bot.Env {
+		if !strings.Contains(v, "!= ''") {
+			t.Errorf("env %s must test presence only, got %q", k, v)
+		}
+	}
+	if strings.Contains(bot.Run, "secrets.") || strings.Contains(bot.Run, "echo \"${NOX") {
+		t.Errorf("the choosing script must not touch a secret:\n%s", bot.Run)
+	}
+	// Only the steps that need a credential reference a secret.
+	for name, s := range steps {
+		raw, _ := yaml.Marshal(s)
+		if strings.Contains(string(raw), "secrets.") &&
+			name != "Mint a short-lived GitHub App token" &&
+			name != "Prepare the remediation pull request" &&
+			name != "Allow auto-merge for safe upgrades" &&
+			name != "Choose the token that opens pull requests" {
+			t.Errorf("step %q should not receive a secret", name)
+		}
+		if strings.Contains(s.Run, "secrets.") {
+			t.Errorf("step %q interpolates a secret into a script", name)
+		}
+	}
+}
+
+func TestInstallCIGitHubTokenFallbackWarnsAndSkipsAutoMerge(t *testing.T) {
+	_, steps := renderedAdvisoriesSteps(t)
+	bot := steps["Choose the token that opens pull requests"]
+	for _, want := range []string{"kind=github", "::warning::", "CI will not run", "auto-merge cannot complete", "GITHUB_STEP_SUMMARY", "docs/advisory-policy.md#opening-pull-requests-that-run-your-checks"} {
+		if !strings.Contains(bot.Run, want) {
+			t.Errorf("fallback should mention %q:\n%s", want, bot.Run)
+		}
+	}
+	merge := steps["Allow auto-merge for safe upgrades"]
+	if !strings.Contains(merge.If, "steps.bot.outputs.kind != 'github'") {
+		t.Errorf("auto-merge must be skipped on a GITHUB_TOKEN PR, if = %q", merge.If)
+	}
+	if strings.Contains(merge.Env["GH_TOKEN"], "github.token") {
+		t.Errorf("auto-merge must never fall back to GITHUB_TOKEN: %q", merge.Env["GH_TOKEN"])
+	}
+	expl := steps["Explain why auto-merge was not enabled"]
+	if !strings.Contains(expl.If, "steps.bot.outputs.kind == 'github'") || !strings.Contains(expl.Run, "::warning::") {
+		t.Errorf("a GITHUB_TOKEN PR should say why auto-merge is off: %+v", expl)
+	}
+}
+
+func TestInstallCIPAT(t *testing.T) {
+	_, steps := renderedAdvisoriesSteps(t)
+	bot := steps["Choose the token that opens pull requests"]
+	if !strings.Contains(bot.Env["HAS_PAT"], "secrets.NOX_TOKEN != ''") || !strings.Contains(bot.Run, "kind=pat") {
+		t.Errorf("a NOX_TOKEN secret should select the pat path: %+v", bot)
+	}
+	// The app wins over the PAT.
+	if strings.Index(bot.Run, "kind=app") > strings.Index(bot.Run, "kind=pat") {
+		t.Error("the app must be preferred over the PAT")
+	}
+}
+
+func TestInstallCIEveryUsesIsPinnedOnAllJobs(t *testing.T) {
+	out, _ := renderedAdvisoriesSteps(t)
+	sha := regexp.MustCompile(`^[0-9a-f]{40}$`)
+	for _, m := range regexp.MustCompile(`(?m)^\s*(?:- )?uses: (\S+)`).FindAllStringSubmatch(out, -1) {
+		if strings.HasPrefix(m[1], "nox-hq/nox") {
+			continue
+		}
+		at := strings.LastIndex(m[1], "@")
+		if at < 0 || !sha.MatchString(m[1][at+1:]) {
+			t.Errorf("%q is not pinned to a 40-hex commit", m[1])
+		}
 	}
 }

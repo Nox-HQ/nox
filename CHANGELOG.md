@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox install-ci` pull requests now run your required checks.** A pull
+  request opened with `GITHUB_TOKEN` triggers no workflows, so a remediation PR's
+  checks never ran and its auto-merge never completed. The generated workflow
+  now opens it as a GitHub App (secrets `NOX_APP_ID`, `NOX_APP_PRIVATE_KEY`, a
+  short-lived token from `actions/create-github-app-token` scoped to contents,
+  pull-requests and issues write), else as the `NOX_TOKEN` fine-grained token,
+  else with `GITHUB_TOKEN`, which warns that CI will not run and does not enable
+  auto-merge. Setup is in `docs/advisory-policy.md`.
 - **A newly disclosed advisory gets exactly the response you configured.**
   `nox install-ci` writes one workflow that scans pull requests and, on a daily
   schedule, scans the merged code and works out which dependency advisories are
