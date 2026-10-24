@@ -320,8 +320,9 @@ type ScanOptions struct {
 	// `.`, so the contaminating invocation is the obvious one.
 	//
 	// Empty means the caller writes nothing and nothing is excluded. Only the
-	// exact artifact paths under this directory are skipped: a findings.json
-	// somewhere else in the tree is a real file and is still scanned.
+	// exact artifact paths under this directory are skipped by path: a
+	// findings.json somewhere else in the tree is skipped only when its content
+	// says nox wrote it (see skipGeneratedReports), and is scanned otherwise.
 	OutputDir string
 }
 
@@ -419,8 +420,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// degradations collects checks that could not complete. Analyzers write to
+	// it concurrently; it is surfaced on ScanResult so "no findings" can be
+	// distinguished from "did not look". Created before discovery, which
+	// records the files it deliberately did not read.
+	degradations := &degrade.Degradations{}
+
 	// Stage 1: Discover artifacts.
-	artifacts, err := discoverArtifacts(target, cfg, opts)
+	artifacts, err := discoverArtifacts(target, cfg, opts, degradations)
 	if err != nil {
 		return nil, err
 	}
@@ -467,10 +474,6 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	dataAnalyzer := data.NewAnalyzer()
 	iacAnalyzer := iac.NewAnalyzer()
 	iacAnalyzer.RecordReasoningTo(reasons)
-	// degradations collects checks that could not complete. Analyzers write to
-	// it concurrently; it is surfaced on ScanResult so "no findings" can be
-	// distinguished from "did not look".
-	degradations := &degrade.Degradations{}
 	// Config nox parses but does not act on is a coverage question, so it rides
 	// the same channel as every other "did not look" signal. Reported here in
 	// core rather than printed by one adapter: an agent scanning over MCP has no
@@ -1185,7 +1188,21 @@ func scanRootDir(target string) string {
 // discoverArtifacts walks the target, honoring .gitignore and config excludes,
 // optionally restricting to files changed since a git ref, and filtering out
 // excluded artifact types. It is stage 1 of the scan pipeline.
-func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
+//
+// Reports nox wrote are removed from the result and recorded on deg, for a
+// single-file target too: the LSP scans one file at a time, and an editor that
+// opens an old results.sarif should not light up with findings about nox's own
+// rule descriptions. See skipGeneratedReports.
+func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions, deg *degrade.Degradations) ([]discovery.Artifact, error) {
+	artifacts, err := walkArtifacts(target, cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+	return skipGeneratedReports(artifacts, deg), nil
+}
+
+// walkArtifacts is discoverArtifacts before nox's own reports are removed.
+func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
 	// A single-file target scans exactly that file — the walker skips its own
 	// root, so pointing it at a file would yield nothing. The user named the
 	// file explicitly, so gitignore/scan.exclude do not apply.
