@@ -80,6 +80,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
   (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
   three times, once per peer-suffixed version string; they are reported once.
+
+- **A report nox wrote was scanned as source wherever it was kept.** Only the
+  current `--output` paths were excluded, so a renamed output directory, a
+  downloaded CI artifact or a committed `results.sarif` fed nox's own rule
+  descriptions back in: `cp -R out old-report` took a 44-finding scan to 48
+  (AI-009 and AI-038 matching the SARIF rule catalog), and an `--evidence-out`
+  file added 37 DATA-001 findings per copy. Discovery now recognises nox's
+  SARIF, findings/evidence JSON, CycloneDX, SPDX, attack-plan and HTML reports
+  by content (a prefix sniff for the producer marker, confirmed by decoding
+  the field it belongs in), under any name and in any directory, for the CLI,
+  MCP and LSP alike. Each skipped file is named in an advisory
+  `generated_report` degradation. Other tools' SARIF and SBOMs are still
+  scanned: a gitleaks or semgrep SARIF carries the credential it matched.
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what
