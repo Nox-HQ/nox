@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The slopsquat feed could not be pinned with the key the docs say to
+  make.** `docs/slopsquat-feed.md` tells operators to pin the output of
+  `openssl pkey -pubout`, a PKIX `PUBLIC KEY`. `scan.slop.signature_key_path`
+  rejected it with "unexpected public key length: 44", so
+  `require_signature: true` could only be met with nox's own raw key form. Both
+  forms are now accepted. The feed format, digest, signing and the generator
+  moved to `github.com/nox-hq/nox-core/slopfeed` (v0.4.0), shared with the
+  service that will publish the feed; the CLI keeps only file, bundled and
+  remote loading, and `cmd/slopfeed` is now a thin command line over it with
+  the same flags and output.
 - **VULN-002 reported established packages as typosquats.** The ~240
   hand-picked popular names per ecosystem were both the targets a typosquat
   imitates and the only exemption, so any established package one edit from a
@@ -42,6 +52,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   34 -> 8 on vercel/ai and 1 -> 0 on anthropic-sdk-python; historical
   typosquats (`crossenv`, `mongose`, `colourama`, `python3-dateutil`, `djago`,
   `diango`, `setup-tools`) still fire.
+
+- **`results.sarif` differed between identical scans.** The taint rule
+  catalog kept the first sink a map iteration reached for each rule ID, and
+  TAINT-005 is shared by code_injection and unsafe_deserialization sinks, so
+  its descriptor (description, CWE, tags, helpUri) changed from run to run
+  and was wrong for the other class every time. TAINT-003 (xss and ssti) had
+  the same construction. Each shared ID's descriptor now names every class
+  and CWE it reports (TAINT-005: CWE-94, CWE-95, CWE-134, CWE-502), and the
+  taint catalog's listings are sorted. Rule IDs and fingerprints are
+  unchanged, so no Code Scanning alert moves. `nox explain` classifies a
+  finding by its own CWE before the rule's. With `SOURCE_DATE_EPOCH` set,
+  every report a scan writes is byte-identical across runs of one tree.
+
+- **pnpm lockfiles produced phantom packages.** The line-based reader took
+  any indented key containing `@` or `/` for a package, so every
+  `peerDependenciesMeta` child became one: `'@angular/core':` turned into
+  `@angular` at version `core`, in the inventory, both SBOMs, OSV and intel
+  lookups, and the typosquat check. On vercel/ai (6c6c221) that was 353
+  phantom components and 8 bogus VULN-002 findings. `pnpm-lock.yaml` is now
+  decoded as YAML and only `packages:` keys are read, in the 5.x, 6.0 and 9.0
+  layouts and in two-document lockfiles. The same change recovers real
+  packages the old reader mangled: names containing `_` (`string_decoder`,
+  `@types/babel__core`), v5 hashed peer suffixes (`vite@4.0.4_<hash>`), and
+  git/tarball dependencies, whose version is in a `version:` field rather
+  than the key. Package counts now equal the lockfile's own on vercel/ai,
+  vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
+  (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
+  three times, once per peer-suffixed version string; they are reported once.
+
+- **A report nox wrote was scanned as source wherever it was kept.** Only the
+  current `--output` paths were excluded, so a renamed output directory, a
+  downloaded CI artifact or a committed `results.sarif` fed nox's own rule
+  descriptions back in: `cp -R out old-report` took a 44-finding scan to 48
+  (AI-009 and AI-038 matching the SARIF rule catalog), and an `--evidence-out`
+  file added 37 DATA-001 findings per copy. Discovery now recognises nox's
+  SARIF, findings/evidence JSON, CycloneDX, SPDX, attack-plan and HTML reports
+  by content (a prefix sniff for the producer marker, confirmed by decoding
+  the field it belongs in), under any name and in any directory, for the CLI,
+  MCP and LSP alike. Each skipped file is named in an advisory
+  `generated_report` degradation. Other tools' SARIF and SBOMs are still
+  scanned: a gitleaks or semgrep SARIF carries the credential it matched.
 
 - **A detected LLM model was invisible.** An app calling
   `openai.chat.completions.create({model: "gpt-4o"})`, in JavaScript or
@@ -65,7 +116,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ML model. Model extractors now skip comments. In ordinary source, a
   `model: "X"` assignment counts only when X is a recognised model family. SDK
   call sites and `from_pretrained` keep their own evidence.
-
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what
