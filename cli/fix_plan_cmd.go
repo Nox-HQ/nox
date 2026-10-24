@@ -193,15 +193,16 @@ func runApplySub(plan remediate.Plan, active []findings.Finding, o fixSubOptions
 }
 
 func finishApply(plan remediate.Plan, attempts []remediate.Attempt, report *remediate.Report, o fixSubOptions) int {
-	if o.format == "json" {
+	switch {
+	case o.format == "json":
 		res := applyResult{Plan: plan, Report: report, Attempts: []applyAttempt{}}
 		for _, a := range attempts {
 			res.Attempts = append(res.Attempts, applyAttempt{N: a.N, Applied: a.Applied, Error: a.Error})
 		}
 		writeApplyJSON(res)
-	} else if report != nil {
+	case report != nil:
 		_ = remediate.RenderReport(os.Stdout, *report)
-	} else {
+	default:
 		fmt.Printf("\nApplied %d change(s). They were not verified (--no-verify): run nox fix verify.\n", countApplied(attempts))
 	}
 	if report == nil {

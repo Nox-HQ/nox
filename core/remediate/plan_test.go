@@ -230,7 +230,7 @@ func TestTransitiveUpgradeSaysSo(t *testing.T) {
 // would not change a byte, and the item says what to do instead.
 func TestStalePatchBecomesNeedsInformation(t *testing.T) {
 	root := writeTree(t)
-	if err := os.WriteFile(filepath.Join(root, "k8s/pod.yaml"), []byte("spec:\n  securityContext:\n    privileged: false\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "k8s", "pod.yaml"), []byte("spec:\n  securityContext:\n    privileged: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	plan := Build(Input{Findings: []findings.Finding{iac("IAC-007", "k8s/pod.yaml", 3, "fp-pod")}, Root: root})

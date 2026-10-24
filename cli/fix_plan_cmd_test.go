@@ -95,7 +95,7 @@ func TestFixPlanClassifiesTheTwoMisconfigurations(t *testing.T) {
 		t.Fatalf("classes = %v\n%s", got, out)
 	}
 	// Planning writes nothing.
-	if readFile(t, filepath.Join(root, "k8s/pod.yaml")) != podBody {
+	if readFile(t, filepath.Join(root, "k8s", "pod.yaml")) != podBody {
 		t.Fatal("fix plan modified a file")
 	}
 }
@@ -107,10 +107,10 @@ func TestFixApplyChangesOnlyTheSafeSetAndVerifiesIt(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d\n%s", code, out)
 	}
-	if !strings.Contains(readFile(t, filepath.Join(root, ".github/workflows/ci.yml")), "continue-on-error: false") {
+	if !strings.Contains(readFile(t, filepath.Join(root, ".github", "workflows", "ci.yml")), "continue-on-error: false") {
 		t.Fatal("the safe change was not applied")
 	}
-	if readFile(t, filepath.Join(root, "k8s/pod.yaml")) != podBody {
+	if readFile(t, filepath.Join(root, "k8s", "pod.yaml")) != podBody {
 		t.Fatal("a change that needs review was applied without being asked for")
 	}
 	for _, want := range []string{"Verified fixed (1)", "Verified fixed: 1 of 1 changes.", "still yours to resolve"} {
@@ -129,7 +129,7 @@ func TestFixApplyIncludeReviewAppliesAndVerifiesBoth(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d\n%s", code, out)
 	}
-	if !strings.Contains(readFile(t, filepath.Join(root, "k8s/pod.yaml")), "privileged: false") {
+	if !strings.Contains(readFile(t, filepath.Join(root, "k8s", "pod.yaml")), "privileged: false") {
 		t.Fatal("the reviewed change was not applied")
 	}
 	if !strings.Contains(out, "Verified fixed: 2 of 2 changes.") {
@@ -150,7 +150,7 @@ func TestFixApplyReportsStillPresentWhenTheEditDoesNotClearTheFinding(t *testing
 	var code int
 	out := captureStdout(t, func() { code = runFix([]string{"apply", "--input", in, "--root", root, "--offline"}) })
 
-	if !strings.Contains(readFile(t, filepath.Join(root, ".github/workflows/ci.yml")), "continue-on-error: true # reviewed") {
+	if !strings.Contains(readFile(t, filepath.Join(root, ".github", "workflows", "ci.yml")), "continue-on-error: true # reviewed") {
 		t.Fatal("test setup: the edit was not made")
 	}
 	if code == 0 {
@@ -190,7 +190,7 @@ func TestFixApplyJSONIsOneDocument(t *testing.T) {
 
 func TestFixVerifyChecksAChangeMadeByHand(t *testing.T) {
 	root, in := fixTree(t)
-	path := filepath.Join(root, ".github/workflows/ci.yml")
+	path := filepath.Join(root, ".github", "workflows", "ci.yml")
 	if err := os.WriteFile(path, []byte(strings.Replace(workflowBody, "true", "false", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
