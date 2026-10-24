@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/nox-hq/nox-core/slopfeed"
 )
 
 const (
@@ -48,7 +50,7 @@ type RemoteOptions struct {
 	HTTPClient *http.Client
 	// Verify is applied to both freshly fetched and cached bytes. Only bytes
 	// that pass verification are ever cached or returned.
-	Verify VerifyOptions
+	Verify slopfeed.VerifyOptions
 }
 
 // LoadRemote fetches, verifies, and caches a feed from a URL, then returns it
@@ -69,7 +71,7 @@ type RemoteOptions struct {
 // and cached bytes are re-verified on every read. An attacker who MITMs the feed
 // cannot inject a name nox would then flag, nor suppress an existing one,
 // without a signature that verifies under the pinned key.
-func LoadRemote(ctx context.Context, opts RemoteOptions) (*Loaded, error) {
+func LoadRemote(ctx context.Context, opts RemoteOptions) (*slopfeed.Loaded, error) {
 	if err := validateFeedURL(opts.URL); err != nil {
 		return nil, err
 	}
@@ -152,17 +154,17 @@ func cacheStale(path string, ttl time.Duration) bool {
 // loadCachedFeed reads and re-verifies cached feed bytes. A missing file or a
 // verification failure returns an error (fail closed) so the caller never trusts
 // an unverifiable cache.
-func loadCachedFeed(path string, verify VerifyOptions) (*Loaded, error) {
+func loadCachedFeed(path string, verify slopfeed.VerifyOptions) (*slopfeed.Loaded, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(data, verify)
+	return slopfeed.Parse(data, verify)
 }
 
 // fetchAndCacheFeed performs the network fetch, verifies the response, and — only
 // on success — atomically writes the verified bytes to the cache.
-func fetchAndCacheFeed(ctx context.Context, opts RemoteOptions, cachePath string) (*Loaded, error) {
+func fetchAndCacheFeed(ctx context.Context, opts RemoteOptions, cachePath string) (*slopfeed.Loaded, error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: defaultFeedHTTPTimeout}
@@ -191,7 +193,7 @@ func fetchAndCacheFeed(ctx context.Context, opts RemoteOptions, cachePath string
 	}
 
 	// Verify BEFORE caching: only verified bytes are ever persisted or trusted.
-	loaded, err := Parse(body, opts.Verify)
+	loaded, err := slopfeed.Parse(body, opts.Verify)
 	if err != nil {
 		return nil, fmt.Errorf("verifying fetched feed: %w", err)
 	}
