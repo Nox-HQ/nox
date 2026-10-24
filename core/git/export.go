@@ -22,8 +22,14 @@ const maxExportedFile = 256 << 20
 // out, and a dirty working tree is irrelevant. Symbolic links are not
 // recreated; a link in a tree is never followed by the scanner and recreating
 // one is how an extraction escapes its directory.
+//
+// git archive applies checkout line-ending conversion, so on a Windows
+// machine with core.autocrlf (or the native core.eol) the base tree would be
+// exported with CRLF while the committed bytes are LF. Pinning both settings
+// exports what was committed; an explicit eol attribute in the repository's
+// .gitattributes still applies, as it would for any checkout.
 func ExportTree(repoRoot, ref, dest string) error {
-	cmd := exec.Command("git", "archive", "--format=tar", ref)
+	cmd := exec.Command("git", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "--format=tar", ref)
 	cmd.Dir = repoRoot
 	out, err := cmd.StdoutPipe()
 	if err != nil {
