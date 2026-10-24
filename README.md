@@ -365,12 +365,22 @@ Supports all comment styles: `//`, `#`, `--`, `/*`, `<!--`. Multi-rule: `nox:ign
 
 ### Diff Mode
 
-Show only findings in changed files:
+Show what a branch changed: what is new, what is no longer present, what got
+worse, which agents gained a capability, and which routes became authorization
+leads. Both refs are scanned from git's object database and compared; your
+working tree is never touched.
 
 ```bash
 nox diff --base main --head HEAD
 nox diff --base main --json
 nox diff . --rules custom-rules.yaml
+```
+
+Compare with an earlier run instead of a ref (keep its `findings.json` and the
+`ai.inventory.json` beside it):
+
+```bash
+nox scan . --previous last-run/findings.json
 ```
 
 ### Watch Mode

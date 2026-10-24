@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Nox now says what changed, not only what is wrong.** `nox scan --previous
+  <findings.json>` leads the assessment with a "Since the previous run:" section
+  (new issues, what is no longer present, severity regressions, agents that
+  gained or lost a tool or capability, new AI components, new authorization
+  leads) before the usual assessment; with no `--previous` the output is
+  byte-for-byte what it was. `nox diff --base X --head Y` is now a real delta: it
+  scans the merge-base and the head from the object database (nothing is checked
+  out or touched) and compares them, so a one-line lockfile change lists only the
+  advisories it introduced, not the forty already there. The MCP `scan` tool
+  takes `previous` (or compares with the last scan of the same path in the
+  session) and the `scan` and `diff` tools return the same structured `change`.
+  One implementation, `core/change`, with documented identity: a dependency
+  advisory is manifest + package + advisory id or alias (an upgrade that leaves a
+  package still affected is neither resolved nor new), other findings are the
+  line-independent fingerprint (a line move is neither), a lead is route + file,
+  an agent capability is agent + server + tool + capability. A comparison that
+  cannot be made (an earlier run that did not record leads or the AI inventory,
+  an incomplete or differently scoped run) is said so, never reported as "nothing
+  changed". `findings.json` records the authorization leads under their own
+  `leads` and `lead_checks` keys, never among the findings.
+
 - **`nox install-ci` pull requests now run your required checks.** A pull
   request opened with `GITHUB_TOKEN` triggers no workflows, so a remediation PR's
   checks never ran and its auto-merge never completed. The generated workflow
@@ -117,6 +138,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`nox diff` reports a delta, and its `--json` shape changed.** It used to
+  print every finding in the files that differ between two refs; it now prints
+  what the head introduced, what it resolved and what got worse (`core/change`).
+  `--json` is an object (`findings`: the new findings in the old shape,
+  `changed_files`, `base`, `head`, `change`: the full delta) instead of a bare
+  array. Exit 1 now means the head made findings worse (a new finding or a raised
+  severity); it no longer means "a changed file has a finding". New flags
+  `--offline` and `--no-osv`. Authorization leads are recorded in `findings.json`
+  under `leads` and `lead_checks`; the `findings` array and SARIF are unchanged.
 - **The assessment describes what was not checked in capabilities, not plugins.**
   `nox scan .` on an ordinary app used to say "Optional plugins are installed
   but not enabled" and send the reader to pick from fifteen names. It now says

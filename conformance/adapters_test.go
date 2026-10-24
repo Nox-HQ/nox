@@ -88,7 +88,12 @@ var sharedOperations = []sharedOperation{
 	{
 		symbol:   "diff.Run",
 		adapters: []string{"cli", "server"},
-		why:      "changed-file scanning must be one implementation",
+		why:      "the base-versus-head comparison must be one implementation",
+	},
+	{
+		symbol:   "change.Compare",
+		adapters: []string{"cli", "server"},
+		why:      "what is new, resolved or worse since an earlier scan must not depend on which surface asked",
 	},
 }
 

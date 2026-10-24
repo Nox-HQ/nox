@@ -184,6 +184,29 @@ type JSONReport struct {
 	// Enrichments are plugin annotations keyed to a finding's fingerprint.
 	// Omitted when empty so scans without post-scan plugins are unchanged.
 	Enrichments []findings.Enrichment `json:"enrichments,omitempty"`
+	// Leads are the scan's authorization leads: routes worth testing that the
+	// scan does not report as findings. They sit under their own key, never in
+	// Findings, so no finding consumer (SARIF, baseline, VEX, gates, exit
+	// codes) can mistake a hint for a verdict. Present only when the scan
+	// found at least one.
+	Leads []Lead `json:"leads,omitempty"`
+	// LeadChecks names each check that produced leads and had something to
+	// read. It is present whenever the lead check ran, even with zero leads, so
+	// a later run can tell "this nox looked and found none" from "this nox
+	// predates leads". Omitted when the check read nothing.
+	LeadChecks []string `json:"lead_checks,omitempty"`
+}
+
+// Lead is the serialised form of core.Lead: one thing a scan found worth
+// verifying by hand, carried beside the findings rather than among them.
+type Lead struct {
+	Category  string `json:"category"`
+	RuleID    string `json:"rule_id"`
+	Route     string `json:"route"`
+	FilePath  string `json:"file_path"`
+	Line      int    `json:"line"`
+	Statement string `json:"statement"`
+	Test      string `json:"test"`
 }
 
 // ActiveFindings returns the report's findings that are still active — not
@@ -319,6 +342,11 @@ type JSONReporter struct {
 	// StageAccounting is what each rule family produced and what became of it.
 	// Set from ScanResult.Stages, and likewise best left to the constructor.
 	StageAccounting []StageCount
+	// Leads and LeadChecks are the scan's authorization leads, set by
+	// core.ScanResult.JSONReporter. They are written beside the findings, not
+	// among them.
+	Leads      []Lead
+	LeadChecks []string
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -362,6 +390,8 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		},
 		Findings:    f,
 		Enrichments: r.Enrichments,
+		Leads:       r.Leads,
+		LeadChecks:  r.LeadChecks,
 	}
 
 	return json.MarshalIndent(report, "", "  ")

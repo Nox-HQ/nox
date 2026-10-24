@@ -242,7 +242,7 @@ func run(args []string) int {
 	case "baseline":
 		return runBaseline(remaining[1:])
 	case "diff":
-		return runDiff(remaining[1:])
+		return runDiffWith(remaining[1:], verboseFlag)
 	case "watch":
 		return runWatch(remaining[1:])
 	case "completion":
@@ -528,6 +528,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&hypothesesOutFlag, "emit-hypotheses", "", "write the active-testing questions this scan raises to a JSON file (see `nox attack run --plan`). Emits only; the scan stays read-only.")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
+	var previousFlag string
+	scanFS.StringVar(&previousFlag, "previous", "", "findings.json from an earlier run (with the ai.inventory.json beside it): lead the assessment with what changed since, instead of listing everything as if it were new")
 	scanFS.Usage = func() {
 		out := scanFS.Output()
 		_, _ = fmt.Fprintln(out, "Usage of scan:")
@@ -608,6 +610,14 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 	if verbose {
 		fmt.Println("[discover] walking directory...")
+	}
+
+	// Read the earlier run before this one writes anything: --previous often
+	// points at the file this run is about to overwrite.
+	prev, havePrev, perr := loadPreviousState(previousFlag, stagedFlag || historyFlag)
+	if perr != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", perr)
+		return 2
 	}
 
 	scopes, err := nox.ResolveScopes(strings.Split(onlyFlag, ","), strings.Split(skipFlag, ","))
@@ -908,7 +918,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if !quiet {
 		if assessmentShown(quiet, stagedFlag, historyFlag) {
 			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
-				formats: formats, offline: offlineFlag, verbose: verbose}.print(os.Stdout)
+				formats: formats, offline: offlineFlag, verbose: verbose, since: sinceDelta(prev, havePrev, result)}.print(os.Stdout)
 		}
 		fmt.Println("[done]")
 	}

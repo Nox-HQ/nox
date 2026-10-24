@@ -629,6 +629,18 @@ func knownSet(prev []findings.Finding) map[string]struct{} {
 	return out
 }
 
+// IDs returns every identifier an advisory finding answers to: its vuln id and
+// its aliases (GHSA and CVE for the same flaw). ok is false for a finding that
+// is not a dependency advisory. It is the one definition of advisory identity,
+// shared with core/change so "the same advisory" means the same thing in the
+// two places that ask.
+func IDs(f *findings.Finding) (ids []string, ok bool) {
+	if f.RuleID != ruleID || f.Metadata["vuln_id"] == "" {
+		return nil, false
+	}
+	return advisoryIDs(f), true
+}
+
 func advisoryIDs(f *findings.Finding) []string {
 	ids := []string{f.Metadata["vuln_id"]}
 	for _, a := range strings.Split(f.Metadata["aliases"], ",") {
