@@ -94,7 +94,11 @@ func runInstallCI(args []string) int {
 	fmt.Println("  2. The default policy only reports. To have nox prepare fixes, add to .nox.yaml:")
 	fmt.Println("       advisories:")
 	fmt.Println("         policy: prepare   # report (default) | prepare | remediate")
-	fmt.Println("     and add a NOX_TOKEN secret so the pull requests it opens run your required checks.")
+	fmt.Println("     and give it a bot identity so those pull requests run your required checks:")
+	fmt.Println("     a GitHub App (secrets NOX_APP_ID, NOX_APP_PRIVATE_KEY; recommended) or a")
+	fmt.Println("     fine-grained token (secret NOX_TOKEN). Without one, the pull request is opened")
+	fmt.Println("     with GITHUB_TOKEN, CI will not run on it, and auto-merge stays off.")
+	fmt.Println("     Setup: docs/advisory-policy.md#opening-pull-requests-that-run-your-checks")
 	fmt.Println("  3. Pin the action refs to commit SHAs with: nox fix --actions")
 	return 0
 }

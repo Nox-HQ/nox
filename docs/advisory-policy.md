@@ -55,13 +55,50 @@ so `policy: remediate` does not mean everything is merged.
 Nox never merges anything itself and never bypasses branch protection.
 `--auto` asks GitHub to merge when the branch's required checks and reviews are
 satisfied; if the repository has none, or does not allow auto-merge, the pull
-request stays open for a person. Pull requests opened with the default
-`GITHUB_TOKEN` do not trigger other workflows, so their required checks would
-never run: add a `NOX_TOKEN` secret (a fine-grained or GitHub App token with
-contents and pull-requests write) and the generated workflow uses it.
+request stays open for a person. Pull requests need a bot identity to run your
+checks; see [Opening pull requests that run your checks](#opening-pull-requests-that-run-your-checks).
 
 An invalid value (`policy: remediat`) is an error and exits 2. It does not
 quietly fall back to the default.
+
+## Opening pull requests that run your checks
+
+A pull request opened with the workflow's default `GITHUB_TOKEN` does not
+trigger other workflows: GitHub does this on purpose, to stop workflows
+starting each other in a loop. So its required checks never start, and
+`gh pr merge --auto` waits for checks that will never report. `prepare` and
+`remediate` therefore need a real identity. The generated workflow picks the
+first of these that exists:
+
+| order | credential | secrets |
+|---|---|---|
+| 1 | GitHub App (recommended) | `NOX_APP_ID`, `NOX_APP_PRIVATE_KEY` |
+| 2 | fine-grained personal access token | `NOX_TOKEN` |
+| 3 | `GITHUB_TOKEN` | none |
+
+**GitHub App.** The workflow mints an installation token for that one job with
+`actions/create-github-app-token`, scoped to contents, pull-requests and issues
+write; it is revoked when the job ends, and nothing long-lived has to be rotated
+by hand.
+
+1. Create a GitHub App (Settings, Developer settings, GitHub Apps). Repository
+   permissions: Contents: Read and write, Pull requests: Read and write,
+   Issues: Read and write. No webhook needed.
+2. Install it on the repository (only that one).
+3. Generate a private key. Add repository secrets `NOX_APP_ID` (the app's
+   Client ID) and `NOX_APP_PRIVATE_KEY` (the whole PEM).
+
+**Personal access token.** Create a fine-grained token with the repository as
+its only resource, the same three permissions, and an expiry you will remember
+to renew. Add it as the repository secret `NOX_TOKEN`. It acts as you, and the
+pull request is attributed to you.
+
+**Neither.** The pull request is still opened, but the job emits a warning and
+a summary line that CI will not run on it. In `remediate` mode auto-merge is
+**not** enabled, since it could never complete; the run says so instead of
+leaving it pending.
+
+Report-only runs need none of this: the issue is created with `GITHUB_TOKEN`.
 
 ## How relevance is judged
 

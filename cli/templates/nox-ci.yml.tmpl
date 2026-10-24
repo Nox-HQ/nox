@@ -17,9 +17,17 @@
 #                            Branch protection is never bypassed.
 #
 # Pull requests opened with the default GITHUB_TOKEN do not trigger other
-# workflows, so their required checks would never run. For prepare/remediate,
-# add a NOX_TOKEN secret (a fine-grained token or GitHub App token with
-# contents and pull-requests write) and the checks run as on any other PR.
+# workflows, so their required checks would never run and auto-merge could
+# never complete. For prepare/remediate the advisories job therefore opens them
+# as, in order of preference:
+#
+#   1. a GitHub App   secrets NOX_APP_ID and NOX_APP_PRIVATE_KEY; a short-lived
+#                     installation token is minted for this one job (recommended)
+#   2. a fine-grained personal access token in secret NOX_TOKEN
+#   3. GITHUB_TOKEN   the pull request is still opened, with a warning that CI
+#                     will not run on it; auto-merge is NOT enabled
+#
+# Setup: https://github.com/nox-hq/nox/blob/main/docs/advisory-policy.md#opening-pull-requests-that-run-your-checks
 name: Nox
 
 on:
@@ -120,6 +128,43 @@ jobs:
             --title "nox: ${NEW_COUNT} newly disclosed dependency advisories" \
             --body-file nox-results/advisories.md
 
+      # Which credential opens the pull request. The secrets are only tested
+      # for presence here; their values never enter this step's environment.
+      - name: Choose the token that opens pull requests
+        id: bot
+        if: steps.decide.outputs.action == 'prepare' || steps.decide.outputs.action == 'remediate'
+        env:
+          HAS_APP: ${{ secrets.NOX_APP_ID != '' && secrets.NOX_APP_PRIVATE_KEY != '' }}
+          HAS_PAT: ${{ secrets.NOX_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "${HAS_APP}" = "true" ]; then
+            kind=app
+          elif [ "${HAS_PAT}" = "true" ]; then
+            kind=pat
+          else
+            kind=github
+            docs='https://github.com/nox-hq/nox/blob/main/docs/advisory-policy.md#opening-pull-requests-that-run-your-checks'
+            echo "::warning::No NOX_APP_ID/NOX_APP_PRIVATE_KEY or NOX_TOKEN secret: the remediation pull request is opened with GITHUB_TOKEN, so CI will not run on it and auto-merge cannot complete. Setup: ${docs}"
+            {
+              echo "### Remediation pull request: CI will not run on it"
+              echo
+              echo "It was opened with \`GITHUB_TOKEN\`, which GitHub does not let trigger other workflows, so required checks never start and auto-merge cannot complete. Add a GitHub App (\`NOX_APP_ID\`, \`NOX_APP_PRIVATE_KEY\`) or a \`NOX_TOKEN\` secret: ${docs}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          echo "kind=${kind}" >> "${GITHUB_OUTPUT}"
+
+      - name: Mint a short-lived GitHub App token
+        id: app-token
+        if: steps.bot.outputs.kind == 'app'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.NOX_APP_ID }}
+          private-key: ${{ secrets.NOX_APP_PRIVATE_KEY }}
+          permission-contents: write # nox:ignore IAC-314 -- the token pushes the remediation branch; it lives for this job only
+          permission-pull-requests: write
+          permission-issues: write
+
       - name: Prepare the remediation pull request
         id: remediate
         if: steps.decide.outputs.action == 'prepare' || steps.decide.outputs.action == 'remediate'
@@ -128,20 +173,30 @@ jobs:
           findings-file: nox-results/prepare.json
           version: '[[.NoxVersion]]'
           pr-title: 'chore(security): nox remediation for newly disclosed advisories'
-          github-token: ${{ secrets.NOX_TOKEN || github.token }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.NOX_TOKEN || github.token }}
 
       # Auto-merge, not merge: GitHub merges only when the branch's required
       # checks and reviews are satisfied. If the repository has none, or does not
       # allow auto-merge, nothing is merged and the pull request waits for a person.
       - name: Allow auto-merge for safe upgrades
-        if: steps.decide.outputs.automerge == 'true' && steps.remediate.outputs.pr-url != ''
+        if: steps.decide.outputs.automerge == 'true' && steps.remediate.outputs.pr-url != '' && steps.bot.outputs.kind != 'github'
         env:
-          GH_TOKEN: ${{ secrets.NOX_TOKEN || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.NOX_TOKEN }}
           PR_URL: ${{ steps.remediate.outputs.pr-url }}
         run: |
           if ! gh pr merge --auto --squash "${PR_URL}"; then
             echo "::warning::auto-merge was not enabled on ${PR_URL}; it is open for review"
           fi
+
+      # With GITHUB_TOKEN the pull request's checks never run, so auto-merge
+      # would sit pending forever. Say so instead of leaving it dangling.
+      - name: Explain why auto-merge was not enabled
+        if: steps.decide.outputs.automerge == 'true' && steps.remediate.outputs.pr-url != '' && steps.bot.outputs.kind == 'github'
+        env:
+          PR_URL: ${{ steps.remediate.outputs.pr-url }}
+        run: |
+          echo "::warning::auto-merge was not enabled on ${PR_URL}: it was opened with GITHUB_TOKEN, so its required checks cannot run and auto-merge could never complete. Configure a GitHub App or NOX_TOKEN to allow it."
+          echo "Auto-merge was not enabled on ${PR_URL}: the pull request was opened with \`GITHUB_TOKEN\`, so its checks cannot run." >> "${GITHUB_STEP_SUMMARY}"
 
       # Last, and only when every step above succeeded: a run that failed
       # part-way must not make its advisories look known to the next one.
