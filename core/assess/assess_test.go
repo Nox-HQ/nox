@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -124,6 +125,42 @@ var undeclaredPlugins = nox.Degradation{
 	Advisory: true,
 }
 
+func invoiceLead(route, file string, line int) nox.Lead {
+	return nox.Lead{
+		Category: "authorization", RuleID: "AUTHZ-001", Route: route, FilePath: file, Line: line,
+		Statement: "loads a record by a caller-supplied id with no visible ownership check",
+		Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
+	}
+}
+
+func manyLeads(n int) []nox.Lead {
+	out := make([]nox.Lead, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, invoiceLead("GET /api/r"+strconv.Itoa(i)+"/:id", "src/routes/r"+strconv.Itoa(i)+".js", 10+i))
+	}
+	return out
+}
+
+// Leads are not findings: they add no issue, change no count, and under
+// --verbose (limit 0) every one is listed.
+func TestLeadsAreNotIssues(t *testing.T) {
+	in := Input{Scope: nox.FullScope(), Leads: manyLeads(7)}
+	r := Build(in)
+	if len(r.Issues) != 0 || r.FindingCount != 0 {
+		t.Fatalf("leads became issues: %+v", r.Issues)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, r, RenderOptions{Limit: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(buf.String(), "  - Authorization: "); got != 7 {
+		t.Errorf("verbose lists %d leads, want 7", got)
+	}
+	if !strings.Contains(buf.String(), "No issues found in what was checked.") {
+		t.Errorf("a scan with only leads must still say no issues were found:\n%s", buf.String())
+	}
+}
+
 func TestRenderGolden(t *testing.T) {
 	saas := saasFindings()
 
@@ -216,6 +253,29 @@ func TestRenderGolden(t *testing.T) {
 			limit: DefaultLimit,
 		},
 		{
+			// AUTHZ-001 not enabled: the route is a lead, listed under
+			// verification and never counted as an issue, and coverage says
+			// what was read without claiming authorization was checked.
+			name: "authz_lead",
+			in: Input{
+				Findings: []findings.Finding{promptInjection()}, Plan: plan(t, []findings.Finding{promptInjection()}),
+				Scope: nox.FullScope(), Packages: 123, Target: ".", FindingsPath: "./findings.json",
+				Leads:      []nox.Lead{invoiceLead("GET /api/invoices/:id", "src/routes/invoices.js", 14)},
+				LeadChecks: []string{"authorization (Express routes; leads only)"},
+			},
+			limit: DefaultLimit,
+		},
+		{
+			// More leads than the limit: the first five, then a count.
+			name: "authz_leads_capped",
+			in: Input{
+				Scope: nox.FullScope(), Packages: 3, Target: ".", FindingsPath: "./findings.json",
+				Leads:      manyLeads(7),
+				LeadChecks: []string{"authorization (Express routes; leads only)"},
+			},
+			limit: DefaultLimit,
+		},
+		{
 			name: "no_findings_json",
 			in: Input{
 				Findings: []findings.Finding{dep("express", "4.17.0", "5.0.0", findings.SeverityHigh, "fp-express")},
@@ -268,7 +328,7 @@ func TestNotCheckedNamesCapabilitiesNotPlugins(t *testing.T) {
 	if strings.Contains(strings.ReplaceAll(out, "plugins.required", ""), "plugin") {
 		t.Errorf("the assessment says \"plugin\":\n%s", out)
 	}
-	for _, c := range []string{"API authorization patterns", "exposed endpoints and admin or debug routes", "dependency-confusion exposure"} {
+	for _, c := range []string{"API abuse patterns (rate limiting, error detail)", "exposed endpoints and admin or debug routes", "dependency-confusion exposure"} {
 		if !strings.Contains(out, c) {
 			t.Errorf("an unchecked capability %q is not named:\n%s", c, out)
 		}

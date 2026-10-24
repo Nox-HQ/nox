@@ -7,7 +7,7 @@
 // plugins ("15 plugins are not listed in plugins.required"), which asks the
 // reader to know what each one is and to pick. This package is the single place
 // that maps a plugin name to a capability and a class, so the assessment can say
-// "API authorization patterns were not checked" and keep the plugin names for
+// "API abuse patterns (rate limiting, error detail) were not checked" and keep the plugin names for
 // --verbose and findings.json.
 //
 // The class is not decoration. It records a measured decision (see
@@ -64,7 +64,7 @@ var unknown = Entry{Capability: "additional checks from a third-party plugin", C
 func classify(name string) (Entry, bool) {
 	switch name {
 	case "nox/api-abuse":
-		return Entry{"API authorization patterns", Optional}, true
+		return Entry{"API abuse patterns (rate limiting, error detail)", Optional}, true
 	case "nox/attack-surface":
 		return Entry{"exposed endpoints and admin or debug routes", Optional}, true
 	case "nox/depconfusion":

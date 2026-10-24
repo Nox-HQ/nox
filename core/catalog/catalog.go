@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
@@ -69,6 +70,7 @@ func allRuleSets() []*rules.RuleSet {
 		// in scans while `nox rules` and the MCP rules tool denied the rules
 		// existed, and any metadata join by rule ID came back empty for them.
 		agentflow.NewAnalyzer().Rules(),
+		authz.NewAnalyzer().Rules(),
 		taintflow.NewAnalyzer().Rules(),
 		weakcrypto.NewAnalyzer().Rules(),
 		hardening.NewAnalyzer().Rules(),

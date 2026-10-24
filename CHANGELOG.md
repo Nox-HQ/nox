@@ -25,12 +25,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[families]` and blocking `[degraded]` lines are unchanged, and so are
   findings.json, SARIF and the SBOMs: this is presentation only.
 
+- **Possible IDOR leads (AUTHZ-001) in the assessment.** nox now reads
+  Express and koa-router JavaScript/TypeScript for routes that require an
+  authenticated caller, look up a record by a caller-supplied id (route
+  parameter, query or body field), and show nothing that relates the record
+  to the caller (OWASP API1:2023, CWE-639). By default each such route is a
+  **lead, not a finding**: the assessment lists it under "Additional
+  verification recommended" ("Authorization: GET /api/invoices/:id
+  (src/routes/invoices.js:14) loads a record by a caller-supplied id with no
+  visible ownership check. Test it with two user accounts..."), top five with
+  the rest under `--verbose`, and "Checks completed" says "authorization
+  (Express routes; leads only)" rather than claiming the check. Leads never
+  reach findings.json, SARIF (results or rule catalogue), the exit code,
+  gates or fingerprints: default-mode outputs are byte-identical to before.
+  They are carried on `ScanResult.Leads` for every adapter.
+  `scan.rules.enable: [AUTHZ-001]` makes each one a medium/low finding instead,
+  with no duplicate lead. Routes, router and prefix `use()` middleware, mounts
+  across files, and handlers in other files are resolved; thirteen
+  counterexample classes clear a route (principal-scoped lookups, owner
+  fields, request-scoped clients, middleware context passed to the data layer,
+  comparisons with the principal, policy calls, 403s, role reads,
+  authorization or loader middleware, `router.param()`, row-level security).
+  Measured on 22 pinned open-source Express apps, every candidate read:
+  deliberately vulnerable apps 18 TP / 8 FP, recall 10 of 14 documented BOLA
+  instances; ordinary apps 12 object-level TP plus 5 missing admin checks and
+  0 FP, from only three apps. The FPs are all resources shared by design,
+  which source cannot tell apart, hence leads by default.
+
 ### Changed
 
 - **The assessment describes what was not checked in capabilities, not plugins.**
   `nox scan .` on an ordinary app used to say "Optional plugins are installed
   but not enabled" and send the reader to pick from fifteen names. It now says
-  what would have been checked ("API authorization patterns", "exposed
+  what would have been checked ("API abuse patterns (rate limiting, error detail)", "exposed
   endpoints and admin or debug routes") and groups live testing (probing a
   running app, inspecting a cluster, adversarial prompts) into one line that
   points at `nox attack plan`. A plugin whose check core already performs

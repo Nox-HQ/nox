@@ -43,7 +43,7 @@ certbot). `E` is enrichments, which annotate existing findings.
 | nox/threat-model | 0, 8, 0, 19, 17, 24 | yes | `if token == ""` reported as "authentication bypass pattern", `fmt.Fprintf(os.Stderr, "error: %s", err)` as "information disclosure". It flags the check, not the bypass. Retire |
 | nox/depconfusion | 1, 0, 1, 20, 0, 0 | yes | 19 of hackathon-starter's 20 are "scoped package @langchain/langgraph has no explicit registry source": public packages on the public registry, which is the correct state. The SaaS one says the same of npm as a whole. Dependency confusion needs a private scope; this cannot tell. Keep opt-in, do not enable |
 | nox/attack-surface | 13, 7, 11, 109, 19, 0 | yes | ATTACK-001 is an endpoint inventory at severity info, not a finding. ATTACK-002 "potentially unauthenticated" is wrong on the SaaS app for `/webhook` (Stripe-signed), `/login` (must be open) and `/api/invoices` (every route has `requireAuth`): 0 of 5. Keep opt-in; the inventory belongs in core data, not findings |
-| nox/api-abuse | 2, 2, 0, 3, 7, 0 | yes | 14 findings: 1 real (SaaS `GET /:id` reads an invoice by id with no ownership check, the vision's own example), 1 true but minor (no rate limit on `/login`), 7 verbose-error patterns of debatable value, 5 false positives (a `GetEnvVar` accessor in generated `.pb.go` as "BOLA"; a `Last-Event-ID` header as a "user ID"; three `json.Decode` into request DTOs as "mass assignment"). Keep opt-in. The BOLA idea is worth building into core |
+| nox/api-abuse | 2, 2, 0, 3, 7, 0 | yes | 14 findings: 1 real (SaaS `GET /:id` reads an invoice by id with no ownership check, the vision's own example), 1 true but minor (no rate limit on `/login`), 7 verbose-error patterns of debatable value, 5 false positives (a `GetEnvVar` accessor in generated `.pb.go` as "BOLA"; a `Last-Event-ID` header as a "user ID"; three `json.Decode` into request DTOs as "mass assignment"). Keep opt-in. Core has since gained AUTHZ-001, which reports the same `GET /:id` as a lead with a two-account test, so the one real finding no longer needs the plugin |
 | nox/threat-enrich | 0 (E 1, 189, 806, 112, 56, 148) | yes (post-scan) | adds a CWE, OWASP and ATT&CK technique to findings.json. Deterministic, offline, 0.1 s. But nothing in nox reads it, and some mappings are wrong (CWE-359 private-information exposure to T1552 "unsecured credentials"). Keep opt-in |
 | nox/grc | 0 | **no** | provides `assess`, `gap_report`, `evidence`; a scan calls none of them. Registered, never invoked |
 | nox/remediate | 0 | no | rejected at registration: wants filesystem `**`, active risk class, user confirmation. It applies changes; a scan is read-only |
@@ -90,7 +90,7 @@ The assessment no longer names plugins. `core/plugincap` maps each plugin to a
 capability and a class:
 
 - **Optional**, a check core does not perform: named under "Not checked"
-  ("API authorization patterns", "exposed endpoints and admin or debug routes",
+  ("API abuse patterns (rate limiting, error detail)", "exposed endpoints and admin or debug routes",
   "dependency-confusion exposure").
 - **Live**, needs a running system: named once, as live testing that needs an
   explicit go-ahead, pointing at `nox attack plan`.
@@ -106,10 +106,11 @@ unclassified (third-party) plugin is treated as an optional check, never hidden.
 
 ## What would change the answer
 
-- **Core absorbs the real finding.** The one true positive in this run, a
-  missing ownership check on `GET /:id`, is a core rule waiting to be written
-  with an ownership-check-aware matcher; the plugin's version fires on
-  generated code and on DTO decodes.
+- **Core absorbs the real finding.** This happened during the work: the one
+  true positive here, a missing ownership check on `GET /:id`, is now reported
+  by core as AUTHZ-001, with a precision the plugin never had (it fires on
+  generated code and on DTO decodes). That is the route by which a plugin's
+  value should reach a default scan.
 - **A plugin earns a place in core, versioned with nox.** The way to run
   something without configuration deterministically is to ship it in the
   binary, which is what happened to taint and to reachability applicability.

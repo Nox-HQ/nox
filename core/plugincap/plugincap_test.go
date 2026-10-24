@@ -77,7 +77,7 @@ func TestConstraintIsStrippedBeforeLookup(t *testing.T) {
 func TestCapabilitiesAreDistinctAndSorted(t *testing.T) {
 	got := Capabilities([]string{"nox/attack-surface", "nox/api-abuse", "x/a", "y/b", "nox/container"}, Optional)
 	want := []string{
-		"API authorization patterns",
+		"API abuse patterns (rate limiting, error detail)",
 		"additional checks from a third-party plugin",
 		"exposed endpoints and admin or debug routes",
 	}

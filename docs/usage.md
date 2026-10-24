@@ -906,13 +906,19 @@ scan:
       - "IAC-002"      # We use floating base image tags intentionally
 
     # Turn on opt-in rules, which do not run otherwise. `nox rules` tags them
-    # `opt-in`. One ships opt-in today: TAINT-011, untrusted request data
-    # stored in the server-side session (CWE-501, low severity). It is correct
-    # by definition and common in ordinary login code, so it is off unless
-    # named here. SEC-951, the generic "credential-named key with a
+    # `opt-in`. TAINT-011 is untrusted request data stored in the server-side
+    # session (CWE-501, low severity). It is correct by definition and common
+    # in ordinary login code, so it is off unless named here. AUTHZ-001 is a
+    # possible IDOR in an Express route: authenticated, a record looked up by
+    # a caller-supplied id, and no visible check that it belongs to the caller
+    # (CWE-639, medium severity, low confidence). It cannot tell a resource
+    # shared by design from an owned one, so without this line those routes
+    # are not findings: the assessment lists them under "Additional
+    # verification recommended" as a two-account test, and no machine output,
+    # exit code or gate sees them. Named here, each is a finding. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
-    enable: []   # e.g. [TAINT-011]
+    enable: []   # e.g. [TAINT-011, AUTHZ-001]
 
     # Override severity for specific rules
     severity_override:
