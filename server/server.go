@@ -22,6 +22,7 @@ import (
 	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/change"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
@@ -51,6 +52,10 @@ type scanInput struct {
 	// ai, data, supply-chain), as --only/--skip do on the command line.
 	Only []string `json:"only,omitempty"`
 	Skip []string `json:"skip,omitempty"`
+	// Previous is the findings.json of an earlier run (with the ai.inventory.json
+	// beside it). When given, the result also says what changed since it. When
+	// not, an earlier scan of the same path in this session is the comparison.
+	Previous string `json:"previous,omitempty"`
 }
 type getFindingsInput struct {
 	Format string `json:"format,omitempty"`
@@ -85,6 +90,8 @@ type diffInput struct {
 	Path string `json:"path"`
 	Base string `json:"base,omitempty"`
 	Head string `json:"head,omitempty"`
+	// Offline makes both scans use no network (no dependency advisory lookups).
+	Offline bool `json:"offline,omitempty"`
 }
 type badgeInput struct {
 	Label string `json:"label,omitempty"`
@@ -230,7 +237,8 @@ func (s *Server) registerTools(srv *mcp.Server) {
 			"Optional only/skip narrow it to scopes (secrets, code, deps, iac, ai, data, supply-chain); " +
 			"scopes left out do not run, and the findings report says which those were").
 		ReadOnly().
-		Handler(s.handleScan)
+		OutputSchema(scanOutput{}).
+		Handler(s.handleScanStructured)
 
 	srv.Tool("get_findings").
 		Description("Get security findings from the last scan").
@@ -526,7 +534,54 @@ func (s *Server) isPathAllowed(path string) error {
 
 // --- Tool handlers ---
 
+// scanOutput is the structured form of the scan tool's result.
+type scanOutput struct {
+	// Summary is the one-line scan result.
+	Summary string `json:"summary"`
+	// Change is what changed since the earlier state, from the same core code
+	// as `nox scan --previous` and `nox diff`. Absent when there was no earlier
+	// state to compare against.
+	Change *change.Delta `json:"change,omitempty"`
+}
+
+// handleScan is the scan tool as text: the summary, and when there is an
+// earlier state, what changed since it.
 func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) {
+	msg, delta := s.scanProject(input)
+	if delta != nil {
+		msg += "\n" + change.Text(*delta, change.DefaultLimit)
+	}
+	return msg, nil
+}
+
+// handleScanStructured is the registered scan tool: the same text, plus the
+// change summary as structured content so an agent need not parse prose.
+func (s *Server) handleScanStructured(ctx context.Context, input scanInput) (mcp.StructuredResult, error) {
+	msg, delta := s.scanProject(input)
+	if strings.HasPrefix(msg, "Error: ") {
+		return mcp.StructuredResult{
+			Content: []mcp.Content{mcp.NewTextContent(msg)},
+			IsError: true,
+		}, nil
+	}
+	text := msg
+	if delta != nil {
+		text += "\n" + change.Text(*delta, change.DefaultLimit)
+	}
+	data, err := json.Marshal(scanOutput{Summary: msg, Change: delta})
+	if err != nil {
+		return toolError("marshalling result: " + err.Error()), nil
+	}
+	var sc map[string]any
+	if err := json.Unmarshal(data, &sc); err != nil {
+		return toolError("structuring result: " + err.Error()), nil
+	}
+	return mcp.StructuredResult{Content: []mcp.Content{mcp.NewTextContent(text)}, StructuredContent: sc}, nil
+}
+
+// scanProject runs the scan. The returned delta is nil when no earlier state
+// was available; an "Error: ..." message comes with a nil delta.
+func (s *Server) scanProject(input scanInput) (string, *change.Delta) {
 	if input.Path == "" {
 		return "Error: missing required argument: path", nil
 	}
@@ -545,12 +600,23 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 	if err != nil {
 		return "Error: " + err.Error(), nil
 	}
+	// The earlier state is read before the scan replaces the cache.
+	prev, havePrev, perr := s.previousState(input)
+	if perr != nil {
+		return "Error: " + perr.Error(), nil
+	}
 	result, err := nox.RunScanWithOptions(input.Path, nox.ScanOptions{RecordReasoning: true, Scopes: scopes})
 	if err != nil {
 		return "Error: scan failed: " + err.Error(), nil
 	}
 
 	s.setCache(input.Path, result)
+
+	var delta *change.Delta
+	if havePrev {
+		d := change.Compare(prev, change.FromScan(result, "this scan"))
+		delta = &d
+	}
 
 	findingCount := len(result.Findings.Findings())
 	pkgCount := len(result.Inventory.Packages())
@@ -565,10 +631,37 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 			skipped = append(skipped, string(sc))
 		}
 		return fmt.Sprintf("Scan complete: %d findings. Scanned: %s. Not scanned: %s, so no result about them is an all-clear.",
-			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), nil
+			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), delta
 	}
 	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %s",
-		findingCount, pkgCount, aiSummary), nil
+		findingCount, pkgCount, aiSummary), delta
+}
+
+// previousState is the state a scan is compared with: the findings.json the
+// caller named, else an earlier scan of the same path in this session. havePrev
+// is false when there is neither, and nothing is then called new.
+func (s *Server) previousState(input scanInput) (state change.State, havePrev bool, err error) {
+	if input.Previous != "" {
+		if err := s.isPathAllowed(input.Previous); err != nil {
+			return change.State{}, false, err
+		}
+		st, lerr := change.LoadPrevious(input.Previous, "the previous run")
+		if lerr != nil {
+			if os.IsNotExist(lerr) {
+				return change.State{}, false, nil
+			}
+			return change.State{}, false, fmt.Errorf("previous %s: %w", input.Previous, lerr)
+		}
+		return st, true, nil
+	}
+	abs, aerr := filepath.Abs(input.Path)
+	if aerr != nil {
+		abs = input.Path
+	}
+	if pc := s.getCache(abs); pc != nil {
+		return change.FromScan(pc.result, "the previous scan in this session"), true, nil
+	}
+	return change.State{}, false, nil
 }
 
 func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (string, error) {
@@ -1032,8 +1125,9 @@ func (s *Server) handleDiff(_ context.Context, input diffInput) (mcp.StructuredR
 	}
 
 	result, err := diff.Run(input.Path, diff.Options{
-		Base: base,
-		Head: head,
+		Base:    base,
+		Head:    head,
+		Offline: input.Offline,
 	})
 	if err != nil {
 		return toolError("diff failed: " + err.Error()), nil

@@ -200,13 +200,22 @@ func TestRunDiff_JSONOutput(t *testing.T) {
 	}
 
 	// Validate JSON output.
-	var result []map[string]interface{}
+	var result struct {
+		Findings []map[string]interface{} `json:"findings"`
+		Change   struct {
+			Since string                   `json:"since"`
+			New   []map[string]interface{} `json:"new"`
+		} `json:"change"`
+	}
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("invalid JSON output: %v", err)
 	}
 
-	if len(result) == 0 {
-		t.Fatal("expected JSON output to contain findings")
+	if len(result.Findings) == 0 || len(result.Change.New) == 0 {
+		t.Fatal("expected JSON output to contain the new findings")
+	}
+	if result.Change.Since != "HEAD~1" {
+		t.Errorf("change.since = %q, want HEAD~1", result.Change.Since)
 	}
 }
 
