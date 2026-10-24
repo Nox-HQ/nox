@@ -21,6 +21,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 )
@@ -337,13 +338,25 @@ func normalizeLang(lang string) string {
 // checks by consumers.
 func (c *Catalog) SchemaVersion() int { return c.schemaVersion }
 
-// Languages returns the catalog's canonical language keys (aliases excluded).
+// Languages returns the catalog's canonical language keys (aliases excluded),
+// sorted.
+//
+// Every listing here is sorted because the catalog is held in maps and Go
+// randomizes map iteration: a caller that keeps the first entry it sees would
+// otherwise get a different one per run. The taintflow rule catalog did, and
+// TAINT-005's SARIF description changed between identical scans.
 func (c *Catalog) Languages() []string {
-	langs := make([]string, 0, len(c.sinks))
-	for l := range c.sinks {
-		langs = append(langs, l)
+	return slices.Sorted(maps.Keys(c.sinks))
+}
+
+// valuesByCall returns idx's values in the order of their keys, which are the
+// normalized call chains.
+func valuesByCall[T any](idx map[string]T) []T {
+	out := make([]T, 0, len(idx))
+	for _, call := range slices.Sorted(maps.Keys(idx)) {
+		out = append(out, idx[call])
 	}
-	return langs
+	return out
 }
 
 // IsSource reports whether call is a known taint source for lang.
@@ -430,33 +443,18 @@ func containsClass(classes []VulnClass, class VulnClass) bool {
 	return false
 }
 
-// Sinks returns all sink definitions for lang. The slice is freshly built and
-// may be freely retained by the caller.
+// Sinks returns all sink definitions for lang, sorted by call. The slice is
+// freshly built and may be freely retained by the caller.
 func (c *Catalog) Sinks(lang string) []Sink {
-	idx := c.sinks[normalizeLang(lang)]
-	out := make([]Sink, 0, len(idx))
-	for _, s := range idx {
-		out = append(out, s)
-	}
-	return out
+	return valuesByCall(c.sinks[normalizeLang(lang)])
 }
 
-// Sources returns all source definitions for lang.
+// Sources returns all source definitions for lang, sorted by call.
 func (c *Catalog) Sources(lang string) []Source {
-	idx := c.sources[normalizeLang(lang)]
-	out := make([]Source, 0, len(idx))
-	for _, s := range idx {
-		out = append(out, s)
-	}
-	return out
+	return valuesByCall(c.sources[normalizeLang(lang)])
 }
 
-// Sanitizers returns all sanitizer definitions for lang.
+// Sanitizers returns all sanitizer definitions for lang, sorted by call.
 func (c *Catalog) Sanitizers(lang string) []Sanitizer {
-	idx := c.sanitizers[normalizeLang(lang)]
-	out := make([]Sanitizer, 0, len(idx))
-	for _, s := range idx {
-		out = append(out, s)
-	}
-	return out
+	return valuesByCall(c.sanitizers[normalizeLang(lang)])
 }

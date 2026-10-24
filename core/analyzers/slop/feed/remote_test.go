@@ -1,22 +1,26 @@
 package feed
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nox-hq/nox-core/slopfeed"
 )
 
 // signedFeedBytes builds a feed over sampleEntries, signs it with priv, and
 // returns the JSON bytes a server would serve.
 func signedFeedBytes(t *testing.T, priv ed25519.PrivateKey) []byte {
 	t.Helper()
-	f := &Feed{
-		SchemaVersion: SchemaVersion,
+	f := &slopfeed.Feed{
+		SchemaVersion: slopfeed.SchemaVersion,
 		Version:       "2026.07.25",
 		GeneratedAt:   "2026-07-25T00:00:00Z",
 		Source:        "test",
@@ -46,7 +50,7 @@ func TestLoadRemoteValidSignatureLoads(t *testing.T) {
 		URL:      srv.URL,
 		CacheDir: t.TempDir(),
 		TTL:      time.Hour,
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	})
 	if err != nil {
 		t.Fatalf("valid signed remote feed must load: %v", err)
@@ -69,7 +73,7 @@ func TestLoadRemoteWrongKeyRejected(t *testing.T) {
 	loaded, err := LoadRemote(context.Background(), RemoteOptions{
 		URL:      srv.URL,
 		CacheDir: t.TempDir(),
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(otherPub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(otherPub)},
 	})
 	if err == nil {
 		t.Fatalf("feed signed by a different key must be rejected")
@@ -96,7 +100,7 @@ func TestLoadRemoteTamperedDigestRejected(t *testing.T) {
 	loaded, err := LoadRemote(context.Background(), RemoteOptions{
 		URL:      srv.URL,
 		CacheDir: t.TempDir(),
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	})
 	if err == nil {
 		t.Fatalf("tampered feed must be rejected (digest mismatch)")
@@ -117,7 +121,7 @@ func TestLoadRemoteRequireSignatureUnsignedRejected(t *testing.T) {
 	_, err := LoadRemote(context.Background(), RemoteOptions{
 		URL:      srv.URL,
 		CacheDir: t.TempDir(),
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	})
 	if err == nil {
 		t.Fatalf("require_signature must reject an unsigned remote feed")
@@ -135,7 +139,7 @@ func TestLoadRemoteFreshCacheAvoidsNetwork(t *testing.T) {
 		URL:      srv.URL,
 		CacheDir: dir,
 		TTL:      time.Hour,
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	}
 	if _, err := LoadRemote(context.Background(), opts); err != nil {
 		t.Fatalf("first load: %v", err)
@@ -163,7 +167,7 @@ func TestLoadRemoteOfflineUsesCacheNeverNetwork(t *testing.T) {
 		URL:      srv.URL,
 		CacheDir: dir,
 		TTL:      time.Hour,
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	}
 	// Prime the cache once online.
 	if _, err := LoadRemote(context.Background(), base); err != nil {
@@ -194,7 +198,7 @@ func TestLoadRemoteOfflineWithNoCacheFailsClosed(t *testing.T) {
 		URL:      "https://feeds.example.com/slopfeed.json",
 		CacheDir: t.TempDir(),
 		Offline:  true,
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	})
 	if err == nil {
 		t.Fatalf("offline with no cache must fail closed")
@@ -221,7 +225,7 @@ func TestLoadRemoteFetchErrorFallsBackToCache(t *testing.T) {
 		URL:      srv.URL,
 		CacheDir: dir,
 		TTL:      time.Hour,
-		Verify:   VerifyOptions{RequireSignature: true, Verifier: Ed25519Verifier(pub)},
+		Verify:   slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	}
 	if _, err := LoadRemote(context.Background(), base); err != nil {
 		t.Fatalf("prime: %v", err)
@@ -248,26 +252,54 @@ func TestLoadRemoteRejectsNonHTTPScheme(t *testing.T) {
 	}
 }
 
-func TestSignRoundTripsThroughPEMVerifier(t *testing.T) {
+// TestLoadRemoteOverHTTPSVerifiesAndCaches drives the production transport
+// shape, a TLS server, end to end: the signed feed verifies under the pinned
+// key, the verified bytes land in the cache byte for byte, and a later offline
+// load is served from that cache without a request.
+func TestLoadRemoteOverHTTPSVerifiesAndCaches(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(nil)
-	f := buildFeed(t)
-	if err := f.Sign(priv, "kid-1"); err != nil {
-		t.Fatalf("sign: %v", err)
-	}
-	data := mustJSON(t, f)
+	body := signedFeedBytes(t, priv)
+	var hits int64
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
 
-	// The public key the signer embedded must be usable to build a verifier that
-	// accepts the feed — and it must be the SAME key material as pub.
-	verifier := Ed25519Verifier(pub)
-	if _, err := Parse(data, VerifyOptions{RequireSignature: true, Verifier: verifier}); err != nil {
-		t.Fatalf("signed feed must verify under the signer's public key: %v", err)
+	dir := t.TempDir()
+	opts := RemoteOptions{
+		URL:        srv.URL + "/slopsquat-blocklist.v1.json",
+		CacheDir:   dir,
+		TTL:        time.Hour,
+		HTTPClient: srv.Client(),
+		Verify:     slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
 	}
-	// A PEM verifier built from the embedded public key must also accept it.
-	pemVerifier, err := PEMEd25519Verifier([]byte(f.Signature.PublicKeyPEM))
+	loaded, err := LoadRemote(context.Background(), opts)
 	if err != nil {
-		t.Fatalf("PEMEd25519Verifier from embedded key: %v", err)
+		t.Fatalf("signed feed over HTTPS must load: %v", err)
 	}
-	if _, err := Parse(data, VerifyOptions{RequireSignature: true, Verifier: pemVerifier}); err != nil {
-		t.Fatalf("signed feed must verify under a PEM verifier from its embedded key: %v", err)
+	if _, ok := loaded.Lookup("npm", "axios-retry-async"); !ok {
+		t.Fatal("expected axios-retry-async in the loaded feed")
+	}
+	cached, err := os.ReadFile(feedCachePath(dir, opts.URL))
+	if err != nil {
+		t.Fatalf("verified feed must be cached: %v", err)
+	}
+	if !bytes.Equal(cached, body) {
+		t.Fatal("cache must hold the verified bytes unchanged")
+	}
+
+	offline := opts
+	offline.Offline = true
+	offline.HTTPClient = nil
+	again, err := LoadRemote(context.Background(), offline)
+	if err != nil {
+		t.Fatalf("offline load from the HTTPS-primed cache must succeed: %v", err)
+	}
+	if again.Digest() != loaded.Digest() {
+		t.Fatalf("cached digest %s differs from fetched %s", again.Digest(), loaded.Digest())
+	}
+	if got := atomic.LoadInt64(&hits); got != 1 {
+		t.Fatalf("expected exactly one request, got %d", got)
 	}
 }
