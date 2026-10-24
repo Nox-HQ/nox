@@ -18,6 +18,7 @@ import (
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/adjudicate"
@@ -1005,8 +1006,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // dimension and records a degradation rather than trusting the feed. When
 // offline is set, a URL feed never touches the network — it is served from the
 // verified cache or the load fails closed.
-func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*feed.Loaded, error) {
-	opts := feed.VerifyOptions{RequireSignature: cfg.RequireSignature}
+func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*slopfeed.Loaded, error) {
+	opts := slopfeed.VerifyOptions{RequireSignature: cfg.RequireSignature}
 	if cfg.SignatureKeyPath != "" {
 		keyPath := cfg.SignatureKeyPath
 		if !filepath.IsAbs(keyPath) {
@@ -1016,7 +1017,7 @@ func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bo
 		if err != nil {
 			return nil, fmt.Errorf("reading signature key %s: %w", keyPath, err)
 		}
-		verifier, err := feed.PEMEd25519Verifier(pem)
+		verifier, err := slopfeed.PEMEd25519Verifier(pem)
 		if err != nil {
 			return nil, fmt.Errorf("parsing signature key: %w", err)
 		}

@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The slopsquat feed could not be pinned with the key the docs say to
+  make.** `docs/slopsquat-feed.md` tells operators to pin the output of
+  `openssl pkey -pubout`, a PKIX `PUBLIC KEY`. `scan.slop.signature_key_path`
+  rejected it with "unexpected public key length: 44", so
+  `require_signature: true` could only be met with nox's own raw key form. Both
+  forms are now accepted. The feed format, digest, signing and the generator
+  moved to `github.com/nox-hq/nox-core/slopfeed` (v0.4.0), shared with the
+  service that will publish the feed; the CLI keeps only file, bundled and
+  remote loading, and `cmd/slopfeed` is now a thin command line over it with
+  the same flags and output.
 - **VULN-002 reported established packages as typosquats.** The ~240
   hand-picked popular names per ecosystem were both the targets a typosquat
   imitates and the only exemption, so any established package one edit from a
@@ -43,6 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   typosquats (`crossenv`, `mongose`, `colourama`, `python3-dateutil`, `djago`,
   `diango`, `setup-tools`) still fire.
 
+- **`results.sarif` differed between identical scans.** The taint rule
+  catalog kept the first sink a map iteration reached for each rule ID, and
+  TAINT-005 is shared by code_injection and unsafe_deserialization sinks, so
+  its descriptor (description, CWE, tags, helpUri) changed from run to run
+  and was wrong for the other class every time. TAINT-003 (xss and ssti) had
+  the same construction. Each shared ID's descriptor now names every class
+  and CWE it reports (TAINT-005: CWE-94, CWE-95, CWE-134, CWE-502), and the
+  taint catalog's listings are sorted. Rule IDs and fingerprints are
+  unchanged, so no Code Scanning alert moves. `nox explain` classifies a
+  finding by its own CWE before the rule's. With `SOURCE_DATE_EPOCH` set,
+  every report a scan writes is byte-identical across runs of one tree.
+
 - **pnpm lockfiles produced phantom packages.** The line-based reader took
   any indented key containing `@` or `/` for a package, so every
   `peerDependenciesMeta` child became one: `'@angular/core':` turned into
@@ -58,7 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
   (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
   three times, once per peer-suffixed version string; they are reported once.
-
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what

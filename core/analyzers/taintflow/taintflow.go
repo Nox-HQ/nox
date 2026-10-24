@@ -15,10 +15,14 @@
 package taintflow
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
@@ -94,48 +98,98 @@ func severityForClass(class taint.VulnClass) findings.Severity {
 // Rules returns one rule per distinct TAINT rule ID present in the catalog, so
 // SARIF reporting and rule-listing surface every ID this analyzer can emit. The
 // descriptions state the class and the honest intraprocedural limit.
+//
+// A rule ID can be shared by sinks of several vulnerability classes: TAINT-005
+// covers code_injection (CWE-94, CWE-95, CWE-134) and unsafe_deserialization
+// (CWE-502), TAINT-003 covers xss and ssti. One rule serves every finding with
+// its ID, so it describes every class and CWE the ID reports; each finding's
+// own message and metadata carry its precise class and CWE. The IDs are not
+// split per class: SARIF consumers key alerts on ruleId, so a split would move
+// the identity of every existing TAINT-003 and TAINT-005 alert.
 func (a *Analyzer) Rules() *rules.RuleSet {
-	rs := rules.NewRuleSet()
-	// Collect distinct (ruleID -> representative sink) across all catalog langs,
-	// deterministically.
 	type ruleInfo struct {
-		class taint.VulnClass
-		cwe   string
+		classes map[taint.VulnClass]bool
+		cwes    map[string]bool
+		// optIn holds only while every sink of the ID is opt-in; one default
+		// sink makes the rule report by default.
 		optIn bool
 	}
-	byID := map[string]ruleInfo{}
+	byID := map[string]*ruleInfo{}
 	for _, lang := range a.cat.Languages() {
 		for _, s := range a.cat.Sinks(lang) {
-			if _, ok := byID[s.RuleID]; !ok {
-				byID[s.RuleID] = ruleInfo{class: s.VulnClass, cwe: s.CWE, optIn: s.OptIn}
+			info := byID[s.RuleID]
+			if info == nil {
+				info = &ruleInfo{classes: map[taint.VulnClass]bool{}, cwes: map[string]bool{}, optIn: true}
+				byID[s.RuleID] = info
 			}
+			info.classes[s.VulnClass] = true
+			info.cwes[s.CWE] = true
+			info.optIn = info.optIn && s.OptIn
 		}
 	}
-	ids := make([]string, 0, len(byID))
-	for id := range byID {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
 
-	for _, id := range ids {
+	rs := rules.NewRuleSet()
+	for _, id := range slices.Sorted(maps.Keys(byID)) {
 		info := byID[id]
+		classes := orderedClasses(info.classes)
+		cwes := slices.SortedFunc(maps.Keys(info.cwes), compareCWE)
+		classNames := make([]string, len(classes))
+		severity := severityForClass(classes[0])
+		for i, c := range classes {
+			classNames[i] = string(c)
+			if sev := severityForClass(c); findings.SeverityRank(sev) < findings.SeverityRank(severity) {
+				severity = sev
+			}
+		}
+		refs := make([]string, 0, len(cwes)+1)
+		for _, cwe := range cwes {
+			refs = append(refs, "https://cwe.mitre.org/data/definitions/"+cweNumber(cwe)+".html")
+		}
+		refs = append(refs, "https://owasp.org/www-community/Injection_Flaws")
+		desc := fmt.Sprintf("Untrusted input reaches a %s sink (%s) without sanitization (intraprocedural taint flow)",
+			strings.Join(classNames, " or "), strings.Join(cwes, ", "))
 		rs.Add(&rules.Rule{
 			ID:          id,
 			Version:     "1.0",
-			Description: fmt.Sprintf("Untrusted input reaches a %s sink (%s) without sanitization (intraprocedural taint flow)", info.class, info.cwe),
-			Severity:    severityForClass(info.class),
+			Description: desc,
+			Severity:    severity,
 			Confidence:  findings.ConfidenceMedium,
-			Tags:        []string{"sast", "taint", "injection", string(info.class)},
+			Tags:        append([]string{"sast", "taint", "injection"}, classNames...),
 			Remediation: "A value derived from untrusted input (a request parameter, environment variable, or similar) flows into a dangerous operation in the same function without passing through an appropriate sanitizer. Validate or neutralize the value for this sink's context (parameterized query, argument-vector exec, output escaping, path canonicalization + allow-list) before it reaches the sink. Note: this is intraprocedural analysis — it reasons within one function body only.",
-			References: []string{
-				"https://cwe.mitre.org/data/definitions/" + cweNumber(info.cwe) + ".html",
-				"https://owasp.org/www-community/Injection_Flaws",
-			},
-			Metadata: map[string]string{"cwe": info.cwe, "vuln_class": string(info.class)},
-			OptIn:    info.optIn,
+			References:  refs,
+			Metadata:    map[string]string{"cwe": strings.Join(cwes, ", "), "vuln_class": strings.Join(classNames, ", ")},
+			OptIn:       info.optIn,
 		})
 	}
 	return rs
+}
+
+// orderedClasses returns the classes in set in the taint model's fixed class
+// order.
+func orderedClasses(set map[taint.VulnClass]bool) []taint.VulnClass {
+	var out []taint.VulnClass
+	for _, c := range taint.AllVulnClasses() {
+		if set[c] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// compareCWE orders CWE identifiers by number, so CWE-94 precedes CWE-134; an
+// identifier without a number sorts after those with one, by text.
+func compareCWE(a, b string) int {
+	na, errA := strconv.Atoi(cweNumber(a))
+	nb, errB := strconv.Atoi(cweNumber(b))
+	switch {
+	case errA == nil && errB == nil && na != nb:
+		return cmp.Compare(na, nb)
+	case errA == nil && errB != nil:
+		return -1
+	case errA != nil && errB == nil:
+		return 1
+	}
+	return strings.Compare(a, b)
 }
 
 // cweNumber strips the "CWE-" prefix for building a MITRE URL; returns the input
