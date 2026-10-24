@@ -550,7 +550,7 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 
 	findingCount := len(result.Findings.Findings())
 	pkgCount := len(result.Inventory.Packages())
-	aiCount := len(result.AIInventory.Components)
+	aiSummary := result.AIInventory.Summary()
 
 	if !result.Scope.Full() {
 		var ran, skipped []string
@@ -563,8 +563,8 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 		return fmt.Sprintf("Scan complete: %d findings. Scanned: %s. Not scanned: %s, so no result about them is an all-clear.",
 			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), nil
 	}
-	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %d AI components",
-		findingCount, pkgCount, aiCount), nil
+	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %s",
+		findingCount, pkgCount, aiSummary), nil
 }
 
 func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (string, error) {
@@ -637,8 +637,7 @@ func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, e
 		r := sbom.NewSPDXReporter(s.version)
 		data, err = r.Generate(pc.result.Inventory)
 	default:
-		r := sbom.NewCycloneDXReporter(s.version)
-		data, err = r.Generate(pc.result.Inventory)
+		data, err = s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	}
 
 	if err != nil {
@@ -679,6 +678,13 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 // severity, confidence, and rule family, plus dependency / AI-component totals.
 // This is the cheap "what am I looking at?" call an agent (or human) makes
 // before deciding whether to page through individual findings.
+// cycloneDX builds the CycloneDX reporter for a cached scan, with the scan's
+// AI inventory so the ML-BOM carries the models the scan detected. Every
+// CycloneDX surface goes through here so none of them can drop the models.
+func (s *Server) cycloneDX(result *nox.ScanResult) *sbom.CycloneDXReporter {
+	return sbom.NewCycloneDXReporter(s.version).WithAIInventory(result.AIInventory)
+}
+
 func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
@@ -706,7 +712,7 @@ func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredR
 		ByConfidence:   byConfidence,
 		ByFamily:       byFamily,
 		Dependencies:   len(pc.result.Inventory.Packages()),
-		AIComponents:   len(pc.result.AIInventory.Components),
+		AIComponents:   pc.result.AIInventory.ComponentCount(),
 	})
 }
 
@@ -1342,8 +1348,7 @@ func (s *Server) handleResourceCDX(_ context.Context, uri string, _ map[string]s
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	r := sbom.NewCycloneDXReporter(s.version)
-	data, err := r.Generate(pc.result.Inventory)
+	data, err := s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	if err != nil {
 		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
 	}
@@ -1503,8 +1508,7 @@ func (s *Server) handleProjectResourceCDX(_ context.Context, uri string, params 
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	r := sbom.NewCycloneDXReporter(s.version)
-	data, err := r.Generate(pc.result.Inventory)
+	data, err := s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	if err != nil {
 		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
 	}

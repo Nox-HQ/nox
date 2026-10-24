@@ -64,6 +64,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service that will publish the feed; the CLI keeps only file, bundled and
   remote loading, and `cmd/slopfeed` is now a thin command line over it with
   the same flags and output.
+
+- **DATA-012 reported every passport.js application as leaking a passport
+  number.** The pattern was case-insensitive throughout, so its value class
+  `[A-Z0-9]{6,12}` matched any six-letter word: `const passport =
+  require('passport')` was a HIGH finding with `require` as the number. Only
+  the key is case-insensitive now; the value must be upper-case, end at a word
+  boundary and contain a digit (US, UK), or be a nine-character German serial
+  from the vowel-free PassV alphabet. The key must bind the value, directly or
+  as the number field of a passport object, and the JSON key forms that were
+  missed before now fire. DATA-010 (health record id) and DATA-011 (driver's
+  licence) shared the construction and the false positive (`patient_id =
+  request.args...`, `license_number = license.number`) and get the same value
+  check. Measured: DATA-012 6 -> 0 on hackathon-starter and 2 -> 0 on
+  node_passport_login (every drop a `require` line); no change on the other 25
+  corpus repositories; generated real-format values still fire.
+  hackathon-starter joins the rule-diff corpus as the witness.
 - **VULN-002 reported established packages as typosquats.** The ~240
   hand-picked popular names per ecosystem were both the targets a typosquat
   imitates and the only exemption, so any established package one edit from a
@@ -107,6 +123,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
   (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
   three times, once per peer-suffixed version string; they are reported once.
+
+- **A report nox wrote was scanned as source wherever it was kept.** Only the
+  current `--output` paths were excluded, so a renamed output directory, a
+  downloaded CI artifact or a committed `results.sarif` fed nox's own rule
+  descriptions back in: `cp -R out old-report` took a 44-finding scan to 48
+  (AI-009 and AI-038 matching the SARIF rule catalog), and an `--evidence-out`
+  file added 37 DATA-001 findings per copy. Discovery now recognises nox's
+  SARIF, findings/evidence JSON, CycloneDX, SPDX, attack-plan and HTML reports
+  by content (a prefix sniff for the producer marker, confirmed by decoding
+  the field it belongs in), under any name and in any directory, for the CLI,
+  MCP and LSP alike. Each skipped file is named in an advisory
+  `generated_report` degradation. Other tools' SARIF and SBOMs are still
+  scanned: a gitleaks or semgrep SARIF carries the credential it matched.
+
+- **A detected LLM model was invisible.** An app calling
+  `openai.chat.completions.create({model: "gpt-4o"})`, in JavaScript or
+  Python, printed `0 AI components` and wrote no `ai.inventory.json`, even with
+  `--format all`. nox detected the model, but every output counted only
+  inventory components and models are kept separately. The console, the MCP
+  `scan` and `summary` tools, the dashboard and the AI-assist context now share one
+  count, components plus distinct models:
+  `1 AI component (1 model: gpt-4o via openai)`. `sbom.cdx.json` (CLI and MCP)
+  lists the same models as CycloneDX `machine-learning-model` components.
+
+- **`ai.inventory.json` is written on every scan.** It has a new `checks` field
+  (schema 2.1.0) that names the AI checks that ran. An empty inventory with
+  checks means nox found nothing; one without checks means the AI scope did not
+  run.
+
+- **No phantom models.** With models now visible, two detector gaps would have
+  shown up in the AI-BOM. A model call quoted in a comment was inventoried
+  (nox's own source listed a model named `gpt-...`), and in a file where
+  "openai" appears only in a comment, an ORM's `model: "Invoice"` counted as an
+  ML model. Model extractors now skip comments. In ordinary source, a
+  `model: "X"` assignment counts only when X is a recognised model family. SDK
+  call sites and `from_pretrained` keep their own evidence.
 ## [1.48.2] - 2026-10-24
 
 Fixes from the concrete-witness research (#814): secret rules now report what

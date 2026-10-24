@@ -52,12 +52,16 @@ type Inventory struct {
 	PromptTemplates []PromptTemplate `json:"prompt_templates,omitempty"`
 	// ToolMatrix lists tool permission sets for agents and MCP servers.
 	ToolMatrix []ToolPermissionSet `json:"tool_permission_matrix,omitempty"`
+	// Checks names the AI checks that ran. Empty means the AI analyzer did
+	// not run, so empty Components then means "did not look", not "found
+	// nothing".
+	Checks []string `json:"checks"`
 }
 
 // NewInventory returns an empty inventory with the current schema version.
 func NewInventory() *Inventory {
 	return &Inventory{
-		SchemaVersion: "2.0.0",
+		SchemaVersion: schemaVersion,
 		Components:    []Component{},
 	}
 }
@@ -130,7 +134,8 @@ func mergeModel(dst *ModelReference, src ModelReference) {
 
 // JSON returns the inventory as pretty-printed JSON bytes.
 func (inv *Inventory) JSON() ([]byte, error) {
-	return json.MarshalIndent(inv, "", "  ")
+	out := inv.normalized()
+	return json.MarshalIndent(&out, "", "  ")
 }
 
 // WriteFile writes the inventory to the given file path.
@@ -244,6 +249,7 @@ func suppressNonCode(lang lexctx.Lang, content []byte, f *findings.Finding) bool
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, *Inventory, error) {
 	fs := findings.NewFindingSet()
 	inv := NewInventory()
+	inv.Checks = append([]string(nil), inventoryChecks...)
 
 	// Files are scanned on every core (see core/parallel, which also honours
 	// cancellation between artifacts). Each file's findings and inventory
@@ -443,7 +449,16 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 			out.components = extractComponents(artifact.Path, content)
 		}
 
-		out.models = extractModelReferences(artifact.Path, content)
+		// A source file reaches here on a marker as weak as the word
+		// "openai" in a comment, so its config-style `model: "X"` matches
+		// count only when X is a recognised model family; otherwise an ORM's
+		// `model: "Invoice"` became an ML model in the AI-BOM.
+		//
+		// Both model extractors read the file with its comments blanked: a
+		// call quoted in a doc comment is documentation, not a model the
+		// application calls. Offsets and lines are unchanged.
+		code := commentsBlanked(lang, content)
+		out.models = extractModelReferencesIn(artifact.Path, code, !isAIComp)
 		out.prompts = extractPromptTemplates(artifact.Path, content)
 		out.tools = extractToolPermissions(artifact.Path, content, a.deg)
 
@@ -453,7 +468,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 		// "misses" suggests: `model="gpt-4o"` satisfies the config pattern
 		// here and the invocation pattern there, so these merge into the
 		// existing entry rather than appending a second one.
-		out.sdkModels = extractSDKInvocations(artifact.Path, content)
+		out.sdkModels = extractSDKInvocations(artifact.Path, code)
 		out.frameworks = extractFrameworkComponents(artifact.Path, content)
 	}
 	return out, nil

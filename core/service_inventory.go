@@ -42,7 +42,7 @@ func DeriveServiceInventory(ctx context.Context, target string, inv intel.Invent
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
-	artifacts, err := discoverArtifacts(target, cfg, opts)
+	artifacts, err := discoverArtifacts(target, cfg, opts, nil)
 	if err != nil {
 		return nil, err
 	}
