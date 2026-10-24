@@ -396,11 +396,20 @@ digest.
 
 ### diff
 
-Show findings only in files changed relative to a git base ref.
+Say what a range of commits changed in the project's security state: what is
+new, what is no longer present, what got worse, which agents gained or lost a
+tool or capability, and which routes became authorization leads.
 
 ```
 nox diff [path] [flags]
 ```
+
+The tree at the merge-base of `--base` and `--head`, and the tree at `--head`,
+are each read from git's object database into a temporary directory and scanned
+the same way; the two are compared by `core/change`. Nothing is checked out and
+uncommitted changes are not part of either side. Exit 1 means the head made
+findings worse (a new finding or a raised severity). Resolved items, leads and
+agent changes are listed but do not fail the command.
 
 **Flags:**
 
@@ -408,20 +417,51 @@ nox diff [path] [flags]
 |------|---------|-------------|
 | `--base` | `main` | Base ref for comparison |
 | `--head` | `HEAD` | Head ref for comparison |
-| `--json` | `false` | Output as JSON |
+| `--json` | `false` | Output as JSON: `findings` (new, the old shape), `changed_files`, `base`, `head`, `change` (the full delta) |
+| `--offline` | `false` | No network in either scan (no dependency advisory lookups) |
+| `--no-osv` | `false` | Skip the OSV.dev lookup in both scans |
+| `--verbose` | `false` | List every line instead of the first five per section |
+
+**What counts as the same thing in both states:**
+
+| Kind | Identity |
+|------|----------|
+| Dependency advisory | manifest + ecosystem + package + advisory id (any alias). Not the version, so an upgrade that leaves a package still affected is neither resolved nor new |
+| Any other finding | rule + file + message (the line-independent fingerprint), so a finding that only moved is neither new nor resolved |
+| Authorization lead | route + file |
+| Agent capability | agent + server + tool + capability |
+| AI component | type + name |
+
+A finding that was baselined, suppressed or cleared by VEX between the refs is
+listed as waived, never as resolved. A comparison that cannot be made (an
+earlier run that did not record leads or the AI inventory, an incomplete or
+differently scoped run) is stated under "Not compared / caution".
 
 **Examples:**
 
 ```bash
-# Show findings in files changed vs main
+# What did this branch change versus main?
 nox diff --base main
 
-# JSON output for CI
+# JSON for CI
 nox diff --base main --json
 
 # Compare specific refs
 nox diff --base v1.0.0 --head feature-branch
 ```
+
+`nox scan --previous <findings.json>` makes the same comparison against an
+earlier run instead of a ref, and leads the assessment with it. The
+`ai.inventory.json` beside that file is compared too when present. The MCP
+`scan` tool takes `previous` for the same purpose and otherwise compares with
+the last scan of the same path in the session; its result and the `diff` tool's
+carry the delta as a structured `change`.
+
+`findings.json` records authorization leads under `leads` and `lead_checks`,
+never among `findings`. `lead_checks` is present whenever the check had routes
+to read, even with no leads, so a later run can tell "looked, none" from "an
+older nox". An earlier file without it cannot be compared for leads, and the
+comparison says so.
 
 ### watch
 

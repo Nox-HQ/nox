@@ -7,6 +7,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/assess"
+	"github.com/nox-hq/nox/core/change"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -21,6 +22,9 @@ type scanAssessment struct {
 	formats []string
 	offline bool
 	verbose bool
+	// since is what changed from the earlier run --previous named; nil when
+	// there was none, in which case the assessment prints as it always has.
+	since *change.Delta
 }
 
 // assessmentShown reports whether a run renders the assessment. Only a default
@@ -55,6 +59,15 @@ func (a scanAssessment) print(w io.Writer) {
 	opts := assess.RenderOptions{Limit: assess.DefaultLimit}
 	if a.verbose {
 		opts.Limit = 0
+	}
+	if a.since != nil {
+		limit := change.DefaultLimit
+		if a.verbose {
+			limit = 0
+		}
+		if err := change.Render(w, *a.since, limit); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not print the changes: %v\n", err)
+		}
 	}
 	if err := assess.Render(w, assess.Build(in), opts); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not print the assessment: %v\n", err)

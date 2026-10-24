@@ -34,7 +34,26 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
 	rep.StageAccounting = stageAccountingFor(r)
+	rep.Leads = r.ReportLeads()
+	rep.LeadChecks = r.LeadChecks
 	return rep
+}
+
+// ReportLeads converts the scan's leads into their findings.json form. It is
+// the one conversion, so the artifact, the change summary and the MCP tools
+// describe a lead identically. Nil when the scan produced none.
+func (r *ScanResult) ReportLeads() []report.Lead {
+	if r == nil || len(r.Leads) == 0 {
+		return nil
+	}
+	out := make([]report.Lead, 0, len(r.Leads))
+	for _, l := range r.Leads {
+		out = append(out, report.Lead{
+			Category: l.Category, RuleID: l.RuleID, Route: l.Route,
+			FilePath: l.FilePath, Line: l.Line, Statement: l.Statement, Test: l.Test,
+		})
+	}
+	return out
 }
 
 // stageAccountingFor converts the scan's stage counts into their report form.

@@ -2,16 +2,19 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 // The routes AUTHZ-001 holds are leads by default, not findings, and a lead
-// must leave no trace in a machine output: not in findings.json, not in SARIF
-// (results or rule catalogue), not in the exit code or a fingerprint. So the
-// same app with and without an unscoped lookup renders byte-identical
-// reports in default mode, and only ScanResult.Leads tells them apart.
+// must leave no trace among the findings of a machine output: not in the
+// findings array, not in SARIF (results or rule catalogue), not in the exit
+// code or a fingerprint. So the same app with and without an unscoped lookup
+// renders byte-identical reports in default mode, except that findings.json
+// records the lead under its own "leads" key (so core/change can tell a later
+// run that a route is new), and ScanResult.Leads tells them apart.
 // Enabled, the rule reports the finding exactly as before and holds no lead
 // for it.
 func TestAuthzLeadsLeaveNoTraceInMachineOutputs(t *testing.T) {
@@ -80,11 +83,24 @@ func TestAuthzLeadsLeaveNoTraceInMachineOutputs(t *testing.T) {
 	if len(withLead.LeadChecks) != 1 || withLead.LeadChecks[0] != "authorization (Express routes; leads only)" {
 		t.Errorf("lead checks = %v", withLead.LeadChecks)
 	}
+	// findings.json carries the lead, but only under its own keys, so that a
+	// later run can say a route is new. Everything a finding consumer reads is
+	// identical: with those two keys removed the documents are byte-equal.
+	if !bytes.Contains(leadOut["findings.json"], []byte(`"leads"`)) {
+		t.Error("findings.json does not record the lead, so a later run cannot compare against it")
+	}
+	if bytes.Contains(cleanOut["findings.json"], []byte(`"leads"`)) {
+		t.Error("findings.json lists leads for an app that has none")
+	}
 	for name, b := range leadOut {
-		if !bytes.Equal(b, cleanOut[name]) {
+		got, want := b, cleanOut[name]
+		if name == "findings.json" {
+			got, want = withoutLeadKeys(t, got), withoutLeadKeys(t, want)
+		}
+		if !bytes.Equal(got, want) {
 			t.Errorf("%s differs between the app with a lead and without one", name)
 		}
-		if bytes.Contains(b, []byte("AUTHZ")) {
+		if bytes.Contains(got, []byte("AUTHZ")) {
 			t.Errorf("%s mentions AUTHZ in default mode", name)
 		}
 	}
@@ -105,4 +121,21 @@ func TestAuthzLeadsLeaveNoTraceInMachineOutputs(t *testing.T) {
 	if n != 1 || !bytes.Contains(enabledOut["results.sarif"], []byte(`"AUTHZ-001"`)) {
 		t.Errorf("enabled: %d AUTHZ-001 findings, want 1, reported in SARIF", n)
 	}
+}
+
+// withoutLeadKeys re-encodes a findings document without the keys that carry
+// leads.
+func withoutLeadKeys(t *testing.T, doc []byte) []byte {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(doc, &m); err != nil {
+		t.Fatalf("the document is not a JSON object: %v", err)
+	}
+	delete(m, "leads")
+	delete(m, "lead_checks")
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
