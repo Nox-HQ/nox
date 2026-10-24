@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`nox scan` ends with an assessment instead of counts.** Issues are grouped
+  by the action that resolves them: one line per upgrade the `nox fix` planner
+  would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known
+  vulnerabilities"), one per vulnerable package with no fix, one per rule for
+  code findings with file:line, ranked by severity times confidence, top five
+  shown (`--verbose` lists all). It then states which checks ran and which did
+  not (and the one action that enables each), what the scan could not settle
+  (reachability of dependency vulnerabilities, exploitability), the runtime
+  tests `nox attack plan` would build, and the next commands. Built in
+  `core/assess` from the shared `core/fix` planner and `core/hypothesize`, so
+  other adapters can render the same account. The `[tip]` lines are replaced;
+  the advisory "installed plugins not listed in plugins.required" `[degraded]`
+  line moves behind `--verbose` when the assessment is shown. `[results]`,
+  `[families]` and blocking `[degraded]` lines are unchanged, and so are
+  findings.json, SARIF and the SBOMs: this is presentation only.
+
 ### Fixed
+
+- **VULN-002 reported established packages as typosquats.** The ~240
+  hand-picked popular names per ecosystem were both the targets a typosquat
+  imitates and the only exemption, so any established package one edit from a
+  target was flagged: `openai` (openapi), `jws` (ws), `safer-buffer`
+  (safe-buffer), `gaxios`, `enquirer`, `psycopg`, `motor`, `boto` and more.
+  The roles are now split. Targets stay curated; the exemption is a pinned set
+  of established packages (npm: the 17,330 names in `npm-high-impact` 1.13.0,
+  MIT; PyPI: the top 10,000 of `hugovk/top-pypi-packages` 2026.10.1,
+  CC-BY-4.0), embedded and reproduced by
+  `scripts/gen-typosquat-exemptions.py`. The scan stays offline. A
+  known-malicious name (VULN-003) is never exempt. Measured on real lockfiles,
+  VULN-002 went 126 -> 0 on nestjs/nest v10.4.0, 19 -> 1 on npm/cli v10.9.0,
+  34 -> 8 on vercel/ai and 1 -> 0 on anthropic-sdk-python; historical
+  typosquats (`crossenv`, `mongose`, `colourama`, `python3-dateutil`, `djago`,
+  `diango`, `setup-tools`) still fire.
 
 - **A report nox wrote was scanned as source wherever it was kept.** Only the
   current `--output` paths were excluded, so a renamed output directory, a

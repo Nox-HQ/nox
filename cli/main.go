@@ -773,7 +773,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// SBOM, so a pipeline that tripped the flag lost the findings it did
 	// collect and had nothing to upload. The exit is applied after reports are
 	// written; see below.
-	for _, d := range result.Degradations {
+	for _, d := range degradationsToPrint(result.Degradations, assessmentShown(quiet, stagedFlag, historyFlag), verbose) {
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
 	}
 
@@ -896,7 +896,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	}
 
 	if !quiet {
-		printNextStepTips(activeFindings, outputDir)
+		if assessmentShown(quiet, stagedFlag, historyFlag) {
+			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
+				formats: formats, offline: offlineFlag, verbose: verbose}.print(os.Stdout)
+		}
 		fmt.Println("[done]")
 	}
 
