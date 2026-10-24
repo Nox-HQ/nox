@@ -118,8 +118,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1495 -> 1497 added HARDEN-003 (cookie secure=False) and TAINT-011
 	// (untrusted data stored in the session, opt-in).
 	// 1497 -> 1498 added SEC-952, a JWT in a non-compact JSON layout.
-	if got := len(cat); got != 1498 {
-		t.Errorf("Catalog() returned %d rules, want 1498", got)
+	// 1498 -> 1499 added AUTHZ-001, possible broken object-level
+	// authorization in Express routes (opt-in).
+	if got := len(cat); got != 1499 {
+		t.Errorf("Catalog() returned %d rules, want 1499", got)
 	}
 }
 

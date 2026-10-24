@@ -23,6 +23,7 @@ import (
 	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
@@ -584,6 +585,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	taintflowAnalyzer.RecordReasoningTo(reasons)
 	taintflowAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
 	agentflowAnalyzer := agentflow.NewAnalyzer()
+	authzAnalyzer := authz.NewAnalyzer()
+	authzAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
+	authzAnalyzer.RecordReasoningTo(reasons)
 	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
@@ -721,6 +725,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"authz", func(c context.Context) error {
+			fs, err := authzAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"provenance", func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
@@ -796,6 +808,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},
 		{"agentflow", agentflowAnalyzer.Rules()},
+		{"authz", authzAnalyzer.Rules()},
 		{"provenance", provenanceAnalyzer.Rules()},
 	} {
 		if !opts.Scopes.RunsAnalyzer(rs.analyzer) {

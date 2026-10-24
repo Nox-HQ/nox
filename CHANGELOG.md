@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **AUTHZ-001: possible broken object-level authorization (IDOR, OWASP
+  API1:2023, CWE-639) in Express/koa-router JavaScript and TypeScript.
+  Opt-in** (`scan.rules.enable: [AUTHZ-001]`), medium severity, low
+  confidence, Exploitability POTENTIAL. It claims only this: a route that
+  requires an authenticated caller looks up a record by a caller-supplied id
+  (route parameter, query or body field), and nothing visible on that path
+  relates the record to the caller's principal. Routes, router-level and
+  prefix `use()` middleware, mounts across files, and handlers in other files
+  (wrappers, factories, controllers, DAOs) are resolved. Thirteen
+  counterexample classes clear a route (principal-scoped lookups, owner
+  fields, request-scoped clients, middleware context handed to the data
+  layer, comparisons with the principal, policy calls, 403s, role reads,
+  authorization/loader middleware, `router.param()`, row-level security), and
+  each cleared candidate is filed in the reasoning ledger with its reason.
+  Not a copy of the `api-abuse` plugin's approach (precision 0.000): that rule
+  judged whether a route was meant to be public; this one requires the
+  authentication that says it is not.
+  Measured on 22 pinned open-source Express apps, every finding read and
+  classified. Deliberately vulnerable apps (Juice Shop, dvws-node, NodeGoat,
+  DVNA, DVAPI, Pixi): 26 findings, 18 TP / 8 FP, recall 10 of 14 documented
+  BOLA instances. Ordinary apps: 17 findings on proshop-v2, mern-ecommerce and
+  mern-social, 12 object-level TPs and 5 missing admin checks (function-level,
+  still real defects), 0 FP; Directus, Ghost, kutt, Actual, CodiMD,
+  async-labs/saas, builderbook, uptime-kuma and five others produced none,
+  with 100+ authenticated id-keyed routes cleared by a counterexample. The 8 FPs
+  are all resources shared by design (a picture's likes, a public profile, a
+  product catalogue), which no reader of source can refute, and only three
+  ordinary apps produced findings at all, so the rule is opt-in rather than
+  default.
+
 ### Fixed
 
 - **VULN-002 reported established packages as typosquats.** The ~240
