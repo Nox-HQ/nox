@@ -1948,7 +1948,6 @@ func builtinBaseIaCRules() []rules.Rule {
 			absenceSpan:          "yaml-doc",
 			absenceResourceTypes: []string{"Ingress"},
 			absencePropertyPath:  []string{"spec.tls"},
-			retires:              []rules.RetiredRule{{ID: "IAC-296", Pattern: `(?i)kind:\s*Ingress`}},
 			description:          "Kubernetes Ingress without TLS configuration",
 			cwe:                  "CWE-319", keywords: []string{"Ingress", "tls"},
 			filePatterns: []string{"*.yaml", "*.yml"},

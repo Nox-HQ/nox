@@ -140,7 +140,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1502 built-in rules** across five analyzer suites:
+Nox ships with **1503 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -182,7 +182,7 @@ Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 | Supply Chain | AI-008, AI-014 | LLM03 | Unpinned models, insecure HTTP model downloads |
 | Resource Management | AI-017 | LLM10 | Unlimited token limits |
 
-### Infrastructure as Code (484 rules)
+### Infrastructure as Code (485 rules)
 
 Detects misconfigurations across **7 IaC categories**:
 

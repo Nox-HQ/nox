@@ -180,8 +180,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     firing domain and finding locations are unchanged, so baselines and waivers
     written against it keep matching.
   - *IAC-296* ("verify TLS termination") fired on every Ingress, including ones
-    with a `tls:` block. It duplicated IAC-149, which reports the missing block,
-    and is retired into it; waivers written against IAC-296 keep matching.
+    with a `tls:` block. It keeps its ID and now makes a claim that can be
+    checked and that IAC-149 (no `tls:` at all) does not: an Ingress that HAS a
+    tls block serves a `spec.rules[].host` no `spec.tls[].hosts` entry covers
+    (a wildcard covers one label), or has a tls entry with no `secretName` and
+    no cert-manager/controller annotation providing a certificate. It never
+    fires with IAC-149, and a Helm template (`{{ }}`) is not evaluated.
   - *IAC-144* reported `valueFrom: secretKeyRef`, the documented way to pass one
     credential and the form IAC-502 tells people to move to. It now reports
     `envFrom: secretRef`, which hands every key of the Secret to the process.

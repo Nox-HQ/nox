@@ -123,12 +123,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1499 -> 1502 adds IAC-502, IAC-503 (a credential-named environment
 	// variable with a literal value, Kubernetes/Helm and Compose), IAC-504
 	// (Terraform S3 public access block disabled) and MCP-025 (an MCP server
-	// launched from a package registry without a pinned version), and retires
-	// IAC-296 into IAC-149: "verify TLS" of every Ingress, with or without a
-	// tls block, duplicated the rule that reports the missing block. IAC-149
-	// carries the alias.
-	if got := len(cat); got != 1502 {
-		t.Errorf("Catalog() returned %d rules, want 1502", got)
+	// launched from a package registry without a pinned version).
+	if got := len(cat); got != 1503 {
+		t.Errorf("Catalog() returned %d rules, want 1503", got)
 	}
 }
 

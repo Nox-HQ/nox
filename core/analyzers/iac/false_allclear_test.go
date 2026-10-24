@@ -211,27 +211,46 @@ func TestFalseAllClear_RuleFiresOnlyOnTheInsecureForm(t *testing.T) {
 	}
 }
 
-// IAC-296 asked "verify TLS termination" of every Ingress, with or without a
-// tls block: noise on the hardened form, and a duplicate of IAC-149 on the
-// insecure one. It is retired into IAC-149, and the old ID must keep matching
-// waivers.
-func TestFalseAllClear_IAC296RetiresIntoIAC149(t *testing.T) {
-	ingress := "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: invoicely\nspec:\n  tls:\n    - hosts: [invoicely.example.com]\n      secretName: invoicely-tls\n"
-	if got := iacFindings(t, "ingress.yaml", ingress, "IAC-296"); len(got) != 0 {
-		t.Errorf("IAC-296 fired on an Ingress that has a tls block")
+// IAC-296 used to match `kind: Ingress` and nothing else, so it fired on every
+// Ingress. Its claim is now one that can be checked, and is distinct from
+// IAC-149 (no tls at all): an Ingress that HAS a tls block, but where a host
+// is served that no tls entry covers, or a tls entry names no certificate
+// source. It never fires where IAC-149 does, and it does not guess at a Helm
+// template it cannot render.
+func TestFalseAllClear_IAC296ChecksTheTLSItFinds(t *testing.T) {
+	head := "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: invoicely\n"
+	rule := func(hosts ...string) string {
+		out := "  rules:\n"
+		for _, h := range hosts {
+			out += "    - host: " + h + "\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend: {service: {name: web, port: {number: 80}}}\n"
+		}
+		return out
 	}
-	var found bool
-	for _, r := range builtinIaCRules() {
-		if r.ID == "IAC-149" {
-			for _, ret := range r.Retires {
-				found = found || ret.ID == "IAC-296"
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"tls covers the host and names a secret", head + "spec:\n  tls:\n    - hosts: [a.example.com]\n      secretName: a-tls\n" + rule("a.example.com"), 0},
+		{"a wildcard entry covers one label", head + "spec:\n  tls:\n    - hosts: [\"*.example.com\"]\n      secretName: w-tls\n" + rule("a.example.com"), 0},
+		{"a wildcard does not cover two labels", head + "spec:\n  tls:\n    - hosts: [\"*.example.com\"]\n      secretName: w-tls\n" + rule("a.b.example.com"), 1},
+		{"a second host no tls entry covers is served in plain text", head + "spec:\n  tls:\n    - hosts: [a.example.com]\n      secretName: a-tls\n" + rule("a.example.com", "admin.example.com"), 1},
+		{"a tls entry with no hosts is the default and covers every host", head + "spec:\n  tls:\n    - secretName: any-tls\n" + rule("a.example.com"), 0},
+		{"tls with no secretName and no certificate source", head + "spec:\n  tls:\n    - hosts: [a.example.com]\n" + rule("a.example.com"), 1},
+		{"no secretName but cert-manager provides it", "apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: invoicely\n  annotations:\n    cert-manager.io/cluster-issuer: letsencrypt\nspec:\n  tls:\n    - hosts: [a.example.com]\n" + rule("a.example.com"), 0},
+		{"no tls at all is IAC-149's, not this rule's", head + "spec:\n" + rule("a.example.com"), 0},
+		{"a templated host is not evaluated", head + "spec:\n  tls:\n    - hosts: [a.example.com]\n      secretName: a-tls\n  rules:\n    - host: \"{{ .Values.host }}\"\n", 0},
+		{"a Helm template with a conditional tls block cannot be evaluated", "{{- if .Values.ingress.enabled -}}\n" + head + "spec:\n  {{- if .Values.ingress.tls }}\n  tls:\n    - secretName: x\n  {{- end }}\n  rules:\n    {{- range .Values.ingress.hosts }}\n    - host: {{ .host | quote }}\n    {{- end }}\n{{- end }}\n", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := iacFindings(t, "ingress.yaml", tc.body, "IAC-296")
+			if len(got) != tc.want {
+				t.Fatalf("IAC-296 fired %d times, want %d", len(got), tc.want)
 			}
-		}
-		if r.ID == "IAC-296" {
-			t.Errorf("IAC-296 is still a live rule next to IAC-149")
-		}
-	}
-	if !found {
-		t.Errorf("IAC-149 does not declare IAC-296 in Retires, so waivers written against IAC-296 would stop matching")
+			if tc.want > 0 && len(iacFindings(t, "ingress.yaml", tc.body, "IAC-149")) != 0 {
+				t.Errorf("IAC-296 and IAC-149 both fired on one Ingress")
+			}
+		})
 	}
 }

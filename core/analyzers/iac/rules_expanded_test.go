@@ -21,10 +21,9 @@ func TestExpandedRules_Count(t *testing.T) {
 	// same three kinds and the same file patterns, differing only by tolerating
 	// a space before the colon.
 	//
-	// 224 -> 226: IAC-502, IAC-503 and IAC-504 were added and IAC-296 retired
-	// into IAC-149 (see TestAllIaCRules_Count).
-	if got := len(rules); got != 226 {
-		t.Errorf("expected 226 expanded rules, got %d", got)
+	// 224 -> 227: IAC-502, IAC-503 and IAC-504 were added.
+	if got := len(rules); got != 227 {
+		t.Errorf("expected 227 expanded rules, got %d", got)
 	}
 }
 

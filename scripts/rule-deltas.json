@@ -43,9 +43,9 @@
     },
     {
       "rule": "IAC-296",
-      "classification": "duplicate-retired",
+      "classification": "applicability-narrowed",
       "pr": 862,
-      "reason": "IAC-296 asked to 'verify TLS termination' of every Ingress, with or without a tls block, and is retired into IAC-149, which reports the missing block and carries the alias. Both corpus drops were read. kubernetes/examples AI/model-serving-tensorflow/ingress.yaml has no tls block: IAC-296 and IAC-149 reported it on the same line, and IAC-149 still does. stefanprodan/podinfo charts/podinfo/templates/ingress.yaml renders its tls block under `{{- if .Values.ingress.tls }}`; a conditionally configured block is not a defect in the template, and 'verify' was the whole claim. No Ingress with no tls block lost its finding."
+      "reason": "IAC-296 matched `kind: Ingress` and so fired on every Ingress; its claim is now that an Ingress WITH a tls block serves a host no tls entry covers, or has a tls entry with no secretName and no certificate-provisioning annotation. Both corpus drops were read. kubernetes/examples AI/model-serving-tensorflow/ingress.yaml has no tls block at all: that is IAC-149's condition, IAC-149 still reports it on the same line, and nothing about a covered host or a certificate source can be said of it. stefanprodan/podinfo charts/podinfo/templates/ingress.yaml is a Helm template whose tls block sits under `{{- if .Values.ingress.tls }}` and whose hosts are `{{ .host }}`; the rule cannot render it, so it reports nothing rather than guess. No Ingress with a covered-host or certificate gap lost its finding."
     }
   ]
 }

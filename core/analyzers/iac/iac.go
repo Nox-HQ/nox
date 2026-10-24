@@ -144,6 +144,8 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// A seccomp profile on the pod is inherited by its containers. See
 	// seccomp_inherit.go.
 	out = dropSeccompInheritedFromPod(out, content, drop)
+	// IAC-296's claim is checked against the parsed Ingress. See ingress_tls.go.
+	out = dropIngressTLSNotEstablished(out, content, drop)
 	// Applicability is decided by the document, not by its name. See
 	// document_kind.go.
 	out = dropRulesOutsideTheirDocumentKind(path, out, content, a.engine.Rules(), drop)

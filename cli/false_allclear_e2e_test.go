@@ -102,7 +102,7 @@ func TestFalseAllClear_InsecureChangesAreReportedAndHardenedNoiseIsGone(t *testi
 	// Noise the hardened tree used to produce, and must not.
 	for _, c := range []struct{ rule, why string }{
 		{"IAC-135", "seccompProfile RuntimeDefault is set at pod level and inherited"},
-		{"IAC-296", "the Ingress has a tls block (rule retired into IAC-149)"},
+		{"IAC-296", "the Ingress has a tls block covering its host, with a secretName"},
 		{"IAC-144", "a single key from a Secret via secretKeyRef is the recommended form"},
 	} {
 		if hardened[c.rule] != 0 {

@@ -324,14 +324,24 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Avoid imagePullPolicy: Never in production. This policy requires images to already exist on the node and prevents pulling updated or patched images.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
-		// IAC-296 ("K8s Ingress (verify TLS termination)") is retired into
-		// IAC-149. It matched `kind: Ingress` and nothing else, so it fired on
-		// every Ingress including the ones with a tls block, which is noise on
-		// the hardened form, and on the ones without, where IAC-149 already
-		// reports the missing block (structurally, so a tls reached through an
-		// alias is seen). A rule that is only correct when it duplicates
-		// another rule is a duplicate. IAC-149 carries the alias, so a
-		// waiver written against IAC-296 keeps matching.
+		{
+			id: "IAC-296", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// The pattern only nominates every Ingress; it is not the claim. The
+			// claim is checked by parsing the document (ingress_tls.go), which
+			// drops the nomination unless the Ingress HAS a tls block and (a)
+			// serves a host no tls entry covers, or (b) has a tls entry with no
+			// secretName and no certificate-provisioning annotation. An Ingress
+			// with no tls block at all is IAC-149's, and a template that cannot
+			// be parsed is not evaluated.
+			pattern:      `(?i)kind:\s*Ingress`,
+			description:  "K8s Ingress has a tls block but serves a host it does not cover, or names no certificate source",
+			cwe:          "CWE-319",
+			keywords:     []string{"Ingress"},
+			filePatterns: k8sFilePatterns,
+			tags:         []string{"iac", "kubernetes", "transport-security"},
+			remediation:  "List every host in spec.rules[].host under a spec.tls[].hosts entry (a wildcard covers one label), and give each tls entry a secretName or a cert-manager/controller annotation that provisions the certificate. A host with no covering tls entry is served over plain HTTP.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/319.html", "https://kubernetes.io/docs/concepts/services-networking/ingress/#tls"},
+		},
 		{
 			id: "IAC-297", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
 			pattern:      `(?i)loadBalancerSourceRanges:\s*\n\s*-\s*['"]?0\.0\.0\.0/0`,
