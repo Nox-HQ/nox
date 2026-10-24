@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/internal/workcount"
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -189,7 +190,9 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 			continue
 		}
 		fa := &in[ia]
+		visited := 0
 		for b := a + 1; b < len(order); b++ {
+			visited++
 			ib := order[b]
 			if suppressed[ib] {
 				continue
@@ -222,6 +225,7 @@ func dedupBySpecificity(in []findings.Finding, spec map[string]int, content []by
 				break // fa gone; move to next anchor
 			}
 		}
+		workcount.Add(workcount.DedupVisit, visited)
 	}
 
 	out := make([]findings.Finding, 0, len(in))
@@ -305,6 +309,7 @@ func resolveOwners(in []findings.Finding, order, groupStart, groupEnd []int, sup
 		// fa names a provider; drop overlapping provider findings on this span
 		// that aren't canonical owners (including fa itself if, e.g., a Clerk
 		// rule matched a Stripe token).
+		workcount.Add(workcount.DedupVisit, len(group))
 		for _, ib := range group {
 			if ib == ia || suppressed[ib] {
 				continue
@@ -373,6 +378,7 @@ func resolveOwners(in []findings.Finding, order, groupStart, groupEnd []int, sup
 // ownerPresent reports whether some non-suppressed finding overlapping fa's
 // span is a canonical owner in owners.
 func ownerPresent(in []findings.Finding, order []int, suppressed []bool, fa *findings.Finding, owners map[string]struct{}) bool {
+	workcount.Add(workcount.DedupVisit, len(order))
 	for _, idx := range order {
 		if suppressed[idx] {
 			continue
@@ -411,6 +417,7 @@ func ownerSuppression(in []findings.Finding, order []int, suppressed []bool, anc
 
 // ownerIndex returns the index of a surviving canonical owner overlapping fa.
 func ownerIndex(in []findings.Finding, order []int, suppressed []bool, fa *findings.Finding, owners map[string]struct{}) (int, bool) {
+	workcount.Add(workcount.DedupVisit, len(order))
 	for _, idx := range order {
 		if suppressed[idx] {
 			continue
