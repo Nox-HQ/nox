@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A newly disclosed advisory gets exactly the response you configured.**
+  `nox install-ci` writes one workflow that scans pull requests and, on a daily
+  schedule, scans the merged code and works out which dependency advisories are
+  new since the previous scheduled run. `nox advisories` decides what to do
+  about each, from the `.nox.yaml` `advisories` block: `report` (the default:
+  job summary, SARIF, an issue), `prepare` (also a remediation pull request
+  carrying only the new advisories' upgrades, through `actions/remediate`) or
+  `remediate` (also permits `gh pr merge --auto`, only when every advisory in
+  that pull request passes the stricter gate and the package move is within
+  `max_bump`; GitHub's required checks decide whether it merges, and nothing
+  bypasses them). Gates are `min_severity` and `min_relevance`
+  (`undetermined`, `symbol_used`, `call_reachable`). Undetermined relevance is
+  treated as possibly affecting the application and the reason says so; only a
+  refuted `not_impacting` advisory is held at report. A waived or baselined
+  advisory is never new; with no previous run, or a scan whose lookup failed,
+  nothing is acted on and `nox advisories` says so. The decision is a pure
+  function in `core/advisory`. `actions/remediate` gains a `findings-file`
+  input, and `remediate.sh` no longer fails on bash 3.2 when no extra arguments
+  are set. See `docs/advisory-policy.md`.
+
+- **`nox compliance iso27001`, and an MCP tool `compliance_iso27001`.** Reads
+  the outputs of a scan already run (`findings.json`, an SBOM,
+  `ai.inventory.json`) and writes `iso27001.md` for a reviewer and
+  `iso27001.json` for tooling: for 16 ISO/IEC 27001:2022 Annex A controls, what
+  the scan shows with counts, rule IDs, source file and SHA-256, the gaps in
+  this run, what that evidence can never show, and a 25-item checklist of the
+  organizational evidence a repository cannot hold (risk assessment, ISMS
+  scope, access reviews, incident records, supplier agreements). It never
+  states that a control is met: statuses describe the evidence
+  (`supporting_evidence`, `open_issues`, `limited_evidence`, `not_evidenced`),
+  and a test rejects any status or word that claims more. An empty result only
+  counts when the outputs show something was there to check, a scan without a
+  recorded advisory lookup is not read as "no known vulnerabilities", and
+  waived findings keep a control at limited. Deterministic, offline, no scan;
+  the same outputs give the same bytes. See `docs/compliance-iso27001.md`.
+
+- **`nox fix plan | apply | verify`: "can you fix these?" answered, and checked.**
+  `plan` takes every issue the assessment listed (same numbering) and says
+  which are safe to apply, which need review and why (a major upgrade, a
+  settings change that alters a deployed system), and which nox cannot fix and
+  exactly what each needs (a published fix, a decision about a prompt
+  boundary, a two-account test). `apply` makes the safe set (`--include-major`
+  and `--include-review` widen it), then re-runs the checks that produced the
+  targeted findings and reports each change as verified fixed, still present,
+  new finding introduced, could not verify, or not applied. "Fixed" is claimed
+  only when the check ran to completion and no longer reports the finding; an
+  upgrade to a release the advisory still affects is reported as still
+  present even though every fingerprint changed, and an offline run reports
+  dependency changes as not verified rather than fixed. `verify` re-runs the
+  checks after a change made by hand. `--format json` for CI. Built in
+  `core/remediate` on `core/assess` and `core/fix`; the MCP `fix_plan` tool
+  returns the same plan (`plan`, `text`) and the LSP attaches each finding's
+  entry to its diagnostic. MCP stays read-only: applying is a command a person
+  runs. The bare `nox fix` flags, and the remediation workflow that uses them,
+  are unchanged. The assessment's next step now points at `nox fix plan`.
 - **`nox scan` ends with an assessment instead of counts.** Issues are grouped
   by the action that resolves them: one line per upgrade the `nox fix` planner
   would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known
@@ -51,6 +106,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instances; ordinary apps 12 object-level TP plus 5 missing admin checks and
   0 FP, from only three apps. The FPs are all resources shared by design,
   which source cannot tell apart, hence leads by default.
+
+### Changed
+
+- **The assessment describes what was not checked in capabilities, not plugins.**
+  `nox scan .` on an ordinary app used to say "Optional plugins are installed
+  but not enabled" and send the reader to pick from fifteen names. It now says
+  what would have been checked ("API abuse patterns (rate limiting, error detail)", "exposed
+  endpoints and admin or debug routes") and groups live testing (probing a
+  running app, inspecting a cluster, adversarial prompts) into one line that
+  points at `nox attack plan`. A plugin whose check core already performs
+  (container configuration, data-flow analysis), one measured to hurt
+  (reachability, pattern triage, pattern threat modelling) and one that only
+  annotates are no longer offered as gaps. Nothing is auto-enabled: all 15
+  installed plugins were run against six real trees and none earns it
+  (`docs/plugin-defaults.md`), and enabling by what happens to be installed
+  would make findings depend on the machine. The degradation is unchanged:
+  `findings.json` and `--verbose` still list every plugin that did not run,
+  and `--fail-on-degraded` behaves as before. Plugin knowledge is in
+  `core/plugincap`. Also: the `generated_report` degradation is worded as
+  "Reports nox wrote itself were not scanned" instead of leaking its kind.
 
 ### Fixed
 

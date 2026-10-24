@@ -14,6 +14,7 @@ Additional verification recommended:
   - Authorization: GET /api/invoices/:id (src/routes/invoices.js:14) loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts: request user A's record while signed in as user B.
 
 Next steps:
+  - See what nox can fix, what needs your review, and what it cannot: nox fix plan --input ./findings.json
   - Plan the runtime tests (offline, sends nothing): nox attack plan . --findings ./findings.json
   - Record a reviewed, accepted risk as a waiver: nox vex init --input ./findings.json
   - Catch new issues before they are committed: nox install-hook

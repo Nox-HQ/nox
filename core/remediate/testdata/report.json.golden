@@ -1,0 +1,60 @@
+{
+  "outcomes": [
+    {
+      "n": 1,
+      "title": "Upgrade axios 1.7.4 -\u003e 1.20.0: fixes 2 known vulnerabilities (highest severity: high).",
+      "status": "verified_fixed",
+      "detail": "The re-run no longer reports any of the 2 findings this change targeted.",
+      "targeted": 2,
+      "remaining": 0
+    },
+    {
+      "n": 2,
+      "title": "Upgrade body-parser 1.20.3 -\u003e 1.20.9: fixes 1 known vulnerability (highest severity: high).",
+      "status": "not_applied",
+      "detail": "Not applied: body-parser is transitive and a parent's version range excludes the fix. Its findings are unchanged.",
+      "targeted": 1,
+      "remaining": 1
+    },
+    {
+      "n": 3,
+      "title": "Upgrade jsonwebtoken 9.0.0 -\u003e 9.0.2: fixes 1 known vulnerability (highest severity: high).",
+      "status": "new_finding_introduced",
+      "detail": "The change introduced 1 finding the original scan did not report. The finding it targeted is gone.",
+      "targeted": 1,
+      "remaining": 0,
+      "new": [
+        "VULN-001 GHSA-jwt-NEW in jsonwebtoken@9.0.2"
+      ]
+    },
+    {
+      "n": 5,
+      "title": "Upgrade qs 6.13.0 -\u003e 6.16.0: fixes 1 known vulnerability (highest severity: medium).",
+      "status": "still_present",
+      "detail": "The finding it targeted is still reported after the change: qs is at 6.14.0, and 1 advisory still affects that version (GHSA-qs-0001).",
+      "targeted": 1,
+      "remaining": 1
+    },
+    {
+      "n": 6,
+      "title": "Upgrade pg 8.0.0 -\u003e 8.0.1: fixes 1 known vulnerability (highest severity: low).",
+      "status": "verified_fixed",
+      "detail": "The re-run no longer reports the finding this change targeted.",
+      "targeted": 1,
+      "remaining": 0
+    }
+  ],
+  "counts": {
+    "verified_fixed": 2,
+    "still_present": 1,
+    "new_finding_introduced": 1,
+    "not_verified": 0,
+    "not_applied": 1
+  },
+  "rechecked": [
+    "dependency"
+  ],
+  "untouched": [
+    4
+  ]
+}

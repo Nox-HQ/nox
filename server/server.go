@@ -27,6 +27,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/git"
+	"github.com/nox-hq/nox/core/remediate"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/core/vex"
@@ -334,7 +335,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Handler(s.handleVEXStatus)
 
 	srv.Tool("fix_plan").
-		Description("Plan dependency upgrade actions from VULN-001 findings with fixed_in metadata. Read-only — returns the upgrade plan as a list; never mutates the workspace. Operators apply via the nox fix CLI subcommand.").
+		Description("Plan the fixes for the last scan: every issue classified as safe to apply, needs review, or needs information (with what is needed), plus the dependency upgrade actions. Read-only — never mutates the workspace. A person applies it with nox fix apply, which then re-runs the checks and reports what was verified.").
 		ReadOnly().
 		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
@@ -342,6 +343,9 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	// Offline attack planning. The ACTIVE half of `nox attack` is deliberately
 	// not registered — see the rationale at the top of server/attack.go.
 	s.registerAttackTools(srv)
+
+	// Technical evidence for ISO/IEC 27001, derived from the cached scan.
+	s.registerComplianceTools(srv)
 
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
@@ -1667,6 +1671,13 @@ type fixPlanResponse struct {
 	MajorSkipped int         `json:"major_skipped"`
 	VulnCount    int         `json:"vuln_count"`
 	Note         string      `json:"note,omitempty"`
+	// Plan is the same classified plan `nox fix plan` prints: every issue the
+	// assessment lists, as safe to apply, needs review, or needs information.
+	// Actions above stays for clients written against the dependency-only plan.
+	Plan remediate.Plan `json:"plan"`
+	// Text is Plan rendered as `nox fix plan` renders it, so an agent relaying
+	// it to a person says what the CLI would say.
+	Text string `json:"text"`
 }
 
 func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
@@ -1682,7 +1693,7 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor})
 
 	resp := fixPlanResponse{
-		Note:         "Plan only. Apply with: nox fix --input findings.json",
+		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",
 		Actions:      []fixAction{},
 		Skipped:      plan.Skipped,
 		MajorSkipped: plan.MajorSkipped,
@@ -1698,6 +1709,17 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 			Command:   a.Command(),
 		})
 	}
+
+	// One plan for everything the assessment lists, built by the same code the
+	// CLI uses. Nothing in it is applied here.
+	resp.Plan = remediate.Build(remediate.Input{
+		Findings: pc.result.Findings.ActiveFindings(),
+		Rules:    pc.result.Rules,
+		Root:     pc.basePath,
+	})
+	var text strings.Builder
+	_ = remediate.RenderPlan(&text, resp.Plan)
+	resp.Text = text.String()
 
 	switch {
 	case len(resp.Actions) > 0:

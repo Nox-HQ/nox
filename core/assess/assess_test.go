@@ -12,6 +12,7 @@ import (
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/plugincap"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files from the current output")
@@ -107,9 +108,19 @@ func scopes(t *testing.T, only, skip string) nox.ScopeSet {
 	return s
 }
 
+// installedPlugins is the set measured in docs/plugin-defaults.md, the one a
+// developer who has tried the marketplace is likely to have.
+var installedPlugins = []string{
+	"freshness", "nox/ai-eval", "nox/api-abuse", "nox/attack-surface",
+	"nox/container", "nox/dast", "nox/depconfusion", "nox/grc",
+	"nox/k8s-runtime", "nox/reachability", "nox/remediate",
+	"nox/taint-analysis", "nox/threat-enrich", "nox/threat-model",
+	"nox/triage-agent",
+}
+
 var undeclaredPlugins = nox.Degradation{
 	Kind:     "plugin",
-	Detail:   "15 installed plugin(s) are not listed in plugins.required and did not run: freshness, nox/ai-eval",
+	Detail:   plugincap.UndeclaredDetail(installedPlugins),
 	Impact:   "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
 	Advisory: true,
 }
@@ -293,6 +304,89 @@ func TestRenderGolden(t *testing.T) {
 				t.Errorf("assessment differs from %s\n--- got ---\n%s\n--- want ---\n%s", golden, got, want)
 			}
 		})
+	}
+}
+
+// The vision: nobody has to know which component performs a check. The
+// assessment names capabilities; a plugin name appearing in it is the defect.
+func TestNotCheckedNamesCapabilitiesNotPlugins(t *testing.T) {
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{undeclaredPlugins}})
+	var b bytes.Buffer
+	if err := Render(&b, r, RenderOptions{Limit: DefaultLimit}); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, n := range installedPlugins {
+		// "freshness" is also an ordinary word, and the capability is allowed
+		// to use it; the registry-qualified names are what must not appear.
+		if n != "freshness" && strings.Contains(out, n) {
+			t.Errorf("the assessment names plugin %q:\n%s", n, out)
+		}
+	}
+	// plugins.required is the config key the one action points at; nothing else
+	// in the account may talk about plugins.
+	if strings.Contains(strings.ReplaceAll(out, "plugins.required", ""), "plugin") {
+		t.Errorf("the assessment says \"plugin\":\n%s", out)
+	}
+	for _, c := range []string{"API abuse patterns (rate limiting, error detail)", "exposed endpoints and admin or debug routes", "dependency-confusion exposure"} {
+		if !strings.Contains(out, c) {
+			t.Errorf("an unchecked capability %q is not named:\n%s", c, out)
+		}
+	}
+	// Live testing is its own line: it needs authorization, which an optional
+	// static check does not.
+	if !strings.Contains(out, "Live testing did not run (adversarial prompts against a live chat endpoint, inspecting running Kubernetes workloads and probing a running web application)") {
+		t.Errorf("live testing is not stated as such:\n%s", out)
+	}
+}
+
+// A plugin whose check core performs, one measured to hurt, and one that only
+// annotates are not gaps. Listing them as "Not checked" would tell the reader
+// container configuration was skipped (core checks it) and invite them to turn
+// on a reachability that calls a transitive dependency a likely false positive.
+func TestCoveredRetiredAndAdjunctPluginsAreNotListedAsGaps(t *testing.T) {
+	d := nox.Degradation{
+		Kind:     "plugin",
+		Detail:   plugincap.UndeclaredDetail([]string{"nox/container", "nox/taint-analysis", "nox/reachability", "nox/triage-agent", "nox/threat-model", "nox/threat-enrich", "nox/remediate", "nox/grc"}),
+		Impact:   "their findings are absent from this scan",
+		Advisory: true,
+	}
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{d}})
+	for _, l := range r.NotChecked {
+		t.Errorf("a plugin that leaves no gap produced a Not checked line: %+v", l)
+	}
+}
+
+// What did not run stays accounted for in full, with names, for the machine
+// outputs and --verbose. Only the assessment's wording is capability-shaped.
+func TestDegradationDetailStillNamesEveryPlugin(t *testing.T) {
+	for _, n := range installedPlugins {
+		if !strings.Contains(undeclaredPlugins.Detail, n) {
+			t.Errorf("the degradation no longer names %q", n)
+		}
+	}
+	if !undeclaredPlugins.Advisory {
+		t.Error("an unenabled plugin must stay an advisory degradation, not a failure")
+	}
+}
+
+// A degradation another producer wrote, in a shape plugincap cannot read, must
+// not vanish from the assessment.
+func TestUnreadablePluginDegradationFallsBackToAGenericLine(t *testing.T) {
+	d := nox.Degradation{Kind: "plugin", Detail: "something else entirely", Impact: "x", Advisory: true}
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{d}})
+	if len(r.NotChecked) != 1 || !strings.Contains(r.NotChecked[0].Summary, "Optional checks are installed but not enabled") {
+		t.Fatalf("NotChecked = %+v", r.NotChecked)
+	}
+}
+
+// An internal degradation kind is not a sentence. "A check did not complete
+// (generated_report)" put a Go identifier in front of a first-time user.
+func TestEveryAdvisoryKindHasAHeadline(t *testing.T) {
+	d := nox.Degradation{Kind: "generated_report", Detail: "6 file(s) not scanned", Impact: "a nox report holds nox's own text", Advisory: true}
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{d}})
+	if len(r.NotChecked) != 1 || strings.Contains(r.NotChecked[0].Summary, "generated_report") {
+		t.Fatalf("NotChecked = %+v", r.NotChecked)
 	}
 }
 

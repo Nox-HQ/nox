@@ -538,7 +538,58 @@ mapping, and sandbox guidance.
 
 ### fix
 
-Generate remediations from a prior scan's `findings.json`.
+Answers "can you fix these?" for a prior scan's `findings.json`: it plans the
+changes, applies the ones you allow, and then runs the checks again to see
+whether they worked.
+
+```bash
+nox fix plan                      # what nox can fix, what needs you; writes nothing
+nox fix apply                     # apply the safe set, re-run the checks, report
+nox fix apply --include-major     # ...and major-version upgrades
+nox fix apply --include-review    # ...and every change that needs review
+nox fix verify                    # re-run the checks after a change you made by hand
+```
+
+`plan` lists every issue the assessment showed, with the assessment's numbers,
+in one of three classes:
+
+- **Safe to apply**: a published dependency fix on the same major version, a
+  GitHub Action pin, a configuration change that cannot alter what is deployed
+  (`continue-on-error: true` to `false`).
+- **Needs your review**: a major-version upgrade, or a one-line settings change
+  that alters how a deployed system behaves (`privileged: true` to `false`, a
+  Terraform `storage_encrypted`, an `ADD` to `COPY`). The item says what could
+  break.
+- **Needs information, or cannot be fixed automatically**: a vulnerable package
+  with no fixed version, an upgrade nox cannot drive, a code finding with no
+  deterministic fixer (prompt injection, SQL injection, ...), or an
+  authorization hint that only a two-account test settles. The item says
+  exactly what is needed.
+
+`apply` changes nothing outside the safe set unless you pass `--include-major`
+or `--include-review`. It then re-runs the checks that produced the targeted
+findings (the dependency check for upgrades, the infrastructure check for
+patched configuration) and reports, per change:
+
+- **Verified fixed**: the check ran to completion and no longer reports the
+  finding. This is the only status that claims success.
+- **Still present**: the change was made and the finding is still reported
+  (for example, an upgrade to a version the advisory still affects).
+- **New finding introduced**: the re-run reports a finding on the package or
+  files the change touched that the original scan did not.
+- **Could not verify**: the check could not run again (`--offline` cannot
+  look up dependency vulnerabilities; a failed lookup is the same), so nothing
+  is claimed.
+- **Not applied**: the change could not be made, with the reason.
+
+The exit code is 0 only when every attempted change is verified fixed.
+`--format json` writes one JSON document for CI and agents; `--no-verify`
+skips the re-run (the changes are then unverified, and the output says so).
+The MCP `fix_plan` tool and the LSP show the same plan. They plan and explain;
+applying stays a command a person runs.
+
+The flag-driven forms below are unchanged; a bare `nox fix` still applies
+dependency upgrades at once.
 
 ```bash
 # Dependency upgrades for VULN findings (applies unless --dry-run)
@@ -747,6 +798,22 @@ two commands:
 nox fix --actions --input findings.json --root .
 nox fix --outdated --root .
 ```
+
+### advisories
+
+Decide what to do about a dependency advisory that was disclosed after the code
+was merged: report it, prepare a fix, or carry the fix as far as your policy
+allows.
+
+```bash
+nox install-ci      # writes .github/workflows/nox.yml: PR scan + scheduled advisory watch
+nox advisories --input findings.json --previous last-run/findings.json
+```
+
+The policy is the `advisories` block in `.nox.yaml` and defaults to `report`.
+Undetermined relevance is never read as "not affected". Full semantics, the
+decision table and how "new" is determined are in
+[advisory-policy.md](./advisory-policy.md).
 
 ### variants
 
@@ -1843,6 +1910,9 @@ inventory is not an all-clear.
 ## CI/CD Integration
 
 ### GitHub Actions
+
+To wire up everything below, including a scheduled watch for newly disclosed
+advisories, run `nox install-ci` (see [advisory-policy.md](./advisory-policy.md)).
 
 #### Using the Nox Action (recommended)
 
