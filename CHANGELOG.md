@@ -37,6 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service that will publish the feed; the CLI keeps only file, bundled and
   remote loading, and `cmd/slopfeed` is now a thin command line over it with
   the same flags and output.
+
+- **DATA-012 reported every passport.js application as leaking a passport
+  number.** The pattern was case-insensitive throughout, so its value class
+  `[A-Z0-9]{6,12}` matched any six-letter word: `const passport =
+  require('passport')` was a HIGH finding with `require` as the number. Only
+  the key is case-insensitive now; the value must be upper-case, end at a word
+  boundary and contain a digit (US, UK), or be a nine-character German serial
+  from the vowel-free PassV alphabet. The key must bind the value, directly or
+  as the number field of a passport object, and the JSON key forms that were
+  missed before now fire. DATA-010 (health record id) and DATA-011 (driver's
+  licence) shared the construction and the false positive (`patient_id =
+  request.args...`, `license_number = license.number`) and get the same value
+  check. Measured: DATA-012 6 -> 0 on hackathon-starter and 2 -> 0 on
+  node_passport_login (every drop a `require` line); no change on the other 25
+  corpus repositories; generated real-format values still fire.
+  hackathon-starter joins the rule-diff corpus as the witness.
 - **VULN-002 reported established packages as typosquats.** The ~240
   hand-picked popular names per ecosystem were both the targets a typosquat
   imitates and the only exemption, so any established package one edit from a

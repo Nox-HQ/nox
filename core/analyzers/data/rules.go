@@ -129,27 +129,41 @@ func builtinDataRules() []*rules.Rule {
 			remediation:   "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:    []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
+		// DATA-010..012 share one construction: a key, an assignment, and a
+		// document-number value. Only the key is case-insensitive. The value
+		// is upper-case (ICAO 9303 and the national formats are), must end at
+		// a word boundary, and must contain a digit (see validate.go). The
+		// whole pattern used to be case-insensitive, so the value class
+		// matched any six-letter word: `const passport = require('passport')`
+		// reported `require` as a passport number in every passport.js app.
 		{
 			id: "DATA-010", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(?:mrn|medical_record|patient_id|health_id)\s*[=:]\s*['"]?[A-Z0-9-]{6,20}`,
+			pattern:     `(?i:mrn|medical_record|patient_id|health_id)["']?\s*(?::=|=>|[=:])\s*["']?[A-Z0-9-]{6,20}\b`,
 			description: "Health record identifier (MRN/patient_id)",
 			cwe:         "CWE-359", keywords: []string{"mrn", "medical_record", "patient_id", "health_id"},
+			validate:    isDocumentNumberMatch,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
 		{
 			id: "DATA-011", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(?:driver_?license|dl_?number|license_?number)\s*[=:]\s*['"]?[A-Z0-9-]{6,15}`,
+			pattern:     `(?i:driver_?license|dl_?number|license_?number)["']?\s*(?::=|=>|[=:])\s*["']?[A-Z0-9-]{6,15}\b`,
 			description: "Driver's license number pattern",
 			cwe:         "CWE-359", keywords: []string{"driver_license", "driverlicense", "dl_number", "dlnumber", "license_number", "licensenumber"},
+			validate:    isDocumentNumberMatch,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},
 		{
+			// The key is `passport` or a passport-number key, and the value is
+			// bound to it: assigned to the key directly, or as the number field
+			// of a passport object (`"passport": {"number": ...}`). Spelling a
+			// complete example here would make this comment a finding.
 			id: "DATA-012", severity: findings.SeverityHigh, confidence: findings.ConfidenceLow,
-			pattern:     `(?i)(?:passport|passport_?number|passport_?no)\s*[=:]\s*['"]?[A-Z0-9]{6,12}`,
+			pattern:     `(?i:passport(?:[ _.\-]?(?:number|num|no|nr))?)["']?\s*(?::=|=>|[=:])\s*(?:\{\s*["']?(?i:number|num|no|nr)["']?\s*:\s*)?["']?[A-Z0-9]{6,12}\b`,
 			description: "Passport number pattern",
 			cwe:         "CWE-359", keywords: []string{"passport", "passport_number", "passportnumber", "passport_no", "passportno"},
+			validate:    isPassportNumberMatch,
 			remediation: "Remove or externalize PII data. Never hard-code sensitive personal information in source code or configuration files. Use environment variables, encrypted vaults, or database references.",
 			references:  []string{"https://cwe.mitre.org/data/definitions/359.html"},
 		},

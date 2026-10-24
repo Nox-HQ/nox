@@ -25,7 +25,8 @@
     "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context",
     "keyword-tokenized": "the rule's vendor keyword must now be a token; it used to match as a bare substring, so it could be supplied by an accident inside opaque data or by an ordinary English word",
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
-    "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
+    "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential",
+    "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier"
   },
   "entries": [
     {
@@ -33,6 +34,12 @@
       "classification": "refined-away",
       "pr": 843,
       "reason": "A package in the embedded established set (npm-high-impact 1.13.0; top 10,000 PyPI by downloads) is not a typosquat of the curated target it sits one edit from. Every corpus drop was read: reitit's safer-buffer (vs safe-buffer) and di (vs d3, the AngularJS DI library karma depends on), and anthropic-sdk-python's httpx2 (vs httpx), published from github.com/pydantic/httpx2 by httpx's author and declared in that SDK's own pyproject.toml. A known-malicious name is never exempt."
+    },
+    {
+      "rule": "DATA-012",
+      "classification": "value-shape-required",
+      "pr": 853,
+      "reason": "A passport number is upper-case and contains a digit (US: 9 digits or a letter and 8 digits; UK: 9 digits), or is a German serial of nine characters from the vowel-free PassV alphabet. Every corpus drop was read: all six are hackathon-starter's `const passport = require('passport')` / `require('passport-strategy')` lines, where the case-insensitive value class read `require` as the number. Generated real-format values in a passport-number key still fire, and the JSON key form (`\"passport_number\": ...`, `\"passport\": {\"number\": ...}`) now fires where it was missed before."
     }
   ]
 }
