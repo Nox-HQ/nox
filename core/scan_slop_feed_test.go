@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nox-hq/nox/core/analyzers/slop/feed"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -40,16 +40,18 @@ func countRule(res *ScanResult, ruleID string) int {
 	return n
 }
 
-func writeFeedFile(t *testing.T, dir, name string, entries ...feed.Entry) string {
+func writeFeedFile(t *testing.T, dir, name string, entries ...slopfeed.Entry) string {
 	t.Helper()
-	f := &feed.Feed{
-		SchemaVersion: feed.SchemaVersion,
+	f := &slopfeed.Feed{
+		SchemaVersion: slopfeed.SchemaVersion,
 		Version:       "test-2026.07.25",
 		GeneratedAt:   "2026-07-25T00:00:00Z",
 		Source:        "test",
 		Entries:       entries,
 	}
-	f.SetDigest()
+	if err := f.SetDigest(); err != nil {
+		t.Fatal(err)
+	}
 	data, err := json.Marshal(f)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +98,7 @@ func TestScanWithFeedAddsPredictiveOnly(t *testing.T) {
 	baseSlop001 := countRule(baseRes, "SLOP-001")
 
 	// Configure a feed that flags openai-utils, then re-scan.
-	writeFeedFile(t, root, "slopfeed.json", feed.Entry{
+	writeFeedFile(t, root, "slopfeed.json", slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "unregistered high-risk", VerifiedAt: "2026-07-25",
 	})
@@ -129,7 +131,7 @@ func TestScanTamperedFeedFailsClosed(t *testing.T) {
 	root := writeProject(t, map[string]string{
 		"app.py": "import openai_utils\n",
 	})
-	path := writeFeedFile(t, root, "slopfeed.json", feed.Entry{
+	path := writeFeedFile(t, root, "slopfeed.json", slopfeed.Entry{
 		Name: "openai-utils", Ecosystem: "pypi", Pattern: "obvious",
 		Risk: 0.82, Tier: "critical", Reason: "x", VerifiedAt: "2026-07-25",
 	})
