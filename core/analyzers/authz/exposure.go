@@ -67,7 +67,11 @@ type routeView struct {
 	// guardUnseen: the route sits where a global guard may apply that this
 	// reader could not attribute to it, so an empty Authn proves nothing.
 	guardUnseen bool
-	framework   string
+	// declaredPublic: the source says the route is public (a DRF AllowAny
+	// permission class, @login_not_required). That is intent, not absence, so
+	// it is never a missing-authentication lead.
+	declaredPublic bool
+	framework      string
 }
 
 // ---- comment stripping ----
@@ -212,7 +216,7 @@ func nonProductionPath(p string) bool {
 // lead that records it.
 func missingAuthLead(v routeView) (Lead, bool) {
 	r := v.route
-	if r.Authn != "" || r.Authz != "" || v.guardUnseen || nonProductionPath(r.FilePath) {
+	if r.Authn != "" || r.Authz != "" || v.guardUnseen || v.declaredPublic || nonProductionPath(r.FilePath) {
 		return Lead{}, false
 	}
 	if r.Path == "" || r.Path == "/" || strings.Contains(r.Path, "*") && len(pathSegments(r.Path)) == 0 {
