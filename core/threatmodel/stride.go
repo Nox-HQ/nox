@@ -60,6 +60,11 @@ func (b *builder) attach(f findings.Finding) []*elem {
 		return nil
 	}
 	file := f.Location.FilePath
+	if e := b.resourceFor(f); e != nil {
+		// The rule names the kind of resource and the inventory says which
+		// one the finding sits in.
+		return []*elem{e}
+	}
 	var out []*elem
 	for _, id := range sortedIDs(b.elems) {
 		e := b.elems[id]
@@ -71,6 +76,9 @@ func (b *builder) attach(f findings.Finding) []*elem {
 		// which of them a finding is about. A finding is attached to such an
 		// element only when its rule names that kind of resource; any other
 		// finding in the file belongs to none of them.
+		if e.resource != nil && b.infraPerFile[file] > 1 {
+			continue
+		}
 		if e.infra != nil && b.infraPerFile[file] > 1 {
 			row, named := iacRules[f.RuleID]
 			if !named || row.kind != e.infra.kind || row.sub != e.infra.sub {

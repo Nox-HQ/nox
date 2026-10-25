@@ -40,6 +40,7 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.Leads = r.ReportLeads()
 	rep.LeadChecks = r.LeadChecks
 	rep.Routes = r.ReportRoutes()
+	rep.Infrastructure = r.Infrastructure
 	return rep
 }
 

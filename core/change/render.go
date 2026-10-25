@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // DefaultLimit is how many lines each section lists before summarising the
@@ -42,6 +43,10 @@ func Render(w io.Writer, d Delta, limit int) error {
 		ag = append(ag, agentLine(a))
 	}
 	section(b, "Agent capabilities", len(ag), ag, limit)
+
+	weaker, stronger := infra.Split(d.Infrastructure)
+	section(b, "Infrastructure assumptions weakened", len(weaker), infraLines(weaker), limit)
+	section(b, "Infrastructure assumptions strengthened", len(stronger), infraLines(stronger), limit)
 
 	var comps []string
 	for _, c := range d.ComponentsAdded {
@@ -149,6 +154,14 @@ func findingLines(items []Item) []string {
 	sort.SliceStable(all, func(i, j int) bool { return all[i].rank < all[j].rank })
 	for _, r := range all {
 		lines = append(lines, r.line)
+	}
+	return lines
+}
+
+func infraLines(cs []infra.Change) []string {
+	lines := make([]string, 0, len(cs))
+	for _, c := range cs {
+		lines = append(lines, c.Line())
 	}
 	return lines
 }

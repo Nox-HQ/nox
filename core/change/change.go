@@ -45,6 +45,7 @@ import (
 	"github.com/nox-hq/nox/core/advisory"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 	"github.com/nox-hq/nox/core/report"
 )
 
@@ -65,6 +66,12 @@ type State struct {
 	LeadsRecorded bool
 	// Inventory is the AI inventory, or nil when none was recorded.
 	Inventory *ai.Inventory
+	// Infrastructure is the deployment inventory the scan read, or nil.
+	Infrastructure *infra.Inventory
+	// InfrastructureRecorded is whether this state knows its infrastructure.
+	// A findings.json written before the inventory existed does not, and "no
+	// inventory recorded" must not read as "no infrastructure".
+	InfrastructureRecorded bool
 	// Incomplete lists the checks that did not complete in this scan.
 	Incomplete []string
 	// Scanned is the scopes a scoped scan covered; nil means a full scan.
@@ -94,6 +101,9 @@ func FromReport(rep report.JSONReport, inv *ai.Inventory, label string) State {
 		Leads:         rep.Leads,
 		LeadsRecorded: len(rep.LeadChecks) > 0,
 		Inventory:     inv,
+
+		Infrastructure:         rep.Infrastructure,
+		InfrastructureRecorded: rep.Infrastructure != nil,
 	}
 	for _, d := range rep.Meta.Degradations {
 		if !d.Advisory {
@@ -183,6 +193,12 @@ type Delta struct {
 	// ComponentsAdded and ComponentsRemoved are AI components that came or went.
 	ComponentsAdded   []ComponentChange `json:"components_added,omitempty"`
 	ComponentsRemoved []ComponentChange `json:"components_removed,omitempty"`
+	// Infrastructure are the security-relevant properties of deployment
+	// resources that got weaker or stronger since the earlier state: the
+	// assumptions a change invalidated, which findings alone cannot name
+	// because a hardened resource has none. Hints, like leads: never counted
+	// as regressions and never findings.
+	Infrastructure []infra.Change `json:"infrastructure,omitempty"`
 	// Caveats say what could not be compared or may be misleading. A delta with
 	// caveats is not a clean bill of health.
 	Caveats []string `json:"caveats,omitempty"`
@@ -198,6 +214,7 @@ func Compare(prev, cur State) Delta {
 	compareFindings(&d, pf, cf)
 	compareLeads(&d, prev, cur)
 	compareInventory(&d, prev, cur)
+	compareInfrastructure(&d, prev, cur)
 	d.Caveats = append(d.Caveats, caveats(prev, cur)...)
 	return d
 }
@@ -206,7 +223,8 @@ func Compare(prev, cur State) Delta {
 func (d Delta) Empty() bool {
 	return len(d.New) == 0 && len(d.Resolved) == 0 && len(d.Waived) == 0 &&
 		len(d.SeverityChanged) == 0 && len(d.NewLeads) == 0 && len(d.ResolvedLeads) == 0 &&
-		len(d.Agents) == 0 && len(d.ComponentsAdded) == 0 && len(d.ComponentsRemoved) == 0
+		len(d.Agents) == 0 && len(d.ComponentsAdded) == 0 && len(d.ComponentsRemoved) == 0 &&
+		len(d.Infrastructure) == 0
 }
 
 // Regressions counts what got worse in findings: new issues plus severity
@@ -571,6 +589,18 @@ func compareComponents(d *Delta, prev, cur *ai.Inventory) {
 	less(d.ComponentsRemoved)
 }
 
+// ---- infrastructure ---------------------------------------------------------
+
+// compareInfrastructure names the properties of resources present in both
+// states that got weaker or stronger. Both states must have recorded their
+// infrastructure; otherwise caveats says why nothing is compared.
+func compareInfrastructure(d *Delta, prev, cur State) {
+	if !prev.InfrastructureRecorded || !cur.InfrastructureRecorded {
+		return
+	}
+	d.Infrastructure = infra.Compare(prev.Infrastructure, cur.Infrastructure)
+}
+
 // ---- caveats ----------------------------------------------------------------
 
 func caveats(prev, cur State) []string {
@@ -601,6 +631,11 @@ func caveats(prev, cur State) []string {
 	if !prev.LeadsRecorded && len(cur.Leads) > 0 {
 		out = append(out, "Authorization leads were not compared: the earlier findings.json did not record them. "+
 			"This scan has "+strconv.Itoa(len(cur.Leads))+".")
+	}
+	if !prev.InfrastructureRecorded && cur.Infrastructure != nil && !cur.Infrastructure.Empty() {
+		out = append(out, "Infrastructure assumptions were not compared: the earlier findings.json did not record the "+
+			"deployment inventory (it predates it, or the earlier tree had no infrastructure files). "+
+			"This scan read "+strconv.Itoa(len(cur.Infrastructure.Resources))+" resources.")
 	}
 	if cur.Inventory != nil && !inventoryUsable(prev.Inventory) && (len(cur.Inventory.Components) > 0 || len(cur.Inventory.ToolMatrix) > 0) {
 		out = append(out, "AI components and agent capabilities were not compared: the earlier scan has no AI inventory "+

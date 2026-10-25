@@ -8,6 +8,7 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // Artifact names used in evidence. They are the base names a scan writes, and
@@ -49,6 +50,8 @@ type elem struct {
 	toolCaps  map[string][]string
 	// infra is set on an element derived from an infrastructure rule.
 	infra *iacRow
+	// resource is set on an element derived from the deployment inventory.
+	resource *infra.Resource
 }
 
 // builder accumulates the model.
@@ -60,10 +63,12 @@ type builder struct {
 	flows  map[string]*Flow
 	// infraPerFile counts the infrastructure elements derived from each file.
 	infraPerFile map[string]int
+	// resources are the inventory's elements by file, in declaration order.
+	resources map[string][]*elem
 }
 
 func newBuilder(in Input) *builder {
-	b := &builder{in: in, elems: map[string]*elem{}, flows: map[string]*Flow{}, infraPerFile: map[string]int{}}
+	b := &builder{in: in, elems: map[string]*elem{}, flows: map[string]*Flow{}, infraPerFile: map[string]int{}, resources: map[string][]*elem{}}
 	for _, f := range in.Report.Findings {
 		if f.Status.IsActive() {
 			b.active = append(b.active, f)
@@ -556,6 +561,7 @@ func (b *builder) supplyChainFindings() []findings.Finding {
 }
 
 func (b *builder) collectInfrastructure() {
+	b.collectResources()
 	all := append(append([]findings.Finding(nil), b.active...), b.waived...)
 	sort.SliceStable(all, func(i, j int) bool {
 		if all[i].Location.FilePath != all[j].Location.FilePath {
@@ -575,7 +581,7 @@ func (b *builder) collectInfrastructure() {
 	var order []string
 	for _, f := range all {
 		row, ok := iacRules[f.RuleID]
-		if !ok {
+		if !ok || b.resourceFor(f) != nil {
 			continue
 		}
 		key := row.kind + "|" + row.sub + "|" + f.Location.FilePath

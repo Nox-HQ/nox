@@ -12,6 +12,7 @@ import (
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // GeneratedAt returns the report timestamp. It honors SOURCE_DATE_EPOCH (the
@@ -208,6 +209,13 @@ type JSONReport struct {
 	// a later run can tell "this nox looked and found none" from "this nox
 	// predates leads". Omitted when the check read nothing.
 	LeadChecks []string `json:"lead_checks,omitempty"`
+	// Infrastructure is the deployment resources the scan read from
+	// infrastructure as code, with the security-relevant properties of each,
+	// hardened resources included. It is context, never findings: a resource
+	// that is configured correctly has no finding, so findings alone cannot say
+	// that an earlier assumption no longer holds. Present only when the scan
+	// read at least one resource.
+	Infrastructure *infra.Inventory `json:"infrastructure,omitempty"`
 	// Routes are the HTTP entry points the authorization reader found, with
 	// the access-control middleware it could see in front of each. They are
 	// descriptive context for a system model, never findings: no consumer of
@@ -383,6 +391,8 @@ type JSONReporter struct {
 	// among them.
 	Leads      []Lead
 	LeadChecks []string
+	// Infrastructure is the deployment inventory, written beside the findings.
+	Infrastructure *infra.Inventory
 	// Routes are the entry points the authorization reader found.
 	Routes []Route
 }
@@ -431,6 +441,8 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		Leads:       r.Leads,
 		LeadChecks:  r.LeadChecks,
 		Routes:      r.Routes,
+
+		Infrastructure: r.Infrastructure,
 	}
 
 	report.Meta.AdvisoryLookup = r.AdvisoryLookup

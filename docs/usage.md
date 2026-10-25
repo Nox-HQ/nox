@@ -463,6 +463,17 @@ to read, even with no leads, so a later run can tell "looked, none" from "an
 older nox". An earlier file without it cannot be compared for leads, and the
 comparison says so.
 
+`findings.json` also records the deployment resources it read from infrastructure
+as code under `infrastructure` (`version`, and `resources`: `kind`, `name`,
+`namespace`, `file`, `class`, `line`, `end_line` and a `properties` map). A
+hardened resource has no finding, so findings alone cannot say that one stopped
+being hardened; the inventory can. The change summary lists, per resource, the
+properties that got weaker or stronger since the earlier state under
+"Infrastructure assumptions weakened" and "... strengthened", and `nox model
+--previous` shows the same for deployment elements. These are context, not
+findings: they reach no gate, exit code or SARIF output. An earlier file without
+`infrastructure` cannot be compared, and the comparison says so.
+
 ### watch
 
 Watch for file changes and re-scan automatically. Useful during development.

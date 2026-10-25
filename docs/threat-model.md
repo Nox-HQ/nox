@@ -50,9 +50,9 @@ new element from a moved one.
 | AI agents | `ai.inventory.json` `tool_permission_matrix` | tools and their capability tags (`shell_exec`, `email_send`, `database_read`, ...); a tool with no recognised capability is named as such |
 | MCP servers and client | `ai.inventory.json` components (`.mcp.json` and `mcp.json`) | server name, launch command and arguments (never the `env` block) |
 | Models | `ai.inventory.json` `model_provenance` | model, provider, whether pinned, the environment variable the credential is read from |
-| Data stores | SBOM packages (PostgreSQL, MySQL, MongoDB, Redis, SQLite, Elasticsearch) and infrastructure findings (public bucket, database instance) | the package or the finding |
+| Data stores | SBOM packages (PostgreSQL, MySQL, MongoDB, Redis, SQLite, Elasticsearch) and the deployment inventory in `findings.json` (bucket, database instance), with the findings attached | the package or the finding |
 | External services | SBOM packages (Stripe, Twilio, SendGrid, SMTP, Slack, AWS, Sentry, Firebase, brokers) and AI SDKs | the package; an AI provider the inventory already names through a model is not listed twice |
-| Deployment surface | infrastructure findings (ingress, Kubernetes workloads, container images, public network rules, cloud data stores) | the findings of the rules in `core/threatmodel/tables.go` |
+| Deployment surface | the `infrastructure` inventory in `findings.json` (ingress, Kubernetes workloads, container images and Dockerfiles, security groups, buckets, databases), hardened resources included | the resource, and the findings of the rules in `core/threatmodel/tables.go` attached to it |
 | Dependencies | SBOM | package count; supply-chain findings attach here |
 
 A package in the SBOM shows the application can talk to a store or service, not
@@ -98,8 +98,8 @@ or a weakness the mapping does not cover, is listed under the element as a
 finding with no STRIDE category and is not forced into a cell. Findings attach to
 elements by file; to a route only when they sit below that route's registration
 and above the next one; and in a file that holds several infrastructure resources
-(one Terraform file with a bucket and a database) only to the resource the rule
-names. Anything no element accounts for is counted as unattributed in the
+(one Terraform file with a bucket and a database) only to the resource of the
+kind the rule names that the finding sits in. Anything no element accounts for is counted as unattributed in the
 summary, never dropped silently. Waived findings are counted apart: a person
 decided to stop looking, which is a decision to cite and not a fix.
 
@@ -120,7 +120,7 @@ beyond infrastructure findings, frameworks nox does not read (routes and
 authorization leads come from the Express, Fastify, Flask and FastAPI readers;
 NestJS, Next.js, Django, Go and Java entry points, gRPC, queue consumers and
 scheduled jobs are not enumerated),
-infrastructure no rule reported on, dependency directness, call tracing between
+infrastructure of a kind nox does not read (or produced by a template or module), dependency directness, call tracing between
 elements, data sensitivity, third-party and MCP server internals. Per-run limits
 are added when a scope was not scanned, the scan ran offline or did not complete,
 or an input is missing.
