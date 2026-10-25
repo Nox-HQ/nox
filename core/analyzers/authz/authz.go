@@ -183,6 +183,7 @@ const (
 	ReaderFastAPI = "FastAPI"
 	ReaderNextJS  = "Next.js"
 	ReaderDjango  = "Django"
+	ReaderNestJS  = "NestJS"
 )
 
 // Lead is a route that meets AUTHZ-001's proposition, reported as something to

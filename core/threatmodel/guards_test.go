@@ -342,7 +342,7 @@ func TestLimitsNameTheRunsGaps(t *testing.T) {
 	if !hasLimit(Build(inputs()["no-ai"]), "No ai.inventory.json") {
 		t.Error("a missing inventory is a gap, not an absence")
 	}
-	for _, want := range []string{"Business logic", "identity provider", "Express-style", "network topology"} {
+	for _, want := range []string{"Business logic", "identity provider", "Next.js and NestJS", "network topology"} {
 		if !hasLimit(m, want) && !hasLimitFold(m, want) {
 			t.Errorf("fixed limits lack %q", want)
 		}

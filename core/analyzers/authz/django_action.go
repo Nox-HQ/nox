@@ -207,7 +207,7 @@ func (d *djIndex) emitActions(v djView, list, detail string, out *[]Route, views
 			} else if authn == "" && authz == "" && pyInlineAuthRe.MatchString(a.text) {
 				authn = inlineAuthLabel
 			}
-			rt := Route{Method: m, Path: p, FilePath: a.file.path, Line: line, Authn: authn, Authz: authz}
+			rt := Route{Method: m, Path: p, FilePath: a.file.path, Line: line, Authn: authn, Authz: authz, Reader: ReaderDjango}
 			*out = append(*out, rt)
 			*views = append(*views, routeView{route: rt, handler: a.text, known: true, chain: v.decos + " " + v.bases + " " + a.args,
 				guardUnseen: d.guard, declaredPublic: public, framework: "django"})

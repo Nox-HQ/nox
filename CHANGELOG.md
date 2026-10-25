@@ -25,6 +25,10 @@ instead of hidden machine state.
 
 ### Fixed
 
+- **`nox model` names NestJS and DRF action routes, and its entry-point limit
+  matches the readers.** NestJS routes are "read by the NestJS reader", DRF
+  `@action` routes by the Django reader, and the limit text no longer says
+  Next.js, Django or NestJS are not enumerated.
 - **`nox model` names the reader that actually found a route.** Every JavaScript
   route was "read by the authorization reader (Express)" and every Python route
   "(Flask or FastAPI)", so Next.js and Django routes carried the wrong name. A
