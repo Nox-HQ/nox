@@ -39,7 +39,7 @@ advisories:
 
   remediate:              # which of those may also be auto-merged
     min_severity: high
-    min_relevance: symbol_used
+    min_relevance: call_reachable # the default; symbol_used opts in to merging on linkage alone
     max_bump: minor             # patch | minor; a major bump is never merged unattended
 ```
 
@@ -105,12 +105,12 @@ Report-only runs need none of this: the issue is created with `GITHUB_TOKEN`.
 Relevance is the applicability ladder already on every dependency finding
 (`applicability`, `applicability_reached`), read honestly:
 
-| relevance | meaning | can pass a gate? |
-|---|---|---|
-| `call_reachable` | a call path reaches the affected code | yes |
-| `symbol_used` | the affected package is linked or imported by this build | yes |
-| `undetermined` | nox could not place the advisory against your code | yes, at `min_relevance: undetermined` |
-| `not_impacting` | a rung was **deterministically refuted** (e.g. Go: the build links no affected package) | never |
+| relevance | printed as | meaning | can pass a gate? |
+|---|---|---|---|
+| `call_reachable` | a call path reaches it | a call path reaches the affected code | yes |
+| `symbol_used` | linked, not shown to be called | the affected package is linked or imported by this build; nothing shows it is called | yes |
+| `undetermined` | not determined | nox could not place the advisory against your code | yes, at `min_relevance: undetermined` |
+| `not_impacting` | shown not to affect this build | a rung was **deterministically refuted** (e.g. Go: the build links no affected package) | never |
 
 **Undetermined is not "not affected".** Most npm and PyPI advisories are
 undetermined, because nox cannot see through a dependency. They are treated as
@@ -125,6 +125,28 @@ advisories:
   remediate:
     min_relevance: undetermined
 ```
+
+**Linked is not called.** For every ecosystem except Go, linked is as far as
+nox gets, so a merge gate that accepted `symbol_used` would be a merge gate on
+severity alone. The default remediate gate is therefore `call_reachable`, and
+an npm or PyPI project is prepared as a pull request for a person to merge.
+A repository that decides linkage is enough says so itself:
+
+```yaml
+advisories:
+  policy: remediate
+  remediate:
+    min_relevance: symbol_used
+```
+
+The identifiers in the first column are what `.nox.yaml` and the JSON output
+use; text and markdown output print the second column.
+
+When gates leave some of a package's advisories out of the pull request, the
+package still moves once, to the highest fix across all of its active
+advisories, which is the version `nox fix plan` shows. A lower target would
+leave the package in the pull request still carrying an advisory the plan
+fixes.
 
 Only `not_impacting` lowers an advisory, and only to "reported with the
 reason". It is never acted on and never hidden.
@@ -178,7 +200,9 @@ any alias is already reported for that package in the previous run.
 - **Not keyed on the version.** The same advisory still hitting an upgraded
   package is the same advisory.
 - **No previous run is not "no advisories".** The first scheduled run, or a
-  cache miss, reports everything and acts on nothing. Otherwise adopting this
+  cache miss, reports everything and acts on nothing: the issue step opens an
+  issue for every current advisory that no existing issue (open or closed) already
+  lists, so an evicted cache cannot swallow a disclosure. Otherwise adopting this
   would open a pull request for every advisory you have ever had.
 - **A scan that could not look is not a quiet week.** If the vulnerability
   lookup failed, `nox advisories` exits 1, acts on nothing, and the workflow
@@ -190,7 +214,15 @@ earlier step succeeded: a run that failed part-way must not make its advisories
 look known.
 
 GitHub evicts caches unused for seven days and disables scheduled workflows in
-repositories with no activity for sixty. The daily default keeps the cache warm.
+repositories with no activity for sixty. The daily default keeps the cache warm,
+and the cache is not the record of what was reported: each issue carries a hidden
+`<!-- nox-advisory:ecosystem/package/id -->` marker per advisory (aliases
+included, version excluded), and the next run reads those from your issues,
+open and closed. A run that finds the cache gone therefore reports what has never
+been reported, once, instead of nothing. What a missing cache does cost is
+action: with no previous run nothing is prepared as a pull request until a
+later run has one to compare with. Delete the marker comment from an issue to
+have its advisory reported again.
 
 ## Run it by hand
 

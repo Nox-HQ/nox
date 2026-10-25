@@ -7,9 +7,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -142,6 +144,7 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	}
 
 	failed := unresolved
+	applied := map[string]bool{}
 	// Keyed by directory as well as ecosystem: a monorepo has one go.mod per
 	// module, and each needs its own tidy.
 	tidied := map[[2]string]bool{}
@@ -171,8 +174,11 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 			continue
 		}
 		tidied[[2]string{dir, a.ecosystem}] = true
+		applied[a.ecosystem] = true
 		fmt.Printf("applied: %s [%s] -> %s in %s\n", a.pkg, a.ecosystem, a.toVersion, describeDir(manifestRoot, dir))
 	}
+
+	printScriptsNotRun(os.Stdout, applied)
 
 	if failed == 0 {
 		for key := range tidied {
@@ -208,6 +214,38 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	}
 
 	return 0
+}
+
+// scriptsNotRun says, per ecosystem, what nox deliberately did not execute
+// and what the operator does to run it once they have looked at the new code.
+var scriptsNotRun = []struct {
+	ecosystem string
+	text      string
+}{
+	{"npm", "npm/pnpm/yarn/bun: install scripts (preinstall, install, postinstall, prepare) of the new versions were not run. Native addons and generated files may be missing until you review the packages and run `npm rebuild` (or your manager's equivalent)."},
+	{"pypi", "pip: only prebuilt wheels were installed; no source distribution was built, because building one runs the package's own setup code."},
+	{"rubygems", "bundler: Gemfile.lock was updated but the gems were not installed, so no native extension was compiled. Run `bundle install` after reviewing."},
+	{"composer", "composer: scripts and plugins were not run (--no-scripts --no-plugins)."},
+	{"nuget", "dotnet: the project file was updated but not restored (--no-restore), so no package build logic ran. Run `dotnet restore` after reviewing."},
+}
+
+// printScriptsNotRun tells the operator which package-manager steps nox kept
+// switched off. Silence here would let "applied" read as "installed and
+// working", which is not what happened.
+func printScriptsNotRun(w io.Writer, applied map[string]bool) {
+	var lines []string
+	for _, n := range scriptsNotRun {
+		if applied[n.ecosystem] {
+			lines = append(lines, n.text)
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "note: nox does not execute code from the packages it upgrades, so these steps were skipped:")
+	for _, l := range lines {
+		_, _ = fmt.Fprintln(w, "  - "+l)
+	}
 }
 
 // upgradeResult is what applying one upgrade did.
@@ -464,7 +502,7 @@ func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
 func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	version := strings.TrimPrefix(a.toVersion, "v")
 	name, args := npmCommand(manifestRoot, a.pkg, version)
-	if err := runIn(manifestRoot, name, args...); err != nil {
+	if err := runInEnv(manifestRoot, scriptsOffEnv, name, args...); err != nil {
 		return err
 	}
 	if name != "npm" || args[0] != "update" {
@@ -482,29 +520,88 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	return nil
 }
 
-// npmDirectSection names the package.json section that declares pkg directly,
-// or "" when nothing does and pkg is only pulled in by another package.
-// peerDependencies is not a section anything is installed into, so a package
-// listed only there is treated as transitive.
-func npmDirectSection(dir, pkg string) string {
+// npmDirectDeclaration names the package.json section that declares pkg and
+// the version specifier written there ("4.17.15", "^4.17.15", "~4.17.0").
+// Both are "" when pkg is only pulled in by another package.
+func npmDirectDeclaration(dir, pkg string) (section, spec string) {
 	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	var manifest map[string]json.RawMessage
 	if json.Unmarshal(raw, &manifest) != nil {
-		return ""
+		return "", ""
 	}
-	for _, section := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
+	for _, name := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
 		var deps map[string]string
-		if json.Unmarshal(manifest[section], &deps) != nil {
+		if json.Unmarshal(manifest[name], &deps) != nil {
 			continue
 		}
-		if _, ok := deps[pkg]; ok {
-			return section
+		if s, ok := deps[pkg]; ok {
+			return name, s
 		}
 	}
-	return ""
+	return "", ""
+}
+
+// specStyle is how a package.json specifier pins a version.
+type specStyle int
+
+const (
+	// styleOther covers ranges, wildcards, tags and non-registry sources. The
+	// package manager's own default applies; nox has no faithful way to keep
+	// them.
+	styleOther specStyle = iota
+	styleExact
+	styleCaret
+	styleTilde
+)
+
+// styleOfSpec classifies a specifier so an upgrade can keep the operator's
+// choice. An exact pin is a decision (reproducible builds, a vetted version),
+// and rewriting it to a caret range silently widens what any later install
+// may resolve.
+func styleOfSpec(spec string) specStyle {
+	spec = strings.TrimSpace(spec)
+	switch {
+	case strings.HasPrefix(spec, "^"):
+		return styleCaret
+	case strings.HasPrefix(spec, "~"):
+		return styleTilde
+	case exactVersionRE.MatchString(spec):
+		return styleExact
+	}
+	return styleOther
+}
+
+var exactVersionRE = regexp.MustCompile(`^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]+)?$`)
+
+// saveFlags are the npm/yarn flags that make a written specifier match style.
+// styleOther gets none: the manager's default is the best nox can do.
+func saveFlags(tool string, style specStyle) []string {
+	switch tool {
+	case "npm":
+		switch style {
+		case styleExact:
+			return []string{"--save-exact"}
+		case styleTilde:
+			return []string{"--save-prefix=~"}
+		case styleCaret:
+			return []string{"--save-prefix=^"}
+		}
+	case "yarn":
+		switch style {
+		case styleExact:
+			return []string{"--exact"}
+		case styleTilde:
+			return []string{"--tilde"}
+		case styleCaret:
+			return []string{"--caret"}
+		}
+	}
+	// pnpm and bun keep the existing specifier's style when given an explicit
+	// version (measured, pnpm 10.24 and bun 1.x), so they need nothing.
+	return nil
 }
 
 // npmLockBelow lists every copy of pkg in dir's package-lock.json whose
@@ -580,74 +677,137 @@ func npmCommand(dir, pkg, version string) (tool string, args []string) {
 		_, err := os.Stat(filepath.Join(dir, name))
 		return err == nil
 	}
+	section, spec := npmDirectDeclaration(dir, pkg)
+	style := styleOfSpec(spec)
+	// Every command here installs packages, and installing runs their
+	// lifecycle scripts: arbitrary code from whatever version nox just chose.
+	// nox never executes untrusted code, so scripts are always off.
 	switch {
 	case has("pnpm-lock.yaml"):
-		return "pnpm", []string{"update", "--depth", "Infinity", target}
+		return "pnpm", []string{"update", "--ignore-scripts", "--depth", "Infinity", target}
 	case has("yarn.lock"):
 		// Berry renamed the verb and is told apart by its own config file.
+		// Berry has no --ignore-scripts on `up`; applyNpmUpgrade sets
+		// YARN_ENABLE_SCRIPTS=false for it.
 		if has(".yarnrc.yml") {
-			return "yarn", []string{"up", target}
+			return "yarn", append(append([]string{"up"}, saveFlags("yarn", style)...), target)
 		}
-		return "yarn", []string{"upgrade", target}
+		return "yarn", append(append([]string{"upgrade", "--ignore-scripts"}, saveFlags("yarn", style)...), target)
 	case has("bun.lock"), has("bun.lockb"):
-		return "bun", []string{"update", target}
+		return "bun", []string{"update", "--ignore-scripts", target}
 	}
 	// npm install writes whatever it is given into package.json: a transitive
 	// package becomes a new direct dependency, and a devDependency moves into
 	// dependencies. So the manifest decides. A declared package keeps its
 	// section; anything else is moved by `npm update`, which touches only the
 	// lockfile and takes no version — applyNpmUpgrade checks where it landed.
-	switch npmDirectSection(dir, pkg) {
-	case "dependencies":
-		return "npm", []string{"install", target}
-	case "devDependencies":
-		return "npm", []string{"install", "--save-dev", target}
-	case "optionalDependencies":
-		return "npm", []string{"install", "--save-optional", target}
+	install := func(extra ...string) []string {
+		a := append([]string{"install", "--ignore-scripts"}, extra...)
+		a = append(a, saveFlags("npm", style)...)
+		return append(a, target)
 	}
-	return "npm", []string{"update", pkg}
+	switch section {
+	case "dependencies":
+		return "npm", install()
+	case "devDependencies":
+		return "npm", install("--save-dev")
+	case "optionalDependencies":
+		return "npm", install("--save-optional")
+	}
+	return "npm", []string{"update", "--ignore-scripts", pkg}
 }
 
-// applyPyPIUpgrade runs `pip install --upgrade pkg==version`. Operators
-// who manage requirements.txt / pyproject.toml directly should re-pin
-// after running. Plain pip is the lowest common denominator.
+// scriptsOffEnv switches install scripts off for every JavaScript package
+// manager through its environment, as well as through flags: yarn Berry has no
+// flag on `up`, and an environment setting also covers a manager that grows a
+// new verb. The three are no-ops for tools that do not read them.
+var scriptsOffEnv = []string{
+	"npm_config_ignore_scripts=true",
+	"YARN_ENABLE_SCRIPTS=false",
+}
+
+// pipUpgradeArgs is `pip install --upgrade --only-binary :all: pkg==version`.
+// A source distribution is built by running the package's own setup code, so
+// only wheels are accepted: installing one runs nothing. A package that ships
+// no wheel fails loudly rather than executing its build.
+func pipUpgradeArgs(a upgradeAction) []string {
+	return []string{"install", "--upgrade", "--only-binary", ":all:", a.pkg + "==" + strings.TrimPrefix(a.toVersion, "v")}
+}
+
+// applyPyPIUpgrade runs pipUpgradeArgs. Operators who manage
+// requirements.txt / pyproject.toml directly should re-pin after running.
+// Plain pip is the lowest common denominator.
 func applyPyPIUpgrade(manifestRoot string, a upgradeAction) error {
-	target := a.pkg + "==" + strings.TrimPrefix(a.toVersion, "v")
-	return runIn(manifestRoot, "pip", "install", "--upgrade", target)
+	err := runIn(manifestRoot, "pip", pipUpgradeArgs(a)...)
+	if err != nil {
+		return fmt.Errorf("%w (nox installs wheels only, because building a source distribution runs the package's code; "+
+			"if %s publishes no wheel for this platform, review it and install it yourself)", err, a.pkg)
+	}
+	return nil
 }
 
 // applyCargoUpgrade runs `cargo update -p pkg --precise version`.
 // Cargo has no separate "install" semantics for project deps; update
-// rewrites Cargo.lock.
+// rewrites Cargo.lock. It resolves only: no crate is built, so no build.rs
+// runs.
 func applyCargoUpgrade(manifestRoot string, a upgradeAction) error {
 	return runIn(manifestRoot, "cargo", "update", "-p", a.pkg, "--precise", strings.TrimPrefix(a.toVersion, "v"))
 }
 
-// applyRubyGemsUpgrade runs `bundle update <gem> --conservative`.
+// rubyGemsUpgradeArgs is `bundle lock --update <gem> --conservative`.
 //
-// Deliberately not a Gemfile rewrite: the Gemfile constraint is the operator's
-// declared intent, and bundler resolving within it is the behaviour a Ruby
-// project expects. If the constraint pins below the latest release, bundler
-// says so rather than nox silently editing the pin away.
+// Deliberately not `bundle update`, which installs the gems and so compiles
+// native extensions (extconf.rb is arbitrary Ruby). `bundle lock` resolves
+// and rewrites Gemfile.lock only; the next `bundle install` is the
+// operator's.
+//
+// Deliberately not a Gemfile rewrite either: the Gemfile constraint is the
+// operator's declared intent, and bundler resolving within it is the
+// behaviour a Ruby project expects. If the constraint pins below the latest
+// release, bundler says so rather than nox silently editing the pin away.
+func rubyGemsUpgradeArgs(a upgradeAction) []string {
+	return []string{"lock", "--update", a.pkg, "--conservative"}
+}
+
 func applyRubyGemsUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "bundle", "update", a.pkg, "--conservative")
+	return runIn(manifestRoot, "bundle", rubyGemsUpgradeArgs(a)...)
 }
 
-// applyComposerUpgrade runs `composer update <vendor/pkg> --with-dependencies`.
-// Composer resolves within the composer.json constraint for the same reason.
+// composerUpgradeArgs is `composer update <vendor/pkg> --with-dependencies
+// --no-scripts --no-plugins`. Composer resolves within the composer.json
+// constraint for the same reason as bundler. Scripts (post-update-cmd and
+// friends) and plugins are code the project or its dependencies supply, and
+// both run during an update.
+func composerUpgradeArgs(a upgradeAction) []string {
+	return []string{"update", a.pkg, "--with-dependencies", "--no-scripts", "--no-plugins"}
+}
+
 func applyComposerUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "composer", "update", a.pkg, "--with-dependencies")
+	return runIn(manifestRoot, "composer", composerUpgradeArgs(a)...)
 }
 
-// applyNuGetUpgrade runs `dotnet add package <id> --version <v>`, which
-// rewrites the PackageReference in the project file.
+// nugetUpgradeArgs is `dotnet add package <id> --version <v> --no-restore`.
+// It rewrites the PackageReference in the project file and stops: restore
+// pulls MSBuild props and targets out of the new package, which are executed.
+func nugetUpgradeArgs(a upgradeAction) []string {
+	return []string{"add", "package", a.pkg, "--version", strings.TrimPrefix(a.toVersion, "v"), "--no-restore"}
+}
+
 func applyNuGetUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "dotnet", "add", "package", a.pkg, "--version", strings.TrimPrefix(a.toVersion, "v"))
+	return runIn(manifestRoot, "dotnet", nugetUpgradeArgs(a)...)
 }
 
 func runIn(dir, name string, args ...string) error {
+	return runInEnv(dir, nil, name, args...)
+}
+
+// runInEnv is runIn with extra environment entries layered over nox's own.
+func runInEnv(dir string, env []string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

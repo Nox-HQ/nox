@@ -13,6 +13,10 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
+A scan that made the lookup says so once, in a `[network]` line after the
+results: how many dependencies, where they went, and how to opt out. A scan that
+made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
+
 `nox intel preview <path>` prints exactly what a contribution from `<path>`
 would carry, without sending it. `nox intel allowlist` prints every field an
 observation may carry; anything not on that list cannot be sent, by
@@ -45,6 +49,14 @@ endpoint, distinct from the `intel_suppression` a withheld record raises —
 silence is not withholding, and the two are never confused. Only when the
 reference is unreachable as well does the scan report an advisory under-report
 (`osv_lookup`), the one degradation that can hide a finding.
+
+An answer the service marks incomplete is not an answer of "none". Each query
+result may carry `nox_coverage` (`complete`, `incomplete`, `unsupported`); a
+partial one raises an `intel_incomplete` degradation naming the packages and
+sets `meta.advisory_lookup` to `incomplete` in `findings.json`, so `nox diff`
+does not compare its advisories against a full scan. A plain OSV.dev response
+carries no coverage statement and raises nothing: it claims neither
+completeness nor its absence.
 
 ## Turning it off, at every level
 

@@ -219,8 +219,8 @@ func TestMajorBumpIsReportedForAPerson(t *testing.T) {
 }
 
 func TestRemediateRequiresSafeBumpAndGate(t *testing.T) {
-	p := mustPolicy(t, Settings{Policy: "remediate"}) // defaults: high, symbol_used, minor
-	good := adv("GHSA-ok", "a", "1.2.3", "1.2.4", findings.SeverityHigh, "impacting", "symbol_used")
+	p := mustPolicy(t, Settings{Policy: "remediate"}) // defaults: high, call_reachable, minor
+	good := adv("GHSA-ok", "a", "1.2.3", "1.2.4", findings.SeverityHigh, "impacting", "call_reachable")
 	r := Evaluate(Input{Findings: []findings.Finding{good}, HavePrevious: true, Policy: p})
 	d := only(t, r)
 	if d.Action != ActionRemediate || !r.AutoMerge || r.Action != ActionRemediate {
@@ -238,7 +238,7 @@ func TestRemediateRequiresSafeBumpAndGate(t *testing.T) {
 
 	// max_bump: patch refuses a minor.
 	p2 := mustPolicy(t, Settings{Policy: "remediate", Remediate: RemediateGate{MaxBump: "patch"}})
-	minor := adv("GHSA-minor", "c", "1.2.3", "1.3.0", findings.SeverityHigh, "impacting", "symbol_used")
+	minor := adv("GHSA-minor", "c", "1.2.3", "1.3.0", findings.SeverityHigh, "impacting", "call_reachable")
 	r = Evaluate(Input{Findings: []findings.Finding{minor}, HavePrevious: true, Policy: p2})
 	d = only(t, r)
 	if d.Action != ActionPrepare || r.AutoMerge || !strings.Contains(d.Reason, "minor") {
@@ -250,7 +250,7 @@ func TestRemediateRequiresSafeBumpAndGate(t *testing.T) {
 // of them is safe would merge the others unreviewed.
 func TestAutoMergeNeedsEveryPreparedAdvisorySafe(t *testing.T) {
 	p := mustPolicy(t, Settings{Policy: "remediate"})
-	safe := adv("GHSA-s", "a", "1.0.0", "1.0.1", findings.SeverityHigh, "impacting", "symbol_used")
+	safe := adv("GHSA-s", "a", "1.0.0", "1.0.1", findings.SeverityHigh, "impacting", "call_reachable")
 	unsure := adv("GHSA-u", "b", "1.0.0", "1.0.1", findings.SeverityHigh, "undetermined", "affected_version")
 	r := Evaluate(Input{Findings: []findings.Finding{safe, unsure}, HavePrevious: true, Policy: p})
 	if r.AutoMerge {
@@ -268,8 +268,8 @@ func TestAutoMergeNeedsEveryPreparedAdvisorySafe(t *testing.T) {
 // judged is that move, not each advisory's own fixed_in.
 func TestBumpJudgedOnThePackageMove(t *testing.T) {
 	p := mustPolicy(t, Settings{Policy: "remediate"})
-	a := adv("GHSA-1", "lib", "1.2.0", "1.2.1", findings.SeverityHigh, "impacting", "symbol_used")
-	b := adv("GHSA-2", "lib", "1.2.0", "1.4.0", findings.SeverityHigh, "impacting", "symbol_used")
+	a := adv("GHSA-1", "lib", "1.2.0", "1.2.1", findings.SeverityHigh, "impacting", "call_reachable")
+	b := adv("GHSA-2", "lib", "1.2.0", "1.4.0", findings.SeverityHigh, "impacting", "call_reachable")
 	p2 := mustPolicy(t, Settings{Policy: "remediate", Remediate: RemediateGate{MaxBump: "patch"}})
 	r := Evaluate(Input{Findings: []findings.Finding{a, b}, HavePrevious: true, Policy: p2})
 	if r.AutoMerge {
@@ -388,5 +388,60 @@ func TestTheoreticalIsReportOnly(t *testing.T) {
 	d := only(t, r)
 	if d.Action != ActionReport {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// Linked is not called. For every ecosystem but Go, linked is as far as the
+// applicability ladder gets, so a default that merges on it merges on severity
+// alone. The test app's lodash was "linked ... whether anything calls it was not
+// established" and still got "Auto-merge permitted: true".
+func TestDefaultPolicyDoesNotAutoMergeOnLinkageAlone(t *testing.T) {
+	linked := adv("GHSA-linked", "lodash", "4.17.15", "4.17.21", findings.SeverityHigh, "undetermined", "symbol_used")
+	r := Evaluate(Input{Findings: []findings.Finding{linked}, HavePrevious: true, Policy: mustPolicy(t, Settings{Policy: "remediate"})})
+	d := only(t, r)
+	if r.AutoMerge || d.Action != ActionPrepare {
+		t.Fatalf("linked-only must prepare and not merge by default: action=%q merge=%v", d.Action, r.AutoMerge)
+	}
+	for _, want := range []string{"linked, not shown to be called", "a call path reaches it", "min_relevance: call_reachable"} {
+		if !strings.Contains(d.Reason, want) {
+			t.Errorf("reason lacks %q: %s", want, d.Reason)
+		}
+	}
+
+	// A repository that decides linkage is enough says so, and only then.
+	opt := mustPolicy(t, Settings{Policy: "remediate", Remediate: RemediateGate{Gate: Gate{MinRelevance: "symbol_used"}}})
+	r = Evaluate(Input{Findings: []findings.Finding{linked}, HavePrevious: true, Policy: opt})
+	if d := only(t, r); !r.AutoMerge || d.Action != ActionRemediate {
+		t.Fatalf("explicit min_relevance: symbol_used should merge: %+v", r)
+	}
+}
+
+func TestRelevanceLabelsAreNotLadderJargon(t *testing.T) {
+	for _, r := range []Relevance{RelUndetermined, RelSymbolUsed, RelCallReachable, RelNotImpacting} {
+		if l := r.Label(); l == string(r) || strings.Contains(l, "_") {
+			t.Errorf("%q labelled %q: still an identifier", r, l)
+		}
+	}
+}
+
+// The pull request's target is the package's, not the gated subset's. Gating
+// out the 4.18.0 advisory used to leave the PR moving lodash to 4.17.21 while
+// `nox fix plan` (every active advisory) moved it to 4.18.0.
+func TestPullRequestTargetMatchesFixPlan(t *testing.T) {
+	high := adv("GHSA-a", "lodash", "4.17.15", "4.17.21", findings.SeverityHigh, "undetermined", "symbol_used")
+	med := adv("GHSA-b", "lodash", "4.17.15", "4.18.0", findings.SeverityMedium, "undetermined", "symbol_used")
+	p := mustPolicy(t, Settings{Policy: "prepare", Prepare: Gate{MinSeverity: "high"}})
+	r := Evaluate(Input{Findings: []findings.Finding{high, med}, HavePrevious: true, Policy: p})
+	var prepared Decision
+	for _, d := range r.Decisions {
+		if d.Action == ActionPrepare {
+			prepared = d
+		}
+	}
+	if !strings.Contains(prepared.Reason, "4.17.15 -> 4.18.0") {
+		t.Fatalf("PR must target the plan's version: %s", prepared.Reason)
+	}
+	if len(r.Fixes) != 2 {
+		t.Fatalf("the move fixes both advisories, and the file handed to nox fix must carry both: %v", r.Fixes)
 	}
 }

@@ -182,12 +182,11 @@ var providerInvocations = []sdkInvocationPattern{
 // the matching pattern (overrides classifyModelRegistry's prefix-based
 // guess) so that an `azure.openai` deployment shows up correctly even
 // when its model name is a custom string. The result is enriched with
-// the invocation's line number, the auth env var (when an api_key is
-// passed inline), and the endpoint / base URL (Azure, Bedrock, custom).
+// the invocation's line number, the auth env var (only when the client the call is made on
+// was built from one; see credentialFor), and the endpoint / base URL (Azure, Bedrock, custom).
 func extractSDKInvocations(path string, content []byte) []ModelReference {
 	text := string(content)
 	endpointGuess := detectEndpoint(text)
-	authGuess := detectAuthEnvVar(text)
 
 	var refs []ModelReference
 	for _, p := range providerInvocations {
@@ -205,37 +204,12 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 				Registry:   p.provider,
 				Path:       path,
 				Line:       lexctx.LineForOffset(content, m[0]),
-				AuthEnvVar: authGuess,
+				AuthEnvVar: credentialFor(content, m[0]),
 				Endpoint:   endpointGuess,
 			})
 		}
 	}
 	return refs
-}
-
-// detectAuthEnvVar inspects content for `api_key = os.getenv("X")` /
-// `process.env.X` style references commonly used to feed LLM clients.
-// Returns the env var name when one matches, or "" otherwise.
-func detectAuthEnvVar(text string) string {
-	// These are detector regexes, not credentials: they match
-	// "API_KEY"/"TOKEN"/"SECRET"/"PASSWORD" identifiers in scanned source.
-	//
-	// The waivers are per-line and trailing. A directive applies to exactly one
-	// line, so the single directive that used to sit above this block waived
-	// nothing at all — every pattern below was reported despite looking waived.
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`os\.getenv\s*\(\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`os\.environ\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),   // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))`),
-		regexp.MustCompile(`process\.env\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`os\.Getenv\s*\(\s*"([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))"\s*\)`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-	}
-	for _, re := range patterns {
-		if m := re.FindStringSubmatch(text); len(m) > 1 {
-			return m[1]
-		}
-	}
-	return ""
 }
 
 // detectEndpoint extracts a non-default LLM endpoint URL when present.

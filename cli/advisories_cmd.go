@@ -165,8 +165,8 @@ func loadPrevious(path string) ([]findings.Finding, bool) {
 
 func writePrepareFindings(path string, rep report.JSONReport, res advisory.Result) error {
 	out := rep
-	out.Findings = make([]findings.Finding, 0, len(res.Prepare))
-	for _, i := range res.Prepare {
+	out.Findings = make([]findings.Finding, 0, len(res.Fixes))
+	for _, i := range res.Fixes {
 		out.Findings = append(out.Findings, rep.Findings[i])
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
@@ -215,7 +215,7 @@ func advisoriesText(res advisory.Result) string {
 			continue
 		}
 		fmt.Fprintf(&b, "\n  [%s] %s  %s %s@%s  severity=%s relevance=%s\n    %s\n",
-			d.Action, d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance, d.Reason)
+			d.Action, d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance.Label(), d.Reason)
 	}
 	if len(res.Prepare) > 0 {
 		fmt.Fprintf(&b, "\nPull request: %d advisories. Auto-merge permitted: %t.\n", len(res.Prepare), res.AutoMerge)
@@ -241,7 +241,7 @@ func advisoriesMarkdown(res advisory.Result) string {
 	b.WriteString("| Advisory | Package | Severity | Relevance | Action |\n|---|---|---|---|---|\n")
 	for _, d := range rows {
 		fmt.Fprintf(&b, "| %s | %s %s@%s | %s | %s | %s |\n",
-			d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance, d.Action)
+			d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance.Label(), d.Action)
 	}
 	b.WriteString("\nWhy:\n\n")
 	for _, d := range rows {

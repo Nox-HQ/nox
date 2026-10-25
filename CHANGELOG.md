@@ -59,6 +59,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Flask converters (`<int:id>`, `<path:p>`, `<uuid:u>`, `<int(min=1):id>`) were
   reported as a miss against the built binary; they were not (measured, and now
   pinned by a test for every converter form).
+- **MCP-015 (rug-pull detection) no longer keeps its pin in hidden machine
+  state.** The pin lived in `~/.nox/cache/mcp-pins`, was written by the scan
+  itself, and was overwritten when it reported a change: after editing a server's
+  args, three scans gave 1, 0, 0 hits, and a fresh CI runner (no `~/.nox`) could
+  never report anything. The pin is now `.nox/mcp-pins.json`, a reviewable file
+  you commit (like `.nox/baseline.json`), written only by the new
+  `nox mcp pin`. A scan reads it, reports a changed server (high) or one that was
+  never pinned (medium) on every run until you re-pin, and never edits it. With
+  MCP servers but no pin file the scan reports an MCP degradation saying MCP-015
+  cannot run, instead of staying silent. The old `~/.nox/cache/mcp-pins` cache is
+  ignored (and named once in that degradation if it exists). Same project, same
+  output.
+- **The `nox install-ci` workflow no longer loses a disclosure when the Actions
+  cache is evicted.** The issue step ran only when a previous run was restored,
+  so after the cache expired (seven days unused) the next run counted as a first
+  run, reported nothing, and a new advisory was swallowed. The step now reports
+  every current advisory that no existing issue, open or closed, already lists
+  (each issue carries a hidden `nox-advisory` marker per advisory), so a missing
+  cache costs a repeat of nothing and a miss of nothing. With no previous run
+  nothing is still acted on (no pull request). The step's shell is now executed
+  by tests against the real `nox advisories`; it has not been run on GitHub.
+- **`ai.inventory.json` and `nox model` attributed the wrong credential to a
+  model.** The credential was the first `*_KEY`/`*_SECRET`/`*_TOKEN` environment
+  variable anywhere in the file, truncated: `gpt-4o` showed `STRIPE_SECRET` while
+  the client was built from `OPENAI_API_KEY`. It now follows the client the call
+  is made on to its constructor (`apiKey: process.env.X`, `api_key=os.environ["X"]`,
+  `option.WithAPIKey(os.Getenv("X"))`, or one assignment away) and is omitted
+  when that cannot be established (client built by a helper, two clients with
+  different keys, an SDK reading its default variable implicitly).
+- **`nox fix` no longer runs the install scripts of the packages it upgrades.**
+  It ran plain `npm install pkg@version`, which executes the new version's
+  preinstall, install and postinstall scripts: arbitrary code from a version
+  nox had just chosen, in a tool that promises never to execute untrusted code.
+  npm, pnpm, yarn (classic and Berry, the latter through
+  `YARN_ENABLE_SCRIPTS=false`) and bun now run with scripts off. The other
+  managers were audited the same way: pip installs wheels only
+  (`--only-binary :all:`, since building a source distribution runs setup code),
+  bundler runs `bundle lock --update --conservative` instead of `bundle update`
+  (which compiled native extensions), composer runs with `--no-scripts
+  --no-plugins`, and `dotnet add package` runs with `--no-restore`. Go and Cargo
+  only resolve and are unchanged. `nox fix` now prints which steps were skipped
+  and what to run after reviewing the packages.
+- **`nox fix` keeps the version specifier the project wrote.** An exact pin
+  (`"lodash": "4.17.15"`) was rewritten to a caret range (`^4.18.0`), widening
+  what any later install may resolve. Exact stays exact, caret stays caret and
+  tilde stays tilde, for npm and yarn (`--save-exact`, `--save-prefix`,
+  `--exact`/`--tilde`/`--caret`); pnpm and bun already keep the style.
+- **`nox advisories` no longer permits auto-merge on linkage alone.** The default
+  remediate gate was `min_relevance: symbol_used`, which for every ecosystem
+  except Go is as far as the applicability ladder gets: the package is linked,
+  nothing shows it is called. Severity alone therefore decided "Auto-merge
+  permitted: true". The default is now `call_reachable`; a repository that wants
+  to merge on linkage sets `advisories.remediate.min_relevance: symbol_used`
+  itself.
+- **`nox advisories` says relevance in plain words.** Text and markdown output
+  printed `relevance=symbol_used` beside "whether anything calls it was not
+  established". They now print "linked, not shown to be called", "a call path
+  reaches it", "not determined" or "shown not to affect this build", and the
+  merge-gate reason names the setting that governs it. JSON and `.nox.yaml` keep
+  the identifiers.
+- **The advisories pull request and `nox fix plan` agree on the target
+  version.** The pull request was planned over the advisories that cleared the
+  gates only, so a gate that dropped one could lower the target (lodash 4.17.21
+  against `fix plan`'s 4.18.0). It is now planned over every active advisory,
+  the way `nox fix` does, and the findings handed to `nox fix` include all the
+  advisories that move fixes.
+- **An incomplete NOX Intelligence answer is no longer read as "no
+  vulnerabilities".** When the service marks a package's answer `incomplete`
+  or `unsupported` (`nox_coverage`, nox-intelligence v0.19.1), the scan records a
+  blocking `intel_incomplete` degradation naming the packages, sets
+  `meta.advisory_lookup` to `incomplete`, and `nox diff` does not compare that
+  scan's advisories against a full one. Records the reference restores for a
+  package the service reported as partial are not counted as `intel_suppression`.
+  A plain OSV.dev response carries no coverage statement and raises nothing.
+  Requires nox-core v0.5.0.
+
+### Changed
+
+- A default scan that looked dependencies up now prints one `[network]` line: how
+  many dependencies (ecosystem, name, version) were sent to the intelligence
+  service and the OSV reference, that no source or paths were, and how to opt out
+  (`scan.intelligence.disabled`, `--offline`).
 
 ## [1.49.0] - 2026-10-25
 
