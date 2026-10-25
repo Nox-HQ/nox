@@ -81,7 +81,10 @@ type Item struct {
 	Command  string            `json:"command,omitempty"`
 	Severity findings.Severity `json:"severity"`
 	// Findings is how many findings the item stands for.
-	Findings     int      `json:"findings"`
+	Findings int `json:"findings"`
+	// Attention is set when the item needs attention now rather than being a
+	// lower-priority observation (assess.NeedsAttention).
+	Attention    bool     `json:"needs_attention"`
 	Fingerprints []string `json:"fingerprints"`
 	Rules        []string `json:"rules"`
 	// Upgrade is the dependency move, for the upgrade kinds.
@@ -100,6 +103,9 @@ type Plan struct {
 	Safe         int    `json:"safe_to_apply"`
 	Review       int    `json:"needs_review"`
 	Info         int    `json:"needs_information"`
+	// Attention counts the items that need attention now (assess.NeedsAttention);
+	// the rest are lower-priority observations. Every item stays in Items.
+	Attention int `json:"needs_attention"`
 }
 
 // Annotation is what a plan says about one finding, for surfaces that show a
@@ -175,6 +181,9 @@ func Build(in Input) Plan {
 	for i := range report.Issues {
 		it := classify(&report.Issues[i], in, reader)
 		it.N = i + 1
+		if it.Attention {
+			plan.Attention++
+		}
 		plan.Items = append(plan.Items, it)
 		switch it.Class {
 		case ClassSafe:
@@ -192,6 +201,7 @@ func classify(is *assess.Issue, in Input, reader *fileReader) Item {
 	it := Item{
 		Title:        is.Summary,
 		Severity:     is.Severity,
+		Attention:    is.Attention,
 		Findings:     is.Findings,
 		Fingerprints: is.Fingerprints,
 		Rules:        ruleIDs(in.Findings, is.Fingerprints),
@@ -274,15 +284,41 @@ func versionStep(a *fix.UpgradeAction) string {
 }
 
 func classifyNoFix(it *Item, is *assess.Issue) {
+	pkg := strings.TrimSpace(is.Package + " " + is.Version)
+	if pkg == "" {
+		pkg = "this package"
+	}
 	if is.FixedIn != "" {
 		it.Class, it.Kind = ClassInfo, KindManualUpgrade
-		it.Needs = "You to upgrade it: version " + is.FixedIn + " fixes it, but nox cannot apply upgrades for this " +
-			"kind of package (or this is not a move forward from the installed version). Make the upgrade with your package manager."
+		if _, ok := fix.SupportedEcosystem(is.Ecosystem); !ok {
+			it.Needs = "You to upgrade " + pkg + " to " + is.FixedIn + " or later by hand: nox fix does not drive " +
+				ecosystemName(is.Ecosystem) + " (it does not edit build files). Change the version in your build file, " +
+				"then re-run nox scan to confirm."
+			return
+		}
+		it.Needs = "A version nox can move forward to. " + is.FixedIn + " fixes it, but nox could not establish that it is " +
+			"newer than the installed " + pkg + " (the installed version is unknown or not comparable). Check the version your lockfile " +
+			"resolves, upgrade with your package manager, and re-run nox scan."
 		return
 	}
 	it.Class, it.Kind = ClassInfo, KindNoFix
-	it.Needs = "A fixed version, which has not been published. Until then the choice is yours: use a workaround from the " +
-		"advisory, replace the package, or record the accepted risk as a reviewed waiver (nox vex init). Re-run nox scan when a fix is published."
+	it.Needs = "A fixed version of " + pkg + ", and none has been published, so there is nothing to upgrade to. " +
+		"Choose one: apply a workaround from the advisory, replace the package, or record the accepted risk as a reviewed " +
+		"waiver (nox vex init). Re-run nox scan when a fix is published."
+}
+
+// ecosystemName says an ecosystem in words, "this ecosystem" when the finding
+// did not name one.
+func ecosystemName(eco string) string {
+	switch eco {
+	case "maven":
+		return "Maven"
+	case "gradle":
+		return "Gradle"
+	case "":
+		return "this ecosystem"
+	}
+	return eco
 }
 
 func classifyCode(it *Item, is *assess.Issue, in Input, reader *fileReader) {
@@ -357,8 +393,11 @@ func classifyPatch(it *Item, is *assess.Issue, in Input, reader *fileReader) {
 }
 
 // needsFor says what a person has to supply for an issue nox has no
-// deterministic fix for. It never says "unknown": every answer names the thing
-// that is needed.
+// deterministic fix for. It never says "unknown", and it never gives the same
+// sentence to unrelated rules: every answer names the specific thing nox is
+// missing and how to supply it. The order is the most specific source first: a
+// rule's own entry, the taint class, then the rule family's missing piece
+// joined to the rule's remediation guidance.
 func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
 	if n, ok := needsByRule[is.RuleID]; ok {
 		return n
@@ -366,17 +405,87 @@ func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
 	if n, ok := needsByClass[is.VulnClass]; ok {
 		return n
 	}
+	missing := needsByFamily[catalog.Family(is.RuleID).Key]
+	if missing == "" {
+		missing = "Whether this is deliberate: the code alone does not say, and nox does not guess intent."
+	}
 	if rs != nil {
 		if r, ok := rs.ByID(is.RuleID); ok && strings.TrimSpace(r.Remediation) != "" {
-			return "A change to your code that only you can choose. Guidance for this rule: " + strings.TrimSpace(r.Remediation)
+			return missing + " To supply it: " + strings.TrimSpace(r.Remediation)
 		}
 	}
-	return "A change to your code that only you can choose: nox has no deterministic fix for " + is.RuleID +
-		". Open the flagged location and run nox explain " + is.RuleID + " for what the rule looks for."
+	return missing + " To supply it: open the flagged location and run nox explain " + is.RuleID +
+		" for what the rule looks for."
 }
 
-// needsByRule is for rules whose missing piece is not code but a test.
+// needsByFamily is what nox is missing for a rule that has no entry of its own,
+// by rule family. Each states the information, not the edit.
+var needsByFamily = map[string]string{
+	"secrets":              "A replacement secret and the place it should be read from. Treat the exposed value as compromised: rotate it at its provider first, then load the new one from an environment variable or a secret store.",
+	"privacy":              "A decision about this data: whether it has to be collected, stored or logged at all, and for how long.",
+	"infrastructure":       "The value that is right for your environment, which the file does not state.",
+	"containers":           "The image, user or setting that is right for your build, which the Dockerfile does not state.",
+	"dependencies":         "A decision about this package: a fixed version, a replacement, or an accepted risk.",
+	"provenance":           "Where this artifact is meant to come from, and a way to verify it (a digest, a signature or a pinned source).",
+	"license":              "Your license policy for this dependency; nox cannot decide what your project may include.",
+	"slopsquatting":        "Confirmation that this is the package you meant. Check its registry page, publisher and age, and remove it if you did not choose it.",
+	"mcp-hardening":        "How much this MCP server is allowed to do for you, and the pinned version or address you trust.",
+	"agent-config":         "How much this agent is allowed to do, and which tools and data it may reach.",
+	"ai":                   "A decision about how this AI feature may use, store or expose prompts, models and responses.",
+	"ai-agent-lattice":     "Which of the capabilities this agent combines it is meant to hold together.",
+	"ai-embedding":         "Which data may be embedded and who may query it.",
+	"ai-prompt-injection":  "What this input may do once it reaches the model.",
+	"weak-crypto":          "Which algorithm or key size your stored data and peers can move to; changing it can make existing data unreadable.",
+	"transport-security":   "Which protocol versions and certificates your clients support.",
+	"file-permissions":     "Which account should own and access this file.",
+	"memory-safety":        "The size or bound that is right for this buffer, which the code does not state.",
+	"agentic-dataflow":     "Which data this agent step may receive from, and pass to, the next one, and who vouches for it.",
+	"taint-flow":           "Where this input is validated before it is used, and what it is checked against; the flow is real but the safe boundary depends on your feature.",
+	"cve-variants":         "Whether the library version you run has the vulnerable behaviour: check the advisory for the affected versions, then upgrade or confirm it does not apply.",
+	"webhook-verification": "The signing secret for this provider's endpoint, and where the handler should read it from; only you can obtain it from the provider's dashboard.",
+	"authorization":        "Who is meant to be allowed to call this, which the code does not state.",
+}
+
+// needsByRule is for rules whose missing piece is specific enough to name: a
+// value only the owner knows, a decision, or a test rather than an edit.
 var needsByRule = map[string]string{
+	"CONT-002": "The version to pin. nox cannot know which tag of this image you have tested; pick it from the image's " +
+		"registry (a specific tag, or better a digest) and write it in the FROM line.",
+	"IAC-031": "The version to pin. nox cannot know which tag of this image you have tested; use the tag or digest " +
+		"your deployment has been verified with, and set it on the image field.",
+	"IAC-004": "The address ranges that really need access. Replace 0.0.0.0/0 with your office, VPN or VPC ranges; " +
+		"only you know which clients must reach this resource.",
+	"IAC-137": "The CPU and memory limits for this container. The numbers depend on its real usage, which the manifest " +
+		"does not show: read them from your monitoring (or load-test), then set resources.limits.",
+	"IAC-138": "The CPU and memory this container needs to be scheduled. Read its typical usage from your monitoring and " +
+		"set resources.requests (usually at or below the limits).",
+	"IAC-139": "The endpoint or command that proves this process is alive, and how long it needs to start. Only the application " +
+		"knows that; set livenessProbe with it.",
+	"IAC-140": "The endpoint or command that proves this process is ready to take traffic. Only the application knows " +
+		"when that is; set readinessProbe with it.",
+	"IAC-121": "A command that proves the service is healthy (for example an HTTP check on its health endpoint) and which " +
+		"tool the image has to run it. Add it as a HEALTHCHECK line.",
+	"IAC-122": "The unprivileged user to run as, and which files it must own. Create that user in the image and add a USER " +
+		"line after the steps that need root.",
+	"IAC-123": "The user and group that should own the copied files; use the same one as the USER instruction. " +
+		"Then add --chown=user:group to the COPY.",
+	"IAC-124": "A contact for this image: the person or team to name as maintainer. Add it as a LABEL.",
+	"IAC-131": "Which traffic this workload should accept and send. List its callers and the services it calls, then write " +
+		"a NetworkPolicy that allows only those.",
+	"IAC-132": "How many replicas may be down at once during a node drain. That is an availability decision for this " +
+		"service; set minAvailable or maxUnavailable in a PodDisruptionBudget.",
+	"IAC-135": "Whether the workload needs system calls the default seccomp profile blocks. If not, set " +
+		"seccompProfile type RuntimeDefault in the pod security context; if unsure, test it in staging first.",
+	"IAC-142": "How the replicas should spread (across nodes or zones) and how many you run. Add podAntiAffinity " +
+		"for the topology you want; with a single replica there is nothing to spread.",
+	"IAC-167": "Which resources hold data you cannot recreate. Mark those with lifecycle { prevent_destroy = true }; " +
+		"nox cannot tell a database from a scratch bucket.",
+	"AI-006": "A decision about what may be logged of a prompt or response. Redact or truncate the content (or log only " +
+		"identifiers and sizes) before it reaches the logger.",
+	"ATTACK-001": "Which of these endpoints are meant to be public. Nothing is wrong yet: confirm each one's audience, " +
+		"and require authentication on those that are not.",
+	"ATTACK-003": "Whether this admin or debug route is meant to be reachable in production, and by whom. " +
+		"Remove it, disable it outside development, or put authentication and an allow-list in front of it.",
 	"AUTHZ-001": "A two-account test. Create two users, have each own one record, then request the first user's " +
 		"record while signed in as the second. If it comes back, the endpoint lacks an ownership check. " +
 		"A static scan cannot see who owns a record, so only that test settles it.",

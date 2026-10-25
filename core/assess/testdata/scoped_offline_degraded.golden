@@ -1,13 +1,15 @@
 
 Nox Security Assessment
 
-7 issues need attention (11 findings).
+6 issues need attention (6 findings).
   1. Upgrade lodash 3.10.0 -> 4.17.21: fixes 1 known vulnerability (highest severity: critical). A major version, so check for breaking changes; nox fix apply --include-major applies it.
   2. AWS access key ID [SEC-001] at config/prod.env:3 (high severity, high confidence).
   3. Upgrade org.yaml:snakeyaml 1.33 to 2.0 or later in services/api yourself: fixes 1 known vulnerability (highest severity: high); nox fix cannot apply this upgrade.
   4. left-pad 1.0.0 has 1 known vulnerability with no fixed version published (highest severity: high). Check the advisories for a workaround, or replace the package.
   5. Container image uses the latest tag [IAC-001] at Dockerfile:1 (medium severity, high confidence).
-  ...and 2 more issues; run with --verbose to list every issue.
+  ...and 1 more issue; run with --verbose to list every issue.
+
+Plus 1 lower-priority observation (5 findings): low severity, or a check that is unsure of the finding. Run with --verbose to list them; nothing is hidden from findings.json or results.sarif.
 
 Checks completed: secrets, application code, dependencies (12 packages), infrastructure configuration and supply chain.
 Checks that did not complete (results may be incomplete):

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `nox scan --help` documents `SOURCE_DATE_EPOCH`, and a test pins two scans
+  with it set to byte-identical `findings.json`, SARIF, both SBOMs,
+  `ai.inventory.json` and the HTML report.
+
 - **Contribution is consented to, versioned, and erasable.** `nox scan` now
   contributes (when `scan.intelligence.contribute: true`) only on a machine
   that has accepted the contribution terms: `nox intel consent show` prints
@@ -153,6 +157,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Requires nox-core v0.5.0.
 
 ### Changed
+
+- **The assessment headline counts what needs attention.** "23 issues need
+  attention" counted a privileged container and a missing `LABEL maintainer`
+  alike. An issue needs attention when a finding in it is critical or high
+  severity (the line `nox ci-gate` draws) or medium severity with high
+  confidence; everything else is a lower-priority observation, shown as its own
+  line ("Plus 16 lower-priority observations (24 findings)") and listed under
+  `--verbose`. Nothing leaves `findings.json` or SARIF. `nox fix plan` carries
+  the same count and a `needs_attention` flag per item.
+- **`nox fix plan` says what is missing.** Fifteen of nineteen "needs
+  information" items shared one sentence. Each now names the specific
+  information (the CPU and memory limits, the probe endpoint, the maintainer
+  contact, the image tag to pin, the signing secret...) and how to supply it,
+  by rule, then by rule family. Dependencies say whether there is no fixed
+  version, the ecosystem is one `nox fix` does not drive, or the fixed version
+  could not be shown to be newer.
 
 - A default scan that looked dependencies up now prints one `[network]` line: how
   many dependencies (ecosystem, name, version) were sent to the intelligence
