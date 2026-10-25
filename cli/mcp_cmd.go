@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/mcpdrift"
 	"github.com/nox-hq/nox/core/report"
@@ -16,7 +17,7 @@ import (
 )
 
 // mcpUsage is the shared usage banner for the `nox mcp` command family.
-const mcpUsage = `Usage: nox mcp <baseline|drift|show> [flags] -- <server-launch-command...>
+const mcpUsage = `Usage: nox mcp <pin|baseline|drift|show> [flags] -- <server-launch-command...>
 
 Capture a reviewable baseline of an MCP server's tool manifest and detect drift
 (a "rug-pull": a server that shows a benign manifest at review time, then serves
@@ -24,6 +25,10 @@ a changed or malicious one later). The baseline is local, diffable JSON —
 commit it, review it in PRs, and treat drift as a finding.
 
 Subcommands:
+  pin        Approve the MCP server definitions in this project's config files by
+             writing .nox/mcp-pins.json (commit it). Scans compare against it and
+             report MCP-015 on every run until a change is re-pinned. Does not
+             launch any server.
   baseline   Capture the server's tool manifest into .nox/mcp-baseline.json
   drift      Re-capture and report drift against the baseline (emits findings)
   show       Print the stored baseline summary
@@ -62,6 +67,8 @@ func runMCP(args []string) int {
 	sub := args[0]
 	rest := args[1:]
 	switch sub {
+	case "pin":
+		return mcpPin(rest)
 	case "baseline":
 		return mcpBaseline(rest)
 	case "drift":
@@ -306,4 +313,39 @@ func severityLine(sev map[findings.Severity]int) string {
 func printSandboxWarning(serverCmd []string) {
 	fmt.Fprintf(os.Stderr, "[sandbox] launching MCP server as a subprocess: %v\n", serverCmd)
 	fmt.Fprintln(os.Stderr, "[sandbox] if this server is untrusted, STOP and run it in an isolated sandbox (no network, read-only FS). See `nox mcp --help`.")
+}
+
+// mcpPin writes the project's MCP pin file from the definitions currently on
+// disk. It is the acknowledgement MCP-015 waits for, so it states exactly what
+// it accepted.
+func mcpPin(args []string) int {
+	fs := flag.NewFlagSet("mcp pin", flag.ContinueOnError)
+	var target string
+	fs.StringVar(&target, "target", ".", "project root to pin")
+	if err := parseFlagsAnywhere(fs, args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 0 {
+		target = fs.Arg(0)
+	}
+	res, err := core.PinMCPServers(context.Background(), target, core.ScanOptions{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Printf("Pinned %d MCP server definition(s) in %s\n", res.Servers, res.Path)
+	printPinKeys("new", res.Added)
+	printPinKeys("changed (now accepted)", res.Changed)
+	printPinKeys("no longer defined (removed from the pin file)", res.Removed)
+	if res.Servers == 0 {
+		fmt.Println("No MCP servers were found, so there is nothing to protect yet.")
+	}
+	fmt.Println("Review the definitions you just accepted, then commit the pin file.")
+	return 0
+}
+
+func printPinKeys(label string, keys []string) {
+	for _, k := range keys {
+		fmt.Printf("  %s: %s\n", label, k)
+	}
 }

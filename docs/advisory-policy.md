@@ -178,7 +178,9 @@ any alias is already reported for that package in the previous run.
 - **Not keyed on the version.** The same advisory still hitting an upgraded
   package is the same advisory.
 - **No previous run is not "no advisories".** The first scheduled run, or a
-  cache miss, reports everything and acts on nothing. Otherwise adopting this
+  cache miss, reports everything and acts on nothing: the issue step opens an
+  issue for every current advisory that no existing issue (open or closed) already
+  lists, so an evicted cache cannot swallow a disclosure. Otherwise adopting this
   would open a pull request for every advisory you have ever had.
 - **A scan that could not look is not a quiet week.** If the vulnerability
   lookup failed, `nox advisories` exits 1, acts on nothing, and the workflow
@@ -190,7 +192,15 @@ earlier step succeeded: a run that failed part-way must not make its advisories
 look known.
 
 GitHub evicts caches unused for seven days and disables scheduled workflows in
-repositories with no activity for sixty. The daily default keeps the cache warm.
+repositories with no activity for sixty. The daily default keeps the cache warm,
+and the cache is not the record of what was reported: each issue carries a hidden
+`<!-- nox-advisory:ecosystem/package/id -->` marker per advisory (aliases
+included, version excluded), and the next run reads those from your issues,
+open and closed. A run that finds the cache gone therefore reports what has never
+been reported, once, instead of nothing. What a missing cache does cost is
+action: with no previous run nothing is prepared as a pull request until a
+later run has one to compare with. Delete the marker comment from an issue to
+have its advisory reported again.
 
 ## Run it by hand
 

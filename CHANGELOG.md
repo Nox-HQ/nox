@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP-015 (rug-pull detection) no longer keeps its pin in hidden machine
+  state.** The pin lived in `~/.nox/cache/mcp-pins`, was written by the scan
+  itself, and was overwritten when it reported a change: after editing a server's
+  args, three scans gave 1, 0, 0 hits, and a fresh CI runner (no `~/.nox`) could
+  never report anything. The pin is now `.nox/mcp-pins.json`, a reviewable file
+  you commit (like `.nox/baseline.json`), written only by the new
+  `nox mcp pin`. A scan reads it, reports a changed server (high) or one that was
+  never pinned (medium) on every run until you re-pin, and never edits it. With
+  MCP servers but no pin file the scan reports an MCP degradation saying MCP-015
+  cannot run, instead of staying silent. The old `~/.nox/cache/mcp-pins` cache is
+  ignored (and named once in that degradation if it exists). Same project, same
+  output.
+- **The `nox install-ci` workflow no longer loses a disclosure when the Actions
+  cache is evicted.** The issue step ran only when a previous run was restored,
+  so after the cache expired (seven days unused) the next run counted as a first
+  run, reported nothing, and a new advisory was swallowed. The step now reports
+  every current advisory that no existing issue, open or closed, already lists
+  (each issue carries a hidden `nox-advisory` marker per advisory), so a missing
+  cache costs a repeat of nothing and a miss of nothing. With no previous run
+  nothing is still acted on (no pull request). The step's shell is now executed
+  by tests against the real `nox advisories`; it has not been run on GitHub.
+- **`ai.inventory.json` and `nox model` attributed the wrong credential to a
+  model.** The credential was the first `*_KEY`/`*_SECRET`/`*_TOKEN` environment
+  variable anywhere in the file, truncated: `gpt-4o` showed `STRIPE_SECRET` while
+  the client was built from `OPENAI_API_KEY`. It now follows the client the call
+  is made on to its constructor (`apiKey: process.env.X`, `api_key=os.environ["X"]`,
+  `option.WithAPIKey(os.Getenv("X"))`, or one assignment away) and is omitted
+  when that cannot be established (client built by a helper, two clients with
+  different keys, an SDK reading its default variable implicitly).
+
+### Changed
+
+- A default scan that looked dependencies up now prints one `[network]` line: how
+  many dependencies (ecosystem, name, version) were sent to the intelligence
+  service and the OSV reference, that no source or paths were, and how to opt out
+  (`scan.intelligence.disabled`, `--offline`).
+
 ## [1.49.0] - 2026-10-25
 
 The first-run experience and continuous understanding from the product vision

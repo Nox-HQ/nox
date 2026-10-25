@@ -118,15 +118,71 @@ jobs:
           if [ -n "${POLICY_OVERRIDE}" ]; then args+=(--policy "${POLICY_OVERRIDE}"); fi
           nox advisories "${args[@]}"
 
-      - name: Report the new advisories in an issue
-        if: steps.decide.outputs.new-count != '0' && steps.decide.outputs.previous-run == 'true'
+      # The issue is the durable record of what has been reported. The cache
+      # above is only a performance and "what to act on" aid: GitHub evicts it
+      # after seven days without use, and a run that finds it gone has no
+      # "previous" to compare with. Such a run reports every current advisory
+      # that no existing issue (open OR closed) already carries, instead of
+      # concluding that nothing is new. So a disclosure that lands while the
+      # cache is missing is still reported, once, and nothing is reported twice.
+      # Each advisory is recorded in the issue body as a hidden marker
+      # (ecosystem/package/id, aliases included, version excluded).
+      - name: Report advisories in an issue
         env:
           GH_TOKEN: ${{ github.token }}
-          NEW_COUNT: ${{ steps.decide.outputs.new-count }}
+          PREVIOUS: ${{ runner.temp }}/nox-previous/findings.json
+          POLICY_OVERRIDE: ${{ inputs.policy }}
         run: |
-          gh issue create \
-            --title "nox: ${NEW_COUNT} newly disclosed dependency advisories" \
-            --body-file nox-results/advisories.md
+          set -euo pipefail
+          args=(--input nox-results/findings.json --previous "${PREVIOUS}" --format json)
+          if [ -n "${POLICY_OVERRIDE}" ]; then args+=(--policy "${POLICY_OVERRIDE}"); fi
+          nox advisories "${args[@]}" > nox-results/advisories.json
+
+          gh issue list --state all --limit 1000 --json body --jq '.[].body' > nox-results/issue-bodies.txt
+
+          jq --rawfile seen nox-results/issue-bodies.txt '
+            . as $r
+            | ( $r.decisions // [] )
+            | map(select(.novelty == "new" or .novelty == "unestablished"))
+            | map( . as $d
+                | ( [ $d.advisory ] + ( $d.aliases // [] ) ) as $ids
+                | $d + { markers: ( $ids | map( "<!-- nox-advisory:" + $d.ecosystem + "/" + $d.package + "/" + . + " -->" ) ) } )
+            | map( select( ( .markers | map( . as $m | $seen | contains($m) ) | any ) | not ) )
+          ' nox-results/advisories.json > nox-results/to-report.json
+
+          count="$(jq 'length' nox-results/to-report.json)"
+          if [ "${count}" = "0" ]; then
+            echo "No advisory is waiting to be reported: every current one is already in an issue, known from the previous run, or waived."
+            exit 0
+          fi
+
+          previous="$(jq -r '.previous_run' nox-results/advisories.json)"
+          {
+            echo "## Nox advisory report"
+            echo
+            if [ "${previous}" != "true" ]; then
+              echo "There was no previous run to compare against (this is the first scheduled run, or GitHub evicted the Actions cache), so every current advisory that no earlier issue already lists is reported here. Nothing was acted on."
+            else
+              echo "These advisories are new since the previous scheduled run."
+            fi
+            echo
+            echo "| Advisory | Package | Severity | Relevance |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.advisory) | \(.ecosystem) \(.package)@\(.version) | \(.severity) | \(.relevance) |"' nox-results/to-report.json
+            echo
+            echo "Why:"
+            echo
+            jq -r '.[] | "- **\(.advisory)**: \(.reason)"' nox-results/to-report.json
+            echo
+            jq -r '.[].markers[]' nox-results/to-report.json
+          } > nox-results/issue.md
+
+          if [ "${previous}" = "true" ]; then
+            title="nox: ${count} newly disclosed dependency advisories"
+          else
+            title="nox: ${count} dependency advisories reported (no previous run to compare against)"
+          fi
+          gh issue create --title "${title}" --body-file nox-results/issue.md
 
       # Which credential opens the pull request. The secrets are only tested
       # for presence here; their values never enter this step's environment.
