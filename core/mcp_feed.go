@@ -5,14 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox-core/degrade"
-	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/mcpconfig"
@@ -47,30 +45,34 @@ const maxAdvisoryIDs = 5
 // must not read as "no advisories".
 func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts ScanOptions, artifacts []discovery.Artifact, allFindings *findings.FindingSet, deg *degrade.Degradations) { //nolint:gocritic // mirrors RunScanContext
 	fc := cfg.Scan.MCPFeed
-	if fc.Disabled || cfg.Scan.OSV.Disabled {
+	if fc.Disabled {
 		return
 	}
 	servers := mcpFeedServers(artifacts)
 	if len(servers) == 0 {
 		return
 	}
-	feedURL := fc.ResolvedURL(cfg.Scan.Intelligence)
-	if feedURL == "" {
-		return // the operator opted out of the intelligence service and named no feed
-	}
-
-	if fc.SignatureKeyPath == "" {
+	if cfg.Scan.OSV.Disabled {
 		deg.AddAdvisory(degradeMCPFeed,
-			fmt.Sprintf("%d MCP server package(s) were not checked against the MCP advisory feed: no public key is pinned (scan.mcp_feed.signature_key_path)", len(servers)),
-			"known advisories for these packages are not reported; fetch "+feedURL+".pub.pem once, review it, commit it and name it in scan.mcp_feed.signature_key_path")
+			fmt.Sprintf("%d MCP server package(s) were not checked against the MCP advisory feed: network lookups are disabled (scan.osv.disabled)", len(servers)),
+			"known advisories for these packages are not reported; this is not \"no advisories\"")
 		return
 	}
-	verify, err := loadFeedVerifier(target, fc.SignatureKeyPath)
+	feedURL := fc.ResolvedURL(cfg.Scan.Intelligence)
+	if feedURL == "" {
+		deg.AddAdvisory(degradeMCPFeed,
+			fmt.Sprintf("%d MCP server package(s) were not checked against the MCP advisory feed: NOX Intelligence is disabled (scan.intelligence.disabled) and scan.mcp_feed.url names no feed", len(servers)),
+			"known advisories for these packages are not reported; this is not \"no advisories\"")
+		return
+	}
+
+	key, err := resolveFeedKey(target, fc.SignatureKeyPath)
 	if err != nil {
-		deg.Add(degradeMCPFeed, fmt.Sprintf("the pinned MCP advisory feed key could not be used: %v", err),
+		deg.Add(degradeMCPFeed, fmt.Sprintf("the MCP advisory feed key could not be used: %v", err),
 			"MCP server packages were not checked against the advisory feed")
 		return
 	}
+	verify := key.verify
 	refresh := mcpfeed.DefaultRefresh
 	if fc.Refresh != "" {
 		if refresh, err = parseFeedRefresh(fc.Refresh); err != nil {
@@ -86,7 +88,7 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 
 	loaded, err := mcpfeed.Load(ctx, mcpfeed.Options{URL: feedURL, CacheDir: cacheDir, TTL: refresh, Offline: opts.Offline, Verify: verify})
 	if err != nil {
-		recordMCPFeedFailure(deg, feedURL, len(servers), opts.Offline, err)
+		recordMCPFeedFailure(ctx, deg, key, feedURL, len(servers), opts.Offline, err)
 		return
 	}
 	if loaded.RefreshErr != nil {
@@ -95,7 +97,9 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 			"advisories published since that copy are not reported")
 	}
 	for _, h := range loaded.Check(servers) {
-		allFindings.Add(mcpFeedFinding(h))
+		f := mcpFeedFinding(h)
+		f.Metadata["feed_key"] = key.source()
+		allFindings.Add(f)
 	}
 }
 
@@ -103,7 +107,7 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 // was not checked and why. A service that has not published a feed is not an
 // outage and not the operator's to fix, so it does not fail a build; anything
 // else (a feed that does not verify, an unreachable service with no cache) does.
-func recordMCPFeedFailure(deg *degrade.Degradations, feedURL string, servers int, offline bool, err error) {
+func recordMCPFeedFailure(ctx context.Context, deg *degrade.Degradations, key feedKey, feedURL string, servers int, offline bool, err error) {
 	impact := "MCP server packages were not checked against the advisory feed; an empty result is not \"no advisories\""
 	var np *mcpfeed.NotPublishedError
 	switch {
@@ -114,25 +118,8 @@ func recordMCPFeedFailure(deg *degrade.Degradations, feedURL string, servers int
 		deg.AddAdvisory(degradeMCPFeed,
 			fmt.Sprintf("%d MCP server package(s) were not checked: the scan is offline and no verified copy of the MCP advisory feed is cached (%v)", servers, err), impact)
 	default:
-		deg.Add(degradeMCPFeed, fmt.Sprintf("the MCP advisory feed %s could not be used: %v", feedURL, err), impact)
+		deg.Add(degradeMCPFeed, fmt.Sprintf("the MCP advisory feed %s could not be used: %s", feedURL, explainFeedFailure(ctx, key, feedURL, offline, err)), impact)
 	}
-}
-
-// loadFeedVerifier reads the pinned key. A relative path is relative to the scan
-// root, as for the slopsquat feed.
-func loadFeedVerifier(target, keyPath string) (slopfeed.SignatureVerifier, error) {
-	if !filepath.IsAbs(keyPath) {
-		keyPath = filepath.Join(scanRootDir(target), keyPath)
-	}
-	pem, err := os.ReadFile(keyPath) // #nosec G304 -- operator-configured key path
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", keyPath, err)
-	}
-	v, err := slopfeed.PEMEd25519Verifier(pem)
-	if err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", keyPath, err)
-	}
-	return v, nil
 }
 
 // mcpFeedServers lists the MCP servers across the scan's client configs whose

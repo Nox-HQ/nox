@@ -156,18 +156,21 @@ func TestMCPFeed_AFeedThatDoesNotVerifyFailsClosedAndBlocks(t *testing.T) {
 	}
 }
 
-func TestMCPFeed_WithoutAPinnedKeyTheFeedIsNotConsultedAndTheScanSaysSo(t *testing.T) {
+// With no signature_key_path the feed is verified under the key built into nox,
+// not skipped. The fixture feed is signed by a test key, so it must be rejected,
+// blocking, and never used: the old "no public key is pinned" skip is gone.
+func TestMCPFeed_WithoutAConfiguredKeyTheBuiltInKeyDecides(t *testing.T) {
 	good, _ := os.ReadFile(mcpFeedTestdata + "feed.json")
 	dir, requests := feedProject(t, feedServers, 200, good, false)
 	res, err := RunScan(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != 0 || len(feedFindings(res)) != 0 {
-		t.Fatalf("an unpinned feed was consulted: requests=%d findings=%+v", requests.Load(), feedFindings(res))
+	if requests.Load() != 1 || len(feedFindings(res)) != 0 {
+		t.Fatalf("requests=%d findings=%+v", requests.Load(), feedFindings(res))
 	}
 	ds := feedDegradations(res)
-	if len(ds) != 1 || !ds[0].Advisory || !strings.Contains(ds[0].Detail, "no public key is pinned") {
+	if len(ds) != 1 || ds[0].Advisory || !strings.Contains(ds[0].Detail, "signature") || strings.Contains(ds[0].Detail, "no public key is pinned") {
 		t.Fatalf("degradation = %+v", ds)
 	}
 }

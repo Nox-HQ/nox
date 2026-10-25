@@ -30,6 +30,13 @@ const (
 	DefaultRefreshInterval = 24 * time.Hour
 )
 
+// NotPublishedError means the server answered 404: it has no feed at this URL
+// (yet). That is the SERVICE having nothing to say, which is different from the
+// feed saying nothing is high-risk, and from a feed that failed verification.
+type NotPublishedError struct{ URL string }
+
+func (e *NotPublishedError) Error() string { return "feed server returned HTTP 404" }
+
 // RemoteOptions configures fetching, caching, and verifying a feed served over
 // HTTP(S).
 type RemoteOptions struct {
@@ -181,6 +188,9 @@ func fetchAndCacheFeed(ctx context.Context, opts RemoteOptions, cachePath string
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &NotPublishedError{URL: opts.URL}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("feed server returned HTTP %d", resp.StatusCode)
 	}

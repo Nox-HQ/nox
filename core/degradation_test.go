@@ -162,6 +162,12 @@ func TestScan_CleanScanReportsNoDegradations(t *testing.T) {
 		t.Fatalf("writing file: %v", err)
 	}
 
+	// The default slopsquat feed is "not checked" offline, and a scan says so;
+	// this test is about a scan with nothing else wrong, so it opts the feed out.
+	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"), []byte("scan:\n  slop:\n    disabled: true\n"), 0o644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+
 	result, err := RunScanWithOptions(dir, ScanOptions{Offline: true})
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)

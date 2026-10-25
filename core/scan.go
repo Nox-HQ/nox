@@ -674,21 +674,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
-	// The SLOP analyzer gains a predictive dimension only when a feed is
-	// configured (default: off, exact reactive behavior preserved). Loading is
-	// offline: a file read plus digest/signature verification, no network. A
-	// misconfigured or tampered feed fails closed — the predictive dimension
-	// stays off and the failure is recorded as a visible degradation.
-	var slopOpts []slop.Option
-	if fp := cfg.Scan.Slop.Feed; fp != "" && opts.Scopes.Has(ScopeSupplyChain) {
-		if loaded, ferr := loadSlopFeed(ctx, target, cfg.Scan.Slop, opts.Offline); ferr != nil {
-			degradations.Add(degrade.SlopFeed,
-				fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", fp, ferr),
-				"the SLOP-002 predictive dimension is disabled; high-risk slopsquat targets are not being flagged from the feed")
-		} else {
-			slopOpts = append(slopOpts, slop.WithFeed(loaded))
-		}
-	}
+	// The SLOP analyzer gains a predictive dimension from NOX Intelligence's
+	// signed feed by default, or from the feed .nox.yaml names. A misconfigured
+	// or tampered feed fails closed — the predictive dimension stays off and the
+	// failure is recorded as a visible degradation.
+	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations)
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	slopAnalyzer.RecordReasoningTo(reasons)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()

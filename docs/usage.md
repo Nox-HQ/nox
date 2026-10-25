@@ -1186,19 +1186,22 @@ to hallucinate that were verified *unregistered (squattable)* when the feed was
 generated. When an imported name matches a high-risk entry, `SLOP-002` fires with
 a severity derived from the entry's risk tier.
 
-It is **opt-in and off by default**: with no feed configured the analyzer's
-`SLOP-001` behavior is unchanged. Enabling a feed is purely additive.
+It is **on by default** when NOX Intelligence is enabled and the scan is online:
+nox fetches the signed feed and verifies it under the key built into nox
+(`slopfeed-key-v1`). `scan.slop.disabled: true` opts out; a configured
+`signature_key_path` overrides the built-in key. The feed is purely additive.
 
 ```yaml
 scan:
   slop:
+    # disabled: true             # opt out of the default NOX Intelligence feed
     feed: bundled                 # ship-in-binary feed; or a path to a feed JSON
     require_signature: false      # reject unsigned/bad-signature feeds
     signature_key_path: keys/slopsquat.pub.pem   # PEM Ed25519 public key
 ```
 
-No network is touched at scan time — only the out-of-band generator
-(`cmd/slopfeed`) queries registries. A malformed, tampered, or digest-mismatched
+Only the out-of-band generator (`cmd/slopfeed`) queries registries; `--offline`
+makes no request at all. A malformed, tampered, or digest-mismatched
 feed fails closed (predictive dimension off, a visible `slop_feed` degradation
 recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
 trust model, regeneration, and the responsible-disclosure note.
@@ -1208,8 +1211,9 @@ trust model, regeneration, and the responsible-disclosure note.
 `scan.mcp_feed` joins the MCP servers a scan finds with NOX Intelligence's
 signed feed of public advisories for MCP packages and reports `MCP-026`, "an
 advisory affects this MCP server package", for a server whose pinned version an
-advisory's own interval contains. It needs a pinned public key
-(`signature_key_path`), and says so when it is missing. See
+advisory's own interval contains. It is on by default (online, intelligence
+enabled), verified under the key built into nox; `signature_key_path` overrides
+it and `scan.mcp_feed.disabled: true` opts out. See
 [docs/mcp-advisory-feed.md](mcp-advisory-feed.md).
 
 ### Conditional Severity
