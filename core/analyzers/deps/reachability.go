@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox-core/vulnsource"
 	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/capability"
@@ -328,4 +329,120 @@ func goCallReachable(g *callgraph.Graph, root string, affected []string) (path [
 		return nil, false
 	}
 	return best, true
+}
+
+// symbolHit is a call path from this module to a function an advisory lists.
+type symbolHit struct {
+	importPath, symbol string
+	// fromAdvisory is true when the advisory's own publisher listed the symbol
+	// (OSV imports[].symbols), false when only NOX Intelligence's patch
+	// analysis did.
+	fromAdvisory bool
+	path         []string
+}
+
+// goListedSymbolHit looks for a concrete call path from this module to a
+// function the advisory lists as affected, by the publisher or by nox_symbols.
+//
+// It can only raise. A listed symbol is a hint with a precision of roughly
+// 0.3 to 0.5 and partial recall, so "no listed symbol is called" is not
+// evidence of anything, and the caller must treat a false result as "nothing
+// found", never as a reason to lower a finding. Only package-level functions
+// can be found: a method call's receiver type is not known from syntax.
+func goListedSymbolHit(g *callgraph.Graph, ov *osvVuln, module string) (symbolHit, bool) {
+	if g == nil {
+		return symbolHit{}, false
+	}
+	paths := map[string]struct{}{}
+	for _, aff := range ov.Affected {
+		if aff.Package.Name != module {
+			continue
+		}
+		for _, im := range aff.EcosystemSpecific.Imports {
+			if im.Path != "" {
+				paths[im.Path] = struct{}{}
+			}
+		}
+	}
+	for _, as := range ov.Symbols {
+		if as.Package != module || as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, im := range as.Imports {
+			paths[im.Path] = struct{}{}
+		}
+		for _, cs := range as.Symbols {
+			if cs.Package != "" {
+				paths[cs.Package] = struct{}{}
+			}
+		}
+	}
+	ordered := make([]string, 0, len(paths))
+	for p := range paths {
+		ordered = append(ordered, p)
+	}
+	sort.Strings(ordered)
+
+	advisorySet := func(importPath string) map[string]bool {
+		out := map[string]bool{}
+		for _, aff := range ov.Affected {
+			if aff.Package.Name != module {
+				continue
+			}
+			for _, im := range aff.EcosystemSpecific.Imports {
+				if im.Path == importPath {
+					for _, s := range im.Symbols {
+						out[s] = true
+					}
+				}
+			}
+		}
+		return out
+	}
+
+	var best symbolHit
+	found := false
+	for _, importPath := range ordered {
+		fromAdvisory := advisorySet(importPath)
+		for _, sym := range ov.ListedSymbols(module, importPath) {
+			for _, caller := range g.CallersOfSymbol(importPath, sym) {
+				p, kind := g.PathToFunc(caller)
+				// Only a concrete entry, as in goCallReachable.
+				if kind != callgraph.EntryConcrete {
+					continue
+				}
+				if !found || len(p) < len(best.path) {
+					best = symbolHit{importPath: importPath, symbol: sym, fromAdvisory: fromAdvisory[sym], path: p}
+					found = true
+				}
+			}
+		}
+	}
+	return best, found
+}
+
+// raiseOnListedSymbol records a call path to a symbol the advisory lists and,
+// when the climb had not already reached a call path, raises it to one.
+//
+// Raise-only, by construction: it returns the verdict unchanged when no listed
+// symbol is called, and it never touches a NotImpacting verdict, which rests on
+// the publisher's own statement of which packages are affected.
+func raiseOnListedSymbol(v applicability.Verdict, meta map[string]string, g *callgraph.Graph, ov *osvVuln, module string) applicability.Verdict {
+	hit, ok := goListedSymbolHit(g, ov, module)
+	if !ok {
+		return v
+	}
+	meta["affected_symbol_reached"] = hit.importPath + "." + hit.symbol
+	if hit.fromAdvisory {
+		meta["affected_symbol_basis"] = "advisory"
+	} else {
+		meta["affected_symbol_basis"] = "nox_symbols"
+	}
+	if v.Outcome == applicability.NotImpacting {
+		return v
+	}
+	if v.Outcome == applicability.Impacting && !applicability.CallReachable.Above(v.Reached) {
+		return v // already at or above a call path
+	}
+	return applicability.Established(applicability.CallReachable, hit.path)
 }

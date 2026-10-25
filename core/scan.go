@@ -191,7 +191,7 @@ type ScanResult struct {
 	Leads []Lead
 	// LeadChecks names each check that produces leads or opt-in findings and
 	// had something to read, in words that do not overclaim:
-	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js and Django routes; ...; leads only)".
+	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django routes; ...; leads only)".
 	// Empty when, for example, the scan saw no such routes: it then says nothing about
 	// authorization.
 	LeadChecks []string
@@ -1069,6 +1069,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// policy-gated like any other. Non-fatal per file.
 	if opts.Scopes.Has(ScopeAI) {
 		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
+		// Advisories for the registry packages those servers launch, from the
+		// signed MCP feed, when it can be checked (docs/mcp-advisory-feed.md).
+		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations)
 	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,

@@ -22,6 +22,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/mcpconfig"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -482,7 +483,7 @@ func extractComponents(path string, content []byte) []Component {
 	name := baseName(path)
 
 	switch {
-	case isMCPConfigName(name):
+	case isMCPConfigPath(path):
 		return extractMCPComponents(path, content)
 	case hasSuffix(name, ".prompt") || hasSuffix(name, ".prompt.md"):
 		return []Component{{
@@ -509,29 +510,29 @@ func isMCPConfigName(name string) bool {
 	return name == "mcp.json" || hasSuffix(name, ".mcp.json")
 }
 
+// isMCPConfigPath is isMCPConfigName plus the location-keyed configs whose file
+// name is generic: Zed keeps its servers in .zed/settings.json.
+func isMCPConfigPath(path string) bool {
+	return isMCPConfigName(baseName(path)) || mcpconfig.ServersKey(path) == "context_servers"
+}
+
 // extractMCPComponents parses an mcp.json file and extracts one inventory
 // entry per configured MCP server.
 func extractMCPComponents(path string, content []byte) []Component {
-	// Try to parse as JSON with mcpServers key.
-	var config struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	// The servers key depends on the client that owns the path: mcpServers for
+	// most, servers for .vscode/mcp.json, context_servers for .zed/settings.json.
+	servers, err := mcpconfig.ParseServersAt(path, content)
+	generic := []Component{{Name: "mcp.json", Type: "mcp_config", Path: path}}
+	if mcpconfig.ServersKey(path) == "context_servers" {
+		// An editor settings file with no server table is not an MCP config; it
+		// must not be inventoried as one.
+		generic = nil
 	}
-	if err := json.Unmarshal(content, &config); err != nil {
-		// If unparseable, return a single generic entry.
-		return []Component{{
-			Name: "mcp.json",
-			Type: "mcp_config",
-			Path: path,
-		}}
+	if err != nil || len(servers) == 0 {
+		// If unparseable or empty, return a single generic entry.
+		return generic
 	}
-
-	if len(config.MCPServers) == 0 {
-		return []Component{{
-			Name: "mcp.json",
-			Type: "mcp_config",
-			Path: path,
-		}}
-	}
+	config := struct{ MCPServers map[string]json.RawMessage }{servers}
 
 	// Sort so the inventory is byte-identical run to run. Map iteration order is
 	// randomized, and ai.inventory.json is a reproducible artifact — leaving the
@@ -561,12 +562,8 @@ func extractMCPComponents(path string, content []byte) []Component {
 // not decode keeps only its name.
 func mcpServerDetails(name string, raw json.RawMessage) map[string]string {
 	details := map[string]string{"server": name}
-	var def struct {
-		Command string   `json:"command"`
-		Args    []string `json:"args"`
-		URL     string   `json:"url"`
-	}
-	if err := json.Unmarshal(raw, &def); err != nil {
+	def, err := mcpconfig.ParseLaunch(raw)
+	if err != nil {
 		return details
 	}
 	if def.Command != "" {

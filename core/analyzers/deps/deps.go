@@ -803,6 +803,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
+					if pkg.Ecosystem == "go" {
+						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
+					}
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
 					if verdict.StoppedAt != "" {

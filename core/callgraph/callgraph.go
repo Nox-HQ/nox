@@ -122,8 +122,13 @@ type Graph struct {
 	// build reach for the affected package, and can execution get there" is
 	// exactly what a dependency advisory asks.
 	intoPackage map[string][]string
-	root        string
-	module      string
+	// intoSymbol is intoPackage one level down: the functions here that call
+	// the package-level function `name` of an import path outside the module.
+	// Methods are not in it: a method call's receiver type is not known from
+	// syntax, so it is counted as unresolved like any other dispatch.
+	intoSymbol map[string][]string
+	root       string
+	module     string
 }
 
 // Len returns the number of functions in the graph.
@@ -331,4 +336,20 @@ func (g *Graph) CallersOfPackage(importPath string) []string {
 		return nil
 	}
 	return append([]string(nil), g.intoPackage[importPath]...)
+}
+
+func symbolKey(importPath, name string) string { return importPath + "\x00" + name }
+
+// CallersOfSymbol returns the functions in this module that call the
+// package-level function name of the given import path, sorted.
+//
+// Like CallersOfPackage, empty is not evidence that no call exists: a call
+// through a function value, an interface or reflection is invisible, and so is
+// every method call (a method is named Type.Method by advisories, and the
+// receiver's type is not known from syntax).
+func (g *Graph) CallersOfSymbol(importPath, name string) []string {
+	if g == nil {
+		return nil
+	}
+	return append([]string(nil), g.intoSymbol[symbolKey(importPath, name)]...)
 }

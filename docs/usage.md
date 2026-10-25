@@ -1055,8 +1055,8 @@ scan:
     # are not findings: the assessment lists them under "Additional
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. Its body
-    # analysis covers Express, Fastify, Flask and FastAPI; NestJS is not read. AUTHN-001 is the
-    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js and Django
+    # analysis covers Express, Fastify, Flask and FastAPI. AUTHN-001 is the
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django
     # routes, for a route with no visible authentication (an
     # administrative or account route, or any DELETE, PUT or PATCH, with no
     # auth middleware, decorator, dependency or check on the caller): a lead
@@ -1202,6 +1202,15 @@ No network is touched at scan time — only the out-of-band generator
 feed fails closed (predictive dimension off, a visible `slop_feed` degradation
 recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
 trust model, regeneration, and the responsible-disclosure note.
+
+### MCP advisory feed
+
+`scan.mcp_feed` joins the MCP servers a scan finds with NOX Intelligence's
+signed feed of public advisories for MCP packages and reports `MCP-026`, "an
+advisory affects this MCP server package", for a server whose pinned version an
+advisory's own interval contains. It needs a pinned public key
+(`signature_key_path`), and says so when it is missing. See
+[docs/mcp-advisory-feed.md](mcp-advisory-feed.md).
 
 ### Conditional Severity
 

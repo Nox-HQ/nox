@@ -33,6 +33,33 @@ instead of hidden machine state.
 
 ### Added
 
+- **Affected symbols can raise an advisory's relevance, never lower it.** NOX
+  Intelligence's `nox_symbols` (and OSV's own `imports[].symbols`) list the
+  functions an advisory or its fix concerns. When the Go call graph finds a
+  concrete call path from this module to a listed package-level function, the
+  finding's relevance rises to "a call path reaches it" and the sentence names
+  the symbol and where it came from (the advisory, or nox's analysis of the
+  fix, which is a hint about where the fix landed and not proof). A listed
+  symbol that nothing calls changes nothing: precision of the lists is about
+  0.3 to 0.5, so absence is not evidence, and a publisher's statement that the
+  build does not link the affected package is not overridden. Methods and
+  non-Go ecosystems are not matched (nox has no call graph for them). Needs
+  nox-core with `nox_symbols` decoding.
+- **MCP advisory feed consumer (`MCP-026`).** NOX Intelligence's signed feed of
+  public advisories for MCP packages is joined with the MCP servers a scan finds:
+  "an advisory affects this MCP server package" when an exact pinned version
+  lies inside an interval the advisory publishes, with the feed's basis shown
+  (a package classified by advisory text only is low confidence). A server
+  launched through `npx`/`uvx` with no pinned version cannot be range-matched and
+  is reported at info severity as exactly that. The feed is verified against a
+  pinned public key (`scan.mcp_feed.signature_key_path`) with the slopsquat
+  feed's discipline and fails closed; it is cached and works offline from the
+  verified cache. A feed the service has not published, a missing key, or an
+  offline scan with no cache is a `mcp_feed` degradation saying the servers were
+  not checked, never "no advisories". See `docs/mcp-advisory-feed.md`. The
+  package-runner parsing MCP-025 uses moved to `core/mcpconfig` so both read a
+  launch the same way.
+
 - **`nox intel forget` rotates the reporter salt** once the service confirms
   erasure, so consenting again is a new, unlinkable reporter instead of the
   erased one.
@@ -51,6 +78,15 @@ instead of hidden machine state.
   per-record findings, so a baseline entry for the dropped id reads as fixed.
   Requires nox-core v0.6.0.
 
+||||||| parent of cd272eb (feat(mcp): read each client's server key (VS Code servers, Zed context_servers))
+- **MCP configs are read by the client that owns them.** `.vscode/mcp.json`
+  keeps its servers under `servers`, not `mcpServers`, so VS Code's project
+  config showed up as one opaque component with no servers, no tool matrix, no
+  pin and no shadow check. The key is now chosen from the path (VS Code
+  `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
+  `mcpServers`), never from the content: a `servers` object in unrelated JSON is
+  not an MCP config. Zed's `command: {path, args}` form is read too.
+
 - **Next.js and Django routes join the route table.** Next.js route handlers
   (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
   prefixes, function and class views, DRF routers and viewsets) are read into
@@ -62,7 +98,7 @@ instead of hidden machine state.
   = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
   auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
   find are never leads. AUTHZ-001's object-level analysis does not run over
-  these handlers, and "Checks completed" now says so. NestJS is still not read.
+  these handlers, and "Checks completed" now says so.
 - **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
   decision `nox advisories` computes; the rendering and the "scan incomplete"
   rule moved into `core/advisory`, so the CLI and the tool cannot disagree.

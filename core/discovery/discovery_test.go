@@ -70,6 +70,11 @@ func TestDefaultClassifier_AIComponent(t *testing.T) {
 		want ArtifactType
 	}{
 		{"mcp.json", AIComponent},
+		{".vscode/mcp.json", AIComponent},
+		// Zed keeps MCP servers in its project settings; other settings.json
+		// files stay what they were.
+		{".zed/settings.json", AIComponent},
+		{"app/settings.json", Config},
 		{"system.prompt", AIComponent},
 		{"system.prompt.md", AIComponent},
 		{"prompts/security.txt", AIComponent},

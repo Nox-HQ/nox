@@ -176,3 +176,96 @@ func TestDjangoDispatcherInheritsTheAccessControlOfWhatItCalls(t *testing.T) {
 		t.Fatalf("control: leads = %v", got)
 	}
 }
+
+func drfRouter(views string) map[string]string {
+	return map[string]string{
+		"proj/urls.py":     djRoot + "from rest_framework.routers import DefaultRouter\nfrom shop import views\nrouter = DefaultRouter()\nrouter.register(r'orders', views.OrderViewSet)\nurlpatterns = [path('api/', include(router.urls))]\n",
+		"shop/views.py":    "from rest_framework import viewsets\nfrom rest_framework.decorators import action\n" + views,
+		"shop/__init__.py": "", "proj/__init__.py": "",
+	}
+}
+
+// A viewset's @action methods are routes of their own.
+func TestDjangoActionRoutes(t *testing.T) {
+	a, _ := scanFiles(t, drfRouter(`class OrderViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['post', 'put'])
+    def cancel(self, request, pk=None):
+        return None
+
+    @action(detail=False, url_path='open-orders')
+    def open_orders(self, request):
+        return None
+
+    # @action(detail=True)
+    def commented(self, request):
+        return None
+
+    @action(detail=some_flag)
+    def unreadable(self, request):
+        return None
+`))
+	want := []string{"ALL /api/orders", "GET /api/orders/open-orders", "POST /api/orders/:pk/cancel", "PUT /api/orders/:pk/cancel"}
+	if got := routeKeys(a); !slices.Equal(got, want) {
+		t.Fatalf("routes = %v, want %v", got, want)
+	}
+	for _, r := range a.Routes() {
+		if r.Path != "/api/orders" && r.Authn != "IsAuthenticated" {
+			t.Errorf("%s %s must inherit the viewset's permission_classes, Authn = %q", r.Method, r.Path, r.Authn)
+		}
+	}
+}
+
+func TestDjangoActionAccessControl(t *testing.T) {
+	// The unsafe variants.
+	for name, c := range map[string]struct {
+		views string
+		want  []string
+	}{
+		"mutating action on an unguarded viewset": {"class OrderViewSet(viewsets.ViewSet):\n    @action(detail=True, methods=['delete'])\n    def purge(self, request, pk=None):\n        return None\n",
+			[]string{"DELETE /api/orders/:pk/purge"}},
+		"an action that loosens the class's permissions is public, the others are not": {"class OrderViewSet(viewsets.ViewSet):\n    permission_classes = [IsAuthenticated]\n    @action(detail=True, methods=['delete'], permission_classes=[AllowAny])\n    def open(self, request, pk=None):\n        return None\n    @action(detail=True, methods=['delete'])\n    def close(self, request, pk=None):\n        return None\n",
+			nil},
+		"the action's own classes replace the viewset's": {"class OrderViewSet(viewsets.ViewSet):\n    @action(detail=True, methods=['patch'], permission_classes=[IsAuthenticated])\n    def a(self, request, pk=None):\n        return None\n    @action(detail=True, methods=['patch'])\n    def b(self, request, pk=None):\n        return None\n",
+			[]string{"PATCH /api/orders/:pk/b"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, _ := scanFiles(t, drfRouter(c.views))
+			if got := authnLeads(a); !slices.Equal(got, c.want) {
+				t.Fatalf("leads = %v, want %v (routes %v)", got, c.want, routeKeys(a))
+			}
+		})
+	}
+	// The safe variants.
+	for name, views := range map[string]string{
+		"authentication disabled on purpose":                               "class OrderViewSet(viewsets.ViewSet):\n    @action(detail=True, methods=['delete'], authentication_classes=[])\n    def purge(self, request, pk=None):\n        return None\n",
+		"checks the caller inline":                                         "class OrderViewSet(viewsets.ViewSet):\n    @action(detail=True, methods=['delete'])\n    def purge(self, request, pk=None):\n        if not request.user.is_authenticated:\n            return None\n        return None\n",
+		"viewset permission_classes":                                       "class OrderViewSet(viewsets.ViewSet):\n    permission_classes = [IsAdminUser]\n    @action(detail=True, methods=['delete'])\n    def purge(self, request, pk=None):\n        return None\n",
+		"stacked decorators after @action":                                 "class OrderViewSet(viewsets.ViewSet):\n    permission_classes = [IsAuthenticated]\n    @action(\n        detail=True,\n        methods=['delete'],\n    )\n    @swagger_auto_schema(responses={204: None})\n    def purge(self, request, pk=None):\n        return None\n",
+		"an action on a base class in the repo inherits that base's guard": "class Base(viewsets.ViewSet):\n    permission_classes = [IsAuthenticated]\n    @action(detail=True, methods=['delete'])\n    def purge(self, request, pk=None):\n        return None\nclass OrderViewSet(Base):\n    pass\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, _ := scanFiles(t, drfRouter(views))
+			if got := authnLeads(a); len(got) != 0 {
+				t.Fatalf("a safe variant produced leads %v (routes %v)", got, routeKeys(a))
+			}
+		})
+	}
+}
+
+// An @action's own permission_classes is that action's setting. Read as the
+// viewset's it hid a real lead on the standard routes (here DELETE, which has
+// no guard) behind another method's guard.
+func TestDjangoActionKwargsDoNotBecomeTheViewsetsPermissions(t *testing.T) {
+	a, _ := scanFiles(t, drfRouter("class OrderViewSet(viewsets.ModelViewSet):\n    queryset = None\n    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])\n    def cancel(self, request, pk=None):\n        return None\n"))
+	if got, want := authnLeads(a), []string{"DELETE /api/orders/:pk", "GET /api/orders/:pk", "PATCH /api/orders/:pk", "PUT /api/orders/:pk"}; !slices.Equal(got, want) {
+		t.Fatalf("leads = %v, want %v (routes %v)", got, want, routeKeys(a))
+	}
+	a, _ = scanFiles(t, drfRouter("class OrderViewSet(viewsets.ModelViewSet):\n    permission_classes = [IsAuthenticated]\n    @action(detail=True, methods=['post'], permission_classes=[AllowAny])\n    def webhook(self, request, pk=None):\n        return None\n"))
+	for _, r := range a.Routes() {
+		if r.Path == "/api/orders/:pk" && r.Authn != "IsAuthenticated" {
+			t.Errorf("%s %s lost the viewset's guard to an action's AllowAny: %q", r.Method, r.Path, r.Authn)
+		}
+	}
+}
