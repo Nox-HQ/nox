@@ -126,7 +126,7 @@ func (l *Lock) Save(path string) error {
 // empty result means "this file pins nothing", which for rug-pull detection is
 // indistinguishable from "everything is fine".
 func Definitions(path string, content []byte) (map[string]string, error) {
-	servers, err := mcpconfig.ParseServers(content)
+	servers, err := mcpconfig.ParseServersAt(path, content)
 	if err != nil {
 		return nil, fmt.Errorf("extracting MCP server definitions from %s: %w", path, err)
 	}

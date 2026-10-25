@@ -191,7 +191,7 @@ type ScanResult struct {
 	Leads []Lead
 	// LeadChecks names each check that produces leads or opt-in findings and
 	// had something to read, in words that do not overclaim:
-	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js and Django routes; ...; leads only)".
+	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django routes; ...; leads only)".
 	// Empty when, for example, the scan saw no such routes: it then says nothing about
 	// authorization.
 	LeadChecks []string

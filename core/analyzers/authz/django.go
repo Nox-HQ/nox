@@ -24,6 +24,7 @@ import (
 //     UserPassesTestMixin and their kin, in the class or a base class defined in
 //     the repository; `permission_classes = [...]`; @method_decorator(login_required,
 //     name='dispatch');
+//   - DRF @action methods are routes of their own (see django_action.go);
 //   - project-wide: REST_FRAMEWORK DEFAULT_PERMISSION_CLASSES (any class but
 //     AllowAny), Django 5.1's LoginRequiredMiddleware, and an inline read of the
 //     caller (request.user.is_authenticated, a 401/403) in the handler.
@@ -32,7 +33,7 @@ import (
 // Django route's empty Authn proof of nothing (guardUnseen), and a view it
 // cannot find in the repository is unread (known=false) and never a lead.
 //
-// Not read: DRF @action routes, viewsets whose methods are mapped by a dict in
+// Not read: viewsets whose methods are mapped by a dict in
 // as_view({...}) beyond the mapping keys, django-rest-framework-simplejwt or
 // guardian object permissions beyond the names above, URLconfs built in a loop,
 // and AUTHZ-001's body analysis over these handlers.
@@ -90,7 +91,11 @@ type djView struct {
 	decos     string
 }
 
-func (v djView) text() string { return v.file.sans[v.off:v.bodyEnd] }
+// text is the view's source, comment-free, with the arguments of its @action
+// decorators blanked: `@action(..., permission_classes=[AllowAny])` is that
+// one action's setting, and read as the class's own it would declare the whole
+// viewset public (or, with IsAuthenticated, covered).
+func (v djView) text() string { return blankActionArgs(v.file.sans[v.off:v.bodyEnd]) }
 
 // djEntry is one urlpatterns entry or router registration.
 type djEntry struct {
@@ -467,6 +472,7 @@ func (d *djIndex) emitViewset(reg djEntry, full string, inc djEntry, out *[]Rout
 		*views = append(*views, routeView{route: rt, handler: d.handlerText(v), known: true, chain: v.decos + " " + v.bases,
 			guardUnseen: d.guard, declaredPublic: public, framework: "django"})
 	}
+	d.emitActions(v, list, detail, out, views)
 }
 
 type viewsetRoute struct {
