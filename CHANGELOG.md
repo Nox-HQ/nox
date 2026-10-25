@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A baseline written before duplicate advisory ids were merged still accepts
+  the merged finding.** When one vulnerability arrived as two records (a Go
+  advisory and its GitHub advisory) they used to be two findings, so a baseline
+  could hold an entry for either; now the pair is one finding, and an entry for
+  the one that was folded away no longer matched, which would have turned CI red
+  for an unchanged dependency. The merged finding now also answers to the
+  fingerprint each absorbed record's finding had (exactly the old message, not a
+  guess from ids), so a different advisory or another version of the package
+  still does not match. When it matches that way the finding carries
+  `baseline_match: alias_fingerprint` and `baseline_entry`, and `baseline
+  update` no longer prunes the entry that is doing the matching. VEX already
+  matches by vuln id and aliases, and `nox:ignore` is by rule on a line, so
+  neither changed.
+
 ### Added
 
 - **A scan keeps working through an OSV outage, and says how it was answered.**

@@ -167,3 +167,20 @@ func TestPruneRemovesSpareEntries(t *testing.T) {
 		t.Errorf("baseline kept %d entries, want 2", len(b.Entries))
 	}
 }
+
+// An entry that accepts a finding through an alias fingerprint is in use. Pruning
+// it would un-baseline that finding on the next scan.
+func TestPruneKeepsAnEntryUsedThroughAnAliasFingerprint(t *testing.T) {
+	b := &Baseline{Entries: []Entry{
+		{Fingerprint: "old-duplicate", RuleID: "VULN-001"},
+		{Fingerprint: "unrelated", RuleID: "VULN-001"},
+	}}
+	b.buildIndex()
+	cur := []findings.Finding{{Fingerprint: "survivor", AliasFingerprints: []string{"old-duplicate"}}}
+	if removed := b.Prune(cur); removed != 1 {
+		t.Fatalf("removed %d, want only the unrelated entry", removed)
+	}
+	if len(b.Entries) != 1 || b.Entries[0].Fingerprint != "old-duplicate" {
+		t.Errorf("entries = %+v", b.Entries)
+	}
+}
