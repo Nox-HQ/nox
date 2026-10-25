@@ -211,6 +211,9 @@ func TestDjangoActionRoutes(t *testing.T) {
 		t.Fatalf("routes = %v, want %v", got, want)
 	}
 	for _, r := range a.Routes() {
+		if r.Reader != ReaderDjango {
+			t.Errorf("%s %s Reader = %q, want Django", r.Method, r.Path, r.Reader)
+		}
 		if r.Path != "/api/orders" && r.Authn != "IsAuthenticated" {
 			t.Errorf("%s %s must inherit the viewset's permission_classes, Authn = %q", r.Method, r.Path, r.Authn)
 		}

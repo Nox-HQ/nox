@@ -588,7 +588,7 @@ func nestController(f *jsFile, c nestMember, g nestGlobals, classes map[string][
 			method := nestVerbs[vd.name]
 			for _, p := range paths {
 				full := nestJoin(sc, version, p)
-				rt := Route{Method: method, Path: full, FilePath: f.path, Line: lineAt(f.lineStarts, vd.start), Authn: authn, Authz: authz}
+				rt := Route{Method: method, Path: full, FilePath: f.path, Line: lineAt(f.lineStarts, vd.start), Authn: authn, Authz: authz, Reader: ReaderNestJS}
 				routes = append(routes, rt)
 				views = append(views, routeView{route: rt, handler: handler, known: known, chain: chain,
 					guardUnseen: unseenHere, declaredPublic: public, framework: "nestjs"})

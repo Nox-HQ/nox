@@ -113,6 +113,9 @@ export class CatsController {
 		t.Fatalf("routes = %v, want %v", got, want)
 	}
 	for _, r := range a.Routes() {
+		if r.Reader != ReaderNestJS {
+			t.Errorf("%s %s Reader = %q, want NestJS", r.Method, r.Path, r.Reader)
+		}
 		switch r.Path {
 		case "/api/v1/cats":
 			if r.Authn == "" {
