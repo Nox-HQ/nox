@@ -122,6 +122,7 @@ func TestScan_RugPullPersistsUntilRepinned(t *testing.T) {
 func TestScan_RugPullIgnoresUserHomeState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	legacy := filepath.Join(home, ".nox", "cache", "mcp-pins", "targets", "deadbeef")
 	if err := os.MkdirAll(legacy, 0o755); err != nil {
 		t.Fatal(err)
