@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.52.0] - 2026-10-25
+
+The NOX Intelligence feeds are verified and used by default. nox now ships the
+official feed public key (slopfeed-key-v1, raw-key fingerprint
+sha256:168327fe…51fa08), so the slopsquat feed and the MCP advisory feed
+(MCP-026) are consulted when intelligence is enabled and the scan is online. A
+project's own pinned key still wins; a served key that differs from the built-in
+one is reported with both fingerprints and never accepted; offline scans make no
+request and say why the feeds were not checked. Tests are now hermetic: no test
+reaches a non-loopback host or reads the real ~/.nox.
+
 ### Added
 
 - The official NOX Intelligence feed key (`slopfeed-key-v1`, fingerprint
