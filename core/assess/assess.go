@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nox-hq/nox-core/degrade"
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/catalog"
@@ -628,6 +630,29 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 		if k.kind == "plugin" && !k.blocking {
 			out = append(out, optionalChecks(g)...)
 			continue
+		}
+		if k.kind == string(degrade.IntelIncomplete) {
+			var mirror, rest []nox.Degradation
+			for _, d := range g {
+				if strings.Contains(d.Detail, osvsource.MirrorOnlyNote) {
+					mirror = append(mirror, d)
+				} else {
+					rest = append(rest, d)
+				}
+			}
+			if len(mirror) > 0 {
+				// A specific statement, not the generic partial-answer line:
+				// the cause is known and so is what it costs.
+				out = append(out, Limit{
+					Summary:  "Answered from NOX Intelligence's mirror; live OSV unavailable: advisories published or changed since the mirror last synced may be missing.",
+					Action:   "re-run when OSV is reachable for a complete answer",
+					Blocking: k.blocking,
+				})
+			}
+			if len(rest) == 0 {
+				continue
+			}
+			g = rest
 		}
 		head := kindHeadlines[k.kind]
 		if head == "" {

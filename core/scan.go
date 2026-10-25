@@ -647,7 +647,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// an unreachable service degrades to exactly the OSV scan nox ran before.
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
 		newIntel := func(deg *degrade.Degradations) vulnsource.Source {
+			// Only this source asks for the mirror fallback, never the OSV.dev
+			// reference: it is what lets a scan keep working through an OSV
+			// outage. The answer comes back marked degraded, which the source
+			// records as a blocking intel_incomplete degradation, so the scan
+			// is honest about it rather than failing over to nothing.
 			return osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+				WithAcceptDegraded().
 				WithCache(advisoryCache)
 		}
 

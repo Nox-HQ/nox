@@ -712,6 +712,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 			for pkgIdx, osvVulns := range vulnMap {
 				pkg := pkgs[pkgIdx]
+				osvVulns = collapseSameAs(osvVulns)
 				var domainVulns []Vulnerability
 
 				for _, ov := range osvVulns {
@@ -755,6 +756,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							meta["intel_confidence"] = string(intel.Evidence.Confidence())
 						}
 					}
+					addProvenanceMetadata(meta, &ov)
 					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
