@@ -380,6 +380,9 @@ var needsByRule = map[string]string{
 	"AUTHZ-001": "A two-account test. Create two users, have each own one record, then request the first user's " +
 		"record while signed in as the second. If it comes back, the endpoint lacks an ownership check. " +
 		"A static scan cannot see who owns a record, so only that test settles it.",
+	"AUTHN-001": "A call with no credentials. Request the route without a token or session; a 2xx answer with data " +
+		"means anyone can reach it. A static scan cannot see a gateway or middleware that authenticates before " +
+		"the application, so only that call settles it.",
 }
 
 // needsByClass says what the code's owner has to decide, per taint class.

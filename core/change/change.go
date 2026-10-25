@@ -629,7 +629,7 @@ func caveats(prev, cur State) []string {
 			scopeWords(cur.Scanned)+" now); findings outside the narrower scope are not comparable.")
 	}
 	if !prev.LeadsRecorded && len(cur.Leads) > 0 {
-		out = append(out, "Authorization leads were not compared: the earlier findings.json did not record them. "+
+		out = append(out, "Authorization and authentication leads were not compared: the earlier findings.json did not record them. "+
 			"This scan has "+strconv.Itoa(len(cur.Leads))+".")
 	}
 	if !prev.InfrastructureRecorded && cur.Infrastructure != nil && !cur.Infrastructure.Empty() {

@@ -103,6 +103,9 @@ type findingAcc struct {
 // model has; the agent rules are the exception, because they are about the
 // tools an agent registers and a model reference in the same file is not that.
 func aboutKind(ruleID, kind string) bool {
+	if strings.HasPrefix(ruleID, "WEBHOOK-") || strings.HasPrefix(ruleID, "AUTHN-") {
+		return kind == KindRoute // about the route, not a model or store in the same file
+	}
 	if strings.HasPrefix(ruleID, "AI-AGENT-") || strings.HasPrefix(ruleID, "AGENTFLOW-") {
 		return kind == KindAgent
 	}

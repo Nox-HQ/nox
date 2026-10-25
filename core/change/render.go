@@ -61,12 +61,12 @@ func Render(w io.Writer, d Delta, limit int) error {
 	for _, l := range d.NewLeads {
 		nl = append(nl, fmt.Sprintf("%s: %s (%s:%d) %s", capitalize(l.Category), l.Route, l.FilePath, l.Line, l.Statement))
 	}
-	section(b, "New authorization leads (to verify, not findings)", len(nl), nl, limit)
+	section(b, "New leads (to verify, not findings)", len(nl), nl, limit)
 	var rl []string
 	for _, l := range d.ResolvedLeads {
 		rl = append(rl, fmt.Sprintf("%s: %s (%s)", capitalize(l.Category), l.Route, l.FilePath))
 	}
-	section(b, "Authorization leads no longer present", len(rl), rl, limit)
+	section(b, "Leads no longer present", len(rl), rl, limit)
 
 	if len(d.Caveats) > 0 {
 		b.WriteString("  Not compared / caution:\n")

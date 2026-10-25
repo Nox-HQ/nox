@@ -1035,10 +1035,16 @@ scan:
     # are not findings: the assessment lists them under "Additional
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. NestJS,
-    # Next.js, Django and other frameworks are not read. SEC-951, the generic "credential-named key with a
+    # Next.js, Django and other frameworks are not read. AUTHN-001 is the
+    # same arrangement for a route with no visible authentication (an
+    # administrative or account route, or any DELETE, PUT or PATCH, with no
+    # auth middleware, decorator, dependency or check on the caller): a lead
+    # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
+    # GitHub or Slack webhook payload accepted without signature
+    # verification, is not opt-in: it reports by default. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
-    enable: []   # e.g. [TAINT-011, AUTHZ-001]
+    enable: []   # e.g. [TAINT-011, AUTHZ-001, AUTHN-001]
 
     # Override severity for specific rules
     severity_override:

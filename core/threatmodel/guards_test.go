@@ -392,3 +392,24 @@ func TestParsers(t *testing.T) {
 	}
 	var _ = ai.Inventory{}
 }
+
+// A webhook or missing-authentication finding is about a route. A model or a
+// data store that happens to sit in the same file is not what it is about.
+func TestWebhookAndAuthnRulesAttachOnlyToRoutes(t *testing.T) {
+	for _, rule := range []string{"WEBHOOK-001", "AUTHN-001"} {
+		if !aboutKind(rule, KindRoute) || aboutKind(rule, KindModel) {
+			t.Errorf("%s must be about routes only", rule)
+		}
+	}
+}
+
+func TestAuthnRulesMapToSpoofingAndPrivilege(t *testing.T) {
+	got := categoriesFor(finding("AUTHN-001", "medium", "a", 1, "m", "", map[string]string{"cwe": "CWE-306"}))
+	sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
+	if len(got) != 2 || got[0] != Spoofing && got[1] != Spoofing {
+		t.Errorf("AUTHN-001 maps to %v", got)
+	}
+	if got := categoriesFor(finding("WEBHOOK-001", "high", "a", 1, "m", "", map[string]string{"cwe": "CWE-345"})); len(got) != 2 {
+		t.Errorf("WEBHOOK-001 maps to %v", got)
+	}
+}
