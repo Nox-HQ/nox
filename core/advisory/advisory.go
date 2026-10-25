@@ -626,6 +626,12 @@ func relevanceSentence(f *findings.Finding, r Relevance) string {
 	case RelNotImpacting:
 		return "This build was shown not to be affected (" + m["applicability_stopped_at"] + " was refuted); reported with that reason, not acted on."
 	case RelCallReachable:
+		if sym := m["affected_symbol_reached"]; sym != "" {
+			if m["affected_symbol_basis"] == "advisory" {
+				return "A call path reaches " + sym + ", which the advisory lists as affected."
+			}
+			return "A call path reaches " + sym + ", which NOX Intelligence's analysis of the fix lists (a hint about where the fix landed, not proof this function is the vulnerable one)."
+		}
 		return "A call path reaches the affected code."
 	case RelSymbolUsed:
 		return "The affected package is linked by this build; whether anything calls it was not established."

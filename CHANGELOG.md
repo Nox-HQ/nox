@@ -25,6 +25,18 @@ instead of hidden machine state.
 
 ### Added
 
+- **Affected symbols can raise an advisory's relevance, never lower it.** NOX
+  Intelligence's `nox_symbols` (and OSV's own `imports[].symbols`) list the
+  functions an advisory or its fix concerns. When the Go call graph finds a
+  concrete call path from this module to a listed package-level function, the
+  finding's relevance rises to "a call path reaches it" and the sentence names
+  the symbol and where it came from (the advisory, or nox's analysis of the
+  fix, which is a hint about where the fix landed and not proof). A listed
+  symbol that nothing calls changes nothing: precision of the lists is about
+  0.3 to 0.5, so absence is not evidence, and a publisher's statement that the
+  build does not link the affected package is not overridden. Methods and
+  non-Go ecosystems are not matched (nox has no call graph for them). Needs
+  nox-core with `nox_symbols` decoding.
 - **`nox intel forget` rotates the reporter salt** once the service confirms
   erasure, so consenting again is a new, unlinkable reporter instead of the
   erased one.

@@ -445,3 +445,25 @@ func TestPullRequestTargetMatchesFixPlan(t *testing.T) {
 		t.Fatalf("the move fixes both advisories, and the file handed to nox fix must carry both: %v", r.Fixes)
 	}
 }
+
+// The sentence names the listed symbol a call path reaches, and says what its
+// source can and cannot support. A symbol listed by nox's own patch analysis is
+// a hint about where the fix landed, not proof of the vulnerable function.
+func TestRelevanceSentenceNamesTheReachedSymbol(t *testing.T) {
+	f := adv("GHSA-x", "example.com/vulnmod", "1.0.0", "1.0.1", findings.SeverityHigh, "impacting", "call_reachable")
+	f.Metadata["affected_symbol_reached"] = "example.com/vulnmod/pgp.ReadMessage"
+
+	f.Metadata["affected_symbol_basis"] = "advisory"
+	if got := relevanceSentence(&f, RelCallReachable); !strings.Contains(got, "pgp.ReadMessage, which the advisory lists") {
+		t.Errorf("advisory-listed symbol: %q", got)
+	}
+	f.Metadata["affected_symbol_basis"] = "nox_symbols"
+	got := relevanceSentence(&f, RelCallReachable)
+	if !strings.Contains(got, "pgp.ReadMessage") || !strings.Contains(got, "not proof") {
+		t.Errorf("nox_symbols-listed symbol must read as a hint: %q", got)
+	}
+	delete(f.Metadata, "affected_symbol_reached")
+	if got := relevanceSentence(&f, RelCallReachable); got != "A call path reaches the affected code." {
+		t.Errorf("without a reached symbol the sentence is unchanged: %q", got)
+	}
+}
