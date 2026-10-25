@@ -139,6 +139,13 @@ func writeReportTail(b *strings.Builder, r Report) {
 			fmt.Fprintf(b, "  - %s\n", n)
 		}
 	}
+	if len(r.NewInGeneratedDirs) > 0 {
+		fmt.Fprintf(b, "\nAlso new inside directories a tool generated (%d), not attributed to your change:\n", len(r.NewInGeneratedDirs))
+		fmt.Fprintf(b, "  The fix ran a package manager, which creates these; they were not in the original scan because the directory did not exist yet.\n")
+		for _, n := range r.NewInGeneratedDirs {
+			fmt.Fprintf(b, "  - %s\n", n)
+		}
+	}
 	if len(r.Untouched) > 0 {
 		fmt.Fprintf(b, "\nNot changed by nox, still yours to resolve: %s.\n", joinNumbers(r.Untouched))
 	}
