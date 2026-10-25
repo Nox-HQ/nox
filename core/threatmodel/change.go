@@ -3,6 +3,8 @@ package threatmodel
 import (
 	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // ElementRef names an element that appeared or disappeared.
@@ -55,6 +57,11 @@ type Delta struct {
 	BoundariesAdded   []BoundaryRef `json:"boundaries_added,omitempty"`
 	BoundariesRemoved []BoundaryRef `json:"boundaries_removed,omitempty"`
 	CellsChanged      []CellChange  `json:"cells_changed,omitempty"`
+	// PropertiesChanged are the security-relevant properties of deployment
+	// resources, present in both models, that got weaker or stronger: the
+	// assumptions the change invalidated or established. A resource that exists
+	// in both is never reported as added.
+	PropertiesChanged []infra.Change `json:"properties_changed,omitempty"`
 
 	// Caveats say what could not be compared. A comparison that cannot be made
 	// must not read as "nothing changed".
@@ -66,7 +73,7 @@ func (d Delta) Empty() bool {
 	return len(d.ElementsAdded) == 0 && len(d.ElementsRemoved) == 0 &&
 		len(d.FlowsAdded) == 0 && len(d.FlowsRemoved) == 0 &&
 		len(d.BoundariesAdded) == 0 && len(d.BoundariesRemoved) == 0 &&
-		len(d.CellsChanged) == 0
+		len(d.CellsChanged) == 0 && len(d.PropertiesChanged) == 0
 }
 
 // kindInput says which input an element kind depends on, so a model built
@@ -83,6 +90,9 @@ func kindInput(e Element) string {
 		if e.Attributes["basis"] == "dependency" {
 			return "sbom"
 		}
+	}
+	if strings.HasPrefix(e.ID, "deploy:") {
+		return "infrastructure"
 	}
 	return ""
 }
@@ -111,6 +121,10 @@ func Compare(prev, cur Model) Delta {
 	if pc.AIInventory != cc.AIInventory {
 		skip["ai_inventory"] = true
 		d.Caveats = append(d.Caveats, "The AI inventory was provided to only one of the two models, so AI agents, tools, models and MCP servers were not compared.")
+	}
+	if pc.Infrastructure != cc.Infrastructure {
+		skip["infrastructure"] = true
+		d.Caveats = append(d.Caveats, "The deployment inventory was recorded for only one of the two models (the earlier findings.json may predate it), so deployment resources were not compared; they are not reported as new or gone.")
 	}
 	if pc.SBOM != cc.SBOM {
 		skip["sbom"] = true
@@ -157,6 +171,9 @@ func Compare(prev, cur Model) Delta {
 	}
 
 	d.CellsChanged = compareCells(prev, cur, pe, ce)
+	if !skip["infrastructure"] {
+		d.PropertiesChanged = propertyDelta(prev, cur)
+	}
 	return d
 }
 

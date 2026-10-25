@@ -27,7 +27,7 @@
 package threatmodel
 
 // SchemaVersion identifies the model.json format.
-const SchemaVersion = "1.0.0"
+const SchemaVersion = "1.1.0"
 
 // ReportKind is the value of Meta.Report. A later run reads a model.json back
 // (`nox model --previous`) and refuses anything else.
@@ -202,6 +202,12 @@ type Element struct {
 	// Attributes carries grounded detail: the middleware on a route, the
 	// capabilities of an agent.
 	Attributes map[string]string `json:"attributes,omitempty"`
+	// Properties are the security-relevant properties nox read from a
+	// deployment resource's own configuration (a bucket's public access block,
+	// a workload's privileged flag), recorded whether or not any rule fired on
+	// them. They are what lets a later model say a hardened resource is no
+	// longer hardened instead of calling it new.
+	Properties map[string]string `json:"properties,omitempty"`
 	// Evidence is why the element exists. Never empty.
 	Evidence []Evidence `json:"evidence"`
 }
@@ -287,6 +293,10 @@ type Coverage struct {
 	Routes      bool `json:"routes"`
 	AIInventory bool `json:"ai_inventory"`
 	SBOM        bool `json:"sbom"`
+	// Infrastructure is whether the deployment inventory was available, so a
+	// model built from a findings.json that predates it is not read as having
+	// lost its deployment resources.
+	Infrastructure bool `json:"infrastructure"`
 }
 
 // Provenance says what the model was derived from.

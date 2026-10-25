@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A change to infrastructure now names the security assumption it
+  invalidated.** `findings.json` records the deployment resources a scan read
+  from Terraform, CloudFormation, Kubernetes, Compose and Dockerfiles under a new
+  `infrastructure` key, with the security-relevant properties of each, hardened
+  resources included (an S3 bucket's public access block, ACL and default
+  encryption; an RDS instance's `publicly_accessible` and `storage_encrypted`; a
+  security group open to the internet; a workload's privileged, hostNetwork,
+  runAsNonRoot, runAsUser, capabilities, seccomp, read-only root filesystem and
+  image pinning; an Ingress's TLS coverage and ssl-redirect; where each
+  credential-named environment variable gets its value; a Dockerfile's final
+  USER and base image pin). A resource is identified by kind, namespace, name and
+  file, never a line. `nox scan --previous`, `nox diff` and the MCP `scan` and
+  `diff` tools gain an "Infrastructure assumptions weakened/strengthened"
+  section (structured: `change.infrastructure`) listing, per resource, the
+  properties that moved: `aws_s3_bucket.uploads (deploy/tf/main.tf): public
+  access block - was all true, now all false`. The findings list is unchanged;
+  the section is a hint like authorization leads and is not counted as a
+  regression. An earlier `findings.json` without the key cannot be compared, and
+  the comparison says so. The inventory is context, not findings: it reaches no
+  gate, exit code, SARIF output or fingerprint, and the key is absent when no
+  resource was read.
+- **`nox model` builds deployment elements from that inventory, not from
+  findings alone** (schema `1.1.0`). A hardened bucket, database, ingress,
+  workload or security group is an element, so `nox model --previous` after the
+  same resource is weakened reports its properties moving and its STRIDE cells
+  changing instead of a "new data store", "new ingress" or "new network rule"
+  that existed all along. A resource added in a new file is still new. Elements
+  carry `properties`; the delta carries `properties_changed`. A previous model
+  that predates the inventory is not compared for deployment elements, with a
+  caveat.
 - **`nox model`, and an MCP tool `threat_model`: a threat model from scan
   evidence.** Reads the scan outputs you already have (`findings.json`, an SBOM,
   `ai.inventory.json`) and writes `model.md` and `model.json`: the elements nox

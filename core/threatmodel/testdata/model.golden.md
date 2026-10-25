@@ -376,7 +376,7 @@ Each question comes from a gap in the evidence, not from a judgement that someth
 - The identity provider, session handling and token validation behind authentication. Middleware is read by name; nox does not evaluate whether it works.
 - Network topology beyond what infrastructure-as-code findings show: firewalls, service meshes, VPNs, peering, and what a load balancer actually forwards.
 - Entry points. Routes are read only from Express-style JavaScript and TypeScript servers, and authorization leads are Express-only for the same reason. Fastify, NestJS decorators, Next.js handlers, Python, Go, Java and other frameworks are not enumerated, and neither are gRPC services, queue consumers or scheduled jobs.
-- Infrastructure. Only resources that an infrastructure rule reported on appear. A resource with nothing to report is not in this model.
+- Infrastructure. Only the resources nox reads from Terraform, CloudFormation, Kubernetes, Compose and Dockerfiles appear, with the properties it knows how to read. A resource of another kind, or one produced by a template or a module, is not in this model.
 - Dependencies. Packages are known from the SBOM, which does not say whether a package is direct or transitive. A data store or service inferred from a package shows the application can reach it, not that it does.
 - Data flows are static and name-level. A flow joins two elements because the scan connects them (the same file, a taint finding, a dependency, a configuration entry). Nox does not trace calls between routes, services and stores, and does not see data at rest or in transit.
 - Data sensitivity. Nox attaches DATA-* findings to the element in the file they were found in; it does not classify what each store holds.

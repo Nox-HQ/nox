@@ -46,6 +46,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/graph"
+	"github.com/nox-hq/nox/core/infra"
 	"github.com/nox-hq/nox/core/intel"
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/policy"
@@ -80,13 +81,18 @@ func filterArtifactsByType(artifacts []discovery.Artifact, excludeTypes []string
 
 // ScanResult holds the complete output of a scan pipeline run.
 type ScanResult struct {
-	Findings     *findings.FindingSet
-	Inventory    *deps.PackageInventory
-	AIInventory  *ai.Inventory
-	PolicyResult *policy.Result
-	Rules        *rules.RuleSet
-	Graphs       []graph.Graph         // relationship graphs from plugins
-	Enrichments  []findings.Enrichment // finding annotations from plugins
+	Findings    *findings.FindingSet
+	Inventory   *deps.PackageInventory
+	AIInventory *ai.Inventory
+	// Infrastructure is the deployment resources read from infrastructure as
+	// code, hardened ones included. Nil when the scan read none (or did not run
+	// the IaC checks). It is context for `nox model` and for change-over-time,
+	// never a finding.
+	Infrastructure *infra.Inventory
+	PolicyResult   *policy.Result
+	Rules          *rules.RuleSet
+	Graphs         []graph.Graph         // relationship graphs from plugins
+	Enrichments    []findings.Enrichment // finding annotations from plugins
 	// SASTProfile records the resolved per-language SAST depth applied to this
 	// scan (language name → deep|standard|off). It is the auditable answer to
 	// "what depth did this scan give each language?" and is copied into the
@@ -1080,7 +1086,15 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		routes = authzRoutes(authzAnalyzer)
 	}
 
+	var infrastructure *infra.Inventory
+	if opts.Scopes.RunsAnalyzer("iac") {
+		if inv := iacAnalyzer.Inventory(); !inv.Empty() {
+			infrastructure = &inv
+		}
+	}
+
 	return &ScanResult{
+		Infrastructure:     infrastructure,
 		Leads:              leads,
 		LeadChecks:         leadChecks,
 		Routes:             routes,
