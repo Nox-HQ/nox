@@ -109,6 +109,24 @@ const (
 	RelNotImpacting Relevance = "not_impacting"
 )
 
+// Label is the relevance in the words a person reads in output. The values
+// themselves (symbol_used and the rest) are the stable identifiers in JSON and
+// in .nox.yaml; they are the applicability ladder's rung names and mean nothing
+// to someone who has not read it, so no sentence meant for a reader uses them.
+func (r Relevance) Label() string {
+	switch r {
+	case RelUndetermined:
+		return "not determined"
+	case RelSymbolUsed:
+		return "linked, not shown to be called"
+	case RelCallReachable:
+		return "a call path reaches it"
+	case RelNotImpacting:
+		return "shown not to affect this build"
+	}
+	return string(r)
+}
+
 func (r Relevance) rank() int {
 	switch r {
 	case RelUndetermined:
@@ -178,12 +196,19 @@ type gate struct {
 
 // Defaults. The prepare gate is permissive on purpose: preparing a pull request
 // asks a person to review, so doing it for anything not refuted costs little.
-// The merge gate is not: it requires evidence the code uses the package.
+// The merge gate is not: it requires a call path to the affected code.
+//
+// symbol_used is not enough for that, and is not the default. It says the
+// package is linked, which for every ecosystem but Go is as far as nox gets: a
+// build that links a package it never calls is indistinguishable from one that
+// calls it. Merging unattended on linkage alone is a choice a repository makes
+// by writing advisories.remediate.min_relevance: symbol_used, never one nox
+// makes for it.
 const (
 	defaultPrepareSeverity  = findings.SeverityLow
 	defaultPrepareRelevance = RelUndetermined
 	defaultMergeSeverity    = findings.SeverityHigh
-	defaultMergeRelevance   = RelSymbolUsed
+	defaultMergeRelevance   = RelCallReachable
 	defaultMaxBump          = fix.BumpMinor
 )
 
@@ -294,6 +319,11 @@ type Result struct {
 	// Prepare are the positions, in Input.Findings, of the advisories that go
 	// into the remediation pull request.
 	Prepare []int `json:"-"`
+	// Fixes are the positions of every advisory the pull request's upgrades
+	// fix, a superset of Prepare: a package moves once, to the highest fix, so
+	// it also fixes the advisories on it that did not clear a gate or were
+	// already known. Handing `nox fix` only Prepare would plan a lower version.
+	Fixes []int `json:"-"`
 }
 
 // Counts tallies decisions by novelty and action.
@@ -379,8 +409,8 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 			d.Reason = fmt.Sprintf("New advisory below the prepare severity gate (severity %s, need %s). %s",
 				d.Severity, in.Policy.Prepare.minSeverity, why)
 		case d.Relevance.rank() < in.Policy.Prepare.minRelevance.rank():
-			d.Reason = fmt.Sprintf("New advisory below the prepare relevance gate (relevance %s, need %s). %s",
-				d.Relevance, in.Policy.Prepare.minRelevance, why)
+			d.Reason = fmt.Sprintf("New advisory below the prepare relevance gate (relevance: '%s'; the gate needs: '%s'). %s",
+				d.Relevance.Label(), in.Policy.Prepare.minRelevance.Label(), why)
 		case d.FixedIn == "":
 			d.Reason = "New advisory with no fixed version published, so there is nothing to prepare. " + why
 		default:
@@ -388,14 +418,28 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 		}
 	}
 
-	// Plan once over the eligible set. The planner is the one `nox fix` uses, so
-	// the pull request contains exactly the moves it would make, and a package
-	// with several advisories moves once, to the highest fix.
-	subset := make([]findings.Finding, len(eligible))
-	for i, c := range eligible {
-		subset[i] = in.Findings[res.Decisions[c].index]
+	// Plan over every active advisory, not just the eligible ones, because that
+	// is what `nox fix plan` and `nox fix` see. Planned over the eligible subset
+	// alone, a package's target was the highest fix among the advisories that
+	// cleared the gates: a gate that dropped one advisory also lowered the
+	// version, so this PR moved lodash to 4.17.21 while `nox fix plan` moved it
+	// to 4.18.0 and left the PR's package still carrying the advisory the plan
+	// fixes. The planner is the one `nox fix` uses, so the pull request contains
+	// exactly the moves it would make, and a package with several advisories
+	// moves once, to the highest fix.
+	var active []int
+	posInPlan := map[int]int{}
+	for i := range in.Findings {
+		if in.Findings[i].Status.IsActive() {
+			posInPlan[i] = len(active)
+			active = append(active, i)
+		}
 	}
-	plan := fix.PlanUpgrades(subset, fix.Options{})
+	all := make([]findings.Finding, len(active))
+	for i, idx := range active {
+		all[i] = in.Findings[idx]
+	}
+	plan := fix.PlanUpgrades(all, fix.Options{})
 	moved := map[int]fix.UpgradeAction{}
 	for _, a := range plan.Actions {
 		for _, p := range a.Findings {
@@ -404,17 +448,24 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 	}
 
 	var prepare []int
-	for i, c := range eligible {
+	fixed := map[int]bool{}
+	for _, c := range eligible {
 		d := &res.Decisions[c]
 		f := &in.Findings[d.index]
 		why := relevanceSentence(f, d.Relevance)
-		mv, ok := moved[i]
+		pos := posInPlan[d.index]
+		mv, ok := moved[pos]
 		if !ok {
-			d.Reason = unplannedReason(subset[i], plan, i) + " " + why
+			d.Reason = unplannedReason(*f, plan, pos) + " " + why
 			continue
 		}
 		d.Action = ActionPrepare
 		prepare = append(prepare, d.index)
+		// The move fixes every advisory on the package, not only the one that
+		// earned the pull request.
+		for _, p := range mv.Findings {
+			fixed[active[p]] = true
+		}
 		bump := fix.BumpKind(mv.From, mv.To)
 		move := fmt.Sprintf("%s %s -> %s (%s)", mv.Package, mv.From, mv.To, bump)
 		d.Reason = "New advisory; prepared as a pull request: " + move + ". " + why
@@ -430,6 +481,11 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 		d.Reason += " Meets the remediate gate; may merge once the repository's required checks pass."
 	}
 	sort.Ints(prepare)
+	res.Fixes = res.Fixes[:0]
+	for idx := range fixed {
+		res.Fixes = append(res.Fixes, idx)
+	}
+	sort.Ints(res.Fixes)
 	return prepare
 }
 
@@ -440,7 +496,8 @@ func mergeBlocker(d *Decision, p Policy, bump fix.Bump) string {
 	case findings.SeverityRank(findings.Severity(d.Severity)) > findings.SeverityRank(p.Merge.minSeverity):
 		return fmt.Sprintf("severity %s is below the remediate gate (%s)", d.Severity, p.Merge.minSeverity)
 	case d.Relevance.rank() < p.Merge.minRelevance.rank():
-		return fmt.Sprintf("relevance %s is below the remediate gate (%s); nothing established that this build uses the package", d.Relevance, p.Merge.minRelevance)
+		return fmt.Sprintf("relevance is '%s', and the remediate gate needs '%s' (advisories.remediate.min_relevance: %s)",
+			d.Relevance.Label(), p.Merge.minRelevance.Label(), p.Merge.minRelevance)
 	case bump == fix.BumpUnknown:
 		return "the size of the version move could not be determined"
 	case bumpRank(bump) > bumpRank(p.MaxBump):

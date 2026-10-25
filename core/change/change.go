@@ -90,6 +90,9 @@ const (
 	LookupOffline  = "it was offline"
 	LookupDisabled = "vulnerability lookups were disabled"
 	LookupFailed   = "its vulnerability lookup failed"
+	// LookupIncomplete: the source answered but said it did not fully check
+	// some packages, so its advisories are a floor, not the whole set.
+	LookupIncomplete = "its vulnerability lookup was incomplete"
 )
 
 // FromReport builds a State from a loaded findings.json and, optionally, the
@@ -112,6 +115,9 @@ func FromReport(rep report.JSONReport, inv *ai.Inventory, label string) State {
 		if d.Kind == string(degrade.OSV) {
 			s.AdvisoryLookup = LookupFailed
 		}
+	}
+	if rep.Meta.AdvisoryLookup == report.AdvisoryLookupIncomplete && s.AdvisoryLookup == "" {
+		s.AdvisoryLookup = LookupIncomplete
 	}
 	switch {
 	case rep.Meta.Offline:
@@ -615,14 +621,13 @@ func caveats(prev, cur State) []string {
 	}
 	switch {
 	case prev.AdvisoryLookup != "" && cur.AdvisoryLookup != "":
-		out = append(out, "Dependency advisories were not compared: the previous scan did not look up advisories ("+
-			prev.AdvisoryLookup+") and neither did this one ("+cur.AdvisoryLookup+").")
+		out = append(out, "Dependency advisories were not compared: the previous scan "+lookupGap(prev.AdvisoryLookup)+" and this one "+lookupGap(cur.AdvisoryLookup)+".")
 	case prev.AdvisoryLookup != "":
-		out = append(out, "Dependency advisories were not compared: the previous scan did not look up advisories ("+
-			prev.AdvisoryLookup+"), so every advisory this scan found would read as new.")
+		out = append(out, "Dependency advisories were not compared: the previous scan "+
+			lookupGap(prev.AdvisoryLookup)+", so every advisory this scan found would read as new.")
 	case cur.AdvisoryLookup != "":
-		out = append(out, "Dependency advisories were not compared: this scan did not look up advisories ("+
-			cur.AdvisoryLookup+"), so every advisory the previous scan found would read as resolved.")
+		out = append(out, "Dependency advisories were not compared: this scan "+
+			lookupGap(cur.AdvisoryLookup)+", so every advisory the previous scan found would read as resolved.")
 	}
 	if !sameScopes(prev.Scanned, cur.Scanned) {
 		out = append(out, "The two scans covered different scopes ("+scopeWords(prev.Scanned)+" before, "+
@@ -666,4 +671,13 @@ func scopeWords(s []string) string {
 	x := append([]string(nil), s...)
 	sort.Strings(x)
 	return strings.Join(x, ", ")
+}
+
+// lookupGap words why a scan's advisories cannot be compared. A lookup the
+// source reported as partial did happen, so "did not look up" would be false.
+func lookupGap(reason string) string {
+	if reason == LookupIncomplete {
+		return "only partly looked up advisories (" + reason + ")"
+	}
+	return "did not look up advisories (" + reason + ")"
 }

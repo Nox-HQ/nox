@@ -540,6 +540,7 @@ var kindHeadlines = map[string]string{
 	"intel_suppression":  "NOX Intelligence suppressions could not be applied",
 	"intel_unverified":   "Some NOX Intelligence answers could not be verified",
 	"intel_unreachable":  "NOX Intelligence could not be reached",
+	"intel_incomplete":   "NOX Intelligence answered some packages only in part",
 	"intel_contribution": "Observations could not be contributed to NOX Intelligence",
 }
 

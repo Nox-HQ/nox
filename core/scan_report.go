@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/report"
 	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -30,8 +31,11 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.SASTLanguages = r.SASTProfile
 	rep.Scope = r.Scope.report()
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
-	if r.AdvisoryLookupSkipped {
+	switch {
+	case r.AdvisoryLookupSkipped:
 		rep.AdvisoryLookup = report.AdvisoryLookupSkipped
+	case r.advisoryLookupIncomplete():
+		rep.AdvisoryLookup = report.AdvisoryLookupIncomplete
 	}
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
@@ -121,4 +125,17 @@ func (r *ScanResult) ReportRoutes() []report.Route {
 		return nil
 	}
 	return r.Routes
+}
+
+// advisoryLookupIncomplete reports whether the vulnerability source said it
+// answered some package only in part. It is derived from the degradations, the
+// one place that statement is recorded, so the artifact and the change summary
+// cannot disagree about it.
+func (r *ScanResult) advisoryLookupIncomplete() bool {
+	for _, d := range r.Degradations {
+		if d.Kind == degrade.IntelIncomplete {
+			return true
+		}
+	}
+	return false
 }

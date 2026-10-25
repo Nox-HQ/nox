@@ -50,7 +50,8 @@ type Meta struct {
 	// the artifact — "this report was produced without the scanner touching the
 	// network" — backed by the enforced egress test, not just a claim.
 	Offline bool `json:"offline"`
-	// AdvisoryLookup is AdvisoryLookupSkipped when the scan did not look its
+	// AdvisoryLookup is AdvisoryLookupIncomplete when the source reported a
+	// partial answer for some packages, and AdvisoryLookupSkipped when the scan did not look its
 	// dependencies up in a vulnerability source although it was not offline
 	// (--no-osv, osv.disabled, or no dependency scope). Omitted otherwise, which
 	// is also how a report from before the field reads: looked up.
@@ -169,6 +170,12 @@ type CapabilityCoverage struct {
 // AdvisoryLookupSkipped is Meta.AdvisoryLookup for a scan that did not look
 // its dependencies up.
 const AdvisoryLookupSkipped = "skipped"
+
+// AdvisoryLookupIncomplete is Meta.AdvisoryLookup for a scan whose
+// vulnerability source said it did not fully check some packages. The lookup
+// ran, so its advisories are real; an absent one is not evidence of absence.
+// The degradations name the packages.
+const AdvisoryLookupIncomplete = "incomplete"
 
 // Degradation is a single incomplete check, as recorded in the artifact.
 type Degradation struct {
