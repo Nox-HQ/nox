@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Next.js and Django routes join the route table.** Next.js route handlers
+  (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
+  prefixes, function and class views, DRF routers and viewsets) are read into
+  the table `nox model`, AUTHN-001 and WEBHOOK-001 use. Authentication is read
+  from `getServerSession`/`auth()`/`currentUser()`, auth wrappers on the export,
+  `login_required`, the Django mixins, `permission_classes`, a project-wide DRF
+  `DEFAULT_PERMISSION_CLASSES`, `LoginRequiredMiddleware`, and from what a
+  dispatcher view calls. Declared public (`AllowAny`, `authentication_classes
+  = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
+  auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
+  find are never leads. AUTHZ-001's object-level analysis does not run over
+  these handlers, and "Checks completed" now says so. NestJS is still not read.
+
 - **Contribution is consented to, versioned, and erasable.** `nox scan` now
   contributes (when `scan.intelligence.contribute: true`) only on a machine
   that has accepted the contribution terms: `nox intel consent show` prints

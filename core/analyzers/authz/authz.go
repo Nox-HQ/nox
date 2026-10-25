@@ -89,8 +89,12 @@
 // proposition, the same counterexample classes, the same Lead. The reader is
 // text over a lexically masked copy of the file, not a Python parser.
 //
-// NOT read: NestJS and other decorator frameworks, Next.js route handlers,
-// Django (urls.py + views), Flask class-based views and Flask-RESTful
+// Next.js route handlers (app/**/route.ts and pages/api) and Django (urls.py
+// with function and class views, DRF routers and permission classes) are read
+// into the same route table, so AUTHN-001, WEBHOOK-001 and `nox model` cover
+// them; AUTHZ-001's body analysis does not run over their handlers.
+//
+// NOT read: NestJS and other decorator frameworks, Flask class-based views and Flask-RESTful
 // resources, Starlette/Sanic/Quart/aiohttp/Tornado routes, custom
 // route-definition helpers, handlers that read parameters through a validation
 // helper (`parseReq(req, schema)`) or a FastAPI dependency that itself loads
@@ -199,8 +203,15 @@ func (a *Analyzer) AuthnEnabled() bool { return a.authnEnabled }
 func (a *Analyzer) Leads() []Lead { return a.leads }
 
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
-// this analyzer reads. Keep it equal to the package documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI routes"
+// whose routes this analyzer reads. Keep it equal to the package
+// documentation's SCOPE.
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js and Django routes"
+
+// ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
+// (object-level authorization) runs over. Next.js and Django routes enter the
+// route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
+// for ownership checks, and the scan says so rather than claiming otherwise.
+const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"
 
 // RoutesRead is how many route registrations (Express, Fastify, Flask,
 // FastAPI) the last ScanArtifacts call read. Zero means the scan saw none and
@@ -359,6 +370,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	a.routeList = ix.routeList
 	leads := ix.leads
 	views := ix.views
+	// Next.js has no registration call to read; its routes are files. They join
+	// the same route table, so the exposure checks and `nox model` see them.
+	if nextRoutes, nextViews := ix.nextRoutes(); len(nextRoutes) > 0 {
+		a.routes += len(nextRoutes)
+		a.routeList = append(a.routeList, nextRoutes...)
+		views = append(views, nextViews...)
+		sortRoutes(a.routeList)
+	}
 	if len(pyOrder) > 0 {
 		py := newPyIndex(pyFiles, pyOrder, rls)
 		res := py.findings()
@@ -366,6 +385,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		inv, pyViews := py.routeInventory()
 		a.routeList = append(a.routeList, inv...)
 		views = append(views, pyViews...)
+		djRoutes, djViews := py.djangoRoutes()
+		a.routes += len(djRoutes)
+		a.routeList = append(a.routeList, djRoutes...)
+		views = append(views, djViews...)
 		sortRoutes(a.routeList)
 		reported = append(reported, res.findings...)
 		leads = append(leads, res.leads...)

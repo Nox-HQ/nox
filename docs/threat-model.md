@@ -117,8 +117,8 @@ with a line saying how many were left out.
 Stated in every model. Fixed limits: business logic and intent, runtime
 configuration, the identity provider and session handling, network topology
 beyond infrastructure findings, frameworks nox does not read (routes and
-authorization leads come from the Express, Fastify, Flask and FastAPI readers;
-NestJS, Next.js, Django, Go and Java entry points, gRPC, queue consumers and
+authorization leads come from the Express, Fastify, Flask, FastAPI, Next.js and Django
+readers; NestJS, Go and Java entry points, gRPC, queue consumers and
 scheduled jobs are not enumerated),
 infrastructure of a kind nox does not read (or produced by a template or module), dependency directness, call tracing between
 elements, data sensitivity, third-party and MCP server internals. Per-run limits
