@@ -146,3 +146,22 @@ func ExistingIdentity(saltPath string) (id Identity, found bool, err error) {
 		DeletionKey: deletionKeyFor(salt),
 	}, true, nil
 }
+
+// RotateSalt discards the reporter salt, so the next use mints a fresh one and
+// with it a new reporter id and deletion key. Rotating nothing is not an error.
+//
+// It is for after a confirmed erasure. Erasure unlinks the old id on the
+// service; a salt that outlived it would give the same id on re-consent and
+// quietly re-link the installation to its erased history. The salt is removed
+// rather than replaced, so an installation that has not contributed since still
+// has no identity (ExistingIdentity reports none) instead of one the service
+// has never heard of.
+func RotateSalt(saltPath string) error {
+	if saltPath == "" {
+		saltPath = DefaultSaltPath()
+	}
+	if err := os.Remove(saltPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("rotating reporter salt: %w", err)
+	}
+	return nil
+}

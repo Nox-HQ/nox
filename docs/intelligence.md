@@ -102,7 +102,7 @@ next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
 | `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
 | `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
 | `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
-| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent. Unreachable or refused: it exits non-zero and changes nothing locally |
+| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
 
 Observations are contribution schema 2: the allowlisted fields plus
 `schema_version`, `consent_version` (the terms version you accepted) and

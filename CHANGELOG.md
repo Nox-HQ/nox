@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox intel forget` rotates the reporter salt** once the service confirms
+  erasure, so consenting again is a new, unlinkable reporter instead of the
+  erased one.
 - **A scan keeps working through an OSV outage, and says how it was answered.**
   The NOX Intelligence source now sends `X-Nox-Accept-Degraded: mirror` (never
   to OSV.dev), so during an OSV outage the service answers from its mirror

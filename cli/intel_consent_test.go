@@ -141,3 +141,52 @@ func TestConsent_AcceptRequiresExplicitYesOrNamedVersion(t *testing.T) {
 		t.Error("named version did not record consent")
 	}
 }
+
+// Erasure unlinks the old id on the service; if the same salt were kept, the
+// next consent would mint the same id and silently re-link the installation.
+// After a confirmed forget a later contribution must be a new reporter.
+func TestForget_RotatesTheSaltSoReconsentIsANewReporter(t *testing.T) {
+	salt := contributor(t)
+	before, _, _ := intel.ExistingIdentity(salt)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"candidates_anonymised":1,"identifiers_removed":1,"consent_removed":true,"proof":"deletion_key"}`))
+	}))
+	defer srv.Close()
+	var out, errw bytes.Buffer
+	if code := intelForget([]string{"--endpoint", srv.URL, "--salt-path", salt}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	if _, found, _ := intel.ExistingIdentity(salt); found {
+		t.Error("the old reporter salt survived a confirmed erasure")
+	}
+	// Re-consent, as a later `nox intel consent` and scan would.
+	if err := intel.RecordConsent(salt, "2027-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	again, err := intel.ReporterID(salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again == before.ReporterID {
+		t.Error("re-consent reused the erased reporter id: the two periods are linkable")
+	}
+	if !strings.Contains(out.String(), "new, unlinkable reporter") {
+		t.Errorf("the operator is not told: %s", out.String())
+	}
+}
+
+// A failed erasure keeps the salt: it is the only credential that can retry.
+func TestForget_FailureKeepsTheSalt(t *testing.T) {
+	salt := contributor(t)
+	before, _, _ := intel.ExistingIdentity(salt)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }))
+	defer srv.Close()
+	var out, errw bytes.Buffer
+	if code := intelForget([]string{"--endpoint", srv.URL, "--salt-path", salt}, &out, &errw); code == 0 {
+		t.Fatal("exit 0")
+	}
+	after, found, _ := intel.ExistingIdentity(salt)
+	if !found || after != before {
+		t.Error("the salt changed although the service did not confirm erasure")
+	}
+}
