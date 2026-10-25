@@ -103,7 +103,21 @@ nox scan . --only secrets
 
 # Everything except dependency lookups
 nox scan . --skip deps
+
+# Byte-identical reports: pin every timestamp (Unix seconds)
+SOURCE_DATE_EPOCH=1700000000 nox scan . --offline --format all
 ```
+
+#### Reproducible output
+
+Reports carry the time they were written (`generated_at` in `findings.json`,
+the SBOM creation timestamps, the HTML report). Set `SOURCE_DATE_EPOCH` to a
+Unix time in seconds and every one of them uses it instead, so two scans of the
+same tree write byte-identical `findings.json`, `results.sarif`,
+`sbom.cdx.json`, `sbom.spdx.json`, `ai.inventory.json` and `report.html`. An
+unparseable value is ignored. The other input a scan reads from outside the tree
+is vulnerability data; `--offline` removes it, so a run with both is a pure
+function of the files. `nox scan --help` lists the variable under Environment.
 
 #### Scopes
 

@@ -1,12 +1,14 @@
 
 Nox Security Assessment
 
-6 issues need attention (44 findings).
+5 issues need attention (41 findings).
   1. Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known vulnerabilities (highest severity: high).
   2. Upgrade body-parser 1.20.3 -> 1.20.9: fixes 2 known vulnerabilities (highest severity: high).
   3. Upgrade path-to-regexp 0.1.12 -> 0.1.13: fixes 1 known vulnerability (highest severity: high).
   4. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
   5. Upgrade qs 6.13.0 -> 6.16.0: fixes 4 known vulnerabilities (highest severity: medium).
+
+1 lower-priority observation (3 findings): low severity, or a check that is unsure of the finding.
   6. Possible typosquatting [VULN-002] at jws@3.2.3, openai@4.77.0, safer-buffer@2.1.2 (medium severity, low confidence).
 
 Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling and supply chain.
