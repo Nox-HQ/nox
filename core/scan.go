@@ -1280,6 +1280,29 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		return
 	}
 
+	// Consent is per installation and explicit. scan.intelligence.contribute is
+	// project config and can be committed; it does not speak for whoever runs
+	// the scan. Until this machine records acceptance of the current terms,
+	// nothing is derived, no salt is created and no request is made - and the
+	// scan says so, because a contribution that quietly stopped is the failure
+	// this exists to prevent.
+	switch status, rec := intel.LoadConsent(ic.ReporterSaltPath); status {
+	case intel.ConsentGranted:
+	case intel.ConsentStale:
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("contribution is paused: you accepted terms %s and the current terms are %s",
+				rec.TermsVersion, intel.TermsVersion),
+			"nothing was contributed; read the new terms with `nox intel consent show` "+
+				"and accept them with `nox intel consent accept`. The scan's own findings are unaffected")
+		return
+	default:
+		deg.Add(degrade.IntelContribution,
+			"scan.intelligence.contribute is set but this machine has not accepted the contribution terms",
+			"nothing was contributed; read the terms with `nox intel consent show` and "+
+				"accept them with `nox intel consent accept`. The scan's own findings are unaffected")
+		return
+	}
+
 	reporterID, err := intel.ReporterID(ic.ReporterSaltPath)
 	if err != nil {
 		// Without a stable identifier the observations would be unattributed
@@ -1292,10 +1315,20 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		return
 	}
 
+	delKey, err := intel.DeletionKey(ic.ReporterSaltPath)
+	if err != nil {
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("deletion key unavailable: %v", err),
+			"no observations were contributed; they could not have been erased later")
+		return
+	}
+
 	obs := intel.Derive(fs, intel.DeriveOptions{
-		ReporterID:  reporterID,
-		ObservedAt:  time.Now().UTC().Format(time.RFC3339),
-		ToolVersion: opts.ToolVersion,
+		ReporterID:       reporterID,
+		ObservedAt:       time.Now().UTC().Format(time.RFC3339),
+		ToolVersion:      opts.ToolVersion,
+		ConsentVersion:   intel.TermsVersion,
+		DeletionVerifier: intel.DeletionVerifier(delKey),
 	})
 	if len(obs) == 0 {
 		return

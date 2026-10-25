@@ -15,6 +15,10 @@ import (
 // be transmitted, which is what makes the guarantee structural rather than a
 // matter of remembering to strip things.
 type Observation struct {
+	// SchemaVersion is the wire contract this observation follows. It is always
+	// WireSchemaVersion: the struct carries consent, so it is a schema-2 body.
+	SchemaVersion int `json:"schema_version"`
+
 	Fingerprint string `json:"fingerprint"`
 
 	Ecosystem    string `json:"ecosystem"`
@@ -26,6 +30,13 @@ type Observation struct {
 	ReporterID  string `json:"reporter_id,omitempty"`
 	ObservedAt  string `json:"observed_at"`
 	ToolVersion string `json:"tool_version,omitempty"`
+
+	// ConsentVersion names the contribution terms this installation's operator
+	// accepted (see TermsVersion). An observation without one is never sent.
+	ConsentVersion string `json:"consent_version"`
+	// DeletionVerifier is the SHA-256 of a key only this installation holds. The
+	// service binds it so only the holder of the key can erase the reporter id.
+	DeletionVerifier string `json:"deletion_verifier,omitempty"`
 }
 
 // Fingerprint derives the clustering key from the shareable facts.
@@ -61,6 +72,11 @@ type DeriveOptions struct {
 	ObservedAt string
 	// ToolVersion identifies this build.
 	ToolVersion string
+	// ConsentVersion is the terms version the operator accepted. The caller
+	// supplies it from the recorded acceptance; the package never assumes one.
+	ConsentVersion string
+	// DeletionVerifier is DeletionVerifier(DeletionKey(salt)); empty omits it.
+	DeletionVerifier string
 }
 
 // Derive turns findings into observations.
@@ -87,14 +103,17 @@ func Derive(fs []findings.Finding, opts DeriveOptions) []Observation {
 		}
 
 		o := Observation{
-			Ecosystem:    eco,
-			Package:      pkg,
-			VersionRange: versionRange(f),
-			Weakness:     f.Metadata["weakness"],
-			RuleID:       f.RuleID,
-			ReporterID:   opts.ReporterID,
-			ObservedAt:   opts.ObservedAt,
-			ToolVersion:  opts.ToolVersion,
+			SchemaVersion:    WireSchemaVersion,
+			ConsentVersion:   opts.ConsentVersion,
+			DeletionVerifier: opts.DeletionVerifier,
+			Ecosystem:        eco,
+			Package:          pkg,
+			VersionRange:     versionRange(f),
+			Weakness:         f.Metadata["weakness"],
+			RuleID:           f.RuleID,
+			ReporterID:       opts.ReporterID,
+			ObservedAt:       opts.ObservedAt,
+			ToolVersion:      opts.ToolVersion,
 		}
 		o.Fingerprint = Fingerprint(o.Ecosystem, o.Package, o.VersionRange, o.Weakness, o.RuleID)
 
