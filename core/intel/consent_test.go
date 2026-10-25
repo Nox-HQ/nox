@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -80,8 +81,12 @@ func TestConsent_LifecycleAndVersioning(t *testing.T) {
 		t.Fatalf("after accept: %v %+v", s, c)
 	}
 	fi, err := os.Stat(ConsentPath(sp))
-	if err != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("consent file mode: %v %v", fi, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows has no Unix permission bits; Perm() reports 0o666 there.
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Errorf("consent file mode: %v", fi.Mode().Perm())
 	}
 	if err := os.WriteFile(ConsentPath(sp), []byte(`{"terms_version":"2024-01"}`), 0o600); err != nil {
 		t.Fatal(err)
