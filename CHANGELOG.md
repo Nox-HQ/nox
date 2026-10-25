@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-10-25
+
+The first-run experience and continuous understanding from the product vision
+(docs/vision.md, sections 15 and 17). `nox scan .` gives an assessment in plain
+language; `nox fix plan`/`apply`/`verify` prepare, apply and re-check fixes;
+`nox install-ci` and `nox advisories` handle newly disclosed advisories by a
+configured policy; `nox compliance iso27001` and `nox model` produce evidence and
+a threat model from what the scan already knows. `nox scan --previous` and
+`nox diff` now say what changed: new and resolved findings, new authorization
+leads, capabilities an AI agent gained, and infrastructure settings that got
+weaker. Breaking: `nox diff --json` is an object, and `nox diff` exits 1 when
+something is new or worse.
+
 ### Added
 
 - **A change to infrastructure now names the security assumption it
