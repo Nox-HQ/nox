@@ -220,6 +220,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP `threat_model` takes a `previous` model.** The tool's input schema was
+  `{}`, so an agent could not ask what changed since an earlier model, though
+  `nox model --previous` could. It now accepts an optional `previous` (the
+  `model.json` of an earlier run), confined to the allowed workspace paths exactly
+  as the `scan` tool's `previous` is, and returns the same `changes` block. Both
+  surfaces call `threatmodel.BuildAgainst`, so they cannot compare differently. A
+  file that is missing or is not a nox threat model is an error, never an empty
+  comparison.
+
 - **`findings.json` `routes` now lists Flask and FastAPI routes, with their
   authentication.** The route inventory held only JavaScript routes, so `nox
   model` showed Python entry points only through authorization leads, with

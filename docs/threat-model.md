@@ -134,6 +134,9 @@ went. Identity is the element ID; a cell is compared on stable evidence keys (ru
 and file, or the statement), never on line numbers, so a finding that moved is not
 a change.
 
+The MCP tool takes the same comparison as an optional `previous` argument: the
+path of an earlier `model.json`, which must sit under an allowed workspace path.
+
 A comparison that cannot be made says so. If the AI inventory or the SBOM was
 given to only one of the two models, or the earlier model recorded no routes (it
 may predate route recording), the elements depending on that input are not
@@ -155,8 +158,8 @@ scan of the directory recognises it as nox's own output rather than source.
 Two small scan-side changes make the evidence available:
 
 - `findings.json` has a `routes` key listing every Express, Fastify, Flask
-  and FastAPI route the authorization reader read, with the middleware it could see. Routes are
-  context, not findings: they reach no gate, exit code, SARIF output or
+  and FastAPI route the authorization reader read, with the middleware it could
+  see. Routes are context, not findings: they reach no gate, exit code, SARIF output or
   fingerprint. The key is absent when no routes were read.
 - The AI inventory reads the project-scoped `.mcp.json` as it reads `mcp.json`
   (it was inventoried as one opaque component, with no servers and no tool
