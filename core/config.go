@@ -548,10 +548,19 @@ type IntelligenceConfig struct {
 	ReporterSaltPath string `yaml:"reporter_salt_path"`
 }
 
+// OSVBaseURLEnv names the environment variable that selects the reference
+// database when .nox.yaml does not (a self-hosted mirror, or a closed address in
+// hermetic test runs).
+const OSVBaseURLEnv = "NOX_OSV_BASE_URL"
+
 // ReferenceBaseURL is the OSV-compatible API scans use as the reference
-// database: BaseURL when set, otherwise the public OSV.dev endpoint.
+// database: scan.osv.base_url, then NOX_OSV_BASE_URL, otherwise the public
+// OSV.dev endpoint.
 func (c OSVConfig) ReferenceBaseURL() string {
 	if u := strings.TrimSpace(c.BaseURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	if u := strings.TrimSpace(os.Getenv(OSVBaseURLEnv)); u != "" {
 		return strings.TrimRight(u, "/")
 	}
 	return osvsource.DefaultBaseURL

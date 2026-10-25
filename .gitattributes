@@ -42,3 +42,6 @@ Dockerfile text eol=lf
 *.svg binary
 *.woff binary
 *.woff2 binary
+
+# Key material is byte-exact: the embedded feed key is pinned by hash.
+core/feedkey/*.pem -text

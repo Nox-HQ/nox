@@ -8,6 +8,10 @@ import (
 )
 
 func TestNetworkNotice(t *testing.T) {
+	// The hermetic test environment points both at a closed port; this test is
+	// about the defaults.
+	t.Setenv(nox.IntelligenceEndpointEnv, "")
+	t.Setenv(nox.OSVBaseURLEnv, "")
 	def := func() *nox.ScanConfig { return &nox.ScanConfig{} }
 
 	t.Run("default scan says what was sent and how to stop it", func(t *testing.T) {
