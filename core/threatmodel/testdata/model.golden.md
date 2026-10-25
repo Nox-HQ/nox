@@ -138,11 +138,11 @@
 ### untrusted caller → route
 
 - Callers (untrusted input) → GET /api/invoices/:id: request reaches GET /api/invoices/:id (authentication middleware: requireAuth)
-  - evidence: route registration read by the authorization reader (Express) (`src/routes/invoices.js:13`, findings.json)
+  - evidence: route registration read by the Express or Fastify reader (`src/routes/invoices.js:13`, findings.json)
 - Callers (untrusted input) → POST /api/assistant/summarise: request reaches POST /api/assistant/summarise (authentication middleware: requireAuth)
-  - evidence: route registration read by the authorization reader (Express) (`src/routes/assistant.js:27`, findings.json)
+  - evidence: route registration read by the Express or Fastify reader (`src/routes/assistant.js:27`, findings.json)
 - Callers (untrusted input) → POST /login: request reaches POST /login (no authentication middleware visible)
-  - evidence: route registration read by the authorization reader (Express) (`src/server.js:6`, findings.json)
+  - evidence: route registration read by the Express or Fastify reader (`src/server.js:6`, findings.json)
 
 ### untrusted input → shell command
 

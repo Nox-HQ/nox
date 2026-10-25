@@ -245,6 +245,8 @@ type Route struct {
 	Line     int    `json:"line"`
 	Authn    string `json:"authn,omitempty"`
 	Authz    string `json:"authz,omitempty"`
+	// Reader is the framework reader that found the registration.
+	Reader string `json:"reader,omitempty"`
 }
 
 // Lead is the serialised form of core.Lead: one thing a scan found worth

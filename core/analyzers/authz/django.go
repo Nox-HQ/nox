@@ -435,7 +435,7 @@ func (d *djIndex) emitView(e djEntry, full string, out *[]Route, views *[]routeV
 	v, ok := d.lookup(e.file, e.view)
 	if !ok {
 		// A view this reader cannot find is not a view it can call unguarded.
-		rt := Route{Method: "ALL", Path: full, FilePath: e.file.path, Line: line}
+		rt := Route{Method: "ALL", Path: full, FilePath: e.file.path, Line: line, Reader: ReaderDjango}
 		*out = append(*out, rt)
 		*views = append(*views, routeView{route: rt, framework: "django", guardUnseen: true})
 		return
@@ -443,7 +443,7 @@ func (d *djIndex) emitView(e djEntry, full string, out *[]Route, views *[]routeV
 	methods := d.methodsOf(v, e)
 	for _, m := range methods {
 		authn, authz, public := d.access(v, m)
-		rt := Route{Method: m, Path: full, FilePath: e.file.path, Line: line, Authn: authn, Authz: authz}
+		rt := Route{Method: m, Path: full, FilePath: e.file.path, Line: line, Authn: authn, Authz: authz, Reader: ReaderDjango}
 		*out = append(*out, rt)
 		*views = append(*views, routeView{route: rt, handler: d.handlerText(v), known: true, chain: v.decos + " " + v.bases,
 			guardUnseen: d.guard, declaredPublic: public, framework: "django"})
@@ -456,7 +456,7 @@ func (d *djIndex) emitViewset(reg djEntry, full string, inc djEntry, out *[]Rout
 	detail := djJoin(list, ":pk")
 	line := lineAt(reg.file.lineStarts, reg.off)
 	if !ok {
-		rt := Route{Method: "ALL", Path: list, FilePath: reg.file.path, Line: line}
+		rt := Route{Method: "ALL", Path: list, FilePath: reg.file.path, Line: line, Reader: ReaderDjango}
 		*out = append(*out, rt)
 		*views = append(*views, routeView{route: rt, framework: "django", guardUnseen: true})
 		return
@@ -467,7 +467,7 @@ func (d *djIndex) emitViewset(reg djEntry, full string, inc djEntry, out *[]Rout
 			p = detail
 		}
 		authn, authz, public := d.access(v, m.method)
-		rt := Route{Method: m.method, Path: p, FilePath: reg.file.path, Line: line, Authn: authn, Authz: authz}
+		rt := Route{Method: m.method, Path: p, FilePath: reg.file.path, Line: line, Authn: authn, Authz: authz, Reader: ReaderDjango}
 		*out = append(*out, rt)
 		*views = append(*views, routeView{route: rt, handler: d.handlerText(v), known: true, chain: v.decos + " " + v.bases,
 			guardUnseen: d.guard, declaredPublic: public, framework: "django"})
