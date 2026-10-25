@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox intel forget` rotates the reporter salt** once the service confirms
+  erasure, so consenting again is a new, unlinkable reporter instead of the
+  erased one.
 - **Contribution is consented to, versioned, and erasable.** `nox scan` now
   contributes (when `scan.intelligence.contribute: true`) only on a machine
   that has accepted the contribution terms: `nox intel consent show` prints
