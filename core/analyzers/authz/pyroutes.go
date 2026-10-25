@@ -20,6 +20,7 @@ type pyFile struct {
 	path       string
 	raw        []byte
 	code       string // lexctx.MaskNonCode(raw): same length, same offsets
+	sans       string // raw with comments blanked, strings kept
 	lineStarts []int
 	// modules maps a local binding to the repo file it names (`import a.b as
 	// c`, `from . import users`); named maps a local binding to (file, name)
@@ -87,6 +88,9 @@ type pyIndex struct {
 	consts   map[string][]string
 	rls      bool
 	routes   []pyRoute
+	// funcText indexes every function's comment-free text by name, built on
+	// first use.
+	funcText map[string][]string
 }
 
 var (

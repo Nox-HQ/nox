@@ -46,7 +46,7 @@ new element from a moved one.
 | Element | Source | What is evidenced |
 |---|---|---|
 | Entry points (routes) | `findings.json` `routes`, written by the authorization reader (Express and Fastify JavaScript and TypeScript, Flask and FastAPI Python) | method, mounted path, registration `file:line`, and the authentication and authorization middleware visible on the route's chain, by name |
-| Authorization leads | `findings.json` `leads` | a route that loads a record by a caller-supplied id with no visible ownership check; also names a route when `routes` was not recorded |
+| Authorization and authentication leads | `findings.json` `leads` | a route that loads a record by a caller-supplied id with no visible ownership check (`AUTHZ-001`), or an administrative, account-bearing or mutating route with no visible authentication (`AUTHN-001`, the same fact as `authentication middleware: none visible` in the route table); also names a route when `routes` was not recorded |
 | AI agents | `ai.inventory.json` `tool_permission_matrix` | tools and their capability tags (`shell_exec`, `email_send`, `database_read`, ...); a tool with no recognised capability is named as such |
 | MCP servers and client | `ai.inventory.json` components (`.mcp.json` and `mcp.json`) | server name, launch command and arguments (never the `env` block) |
 | Models | `ai.inventory.json` `model_provenance` | model, provider, whether pinned, the environment variable the credential is read from |

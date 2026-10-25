@@ -59,6 +59,8 @@ var familyRules = []familyRule{
 	{"PERM-", RuleFamily{"file-permissions", "File Permissions"}},
 	{"MEMSAFE-", RuleFamily{"memory-safety", "Memory Safety"}},
 	{"AUTHZ-", RuleFamily{"authorization", "Authorization"}},
+	{"AUTHN-", RuleFamily{"authentication", "Authentication"}},
+	{"WEBHOOK-", RuleFamily{"webhook-verification", "Webhook Verification"}},
 }
 
 // unknownFamily is the fallback for a rule whose prefix is not catalogued. It is

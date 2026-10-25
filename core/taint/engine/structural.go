@@ -828,7 +828,32 @@ func (e *StructuralEngine) resolveSink(lang, rawCall string) (taint.Sink, bool) 
 			return s, true
 		}
 	}
+	if key, ok := pythonConnectFactoryKey(lang, rawCall); ok {
+		if s, ok := e.cat.IsSink(lang, key); ok {
+			return s, true
+		}
+	}
 	return taint.Sink{}, false
+}
+
+// pythonConnectFactoryKey names the connection a factory call produces when
+// the SQL method is called on it directly: `sqlite3.connect("x.db").execute(q)`
+// is `connection.execute(q)`. The catalog names Python's SQL sinks by receiver,
+// and a local bound to a connect() result already stands for `connection`
+// (receivers.go). The inline form has no local to bind, so its chain reads
+// `sqlite3.connect.execute` and no catalog suffix matched it, although
+// `sqlite3.connect("x.db").cursor().execute(q)` did.
+func pythonConnectFactoryKey(lang, rawCall string) (string, bool) {
+	if lang != "python" && lang != "py" {
+		return "", false
+	}
+	segs := strings.Split(rawCall, ".")
+	for i := len(segs) - 2; i >= 0; i-- {
+		if segs[i] == "connect" {
+			return "connection." + strings.Join(segs[i+1:], "."), true
+		}
+	}
+	return "", false
 }
 
 // rubyKernelSinks are Ruby's Kernel command sinks. They are called without a

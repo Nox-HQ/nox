@@ -124,8 +124,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// variable with a literal value, Kubernetes/Helm and Compose), IAC-504
 	// (Terraform S3 public access block disabled) and MCP-025 (an MCP server
 	// launched from a package registry without a pinned version).
-	if got := len(cat); got != 1503 {
-		t.Errorf("Catalog() returned %d rules, want 1503", got)
+	// 1503 -> 1505 adds AUTHN-001 (a route with no visible authentication,
+	// opt-in) and WEBHOOK-001 (a Stripe, GitHub or Slack webhook payload
+	// accepted without signature verification).
+	if got := len(cat); got != 1505 {
+		t.Errorf("Catalog() returned %d rules, want 1505", got)
 	}
 }
 

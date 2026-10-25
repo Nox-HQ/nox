@@ -182,6 +182,12 @@ var strideByCWE = []strideRow{
 // another caller's record is both elevation of privilege and disclosure.
 var strideByRule = map[string][]Category{
 	"AUTHZ-001": {ElevationOfPrivilege, InformationDisclosure},
+	// A route anyone can call is spoofing in the STRIDE sense (the caller is
+	// never established) and the privilege it exposes.
+	"AUTHN-001": {Spoofing, ElevationOfPrivilege},
+	// A webhook payload nobody authenticated can be forged by anyone who can
+	// reach the URL.
+	"WEBHOOK-001": {Spoofing, Tampering},
 }
 
 // supplyChainPrefixes are the rule families whose findings are about the
