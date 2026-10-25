@@ -13,6 +13,10 @@ const (
 	fromSBOM
 	fromAI
 	fromScanRecord
+	// fromLeads is the scan's authorization leads. They are hints a person
+	// confirms with a test, never findings, so this source adds a gap and no
+	// evidence.
+	fromLeads
 )
 
 // source is one place a control's evidence comes from.
@@ -26,6 +30,15 @@ type source struct {
 	// finding carries. A finding matching either is evidence.
 	prefixes []string
 	cwes     []string
+	// ids select findings by exact rule ID, for a rule that bears on a control
+	// that its family prefix does not (a literal credential in a manifest is
+	// authentication information; the rest of IAC- is not).
+	ids []string
+	// additive marks a source that can only add to a control: when it finds
+	// nothing, or its scope did not run, it contributes no evidence and no gap.
+	// It exists so mapping a rule onto a control that other sources already
+	// evidence does not downgrade every scan that has none of that rule's files.
+	additive bool
 	// degradeKinds name scan degradations that make this source incomplete.
 	degradeKinds []string
 	// anywhere marks checks that apply to every file, so an empty result is
@@ -65,6 +78,17 @@ type controlDef struct {
 	org []string
 }
 
+// literalCredentialIaC and literalCredentialAI are the rules that find a
+// credential value written into configuration. TestEveryLiteralCredentialRule-
+// IsMappedOrExcludedWithAReason keeps the list complete as rules are added.
+var (
+	literalCredentialIaC = []string{
+		"IAC-022", "IAC-047", "IAC-130", "IAC-190", "IAC-191", "IAC-192", "IAC-221", "IAC-222", "IAC-223",
+		"IAC-225", "IAC-235", "IAC-236", "IAC-254", "IAC-271", "IAC-343", "IAC-351", "IAC-502", "IAC-503",
+	}
+	literalCredentialAI = []string{"MCP-004", "AI-042"}
+)
+
 var (
 	depKinds = []string{"osv_lookup", "lockfile_parse", "vuln_data_load"}
 
@@ -94,6 +118,8 @@ var controls = []controlDef{
 		id: "A.5.17", title: "Authentication information", theme: "Organizational",
 		sources: []source{
 			{kind: fromFindings, label: "Secret scanning of the working tree", scope: "secrets", prefixes: []string{"SEC-"}, anywhere: true},
+			{kind: fromFindings, label: "Literal credentials in infrastructure and CI configuration", scope: "iac", ids: literalCredentialIaC, additive: true},
+			{kind: fromFindings, label: "Literal credentials in AI and MCP configuration", scope: "ai", ids: literalCredentialAI, additive: true},
 		},
 		limits: []string{
 			"A clean secret scan shows no recognizable credential was found in the scanned files; it does not show credentials are generated, stored, rotated or revoked well.",
@@ -119,6 +145,7 @@ var controls = []controlDef{
 			{kind: fromSBOM, label: "Software bill of materials", scope: "deps"},
 			{kind: fromFindings, label: "Supply-chain checks (slopsquatting, provenance, licenses, containers)", scope: "supply-chain",
 				prefixes: []string{"SLOP-", "PROV-", "LIC-", "CONT-"}, degradeKinds: depKinds, subjectFromSBOM: true},
+			{kind: fromFindings, label: "MCP servers launched from a package registry without a pinned version", scope: "ai", ids: []string{"MCP-025"}, additive: true},
 		},
 		limits: []string{
 			"Checks cover dependencies declared in lockfiles and manifests; build tooling, hosted services and vendored binaries outside them are not covered.",
@@ -191,6 +218,7 @@ var controls = []controlDef{
 		id: "A.8.12", title: "Data leakage prevention", theme: "Technological",
 		sources: []source{
 			{kind: fromFindings, label: "Sensitive-data and secret-exposure checks", scope: "data", prefixes: []string{"DATA-", "SEC-"}, anywhere: true},
+			{kind: fromFindings, label: "Storage that is configured to be publicly readable", scope: "iac", ids: []string{"IAC-504"}, additive: true},
 		},
 		indirect: true,
 		limits: []string{
@@ -248,6 +276,9 @@ var controls = []controlDef{
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
 				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}},
+			{kind: fromFindings, label: "Authorization checks", scope: "code", ids: []string{"AUTHZ-001"}, additive: true},
+			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
+			{kind: fromLeads, label: "Authorization leads"},
 		},
 		limits: []string{
 			"Static analysis finds a subset of defect classes in the languages it supports; absence of findings is not absence of defects.",

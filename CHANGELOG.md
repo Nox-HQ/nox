@@ -220,6 +220,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox compliance iso27001`: a literal credential in a manifest now opens
+  A.5.17.** A literal database password in a Kubernetes `env` block (IAC-502) or
+  a Compose list entry (IAC-503) left "Authentication information" at "checks
+  ran, nothing open", because the control read only secret scanning (`SEC-*`).
+  A.5.17 now also reads every rule that finds a credential value written into
+  configuration (IAC-022/047/130/190-192/221-223/225/235/236/254/271/343/351/
+  502/503, MCP-004, AI-042), and a test fails when a new CWE-798 rule is neither
+  mapped nor excluded with a reason. The rules added since the mapping was
+  written are placed too: IAC-504 on A.8.12, MCP-025 on A.5.21, AUTHZ-001 and
+  AI-AGENT-009 on A.8.28. The additions are silent when they find nothing, so a
+  repository without those files is not downgraded. Authorization leads are
+  named on A.8.28 as unconfirmed hints and still never counted as findings.
+
 - **`nox fix plan` no longer calls a transitive upgrade "safe to apply" when a
   parent pins it.** body-parser, path-to-regexp and qs under express 4.21.2 were
   listed under "Safe to apply, nothing here needs a decision", and `nox fix

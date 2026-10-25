@@ -237,6 +237,11 @@ func (c *context) findingsArtifact() string {
 
 // matches reports whether f is selected by the source.
 func (s source) matches(f findings.Finding) bool {
+	for _, id := range s.ids {
+		if f.RuleID == id {
+			return true
+		}
+	}
 	for _, p := range s.prefixes {
 		if strings.HasPrefix(f.RuleID, p) {
 			return true
@@ -318,11 +323,29 @@ func (c *context) evaluate(src source) tally {
 		return c.evaluateSBOM(src)
 	case fromAI:
 		return c.evaluateAI(src)
+	case fromLeads:
+		return c.evaluateLeads(src)
 	}
 	return c.evaluateScanRecord(src)
 }
 
+// evaluateLeads names the authorization leads the scan produced. A lead is a
+// route worth testing, not a defect, so it is never counted as open; it is a
+// gap, because the control cannot be read as evidenced while a lead is
+// unconfirmed in either direction.
+func (c *context) evaluateLeads(src source) tally {
+	n := len(c.in.Report.Leads)
+	if n == 0 {
+		return tally{}
+	}
+	return tally{incomplete: true, gap: fmt.Sprintf(
+		"%s: %d authorization lead(s) are routes that load a record by a caller-supplied id with no visible ownership check. They are hints, not findings: each needs a two-account test before it counts as a defect or is set aside.", src.label, n)}
+}
+
 func (c *context) evaluateFindings(src source) tally {
+	if src.additive && (!c.ran(src.scope) || !c.hasMatch(src)) {
+		return tally{}
+	}
 	if !c.ran(src.scope) {
 		return tally{gap: fmt.Sprintf("%s did not run: the %q scope was not scanned, so the absence of findings says nothing.", src.label, src.scope), incomplete: true}
 	}
@@ -365,6 +388,20 @@ func (c *context) evaluateFindings(src source) tally {
 		Statement: findingsStatement(src, act, wav), Rules: distinctRules(act, wav),
 	}
 	return t
+}
+
+func (c *context) hasMatch(src source) bool {
+	for _, f := range c.active {
+		if src.matches(f) {
+			return true
+		}
+	}
+	for _, f := range c.waived {
+		if src.matches(f) {
+			return true
+		}
+	}
+	return false
 }
 
 func joinGap(a, b string) string {

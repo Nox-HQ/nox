@@ -83,20 +83,20 @@ fixed limit of that evidence.
 | Control | Title | Evidence from | Cannot show |
 |---|---|---|---|
 | A.5.9 | Inventory of information and other associated assets | SBOM components, AI inventory | Information assets, owners, classification, currency. Indirect: never above limited. |
-| A.5.17 | Authentication information | Secret scan (SEC-*) | Credential generation, rotation, MFA, history unless a history scan ran |
+| A.5.17 | Authentication information | Secret scan (SEC-*); literal credentials in IaC, CI, MCP and AI configuration (IAC-502/503 and the other rules that find a credential value in a file) | Credential generation, rotation, MFA, history unless a history scan ran |
 | A.5.19 | Information security in supplier relationships | SBOM (suppliers named) | Agreements, assessments, monitoring. Indirect. |
-| A.5.21 | Managing information security in the ICT supply chain | SBOM; SLOP, PROV, LIC, CONT rules | Build tooling and hosted services outside lockfiles; supplier practices |
+| A.5.21 | Managing information security in the ICT supply chain | SBOM; SLOP, PROV, LIC, CONT rules; MCP-025 (unpinned MCP server package) | Build tooling and hosted services outside lockfiles; supplier practices |
 | A.5.23 | Information security for use of cloud services | IaC rules (IAC-*) | Deployed cloud state, provider choice, shared responsibility, exit |
 | A.5.34 | Privacy and protection of personal identifiable information (PII) | DATA-* rules | What is personal data for you, lawful basis, retention, DPIA |
 | A.8.4 | Access to source code | Secret scan (credentials in tree) | Who can read or write the repository, branch protection. Indirect. |
 | A.8.8 | Management of technical vulnerabilities | VULN-* against OSV.dev; SBOM; waiver counts | Non-dependency vulnerabilities, reachability beyond what a finding states, the management process |
 | A.8.9 | Configuration management | IAC-*, PERM-* | Approved baselines, production drift, change authorisation |
-| A.8.12 | Data leakage prevention | DATA-*, SEC-* | DLP on networks, endpoints, mail; classification. Indirect. |
+| A.8.12 | Data leakage prevention | DATA-*, SEC-*; IAC-504 (publicly readable storage) | DLP on networks, endpoints, mail; classification. Indirect. |
 | A.8.24 | Use of cryptography | CRYPTO-* and findings with crypto CWEs | Key lifecycle, cryptography policy |
 | A.8.25 | Secure development life cycle | The scan record itself | That it runs on every change or blocks release. Indirect. |
 | A.8.26 | Application security requirements | None | Everything: requirements are written before code. Always `not_evidenced`. |
 | A.8.27 | Secure system architecture and engineering principles | AI inventory; AI-, AGENT-, MCP- rules | Architecture review, documented principles, threat models. Indirect. |
-| A.8.28 | Secure coding | TAINT-, VARIANT-, MEMSAFE-, HARDEN- | Defect classes and languages not covered; standards, training, review |
+| A.8.28 | Secure coding | TAINT-, VARIANT-, MEMSAFE-, HARDEN-; AUTHZ-001 and AI-AGENT-009; authorization leads are named as an unconfirmed gap, never counted as findings | Defect classes and languages not covered; standards, training, review |
 | A.8.29 | Security testing in development and acceptance | The scan record, plus the `dynamic_verification` capability | Penetration tests, acceptance tests. Limited unless dynamic verification answered. |
 
 ## Guards against a false all-clear
