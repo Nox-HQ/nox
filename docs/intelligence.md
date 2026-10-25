@@ -13,6 +13,8 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
+| every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent | the intelligence service |
+
 A scan that made the lookup says so once, in a `[network]` line after the
 results: how many dependencies, where they went, and how to opt out. A scan that
 made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
@@ -57,6 +59,43 @@ sets `meta.advisory_lookup` to `incomplete` in `findings.json`, so `nox diff`
 does not compare its advisories against a full scan. A plain OSV.dev response
 carries no coverage statement and raises nothing: it claims neither
 completeness nor its absence.
+
+## The signed feeds, and the key built into nox
+
+Two feeds come from the service, both signed with one Ed25519 key:
+the predictive slopsquat feed (`SLOP-002`, [slopsquat-feed.md](slopsquat-feed.md))
+and the MCP advisory feed (`MCP-026`, [mcp-advisory-feed.md](mcp-advisory-feed.md)).
+They are used by default, with no configuration, because nox carries the public
+half of that key:
+
+- **Key id** `slopfeed-key-v1`, fingerprint `sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08` (SHA-256 of the raw 32-byte key),
+  published at `/v1/feeds/slopsquat.pub.pem` and `/v1/feeds/mcp.pub.pem`:
+
+```text
+-----BEGIN ED25519 PUBLIC KEY-----
+2ByJdNFjJEs1EDZB5C16bmRdMVdT62k3Ydv1GnqIYQs=
+-----END ED25519 PUBLIC KEY-----
+```
+
+- **Verification is unchanged**: digest recomputed over the canonical entries, then
+  the Ed25519 signature (MCP: over the domain-separated canonical bytes). A feed
+  that fails either is never used, is never papered over with a cached copy, and
+  is a **blocking** degradation (`--fail-on-degraded`).
+- **Your own key wins.** `scan.slop.signature_key_path` and
+  `scan.mcp_feed.signature_key_path` replace the built-in key for that feed.
+  Findings record which key verified them in `metadata.feed_key`:
+  `built-in:slopfeed-key-v1` or `project:sha256:...`.
+- **Consulted only when the service is**: online and `scan.intelligence` not
+  disabled. `--offline`, `--no-osv`, `scan.osv.disabled` make no request (a
+  verified cached copy is still read); `scan.intelligence.disabled` makes none and
+  asks for none. In each case the scan records a non-blocking degradation that
+  says the feed was **not checked** and why, which is not "no advisories".
+- **Opt out per feed**: `scan.slop.disabled: true`, `scan.mcp_feed.disabled: true`.
+- **Rotation.** If a feed fails signature verification, nox makes one extra
+  request for the key the service serves now. If its fingerprint differs from the
+  built-in one, the degradation names both fingerprints and says to upgrade nox
+  or to review the new key and pin it with `signature_key_path`. nox never starts
+  trusting a key because the server served it.
 
 ## Turning it off, at every level
 

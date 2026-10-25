@@ -26,22 +26,33 @@ not thereby free of advisories: absence from the feed is absence from the feed.
 Versions are ordered with nox-core's comparison (`vulnsource.Interval`), which a
 version it cannot order never matches.
 
-## Turning it on
+## On by default
+
+No configuration is needed. With NOX Intelligence enabled and the scan online,
+the feed is fetched and verified under the **Ed25519 key built into nox**: key
+id `slopfeed-key-v1`, fingerprint `sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08`. It is the same key as the slopsquat
+feed's; see [intelligence.md](intelligence.md#the-signed-feeds-and-the-key-built-into-nox).
+`MCP-026` findings carry `metadata.feed_key`, `built-in:slopfeed-key-v1` or
+`project:sha256:...`, saying which key verified the feed.
 
 ```yaml
 scan:
   mcp_feed:
-    signature_key_path: keys/noxintel.pub.pem   # REQUIRED: the pinned key
+    # signature_key_path: keys/noxintel.pub.pem   # optional: YOUR key, which overrides the built-in one
     # url: https://intel.klarlabs.de/v1/feeds/mcp   # default: <scan.intelligence endpoint>/v1/feeds/mcp
     # refresh: 24h
     # cache_dir: ~/.nox/cache/mcpfeed
-    # disabled: true
+    # disabled: true                                # opt out of this feed
 ```
 
-Fetch the key once (`GET /v1/feeds/mcp.pub.pem`), read it, commit it, and name
-it. It is the same key as the slopsquat feed's. **Do not point nox at a key the
-server hands you on every scan**: a key that arrives with the feed proves
-nothing about the feed.
+To pin your own key, fetch it once (`GET /v1/feeds/mcp.pub.pem`), read it, commit
+it, and name it. **Do not point nox at a key the server hands you on every
+scan**: a key that arrives with the feed proves nothing about the feed.
+
+**Rotation.** If the feed fails signature verification, nox asks the service which
+key it serves now. When that fingerprint differs from the built-in one the
+degradation names both and tells you to upgrade nox, or to review the new key and
+pin it with `signature_key_path`. nox never accepts the served key on its own.
 
 Verification is the slopsquat feed's, fail-closed: the digest over the canonical
 entries is recomputed, then the Ed25519 signature over
@@ -55,7 +66,8 @@ re-verified on every read.
 - Only when the scan found MCP servers launched from a package registry. A repo
   with none makes no request and reports nothing.
 - Only when the intelligence service is in use (or `url` is set): with
-  `scan.intelligence.disabled` and no `url`, nothing is fetched.
+  `scan.intelligence.disabled` and no `url`, nothing is fetched and the scan says
+  the servers were not checked.
 - `--offline` makes no request. It reads the verified cache; with none, it says so.
 - Within `refresh` (24h by default) a cached feed is used without a request, so
   repeated scans are deterministic. If a refresh fails, the verified cached copy
@@ -69,10 +81,11 @@ checked**, never "no advisories":
 | cause | blocks a build (`--fail-on-degraded`)? |
 |---|---|
 | the service answers 404: it does not serve the feed, or has not published one (the service's own `disabled_reason` is quoted) | no |
-| no key is pinned | no |
+| `scan.intelligence.disabled` (or `scan.osv.disabled`): nothing is requested | no |
 | offline with no cached feed | no |
 | a stale cached copy was used because the refresh failed | no |
-| the feed does not verify (digest, signature, schema), or the service is unreachable with no cache | **yes** |
+| the feed does not verify under the built-in or the pinned key (digest, signature, schema), including a rotated service key | **yes** |
+| the service is unreachable with no cache | **yes** |
 
 A feed that fails verification is never papered over with the cache: that is a
 tampered or mis-keyed answer, and it is reported as one.

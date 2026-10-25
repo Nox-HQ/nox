@@ -590,14 +590,20 @@ func (c IntelligenceConfig) ResolvedEndpoint() string {
 }
 
 // SlopConfig enables the SLOP analyzer's predictive slopsquat dimension
-// (SLOP-002). It is off by default: with no Feed configured the analyzer keeps
-// exactly its reactive SLOP-001 behavior and adds no findings. The feed is a
-// versioned, content-addressed, offline data file — no network is touched at
-// scan time (only the out-of-band generator queries registries). See
+// (SLOP-002). With no Feed configured it consults NOX Intelligence's signed feed
+// when the service is enabled and the scan is online (or a verified cached copy
+// offline), verified under the key built into nox; Disabled restores exactly the
+// reactive SLOP-001 behavior. The feed is a versioned, content-addressed data
+// file; only the out-of-band generator queries registries. See
 // docs/slopsquat-feed.md.
 type SlopConfig struct {
-	// Feed selects the predictive blocklist. Empty (default) disables the
-	// predictive dimension entirely. Accepted values:
+	// Disabled opts out of the predictive dimension entirely, including the
+	// default feed. With NOX Intelligence enabled and the scan online, an empty
+	// Feed means the official signed feed, verified under the key built into
+	// nox (docs/slopsquat-feed.md).
+	Disabled bool `yaml:"disabled"`
+	// Feed selects the predictive blocklist. Empty (default) means the
+	// official NOX Intelligence feed (see Disabled). Accepted values:
 	//   - "bundled"          — the feed shipped in the nox binary
 	//   - an http(s):// URL  — a remotely published, signature-verified feed
 	//                          (fetched, verified, and cached locally; offline
@@ -621,8 +627,19 @@ type SlopConfig struct {
 	RequireSignature bool `yaml:"require_signature"`
 	// SignatureKeyPath points at a PEM-encoded Ed25519 public key used to verify
 	// the feed signature. Optional; when set, a present signature is verified
-	// against it (and a bad signature is always a hard failure).
+	// against it (and a bad signature is always a hard failure). For the default
+	// feed it overrides the key built into nox.
 	SignatureKeyPath string `yaml:"signature_key_path"`
+}
+
+// DefaultSlopFeedURL is the slopsquat feed NOX Intelligence publishes, or ""
+// when the intelligence service is disabled.
+func (c IntelligenceConfig) DefaultSlopFeedURL() string {
+	ep := c.ResolvedEndpoint()
+	if ep == "" {
+		return ""
+	}
+	return ep + "/v1/feeds/slopsquat"
 }
 
 // MCPFeedConfig selects the signed MCP / AI-component advisory feed NOX
@@ -638,9 +655,9 @@ type MCPFeedConfig struct {
 	URL string `yaml:"url"`
 	// SignatureKeyPath points at the PEM Ed25519 public key the feed must verify
 	// under (PKIX, or the raw "ED25519 PUBLIC KEY" form), relative to the scan
-	// root. The service publishes it at /v1/feeds/mcp.pub.pem; fetch it once and
-	// commit it, so the key you pinned is not whatever the server says today.
-	// Without a key the feed is not consulted and the scan says so.
+	// root. Optional: unset means the official key built into nox
+	// (BuiltinFeedKeyID); set, it always wins. The service publishes its key at
+	// /v1/feeds/mcp.pub.pem, but nox never trusts a key the server hands it.
 	SignatureKeyPath string `yaml:"signature_key_path"`
 	// CacheDir overrides where verified feed bytes are cached. Empty means
 	// $HOME/.nox/cache/mcpfeed.

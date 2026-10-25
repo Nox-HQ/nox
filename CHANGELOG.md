@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The official NOX Intelligence feed key (`slopfeed-key-v1`, fingerprint
+  `sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08`) is built into nox, so the predictive slopsquat feed (`SLOP-002`) and the
+  MCP advisory feed (`MCP-026`) are verified and used by default whenever the scan
+  is online and `scan.intelligence` is not disabled. A configured
+  `signature_key_path` always overrides it; findings record which key verified
+  them in `metadata.feed_key`. A feed that fails verification is a blocking
+  degradation, never trusted. If the service signs with a different key than the
+  built-in one, nox reports both fingerprints and says to upgrade or pin the new
+  key after review; it never accepts it silently. Opt out per feed with
+  `scan.slop.disabled` / `scan.mcp_feed.disabled`. Offline and
+  intelligence-disabled scans make no request and say the feeds were not checked.
+
 ## [1.51.0] - 2026-10-25
 
 Affected-symbol intelligence, MCP advisories and wider route coverage.
