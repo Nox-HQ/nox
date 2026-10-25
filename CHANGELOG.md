@@ -7,8 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The default scan now says when a route has no visible authentication.**
+  `nox model` already printed "no authentication middleware visible" for
+  `GET /api/admin/users` and `DELETE /api/users/:id`; the scan assessment said
+  nothing. Both now read one route table, so they cannot disagree: a route that
+  reads or changes something an anonymous caller should not reach (an
+  administrative path, a record fetched by id, or any DELETE, PUT or PATCH) and
+  has no authentication in front of it or inside it is a lead under
+  "Additional verification recommended", in `findings.json` `leads`, and in the
+  `scan --previous` / `nox diff` delta ("New leads"). `AUTHN-001` makes each
+  one a finding (`scan.rules.enable: [AUTHN-001]`, opt-in like AUTHZ-001, CWE-306);
+  without it a lead never reaches the findings array, SARIF, the exit code or a
+  fingerprint. Express, Fastify, Flask and FastAPI, as AUTHZ-001 reads them.
+  Authentication means middleware on the route, its router, a matching prefix or
+  the mount; an auth decorator, dependency or `before_request` gate; or a handler
+  that reads the caller's identity or answers 401. A handler that does that is now
+  recorded in the route table as authenticated ("an inline check on the caller's
+  identity"), so `nox model` stops calling it "none visible". Public-by-design paths
+  (login, health, docs, callbacks, webhooks), feeds, tests, examples, browser code
+  and routes under an application-wide guard this reader cannot attribute (a
+  FastAPI `add_middleware`, an Express router mounted where nox cannot resolve it
+  beneath an app-wide `app.use(auth)`) are not leads. A route registered with a
+  single access-control argument (`app.get('/api/Users', security.isAuthorized())`,
+  `.put(security.denyAll())`) is a guard, not an endpoint.
+- **WEBHOOK-001: webhook payload accepted without signature verification.** A
+  POST route that receives a Stripe, GitHub or Slack webhook (the provider in the
+  path, its header, or its event types in the handler) and neither the handler,
+  the functions it calls, nor the middleware in front of it verifies the
+  signature is a high-severity, medium-confidence finding: Stripe
+  `constructEvent` / `construct_event`, GitHub `X-Hub-Signature-256` with an HMAC,
+  Slack's signing secret. A commented-out verification does not count. A handler
+  nox cannot read is not reported. Reports by default (it is not opt-in); a
+  gateway that verifies before the app is waived with `nox:ignore`.
+- The assessment's checks line now says what was read: "authorization and
+  authentication (Express, Fastify, Flask, FastAPI routes; leads only) and webhook
+  signatures (Stripe, GitHub and Slack receivers in those routes)".
+
 ### Fixed
 
+- **Python SQL injection through `sqlite3.connect(...).execute(...)` was missed.**
+  The catalog names Python's SQL sinks by receiver (`cursor.execute`,
+  `connection.execute`); `sqlite3.connect("x.db").cursor().execute(q)` matched and
+  `sqlite3.connect("x.db").execute(q)`, which has no local to bind, did not,
+  whatever the string was built with (`%`, `+`, an f-string). The inline connection
+  is now a connection.
+- `nox model` no longer attaches a webhook or missing-authentication finding to
+  a model or data store that happens to share the route's file, and counts an
+  authentication lead once, not twice.
+- Flask converters (`<int:id>`, `<path:p>`, `<uuid:u>`, `<int(min=1):id>`) were
+  reported as a miss against the built binary; they were not (measured, and now
+  pinned by a test for every converter form).
+- **MCP-015 (rug-pull detection) no longer keeps its pin in hidden machine
+  state.** The pin lived in `~/.nox/cache/mcp-pins`, was written by the scan
+  itself, and was overwritten when it reported a change: after editing a server's
+  args, three scans gave 1, 0, 0 hits, and a fresh CI runner (no `~/.nox`) could
+  never report anything. The pin is now `.nox/mcp-pins.json`, a reviewable file
+  you commit (like `.nox/baseline.json`), written only by the new
+  `nox mcp pin`. A scan reads it, reports a changed server (high) or one that was
+  never pinned (medium) on every run until you re-pin, and never edits it. With
+  MCP servers but no pin file the scan reports an MCP degradation saying MCP-015
+  cannot run, instead of staying silent. The old `~/.nox/cache/mcp-pins` cache is
+  ignored (and named once in that degradation if it exists). Same project, same
+  output.
+- **The `nox install-ci` workflow no longer loses a disclosure when the Actions
+  cache is evicted.** The issue step ran only when a previous run was restored,
+  so after the cache expired (seven days unused) the next run counted as a first
+  run, reported nothing, and a new advisory was swallowed. The step now reports
+  every current advisory that no existing issue, open or closed, already lists
+  (each issue carries a hidden `nox-advisory` marker per advisory), so a missing
+  cache costs a repeat of nothing and a miss of nothing. With no previous run
+  nothing is still acted on (no pull request). The step's shell is now executed
+  by tests against the real `nox advisories`; it has not been run on GitHub.
+- **`ai.inventory.json` and `nox model` attributed the wrong credential to a
+  model.** The credential was the first `*_KEY`/`*_SECRET`/`*_TOKEN` environment
+  variable anywhere in the file, truncated: `gpt-4o` showed `STRIPE_SECRET` while
+  the client was built from `OPENAI_API_KEY`. It now follows the client the call
+  is made on to its constructor (`apiKey: process.env.X`, `api_key=os.environ["X"]`,
+  `option.WithAPIKey(os.Getenv("X"))`, or one assignment away) and is omitted
+  when that cannot be established (client built by a helper, two clients with
+  different keys, an SDK reading its default variable implicitly).
 - **`nox fix` no longer runs the install scripts of the packages it upgrades.**
   It ran plain `npm install pkg@version`, which executes the new version's
   preinstall, install and postinstall scripts: arbitrary code from a version
@@ -55,6 +134,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package the service reported as partial are not counted as `intel_suppression`.
   A plain OSV.dev response carries no coverage statement and raises nothing.
   Requires nox-core v0.5.0.
+
+### Changed
+
+- A default scan that looked dependencies up now prints one `[network]` line: how
+  many dependencies (ecosystem, name, version) were sent to the intelligence
+  service and the OSV reference, that no source or paths were, and how to opt out
+  (`scan.intelligence.disabled`, `--offline`).
 
 ## [1.49.0] - 2026-10-25
 

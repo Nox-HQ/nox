@@ -80,7 +80,7 @@ func TestAuthzLeadsLeaveNoTraceInMachineOutputs(t *testing.T) {
 	if len(without.Leads) != 0 {
 		t.Fatalf("the scoped lookup is a lead: %+v", without.Leads)
 	}
-	if len(withLead.LeadChecks) != 1 || withLead.LeadChecks[0] != "authorization (Express, Fastify, Flask, FastAPI routes; leads only)" {
+	if len(withLead.LeadChecks) != 1 || withLead.LeadChecks[0] != "authorization and authentication (Express, Fastify, Flask, FastAPI routes; leads only) and webhook signatures (Stripe, GitHub and Slack receivers in those routes)" {
 		t.Errorf("lead checks = %v", withLead.LeadChecks)
 	}
 	// findings.json carries the lead, but only under its own keys, so that a

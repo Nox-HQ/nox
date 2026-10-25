@@ -784,6 +784,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if offlineFlag {
 			fmt.Println("[offline] zero-network guarantee: no OSV, no API, no token, no telemetry (recorded in findings.json meta)")
 		}
+		if note := networkNotice(cfg, offlineFlag, noOSVFlag, result.Scope.Has(nox.ScopeDeps), pkgCount); note != "" {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that

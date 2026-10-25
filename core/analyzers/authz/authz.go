@@ -139,6 +139,8 @@ type Analyzer struct {
 	leads     []Lead
 	routes    int
 	routeList []Route
+	// authnEnabled: AUTHN-001 reports findings instead of leads.
+	authnEnabled bool
 }
 
 // Route is one Express route registration this reader found, with the access
@@ -177,10 +179,19 @@ type Lead struct {
 	Line     int
 	// IDSource is where the identifier comes from: path, query or body.
 	IDSource string
+	// Category, RuleID, Statement and Test are set by claims other than
+	// AUTHZ-001's (AUTHN-001); empty means an object-level authorization lead.
+	Category  string
+	RuleID    string
+	Statement string
+	Test      string
 }
 
 // Enabled reports whether AUTHZ-001 reports findings on this scan.
 func (a *Analyzer) Enabled() bool { return a.enabled }
+
+// AuthnEnabled reports whether AUTHN-001 reports findings on this scan.
+func (a *Analyzer) AuthnEnabled() bool { return a.authnEnabled }
 
 // Leads returns the routes the last ScanArtifacts call held as leads, sorted
 // by file and line. Empty when AUTHZ-001 is enabled: those routes are
@@ -213,8 +224,11 @@ func NewAnalyzer() *Analyzer { return &Analyzer{} }
 // EnableOptIn turns AUTHZ-001 on when ids names it.
 func (a *Analyzer) EnableOptIn(ids []string) {
 	for _, id := range ids {
-		if id == RuleID {
+		switch id {
+		case RuleID:
 			a.enabled = true
+		case AuthnRuleID:
+			a.authnEnabled = true
 		}
 	}
 }
@@ -238,6 +252,37 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-639", "owasp_api": "API1:2023"},
 	})
+	rs.Add(&rules.Rule{
+		ID:          AuthnRuleID,
+		Version:     "1.0",
+		Description: "Possible missing authentication: an administrative or account-bearing route, or a DELETE, PUT or PATCH route, has no authentication middleware, decorator, dependency or check on the caller's identity that this reader can see (OWASP API2:2023, CWE-306)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceLow,
+		OptIn:       true,
+		Tags:        []string{"authentication", "missing-auth", "owasp-a07", "express", "fastify", "flask", "fastapi"},
+		Remediation: "Put authentication in front of the route: middleware on the route or its router (`router.use(requireAuth)`), a decorator (`@login_required`, `@jwt_required()`), or a dependency (`Depends(get_current_user)`). If a gateway or an application-wide middleware nox does not evaluate already authenticates it, or the route is public by design, waive the finding with that reason. To confirm before changing code: call the route with no credentials; a 2xx answer with data confirms it.",
+		References: []string{
+			"https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/",
+			"https://cwe.mitre.org/data/definitions/306.html",
+		},
+		Metadata: map[string]string{"cwe": "CWE-306", "owasp_api": "API2:2023"},
+	})
+	rs.Add(&rules.Rule{
+		ID:          WebhookRuleID,
+		Version:     "1.0",
+		Description: "Webhook payload accepted without signature verification: a POST route receives a Stripe, GitHub or Slack webhook and neither its handler, what it calls, nor its middleware verifies the provider's signature (CWE-345)",
+		Severity:    findings.SeverityHigh,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"webhook", "signature", "stripe", "github", "slack", "express", "fastify", "flask", "fastapi"},
+		Remediation: "Verify the signature over the RAW request body with the endpoint's signing secret before acting on the payload: Stripe `stripe.webhooks.constructEvent(rawBody, req.headers['stripe-signature'], secret)` (Python `stripe.Webhook.construct_event`), GitHub an HMAC-SHA256 of the body compared in constant time with `X-Hub-Signature-256`, Slack the v0 signature over `v0:{timestamp}:{body}` from `X-Slack-Signature` with the signing secret. Reject the request when it does not match. If verification happens in a gateway nox cannot see, waive the finding with that reason.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/345.html",
+			"https://docs.stripe.com/webhooks#verify-events",
+			"https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries",
+			"https://api.slack.com/authentication/verifying-requests-from-slack",
+		},
+		Metadata: map[string]string{"cwe": "CWE-345"},
+	})
 	return rs
 }
 
@@ -252,6 +297,7 @@ type index struct {
 	order     []string
 	rls       bool
 	reasoning *reasoning.Store
+	views     []routeView
 }
 
 var jsExt = map[string]bool{".js": true, ".mjs": true, ".cjs": true, ".jsx": true, ".ts": true, ".tsx": true, ".mts": true, ".cts": true}
@@ -298,11 +344,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		p := filepath.ToSlash(art.Path)
 		if ext == ".py" {
-			pyFiles[p] = &pyFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangPython, raw)), lineStarts: computeLineStarts(raw)}
+			pyFiles[p] = &pyFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangPython, raw)), sans: withoutComments(lexctx.LangPython, raw), lineStarts: computeLineStarts(raw)}
 			pyOrder = append(pyOrder, p)
 			continue
 		}
-		ix.files[p] = &jsFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangJavaScript, raw)), lineStarts: computeLineStarts(raw)}
+		ix.files[p] = &jsFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangJavaScript, raw)), sans: withoutComments(lexctx.LangJavaScript, raw), lineStarts: computeLineStarts(raw)}
 		ix.order = append(ix.order, p)
 	}
 	// Row-level security moves the ownership check into the database, where
@@ -312,11 +358,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	a.routes = ix.routes
 	a.routeList = ix.routeList
 	leads := ix.leads
+	views := ix.views
 	if len(pyOrder) > 0 {
 		py := newPyIndex(pyFiles, pyOrder, rls)
 		res := py.findings()
 		a.routes += len(py.routes)
-		a.routeList = append(a.routeList, py.routeInventory()...)
+		inv, pyViews := py.routeInventory()
+		a.routeList = append(a.routeList, inv...)
+		views = append(views, pyViews...)
 		sortRoutes(a.routeList)
 		reported = append(reported, res.findings...)
 		leads = append(leads, res.leads...)
@@ -327,12 +376,28 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			}
 		}
 	}
+	exposed, hooks := exposures(views)
+	for _, h := range hooks {
+		fs.Add(buildWebhookFinding(h))
+	}
+	if !a.authnEnabled {
+		leads = append(leads, exposed...)
+		sortLeads(leads)
+	} else {
+		for _, l := range exposed {
+			fs.Add(buildAuthnFinding(l))
+		}
+	}
 	if !a.enabled {
 		a.leads = leads
 		return fs, nil
 	}
 	for _, f := range reported {
 		fs.Add(f)
+	}
+	a.leads = nil
+	if !a.authnEnabled {
+		a.leads = exposed
 	}
 	return fs, nil
 }
@@ -363,7 +428,7 @@ func (ix *index) findings() []findings.Finding {
 	inherited := ix.inheritedMiddleware(uses)
 	prefixes := ix.mountPrefixes(uses)
 	ix.routes = len(routes)
-	ix.routeList = routeInventory(routes, uses, inherited, prefixes)
+	ix.routeList, ix.views = ix.routeInventory(routes, uses, inherited, prefixes)
 
 	// One handler can serve several routes. A subject is reported if ANY of
 	// its routes meets the proposition, and refuted only if every route that
@@ -462,25 +527,137 @@ func (ix *index) findings() []findings.Finding {
 // before it middleware; that is a positional reading, not the body analysis the
 // proposition uses, so it names what is visibly in front of the route and
 // nothing more.
-func routeInventory(routes []route, uses map[string][]use, inherited map[string][]mwRef, prefixes map[string]string) []Route {
+//
+// It also reads each handler, because "no authentication middleware" is not
+// "no authentication": a handler that rejects an anonymous caller itself is
+// recorded as authenticated, so the inventory, `nox model` and AUTHN-001 agree.
+func (ix *index) routeInventory(routes []route, uses map[string][]use, inherited map[string][]mwRef, prefixes map[string]string) ([]Route, []routeView) {
 	out := make([]Route, 0, len(routes))
+	views := make([]routeView, 0, len(routes))
+	globalAuth := ix.hasGlobalAuth(uses)
 	for i := range routes {
 		r := &routes[i]
 		var mw []span
 		if len(r.args) > 1 {
 			mw = r.args[:len(r.args)-1]
 		}
-		authn, authz := classifyChain(routeChain(r, mw, uses[r.file.path], inherited[r.file.path]))
-		out = append(out, Route{
+		chain := routeChain(r, mw, uses[r.file.path], inherited[r.file.path])
+		authn, authz := classifyChain(chain)
+		if len(r.args) == 1 && authn == "" && authz == "" {
+			// `app.get('/api/Users', security.isAuthorized())` registers a guard
+			// for a route served elsewhere, not an endpoint.
+			authn, authz = guardRegistration(chain, r)
+		}
+		handler, known := ix.handlerText(r)
+		if authn == "" && authz == "" && jsInlineAuthRe.MatchString(handler) {
+			authn = inlineAuthLabel
+		}
+		rt := Route{
 			Method:   strings.ToUpper(r.method),
 			Path:     joinRoutePath(prefixes[r.file.path], r.path),
 			FilePath: r.file.path,
 			Line:     lineAt(r.file.lineStarts, r.offset),
 			Authn:    authn,
 			Authz:    authz,
+		}
+		_, mounted := inherited[r.file.path]
+		out = append(out, rt)
+		views = append(views, routeView{
+			route: rt, handler: handler, known: known, chain: chainText(chain),
+			guardUnseen: globalAuth && !mounted && !appDeclRe.MatchString(r.file.code),
 		})
 	}
 	sortRoutes(out)
+	return out, views
+}
+
+var denyRe = regexp.MustCompile(`(?i)\b(?:deny|forbid|reject|block)\w*\s*\(`)
+
+// guardRegistration reads a route registered with a single argument that is
+// itself access control: authentication (`isAuthorized()`), authorization, or a
+// blanket denial (`denyAll()`).
+func guardRegistration(chain []mwRef, r *route) (authn, authz string) {
+	only := mwRef{r.file, r.args[0]}
+	authn, authz = classifyChain(append(append([]mwRef(nil), chain...), only))
+	if authn == "" && authz == "" && denyRe.MatchString(only.text()) {
+		authz = compact(only.text())
+	}
+	return authn, authz
+}
+
+var appDeclRe = regexp.MustCompile(`\b(?:express|[Ff]astify)\s*\(`)
+
+// hasGlobalAuth reports whether some file applies authentication to every
+// request (`app.use(requireAuth)`).
+func (ix *index) hasGlobalAuth(uses map[string][]use) bool {
+	for _, p := range ix.order {
+		for _, u := range uses[p] {
+			if len(u.mounts) > 0 || (u.prefix != "" && u.prefix != "/") {
+				continue
+			}
+			var mw []mwRef
+			for _, sp := range u.mw {
+				mw = append(mw, mwRef{u.file, sp})
+			}
+			if authn, _ := classifyChain(mw); authn != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func chainText(chain []mwRef) string {
+	var b strings.Builder
+	for _, m := range chain {
+		b.WriteString(m.text())
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
+var callNameRe = regexp.MustCompile(`([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\(`)
+
+// maxCallees bounds how many functions a handler is expanded into.
+const maxCallees = 16
+
+// handlerText returns the comment-free text of the route's handler and inline
+// middleware plus the functions they call, and whether the handler itself (the
+// last argument) was read.
+func (ix *index) handlerText(r *route) (string, bool) {
+	var parts []string
+	known := false
+	for j, a := range r.args {
+		ref, ok := ix.resolveHandler(r.file, a, 0)
+		if !ok {
+			continue
+		}
+		if j == len(r.args)-1 {
+			known = true
+		}
+		parts = append(parts, ref.file.sans[ref.s.start:ref.s.end])
+		for _, c := range ix.callees(ref) {
+			parts = append(parts, c.file.sans[c.s.start:c.s.end])
+		}
+	}
+	return strings.Join(parts, "\n"), known
+}
+
+// callees resolves the functions called inside ref, one level deep.
+func (ix *index) callees(ref fnRef) []fnRef {
+	var out []fnRef
+	seen := map[string]bool{}
+	body := ref.file.code[ref.s.start:ref.s.end]
+	for _, m := range callNameRe.FindAllStringSubmatch(body, -1) {
+		name := strings.Join(strings.Fields(m[1]), "")
+		if seen[name] || len(out) >= maxCallees {
+			continue
+		}
+		seen[name] = true
+		if c, ok := ix.resolveName(ref.file, name); ok && (c.file != ref.file || c.s != ref.s) {
+			out = append(out, c)
+		}
+	}
 	return out
 }
 

@@ -276,9 +276,9 @@ var controls = []controlDef{
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
 				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}},
-			{kind: fromFindings, label: "Authorization checks", scope: "code", ids: []string{"AUTHZ-001"}, additive: true},
+			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "WEBHOOK-001"}, additive: true},
 			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
-			{kind: fromLeads, label: "Authorization leads"},
+			{kind: fromLeads, label: "Authorization and authentication leads"},
 		},
 		limits: []string{
 			"Static analysis finds a subset of defect classes in the languages it supports; absence of findings is not absence of defects.",

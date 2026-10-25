@@ -222,27 +222,49 @@ type Lead struct {
 }
 
 // authzLeads converts the authorization analyzer's output into leads and the
-// coverage line that goes with them.
+// coverage lines that go with them. Object-level authorization leads
+// (AUTHZ-001) and missing-authentication leads (AUTHN-001) come from one route
+// inventory, so `nox model` and the scan assessment cannot disagree about a
+// route.
 func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 	if a.RoutesRead() == 0 {
 		return nil, nil
 	}
-	if a.Enabled() {
-		return nil, []string{"authorization (" + authz.Coverage + "; " + authz.RuleID + " enabled, possible issues only)"}
-	}
 	leads = make([]Lead, 0, len(a.Leads()))
 	for _, l := range a.Leads() {
-		leads = append(leads, Lead{
-			Category:  "authorization",
+		lead := Lead{
+			Category:  authz.CategoryAuthorization,
 			RuleID:    authz.RuleID,
 			Route:     l.Method + " " + l.Path,
 			FilePath:  l.FilePath,
 			Line:      l.Line,
 			Statement: "loads a record by a caller-supplied id with no visible ownership check",
 			Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
-		})
+		}
+		if l.Category != "" {
+			lead.Category, lead.RuleID, lead.Statement, lead.Test = l.Category, l.RuleID, l.Statement, l.Test
+		}
+		leads = append(leads, lead)
 	}
-	return leads, []string{"authorization (" + authz.Coverage + "; leads only)"}
+	return leads, authzChecks(a)
+}
+
+// authzChecks names what the route reader covered, per claim: what it is
+// enabled to report as findings and what it only holds as leads. Webhook
+// signature verification is a finding, never a lead, so it carries no mode.
+func authzChecks(a *authz.Analyzer) []string {
+	const webhooks = " and webhook signatures (Stripe, GitHub and Slack receivers in those routes)"
+	if !a.Enabled() && !a.AuthnEnabled() {
+		return []string{"authorization and authentication (" + authz.Coverage + "; leads only)" + webhooks}
+	}
+	mode := func(on bool, id string) string {
+		if on {
+			return id + " enabled, possible issues only"
+		}
+		return "leads only"
+	}
+	return []string{"authorization (" + authz.Coverage + "; " + mode(a.Enabled(), authz.RuleID) +
+		") and authentication (" + mode(a.AuthnEnabled(), authz.AuthnRuleID) + ")" + webhooks}
 }
 
 // authzRoutes converts the authorization analyzer's route inventory into its
@@ -915,13 +937,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		if !opts.Scopes.RunsAnalyzer(rs.analyzer) {
 			continue
 		}
-		// AUTHZ-001 not enabled produces leads, never findings, so it lists no
-		// rule in the scan's outputs either: SARIF's rule catalogue stays
-		// what it was before the analyzer existed.
-		if rs.analyzer == "authz" && !authzAnalyzer.Enabled() {
-			continue
-		}
 		for _, r := range rs.rules.Rules() {
+			// AUTHZ-001 and AUTHN-001 not enabled produce leads, never
+			// findings, so they list no rule in the scan's outputs either:
+			// SARIF's rule catalogue stays what it was before they existed.
+			if rs.analyzer == "authz" && (r.ID == authz.RuleID && !authzAnalyzer.Enabled() || r.ID == authz.AuthnRuleID && !authzAnalyzer.AuthnEnabled()) {
+				continue
+			}
 			allRules.Add(r)
 		}
 	}

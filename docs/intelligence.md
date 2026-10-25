@@ -13,6 +13,10 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
+A scan that made the lookup says so once, in a `[network]` line after the
+results: how many dependencies, where they went, and how to opt out. A scan that
+made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
+
 `nox intel preview <path>` prints exactly what a contribution from `<path>`
 would carry, without sending it. `nox intel allowlist` prints every field an
 observation may carry; anything not on that list cannot be sent, by

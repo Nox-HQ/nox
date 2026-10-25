@@ -651,22 +651,100 @@ func pyStringArg(raw string) bool {
 // uses (classifyPy over inherited router dependencies, the route's decorators
 // and its Depends() parameters), so what the inventory records as
 // authentication is exactly what the proposition treated as authentication.
-func (ix *pyIndex) routeInventory() []Route {
+//
+// A handler that rejects an anonymous caller itself, or takes the caller as a
+// parameter, is recorded as authenticated too: "no decorator" is not "no
+// authentication", and the inventory, `nox model` and AUTHN-001 must agree.
+func (ix *pyIndex) routeInventory() ([]Route, []routeView) {
 	out := make([]Route, 0, len(ix.routes))
+	views := make([]routeView, 0, len(ix.routes))
+	guard := ix.globalGuardUnseen()
 	for i := range ix.routes {
 		r := &ix.routes[i]
-		authn, authz := classifyPy(append(ix.inheritedDeps(r.recv), r.deps...))
-		out = append(out, Route{
+		deps := append(ix.inheritedDeps(r.recv), r.deps...)
+		authn, authz := classifyPy(deps)
+		handler := ix.handlerText(r)
+		if authn == "" && authz == "" && (pyInlineAuthRe.MatchString(handler) || pySecurityParam(r.fn)) {
+			authn = inlineAuthLabel
+		}
+		rt := Route{
 			Method:   strings.ToUpper(r.method),
 			Path:     joinRoutePath(ix.fullPrefix(r.recv), r.path),
 			FilePath: r.file.path,
 			Line:     lineAt(r.file.lineStarts, r.offset),
 			Authn:    authn,
 			Authz:    authz,
-		})
+		}
+		out = append(out, rt)
+		var chain strings.Builder
+		for _, d := range deps {
+			chain.WriteString(d.raw)
+			chain.WriteByte(' ')
+		}
+		views = append(views, routeView{route: rt, handler: handler, known: true, chain: chain.String(), guardUnseen: guard, framework: r.framework})
 	}
-	return out
+	return out, views
 }
+
+// pySecurityParam: a parameter that carries the caller (a FastAPI Security()
+// default, a bearer scheme, a `current_user` or `token` argument).
+func pySecurityParam(fn pyFunc) bool {
+	for _, p := range fn.params {
+		if pySecurityParamRe.MatchString(p.name) || pySecurityParamRe.MatchString(p.annotation) || pySecurityParamRe.MatchString(p.def) {
+			return true
+		}
+	}
+	return false
+}
+
+// globalGuardUnseen: the repository intercepts every request somewhere this
+// reader does not evaluate, or has a before_request hook it could not read as
+// authentication. Either way an empty Authn on a route proves nothing.
+func (ix *pyIndex) globalGuardUnseen() bool {
+	for _, p := range ix.order {
+		if pyGlobalGuardRe.MatchString(ix.files[p].code) {
+			return true
+		}
+	}
+	for _, deps := range ix.hooks {
+		if len(deps) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// handlerText returns the comment-free text of the route's function and of the
+// repository functions it calls by name (one level).
+func (ix *pyIndex) handlerText(r *pyRoute) string {
+	text := r.file.sans[r.fn.defOff:r.fn.bodyEnd]
+	if ix.funcText == nil {
+		ix.funcText = map[string][]string{}
+		for _, p := range ix.order {
+			f := ix.files[p]
+			for _, m := range pyDefRe.FindAllStringSubmatchIndex(f.code, -1) {
+				if fn, ok := parsePyFunc(f, m); ok {
+					ix.funcText[fn.name] = append(ix.funcText[fn.name], f.sans[fn.defOff:fn.bodyEnd])
+				}
+			}
+		}
+	}
+	parts := []string{text}
+	seen := map[string]bool{r.fn.name: true}
+	for _, m := range pyCallNameRe.FindAllStringSubmatch(r.file.code[r.fn.bodyStart:r.fn.bodyEnd], -1) {
+		name := m[1]
+		if seen[name] || len(parts) > maxCallees {
+			continue
+		}
+		seen[name] = true
+		if defs := ix.funcText[name]; len(defs) == 1 {
+			parts = append(parts, defs[0])
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+var pyCallNameRe = regexp.MustCompile(`(?:^|[^\w.])([A-Za-z_]\w*)\s*\(`)
 
 // ---- the route loop ----
 

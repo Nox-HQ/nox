@@ -48,7 +48,7 @@ var analyzerScope = map[string]struct {
 	"secrets":    {ScopeSecrets, []string{"SEC-*"}},
 	"taintflow":  {ScopeCode, []string{"TAINT-*"}},
 	"agentflow":  {ScopeCode, []string{"AGENTFLOW-*"}},
-	"authz":      {ScopeCode, []string{"AUTHZ-*"}},
+	"authz":      {ScopeCode, []string{"AUTHZ-*", "AUTHN-*", "WEBHOOK-*"}},
 	"variants":   {ScopeCode, []string{"VARIANT-*"}},
 	"weakcrypto": {ScopeCode, []string{"CRYPTO-*"}},
 	"hardening":  {ScopeCode, []string{"HARDEN-*"}},

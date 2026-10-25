@@ -12,6 +12,7 @@ type jsFile struct {
 	path       string // repo-relative, forward slashes
 	raw        []byte
 	code       string // lexctx.MaskNonCode(raw)
+	sans       string // raw with comments blanked, strings kept
 	lineStarts []int
 	// modules maps a local binding to the repo-relative file it names: a
 	// `require('./x')`, an `import * as x` / default import, or an instance

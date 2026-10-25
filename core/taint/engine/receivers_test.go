@@ -44,3 +44,31 @@ func TestAPythonCursorIsACursorWhateverItIsCalled(t *testing.T) {
 		t.Errorf("taint in the SQL string of a two-argument call was not reported: %v", got)
 	}
 }
+
+// `sqlite3.connect("x.db").execute(sql)` calls the SQL method on the connection
+// a factory returns, with no local to bind. Its chain is `sqlite3.connect.execute`;
+// no catalog suffix matched it, so the `%`, `+` and f-string forms were all
+// missed there while the same string through `.cursor().execute(...)` was found.
+func TestAnInlineConnectCallIsAConnection(t *testing.T) {
+	const flask = "from flask import request\nimport sqlite3\n\n"
+	for _, c := range []struct{ name, body string }{
+		{"percent, subscript source", "def h():\n    return sqlite3.connect('x.db').execute(\"SELECT * FROM t WHERE n='%s'\" % request.args['n']).fetchall()\n"},
+		{"percent, get source", "def h():\n    return sqlite3.connect('x.db').execute(\"SELECT * FROM t WHERE n='%s'\" % request.args.get('n')).fetchall()\n"},
+		{"concatenation through a local", "def h():\n    n = request.args['n']\n    sqlite3.connect('x.db').execute(\"SELECT * FROM t WHERE n='\" + n + \"'\")\n"},
+		{"f-string", "def h():\n    n = request.args['n']\n    sqlite3.connect('x.db').execute(f\"SELECT * FROM t WHERE n='{n}'\")\n"},
+	} {
+		if got := analyzeRuleIDs(t, "t.py", lexctx.LangPython, flask+c.body); !slices.Contains(got, "TAINT-001") {
+			t.Errorf("%s: no SQL injection reported (got %v)", c.name, got)
+		}
+	}
+	// The safe forms stay silent: bound parameters, and a constant statement.
+	for name, body := range map[string]string{
+		"bound parameter":                     "def h():\n    n = request.args['n']\n    sqlite3.connect('x.db').execute('SELECT * FROM t WHERE n = ?', (n,))\n",
+		"constant":                            "def h():\n    sqlite3.connect('x.db').execute('SELECT * FROM t')\n",
+		"tainted value outside the statement": "def h():\n    n = request.args['n']\n    log(n)\n    sqlite3.connect('x.db').execute('SELECT 1')\n",
+	} {
+		if got := analyzeRuleIDs(t, "t.py", lexctx.LangPython, flask+body); slices.Contains(got, "TAINT-001") {
+			t.Errorf("%s: reported: %v", name, got)
+		}
+	}
+}

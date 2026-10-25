@@ -71,10 +71,21 @@ Registries can route or badge servers by `properties.owasp-mcp`
 ## 5. Rug-pull detection across submissions
 
 To detect a server that was approved benign and later mutated (OWASP
-MCP04), persist the nox pin store (`~/.nox/cache/mcp-pins/`) between scans
-of the same server identity. A changed definition emits **MCP-015** with
-before/after hashes. Mount a per-server volume at that path to keep the
-baseline.
+MCP04), pin the reviewed definitions and commit the result:
+
+```bash
+nox mcp pin          # writes .nox/mcp-pins.json from the configs in this repo
+git add .nox/mcp-pins.json
+```
+
+Every scan then compares each server definition with the pin and emits
+**MCP-015** (with before/after hashes) for a definition that changed, or a server
+that was never pinned. The finding is reported on every scan until the change is
+accepted by running `nox mcp pin` again; a scan never edits the pin file. The pin
+travels with the repository, so a clean CI runner sees the same approval you do.
+With no pin file the scan says so (an MCP degradation) instead of staying silent.
+The per-user cache earlier versions kept under `~/.nox/cache/mcp-pins/` is no
+longer read.
 
 ## Questions
 
