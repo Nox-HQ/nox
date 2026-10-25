@@ -31,6 +31,10 @@ func FromScan(r *nox.ScanResult, label string) State {
 	// scope; an empty list then means "looked, none".
 	s.LeadsRecorded = r.Scope.RunsAnalyzer("authz")
 	s.Inventory = r.AIInventory
+	// The scan knows its infrastructure whenever the IaC checks were in scope;
+	// nil then means "looked, none".
+	s.Infrastructure = r.Infrastructure
+	s.InfrastructureRecorded = r.Scope.RunsAnalyzer("iac")
 	for _, d := range r.Degradations {
 		if d.Blocks() {
 			s.Incomplete = append(s.Incomplete, d.Detail)

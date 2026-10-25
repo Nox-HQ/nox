@@ -43,6 +43,8 @@ func provenance(in Input) Provenance {
 			Routes:      len(rep.Routes) > 0,
 			AIInventory: in.Inventory != nil,
 			SBOM:        in.SBOM != nil,
+
+			Infrastructure: in.Report.Infrastructure != nil && !in.Report.Infrastructure.Empty(),
 		},
 	}
 	for _, d := range rep.Meta.Degradations {

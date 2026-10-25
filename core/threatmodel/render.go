@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // JSON renders the model as indented JSON with a trailing newline. The output
@@ -132,6 +134,13 @@ func (d Delta) Terminal() string {
 	}
 	for _, e := range d.ElementsRemoved {
 		fmt.Fprintf(&b, "  no longer evidenced, %s: %s\n", kindWord(e.Kind), e.Name)
+	}
+	for _, c := range d.PropertiesChanged {
+		verb := "weakened"
+		if c.Direction == infra.Stronger {
+			verb = "strengthened"
+		}
+		fmt.Fprintf(&b, "  %s: %s\n", verb, c.Line())
 	}
 	for _, x := range d.BoundariesAdded {
 		fmt.Fprintf(&b, "  new trust boundary: %s\n", x.Label)
@@ -293,6 +302,18 @@ func elementNotes(e Element) string {
 		if v := e.Attributes[k]; v != "" {
 			parts = append(parts, strings.ReplaceAll(k, "_", " ")+": "+v)
 		}
+	}
+	if len(e.Properties) > 0 {
+		keys := make([]string, 0, len(e.Properties))
+		for k := range e.Properties {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var props []string
+		for _, k := range keys {
+			props = append(props, infra.Label(k)+" "+e.Properties[k])
+		}
+		parts = append(parts, strings.Join(props, ", "))
 	}
 	if len(parts) == 0 && len(e.Evidence) > 0 {
 		return e.Evidence[0].Statement
