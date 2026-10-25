@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -44,6 +45,9 @@ type issueHarness struct {
 
 func newIssueHarness(t *testing.T) *issueHarness {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the generated step runs on ubuntu runners; its shell stand-ins are POSIX")
+	}
 	for _, tool := range []string{"bash", "jq"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			if os.Getenv("CI") != "" {
