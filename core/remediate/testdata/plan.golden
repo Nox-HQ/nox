@@ -1,7 +1,7 @@
 
 Nox Fix Plan
 
-10 issues in 11 findings: 3 can be applied as they are, 3 need your review, and 4 need something nox does not have.
+10 issues in 11 findings (6 need attention, 4 lower-priority observations): 3 can be applied as they are, 3 need your review, and 4 need something nox does not have.
 
 Safe to apply (3). Nothing here needs a decision from you.
   1. Upgrade axios 1.7.4 -> 1.20.0: fixes 2 known vulnerabilities (highest severity: high).
@@ -27,9 +27,9 @@ Needs information, or cannot be fixed automatically (4). Nox will not guess at t
   5. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
      Needed: A decision from you: what this input may do once it reaches the model. Keep it out of the system prompt, validate its shape and length, and limit the tools the model can call on its behalf. The right boundary depends on your feature, so nox does not guess it.
   6. Upgrade org.example:lib 1.0.0 to 1.0.5 or later yourself: fixes 1 known vulnerability (highest severity: medium); nox fix cannot apply this upgrade.
-     Needed: You to upgrade it: version 1.0.5 fixes it, but nox cannot apply upgrades for this kind of package (or this is not a move forward from the installed version). Make the upgrade with your package manager.
+     Needed: You to upgrade org.example:lib 1.0.0 to 1.0.5 or later by hand: nox fix does not drive Maven (it does not edit build files). Change the version in your build file, then re-run nox scan to confirm.
   10. left-pad 1.0.0 has 1 known vulnerability with no fixed version published (highest severity: low). Check the advisories for a workaround, or replace the package.
-     Needed: A fixed version, which has not been published. Until then the choice is yours: use a workaround from the advisory, replace the package, or record the accepted risk as a reviewed waiver (nox vex init). Re-run nox scan when a fix is published.
+     Needed: A fixed version of left-pad 1.0.0, and none has been published, so there is nothing to upgrade to. Choose one: apply a workaround from the advisory, replace the package, or record the accepted risk as a reviewed waiver (nox vex init). Re-run nox scan when a fix is published.
 
 Next steps:
   - Apply the safe changes, then re-run the checks that found them: nox fix apply
