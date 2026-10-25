@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
+  decision `nox advisories` computes; the rendering and the "scan incomplete"
+  rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
+- **Registry freshness.** `nox plugin search` and `info` warn when the installed
+  plugin is newer than the index's highest version, and when the index's
+  `generated_at` is more than 14 days old. LATEST is now the highest version in
+  the index, labelled as such (it was the last one listed).
+
 - **Contribution is consented to, versioned, and erasable.** `nox scan` now
   contributes (when `scan.intelligence.contribute: true`) only on a machine
   that has accepted the contribution terms: `nox intel consent show` prints
@@ -153,6 +161,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Requires nox-core v0.5.0.
 
 ### Changed
+
+- **The AI inventory binds an endpoint to the client that uses it.** The first
+  `base_url` in a file was recorded against every model call in it. The endpoint
+  now comes from the construction of the client the call is made on, and is
+  omitted when that cannot be established.
+- **`nox agent-graph` names MCP servers.** Each configured server was a box
+  called `mcp_client` with a bare `*`. It now shows the server name, its
+  transport (stdio or remote), and the capabilities its launch configuration
+  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
+- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
+  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
+  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
+  no longer says every tool is read-only.
 
 - A default scan that looked dependencies up now prints one `[network]` line: how
   many dependencies (ecosystem, name, version) were sent to the intelligence

@@ -237,22 +237,26 @@ func (s *Server) registerTools(srv *mcp.Server) {
 			"Optional only/skip narrow it to scopes (secrets, code, deps, iac, ai, data, supply-chain); " +
 			"scopes left out do not run, and the findings report says which those were").
 		ReadOnly().
+		OpenWorld().
 		OutputSchema(scanOutput{}).
 		Handler(s.handleScanStructured)
 
 	srv.Tool("get_findings").
 		Description("Get security findings from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleGetFindings)
 
 	srv.Tool("get_sbom").
 		Description("Get software bill of materials from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleGetSBOM)
 
 	srv.Tool("get_finding_detail").
 		Description("Get detailed information about a finding including source context and remediation").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(detail.FindingDetail{}).
 		Handler(s.handleGetFindingDetail)
 
@@ -262,89 +266,110 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("analysis_capabilities").
 		Description("What this installation can establish and what THIS scan actually established, per analysis capability. Call it before summarising a scan: a capability that is provided but answered nothing was available and never used, which is not a clean result — it means the question was not asked. Degradations tell you a check broke; this tells you a question was never put.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(capabilityOutput{}).
 		Handler(s.handleAnalysisCapabilities)
 
 	srv.Tool("why").
 		Description("Answer eight questions about a finding: what was observed, why it matters, what supports it, what argues against it, what was NOT evaluated, the potential impact, whether it affects this application, and what to do. Deterministic — derived from what the scan established, not written by a model. Pass a fingerprint (full or prefix) or a rule ID; omit to explain every active finding.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(whyOutput{}).
 		Handler(s.handleWhy)
 
 	srv.Tool("summary").
 		Description("Aggregate overview of the last scan: active/total/suppressed counts and breakdowns by severity, confidence, and rule family, plus dependency and AI-component totals. Call this first to size up a scan before paging through individual findings.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(summaryOutput{}).
 		Handler(s.handleSummary)
 
 	srv.Tool("list_findings").
 		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(listFindingsOutput{}).
 		Handler(s.handleListFindings)
 
 	srv.Tool("get_finding_by_fingerprint").
 		Description("Look up a single finding by fingerprint (full or 12-char prefix) and report its current status (new / baselined / suppressed / vex_*). Use this when you already hold a fingerprint (from a prior scan or baseline entry) and just need to know whether it is still active. Returns {found:false, fingerprint} if no match.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(fingerprintLookupOutput{}).
 		Handler(s.handleFindingByFingerprint)
 
 	srv.Tool("baseline_status").
 		Description("Show baseline statistics: total entries, expired count, per-severity breakdown").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(baselineStatusOutput{}).
 		Handler(s.handleBaselineStatus)
 
+	// The two baseline tools write .nox/baseline.json. They only add entries
+	// (nothing is deleted or overwritten) and adding the same fingerprint again
+	// changes nothing, so they are not destructive and are idempotent; they are
+	// still not read-only, and suppressing a finding is a decision a person
+	// should be asked about.
 	srv.Tool("baseline_add").
 		Description("Add a finding to the baseline by fingerprint").
+		Annotations(additiveLocalWrite).
 		Handler(s.handleBaselineAdd)
 
 	srv.Tool("baseline_add_many").
 		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
+		Annotations(additiveLocalWrite).
 		Handler(s.handleBaselineAddMany)
 
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
 		ReadOnly().
+		OpenWorld().
 		OutputSchema(diff.Result{}).
 		Handler(s.handleDiff)
 
 	srv.Tool("badge").
 		Description("Generate a security grade SVG badge from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleBadge)
 
 	srv.Tool("version").
 		Description("Return nox version, commit, and build date").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(versionOutput{}).
 		Handler(s.handleVersion)
 
 	srv.Tool("rules").
 		Description("List all security rules with ID, description, severity, CWE, and remediation").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(rulesOutput{}).
 		Handler(s.handleRules)
 
 	srv.Tool("protect_status").
 		Description("Check whether the nox pre-commit hook is installed in a git repository").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleProtectStatus)
 
 	srv.Tool("annotate").
 		Description("Build a GitHub PR review payload from findings for posting via the GitHub API").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleAnnotate)
 
 	srv.Tool("vex_status").
 		Description("Load a VEX document and show a summary of vulnerability statuses").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(vexStatusOutput{}).
 		Handler(s.handleVEXStatus)
 
 	srv.Tool("fix_plan").
 		Description("Plan the fixes for the last scan: every issue classified as safe to apply, needs review, or needs information (with what is needed), plus the dependency upgrade actions. Read-only — never mutates the workspace. A person applies it with nox fix apply, which then re-runs the checks and reports what was verified.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
 
@@ -355,25 +380,30 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	// Technical evidence for ISO/IEC 27001, derived from the cached scan.
 	s.registerComplianceTools(srv)
 	s.registerThreatModelTools(srv)
+	s.registerAdvisoryTools(srv)
 
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleAgentGraph)
 
 	srv.Tool("plugin_install").
 		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only. REQUIRES `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine.").
+		Annotations(pluginInstallHints).
 		Handler(s.handlePluginInstall)
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(report.DataSensitivityReport{}).
 		Handler(s.handleDataSensitivityReport)
 
 	srv.Tool("dashboard").
 		Description("Generate an interactive HTML security dashboard from scan results").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleDashboard)
 
 	s.registerPluginTools(srv)
@@ -387,11 +417,13 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 	srv.Tool("plugin.list").
 		Description("List registered plugins and their capabilities").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handlePluginList)
 
 	srv.Tool("plugin.call_tool").
 		Description("Invoke a tool provided by a registered plugin").
 		ReadOnly().
+		OpenWorld().
 		Handler(s.handlePluginCallTool)
 
 	// plugin.read_resource is deliberately NOT registered. Plugins declare their

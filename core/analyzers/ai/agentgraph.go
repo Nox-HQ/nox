@@ -100,6 +100,33 @@ func sanitizeGraphLabel(s string) string {
 	return strings.NewReplacer("\"", "'", "\n", " ", "[", "(", "]", ")").Replace(s)
 }
 
+// agentTitle names a lattice node. An MCP server is "mcp_client: <server>
+// (stdio)" or "(remote host)": every server shares the agent name "mcp_client",
+// so without the server's own name the graph showed N identical boxes.
+func agentTitle(set ToolPermissionSet) string {
+	title := set.Agent
+	if set.Server != "" {
+		title += ": " + set.Server
+		switch {
+		case set.Endpoint != "":
+			title += " (remote " + set.Endpoint + ")"
+		case set.Transport != "":
+			title += " (" + set.Transport + ")"
+		}
+	}
+	return sanitizeGraphLabel(title)
+}
+
+// toolLabel is how a tool reads in the graph. "*" is the config's way of
+// saying it does not restrict the server's tools, which the reader has to be
+// told in words.
+func toolLabel(tool string) string {
+	if tool == "*" {
+		return "* (every tool the server exposes)"
+	}
+	return tool
+}
+
 // RenderMermaid renders the agent capability lattice as a Mermaid graph, one
 // subgraph per agent. An inventory with no tool registrations renders an
 // explicit empty node rather than an empty graph, so a consumer can tell "no
@@ -112,9 +139,9 @@ func RenderMermaid(inv *Inventory) string {
 		return b.String()
 	}
 	for i, set := range inv.ToolMatrix {
-		fmt.Fprintf(&b, "    subgraph agent%d [%s]\n", i, sanitizeGraphLabel(set.Agent))
+		fmt.Fprintf(&b, "    subgraph agent%d [%s]\n", i, agentTitle(set))
 		for j, tool := range set.Tools {
-			label := sanitizeGraphLabel(tool)
+			label := sanitizeGraphLabel(toolLabel(tool))
 			if caps := capabilityLabel(set.Capabilities[tool]); caps != "" {
 				label += "<br/><small>" + caps + "</small>"
 			}
@@ -135,11 +162,11 @@ func RenderDot(inv *Inventory) string {
 	if inv != nil {
 		for i, set := range inv.ToolMatrix {
 			fmt.Fprintf(&b, "    subgraph cluster_%d {\n", i)
-			fmt.Fprintf(&b, "        label=%q;\n", sanitizeGraphLabel(set.Agent))
+			fmt.Fprintf(&b, "        label=%q;\n", agentTitle(set))
 			for j, tool := range set.Tools {
-				label := tool
+				label := toolLabel(tool)
 				if caps := capabilityLabel(set.Capabilities[tool]); caps != "" {
-					label = tool + "\\n[" + caps + "]"
+					label += "\\n[" + caps + "]"
 				}
 				color := CapabilityColor(set.Capabilities[tool])
 				fmt.Fprintf(&b, "        a%d_t%d [label=%q, fillcolor=%q, style=\"rounded,filled\"];\n", i, j, label, color)
