@@ -7,21 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [1.50.0] - 2026-10-25
 
-- **A baseline written before duplicate advisory ids were merged still accepts
-  the merged finding.** When one vulnerability arrived as two records (a Go
-  advisory and its GitHub advisory) they used to be two findings, so a baseline
-  could hold an entry for either; now the pair is one finding, and an entry for
-  the one that was folded away no longer matched, which would have turned CI red
-  for an unchanged dependency. The merged finding now also answers to the
-  fingerprint each absorbed record's finding had (exactly the old message, not a
-  guess from ids), so a different advisory or another version of the package
-  still does not match. When it matches that way the finding carries
-  `baseline_match: alias_fingerprint` and `baseline_entry`, and `baseline
-  update` no longer prunes the entry that is doing the matching. VEX already
-  matches by vuln id and aliases, and `nox:ignore` is by rule on a line, so
-  neither changed.
+The intelligence and trust release. Contribution to NOX Intelligence now
+requires accepting versioned terms on the machine (`nox intel consent`), and
+`nox intel forget` erases a reporter and rotates its secret; existing
+installations with `scan.intelligence.contribute: true` pause until consent is
+given. Scans keep working through an OSV outage on the service's mirror and say
+so, report partial intelligence answers as incomplete rather than clean, and merge
+one vulnerability published under two ids into one finding (baselines keep
+matching). The default scan reports routes with no visible authentication
+(AUTHN-001 leads; Express, Fastify, Flask, FastAPI, Next.js, Django) and webhooks
+accepted without signature verification (WEBHOOK-001), and its headline counts
+what needs attention. `nox fix` no longer runs package install scripts and keeps
+the project's version specifiers; MCP rug-pull pins are a committed project file
+instead of hidden machine state.
 
 ### Added
 
@@ -119,7 +119,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authentication (Express, Fastify, Flask, FastAPI routes; leads only) and webhook
   signatures (Stripe, GitHub and Slack receivers in those routes)".
 
+### Changed
+
+- **The AI inventory binds an endpoint to the client that uses it.** The first
+  `base_url` in a file was recorded against every model call in it. The endpoint
+  now comes from the construction of the client the call is made on, and is
+  omitted when that cannot be established.
+- **`nox agent-graph` names MCP servers.** Each configured server was a box
+  called `mcp_client` with a bare `*`. It now shows the server name, its
+  transport (stdio or remote), and the capabilities its launch configuration
+  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
+- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
+  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
+  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
+  no longer says every tool is read-only.
+- **The assessment headline counts what needs attention.** "23 issues need
+  attention" counted a privileged container and a missing `LABEL maintainer`
+  alike. An issue needs attention when a finding in it is critical or high
+  severity (the line `nox ci-gate` draws) or medium severity with high
+  confidence; everything else is a lower-priority observation, shown as its own
+  line ("Plus 16 lower-priority observations (24 findings)") and listed under
+  `--verbose`. Nothing leaves `findings.json` or SARIF. `nox fix plan` carries
+  the same count and a `needs_attention` flag per item.
+- **`nox fix plan` says what is missing.** Fifteen of nineteen "needs
+  information" items shared one sentence. Each now names the specific
+  information (the CPU and memory limits, the probe endpoint, the maintainer
+  contact, the image tag to pin, the signing secret...) and how to supply it,
+  by rule, then by rule family. Dependencies say whether there is no fixed
+  version, the ecosystem is one `nox fix` does not drive, or the fixed version
+  could not be shown to be newer.
+
+- A default scan that looked dependencies up now prints one `[network]` line: how
+  many dependencies (ecosystem, name, version) were sent to the intelligence
+  service and the OSV reference, that no source or paths were, and how to opt out
+  (`scan.intelligence.disabled`, `--offline`).
+
 ### Fixed
+
+- **A baseline written before duplicate advisory ids were merged still accepts
+  the merged finding.** When one vulnerability arrived as two records (a Go
+  advisory and its GitHub advisory) they used to be two findings, so a baseline
+  could hold an entry for either; now the pair is one finding, and an entry for
+  the one that was folded away no longer matched, which would have turned CI red
+  for an unchanged dependency. The merged finding now also answers to the
+  fingerprint each absorbed record's finding had (exactly the old message, not a
+  guess from ids), so a different advisory or another version of the package
+  still does not match. When it matches that way the finding carries
+  `baseline_match: alias_fingerprint` and `baseline_entry`, and `baseline
+  update` no longer prunes the entry that is doing the matching. VEX already
+  matches by vuln id and aliases, and `nox:ignore` is by rule on a line, so
+  neither changed.
+
 
 - **Python SQL injection through `sqlite3.connect(...).execute(...)` was missed.**
   The catalog names Python's SQL sinks by receiver (`cursor.execute`,
@@ -208,41 +258,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package the service reported as partial are not counted as `intel_suppression`.
   A plain OSV.dev response carries no coverage statement and raises nothing.
   Requires nox-core v0.5.0.
-
-### Changed
-
-- **The AI inventory binds an endpoint to the client that uses it.** The first
-  `base_url` in a file was recorded against every model call in it. The endpoint
-  now comes from the construction of the client the call is made on, and is
-  omitted when that cannot be established.
-- **`nox agent-graph` names MCP servers.** Each configured server was a box
-  called `mcp_client` with a bare `*`. It now shows the server name, its
-  transport (stdio or remote), and the capabilities its launch configuration
-  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
-- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
-  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
-  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
-  no longer says every tool is read-only.
-- **The assessment headline counts what needs attention.** "23 issues need
-  attention" counted a privileged container and a missing `LABEL maintainer`
-  alike. An issue needs attention when a finding in it is critical or high
-  severity (the line `nox ci-gate` draws) or medium severity with high
-  confidence; everything else is a lower-priority observation, shown as its own
-  line ("Plus 16 lower-priority observations (24 findings)") and listed under
-  `--verbose`. Nothing leaves `findings.json` or SARIF. `nox fix plan` carries
-  the same count and a `needs_attention` flag per item.
-- **`nox fix plan` says what is missing.** Fifteen of nineteen "needs
-  information" items shared one sentence. Each now names the specific
-  information (the CPU and memory limits, the probe endpoint, the maintainer
-  contact, the image tag to pin, the signing secret...) and how to supply it,
-  by rule, then by rule family. Dependencies say whether there is no fixed
-  version, the ecosystem is one `nox fix` does not drive, or the fixed version
-  could not be shown to be newer.
-
-- A default scan that looked dependencies up now prints one `[network]` line: how
-  many dependencies (ecosystem, name, version) were sent to the intelligence
-  service and the OSV reference, that no source or paths were, and how to opt out
-  (`scan.intelligence.disabled`, `--offline`).
 
 ## [1.49.0] - 2026-10-25
 
