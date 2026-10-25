@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/findings"
@@ -461,5 +462,37 @@ func TestVerificationOnlyForReportedFindings(t *testing.T) {
 	r := Build(Input{Findings: deps, Plan: plan(t, all), Scope: nox.FullScope()})
 	if len(r.Verify) != 0 {
 		t.Errorf("no reported finding grounds a hypothesis, got %+v", r.Verify)
+	}
+}
+
+// A mirror-backed answer is a specific, blocking limit, not the generic
+// "answered only in part"; a different partial answer in the same scan keeps
+// its own line.
+func TestMirrorAnswerIsASpecificBlockingLimit(t *testing.T) {
+	mirror := nox.Degradation{
+		Kind:   "intel_incomplete",
+		Detail: "nox-intelligence answered 1 package(s) incompletely: npm/a@1 (degraded: " + osvsource.MirrorOnlyNote + ")",
+		Impact: "x",
+	}
+	cap := nox.Degradation{
+		Kind:   "intel_incomplete",
+		Detail: "nox-intelligence answered 1 package(s) incompletely: npm/b@1 (incomplete: pagination stopped)",
+		Impact: "an empty or short advisory list is not proof",
+	}
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{mirror, cap}})
+	var sawMirror, sawGeneric bool
+	for _, l := range r.NotChecked {
+		switch {
+		case strings.Contains(l.Summary, "mirror; live OSV unavailable"):
+			sawMirror = true
+			if !l.Blocking {
+				t.Error("the mirror limit must block")
+			}
+		case strings.Contains(l.Summary, "only in part"):
+			sawGeneric = true
+		}
+	}
+	if !sawMirror || !sawGeneric {
+		t.Fatalf("NotChecked = %+v", r.NotChecked)
 	}
 }
