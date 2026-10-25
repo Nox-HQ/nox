@@ -501,7 +501,7 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 		checked = append(checked, label)
 	}
 	// A lead check says what it read and that it yields leads, never that
-	// it checked: "authorization (Express routes; leads only)".
+	// it checked: "authorization (Express, Fastify, Flask, FastAPI routes; leads only)".
 	checked = append(checked, in.LeadChecks...)
 	for _, s := range in.Scope.Skipped() {
 		label := scopeLabels[s]

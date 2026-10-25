@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"bytes"
 	"path"
 	"regexp"
 	"strings"
@@ -51,13 +52,24 @@ type use struct {
 }
 
 var (
-	routeMethodRe = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|del|all)\s*\(`)
+	// An optional TypeScript type argument sits between the method and the call
+	// (`fastify.get<{ Params: { id: string } }>('/x/:id', ...)`).
+	routeMethodRe = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|del|all)\s*(?:<[^()]*>)?\s*\(`)
 	routeChainRe  = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*route\s*\(`)
 	chainMethodRe = regexp.MustCompile(`^\s*\.\s*(get|post|put|patch|delete|del|all)\s*\(`)
 	useRe         = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*use\s*\(`)
 	paramRe       = regexp.MustCompile(`\.\s*param\s*\(\s*(['"])`)
 	routerDeclRe  = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*=\s*(?:new\s+)?(?:express\s*\(|express\s*\.\s*Router\s*\(|Router\s*\()`)
 	pathParamRe   = regexp.MustCompile(`:([A-Za-z_$][\w$]*)`)
+
+	// fastifyDeclRe: `const app = Fastify(...)` / `fastify()` / `require('fastify')()`.
+	fastifyDeclRe = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:[Ff]astify\s*\(|(require\s*\(\s*['"][^'"]*['"]\s*\)\s*\())`)
+	// A Fastify plugin is `function (instance, opts[, done])`.
+	fastifyPluginFnRe    = regexp.MustCompile(`\bfunction\s*\*?\s*[A-Za-z_$]*\s*\(\s*([A-Za-z_$][\w$]*)\s*(?::[^,)]+)?,\s*_?(?:opts|options|done|next)\b`)
+	fastifyPluginArrowRe = regexp.MustCompile(`\(\s*([A-Za-z_$][\w$]*)\s*(?::[^,)]+)?,\s*_?(?:opts|options|done)\b[^)]*\)\s*(?::[^=]+)?=>`)
+	fastifyRouteCallRe   = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*route\s*(?:<[^()]*>)?\s*\(\s*\{`)
+	fastifyHookCallRe    = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*addHook\s*\(`)
+	fastifyRegisterRe    = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*\.\s*register\s*\(`)
 
 	requireRe       = regexp.MustCompile(`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*(['"])`)
 	requireDestRe   = regexp.MustCompile(`\b(?:const|let|var)\s+\{([^}]*)\}\s*=\s*require\s*\(\s*(['"])`)
@@ -73,6 +85,9 @@ var (
 var conventionalRouterNames = map[string]bool{
 	"app": true, "router": true, "api": true, "routes": true, "route": true,
 	"server": true, "r": true, "apiRouter": true, "userRouter": true,
+	// Fastify's instance is conventionally `fastify`, and a plugin receives
+	// the encapsulated instance as its first parameter.
+	"fastify": true, "instance": true,
 }
 
 func routerReceiver(recv string, declared map[string]bool) bool {
@@ -87,6 +102,19 @@ func declaredRouters(f *jsFile) map[string]bool {
 	out := map[string]bool{}
 	for _, m := range routerDeclRe.FindAllStringSubmatch(f.code, -1) {
 		out[m[1]] = true
+	}
+	for _, m := range fastifyDeclRe.FindAllStringSubmatchIndex(f.code, -1) {
+		// require('fastify')() has its module name in a string: read it raw.
+		if m[4] < 0 || bytes.Contains(f.raw[m[0]:m[1]], []byte("fastify")) {
+			out[f.code[m[2]:m[3]]] = true
+		}
+	}
+	if bytes.Contains(f.raw, []byte("fastify")) {
+		for _, re := range []*regexp.Regexp{fastifyPluginFnRe, fastifyPluginArrowRe} {
+			for _, m := range re.FindAllStringSubmatch(f.code, -1) {
+				out[m[1]] = true
+			}
+		}
 	}
 	return out
 }
@@ -116,6 +144,7 @@ func parseRoutes(f *jsFile) []route {
 		}
 		out = append(out, newRoute(f, m[0], recv, f.code[m[4]:m[5]], p, args[1:]))
 	}
+	out = append(out, parseFastifyRoutes(f)...)
 	for _, m := range routeChainRe.FindAllStringSubmatchIndex(f.code, -1) {
 		recv := f.code[m[2]:m[3]]
 		if !routerReceiver(recv, declared) {
@@ -160,8 +189,171 @@ func newRoute(f *jsFile, off int, recv, method, p string, rest []span) route {
 	for _, pm := range pathParamRe.FindAllStringSubmatch(p, -1) {
 		r.params = append(r.params, pm[1])
 	}
-	r.args = rest
+	r.args = fastifyRouteArgs(f, rest)
 	return r
+}
+
+// fastifyHooks are the lifecycle hooks that run before a Fastify handler,
+// where authentication and authorization live.
+var fastifyHooks = setOf("onRequest", "preParsing", "preValidation", "preHandler", "beforeHandler")
+
+// fastifyRouteArgs flattens a route's options object. Fastify takes
+// `fastify.get(path, { preHandler: [auth] }, handler)` and
+// `fastify.route({ method, url, preHandler, handler })`: the hook values are
+// the route's middleware and the `handler` value is its handler. Express routes
+// never pass an object literal, so for them this is the identity.
+func fastifyRouteArgs(f *jsFile, rest []span) []span {
+	out := make([]span, 0, len(rest))
+	for _, a := range rest {
+		if a.end-a.start < 2 || f.code[a.start] != '{' || matchClose(f.code, a.start) != a.end-1 {
+			out = append(out, a)
+			continue
+		}
+		for _, prop := range splitArgs(f.code, a.start+1, a.end-1) {
+			key, val, ok := splitProp(f.code, prop)
+			switch {
+			case !ok:
+			case key == "handler":
+				out = append(out, val)
+			case fastifyHooks[key]:
+				out = append(out, hookValues(f, val)...)
+			}
+		}
+	}
+	return out
+}
+
+// splitProp splits `key: value` (or the shorthand `key`) at the first
+// top-level colon.
+func splitProp(code string, prop span) (key string, val span, ok bool) {
+	text := code[prop.start:prop.end]
+	depth := 0
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case ':':
+			if depth == 0 {
+				k := strings.Trim(strings.TrimSpace(text[:i]), `'"`+"`")
+				v := trimSpan(code, span{prop.start + i + 1, prop.end})
+				return k, v, k != "" && v.end > v.start
+			}
+		}
+	}
+	if isPlainIdent(strings.TrimSpace(text)) {
+		return strings.TrimSpace(text), prop, true
+	}
+	return "", span{}, false
+}
+
+// hookValues returns the functions a hook option names: one, or each element
+// of an array.
+func hookValues(f *jsFile, val span) []span {
+	if val.end-val.start >= 2 && f.code[val.start] == '[' && matchClose(f.code, val.start) == val.end-1 {
+		return splitArgs(f.code, val.start+1, val.end-1)
+	}
+	return []span{val}
+}
+
+var quotedRe = regexp.MustCompile(`['"]([A-Za-z]+)['"]`)
+
+// parseFastifyRoutes finds `fastify.route({ method, url, preHandler, handler })`.
+func parseFastifyRoutes(f *jsFile) []route {
+	declared := declaredRouters(f)
+	var out []route
+	for _, m := range fastifyRouteCallRe.FindAllStringSubmatchIndex(f.code, -1) {
+		recv := f.code[m[2]:m[3]]
+		if !routerReceiver(recv, declared) {
+			continue
+		}
+		open := m[1] - 1 // the `{`
+		closeAt := matchClose(f.code, open)
+		if closeAt < 0 {
+			continue
+		}
+		var method, url string
+		hasHandler := false
+		for _, prop := range splitArgs(f.code, open+1, closeAt) {
+			key, val, ok := splitProp(f.code, prop)
+			if !ok {
+				continue
+			}
+			switch key {
+			case "method":
+				if q := quotedRe.FindSubmatch(f.raw[val.start:val.end]); q != nil {
+					method = string(q[1])
+				}
+			case "url", "path":
+				if p, ok := stringLiteral(f.raw, f.code, val); ok {
+					url = p
+				}
+			case "handler":
+				hasHandler = true
+			}
+		}
+		if method == "" || !strings.HasPrefix(url, "/") || !hasHandler {
+			continue
+		}
+		// The whole options object is the route's argument: newRoute flattens
+		// it the same way as a get() options argument.
+		out = append(out, newRoute(f, m[0], recv, strings.ToLower(method), url, []span{{open, closeAt + 1}}))
+	}
+	return out
+}
+
+// parseFastifyUses finds `fastify.addHook('onRequest', auth)` (middleware for
+// every later route on the instance) and `fastify.register(plugin, { prefix })`
+// (a mount, like Express's `app.use('/x', router)`).
+func parseFastifyUses(f *jsFile, resolve func(f *jsFile, s span) string) []use {
+	declared := declaredRouters(f)
+	var out []use
+	for _, m := range fastifyHookCallRe.FindAllStringSubmatchIndex(f.code, -1) {
+		recv := f.code[m[2]:m[3]]
+		if !routerReceiver(recv, declared) {
+			continue
+		}
+		closeAt := matchClose(f.code, m[1]-1)
+		if closeAt < 0 {
+			continue
+		}
+		args := splitArgs(f.code, m[1], closeAt)
+		if len(args) < 2 {
+			continue
+		}
+		if name, ok := stringLiteral(f.raw, f.code, args[0]); ok && fastifyHooks[name] {
+			out = append(out, use{file: f, offset: m[0], receiver: recv, mw: args[1:]})
+		}
+	}
+	for _, m := range fastifyRegisterRe.FindAllStringSubmatchIndex(f.code, -1) {
+		recv := f.code[m[2]:m[3]]
+		if !routerReceiver(recv, declared) {
+			continue
+		}
+		closeAt := matchClose(f.code, m[1]-1)
+		if closeAt < 0 {
+			continue
+		}
+		args := splitArgs(f.code, m[1], closeAt)
+		if len(args) == 0 {
+			continue
+		}
+		target := resolve(f, args[0])
+		if target == "" || target == f.path {
+			continue
+		}
+		u := use{file: f, offset: m[0], receiver: recv, mounts: []string{target}}
+		if len(args) > 1 && args[1].end-args[1].start >= 2 && f.code[args[1].start] == '{' {
+			for _, prop := range splitArgs(f.code, args[1].start+1, args[1].end-1) {
+				if key, val, ok := splitProp(f.code, prop); ok && key == "prefix" {
+					u.prefix, _ = stringLiteral(f.raw, f.code, val)
+				}
+			}
+		}
+		out = append(out, u)
+	}
+	return out
 }
 
 // parseUses finds every `R.use(...)` call on a router receiver.

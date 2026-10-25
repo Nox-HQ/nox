@@ -178,8 +178,8 @@ type ScanResult struct {
 	Leads []Lead
 	// LeadChecks names each check that produces leads or opt-in findings and
 	// had something to read, in words that do not overclaim:
-	// "authorization (Express routes; leads only)". Empty when, for example,
-	// the scan saw no Express routes: it then says nothing about
+	// "authorization (Express, Fastify, Flask, FastAPI routes; leads only)".
+	// Empty when, for example, the scan saw no such routes: it then says nothing about
 	// authorization.
 	LeadChecks []string
 }
@@ -211,7 +211,7 @@ func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 		return nil, nil
 	}
 	if a.Enabled() {
-		return nil, []string{"authorization (Express routes; " + authz.RuleID + " enabled, possible issues only)"}
+		return nil, []string{"authorization (" + authz.Coverage + "; " + authz.RuleID + " enabled, possible issues only)"}
 	}
 	leads = make([]Lead, 0, len(a.Leads()))
 	for _, l := range a.Leads() {
@@ -225,7 +225,7 @@ func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 			Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
 		})
 	}
-	return leads, []string{"authorization (Express routes; leads only)"}
+	return leads, []string{"authorization (" + authz.Coverage + "; leads only)"}
 }
 
 // EvidenceArtifact assembles the replayable record of what this scan

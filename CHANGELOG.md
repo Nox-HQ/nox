@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Possible IDOR leads (AUTHZ-001) now cover Fastify, Flask and FastAPI.** The
+  Express reader's proposition (an authenticated route loads a record by a
+  caller-supplied id and nothing visible relates the record to the caller) is
+  now applied to the same shape in three more frameworks, with the same lead,
+  the same counterexample classes and the same evidence standard. Fastify:
+  `fastify.get(path, { preHandler }, handler)`, `fastify.route({ method, url,
+  onRequest, handler })`, plugins mounted with `register(plugin, { prefix })`,
+  `addHook('onRequest', auth)`, `request.jwtVerify()`, and TypeScript
+  (`get<{ Params }>`, `request.params as { id: string }`). Flask: `@app.route`
+  and `@app.get`, Blueprints with `url_prefix` (nested, and overridden at
+  `register_blueprint`), `<int:id>` converters, `@login_required` /
+  `@jwt_required()` and `before_request` gates. FastAPI: `@app.get`,
+  `APIRouter(prefix=)` composed with `include_router(prefix=)` (a prefix held
+  in one settings constant is resolved), path and query parameters as function
+  arguments, and `Depends(get_current_user)` directly, through an `Annotated`
+  alias or as router-level `dependencies`, read as authentication and never as
+  ownership. Leads show the route as served (`GET /api/v1/items/{id}`). A
+  lookup scoped to the caller (`filter_by(id=i, user_id=current_user.id)`,
+  `select(...).where(... owner_id == user.id)`, SQL with an owner column), a
+  post-load comparison or 403/404 against the principal, a policy call, a role
+  read, or an authorization dependency or decorator keeps the route quiet.
+  "Checks completed" now reads "authorization (Express, Fastify, Flask, FastAPI
+  routes; leads only)". Still not read: NestJS, Next.js, Django,
+  Flask class-based views and Flask-RESTful, OpenAPI-first apps (connexion),
+  `@fastify/autoload` directory prefixes and `autohooks`, Starlette, Sanic,
+  Quart and aiohttp. Leads flow into `findings.json`, `scan --previous`,
+  `nox diff` and MCP exactly as the Express ones do.
+
 - **Nox now says what changed, not only what is wrong.** `nox scan --previous
   <findings.json>` leads the assessment with a "Since the previous run:" section
   (new issues, what is no longer present, severity regressions, agents that

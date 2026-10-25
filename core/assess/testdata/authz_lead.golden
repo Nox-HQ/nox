@@ -4,7 +4,7 @@ Nox Security Assessment
 1 issue needs attention (1 finding).
   1. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
 
-Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling, supply chain and authorization (Express routes; leads only).
+Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling, supply chain and authorization (Express, Fastify, Flask, FastAPI routes; leads only).
 
 Not determined by this scan:
   - Exploitability: the finding was neither confirmed exploitable nor shown to be prevented; it is a potential issue.
