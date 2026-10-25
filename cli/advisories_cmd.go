@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"strings"
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/advisory"
@@ -95,8 +93,12 @@ func runAdvisories(args []string) int {
 		return 2
 	}
 
-	in := advisory.Input{Findings: rep.Findings, Policy: pol, Incomplete: incompleteReason(rep)}
-	in.Previous, in.HavePrevious = loadPrevious(*previous)
+	in := advisory.Input{Findings: rep.Findings, Policy: pol, Incomplete: advisory.IncompleteReason(rep.Meta.Degradations)}
+	var warning string
+	in.Previous, in.HavePrevious, warning = report.LoadPreviousFindings(*previous)
+	if warning != "" {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+	}
 
 	res := advisory.Evaluate(in)
 
@@ -107,7 +109,7 @@ func runAdvisories(args []string) int {
 		}
 	}
 	if *markdownOut != "" {
-		if err := fsutil.AtomicWriteFile(*markdownOut, []byte(advisoriesMarkdown(res)), 0o644); err != nil {
+		if err := fsutil.AtomicWriteFile(*markdownOut, []byte(advisory.Markdown(res)), 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			return 2
 		}
@@ -126,41 +128,6 @@ func runAdvisories(args []string) int {
 		return 1
 	}
 	return 0
-}
-
-// incompleteReason names the checks that did not finish, or "".
-//
-// A degradation is advisory when it reports capability the operator did not ask
-// for. Every other one is something the scan relies on that did not run, and a
-// lookup that did not run is the one case where "no new advisories" is not a
-// finding but an absence.
-func incompleteReason(rep report.JSONReport) string {
-	var parts []string
-	for _, d := range rep.Meta.Degradations {
-		if d.Advisory {
-			continue
-		}
-		parts = append(parts, d.Kind+": "+d.Detail)
-	}
-	sort.Strings(parts)
-	return strings.Join(parts, "; ")
-}
-
-// loadPrevious reads the last run's findings. A missing or unreadable file is
-// "no previous run", reported to the caller as such, never as "a previous run
-// that found nothing".
-func loadPrevious(path string) ([]findings.Finding, bool) {
-	if path == "" {
-		return nil, false
-	}
-	rep, err := report.LoadFindingsFileReport(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "warning: previous run %s is unreadable (%v); treating it as absent\n", path, err)
-		}
-		return nil, false
-	}
-	return rep.Findings, true
 }
 
 func writePrepareFindings(path string, rep report.JSONReport, res advisory.Result) error {
@@ -183,71 +150,13 @@ func renderAdvisories(w io.Writer, format string, res advisory.Result) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(res)
 	case "markdown":
-		_, err := io.WriteString(w, advisoriesMarkdown(res))
+		_, err := io.WriteString(w, advisory.Markdown(res))
 		return err
 	case "text":
-		_, err := io.WriteString(w, advisoriesText(res))
+		_, err := io.WriteString(w, advisory.Text(res))
 		return err
 	}
 	return fmt.Errorf("--format %q is not text, json or markdown", format)
-}
-
-func advisoriesHeadline(res advisory.Result) string {
-	newN, knownN, waivedN := res.Counts()
-	switch {
-	case res.Incomplete != "":
-		return fmt.Sprintf("Scan incomplete: %s. Nothing was acted on, and this is not a clean result.", res.Incomplete)
-	case !res.PreviousRun:
-		return fmt.Sprintf("No previous run to compare against: %d advisories reported, none acted on. This run becomes the baseline for the next.", len(res.Decisions))
-	case newN == 0:
-		return fmt.Sprintf("No new advisories (%d known, %d waived).", knownN, waivedN)
-	}
-	return fmt.Sprintf("%d new advisories (%d known, %d waived). Policy %s, action %s.", newN, knownN, waivedN, res.Policy, res.Action)
-}
-
-func advisoriesText(res advisory.Result) string {
-	var b strings.Builder
-	b.WriteString(advisoriesHeadline(res))
-	b.WriteString("\n")
-	for i := range res.Decisions {
-		d := res.Decisions[i]
-		if d.Action == advisory.ActionNone {
-			continue
-		}
-		fmt.Fprintf(&b, "\n  [%s] %s  %s %s@%s  severity=%s relevance=%s\n    %s\n",
-			d.Action, d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance.Label(), d.Reason)
-	}
-	if len(res.Prepare) > 0 {
-		fmt.Fprintf(&b, "\nPull request: %d advisories. Auto-merge permitted: %t.\n", len(res.Prepare), res.AutoMerge)
-	}
-	return b.String()
-}
-
-func advisoriesMarkdown(res advisory.Result) string {
-	var b strings.Builder
-	b.WriteString("## Nox advisory check\n\n")
-	b.WriteString(advisoriesHeadline(res))
-	b.WriteString("\n\n")
-	fmt.Fprintf(&b, "Policy `%s`, decision `%s`, auto-merge permitted `%t`.\n\n", res.Policy, res.Action, res.AutoMerge)
-	var rows []advisory.Decision
-	for i := range res.Decisions {
-		if res.Decisions[i].Action != advisory.ActionNone {
-			rows = append(rows, res.Decisions[i])
-		}
-	}
-	if len(rows) == 0 {
-		return b.String()
-	}
-	b.WriteString("| Advisory | Package | Severity | Relevance | Action |\n|---|---|---|---|---|\n")
-	for _, d := range rows {
-		fmt.Fprintf(&b, "| %s | %s %s@%s | %s | %s | %s |\n",
-			d.Advisory, d.Ecosystem, d.Package, d.Version, d.Severity, d.Relevance.Label(), d.Action)
-	}
-	b.WriteString("\nWhy:\n\n")
-	for _, d := range rows {
-		fmt.Fprintf(&b, "- **%s** (%s): %s\n", d.Advisory, d.Action, d.Reason)
-	}
-	return b.String()
 }
 
 // writeAdvisoryGitHub appends step outputs and the job summary. Each is a plain
@@ -262,7 +171,7 @@ func writeAdvisoryGitHub(res advisory.Result) error {
 		}
 	}
 	if sum := os.Getenv("GITHUB_STEP_SUMMARY"); sum != "" {
-		if err := appendFile(sum, advisoriesMarkdown(res)); err != nil {
+		if err := appendFile(sum, advisory.Markdown(res)); err != nil {
 			return err
 		}
 	}

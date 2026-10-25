@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
+  decision `nox advisories` computes; the rendering and the "scan incomplete"
+  rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
+- **Registry freshness.** `nox plugin search` and `info` warn when the installed
+  plugin is newer than the index's highest version, and when the index's
+  `generated_at` is more than 14 days old. LATEST is now the highest version in
+  the index, labelled as such (it was the last one listed).
 - `nox scan --help` documents `SOURCE_DATE_EPOCH`, and a test pins two scans
   with it set to byte-identical `findings.json`, SARIF, both SBOMs,
   `ai.inventory.json` and the HTML report.
@@ -158,6 +165,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The AI inventory binds an endpoint to the client that uses it.** The first
+  `base_url` in a file was recorded against every model call in it. The endpoint
+  now comes from the construction of the client the call is made on, and is
+  omitted when that cannot be established.
+- **`nox agent-graph` names MCP servers.** Each configured server was a box
+  called `mcp_client` with a bare `*`. It now shows the server name, its
+  transport (stdio or remote), and the capabilities its launch configuration
+  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
+- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
+  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
+  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
+  no longer says every tool is read-only.
 - **The assessment headline counts what needs attention.** "23 issues need
   attention" counted a privileged container and a missing `LABEL maintainer`
   alike. An issue needs attention when a finding in it is critical or high

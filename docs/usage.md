@@ -2219,10 +2219,19 @@ nox serve --allowed-paths /path/to/project
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
 | `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
 
-All tools are **read-only**. Output is truncated at **1 MB**.
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`), so a client can decide what to ask a person
+about without calling it. Almost all are **read-only** and closed-world;
+`scan`, `diff` and `plugin.call_tool` are read-only but open-world (they may
+look up advisories on the network). The exceptions: `baseline_add` and
+`baseline_add_many` write the baseline file (additive, idempotent, not
+destructive), and `plugin_install` fetches and registers code that runs on your
+machine (open-world, destructive, requires `confirmed: true`). Output is
+truncated at **1 MB**.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per
