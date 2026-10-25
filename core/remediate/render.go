@@ -65,8 +65,17 @@ func planNextSteps(p Plan) []string {
 	if p.Safe > 0 {
 		out = append(out, "Apply the safe changes, then re-run the checks that found them: nox fix apply")
 	}
-	if p.Review > 0 {
+	held := 0
+	for i := range p.Items {
+		if p.Items[i].Kind == KindHeldUpgrade {
+			held++
+		}
+	}
+	if p.Review > held {
 		out = append(out, "Apply the changes that need review too, once you have looked: nox fix apply --include-review")
+	}
+	if held > 0 {
+		out = append(out, "For a held upgrade, upgrade the package that pins it or add the entry named above to package.json, then re-run nox scan")
 	}
 	if p.Info > 0 {
 		out = append(out, "Supply what the remaining issues need (listed above), then re-run nox scan")

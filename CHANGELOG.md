@@ -220,6 +220,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox fix plan` no longer calls a transitive upgrade "safe to apply" when a
+  parent pins it.** body-parser, path-to-regexp and qs under express 4.21.2 were
+  listed under "Safe to apply, nothing here needs a decision", and `nox fix
+  apply` then could not move them ("a parent's version range excludes the fix").
+  The plan now reads the project's `package-lock.json`: each installed copy below
+  the fixed version is checked against the declared range of every package that
+  resolves to it (and against an existing `overrides` entry). If any range
+  excludes the fix, or the lockfile is one nox does not read (pnpm, yarn, bun) or
+  absent, the item is "needs review" (new kind `held_upgrade`) and names the
+  holding parents and the exact entry to add: `"overrides"` for npm and bun,
+  `"resolutions"` for yarn, `"pnpm": { "overrides" }` for pnpm. `nox fix apply`
+  never selects a held item, even with `--include-review`.
+
 - **`--previous` no longer lists every dependency advisory as new when one scan
   was offline.** An offline scan reports no advisories because it did not look,
   and comparing it with an online scan (`nox scan --previous <offline

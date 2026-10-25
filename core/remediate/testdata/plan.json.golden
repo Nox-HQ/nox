@@ -27,11 +27,10 @@
     },
     {
       "n": 2,
-      "class": "safe_to_apply",
-      "kind": "upgrade",
+      "class": "needs_review",
+      "kind": "held_upgrade",
       "title": "Upgrade body-parser 1.20.3 -\u003e 1.20.9: fixes 1 known vulnerability (highest severity: high).",
-      "why": "The fix is published and stays on the same major version (1.20.3 -\u003e 1.20.9), so it should not change how your code uses the package. It is not a package you list yourself, so nox asks npm to move it within the ranges the packages that use it allow; if one of them pins it lower, the change is not applied and the report says so.",
-      "command": "npm install body-parser@1.20.9",
+      "why": "The fix (1.20.3 -\u003e 1.20.9) is published on the same major version, but body-parser is not a package you list yourself and express@4.21.2 requires body-parser 1.20.3: the range excludes 1.20.9, so nox fix apply cannot move it. Either upgrade express@4.21.2 to a release that depends on a fixed body-parser, or force the version with an entry in package.json: \"overrides\": { \"body-parser\": \"1.20.9\" }",
       "severity": "high",
       "findings": 1,
       "fingerprints": [
@@ -204,7 +203,7 @@
     }
   ],
   "finding_count": 11,
-  "safe_to_apply": 4,
-  "needs_review": 2,
+  "safe_to_apply": 3,
+  "needs_review": 3,
   "needs_information": 4
 }

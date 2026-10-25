@@ -10,6 +10,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/remediate"
 )
 
 const workflowBody = `name: ci
@@ -240,5 +241,18 @@ func TestBareFixStillTakesItsOwnFlags(t *testing.T) {
 	out := captureStdout(t, func() { _ = runFix([]string{"--input", in, "--dry-run"}) })
 	if !re.MatchString(out) {
 		t.Fatalf("legacy path changed: %q", out)
+	}
+}
+
+// An upgrade a parent's range holds out of reach is something nox cannot make,
+// so apply never selects it, even when review items are asked for.
+func TestSelectedSkipsHeldUpgrades(t *testing.T) {
+	it := &remediate.Item{Class: remediate.ClassReview, Kind: remediate.KindHeldUpgrade}
+	if selected(it, fixSubOptions{includeReview: true, includeMajor: true}) {
+		t.Fatal("apply selected an upgrade that a parent's range holds back")
+	}
+	major := &remediate.Item{Class: remediate.ClassReview, Kind: remediate.KindMajorUpgrade}
+	if !selected(major, fixSubOptions{includeMajor: true}) {
+		t.Fatal("a major upgrade must still be selectable with --include-major")
 	}
 }

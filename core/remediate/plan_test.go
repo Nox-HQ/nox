@@ -84,6 +84,12 @@ func writeTree(t *testing.T) string {
 	root := t.TempDir()
 	files := map[string]string{
 		"package.json": `{"dependencies":{"axios":"1.7.4","express":"4.21.2"}}`,
+		// Real-shaped: express 4.21.2 declares body-parser 1.20.3 exactly.
+		"package-lock.json": `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"axios":"1.7.4","express":"4.21.2"}},
+"node_modules/axios":{"version":"1.7.4"},
+"node_modules/express":{"version":"4.21.2","dependencies":{"body-parser":"1.20.3"}},
+"node_modules/body-parser":{"version":"1.20.3"}}}`,
 		"k8s/pod.yaml": "spec:\n  securityContext:\n    privileged: true\n",
 		".github/workflows/ci.yml": "jobs:\n  b:\n    steps:\n      - run: make\n        continue-on-error: true\n" +
 			"      - uses: actions/checkout@v4\n",
@@ -210,18 +216,26 @@ func TestPlanIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestTransitiveUpgradeSaysSo(t *testing.T) {
+func TestTransitiveUpgradeHeldByAParentIsNotSafe(t *testing.T) {
 	plan := Build(Input{Findings: fixtureFindings(), Root: writeTree(t)})
 	for _, it := range plan.Items {
-		if it.Upgrade == nil || it.Kind != KindUpgrade {
+		if it.Upgrade == nil {
 			continue
 		}
-		transitive := strings.Contains(it.Why, "not a package you list yourself")
-		if it.Upgrade.Package == "axios" && transitive {
-			t.Errorf("axios is declared in package.json but the plan calls it transitive")
-		}
-		if it.Upgrade.Package == "body-parser" && !transitive {
-			t.Errorf("body-parser is not declared but the plan does not say it may be held back")
+		switch it.Upgrade.Package {
+		case "axios":
+			if it.Kind != KindUpgrade || it.Class != ClassSafe {
+				t.Errorf("axios is declared in package.json and should stay safe, got %s/%s", it.Class, it.Kind)
+			}
+		case "body-parser":
+			if it.Class != ClassReview || it.Kind != KindHeldUpgrade {
+				t.Errorf("body-parser is pinned by express and must not be safe, got %s/%s", it.Class, it.Kind)
+			}
+			for _, want := range []string{"express@4.21.2 requires body-parser 1.20.3", `"overrides": { "body-parser": "1.20.9" }`, "upgrade express"} {
+				if !strings.Contains(it.Why, want) {
+					t.Errorf("why = %q, want it to contain %q", it.Why, want)
+				}
+			}
 		}
 	}
 }

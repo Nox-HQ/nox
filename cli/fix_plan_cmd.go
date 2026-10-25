@@ -115,6 +115,11 @@ func printPlan(plan remediate.Plan, format string) int {
 // selected says whether apply makes an item's change. The safe set always; the
 // rest only when the person asked for them.
 func selected(it *remediate.Item, o fixSubOptions) bool {
+	if it.Kind == remediate.KindHeldUpgrade {
+		// A parent's range excludes the fix; nox has no change to make. The
+		// plan item names the parent and the entry that would force it.
+		return false
+	}
 	switch it.Class {
 	case remediate.ClassSafe:
 		return true
