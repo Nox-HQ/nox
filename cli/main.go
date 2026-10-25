@@ -465,6 +465,23 @@ func printGlobalFlags(out io.Writer) {
 	tmp.PrintDefaults()
 }
 
+// scanEnvironmentHelp documents the environment variables that change what a
+// scan writes. SOURCE_DATE_EPOCH was honoured by every timestamped report for
+// releases without appearing anywhere a user would look for it.
+const scanEnvironmentHelp = `
+Environment:
+  SOURCE_DATE_EPOCH
+    	Unix time in seconds (e.g. 1700000000) used for every timestamp in the
+    	reports (findings.json, SBOMs, HTML). With it set, two scans of the same
+    	tree write byte-identical files; without it each report carries the time
+    	it was written. An unparseable value is ignored. Vulnerability lookups
+    	are a second input: pass --offline for a run that depends only on the tree.
+  NOX_FINGERPRINT_VERSION
+    	Same as --fingerprint-version.
+`
+
+func printScanEnvironment(out io.Writer) { _, _ = fmt.Fprint(out, scanEnvironmentHelp) }
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -538,6 +555,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		_, _ = fmt.Fprintln(out, "Usage of scan:")
 		scanFS.PrintDefaults()
 		printGlobalFlags(out)
+		printScanEnvironment(out)
 	}
 	positionals, err := parseInterspersed(scanFS, args)
 	if err != nil {

@@ -37,6 +37,7 @@ func (s *Server) registerThreatModelTools(srv *mcp.Server) {
 	srv.Tool("threat_model").
 		Description("Threat model assembled from the last scan: the elements nox can evidence (routes and their authentication middleware, AI agents and their tools, MCP servers, data stores, external services, the deployment surface), the data flows and trust boundaries between them, a STRIDE table with the evidence per element and category, questions for the team derived from the gaps, and what nox cannot see. Use when the user asks for a threat model, an architecture overview or system documentation. Deterministic and read-only; never states that a threat is absent or handled. Needs a prior scan. Pass previous (a model.json from an earlier run) to also get what changed since it.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(threatModelOutput{}).
 		Handler(s.handleThreatModel)
 }

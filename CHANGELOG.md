@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
   find are never leads. AUTHZ-001's object-level analysis does not run over
   these handlers, and "Checks completed" now says so. NestJS is still not read.
+- **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
+  decision `nox advisories` computes; the rendering and the "scan incomplete"
+  rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
+- **Registry freshness.** `nox plugin search` and `info` warn when the installed
+  plugin is newer than the index's highest version, and when the index's
+  `generated_at` is more than 14 days old. LATEST is now the highest version in
+  the index, labelled as such (it was the last one listed).
+- `nox scan --help` documents `SOURCE_DATE_EPOCH`, and a test pins two scans
+  with it set to byte-identical `findings.json`, SARIF, both SBOMs,
+  `ai.inventory.json` and the HTML report.
 
 - **Contribution is consented to, versioned, and erasable.** `nox scan` now
   contributes (when `scan.intelligence.contribute: true`) only on a machine
@@ -166,6 +176,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Requires nox-core v0.5.0.
 
 ### Changed
+
+- **The AI inventory binds an endpoint to the client that uses it.** The first
+  `base_url` in a file was recorded against every model call in it. The endpoint
+  now comes from the construction of the client the call is made on, and is
+  omitted when that cannot be established.
+- **`nox agent-graph` names MCP servers.** Each configured server was a box
+  called `mcp_client` with a bare `*`. It now shows the server name, its
+  transport (stdio or remote), and the capabilities its launch configuration
+  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
+- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
+  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
+  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
+  no longer says every tool is read-only.
+- **The assessment headline counts what needs attention.** "23 issues need
+  attention" counted a privileged container and a missing `LABEL maintainer`
+  alike. An issue needs attention when a finding in it is critical or high
+  severity (the line `nox ci-gate` draws) or medium severity with high
+  confidence; everything else is a lower-priority observation, shown as its own
+  line ("Plus 16 lower-priority observations (24 findings)") and listed under
+  `--verbose`. Nothing leaves `findings.json` or SARIF. `nox fix plan` carries
+  the same count and a `needs_attention` flag per item.
+- **`nox fix plan` says what is missing.** Fifteen of nineteen "needs
+  information" items shared one sentence. Each now names the specific
+  information (the CPU and memory limits, the probe endpoint, the maintainer
+  contact, the image tag to pin, the signing secret...) and how to supply it,
+  by rule, then by rule family. Dependencies say whether there is no fixed
+  version, the ecosystem is one `nox fix` does not drive, or the fixed version
+  could not be shown to be newer.
 
 - A default scan that looked dependencies up now prints one `[network]` line: how
   many dependencies (ecosystem, name, version) were sent to the intelligence

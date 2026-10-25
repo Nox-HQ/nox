@@ -5,6 +5,7 @@ package report
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -302,6 +303,25 @@ func LoadFindingsFileReport(path string) (JSONReport, error) {
 		return JSONReport{}, err
 	}
 	return rep, nil
+}
+
+// LoadPreviousFindings reads the findings of an earlier run. A missing or
+// unreadable file is "no previous run", reported as have=false, never as a
+// previous run that found nothing. warning is non-empty when the file existed
+// but could not be read, so the caller can say why it was treated as absent.
+// Shared by `nox advisories` and the MCP advisories tool.
+func LoadPreviousFindings(path string) (prev []findings.Finding, have bool, warning string) {
+	if path == "" {
+		return nil, false, ""
+	}
+	rep, err := LoadFindingsFileReport(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, ""
+		}
+		return nil, false, fmt.Sprintf("previous run %s is unreadable (%v); treating it as absent", path, err)
+	}
+	return rep.Findings, true, ""
 }
 
 // DegradationsFrom converts scan degradations into their report form.
