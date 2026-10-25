@@ -181,7 +181,7 @@ func hasRow(kind string) bool {
 }
 
 func buildCell(e *elem, cat Category, acc *findingAcc) Cell {
-	cell := Cell{Category: cat}
+	cell := Cell{Category: cat, Evidence: []Evidence{}}
 	if acc != nil {
 		cell.Evidence = append(cell.Evidence, groupFindings(acc.active, false)...)
 		cell.Evidence = append(cell.Evidence, groupFindings(acc.waived, true)...)

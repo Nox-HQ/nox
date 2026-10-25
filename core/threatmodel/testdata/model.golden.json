@@ -730,7 +730,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -772,7 +772,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -781,7 +781,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -790,7 +790,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -842,7 +842,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -851,7 +851,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -860,7 +860,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -869,7 +869,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -878,7 +878,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -887,7 +887,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         }
       ],
@@ -911,7 +911,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -920,7 +920,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -929,7 +929,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -938,7 +938,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -947,7 +947,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -978,7 +978,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -987,7 +987,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -996,7 +996,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1023,7 +1023,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1054,7 +1054,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1063,7 +1063,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1072,7 +1072,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1098,7 +1098,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1107,7 +1107,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         }
       ]
@@ -1121,7 +1121,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1144,7 +1144,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1153,7 +1153,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1162,7 +1162,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1234,7 +1234,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1243,7 +1243,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1252,7 +1252,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1305,7 +1305,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1314,7 +1314,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1338,7 +1338,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1406,7 +1406,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1415,7 +1415,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1424,7 +1424,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1477,7 +1477,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1486,7 +1486,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1495,7 +1495,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1504,7 +1504,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1513,7 +1513,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         }
       ]
@@ -1527,7 +1527,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1536,7 +1536,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1545,7 +1545,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1554,7 +1554,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1563,7 +1563,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1572,7 +1572,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         }
       ]
@@ -1586,7 +1586,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1595,7 +1595,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1604,7 +1604,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1613,7 +1613,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1622,7 +1622,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         },
         {
@@ -1631,7 +1631,7 @@
           "findings": 0,
           "waived": 0,
           "leads": 0,
-          "evidence": null,
+          "evidence": [],
           "note": "nox has no evidence either way"
         }
       ]

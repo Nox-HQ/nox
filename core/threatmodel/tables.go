@@ -143,12 +143,14 @@ var iacRules = map[string]iacRow{
 	"IAC-008": {kind: KindWorkload},
 	"IAC-009": {kind: KindWorkload},
 	"IAC-010": {kind: KindWorkload},
+	"IAC-502": {kind: KindWorkload},
 	// Container images.
 	"IAC-122":  {kind: KindImage},
 	"IAC-124":  {kind: KindImage},
 	"CONT-002": {kind: KindImage},
 	// Cloud data stores and network rules.
 	"IAC-040": {kind: KindDataStore, sub: "bucket", exposes: true},
+	"IAC-504": {kind: KindDataStore, sub: "bucket", exposes: true},
 	"IAC-036": {kind: KindDataStore, sub: "database", exposes: true},
 	"IAC-037": {kind: KindDataStore, sub: "database"},
 	"IAC-004": {kind: KindNetworkRule, exposes: true},
@@ -203,6 +205,7 @@ var capabilityEffects = map[string]capEffect{
 	"http_request":     {"outbound", "Outbound network (HTTP, email, webhooks)", "outbound network"},
 	"email_send":       {"outbound", "Outbound network (HTTP, email, webhooks)", "outbound network"},
 	"webhook_post":     {"outbound", "Outbound network (HTTP, email, webhooks)", "outbound network"},
+	"sql_exec":         {"database", "Database reached through a tool", "database"},
 	"database_read":    {"database", "Database reached through a tool", "database"},
 	"database_write":   {"database", "Database reached through a tool", "database"},
 	"git_push":         {"source-control", "Source control", "source control"},

@@ -179,3 +179,42 @@ func TestMermaidIsDeterministicAndEscapesLabels(t *testing.T) {
 		t.Error("angle brackets must not reach a Mermaid label")
 	}
 }
+
+// A tool the inventory tags sql_exec reaches the database effect, on its own
+// boundary, and is not reported as unclassified.
+func TestSQLExecToolReachesTheDatabaseEffect(t *testing.T) {
+	in := fixture()
+	in.Inventory.ToolMatrix[0].Capabilities["query_db"] = []string{"sql_exec"}
+	m := Build(in)
+	if !hasFlow(m, "agent:src/routes/assistant.js", "effect:database", "tool:database") {
+		t.Fatalf("no database flow: %+v", m.Flows)
+	}
+	if len(flowsOn(m, "tool:unclassified")) != 0 {
+		t.Error("a tagged tool must not be reported as unclassified")
+	}
+	for _, b := range m.Boundaries {
+		if b.ID == "tool:database" && b.Label != "model output → database" {
+			t.Errorf("label = %q", b.Label)
+		}
+	}
+}
+
+// IAC-504 (public access block disabled) is about the bucket, and IAC-502 (a
+// literal secret in an environment variable) about the workload; both are
+// attached by rule even in a file of several resources.
+func TestNewInfrastructureRulesAttachToTheirResource(t *testing.T) {
+	in := fixture()
+	in.Report.Findings = append(in.Report.Findings,
+		finding("IAC-504", "high", "deploy/tf/main.tf", 8, "Public access block disabled", "", map[string]string{"cwe": "CWE-284"}),
+		finding("IAC-502", "high", "deploy/k8s/ingress.yaml", 9, "Literal secret in env", "", map[string]string{"cwe": "CWE-798"}))
+	m := Build(in)
+	if !strings.Contains(rules(cell(t, m, "deploy:bucket@deploy/tf/main.tf", ElevationOfPrivilege)), "IAC-504") {
+		t.Error("IAC-504 must reach the bucket")
+	}
+	if strings.Contains(rules(cell(t, m, "deploy:database@deploy/tf/main.tf", ElevationOfPrivilege)), "IAC-504") {
+		t.Error("IAC-504 must not reach the database")
+	}
+	if !hasElement(m, "deploy:workload@deploy/k8s/ingress.yaml") {
+		t.Error("IAC-502 proves a workload exists")
+	}
+}
