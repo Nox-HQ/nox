@@ -43,6 +43,9 @@ func FromScan(r *nox.ScanResult, label string) State {
 		if d.Kind == degrade.OSV {
 			s.AdvisoryLookup = LookupFailed
 		}
+		if d.Kind == degrade.IntelIncomplete && s.AdvisoryLookup == "" {
+			s.AdvisoryLookup = LookupIncomplete
+		}
 	}
 	if r.AdvisoryLookupSkipped {
 		s.AdvisoryLookup = LookupDisabled
