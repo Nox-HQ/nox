@@ -98,7 +98,7 @@ func TestIncompleteLookupIsNotComparedAndReadsFromTheReport(t *testing.T) {
 	if len(d.Resolved) != 0 {
 		t.Errorf("an advisory missing from an incomplete lookup read as resolved: %v", d.Resolved)
 	}
-	if !hasCaveat(d, "only partly looked up advisories (" + LookupIncomplete + ")") {
+	if !hasCaveat(d, "only partly looked up advisories ("+LookupIncomplete+")") {
 		t.Errorf("caveat missing: %v", d.Caveats)
 	}
 }
