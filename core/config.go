@@ -207,6 +207,7 @@ type ScanSettings struct {
 	OSV                  OSVConfig               `yaml:"osv"`
 	Intelligence         IntelligenceConfig      `yaml:"intelligence"`
 	Slop                 SlopConfig              `yaml:"slop"`
+	MCPFeed              MCPFeedConfig           `yaml:"mcp_feed"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
 	SAST                 SASTConfig              `yaml:"sast"`
@@ -622,6 +623,43 @@ type SlopConfig struct {
 	// the feed signature. Optional; when set, a present signature is verified
 	// against it (and a bad signature is always a hard failure).
 	SignatureKeyPath string `yaml:"signature_key_path"`
+}
+
+// MCPFeedConfig selects the signed MCP / AI-component advisory feed NOX
+// Intelligence publishes (docs/mcp-advisory-feed.md). It is consulted only when
+// the scan has MCP servers launched from a package registry, only online or from
+// a verified cache, and only with a pinned public key: an advisory feed nobody
+// verified is a blocklist anyone on the path can edit.
+type MCPFeedConfig struct {
+	// Disabled turns the check off.
+	Disabled bool `yaml:"disabled"`
+	// URL is the feed. Empty means <intelligence endpoint>/v1/feeds/mcp, which
+	// is not used when the intelligence service is disabled.
+	URL string `yaml:"url"`
+	// SignatureKeyPath points at the PEM Ed25519 public key the feed must verify
+	// under (PKIX, or the raw "ED25519 PUBLIC KEY" form), relative to the scan
+	// root. The service publishes it at /v1/feeds/mcp.pub.pem; fetch it once and
+	// commit it, so the key you pinned is not whatever the server says today.
+	// Without a key the feed is not consulted and the scan says so.
+	SignatureKeyPath string `yaml:"signature_key_path"`
+	// CacheDir overrides where verified feed bytes are cached. Empty means
+	// $HOME/.nox/cache/mcpfeed.
+	CacheDir string `yaml:"cache_dir"`
+	// Refresh is how long a cached feed is fresh ("24h", "7d"). Empty means 24h.
+	Refresh string `yaml:"refresh"`
+}
+
+// ResolvedURL is the feed location, or "" when there is none to use: the
+// intelligence service is disabled and no URL was set.
+func (c MCPFeedConfig) ResolvedURL(intel IntelligenceConfig) string {
+	if u := strings.TrimSpace(c.URL); u != "" {
+		return u
+	}
+	ep := intel.ResolvedEndpoint()
+	if ep == "" {
+		return ""
+	}
+	return ep + "/v1/feeds/mcp"
 }
 
 // RulesConfig allows disabling rules or overriding their severity.

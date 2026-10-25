@@ -67,6 +67,7 @@ var mcpRuleControls = map[string]string{
 	"MCP-023": "MCP09", // server-name shadowing
 	"MCP-024": "MCP09", // tool-name shadowing
 	"MCP-025": "MCP04", // unpinned package runner (supply chain)
+	"MCP-026": "MCP04", // an advisory affects the MCP server package (supply chain)
 }
 
 // Framework returns the OWASP MCP Top 10 control catalog.

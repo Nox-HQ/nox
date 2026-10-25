@@ -1069,6 +1069,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// policy-gated like any other. Non-fatal per file.
 	if opts.Scopes.Has(ScopeAI) {
 		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
+		// Advisories for the registry packages those servers launch, from the
+		// signed MCP feed, when it can be checked (docs/mcp-advisory-feed.md).
+		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations)
 	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
