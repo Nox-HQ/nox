@@ -64,6 +64,7 @@ func (s *Server) registerAttackTools(srv *mcp.Server) {
 	srv.Tool("attack_plan").
 		Description("Build exploit hypotheses from the last scan: which attacks are worth attempting against this codebase, why, and along what path. OFFLINE and read-only — it reasons over scan artifacts and never contacts a target, so nothing is executed and no traffic is sent. Every hypothesis is PLAUSIBLE, never CONFIRMED: confirming one requires actually exercising a running target, which operators do from the CLI via `nox attack run --authorize`. That command is intentionally not available over MCP, because firing attack payloads needs a human who has affirmed they own and isolated the target.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(attackPlanOutput{}).
 		Handler(s.handleAttackPlan)
 }

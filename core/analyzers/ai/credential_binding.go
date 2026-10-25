@@ -83,10 +83,9 @@ func credentialFor(content []byte, pos int) string {
 		found[name] = true
 	}
 
-	ctor := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(recv) +
-		`\s*(?::=|=)\s*(?:await\s+)?(?:new\s+)?[A-Za-z_$][\w$.]*\s*\(`)
-	for _, loc := range ctor.FindAllStringIndex(text, -1) {
-		record(credentialInArgs(text, balanced(text, loc[1]-1)))
+	args := clientConstructions(text, recv)
+	for _, a := range args {
+		record(credentialInArgs(text, a))
 	}
 	// Module-level configuration: `openai.api_key = os.getenv("X")`.
 	attr := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(recv) + `\.(?:api_?key|apiKey)\s*=\s*`)
@@ -101,6 +100,19 @@ func credentialFor(content []byte, pos int) string {
 		return name
 	}
 	return ""
+}
+
+// clientConstructions returns the argument text of every constructor call that
+// assigns recv (`recv = new OpenAI({...})`, `recv := openai.NewClient(...)`).
+// Credential and endpoint binding both read the client's own construction, so
+// they cannot attribute one client's settings to another's calls.
+func clientConstructions(text, recv string) (args []string) {
+	ctor := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(recv) +
+		`\s*(?::=|=)\s*(?:await\s+)?(?:new\s+)?[A-Za-z_$][\w$.]*\s*\(`)
+	for _, loc := range ctor.FindAllStringIndex(text, -1) {
+		args = append(args, balanced(text, loc[1]-1))
+	}
+	return args
 }
 
 // receiverBefore returns the identifier a model call is made on.

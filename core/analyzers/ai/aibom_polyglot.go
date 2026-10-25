@@ -185,9 +185,6 @@ var providerInvocations = []sdkInvocationPattern{
 // the invocation's line number, the auth env var (only when the client the call is made on
 // was built from one; see credentialFor), and the endpoint / base URL (Azure, Bedrock, custom).
 func extractSDKInvocations(path string, content []byte) []ModelReference {
-	text := string(content)
-	endpointGuess := detectEndpoint(text)
-
 	var refs []ModelReference
 	for _, p := range providerInvocations {
 		locs := p.re.FindAllSubmatchIndex(content, -1)
@@ -205,30 +202,11 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 				Path:       path,
 				Line:       lexctx.LineForOffset(content, m[0]),
 				AuthEnvVar: credentialFor(content, m[0]),
-				Endpoint:   endpointGuess,
+				Endpoint:   endpointFor(content, m[0]),
 			})
 		}
 	}
 	return refs
-}
-
-// detectEndpoint extracts a non-default LLM endpoint URL when present.
-// Captures Azure OpenAI deployment names, AWS Bedrock regions, and
-// custom base_url values.
-func detectEndpoint(text string) string {
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`base_url\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`baseURL\s*:\s*["']([^"']+)["']`),
-		regexp.MustCompile(`azure_endpoint\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`AzureOpenAI\s*\([^)]*endpoint\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`bedrock-runtime[^"']*['"]?,?\s*region_name\s*=\s*["']([^"']+)["']`),
-	}
-	for _, re := range patterns {
-		if m := re.FindStringSubmatch(text); len(m) > 1 {
-			return m[1]
-		}
-	}
-	return ""
 }
 
 // frameworkPattern recognises agent / vector-store framework usage and
