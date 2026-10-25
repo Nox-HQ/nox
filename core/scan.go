@@ -52,6 +52,7 @@ import (
 	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/replay"
+	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	taintengine "github.com/nox-hq/nox/core/taint/engine"
@@ -182,6 +183,10 @@ type ScanResult struct {
 	// the scan saw no Express routes: it then says nothing about
 	// authorization.
 	LeadChecks []string
+	// Routes are the HTTP entry points the authorization reader found, with
+	// the access-control middleware it could see on each. Descriptive context
+	// for a system model; never a finding.
+	Routes []report.Route
 }
 
 // Lead is one thing a scan found worth verifying by hand or at runtime,
@@ -226,6 +231,23 @@ func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 		})
 	}
 	return leads, []string{"authorization (Express routes; leads only)"}
+}
+
+// authzRoutes converts the authorization analyzer's route inventory into its
+// report form.
+func authzRoutes(a *authz.Analyzer) []report.Route {
+	rs := a.Routes()
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make([]report.Route, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, report.Route{
+			Method: r.Method, Path: r.Path, FilePath: r.FilePath, Line: r.Line,
+			Authn: r.Authn, Authz: r.Authz,
+		})
+	}
+	return out
 }
 
 // EvidenceArtifact assembles the replayable record of what this scan
@@ -1052,13 +1074,16 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 
 	var leads []Lead
 	var leadChecks []string
+	var routes []report.Route
 	if opts.Scopes.RunsAnalyzer("authz") {
 		leads, leadChecks = authzLeads(authzAnalyzer)
+		routes = authzRoutes(authzAnalyzer)
 	}
 
 	return &ScanResult{
 		Leads:              leads,
 		LeadChecks:         leadChecks,
+		Routes:             routes,
 		Capabilities:       capabilities,
 		Coverage:           coverage,
 		CompetenceProfiles: competenceProfiles,

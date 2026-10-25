@@ -36,6 +36,7 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.StageAccounting = stageAccountingFor(r)
 	rep.Leads = r.ReportLeads()
 	rep.LeadChecks = r.LeadChecks
+	rep.Routes = r.ReportRoutes()
 	return rep
 }
 
@@ -107,4 +108,13 @@ func (r *ScanResult) HTMLReporter(version string) *htmlreport.Reporter {
 		rep.NotScanned = sc.NotScanned
 	}
 	return rep
+}
+
+// ReportRoutes converts the routes the authorization reader found into their
+// findings.json form. Nil when the scan read none.
+func (r *ScanResult) ReportRoutes() []report.Route {
+	if r == nil || len(r.Routes) == 0 {
+		return nil
+	}
+	return r.Routes
 }

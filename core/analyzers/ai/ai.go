@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/source"
@@ -481,7 +482,7 @@ func extractComponents(path string, content []byte) []Component {
 	name := baseName(path)
 
 	switch {
-	case name == "mcp.json":
+	case isMCPConfigName(name):
 		return extractMCPComponents(path, content)
 	case hasSuffix(name, ".prompt") || hasSuffix(name, ".prompt.md"):
 		return []Component{{
@@ -497,6 +498,15 @@ func extractComponents(path string, content []byte) []Component {
 			Path: path,
 		}}
 	}
+}
+
+// isMCPConfigName reports whether a file name is an MCP client configuration:
+// mcp.json, or a dotted variant such as the project-scoped .mcp.json that
+// Claude Code and other clients read from the repository root. Matching only
+// the bare name left that file listed as one opaque component with no servers
+// and no tool matrix.
+func isMCPConfigName(name string) bool {
+	return name == "mcp.json" || hasSuffix(name, ".mcp.json")
 }
 
 // extractMCPComponents parses an mcp.json file and extracts one inventory
@@ -538,10 +548,37 @@ func extractMCPComponents(path string, content []byte) []Component {
 			Name:    serverName,
 			Type:    "mcp_server",
 			Path:    path,
-			Details: map[string]string{"server": serverName},
+			Details: mcpServerDetails(serverName, config.MCPServers[serverName]),
 		})
 	}
 	return components
+}
+
+// mcpServerDetails records what the configuration says about how a server is
+// launched: its command and arguments, which are what a reader needs to know
+// what the server is and what it is pointed at. The environment block is
+// deliberately not copied; it is where credentials live. A definition that does
+// not decode keeps only its name.
+func mcpServerDetails(name string, raw json.RawMessage) map[string]string {
+	details := map[string]string{"server": name}
+	var def struct {
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+		URL     string   `json:"url"`
+	}
+	if err := json.Unmarshal(raw, &def); err != nil {
+		return details
+	}
+	if def.Command != "" {
+		details["command"] = def.Command
+	}
+	if len(def.Args) > 0 {
+		details["args"] = strings.Join(def.Args, " ")
+	}
+	if def.URL != "" {
+		details["transport"] = "remote"
+	}
+	return details
 }
 
 // classifyByPath returns a component type based on path segments.
