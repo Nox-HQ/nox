@@ -20,8 +20,10 @@ func TestExpandedRules_Count(t *testing.T) {
 	// IAC-286 followed into IAC-131, the same NetworkPolicy advisory over the
 	// same three kinds and the same file patterns, differing only by tolerating
 	// a space before the colon.
-	if got := len(rules); got != 224 {
-		t.Errorf("expected 224 expanded rules, got %d", got)
+	//
+	// 224 -> 227: IAC-502, IAC-503 and IAC-504 were added.
+	if got := len(rules); got != 227 {
+		t.Errorf("expected 227 expanded rules, got %d", got)
 	}
 }
 

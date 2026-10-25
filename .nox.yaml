@@ -30,6 +30,11 @@ scan:
     # nox REFUSES to refute what it cannot see (see the corpus README and
     # core/refutation_hard_test.go), and the self-scan must not flag fixtures.
     - "testdata/refutation-hard/"
+    # A hardened application and the same application after an insecure change
+    # (cli/false_allclear_e2e_test.go). The second tree is finding-bearing by
+    # construction: a literal password, a public S3 bucket, SYS_ADMIN, an MCP
+    # server rooted at /. The self-scan must not flag fixtures.
+    - "testdata/false-allclear/"
     # Intentionally finding-bearing inputs for the metamorphic corpus oracle
     # (scripts/metamorphic/sweep.py). Same rationale as the precision corpora:
     # the sweep scans them explicitly in isolated temp dirs; the self-scan must

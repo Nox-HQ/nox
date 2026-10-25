@@ -200,6 +200,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nox model`) saw none of its servers. It is now read like `mcp.json` (and
   `*.mcp.json`), and each server records its launch command and arguments (never
   its `env` block).
+- **Configurations that got worse used to scan the same as, or better than, the
+  ones before them.** Measured on a hardened application and the same
+  application after a "just for debugging" commit: seven insecure changes
+  produced no finding, and two hardened settings produced noise.
+  - *MCP-002* matched home-directory prefixes only, so a filesystem server
+    rooted at `/` (or `C:\`, `/etc`, `/var`, `/root`, `${HOME}`) scanned clean
+    while `/Users/alice/project` was critical. The root must be a whole `args`
+    element, so `a/b` and URLs do not match.
+  - *MCP-003* now also reads the `env` block: `ALLOW_ALL=1`, `DANGEROUSLY_*`,
+    `UNSAFE_*`, `SKIP_PERMISSIONS` and the like, when switched on (`"0"` is the
+    safe spelling). A server merely named `shell` is still not evidence.
+  - *MCP-025* (new): an MCP server launched with `npx`/`pnpx`/`bunx`/`uvx`/`pipx`
+    and no exact package version (none, `@latest`, a range) fetches whatever the
+    registry serves at every launch. MCP-015 cannot see this: the definition's
+    hash does not change when the package behind it does.
+  - *IAC-502* (new): a credential-named environment variable (`PASSWORD`,
+    `SECRET`, `TOKEN`, `API_KEY`...) with a literal `value` in Kubernetes
+    manifests and Helm values, and *IAC-503* (new) for a Compose
+    `- NAME=literal` entry. Moving a Secret out of `valueFrom: secretKeyRef` was
+    invisible because every key-based rule (IAC-225, SEC-080) reads `name:
+    DB_PASSWORD` and `value: ...` as two unrelated scalars. Paths
+    (`DB_PASSWORD_FILE`), URLs, header names, identifiers, templates
+    (`{{ }}`, `${}`, `$()`), empty values and placeholders do not fire.
+  - *IAC-504* (new): Terraform `aws_s3_bucket_public_access_block` with any of
+    `block_public_acls`, `block_public_policy`, `ignore_public_acls`,
+    `restrict_public_buckets` set to `false` (IAC-052 is CloudFormation only).
+  - *IAC-302* and *IAC-028* read only `add:` followed by a block list whose FIRST
+    item was dangerous, so `capabilities: {add: [SYS_ADMIN]}` replacing
+    `drop: [ALL]` was silent. Flow-style lists and any list position now match;
+    `drop: [SYS_ADMIN]` and `add: [NET_BIND_SERVICE]` do not.
+  - *AI-AGENT-009* (new) and the `sql_exec` capability in
+    `ai.inventory.json`'s `tool_permission_matrix`: a function-calling tool whose
+    parameter is a SQL statement (`sql`, `sql_query`, ..., or `query` on a tool
+    described as SQL). The statement is the model's output, so a prompt
+    injection chooses it; a tool that takes an id and runs a fixed statement is
+    not flagged. The evidence is the parameter schema, not the tool's name.
+  - *IAC-135* (missing seccomp profile) fired on the container of a pod whose
+    pod-level `securityContext` sets `seccompProfile: RuntimeDefault`, which the
+    container inherits. A refiner now parses the document and drops the finding
+    when the workload's pod-level `securityContext` sets a profile; the rule's
+    firing domain and finding locations are unchanged, so baselines and waivers
+    written against it keep matching.
+  - *IAC-296* ("verify TLS termination") fired on every Ingress, including ones
+    with a `tls:` block. It keeps its ID and now makes a claim that can be
+    checked and that IAC-149 (no `tls:` at all) does not: an Ingress that HAS a
+    tls block serves a `spec.rules[].host` no `spec.tls[].hosts` entry covers
+    (a wildcard covers one label), or has a tls entry with no `secretName` and
+    no cert-manager/controller annotation providing a certificate. It never
+    fires with IAC-149, and a Helm template (`{{ }}`) is not evaluated.
+  - *IAC-144* reported `valueFrom: secretKeyRef`, the documented way to pass one
+    credential and the form IAC-502 tells people to move to. It now reports
+    `envFrom: secretRef`, which hands every key of the Secret to the process.
+
 - **Which duplicate survived dedup depended on analyzer completion order.**
   `Deduplicate` kept the first finding it met for a fingerprint and position,
   and the analyzers hand their results over in goroutine completion order, so

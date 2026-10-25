@@ -40,6 +40,12 @@
       "classification": "value-shape-required",
       "pr": 853,
       "reason": "A passport number is upper-case and contains a digit (US: 9 digits or a letter and 8 digits; UK: 9 digits), or is a German serial of nine characters from the vowel-free PassV alphabet. Every corpus drop was read: all six are hackathon-starter's `const passport = require('passport')` / `require('passport-strategy')` lines, where the case-insensitive value class read `require` as the number. Generated real-format values in a passport-number key still fire, and the JSON key form (`\"passport_number\": ...`, `\"passport\": {\"number\": ...}`) now fires where it was missed before."
+    },
+    {
+      "rule": "IAC-296",
+      "classification": "applicability-narrowed",
+      "pr": 862,
+      "reason": "IAC-296 matched `kind: Ingress` and so fired on every Ingress; its claim is now that an Ingress WITH a tls block serves a host no tls entry covers, or has a tls entry with no secretName and no certificate-provisioning annotation. Both corpus drops were read. kubernetes/examples AI/model-serving-tensorflow/ingress.yaml has no tls block at all: that is IAC-149's condition, IAC-149 still reports it on the same line, and nothing about a covered host or a certificate source can be said of it. stefanprodan/podinfo charts/podinfo/templates/ingress.yaml is a Helm template whose tls block sits under `{{- if .Values.ingress.tls }}` and whose hosts are `{{ .host }}`; the rule cannot render it, so it reports nothing rather than guess. No Ingress with a covered-host or certificate gap lost its finding."
     }
   ]
 }
