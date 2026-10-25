@@ -2459,8 +2459,18 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.De
 		if f.Status != "" && f.Status != findings.StatusNew {
 			continue // already suppressed
 		}
-		if m.Match(&f) != nil {
+		if e, via := m.MatchHow(&f); e != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
+			if via == baseline.ViaAliasFingerprint {
+				// Say it, because it is not the usual path: the entry was
+				// written against a finding this one replaced (a retired rule,
+				// or a vulnerability merged with its duplicate id).
+				if items[i].Metadata == nil {
+					items[i].Metadata = map[string]string{}
+				}
+				items[i].Metadata["baseline_match"] = via
+				items[i].Metadata["baseline_entry"] = e.Fingerprint
+			}
 		}
 	}
 }

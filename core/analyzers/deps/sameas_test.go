@@ -28,7 +28,7 @@ func TestCollapseSameAs_OneVulnerabilityUnderTwoIdsIsOne(t *testing.T) {
 		rec("GO-2026-1", []string{"GHSA-a"}, "", "GHSA-a"),
 		rec("GHSA-a", []string{"GO-2026-1"}, "", "GO-2026-1", "CVE-1"),
 	}
-	got := collapseSameAs(in)
+	got := mustCollapse(in)
 	if len(got) != 1 {
 		t.Fatalf("got %v", ids(got))
 	}
@@ -45,7 +45,7 @@ func TestCollapseSameAs_NeverLowersSeverity(t *testing.T) {
 		rec("GO-9", []string{"GHSA-a"}, "LOW", "GHSA-a"),
 	}
 	for _, order := range [][]int{{0, 1}, {1, 0}} {
-		got := collapseSameAs([]vulnsource.Record{in[order[0]], in[order[1]]})
+		got := mustCollapse([]vulnsource.Record{in[order[0]], in[order[1]]})
 		if len(got) != 1 || got[0].ID != "GHSA-a" || got[0].DatabaseSpecific.Severity != "CRITICAL" {
 			t.Errorf("order %v: got %+v", order, got)
 		}
@@ -57,7 +57,7 @@ func TestCollapseSameAs_TransitiveAndIndependent(t *testing.T) {
 		rec("A", []string{"B"}, ""), rec("B", []string{"A", "C"}, ""), rec("C", []string{"B"}, ""),
 		rec("OTHER", nil, ""),
 	}
-	got := collapseSameAs(in)
+	got := mustCollapse(in)
 	if !reflect.DeepEqual(ids(got), []string{"A", "OTHER"}) {
 		t.Errorf("got %v, want [A OTHER]", ids(got))
 	}
@@ -67,7 +67,7 @@ func TestCollapseSameAs_TransitiveAndIndependent(t *testing.T) {
 // as aliases: OSV.dev and an older service behave exactly as before.
 func TestCollapseSameAs_AliasesAloneJoinNothing(t *testing.T) {
 	in := []vulnsource.Record{rec("GO-1", nil, "", "GHSA-a"), rec("GHSA-a", nil, "", "GO-1")}
-	if got := collapseSameAs(in); len(got) != 2 {
+	if got := mustCollapse(in); len(got) != 2 {
 		t.Errorf("got %v", ids(got))
 	}
 }
@@ -75,7 +75,7 @@ func TestCollapseSameAs_AliasesAloneJoinNothing(t *testing.T) {
 // A same_as naming a record that is not in this answer joins nothing.
 func TestCollapseSameAs_DanglingReferenceJoinsNothing(t *testing.T) {
 	in := []vulnsource.Record{rec("A", []string{"MISSING"}, "")}
-	if got := collapseSameAs(in); len(got) != 1 || got[0].ID != "A" {
+	if got := mustCollapse(in); len(got) != 1 || got[0].ID != "A" {
 		t.Errorf("got %v", ids(got))
 	}
 }
@@ -96,4 +96,9 @@ func TestAddProvenanceMetadata_NoWallClockForLive(t *testing.T) {
 	if len(m) != 0 {
 		t.Errorf("a record with no provenance gained metadata: %v", m)
 	}
+}
+
+func mustCollapse(in []vulnsource.Record) []vulnsource.Record {
+	out, _ := collapseSameAs(in)
+	return out
 }

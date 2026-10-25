@@ -25,7 +25,10 @@ import (
 // aliases, because a waiver or baseline written against either name must keep
 // matching. A source that sends no nox_same_as (OSV.dev, an older service)
 // leaves the list untouched.
-func collapseSameAs(recs []vulnsource.Record) []vulnsource.Record {
+//
+// The second result maps each survivor's id to the records it absorbed, as they
+// arrived, so the caller can recover what their findings used to be.
+func collapseSameAs(recs []vulnsource.Record) (survivors []vulnsource.Record, absorbed map[string][]vulnsource.Record) {
 	linked := false
 	for i := range recs {
 		if len(recs[i].SameAs) > 0 {
@@ -34,7 +37,7 @@ func collapseSameAs(recs []vulnsource.Record) []vulnsource.Record {
 		}
 	}
 	if !linked {
-		return recs
+		return recs, nil
 	}
 
 	index := make(map[string]int, len(recs))
@@ -73,11 +76,18 @@ func collapseSameAs(recs []vulnsource.Record) []vulnsource.Record {
 	}
 
 	out := make([]vulnsource.Record, 0, len(groups))
+	absorbed = map[string][]vulnsource.Record{}
 	for _, r := range roots {
-		out = append(out, mergeGroup(recs, groups[r]))
+		merged := mergeGroup(recs, groups[r])
+		out = append(out, merged)
+		for _, m := range groups[r] {
+			if recs[m].ID != merged.ID {
+				absorbed[merged.ID] = append(absorbed[merged.ID], recs[m])
+			}
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
+	return out, absorbed
 }
 
 func mergeGroup(recs []vulnsource.Record, members []int) vulnsource.Record {

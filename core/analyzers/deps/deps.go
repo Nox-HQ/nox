@@ -712,18 +712,28 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 			for pkgIdx, osvVulns := range vulnMap {
 				pkg := pkgs[pkgIdx]
-				osvVulns = collapseSameAs(osvVulns)
+				osvVulns, absorbed := collapseSameAs(osvVulns)
 				var domainVulns []Vulnerability
 
-				for _, ov := range osvVulns {
+				// emit builds the finding for one record. It is also run for
+				// the records a survivor absorbed, into a scratch set, to learn
+				// the fingerprint each one's finding had before the merge: the
+				// survivor answers to those too (AliasFingerprints), so a
+				// baseline written when the duplicates were separate findings
+				// still matches. Exactly the old finding, not a guess from ids:
+				// a different advisory or version has a different message and
+				// so a different fingerprint.
+				emit := func(ov osvVuln, into *findings.FindingSet, aliasFPs []string) {
 					sev := mapOSVSeverity(ov.Severity, ov.DatabaseSpecific)
-					domainVulns = append(domainVulns, Vulnerability{
-						ID:       ov.ID,
-						Summary:  ov.Summary,
-						Severity: sev,
-						Aliases:  ov.Aliases,
-						Details:  ov.Details,
-					})
+					if into == fs {
+						domainVulns = append(domainVulns, Vulnerability{
+							ID:       ov.ID,
+							Summary:  ov.Summary,
+							Severity: sev,
+							Aliases:  ov.Aliases,
+							Details:  ov.Details,
+						})
+					}
 
 					lockfilePath := ""
 					if pkgIdx < len(sources) {
@@ -835,7 +845,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// far nox got and where it stopped.
 					message += " — " + verdict.Describe()
 
-					fs.Add(findings.Finding{
+					into.Add(findings.Finding{
 						RuleID:     "VULN-001",
 						Severity:   sev,
 						Confidence: findings.ConfidenceHigh,
@@ -843,9 +853,21 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							FilePath:  lockfilePath,
 							StartLine: 1,
 						},
-						Message:  message,
-						Metadata: meta,
+						Message:           message,
+						Metadata:          meta,
+						AliasFingerprints: aliasFPs,
 					})
+				}
+				for _, ov := range osvVulns {
+					var fps []string
+					for _, ab := range absorbed[ov.ID] {
+						scratch := findings.NewFindingSet()
+						emit(ab, scratch, nil)
+						for _, f := range scratch.Findings() {
+							fps = append(fps, f.Fingerprint)
+						}
+					}
+					emit(ov, fs, dedupStrings(fps))
 				}
 
 				inventory.SetVulnerabilities(pkgIdx, domainVulns)
