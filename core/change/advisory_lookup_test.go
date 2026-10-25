@@ -81,3 +81,24 @@ func TestFromReportRecordsWhyAdvisoriesWereNotLookedUp(t *testing.T) {
 		t.Errorf("legacy online report marked as not looked up: %q", got)
 	}
 }
+
+// A lookup the source said was incomplete is not a clean one: an advisory
+// absent from it may simply not have been fetched, so comparing it against a
+// full scan would report every missing advisory as resolved.
+func TestIncompleteLookupIsNotComparedAndReadsFromTheReport(t *testing.T) {
+	rep := report.JSONReport{Meta: report.Meta{AdvisoryLookup: report.AdvisoryLookupIncomplete}}
+	s := FromReport(rep, nil, "this run")
+	if s.AdvisoryLookup != LookupIncomplete {
+		t.Fatalf("AdvisoryLookup = %q, want %q", s.AdvisoryLookup, LookupIncomplete)
+	}
+
+	adv := vuln("package-lock.json", "qs", "6.13.0", "GHSA-q", "", findings.SeverityMedium)
+	full := st("previous run", adv)
+	d := Compare(full, s)
+	if len(d.Resolved) != 0 {
+		t.Errorf("an advisory missing from an incomplete lookup read as resolved: %v", d.Resolved)
+	}
+	if !hasCaveat(d, LookupIncomplete) {
+		t.Errorf("caveat missing: %v", d.Caveats)
+	}
+}

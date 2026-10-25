@@ -46,6 +46,14 @@ silence is not withholding, and the two are never confused. Only when the
 reference is unreachable as well does the scan report an advisory under-report
 (`osv_lookup`), the one degradation that can hide a finding.
 
+An answer the service marks incomplete is not an answer of "none". Each query
+result may carry `nox_coverage` (`complete`, `incomplete`, `unsupported`); a
+partial one raises an `intel_incomplete` degradation naming the packages and
+sets `meta.advisory_lookup` to `incomplete` in `findings.json`, so `nox diff`
+does not compare its advisories against a full scan. A plain OSV.dev response
+carries no coverage statement and raises nothing: it claims neither
+completeness nor its absence.
+
 ## Turning it off, at every level
 
 ```yaml

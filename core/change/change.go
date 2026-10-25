@@ -90,6 +90,9 @@ const (
 	LookupOffline  = "it was offline"
 	LookupDisabled = "vulnerability lookups were disabled"
 	LookupFailed   = "its vulnerability lookup failed"
+	// LookupIncomplete: the source answered but said it did not fully check
+	// some packages, so its advisories are a floor, not the whole set.
+	LookupIncomplete = "its vulnerability lookup was incomplete"
 )
 
 // FromReport builds a State from a loaded findings.json and, optionally, the
@@ -112,6 +115,9 @@ func FromReport(rep report.JSONReport, inv *ai.Inventory, label string) State {
 		if d.Kind == string(degrade.OSV) {
 			s.AdvisoryLookup = LookupFailed
 		}
+	}
+	if rep.Meta.AdvisoryLookup == report.AdvisoryLookupIncomplete && s.AdvisoryLookup == "" {
+		s.AdvisoryLookup = LookupIncomplete
 	}
 	switch {
 	case rep.Meta.Offline:
