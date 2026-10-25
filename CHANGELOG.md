@@ -43,6 +43,26 @@ instead of hidden machine state.
   per-record findings, so a baseline entry for the dropped id reads as fixed.
   Requires nox-core v0.6.0.
 
+||||||| parent of 449b2f8 (feat(authz): NestJS controllers and DRF @action routes in the route table)
+- **NestJS controllers join the route table.** `@Controller`/`@Get`/`@Post`...
+  (path, array and object forms, `setGlobalPrefix`, URI versioning) are read into
+  the table `nox model`, AUTHN-001 and WEBHOOK-001 use. `@UseGuards(...)` on the
+  class or method sets authentication (a guard named like an authenticator) or
+  authorization (a role or permission guard); a guard registered application-wide
+  (`app.useGlobalGuards`, `APP_GUARD`) covers the controllers under the
+  application that registers it, not every application in a monorepo. `@Public()`
+  and its lookalikes declare a route public; rate limiters are not access
+  control; application middleware, Fastify hooks and guards it cannot name are
+  never leads. Only files importing `@nestjs/*` are read (routing-controllers and
+  tsoa use the same decorators), and a path built from a constant is skipped, not
+  guessed. A webhook handler is checked together with the injected service it
+  delegates to; one it cannot read is silent, not a finding.
+- **DRF `@action` routes.** A viewset's `@action(detail=..., methods=[...],
+  url_path=...)` methods are routes of their own (`/orders/:pk/cancel`), with the
+  action's own `permission_classes`/`authentication_classes` read when it sets
+  them. Also fixes a false all-clear: an action's `permission_classes=` was read
+  as the viewset's, so one `AllowAny` action made every standard route public and
+  one `IsAuthenticated` action hid the lead on an unguarded `DELETE`.
 - **Next.js and Django routes join the route table.** Next.js route handlers
   (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
   prefixes, function and class views, DRF routers and viewsets) are read into
@@ -54,7 +74,7 @@ instead of hidden machine state.
   = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
   auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
   find are never leads. AUTHZ-001's object-level analysis does not run over
-  these handlers, and "Checks completed" now says so. NestJS is still not read.
+  these handlers, and "Checks completed" now says so.
 - **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
   decision `nox advisories` computes; the rendering and the "scan incomplete"
   rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
