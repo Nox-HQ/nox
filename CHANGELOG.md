@@ -25,6 +25,20 @@ instead of hidden machine state.
 
 ### Added
 
+- **MCP advisory feed consumer (`MCP-026`).** NOX Intelligence's signed feed of
+  public advisories for MCP packages is joined with the MCP servers a scan finds:
+  "an advisory affects this MCP server package" when an exact pinned version
+  lies inside an interval the advisory publishes, with the feed's basis shown
+  (a package classified by advisory text only is low confidence). A server
+  launched through `npx`/`uvx` with no pinned version cannot be range-matched and
+  is reported at info severity as exactly that. The feed is verified against a
+  pinned public key (`scan.mcp_feed.signature_key_path`) with the slopsquat
+  feed's discipline and fails closed; it is cached and works offline from the
+  verified cache. A feed the service has not published, a missing key, or an
+  offline scan with no cache is a `mcp_feed` degradation saying the servers were
+  not checked, never "no advisories". See `docs/mcp-advisory-feed.md`. The
+  package-runner parsing MCP-025 uses moved to `core/mcpconfig` so both read a
+  launch the same way.
 - **`nox intel forget` rotates the reporter salt** once the service confirms
   erasure, so consenting again is a new, unlinkable reporter instead of the
   erased one.

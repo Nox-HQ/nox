@@ -1203,6 +1203,15 @@ feed fails closed (predictive dimension off, a visible `slop_feed` degradation
 recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
 trust model, regeneration, and the responsible-disclosure note.
 
+### MCP advisory feed
+
+`scan.mcp_feed` joins the MCP servers a scan finds with NOX Intelligence's
+signed feed of public advisories for MCP packages and reports `MCP-026`, "an
+advisory affects this MCP server package", for a server whose pinned version an
+advisory's own interval contains. It needs a pinned public key
+(`signature_key_path`), and says so when it is missing. See
+[docs/mcp-advisory-feed.md](mcp-advisory-feed.md).
+
 ### Conditional Severity
 
 Override severity based on rule patterns and paths:

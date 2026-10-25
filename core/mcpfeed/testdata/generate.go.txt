@@ -1,0 +1,48 @@
+package main
+
+import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/nox-hq/nox-core/slopfeed"
+	"github.com/nox-hq/nox-intelligence/internal/domain"
+)
+
+func main() {
+	seed := sha256.Sum256([]byte("nox mcpfeed consumer test key - not a secret"))
+	priv := ed25519.NewKeyFromSeed(seed[:])
+	pub := priv.Public().(ed25519.PublicKey)
+	f := &domain.MCPFeed{
+		Version: "2026.10.26", GeneratedAt: "2026-10-26T05:41:00Z", Source: "osv-mirror",
+		Entries: []domain.MCPEntry{
+			{Ecosystem: "npm", Package: "mcp-server-x", AdvisoryID: "GHSA-zzzz-0002", Aliases: []string{"CVE-2026-2", "CVE-2026-1"}, Kind: "vulnerability",
+				Component: "mcp_server", Basis: "package_name", Rule: "name_tokens:mcp+server", Summary: "Path traversal <script> & more in mcp-server-x",
+				Ranges: []domain.MCPRange{{Introduced: "2.0.0", Fixed: "2.1.0"}, {Introduced: "0", Fixed: "1.4.2"}}, Modified: "2026-10-01T00:00:00Z"},
+			{Ecosystem: "npm", Package: "@modelcontextprotocol/server-filesystem", AdvisoryID: "GHSA-aaaa-0001", Aliases: []string{}, Kind: "vulnerability",
+				Component: "mcp_sdk", Basis: "package_name", Rule: "scope:@modelcontextprotocol", Summary: "Directory escape",
+				Ranges: []domain.MCPRange{{Introduced: "0", Fixed: "2025.7.1"}}},
+			{Ecosystem: "PyPI", Package: "mcp-server-git", AdvisoryID: "GHSA-pppp-0003", Aliases: []string{"CVE-2026-3"}, Kind: "vulnerability",
+				Component: "mcp_server", Basis: "package_name", Rule: "name_tokens:mcp+server", Summary: "Argument injection",
+				Ranges: []domain.MCPRange{{Introduced: "0", LastAffected: "0.6.2"}}},
+			{Ecosystem: "PyPI", Package: "some-library", AdvisoryID: "GHSA-tttt-0004", Aliases: []string{}, Kind: "vulnerability",
+				Component: "mcp_in_advisory_text", Basis: "advisory_text", Rule: "text:\"model context protocol\"", Summary: "Library used by MCP servers",
+				Ranges: []domain.MCPRange{{Introduced: "1.0.0", Fixed: "1.5.0"}}},
+			{Ecosystem: "npm", Package: "evil-mcp-tool", AdvisoryID: "MAL-2026-1", Aliases: []string{}, Kind: "malicious_package",
+				Component: "mcp_package", Basis: "package_name", Rule: "name_token:mcp", Summary: "Malicious code in evil-mcp-tool",
+				Ranges: []domain.MCPRange{{Introduced: "0"}}},
+			{Ecosystem: "npm", Package: "candidate-mcp-server", AdvisoryID: "NOX-CAND-0007", Aliases: []string{}, Kind: "published_candidate",
+				Component: "mcp_server", Basis: "package_name", Rule: "name_tokens:mcp+server", Summary: "Disclosed by a person",
+				Ranges: []domain.MCPRange{}, VersionRange: ">=1.0 <1.3"},
+		},
+	}
+	if err := f.Sign(priv, "test-key"); err != nil {
+		panic(err)
+	}
+	b, _ := json.MarshalIndent(f, "", "  ")
+	_ = os.WriteFile(os.Args[1]+"/feed.json", b, 0o644)
+	_ = os.WriteFile(os.Args[1]+"/pub.pem", []byte(slopfeed.EncodePublicKeyPEM(pub)), 0o644)
+	fmt.Println("wrote", len(f.Entries), "entries; digest", f.Digest)
+}

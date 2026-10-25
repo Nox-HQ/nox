@@ -1,0 +1,122 @@
+{
+  "schema_version": "mcp-advisories/v1",
+  "version": "2026.10.26",
+  "generated_at": "2026-10-26T05:41:00Z",
+  "source": "osv-mirror",
+  "claim": "Each entry: a public advisory affects this package, and the package (by name) or the advisory (by its own text) concerns the Model Context Protocol. Not a statement that MCP packages are unsafe, that an application using one is exploitable, or that a package not listed is safe.",
+  "digest": "sha256:f216baa9663fb09a992980f898551c3af9a8d0611ff26c33409c300b9bc0e08f",
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "test-key",
+    "value": "oPWChbCisTxoaN26BuLRTI01mmWLbWz2aRn5yAD/ad4B3FggutC2v+5ykj00YmBrS6SYDwKufD+XMcNIHxgpAg=="
+  },
+  "entries": [
+    {
+      "ecosystem": "npm",
+      "package": "mcp-server-x",
+      "advisory_id": "GHSA-zzzz-0002",
+      "aliases": [
+        "CVE-2026-2",
+        "CVE-2026-1"
+      ],
+      "kind": "vulnerability",
+      "component": "mcp_server",
+      "basis": "package_name",
+      "rule": "name_tokens:mcp+server",
+      "summary": "Path traversal \u003cscript\u003e \u0026 more in mcp-server-x",
+      "ranges": [
+        {
+          "introduced": "2.0.0",
+          "fixed": "2.1.0"
+        },
+        {
+          "introduced": "0",
+          "fixed": "1.4.2"
+        }
+      ],
+      "modified": "2026-10-01T00:00:00Z"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "advisory_id": "GHSA-aaaa-0001",
+      "aliases": [],
+      "kind": "vulnerability",
+      "component": "mcp_sdk",
+      "basis": "package_name",
+      "rule": "scope:@modelcontextprotocol",
+      "summary": "Directory escape",
+      "ranges": [
+        {
+          "introduced": "0",
+          "fixed": "2025.7.1"
+        }
+      ]
+    },
+    {
+      "ecosystem": "PyPI",
+      "package": "mcp-server-git",
+      "advisory_id": "GHSA-pppp-0003",
+      "aliases": [
+        "CVE-2026-3"
+      ],
+      "kind": "vulnerability",
+      "component": "mcp_server",
+      "basis": "package_name",
+      "rule": "name_tokens:mcp+server",
+      "summary": "Argument injection",
+      "ranges": [
+        {
+          "introduced": "0",
+          "last_affected": "0.6.2"
+        }
+      ]
+    },
+    {
+      "ecosystem": "PyPI",
+      "package": "some-library",
+      "advisory_id": "GHSA-tttt-0004",
+      "aliases": [],
+      "kind": "vulnerability",
+      "component": "mcp_in_advisory_text",
+      "basis": "advisory_text",
+      "rule": "text:\"model context protocol\"",
+      "summary": "Library used by MCP servers",
+      "ranges": [
+        {
+          "introduced": "1.0.0",
+          "fixed": "1.5.0"
+        }
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "package": "evil-mcp-tool",
+      "advisory_id": "MAL-2026-1",
+      "aliases": [],
+      "kind": "malicious_package",
+      "component": "mcp_package",
+      "basis": "package_name",
+      "rule": "name_token:mcp",
+      "summary": "Malicious code in evil-mcp-tool",
+      "ranges": [
+        {
+          "introduced": "0"
+        }
+      ]
+    },
+    {
+      "ecosystem": "npm",
+      "package": "candidate-mcp-server",
+      "advisory_id": "NOX-CAND-0007",
+      "aliases": [],
+      "kind": "published_candidate",
+      "component": "mcp_server",
+      "basis": "package_name",
+      "rule": "name_tokens:mcp+server",
+      "summary": "Disclosed by a person",
+      "ranges": [],
+      "version_range": "\u003e=1.0 \u003c1.3"
+    }
+  ]
+}
