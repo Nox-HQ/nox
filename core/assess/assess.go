@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nox-hq/nox-core/degrade"
+	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/catalog"
@@ -121,7 +123,44 @@ type Issue struct {
 	FixedIn string
 	// VulnClass is the taint class a code issue shares, "" otherwise.
 	VulnClass string
+	// Ecosystem, Package and Version name the dependency of a KindNoFix issue,
+	// so the plan can say why nox could not move it.
+	Ecosystem, Package, Version string
+	// Attention is set when the issue needs a person's attention now, as
+	// opposed to being a lower-priority observation. See NeedsAttention.
+	Attention bool
 	rank      int
+}
+
+// NeedsAttention is the one definition of "needs attention", shared by the
+// assessment headline and the fix plan. A finding needs attention when it is
+// critical or high severity (the same line `nox ci-gate` draws for a build),
+// or medium severity that the analyzer is highly confident about. Everything
+// else (a medium the analyzer is unsure of, any low or unrated finding) is a
+// lower-priority observation: it stays in findings.json and SARIF and in the
+// verbose listing, it just is not counted as something to act on today.
+//
+// The rule uses each finding's own severity and confidence, never the worst of
+// one and the best of the other across a group, so a group is not promoted by
+// a critical that is a guess plus an unrelated medium that is certain.
+func NeedsAttention(s findings.Severity, c findings.Confidence) bool {
+	switch s {
+	case findings.SeverityCritical, findings.SeverityHigh:
+		return true
+	case findings.SeverityMedium:
+		return c == findings.ConfidenceHigh
+	}
+	return false
+}
+
+// anyAttention reports whether any finding at idx needs attention.
+func anyAttention(ff []findings.Finding, idx []int) bool {
+	for _, i := range idx {
+		if NeedsAttention(ff[i].Severity, ff[i].Confidence) {
+			return true
+		}
+	}
+	return false
 }
 
 // IssueKind classifies an issue by what resolves it.
@@ -169,6 +208,11 @@ type Report struct {
 	Issues []Issue
 	// FindingCount is how many findings the issues stand for in total.
 	FindingCount int
+	// AttentionIssues and AttentionFindings count the issues that need
+	// attention (Issue.Attention) and the findings they stand for. The rest of
+	// Issues are lower-priority observations; nothing is dropped from Issues.
+	AttentionIssues   int
+	AttentionFindings int
 	// Checked names each concern the scan covered.
 	Checked []string
 	// NotChecked lists what the scan did not cover, and how to enable it.
@@ -188,6 +232,12 @@ type Report struct {
 func Build(in Input) Report {
 	r := Report{FindingCount: len(in.Findings)}
 	r.Issues = issues(in)
+	for _, is := range r.Issues {
+		if is.Attention {
+			r.AttentionIssues++
+			r.AttentionFindings += is.Findings
+		}
+	}
 	r.Checked, r.NotChecked = coverage(in)
 	r.Undetermined = undetermined(in.Findings)
 	r.Verify = verifications(in)
@@ -216,6 +266,9 @@ func issues(in Input) []Issue {
 
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
+		if a.Attention != b.Attention {
+			return a.Attention
+		}
 		if a.rank != b.rank {
 			return a.rank > b.rank
 		}
@@ -273,7 +326,8 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 	}
 	up := a
 	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
-		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf)}
+		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf),
+		Attention: anyAttention(ff, a.Findings)}
 }
 
 // inDir names the manifest's directory when it is not the scan root, so a
@@ -329,7 +383,9 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 				name, inDir(k.manifest), vulns, sev)
 		}
 		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
-			Fingerprints: fingerprints(ff, idx), FixedIn: fix.BestFix(fixes), rank: rank(sev, conf)})
+			Fingerprints: fingerprints(ff, idx), FixedIn: fix.BestFix(fixes), rank: rank(sev, conf),
+			Ecosystem: k.eco, Package: k.pkg, Version: k.version,
+			Attention: anyAttention(ff, idx)})
 	}
 	return out
 }
@@ -361,9 +417,10 @@ func codeIssues(in Input, used []bool) []Issue {
 		}
 		title := issueTitle(in.Rules, group, k.class)
 		s := fmt.Sprintf("%s %s (%s severity, %s confidence).",
-			title, where(ff, idx), sev, confidenceOrUnknown(conf))
+			title, where(ff, idx), severityOrUnrated(sev), confidenceOrUnknown(conf))
 		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
-			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, rank: rank(sev, conf)})
+			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, rank: rank(sev, conf),
+			Attention: anyAttention(ff, idx)})
 	}
 	return out
 }
@@ -573,6 +630,29 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 		if k.kind == "plugin" && !k.blocking {
 			out = append(out, optionalChecks(g)...)
 			continue
+		}
+		if k.kind == string(degrade.IntelIncomplete) {
+			var mirror, rest []nox.Degradation
+			for _, d := range g {
+				if strings.Contains(d.Detail, osvsource.MirrorOnlyNote) {
+					mirror = append(mirror, d)
+				} else {
+					rest = append(rest, d)
+				}
+			}
+			if len(mirror) > 0 {
+				// A specific statement, not the generic partial-answer line:
+				// the cause is known and so is what it costs.
+				out = append(out, Limit{
+					Summary:  "Answered from NOX Intelligence's mirror; live OSV unavailable: advisories published or changed since the mirror last synced may be missing.",
+					Action:   "re-run when OSV is reachable for a complete answer",
+					Blocking: k.blocking,
+				})
+			}
+			if len(rest) == 0 {
+				continue
+			}
+			g = rest
 		}
 		head := kindHeadlines[k.kind]
 		if head == "" {
@@ -805,6 +885,15 @@ func rank(s findings.Severity, c findings.Confidence) int {
 		cw = 1
 	}
 	return severityWeight(s) * cw
+}
+
+// severityOrUnrated names a finding whose rule states no severity, instead of
+// printing an empty word.
+func severityOrUnrated(s findings.Severity) string {
+	if s == "" {
+		return "unrated"
+	}
+	return string(s)
 }
 
 func confidenceOrUnknown(c findings.Confidence) string {

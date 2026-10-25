@@ -76,20 +76,46 @@ func renderIssues(b *strings.Builder, r Report, limit int) {
 		b.WriteString("No issues found in what was checked.\n")
 		return
 	}
+	attention := r.Issues[:r.AttentionIssues]
+	observations := r.Issues[r.AttentionIssues:]
+	renderAttention(b, r, attention, limit)
+	if len(observations) == 0 {
+		return
+	}
+	obsFindings := r.FindingCount - r.AttentionFindings
+	label := plural(len(observations), "lower-priority observation", "lower-priority observations")
+	if limit > 0 {
+		fmt.Fprintf(b, "\nPlus %s (%s): low severity, or a check that is unsure of the finding. "+
+			"Run with --verbose to list them; nothing is hidden from findings.json or results.sarif.\n",
+			label, plural(obsFindings, "finding", "findings"))
+		return
+	}
+	fmt.Fprintf(b, "\n%s (%s): low severity, or a check that is unsure of the finding.\n",
+		capitalize(label), plural(obsFindings, "finding", "findings"))
+	for i, is := range observations {
+		fmt.Fprintf(b, "  %d. %s\n", len(attention)+i+1, is.Summary)
+	}
+}
+
+func renderAttention(b *strings.Builder, r Report, attention []Issue, limit int) {
+	if len(attention) == 0 {
+		b.WriteString("No issues need attention.\n")
+		return
+	}
 	verb := "need"
-	if len(r.Issues) == 1 {
+	if len(attention) == 1 {
 		verb = "needs"
 	}
 	fmt.Fprintf(b, "%s %s attention (%s).\n",
-		plural(len(r.Issues), "issue", "issues"), verb, plural(r.FindingCount, "finding", "findings"))
-	shown := r.Issues
+		plural(len(attention), "issue", "issues"), verb, plural(r.AttentionFindings, "finding", "findings"))
+	shown := attention
 	if limit > 0 && len(shown) > limit {
 		shown = shown[:limit]
 	}
 	for i, is := range shown {
 		fmt.Fprintf(b, "  %d. %s\n", i+1, is.Summary)
 	}
-	if rest := len(r.Issues) - len(shown); rest > 0 {
+	if rest := len(attention) - len(shown); rest > 0 {
 		fmt.Fprintf(b, "  ...and %s; run with --verbose to list every issue.\n",
 			plural(rest, "more issue", "more issues"))
 	}

@@ -28,6 +28,7 @@ func (s *Server) registerComplianceTools(srv *mcp.Server) {
 	srv.Tool("compliance_iso27001").
 		Description("Technical evidence from the last scan, mapped to ISO/IEC 27001:2022 Annex A controls: per control what the scan shows, what it cannot show, and the organizational evidence (policies, risk assessment, access reviews, incident records, supplier agreements) the user still needs. Use when the user asks what Nox can help with for ISO 27001. Deterministic and read-only; never states that a control is met. Needs a prior scan.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(complianceISO27001Output{}).
 		Handler(s.handleComplianceISO27001)
 }

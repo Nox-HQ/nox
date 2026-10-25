@@ -103,7 +103,21 @@ nox scan . --only secrets
 
 # Everything except dependency lookups
 nox scan . --skip deps
+
+# Byte-identical reports: pin every timestamp (Unix seconds)
+SOURCE_DATE_EPOCH=1700000000 nox scan . --offline --format all
 ```
+
+#### Reproducible output
+
+Reports carry the time they were written (`generated_at` in `findings.json`,
+the SBOM creation timestamps, the HTML report). Set `SOURCE_DATE_EPOCH` to a
+Unix time in seconds and every one of them uses it instead, so two scans of the
+same tree write byte-identical `findings.json`, `results.sarif`,
+`sbom.cdx.json`, `sbom.spdx.json`, `ai.inventory.json` and `report.html`. An
+unparseable value is ignored. The other input a scan reads from outside the tree
+is vulnerability data; `--offline` removes it, so a run with both is a pure
+function of the files. `nox scan --help` lists the variable under Environment.
 
 #### Scopes
 
@@ -1040,9 +1054,10 @@ scan:
     # shared by design from an owned one, so without this line those routes
     # are not findings: the assessment lists them under "Additional
     # verification recommended" as a two-account test, and no machine output,
-    # exit code or gate sees them. Named here, each is a finding. NestJS,
-    # Next.js, Django and other frameworks are not read. AUTHN-001 is the
-    # same arrangement for a route with no visible authentication (an
+    # exit code or gate sees them. Named here, each is a finding. Its body
+    # analysis covers Express, Fastify, Flask and FastAPI; NestJS is not read. AUTHN-001 is the
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js and Django
+    # routes, for a route with no visible authentication (an
     # administrative or account route, or any DELETE, PUT or PATCH, with no
     # auth middleware, decorator, dependency or check on the caller): a lead
     # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
@@ -2205,10 +2220,19 @@ nox serve --allowed-paths /path/to/project
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
 | `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
 
-All tools are **read-only**. Output is truncated at **1 MB**.
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`), so a client can decide what to ask a person
+about without calling it. Almost all are **read-only** and closed-world;
+`scan`, `diff` and `plugin.call_tool` are read-only but open-world (they may
+look up advisories on the network). The exceptions: `baseline_add` and
+`baseline_add_many` write the baseline file (additive, idempotent, not
+destructive), and `plugin_install` fetches and registers code that runs on your
+machine (open-world, destructive, requires `confirmed: true`). Output is
+truncated at **1 MB**.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per

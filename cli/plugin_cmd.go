@@ -194,13 +194,10 @@ func runPluginSearch(args []string) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tTRACK\tDESCRIPTION\tLATEST")
+	_, _ = fmt.Fprintln(w, "NAME\tTRACK\tDESCRIPTION\tLATEST (highest in registry index)")
 	for i := range results {
 		p := &results[i]
-		latest := ""
-		if len(p.Versions) > 0 {
-			latest = p.Versions[len(p.Versions)-1].Version
-		}
+		latest := registry.HighestVersion(p)
 		track := string(p.Track)
 		if track == "" {
 			track = "-"
@@ -216,8 +213,35 @@ func runPluginSearch(args []string) int {
 	// Migration notices go to stderr so the table on stdout stays pipeable.
 	for i := range results {
 		warnIfDeprecated(&results[i])
+		warnIfInstalledIsAhead(&results[i], st.FindPlugin(results[i].Name))
 	}
+	warnIfIndexIsStale(ctx, client, time.Now())
 	return 0
+}
+
+// warnIfInstalledIsAhead says so when the installed plugin is newer than the
+// registry index's highest version. The index is then behind what is running,
+// and its LATEST column would read as "you are up to date" about a plugin the
+// index does not know the newest version of.
+func warnIfInstalledIsAhead(p *registry.PluginEntry, installed *InstalledPlugin) {
+	if p == nil || installed == nil || !registry.InstalledIsNewerThanIndex(installed.Version, p) {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "warning: installed %s %s is newer than the registry index's highest version (%s); "+
+		"the index is behind, so LATEST here is not the newest release\n", p.Name, installed.Version, registry.HighestVersion(p))
+}
+
+// warnIfIndexIsStale says so when the oldest configured index was generated
+// more than registry.DefaultIndexMaxAge ago.
+func warnIfIndexIsStale(ctx context.Context, client *registry.Client, now time.Time) {
+	at, ok := client.OldestGeneratedAt(ctx)
+	if !ok || !registry.IndexIsStale(at, now, registry.DefaultIndexMaxAge) {
+		return
+	}
+	days := int(now.Sub(at).Hours() / 24)
+	fmt.Fprintf(os.Stderr, "warning: the registry index was generated %s (%d days ago, over the %d-day limit); "+
+		"versions listed may be out of date\n",
+		at.UTC().Format("2006-01-02"), days, int(registry.DefaultIndexMaxAge.Hours()/24))
 }
 
 // warnIfDeprecated prints a migration notice for a retired plugin.
@@ -306,7 +330,7 @@ func runPluginInfo(args []string) int {
 	if len(found.Maintainers) > 0 {
 		fmt.Printf("Maintainers: %s\n", strings.Join(found.Maintainers, ", "))
 	}
-	fmt.Printf("Versions:    %d\n", len(found.Versions))
+	fmt.Printf("Versions:    %d (latest in registry index: %s)\n", len(found.Versions), registry.HighestVersion(found))
 	for i := range found.Versions {
 		v := &found.Versions[i]
 		caps := ""
@@ -322,7 +346,9 @@ func runPluginInfo(args []string) int {
 
 	if ip := st.FindPlugin(name); ip != nil {
 		fmt.Printf("\nInstalled:   %s (trust: %s)\n", ip.Version, ip.TrustLevel)
+		warnIfInstalledIsAhead(found, ip)
 	}
+	warnIfIndexIsStale(ctx, client, time.Now())
 
 	return 0
 }

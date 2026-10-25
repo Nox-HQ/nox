@@ -191,7 +191,7 @@ type ScanResult struct {
 	Leads []Lead
 	// LeadChecks names each check that produces leads or opt-in findings and
 	// had something to read, in words that do not overclaim:
-	// "authorization (Express, Fastify, Flask, FastAPI routes; leads only)".
+	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js and Django routes; ...; leads only)".
 	// Empty when, for example, the scan saw no such routes: it then says nothing about
 	// authorization.
 	LeadChecks []string
@@ -254,8 +254,9 @@ func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 // signature verification is a finding, never a lead, so it carries no mode.
 func authzChecks(a *authz.Analyzer) []string {
 	const webhooks = " and webhook signatures (Stripe, GitHub and Slack receivers in those routes)"
+	objectLevel := "object-level checks: " + authz.ObjectLevelCoverage + " only"
 	if !a.Enabled() && !a.AuthnEnabled() {
-		return []string{"authorization and authentication (" + authz.Coverage + "; leads only)" + webhooks}
+		return []string{"authorization and authentication (" + authz.Coverage + "; " + objectLevel + "; leads only)" + webhooks}
 	}
 	mode := func(on bool, id string) string {
 		if on {
@@ -263,7 +264,7 @@ func authzChecks(a *authz.Analyzer) []string {
 		}
 		return "leads only"
 	}
-	return []string{"authorization (" + authz.Coverage + "; " + mode(a.Enabled(), authz.RuleID) +
+	return []string{"authorization (" + authz.Coverage + "; " + objectLevel + "; " + mode(a.Enabled(), authz.RuleID) +
 		") and authentication (" + mode(a.AuthnEnabled(), authz.AuthnRuleID) + ")" + webhooks}
 }
 
@@ -646,7 +647,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// an unreachable service degrades to exactly the OSV scan nox ran before.
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
 		newIntel := func(deg *degrade.Degradations) vulnsource.Source {
+			// Only this source asks for the mirror fallback, never the OSV.dev
+			// reference: it is what lets a scan keep working through an OSV
+			// outage. The answer comes back marked degraded, which the source
+			// records as a blocking intel_incomplete degradation, so the scan
+			// is honest about it rather than failing over to nothing.
 			return osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+				WithAcceptDegraded().
 				WithCache(advisoryCache)
 		}
 

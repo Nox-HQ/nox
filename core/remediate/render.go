@@ -17,8 +17,9 @@ func RenderPlan(w io.Writer, p Plan) error {
 		_, err := io.WriteString(w, b.String())
 		return err
 	}
-	fmt.Fprintf(b, "%s in %s: %d can be applied as they are, %d need your review, and %d need%s something nox does not have.\n",
+	fmt.Fprintf(b, "%s in %s (%d need attention, %s): %d can be applied as they are, %d need your review, and %d need%s something nox does not have.\n",
 		count(len(p.Items), "issue", "issues"), count(p.FindingCount, "finding", "findings"),
+		p.Attention, count(len(p.Items)-p.Attention, "lower-priority observation", "lower-priority observations"),
 		p.Safe, p.Review, p.Info, map[bool]string{true: "s", false: ""}[p.Info == 1])
 	section(b, p, ClassSafe, "Safe to apply", "Nothing here needs a decision from you.")
 	section(b, p, ClassReview, "Needs your review", "Nox can prepare these, but a person should look first.")

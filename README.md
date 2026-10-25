@@ -861,6 +861,7 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 | `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
 | `baseline_status` | `path` | Get baseline statistics |
 | `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
 | `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
@@ -877,7 +878,8 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 
 Output is truncated at 1 MB. Workspace paths are allowlisted.
 
-Most tools are read-only. The exceptions are explicit: `baseline_add` /
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`). Most tools are read-only. The exceptions are explicit: `baseline_add` /
 `baseline_add_many` write the baseline file, and `plugin_install` runs new code
 on the operator's machine and requires `confirmed: true`, which the MCP host must
 collect from a human.

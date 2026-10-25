@@ -63,8 +63,8 @@ github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELU
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
-github.com/nox-hq/nox-core v0.5.0 h1:EEBLuSW1dxW50tIGN0LX2ojCi85WlwUVOmyWA5q3/SQ=
-github.com/nox-hq/nox-core v0.5.0/go.mod h1:MQ6xDjQeSts2TGYEqGu3nzshk1mDlj/cAGT1I1KI8Ao=
+github.com/nox-hq/nox-core v0.6.0 h1:RP9xgx97aMj5aO+SDMuDUOySHC2beZnWZy7veoN2Nuc=
+github.com/nox-hq/nox-core v0.6.0/go.mod h1:MQ6xDjQeSts2TGYEqGu3nzshk1mDlj/cAGT1I1KI8Ao=
 github.com/openai/openai-go/v3 v3.82.0 h1:MIBQQt9kEfdRtiOwQy3LV4vZ+82401prZD+IoUraEw4=
 github.com/openai/openai-go/v3 v3.82.0/go.mod h1:i+lM+NFmWP+Yd+fYKEaPxUINBx+vZtRmY5gaszSfsiQ=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

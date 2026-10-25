@@ -32,6 +32,11 @@ type ToolPermissionSet struct {
 	// (file_read, http_request, shell_exec, ...). Same source as the
 	// AI-AGENT-* lattice findings.
 	Capabilities map[string][]string `json:"capabilities,omitempty"`
+	// Transport and Endpoint describe how an MCP server is reached: "stdio" (a
+	// process the client launches) or "remote" (a URL, recorded without user
+	// info or query). Empty for agents coded in source.
+	Transport string `json:"transport,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
 }
 
 // extractToolPermissions parses MCP and agent configs for tool permission
@@ -119,6 +124,7 @@ func extractMCPToolPermissions(path string, content []byte, deg *degrade.Degrada
 		var serverConfig struct {
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
+			URL     string   `json:"url"`
 		}
 		// A server entry that does not decode falls through to Tools=["*"]
 		// below (unknown/all tools). That default is the safe direction, but
@@ -144,6 +150,18 @@ func extractMCPToolPermissions(path string, content []byte, deg *degrade.Degrada
 		}
 		if len(set.Tools) == 0 {
 			set.Tools = []string{"*"} // unknown/all tools
+		}
+		set.Transport = mcpTransport(serverConfig.Command, serverConfig.URL)
+		if serverConfig.URL != "" {
+			set.Endpoint = mcpEndpoint(serverConfig.URL)
+		}
+		// What the launch configuration shows the server can do, attached to
+		// every tool the entry lists so the lattice weighs it like any agent's.
+		if caps := mcpServerCapabilities(serverConfig.Command, serverConfig.Args, serverConfig.URL); len(caps) > 0 {
+			set.Capabilities = map[string][]string{}
+			for _, t := range set.Tools {
+				set.Capabilities[t] = caps
+			}
 		}
 		sets = append(sets, set)
 	}
