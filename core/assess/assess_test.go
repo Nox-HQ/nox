@@ -261,7 +261,7 @@ func TestRenderGolden(t *testing.T) {
 				Findings: []findings.Finding{promptInjection()}, Plan: plan(t, []findings.Finding{promptInjection()}),
 				Scope: nox.FullScope(), Packages: 123, Target: ".", FindingsPath: "./findings.json",
 				Leads:      []nox.Lead{invoiceLead("GET /api/invoices/:id", "src/routes/invoices.js", 14)},
-				LeadChecks: []string{"authorization (Express routes; leads only)"},
+				LeadChecks: []string{"authorization (Express, Fastify, Flask, FastAPI routes; leads only)"},
 			},
 			limit: DefaultLimit,
 		},
@@ -271,7 +271,7 @@ func TestRenderGolden(t *testing.T) {
 			in: Input{
 				Scope: nox.FullScope(), Packages: 3, Target: ".", FindingsPath: "./findings.json",
 				Leads:      manyLeads(7),
-				LeadChecks: []string{"authorization (Express routes; leads only)"},
+				LeadChecks: []string{"authorization (Express, Fastify, Flask, FastAPI routes; leads only)"},
 			},
 			limit: DefaultLimit,
 		},

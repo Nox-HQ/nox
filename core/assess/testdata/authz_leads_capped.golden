@@ -3,7 +3,7 @@ Nox Security Assessment
 
 No issues found in what was checked.
 
-Checks completed: secrets, application code, dependencies (3 packages), infrastructure configuration, AI integrations, sensitive-data handling, supply chain and authorization (Express routes; leads only).
+Checks completed: secrets, application code, dependencies (3 packages), infrastructure configuration, AI integrations, sensitive-data handling, supply chain and authorization (Express, Fastify, Flask, FastAPI routes; leads only).
 
 Additional verification recommended:
   - Authorization: GET /api/r0/:id (src/routes/r0.js:10) loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts: request user A's record while signed in as user B.

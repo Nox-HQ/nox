@@ -61,12 +61,16 @@ var (
 
 	// forbiddenRe: the handler can answer 403 — an authorization decision is
 	// being made here, even if this reader cannot see what it tests.
-	forbiddenRe = regexp.MustCompile(`\b(?:status|sendStatus|code)\s*\(\s*403\b|\b403\s*\)|Forbidden|FORBIDDEN|HttpStatus\s*\.\s*FORBIDDEN|createError\s*\(\s*403`)
+	forbiddenRe = regexp.MustCompile(`\b(?:status|sendStatus|code)\s*\(\s*403\b|\b403\s*\)|Forbidden|FORBIDDEN|HttpStatus\s*\.\s*FORBIDDEN|createError\s*\(\s*403|\bforbidden\s*\(`)
 	// authzCallRe: a policy / ability / ownership call (CASL, casbin,
 	// accesscontrol, hand-rolled helpers).
 	authzCallRe = regexp.MustCompile(`\b(?:authori[sz]e|can|cannot|ability|accessibleBy|checkOwner\w*|isOwner\w*|assertOwner\w*|ensureOwner\w*|verifyOwner\w*|requireOwner\w*|checkAccess|hasAccess|canAccess|assertCan|enforce|permit|checkPermission\w*|hasPermission\w*|checkPolicy|policy|guard)\s*\(|\bsubject\s*\(\s*['"]|\.can\s*\(`)
 	// unauthorizedRe: an inline authentication rejection.
 	unauthorizedRe = regexp.MustCompile(`\b401\b|Unauthori[sz]ed|UNAUTHORI[SZ]ED`)
+
+	// jwtVerifyRe: `await request.jwtVerify()` (@fastify/jwt) rejects a caller
+	// with no valid token: the handler authenticates the caller itself.
+	jwtVerifyRe = regexp.MustCompile(`\b(?:req|request)\s*\.\s*jwtVerify\s*\(`)
 
 	responseRecvRe = regexp.MustCompile(`^(?:res|response|reply|ctx\s*\.\s*body|console|logger|log|this\s*\.\s*logger)\b`)
 	nonGatingCalls = map[string]bool{"json": true, "send": true, "render": true, "status": true, "log": true, "info": true, "debug": true, "warn": true, "error": true, "trace": true, "end": true, "redirect": true, "sendStatus": true}
@@ -148,13 +152,13 @@ func analyzeBody(f *jsFile, s span, idParams map[string]bool, bodyPrincipal bool
 	if len(facts.sinks) == 0 {
 		return facts
 	}
-	facts.inlineAuth = b.authGate.MatchString(b.text) && unauthorizedRe.MatchString(b.text)
+	facts.inlineAuth = b.authGate.MatchString(b.text) && unauthorizedRe.MatchString(b.text) || jwtVerifyRe.MatchString(b.text)
 	facts.refuted = b.refutation(facts.sinks)
 	return facts
 }
 
 func newBodyCtx(f *jsFile, s span, idParams map[string]bool) *bodyCtx {
-	b := &bodyCtx{f: f, base: s.start, text: f.code[s.start:s.end], raw: string(f.raw[s.start:s.end]), vars: map[string]label{}, idKeys: idParams}
+	b := &bodyCtx{f: f, base: s.start, text: maskTSCasts(f.code[s.start:s.end]), raw: string(f.raw[s.start:s.end]), vars: map[string]label{}, idKeys: idParams}
 	seen := map[string]bool{"req": true, "request": true, "ctx": true}
 	b.req = []string{"req", "request", "ctx"}
 	for _, m := range reqNameRe.FindAllStringSubmatch(b.text, -1) {
@@ -853,4 +857,36 @@ func operandAfter(text string, off int) int {
 		}
 	}
 	return i
+}
+
+var (
+	tsParenCastRe = regexp.MustCompile(`\(\s*(\w+\s*\.\s*(?:params|query|body))\s+as\s+(?:any|[A-Za-z_$][\w$.<>\[\]]*|\{[^{}]*\})\s*\)`)
+	tsTailCastRe  = regexp.MustCompile(`\w+\s*\.\s*(?:params|query|body)(\s+as\s+(?:any|[A-Za-z_$][\w$.<>\[\]]*|\{[^{}]*\}))`)
+)
+
+// maskTSCasts blanks a TypeScript assertion on the request's input so that
+// `(request.params as { id: string }).id` and
+// `const { id } = request.params as Params` read as `request.params.id` and
+// `request.params`. Offsets are unchanged.
+func maskTSCasts(text string) string {
+	if !strings.Contains(text, " as ") {
+		return text
+	}
+	b := []byte(text)
+	blank := func(from, to int) {
+		for i := from; i < to; i++ {
+			if b[i] != '\n' {
+				b[i] = ' '
+			}
+		}
+	}
+	for _, m := range tsParenCastRe.FindAllStringSubmatchIndex(text, -1) {
+		blank(m[0], m[2])
+		blank(m[3], m[1])
+	}
+	text = string(b)
+	for _, m := range tsTailCastRe.FindAllStringSubmatchIndex(text, -1) {
+		blank(m[2], m[3])
+	}
+	return string(b)
 }

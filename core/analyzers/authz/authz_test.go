@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -182,15 +183,16 @@ func TestCounterexamplesAreRecordedAsRefutations(t *testing.T) {
 			if _, err := a.ScanArtifacts(context.Background(), arts); err != nil {
 				t.Fatal(err)
 			}
-			notCandidates := map[string]bool{
-				"public_route_no_auth":            true,
-				"optional_auth_and_session_hooks": true,
-				"slug_not_identifier":             true,
-				"security_headers_are_not_auth":   true,
-				"text_in_strings_and_comments":    true,
+			// Fixtures that never meet the proposition's antecedent: nothing says
+			// the route is private, so nothing is refuted.
+			notCandidates := []string{
+				"public_route_no_auth", "optional_auth_and_session_hooks", "slug_not_identifier",
+				"security_headers_are_not_auth", "text_in_strings_and_comments",
+				"fastify_public_route_no_auth", "flask_text_in_strings_and_comments",
+				"flask_public_route_no_auth", "fastapi_public_route_no_auth",
 			}
 			subjects := store.Subjects()
-			if notCandidates[name] {
+			if slices.Contains(notCandidates, name) {
 				if len(subjects) != 0 {
 					t.Errorf("a non-candidate filed %d refutations", len(subjects))
 				}
@@ -347,24 +349,132 @@ func TestSafeFixturesFailWithoutTheirGuard(t *testing.T) {
 		{"owner_field_in_lookup", "routes.js", ", UserId: req.body.UserId", ""},
 		{"forbidden_response", "routes.js", "if (!canView(doc, res.locals.viewer)) return res.status(403).end();", ""},
 		{"role_read_in_handler", "routes.js", "req.user.role !== 'support' && String(ticket.requester) !== req.user.id", "!ticket"},
+		// Fastify
+		{"fastify_scoped_query", "accounts.js", "WHERE id = $1 AND owner_id = $2', [request.params.id, request.user.sub]", "WHERE id = $1', [request.params.id]"},
+		{"fastify_route_object_scoped", "invoices.js", ", ownerId: request.user.sub", ""},
+		{"fastify_post_load_forbidden", "docs.js", "  if (doc.owner_id !== request.user.id) return reply.code(403).send({ error: 'forbidden' });\n", ""},
+		{"fastify_plugin_prefix_scoped", "routes/notes.js", ", userId: request.user.id", ""},
+		{"fastify_typescript_scoped", "orders.ts", "!order || order.userId !== request.user.id", "!order"},
+		// Flask
+		{"flask_filter_by_owner", "orders.py", ", user_id=current_user.id", ""},
+		{"flask_scoped_sql", "orders.py", `"SELECT * FROM orders WHERE id = %s AND user_id = %s", (order_id, current_user.id)`, `"SELECT * FROM orders WHERE id = %s", (order_id,)`},
+		{"flask_post_load_abort", "docs.py", "    if doc.owner_id != get_jwt_identity():\n        abort(403)\n", ""},
+		{"flask_post_load_compare_404", "docs.py", "doc is None or doc.user_id != current_user.id", "doc is None"},
+		{"flask_relationship_scope", "orders.py", "current_user.orders.filter_by", "Order.query.filter_by"},
+		{"flask_role_decorator", "admin.py", "@roles_required(\"admin\")\n", ""},
+		{"flask_chained_owner_filter", "tickets.py", "        .filter(Ticket.owner_id == current_user.id)\n", ""},
+		{"flask_role_read_in_handler", "tickets.py", "    if current_user.role != \"support\":\n        return jsonify(error=\"not found\"), 404\n", ""},
+		{"flask_forbidden_response", "docs.py", "    if not doc.is_shared:\n        abort(403)\n", ""},
+		{"flask_sql_owner_bound_value", "orders.py", " AND user_id = %s\", (order_id, uid)", "\", (order_id,)"},
+		{"flask_owner_filter_bound_value", "orders.py", ", user_id=uid", ""},
+		{"flask_policy_call", "docs.py", "    check_policy(doc, \"read\")\n", ""},
+		{"flask_principal_and_record_in_call", "docs.py", "visible_fields(doc, current_user)", "visible_fields(doc)"},
+		// FastAPI
+		{"fastapi_select_owner_scope", "invoices.py", ", Invoice.owner_id == user.id", ""},
+		{"fastapi_select_scope_added_later", "invoices.py", "    stmt = stmt.where(Invoice.owner_id == user.id)\n", ""},
+		{"fastapi_post_load_403", "items.py", "    if item.owner_id != current_user.id:\n        raise HTTPException(status_code=403, detail=\"Not enough permissions\")\n", ""},
+		{"fastapi_alias_post_load_compare", "items.py", "item is None or item.owner_id != current_user.id", "item is None"},
+		{"fastapi_admin_dependency", "users.py", "Depends(get_current_active_superuser)", "Depends(get_current_user)"},
+		{"fastapi_user_scoped_sql", "documents.py", `"SELECT * FROM documents WHERE id = %s AND owner_id = %s", (doc_id, user.id)`, `"SELECT * FROM documents WHERE id = %s", (doc_id,)`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			src := filepath.Join("testdata", "safe", c.name, c.file)
-			b, err := os.ReadFile(src)
+			srcDir := filepath.Join("testdata", "safe", c.name)
+			b, err := os.ReadFile(filepath.Join(srcDir, c.file))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !strings.Contains(string(b), c.guard) {
 				t.Fatalf("guard %q not in fixture", c.guard)
 			}
+			// Copy the whole fixture: a reader that resolves imports, aliases
+			// and mounts needs the files the guarded one refers to.
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, c.file), []byte(strings.Replace(string(b), c.guard, c.without, 1)), 0o600); err != nil {
+			err = filepath.WalkDir(srcDir, func(p string, d os.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return err
+				}
+				rel, _ := filepath.Rel(srcDir, p)
+				data, err := os.ReadFile(p)
+				if err != nil {
+					return err
+				}
+				if filepath.ToSlash(rel) == c.file {
+					data = []byte(strings.Replace(string(data), c.guard, c.without, 1))
+				}
+				dst := filepath.Join(dir, rel)
+				if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+					return err
+				}
+				return os.WriteFile(dst, data, 0o600)
+			})
+			if err != nil {
 				t.Fatal(err)
 			}
 			if got := scanRoot(t, dir, true); len(got) != 1 {
 				t.Errorf("without its guard the fixture reports %d findings, want 1", len(got))
 			}
 		})
+	}
+}
+
+// A lead names the route as it is served, in each framework's own path syntax:
+// a plugin registered with { prefix }, a Blueprint url_prefix (also nested and
+// overridden at register_blueprint), an APIRouter prefix composed with the
+// include_router prefix (also a prefix held in a settings constant), and
+// fastify.route({ url }).
+func TestLeadRoutesResolvePrefixes(t *testing.T) {
+	cases := []struct{ fixture, method, path, source string }{
+		{"fastify_plugin_prefix", "GET", "/api/invoices/:id", "path"},
+		{"fastify_route_object", "GET", "/invoices/:invoiceId", "path"},
+		{"fastify_get_prehandler", "GET", "/v2/accounts/:id", "path"},
+		{"fastify_typescript_params", "GET", "/orders/:id", "path"},
+		{"flask_blueprint_prefix", "GET", "/api/invoices/<invoice_id>", "path"},
+		{"flask_nested_blueprints", "GET", "/api/reports/<int:report_id>", "path"},
+		{"flask_sqlalchemy_session_get", "DELETE", "/notes/<uuid:note_id>", "path"},
+		{"flask_login_required_sql", "GET", "/api/v3/orders/<int:order_id>", "path"},
+		{"flask_filter_by_body_id", "POST", "/documents/share", "body"},
+		{"flask_before_request_auth", "GET", "/orders/<int:order_id>", "path"},
+		{"fastapi_router_prefix_include", "GET", "/api/v1/items/{id}", "path"},
+		{"fastapi_prefix_from_settings_constant", "GET", "/api/v1/orders/{order_id}", "path"},
+		{"fastapi_router_level_dependency", "GET", "/invoices/{invoice_id}", "path"},
+		{"fastapi_depends_current_user_sql", "GET", "/api/v4/documents/{doc_id}", "path"},
+		{"fastapi_query_param_id", "GET", "/files", "query"},
+	}
+	for _, c := range cases {
+		t.Run(c.fixture, func(t *testing.T) {
+			arts, err := discovery.NewWalker(filepath.Join("testdata", "vulnerable", c.fixture)).Walk()
+			if err != nil {
+				t.Fatal(err)
+			}
+			a := NewAnalyzer()
+			if _, err := a.ScanArtifacts(context.Background(), arts); err != nil {
+				t.Fatal(err)
+			}
+			ls := a.Leads()
+			if len(ls) != 1 || ls[0].Method != c.method || ls[0].Path != c.path || ls[0].IDSource != c.source {
+				t.Fatalf("leads = %+v, want %s %s from the %s", ls, c.method, c.path, c.source)
+			}
+		})
+	}
+}
+
+// The finding carries the framework it was read from.
+func TestFindingNamesTheFramework(t *testing.T) {
+	cases := []struct{ fixture, want string }{
+		{"inline_sql_route_auth", "express"},
+		{"fastify_get_prehandler", "fastify"},
+		{"flask_login_required_sql", "flask"},
+		{"fastapi_depends_current_user_sql", "fastapi"},
+		{"fastapi_router_prefix_include", "fastapi"},
+		{"fastapi_prefix_from_settings_constant", "fastapi"},
+	}
+	for _, c := range cases {
+		fixture, want := c.fixture, c.want
+		fs := scanRoot(t, filepath.Join("testdata", "vulnerable", fixture), true)
+		if len(fs) != 1 || fs[0].Metadata["framework"] != want {
+			t.Errorf("%s: findings = %v, want one from %s", fixture, gotLines(fs), want)
+			continue
+		}
 	}
 }

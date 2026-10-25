@@ -1,6 +1,6 @@
 // Package authz is nox's static detector for possible broken object-level
-// authorization (BOLA / IDOR — OWASP API1:2023, CWE-639) in Express-style
-// JavaScript and TypeScript servers.
+// authorization (BOLA / IDOR — OWASP API1:2023, CWE-639) in Express, Fastify,
+// Flask and FastAPI servers.
 //
 // THE PROPOSITION. AUTHZ-001 claims exactly this, and nothing stronger:
 //
@@ -68,15 +68,44 @@
 // remediation names the runtime test that confirms or refutes it: request the
 // record as a second, unrelated principal.
 //
-// SCOPE. Express (and koa-router, which shares the registration shape) in
-// JavaScript and TypeScript. Decorator frameworks (NestJS), Next.js route
-// handlers, custom route-definition helpers, handlers that read parameters
-// through a validation helper (`parseReq(req, schema)`), lookups keyed by a
-// non-id field (username, email, slug), auto-generated REST layers with no
-// handler in source, and Python are not read.
+// SCOPE. What is read, and nothing else:
+//
+//   - Express (and koa-router, which shares the registration shape) and Fastify
+//     in JavaScript and TypeScript: `app.get(path, [opts], handler)`,
+//     `fastify.route({ method, url, preHandler, handler })`, plugins mounted
+//     with `register(plugin, { prefix })`, hooks (`addHook('onRequest', auth)`,
+//     `preHandler: [auth]`) and `request.params.id`.
+//   - Flask in Python: `@app.route` / `@app.get`, Blueprints with `url_prefix`
+//     (also nested, and overridden at `register_blueprint`), `<int:id>`
+//     converters, login/JWT decorators and `before_request` gates.
+//   - FastAPI in Python: `@app.get`, `APIRouter(prefix=…)` composed with
+//     `include_router(prefix=…)` (a prefix held in a settings constant is
+//     resolved when the constant is unique), path parameters as function
+//     arguments, `Depends(get_current_user)` — directly, through an
+//     `Annotated[…]` alias or as router-level `dependencies` — read as
+//     AUTHENTICATION, never as ownership.
+//
+// A Python route is judged the same way as a JavaScript one: the same
+// proposition, the same counterexample classes, the same Lead. The reader is
+// text over a lexically masked copy of the file, not a Python parser.
+//
+// NOT read: NestJS and other decorator frameworks, Next.js route handlers,
+// Django (urls.py + views), Flask class-based views and Flask-RESTful
+// resources, Starlette/Sanic/Quart/aiohttp/Tornado routes, custom
+// route-definition helpers, handlers that read parameters through a validation
+// helper (`parseReq(req, schema)`) or a FastAPI dependency that itself loads
+// the record (`item = Depends(valid_item_id)`), lookups keyed by a non-id
+// field (username, email, slug), auto-generated REST layers with no handler in
+// source, and Python code that builds a query across several statements
+// without re-binding the same name.
+//
+// Authorization claims a reader cannot see in a FastAPI app: a global
+// `AuthenticationMiddleware`, `app.add_middleware`, and routes whose router is
+// created in another repository.
 package authz
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -85,7 +114,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
@@ -159,9 +187,13 @@ func (a *Analyzer) Enabled() bool { return a.enabled }
 // findings, and a route is never both.
 func (a *Analyzer) Leads() []Lead { return a.leads }
 
-// RoutesRead is how many Express route registrations the last ScanArtifacts
-// call read. Zero means the scan saw no Express routes and has nothing to say
-// about authorization.
+// Coverage names, for the scan's "Checks completed", exactly the frameworks
+// this analyzer reads. Keep it equal to the package documentation's SCOPE.
+const Coverage = "Express, Fastify, Flask, FastAPI routes"
+
+// RoutesRead is how many route registrations (Express, Fastify, Flask,
+// FastAPI) the last ScanArtifacts call read. Zero means the scan saw none and
+// has nothing to say about authorization.
 func (a *Analyzer) RoutesRead() int { return a.routes }
 
 // Routes returns every route registration the last ScanArtifacts call read,
@@ -197,8 +229,8 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Severity:    findings.SeverityMedium,
 		Confidence:  findings.ConfidenceLow,
 		OptIn:       true,
-		Tags:        []string{"authorization", "bola", "idor", "owasp-a01", "express"},
-		Remediation: "Scope the lookup to the caller (`WHERE id = $1 AND owner_id = $2` with the principal's id, or `{ where: { id, ownerId: req.user.id } }`), or load the record and reject the request when it does not belong to the caller (`if (doc.ownerId !== req.user.id) return res.sendStatus(404)`), or route it through your policy layer. If the resource is shared by design, waive the finding with that reason. To confirm before changing code: create a record as user A, request it with user B's credentials; a 200 with A's data confirms the finding.",
+		Tags:        []string{"authorization", "bola", "idor", "owasp-a01", "express", "fastify", "flask", "fastapi"},
+		Remediation: "Scope the lookup to the caller (`WHERE id = $1 AND owner_id = $2` with the principal's id, `{ where: { id, ownerId: req.user.id } }`, `Order.query.filter_by(id=order_id, user_id=current_user.id)`, or `select(Item).where(Item.id == id, Item.owner_id == user.id)`), or load the record and reject the request when it does not belong to the caller (`if (doc.ownerId !== req.user.id) return res.sendStatus(404)`, `if item.owner_id != current_user.id: raise HTTPException(status_code=404)`), or route it through your policy layer. A Depends(get_current_user) dependency authenticates the caller; it does not scope the record. If the resource is shared by design, waive the finding with that reason. To confirm before changing code: create a record as user A, request it with user B's credentials; a 200 with A's data confirms the finding.",
 		References: []string{
 			"https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
 			"https://cwe.mitre.org/data/definitions/639.html",
@@ -238,6 +270,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		ix.reasoning = a.reasoning
 	}
 	rls := false
+	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
 	ordered := make([]discovery.Artifact, len(artifacts))
 	copy(ordered, artifacts)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
@@ -253,7 +286,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			}
 			continue
 		}
-		if art.Type != discovery.Source || !jsExt[ext] || nsource.IsTestPath(art.Path) {
+		if art.Type != discovery.Source || (!jsExt[ext] && ext != ".py") || nsource.IsTestPath(art.Path) {
 			continue
 		}
 		raw, err := os.ReadFile(art.AbsPath)
@@ -264,6 +297,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			rls = true
 		}
 		p := filepath.ToSlash(art.Path)
+		if ext == ".py" {
+			pyFiles[p] = &pyFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangPython, raw)), lineStarts: computeLineStarts(raw)}
+			pyOrder = append(pyOrder, p)
+			continue
+		}
 		ix.files[p] = &jsFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangJavaScript, raw)), lineStarts: computeLineStarts(raw)}
 		ix.order = append(ix.order, p)
 	}
@@ -273,8 +311,22 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	reported := ix.findings()
 	a.routes = ix.routes
 	a.routeList = ix.routeList
+	leads := ix.leads
+	if len(pyOrder) > 0 {
+		py := newPyIndex(pyFiles, pyOrder, rls)
+		res := py.findings()
+		a.routes += len(py.routes)
+		reported = append(reported, res.findings...)
+		leads = append(leads, res.leads...)
+		sortLeads(leads)
+		if a.enabled {
+			for _, rf := range res.refuted {
+				refuteTo(ix.reasoning, rf.path, rf.line, rf.reason, "the Flask and FastAPI route reader, over this repository's Python")
+			}
+		}
+	}
 	if !a.enabled {
-		a.leads = ix.leads
+		a.leads = leads
 		return fs, nil
 	}
 	for _, f := range reported {
@@ -302,7 +354,7 @@ func (ix *index) findings() []findings.Finding {
 	params := map[string]map[string]bool{}
 	for _, p := range ix.order {
 		f := ix.files[p]
-		uses[p] = parseUses(f, mount)
+		uses[p] = append(parseUses(f, mount), parseFastifyUses(f, mount)...)
 		routes = append(routes, parseRoutes(f)...)
 		params[p] = parseParamLoaders(f)
 	}
@@ -457,11 +509,7 @@ func (ix *index) counterexample(facts bodyFacts, loaded, authz string) string {
 // refute files a cleared candidate in the reasoning ledger, scoped to what
 // this reader can and cannot see.
 func (ix *index) refute(path string, line int, reason string) {
-	ix.reasoning.RefuteWithin(reasoning.Candidate(RuleID, path, line, 1), evidence.KindStatic, "nox-scan", "authz",
-		reason, reasoning.Scope{
-			Analysis: "the Express route reader, over this repository's JavaScript and TypeScript",
-			Limits:   "middleware and policy recognised by name rather than by behaviour, and a check in a callee the request is not visibly passed to",
-		})
+	refuteTo(ix.reasoning, path, line, reason, "the Express and Fastify route reader, over this repository's JavaScript and TypeScript")
 }
 
 // routeChain is every middleware that runs before the route's handler that
@@ -628,7 +676,7 @@ func classifyChain(chain []mwRef) (authn, authz string) {
 			if authz == "" && (authzMWRe.MatchString(t) || forbiddenRe.MatchString(t)) {
 				authz = compact(t)
 			}
-			if authn == "" && unauthorizedRe.MatchString(t) {
+			if authn == "" && (unauthorizedRe.MatchString(t) || jwtVerifyRe.MatchString(t)) {
 				authn = compact(t)
 			}
 			continue
@@ -749,32 +797,52 @@ func idSourcePhrase(l label) string {
 }
 
 func newFinding(r *route, h fnRef, sink sinkHit, authn string) findings.Finding {
-	line := lineAt(h.file.lineStarts, sink.off)
-	routeLine := lineAt(r.file.lineStarts, r.offset)
-	method := strings.ToUpper(r.method)
+	framework := "express"
+	if bytes.Contains(r.file.raw, []byte("fastify")) && !bytes.Contains(r.file.raw, []byte("express")) {
+		framework = "fastify"
+	}
+	return buildFinding(findingData{
+		framework: framework, method: strings.ToUpper(r.method), path: r.path, authn: authn, sink: sink,
+		routeFile: r.file.path, routeLine: lineAt(r.file.lineStarts, r.offset),
+		handlerFile: h.file.path, line: lineAt(h.file.lineStarts, sink.off), function: h.name,
+	})
+}
+
+// findingData is what a finding needs, whichever language's reader found it.
+type findingData struct {
+	framework, method, path, authn string
+	sink                           sinkHit
+	routeFile                      string
+	routeLine                      int
+	handlerFile                    string
+	line                           int
+	function                       string
+}
+
+func buildFinding(d findingData) findings.Finding {
 	msg := fmt.Sprintf(
 		"%s %s requires an authenticated caller (%s) but looks up a record by an id the caller supplies in the %s, via %s(), with no visible check that it belongs to the caller: possible broken object-level authorization (IDOR). Verify by requesting another user's record.",
-		method, r.path, authn, idSourcePhrase(sink.idFrom), sink.method)
+		d.method, d.path, d.authn, idSourcePhrase(d.sink.idFrom), d.sink.method)
 	md := map[string]string{
 		"cwe":        "CWE-639",
 		"owasp_api":  "API1:2023",
-		"route":      method + " " + r.path,
-		"route_file": r.file.path,
-		"route_line": fmt.Sprintf("%d", routeLine),
-		"auth":       authn,
-		"sink":       sink.method,
-		"model":      sink.model,
-		"framework":  "express",
-		"id_source":  idSources(sink.idFrom),
+		"route":      d.method + " " + d.path,
+		"route_file": d.routeFile,
+		"route_line": fmt.Sprintf("%d", d.routeLine),
+		"auth":       d.authn,
+		"sink":       d.sink.method,
+		"model":      d.sink.model,
+		"framework":  d.framework,
+		"id_source":  idSources(d.sink.idFrom),
 	}
-	if h.name != "" {
-		md["function"] = h.name
+	if d.function != "" {
+		md["function"] = d.function
 	}
 	return findings.Finding{
 		RuleID:     RuleID,
 		Severity:   findings.SeverityMedium,
 		Confidence: findings.ConfidenceLow,
-		Location:   findings.Location{FilePath: h.file.path, StartLine: line, EndLine: line},
+		Location:   findings.Location{FilePath: d.handlerFile, StartLine: d.line, EndLine: d.line},
 		Message:    msg,
 		Metadata:   md,
 	}
