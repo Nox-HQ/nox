@@ -277,6 +277,21 @@ func (b *builder) collectRoutes() {
 			e.spans = append(e.spans, span{l.FilePath, l.Line})
 		}
 		e.files[l.FilePath] = true
+		if l.Category == "authentication" {
+			// The route's own "no authentication middleware visible" is this
+			// same fact, read from the same inventory; saying it twice would
+			// count one observation as two.
+			e.Attributes["authentication_lead"] = "yes"
+			if !ok {
+				// A findings.json that did not record routes: the lead is the
+				// only evidence there is.
+				e.obs = append(e.obs, obs{Spoofing, LeadsToVerify, Evidence{
+					Artifact: artFindings, Ref: loc(l.FilePath, l.Line), RuleID: l.RuleID,
+					Statement: "lead: " + l.Route + " " + l.Statement + ". " + l.Test,
+				}})
+			}
+			continue
+		}
 		ev := Evidence{
 			Artifact: artFindings, Ref: loc(l.FilePath, l.Line), RuleID: l.RuleID,
 			Statement: "lead: " + l.Route + " " + l.Statement + ". " + l.Test,

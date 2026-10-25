@@ -1,198 +1,131 @@
 package mcppin
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
-
-	"github.com/nox-hq/nox/core/findings"
 )
 
-func fixedNow() func() time.Time {
-	t := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
-	return func() time.Time { return t }
-}
+const cfgV1 = `{"mcpServers":{"fs":{"command":"mcp-fs","args":["./project"]}}}`
+const cfgV2 = `{"mcpServers":{"fs":{"command":"mcp-fs","args":["/"]}}}`
 
-func newTestPinner(t *testing.T) *Pinner {
+func pinned(t *testing.T, path, content string) *Lock {
 	t.Helper()
-	p := New(WithDir(t.TempDir()), WithNow(fixedNow()))
-	if err := p.Load(); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	return p
-}
-
-// mustCheck runs CheckArtifact and fails the test on the (unexpected) parse
-// error path, so the happy-path assertions stay readable.
-func mustCheck(t *testing.T, p *Pinner, path string, content []byte) []findings.Finding {
-	t.Helper()
-	got, err := p.CheckArtifact(path, content)
+	defs, err := Definitions(path, []byte(content))
 	if err != nil {
-		t.Fatalf("CheckArtifact(%s): unexpected error: %v", path, err)
+		t.Fatal(err)
 	}
-	return got
+	l := NewLock()
+	for k, h := range defs {
+		l.Pins[k] = h
+	}
+	return l
 }
 
-const benignConfig = `{
-  "mcpServers": {
-    "fs": {"command": "mcp-server-filesystem", "args": ["./project"]}
-  }
-}`
-
-// Same definition, different key order and whitespace — must hash identically.
-const benignReordered = `{
-  "mcpServers": {
-    "fs": {"args": ["./project"], "command": "mcp-server-filesystem"}
-  }
-}`
-
-const driftedConfig = `{
-  "mcpServers": {
-    "fs": {"command": "mcp-server-filesystem", "args": ["/"]}
-  }
-}`
-
-func TestFirstObservation_NoFinding(t *testing.T) {
-	p := newTestPinner(t)
-	got := mustCheck(t, p, "mcp.json", []byte(benignConfig))
-	if len(got) != 0 {
-		t.Fatalf("first observation should record silently, got %d findings: %+v", len(got), got)
+func TestCheck_UnchangedIsSilent(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV1)
+	ff, err := l.Check("mcp.json", []byte(cfgV1))
+	if err != nil || len(ff) != 0 {
+		t.Fatalf("want no findings, got %v err=%v", ff, err)
 	}
 }
 
-func TestNoDrift_NoFinding(t *testing.T) {
-	p := newTestPinner(t)
-	_ = mustCheck(t, p, "mcp.json", []byte(benignConfig))
-	got := mustCheck(t, p, "mcp.json", []byte(benignConfig))
-	if len(got) != 0 {
-		t.Fatalf("unchanged definition must not flag, got %+v", got)
+func TestCheck_KeyOrderDoesNotDrift(t *testing.T) {
+	l := pinned(t, "mcp.json", `{"mcpServers":{"fs":{"command":"a","args":["x"]}}}`)
+	ff, _ := l.Check("mcp.json", []byte(`{"mcpServers":{"fs":{"args":["x"],"command":"a"}}}`))
+	if len(ff) != 0 {
+		t.Fatalf("key order must not be drift: %v", ff)
 	}
 }
 
-func TestKeyOrderIndependent_NoDrift(t *testing.T) {
-	p := newTestPinner(t)
-	_ = mustCheck(t, p, "mcp.json", []byte(benignConfig))
-	got := mustCheck(t, p, "mcp.json", []byte(benignReordered))
-	if len(got) != 0 {
-		t.Fatalf("reordered-but-equivalent definition must not flag, got %+v", got)
+// The property the hidden-state design lacked: checking never changes the lock,
+// so a change is reported again on every call until a person re-pins.
+func TestCheck_DriftPersistsAcrossRepeatedChecks(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV1)
+	for i := 0; i < 3; i++ {
+		ff, err := l.Check("mcp.json", []byte(cfgV2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ff) != 1 || ff[0].RuleID != RuleID || ff[0].Metadata["change"] != "modified" {
+			t.Fatalf("check %d: want one modified MCP-015, got %v", i, ff)
+		}
 	}
 }
 
-func TestDrift_FiresOnce(t *testing.T) {
-	p := newTestPinner(t)
-	_ = mustCheck(t, p, "mcp.json", []byte(benignConfig))
-
-	got := mustCheck(t, p, "mcp.json", []byte(driftedConfig))
-	if len(got) != 1 {
-		t.Fatalf("expected exactly one MCP-015 on drift, got %d: %+v", len(got), got)
-	}
-	f := got[0]
-	if f.RuleID != RuleID {
-		t.Errorf("rule ID = %q, want %q", f.RuleID, RuleID)
-	}
-	if f.Metadata["old_hash"] == "" || f.Metadata["new_hash"] == "" {
-		t.Errorf("drift finding missing before/after hashes: %+v", f.Metadata)
-	}
-	if f.Metadata["old_hash"] == f.Metadata["new_hash"] {
-		t.Errorf("old and new hashes must differ on drift")
-	}
-
-	// Re-scanning the now-pinned drifted definition must be quiet (alert once).
-	again := mustCheck(t, p, "mcp.json", []byte(driftedConfig))
-	if len(again) != 0 {
-		t.Fatalf("drift should alert once then re-pin, got %+v", again)
+func TestCheck_RepinAcknowledges(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV2)
+	if ff, _ := l.Check("mcp.json", []byte(cfgV2)); len(ff) != 0 {
+		t.Fatalf("re-pinned definition must be silent: %v", ff)
 	}
 }
 
-func TestPersistence_Roundtrip(t *testing.T) {
+func TestCheck_UnpinnedServerIsReported(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV1)
+	both := `{"mcpServers":{"fs":{"command":"mcp-fs","args":["./project"]},"new":{"command":"x"}}}`
+	ff, _ := l.Check("mcp.json", []byte(both))
+	if len(ff) != 1 || ff[0].Metadata["change"] != "unpinned" || ff[0].Metadata["server"] != "new" {
+		t.Fatalf("want one unpinned finding for \"new\": %v", ff)
+	}
+}
+
+func TestCheck_RemovedServerIsNotAFinding(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV1)
+	if ff, _ := l.Check("mcp.json", []byte(`{"mcpServers":{}}`)); len(ff) != 0 {
+		t.Fatalf("removing a server must not alert: %v", ff)
+	}
+}
+
+func TestCheck_MalformedConfigIsError(t *testing.T) {
+	l := pinned(t, "mcp.json", cfgV1)
+	if _, err := l.Check("mcp.json", []byte(`{"mcpServers":{"fs":{},}}`)); err == nil {
+		t.Fatal("malformed config must be an error, not an empty result")
+	}
+}
+
+func TestLoad_AbsentIsNotApproval(t *testing.T) {
+	l, exists, err := Load(filepath.Join(t.TempDir(), "mcp-pins.json"))
+	if err != nil || exists || l != nil {
+		t.Fatalf("absent file: lock=%v exists=%v err=%v", l, exists, err)
+	}
+}
+
+func TestLoad_CorruptAndWrongVersionAreErrors(t *testing.T) {
 	dir := t.TempDir()
-
-	p1 := New(WithDir(dir), WithNow(fixedNow()))
-	if err := p1.Load(); err != nil {
-		t.Fatalf("load p1: %v", err)
-	}
-	_ = mustCheck(t, p1, "mcp.json", []byte(benignConfig))
-	if err := p1.Save(); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	// Fresh pinner over the same dir must see the persisted pin and detect drift
-	// without a prior in-memory observation.
-	p2 := New(WithDir(dir), WithNow(fixedNow()))
-	if err := p2.Load(); err != nil {
-		t.Fatalf("load p2: %v", err)
-	}
-	got := mustCheck(t, p2, "mcp.json", []byte(driftedConfig))
-	if len(got) != 1 {
-		t.Fatalf("persisted pin should yield drift after reload, got %d: %+v", len(got), got)
+	for name, body := range map[string]string{
+		"corrupt": `{"pins": not-json`,
+		"v1":      `{"version":"1","pins":{}}`,
+	} {
+		p := filepath.Join(dir, name+".json")
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, exists, err := Load(p); err == nil || !exists {
+			t.Fatalf("%s: want error with exists=true, got exists=%v err=%v", name, exists, err)
+		}
 	}
 }
 
-func TestClear_Reapproves(t *testing.T) {
-	dir := t.TempDir()
-	p := New(WithDir(dir), WithNow(fixedNow()))
-	if err := p.Load(); err != nil {
-		t.Fatalf("load: %v", err)
+func TestSave_DeterministicAndRoundTrips(t *testing.T) {
+	p := filepath.Join(t.TempDir(), ".nox", "mcp-pins.json")
+	l := pinned(t, "a.json", `{"mcpServers":{"z":{"command":"1"},"a":{"command":"2"}}}`)
+	if err := l.Save(p); err != nil {
+		t.Fatal(err)
 	}
-	_ = mustCheck(t, p, "mcp.json", []byte(benignConfig))
-	if err := p.Clear(); err != nil {
-		t.Fatalf("clear: %v", err)
+	first, _ := os.ReadFile(p)
+	if err := l.Save(p); err != nil {
+		t.Fatal(err)
 	}
-	// After clear, the drifted definition is treated as a fresh baseline.
-	got := mustCheck(t, p, "mcp.json", []byte(driftedConfig))
-	if len(got) != 0 {
-		t.Fatalf("cleared store should re-approve silently, got %+v", got)
+	second, _ := os.ReadFile(p)
+	if !bytes.Equal(first, second) || !bytes.HasSuffix(first, []byte("\n")) {
+		t.Fatal("pin file must be byte-stable with a trailing newline")
 	}
-}
-
-func TestNonMCPContent_Ignored(t *testing.T) {
-	p := newTestPinner(t)
-	got := mustCheck(t, p, "config.json", []byte(`{"unrelated": true}`))
-	if len(got) != 0 {
-		t.Fatalf("non-MCP content must be ignored, got %+v", got)
+	if bytes.Index(first, []byte("a.json::a")) > bytes.Index(first, []byte("a.json::z")) {
+		t.Fatal("keys must be sorted")
 	}
-}
-
-// TestCorruptStore_IsError proves the rug-pull-disarming bug is fixed: a pin
-// store that exists but does not parse must be a hard error, NOT a silent reset
-// to empty. Before the fix Load returned nil and re-baselined every server, so a
-// tampered server would be silently re-approved.
-func TestCorruptStore_IsError(t *testing.T) {
-	dir := t.TempDir()
-
-	// Establish a real, non-empty store, then corrupt the file on disk.
-	p1 := New(WithDir(dir), WithNow(fixedNow()))
-	if err := p1.Load(); err != nil {
-		t.Fatalf("load p1: %v", err)
-	}
-	_ = mustCheck(t, p1, "mcp.json", []byte(benignConfig))
-	if err := p1.Save(); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	storePath := filepath.Join(dir, "pins.json")
-	if err := os.WriteFile(storePath, []byte(`{"pins": not-json`), 0o644); err != nil {
-		t.Fatalf("corrupt store: %v", err)
-	}
-
-	p2 := New(WithDir(dir), WithNow(fixedNow()))
-	if err := p2.Load(); err == nil {
-		t.Fatal("Load of a corrupt store must error, not silently reset to empty")
-	}
-}
-
-// TestMalformedConfig_IsError proves malformed content handed in for pinning
-// surfaces rather than being silently treated as "no servers to pin" (which is
-// how a rogue config would evade rug-pull detection).
-func TestMalformedConfig_IsError(t *testing.T) {
-	p := newTestPinner(t)
-	// Trailing comma — clearly an intended MCP config that does not parse.
-	got, err := p.CheckArtifact("mcp.json", []byte(`{"mcpServers":{"fs":{"command":"x"},}}`))
-	if err == nil {
-		t.Fatal("malformed MCP config must return an error, got nil")
-	}
-	if got != nil {
-		t.Fatalf("malformed config must return nil findings, got %+v", got)
+	got, exists, err := Load(p)
+	if err != nil || !exists || len(got.Pins) != 2 {
+		t.Fatalf("round trip: %v %v %v", got, exists, err)
 	}
 }

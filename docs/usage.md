@@ -576,10 +576,16 @@ one later). Drift is emitted as findings, flowing into `findings.json` /
 `results.sarif` and gating CI like any scan.
 
 ```bash
+nox mcp pin                        # approve the MCP server definitions in this repo (commit .nox/mcp-pins.json)
 nox mcp baseline -- nox serve      # capture .nox/mcp-baseline.json (commit it)
 nox mcp drift    -- nox serve      # re-capture and report drift (exit 1 on drift)
 nox mcp show                       # print the stored baseline
 ```
+
+`nox mcp pin` is the offline half: it writes `.nox/mcp-pins.json`, a hash of each
+server definition in the repo's MCP configs. `nox scan` reports **MCP-015** for a
+changed or unpinned server on every run until you re-pin, and reports a missing
+pin file instead of staying silent. A scan never writes the file.
 
 The baseline is local, sorted JSON — diff it, commit it, review drift in PRs.
 **Security:** these commands launch the server as a subprocess; never run an
@@ -1035,10 +1041,16 @@ scan:
     # are not findings: the assessment lists them under "Additional
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. NestJS,
-    # Next.js, Django and other frameworks are not read. SEC-951, the generic "credential-named key with a
+    # Next.js, Django and other frameworks are not read. AUTHN-001 is the
+    # same arrangement for a route with no visible authentication (an
+    # administrative or account route, or any DELETE, PUT or PATCH, with no
+    # auth middleware, decorator, dependency or check on the caller): a lead
+    # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
+    # GitHub or Slack webhook payload accepted without signature
+    # verification, is not opt-in: it reports by default. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
-    enable: []   # e.g. [TAINT-011, AUTHZ-001]
+    enable: []   # e.g. [TAINT-011, AUTHZ-001, AUTHN-001]
 
     # Override severity for specific rules
     severity_override:

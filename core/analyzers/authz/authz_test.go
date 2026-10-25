@@ -132,8 +132,12 @@ func TestOptInByDefault(t *testing.T) {
 		t.Fatalf("reported without being enabled: %v", gotLines(got))
 	}
 	rs := NewAnalyzer().Rules().Rules()
-	if len(rs) != 1 || rs[0].ID != RuleID || !rs[0].OptIn {
-		t.Fatalf("rule catalogue = %+v, want one opt-in %s", rs, RuleID)
+	optIn := map[string]bool{}
+	for _, r := range rs {
+		optIn[r.ID] = r.OptIn
+	}
+	if len(rs) != 3 || !optIn[RuleID] || !optIn[AuthnRuleID] || optIn[WebhookRuleID] {
+		t.Fatalf("rule catalogue = %v, want opt-in %s and %s and default-on %s", optIn, RuleID, AuthnRuleID, WebhookRuleID)
 	}
 }
 
@@ -284,8 +288,8 @@ func TestDefaultModeHoldsLeadsNotFindings(t *testing.T) {
 		if _, err := a.ScanArtifacts(context.Background(), arts); err != nil {
 			t.Fatal(err)
 		}
-		if len(a.Leads()) != 0 {
-			t.Errorf("%s: counterexample held as a lead: %+v", filepath.Base(dir), a.Leads())
+		if len(objectLeads(a)) != 0 {
+			t.Errorf("%s: counterexample held as a lead: %+v", filepath.Base(dir), objectLeads(a))
 		}
 	}
 }
@@ -477,4 +481,18 @@ func TestFindingNamesTheFramework(t *testing.T) {
 			continue
 		}
 	}
+}
+
+// objectLeads are the AUTHZ-001 leads. AUTHN-001 leads share the analyzer's
+// lead list and answer a different question, so the object-level fixtures
+// (which are deliberately routes with or without ownership checks) are judged
+// on these alone.
+func objectLeads(a *Analyzer) []Lead {
+	var out []Lead
+	for _, l := range a.Leads() {
+		if l.RuleID == "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
