@@ -474,7 +474,7 @@ func TestMirrorAnswerIsASpecificBlockingLimit(t *testing.T) {
 		Detail: "nox-intelligence answered 1 package(s) incompletely: npm/a@1 (degraded: " + osvsource.MirrorOnlyNote + ")",
 		Impact: "x",
 	}
-	cap := nox.Degradation{
+	truncated := nox.Degradation{
 		Kind:   "intel_incomplete",
 		Detail: "nox-intelligence answered 1 package(s) incompletely: npm/b@1 (incomplete: pagination stopped)",
 		Impact: "an empty or short advisory list is not proof",

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A scan keeps working through an OSV outage, and says how it was answered.**
+  The NOX Intelligence source now sends `X-Nox-Accept-Degraded: mirror` (never
+  to OSV.dev), so during an OSV outage the service answers from its mirror
+  instead of failing with 503. That answer is a blocking `intel_incomplete`
+  degradation and a specific limit in the assessment ("Answered from NOX
+  Intelligence's mirror; live OSV unavailable"). `findings.json` advisory
+  metadata gains `advisory_source`, `advisory_via` (live, mirror, candidate)
+  and, for a mirror, `advisory_mirror_synced_at`; a live retrieval time is
+  deliberately not written, so the file stays identical between runs. Records
+  the service marks `nox_same_as` (one vulnerability under two ids) are one
+  finding that keeps every id in `aliases`, at the highest severity of the
+  group. Note: the `vuln_id` of such a finding can differ from the earlier
+  per-record findings, so a baseline entry for the dropped id reads as fixed.
+  Requires nox-core v0.6.0.
 - **The default scan now says when a route has no visible authentication.**
   `nox model` already printed "no authentication middleware visible" for
   `GET /api/admin/users` and `DELETE /api/users/:id`; the scan assessment said
