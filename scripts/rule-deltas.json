@@ -26,7 +26,15 @@
     "keyword-tokenized": "the rule's vendor keyword must now be a token; it used to match as a bare substring, so it could be supplied by an accident inside opaque data or by an ordinary English word",
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential",
-    "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier"
+    "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier",
+    "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "VULN-001",
+      "classification": "duplicate-merged",
+      "pr": 876,
+      "reason": "Records NOX Intelligence marks nox_same_as are one finding, not two. Checked on a Go module set (x/crypto, x/net, gin, x/text) scanned online by the released and the new binary: 100 -> 63 VULN-001 findings; every one of the 100 old vuln_ids is the vuln_id or an alias of a surviving finding on the same package and version (0 lost), and no surviving finding has a lower severity than any finding it absorbed (0 lowered). Ids are joined only through nox_same_as, never by alias lists alone."
+    }
+  ]
 }
