@@ -48,7 +48,7 @@ type Server struct {
 //     identical to a benign non-MCP file and its shadowing risk was invisible.
 //     The caller surfaces this as a visible degradation.
 func ParseConfig(path string, content []byte) ([]Server, error) {
-	servers, err := mcpconfig.ParseServers(content)
+	servers, err := mcpconfig.ParseServersAt(path, content)
 	if err != nil {
 		return nil, fmt.Errorf("parsing MCP config %s: %w", path, err)
 	}
