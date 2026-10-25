@@ -250,6 +250,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **IAC-504 reports one finding per resource, not one per switch.** A
+  `aws_s3_bucket_public_access_block` with all four flags `false` produced four
+  identical findings ("in 4 places"). It now produces one, which keeps the rule
+  ID, spans the flags, and names the ones that are off and the resource
+  (`aws_s3_bucket_public_access_block.invoices`; a module call or a tfvars file
+  is grouped by its block or file). Its identity follows the resource, so fixing
+  one switch or moving the block does not turn it into a different finding.
+  The rule was added in this release cycle, so no baseline, VEX statement or
+  alias needs an entry. The findings it folds away are recorded as refuted in
+  the stage accounting, with the reason.
+
+- **MCP `threat_model` takes a `previous` model.** The tool's input schema was
+  `{}`, so an agent could not ask what changed since an earlier model, though
+  `nox model --previous` could. It now accepts an optional `previous` (the
+  `model.json` of an earlier run), confined to the allowed workspace paths exactly
+  as the `scan` tool's `previous` is, and returns the same `changes` block. Both
+  surfaces call `threatmodel.BuildAgainst`, so they cannot compare differently. A
+  file that is missing or is not a nox threat model is an error, never an empty
+  comparison.
+
+- **`findings.json` `routes` now lists Flask and FastAPI routes, with their
+  authentication.** The route inventory held only JavaScript routes, so `nox
+  model` showed Python entry points only through authorization leads, with
+  "authentication middleware: not recorded". Every Flask and FastAPI route is
+  now listed, and `@login_required`, `@jwt_required()`, `Depends(get_current_user)`
+  (as a parameter or a `dependencies=[...]` entry) and router-level
+  `dependencies` on an `APIRouter` or `include_router` are recorded as the
+  route's `authn`, using the same classification the AUTHZ-001 lead logic
+  applies; role and permission dependencies are recorded as `authz`, never as
+  authentication. The threat model's limits no longer say Python and Fastify
+  routes are not enumerated.
+
+- **`nox compliance iso27001`: a literal credential in a manifest now opens
+  A.5.17.** A literal database password in a Kubernetes `env` block (IAC-502) or
+  a Compose list entry (IAC-503) left "Authentication information" at "checks
+  ran, nothing open", because the control read only secret scanning (`SEC-*`).
+  A.5.17 now also reads every rule that finds a credential value written into
+  configuration (IAC-022/047/130/190-192/221-223/225/235/236/254/271/343/351/
+  502/503, MCP-004, AI-042), and a test fails when a new CWE-798 rule is neither
+  mapped nor excluded with a reason. The rules added since the mapping was
+  written are placed too: IAC-504 on A.8.12, MCP-025 on A.5.21, AUTHZ-001 and
+  AI-AGENT-009 on A.8.28. The additions are silent when they find nothing, so a
+  repository without those files is not downgraded. Authorization leads are
+  named on A.8.28 as unconfirmed hints and still never counted as findings.
+
+- **`nox fix plan` no longer calls a transitive upgrade "safe to apply" when a
+  parent pins it.** body-parser, path-to-regexp and qs under express 4.21.2 were
+  listed under "Safe to apply, nothing here needs a decision", and `nox fix
+  apply` then could not move them ("a parent's version range excludes the fix").
+  The plan now reads the project's `package-lock.json`: each installed copy below
+  the fixed version is checked against the declared range of every package that
+  resolves to it (and against an existing `overrides` entry). If any range
+  excludes the fix, or the lockfile is one nox does not read (pnpm, yarn, bun) or
+  absent, the item is "needs review" (new kind `held_upgrade`) and names the
+  holding parents and the exact entry to add: `"overrides"` for npm and bun,
+  `"resolutions"` for yarn, `"pnpm": { "overrides" }` for pnpm. `nox fix apply`
+  never selects a held item, even with `--include-review`.
+
+- **`--previous` no longer lists every dependency advisory as new when one scan
+  was offline.** An offline scan reports no advisories because it did not look,
+  and comparing it with an online scan (`nox scan --previous <offline
+  findings.json>`, or the MCP `scan` tool) reported all of the online scan's
+  pre-existing advisories as new, and, the other way round, as resolved. A scan
+  that did not look its dependencies up (`--offline`, `--no-osv`, `osv.disabled`,
+  no dependency scope, or a failed OSV lookup) now has its advisories left out of
+  the comparison on both sides, with a caveat in either direction ("the previous
+  scan did not look up advisories (it was offline)..."). `--no-osv` previously
+  left no trace in `findings.json`; it now records `meta.advisory_lookup:
+  "skipped"`. `nox diff` scans both trees with the same flags and was not
+  affected in practice, but shares the guard.
+
 - **`nox fix verify` blamed the user for the dependency directory the fix
   created.** `nox fix apply` runs `npm`, which creates `node_modules/`; the next
   scan then read `node_modules/combined-stream/yarn.lock` (a lockfile that

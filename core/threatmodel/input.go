@@ -235,6 +235,22 @@ func LoadPrevious(path string) (Model, error) {
 	return m, nil
 }
 
+// BuildAgainst builds the model for in and, when previous names an earlier
+// model.json, says what changed since it. It is the one place that pairing is
+// made, so `nox model --previous` and the MCP threat_model tool cannot compare
+// differently. An empty previous builds the model alone.
+func BuildAgainst(in Input, previous string) (Model, error) {
+	m := Build(in)
+	if previous == "" {
+		return m, nil
+	}
+	prev, err := LoadPrevious(previous)
+	if err != nil {
+		return Model{}, err
+	}
+	return m.WithChanges(prev), nil
+}
+
 func firstExisting(paths ...string) string {
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {

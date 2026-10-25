@@ -56,8 +56,12 @@ const (
 	KindActionsPin    Kind = "actions_pin"
 	KindContentPatch  Kind = "content_patch"
 	KindManualUpgrade Kind = "manual_upgrade"
-	KindNoFix         Kind = "no_fix"
-	KindCode          Kind = "code"
+	// KindHeldUpgrade is a fix for a transitive package that a parent's declared
+	// version range keeps out of reach. nox fix apply cannot make it; the item
+	// says which parent holds it and what entry would force it.
+	KindHeldUpgrade Kind = "held_upgrade"
+	KindNoFix       Kind = "no_fix"
+	KindCode        Kind = "code"
 )
 
 // Item is one thing the assessment listed, and what can be done about it.
@@ -210,10 +214,20 @@ func classifyUpgrade(it *Item, is *assess.Issue, root string) {
 	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.Command()
 	it.Why = "The fix is published and stays on the same major version (" + versionStep(a) +
 		"), so it should not change how your code uses the package."
-	if transitiveNPM(root, a) {
-		it.Why += " It is not a package you list yourself, so nox asks npm to move it within the ranges the packages " +
-			"that use it allow; if one of them pins it lower, the change is not applied and the report says so."
+	if !transitiveNPM(root, a) {
+		return
 	}
+	// A transitive package moves only as far as every package that needs it
+	// allows. Promising "safe to apply" for one a parent pins is a plan apply
+	// cannot keep, so the lockfile decides.
+	reach := analyzeNPMReach(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
+	if reach.Established && len(reach.Holds) == 0 {
+		it.Why += " It is not a package you list yourself; the packages that use it allow the fixed version, " +
+			"so nox asks npm to move it within their ranges."
+		return
+	}
+	it.Class, it.Kind, it.Command = ClassReview, KindHeldUpgrade, ""
+	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To}, reach)
 }
 
 // transitiveNPM reports whether an npm upgrade targets a package the project's

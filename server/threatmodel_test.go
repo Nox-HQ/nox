@@ -12,7 +12,7 @@ import (
 // answered from the scan already held, by the same core code the CLI uses.
 func TestAnAgentCanAskForAThreatModel(t *testing.T) {
 	s := scanned(t)
-	res, err := s.handleThreatModel(context.Background(), emptyInput{})
+	res, err := s.handleThreatModel(context.Background(), threatModelInput{})
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestAnAgentCanAskForAThreatModel(t *testing.T) {
 
 func TestThreatModelNeedsAScanFirst(t *testing.T) {
 	s := New("test", nil)
-	res, err := s.handleThreatModel(context.Background(), emptyInput{})
+	res, err := s.handleThreatModel(context.Background(), threatModelInput{})
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}

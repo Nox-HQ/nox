@@ -64,14 +64,10 @@ func runModel(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
 	}
-	m := threatmodel.Build(in)
-	if previous != "" {
-		prev, err := threatmodel.LoadPrevious(previous)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return 2
-		}
-		m = m.WithChanges(prev)
+	m, err := threatmodel.BuildAgainst(in, previous)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
 	}
 
 	if jsonOut {

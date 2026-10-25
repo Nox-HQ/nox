@@ -254,7 +254,7 @@ func TestEmptyScanYieldsNoElementsAndSaysSo(t *testing.T) {
 	if !strings.Contains(md, "hold nothing this model can describe") {
 		t.Error("an empty model must say it is empty because of what was read")
 	}
-	want := []string{"No ai.inventory.json", "No SBOM", "No Express routes were read"}
+	want := []string{"No ai.inventory.json", "No SBOM", "No routes were read"}
 	for _, w := range want {
 		found := false
 		for _, l := range m.Limits {

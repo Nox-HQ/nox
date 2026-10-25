@@ -45,7 +45,7 @@ new element from a moved one.
 
 | Element | Source | What is evidenced |
 |---|---|---|
-| Entry points (routes) | `findings.json` `routes`, written by the authorization reader (Express-style JavaScript and TypeScript) | method, mounted path, registration `file:line`, and the authentication and authorization middleware visible on the route's chain, by name |
+| Entry points (routes) | `findings.json` `routes`, written by the authorization reader (Express and Fastify JavaScript and TypeScript, Flask and FastAPI Python) | method, mounted path, registration `file:line`, and the authentication and authorization middleware visible on the route's chain, by name |
 | Authorization leads | `findings.json` `leads` | a route that loads a record by a caller-supplied id with no visible ownership check; also names a route when `routes` was not recorded |
 | AI agents | `ai.inventory.json` `tool_permission_matrix` | tools and their capability tags (`shell_exec`, `email_send`, `database_read`, ...); a tool with no recognised capability is named as such |
 | MCP servers and client | `ai.inventory.json` components (`.mcp.json` and `mcp.json`) | server name, launch command and arguments (never the `env` block) |
@@ -117,8 +117,9 @@ with a line saying how many were left out.
 Stated in every model. Fixed limits: business logic and intent, runtime
 configuration, the identity provider and session handling, network topology
 beyond infrastructure findings, frameworks nox does not read (routes and
-authorization leads are Express-only; Fastify, NestJS, Next.js, Python, Go and
-Java entry points, gRPC, queue consumers and scheduled jobs are not enumerated),
+authorization leads come from the Express, Fastify, Flask and FastAPI readers;
+NestJS, Next.js, Django, Go and Java entry points, gRPC, queue consumers and
+scheduled jobs are not enumerated),
 infrastructure of a kind nox does not read (or produced by a template or module), dependency directness, call tracing between
 elements, data sensitivity, third-party and MCP server internals. Per-run limits
 are added when a scope was not scanned, the scan ran offline or did not complete,
@@ -132,6 +133,9 @@ shell") and STRIDE cells whose evidence changed, with the evidence that came and
 went. Identity is the element ID; a cell is compared on stable evidence keys (rule
 and file, or the statement), never on line numbers, so a finding that moved is not
 a change.
+
+The MCP tool takes the same comparison as an optional `previous` argument: the
+path of an earlier `model.json`, which must sit under an allowed workspace path.
 
 A comparison that cannot be made says so. If the AI inventory or the SBOM was
 given to only one of the two models, or the earlier model recorded no routes (it
@@ -153,9 +157,9 @@ scan of the directory recognises it as nox's own output rather than source.
 
 Two small scan-side changes make the evidence available:
 
-- `findings.json` has a `routes` key listing every Express route the
-  authorization reader read, with the middleware it could see. Routes are
-  context, not findings: they reach no gate, exit code, SARIF output or
+- `findings.json` has a `routes` key listing every Express, Fastify, Flask
+  and FastAPI route the authorization reader read, with the middleware it could
+  see. Routes are context, not findings: they reach no gate, exit code, SARIF output or
   fingerprint. The key is absent when no routes were read.
 - The AI inventory reads the project-scoped `.mcp.json` as it reads `mcp.json`
   (it was inventoried as one opaque component, with no servers and no tool

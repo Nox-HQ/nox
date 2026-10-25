@@ -25,15 +25,23 @@ const threatModelNote = "Relay the summary and the questions for the team. State
 	"cannot show that a threat does not exist or has been dealt with, a cell marked not evidenced means nox has " +
 	"nothing either way, and the limits list what the model cannot see. Do not add threats the model does not cite."
 
+// threatModelInput is the threat_model tool's input.
+type threatModelInput struct {
+	// Previous is the model.json of an earlier run (what `nox model` writes).
+	// When given, the model also says which elements, flows, trust boundaries
+	// and STRIDE cells changed since it. It must sit under an allowed path.
+	Previous string `json:"previous,omitempty"`
+}
+
 func (s *Server) registerThreatModelTools(srv *mcp.Server) {
 	srv.Tool("threat_model").
-		Description("Threat model assembled from the last scan: the elements nox can evidence (routes and their authentication middleware, AI agents and their tools, MCP servers, data stores, external services, the deployment surface), the data flows and trust boundaries between them, a STRIDE table with the evidence per element and category, questions for the team derived from the gaps, and what nox cannot see. Use when the user asks for a threat model, an architecture overview or system documentation. Deterministic and read-only; never states that a threat is absent or handled. Needs a prior scan.").
+		Description("Threat model assembled from the last scan: the elements nox can evidence (routes and their authentication middleware, AI agents and their tools, MCP servers, data stores, external services, the deployment surface), the data flows and trust boundaries between them, a STRIDE table with the evidence per element and category, questions for the team derived from the gaps, and what nox cannot see. Use when the user asks for a threat model, an architecture overview or system documentation. Deterministic and read-only; never states that a threat is absent or handled. Needs a prior scan. Pass previous (a model.json from an earlier run) to also get what changed since it.").
 		ReadOnly().
 		OutputSchema(threatModelOutput{}).
 		Handler(s.handleThreatModel)
 }
 
-func (s *Server) handleThreatModel(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
+func (s *Server) handleThreatModel(_ context.Context, input threatModelInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
 		return toolError("no scan results available — run the scan tool first"), nil
@@ -45,6 +53,14 @@ func (s *Server) handleThreatModel(_ context.Context, _ emptyInput) (mcp.Structu
 	if c, err := git.HeadCommit(pc.basePath); err == nil {
 		in.Commit = c
 	}
-	m := threatmodel.Build(in)
+	if input.Previous != "" {
+		if err := s.isPathAllowed(input.Previous); err != nil {
+			return toolError(err.Error()), nil
+		}
+	}
+	m, err := threatmodel.BuildAgainst(in, input.Previous)
+	if err != nil {
+		return toolError("previous model: " + err.Error()), nil
+	}
 	return structured(threatModelOutput{Summary: m.Terminal(), Model: m, Note: threatModelNote})
 }

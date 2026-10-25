@@ -95,6 +95,37 @@ func TestScanTool_PreviousFileAndAllowlist(t *testing.T) {
 	}
 }
 
+// A previous findings.json written with --offline did not look advisories up.
+// The scan tool must say so rather than list every advisory as new.
+func TestScanTool_OfflinePreviousIsNotComparedOnAdvisories(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "old.env"), []byte(changeTestOldKey), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New("test", []string{dir})
+	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
+		t.Fatal(err)
+	}
+	pc := s.getCache("")
+	prev := filepath.Join(dir, "prev.json")
+	rep := pc.result.JSONReporter("test")
+	rep.Offline = true
+	if err := rep.WriteToFile(pc.result.Findings, prev); err != nil {
+		t.Fatal(err)
+	}
+	_, delta := s.scanProject(scanInput{Path: dir, Previous: prev})
+	if delta == nil {
+		t.Fatal("no delta")
+	}
+	found := false
+	for _, c := range delta.Caveats {
+		found = found || strings.Contains(c, "did not look up advisories")
+	}
+	if !found {
+		t.Errorf("caveats = %v, want the advisory-lookup caveat", delta.Caveats)
+	}
+}
+
 // The diff tool returns the shared delta.
 func TestDiffTool_ReturnsTheDelta(t *testing.T) {
 	dir := t.TempDir()
