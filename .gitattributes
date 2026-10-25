@@ -22,6 +22,10 @@
 *.golden text eol=lf
 *.golden.* text eol=lf
 
+# Authorization fixtures: the guard tests remove multi-line guards by exact
+# string, so a CRLF checkout leaves the guard in place
+core/analyzers/authz/testdata/** text eol=lf
+
 # Proto definitions
 *.proto text eol=lf
 
