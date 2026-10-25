@@ -51,6 +51,7 @@ instead of hidden machine state.
   `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
   `mcpServers`), never from the content: a `servers` object in unrelated JSON is
   not an MCP config. Zed's `command: {path, args}` form is read too.
+
 - **Next.js and Django routes join the route table.** Next.js route handlers
   (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
   prefixes, function and class views, DRF routers and viewsets) are read into
@@ -62,7 +63,7 @@ instead of hidden machine state.
   = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
   auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
   find are never leads. AUTHZ-001's object-level analysis does not run over
-  these handlers, and "Checks completed" now says so. NestJS is still not read.
+  these handlers, and "Checks completed" now says so.
 - **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
   decision `nox advisories` computes; the rendering and the "scan incomplete"
   rule moved into `core/advisory`, so the CLI and the tool cannot disagree.

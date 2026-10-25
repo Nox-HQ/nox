@@ -1055,8 +1055,8 @@ scan:
     # are not findings: the assessment lists them under "Additional
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. Its body
-    # analysis covers Express, Fastify, Flask and FastAPI; NestJS is not read. AUTHN-001 is the
-    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js and Django
+    # analysis covers Express, Fastify, Flask and FastAPI. AUTHN-001 is the
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django
     # routes, for a route with no visible authentication (an
     # administrative or account route, or any DELETE, PUT or PATCH, with no
     # auth middleware, decorator, dependency or check on the caller): a lead

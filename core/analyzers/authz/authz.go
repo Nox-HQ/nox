@@ -89,12 +89,14 @@
 // proposition, the same counterexample classes, the same Lead. The reader is
 // text over a lexically masked copy of the file, not a Python parser.
 //
-// Next.js route handlers (app/**/route.ts and pages/api) and Django (urls.py
+// Next.js route handlers (app/**/route.ts and pages/api), NestJS controllers
+// (@Controller/@Get with @UseGuards and global guards) and Django (urls.py
 // with function and class views, DRF routers and permission classes) are read
 // into the same route table, so AUTHN-001, WEBHOOK-001 and `nox model` cover
 // them; AUTHZ-001's body analysis does not run over their handlers.
 //
-// NOT read: NestJS and other decorator frameworks, Flask class-based views and Flask-RESTful
+// NOT read: other decorator frameworks (routing-controllers, tsoa), NestJS GraphQL
+// resolvers and gateways, Flask class-based views and Flask-RESTful
 // resources, Starlette/Sanic/Quart/aiohttp/Tornado routes, custom
 // route-definition helpers, handlers that read parameters through a validation
 // helper (`parseReq(req, schema)`) or a FastAPI dependency that itself loads
@@ -205,10 +207,10 @@ func (a *Analyzer) Leads() []Lead { return a.leads }
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
 // whose routes this analyzer reads. Keep it equal to the package
 // documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI, Next.js and Django routes"
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django routes"
 
 // ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
-// (object-level authorization) runs over. Next.js and Django routes enter the
+// (object-level authorization) runs over. Next.js, NestJS and Django routes enter the
 // route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
 // for ownership checks, and the scan says so rather than claiming otherwise.
 const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"
@@ -376,6 +378,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		a.routes += len(nextRoutes)
 		a.routeList = append(a.routeList, nextRoutes...)
 		views = append(views, nextViews...)
+		sortRoutes(a.routeList)
+	}
+	if nestRoutes, nestViews := ix.nestRoutes(); len(nestRoutes) > 0 {
+		a.routes += len(nestRoutes)
+		a.routeList = append(a.routeList, nestRoutes...)
+		views = append(views, nestViews...)
 		sortRoutes(a.routeList)
 	}
 	if len(pyOrder) > 0 {
