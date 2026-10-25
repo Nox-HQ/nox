@@ -199,7 +199,7 @@ func nextBuild(f *jsFile, routePath string, verbs map[string]int, wraps map[stri
 		if authn == "" && authz == "" && (jsInlineAuthRe.MatchString(f.sans) || nextAuthRe.MatchString(f.sans)) {
 			authn = inlineAuthLabel
 		}
-		rt := Route{Method: v, Path: routePath, FilePath: f.path, Line: lineAt(f.lineStarts, verbs[v]), Authn: authn, Authz: authz}
+		rt := Route{Method: v, Path: routePath, FilePath: f.path, Line: lineAt(f.lineStarts, verbs[v]), Authn: authn, Authz: authz, Reader: ReaderNextJS}
 		routes = append(routes, rt)
 		views = append(views, routeView{route: rt, handler: f.sans, known: true, chain: wrap, guardUnseen: guard, framework: "nextjs"})
 	}

@@ -279,7 +279,7 @@ func authzRoutes(a *authz.Analyzer) []report.Route {
 	for _, r := range rs {
 		out = append(out, report.Route{
 			Method: r.Method, Path: r.Path, FilePath: r.FilePath, Line: r.Line,
-			Authn: r.Authn, Authz: r.Authz,
+			Authn: r.Authn, Authz: r.Authz, Reader: r.Reader,
 		})
 	}
 	return out

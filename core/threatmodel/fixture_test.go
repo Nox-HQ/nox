@@ -35,9 +35,9 @@ func fixture() Input {
 				ToolName: "nox", ToolVersion: "1.2.3",
 			},
 			Routes: []report.Route{
-				{Method: "POST", Path: "/login", FilePath: "src/server.js", Line: 6},
-				{Method: "GET", Path: "/api/invoices/:id", FilePath: "src/routes/invoices.js", Line: 13, Authn: "requireAuth"},
-				{Method: "POST", Path: "/api/assistant/summarise", FilePath: "src/routes/assistant.js", Line: 27, Authn: "requireAuth"},
+				{Method: "POST", Path: "/login", FilePath: "src/server.js", Line: 6, Reader: "Express or Fastify"},
+				{Method: "GET", Path: "/api/invoices/:id", FilePath: "src/routes/invoices.js", Line: 13, Authn: "requireAuth", Reader: "Express or Fastify"},
+				{Method: "POST", Path: "/api/assistant/summarise", FilePath: "src/routes/assistant.js", Line: 27, Authn: "requireAuth", Reader: "Express or Fastify"},
 			},
 			Leads: []report.Lead{{
 				Category: "authorization", RuleID: "AUTHZ-001", Route: "GET /api/invoices/:id",

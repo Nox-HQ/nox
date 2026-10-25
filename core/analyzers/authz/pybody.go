@@ -674,6 +674,7 @@ func (ix *pyIndex) routeInventory() ([]Route, []routeView) {
 			Line:     lineAt(r.file.lineStarts, r.offset),
 			Authn:    authn,
 			Authz:    authz,
+			Reader:   pyReader(r.framework),
 		}
 		out = append(out, rt)
 		var chain strings.Builder
@@ -862,4 +863,12 @@ func containsString(xs []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// pyReader names the Python framework a route was registered with.
+func pyReader(framework string) string {
+	if framework == "fastapi" {
+		return ReaderFastAPI
+	}
+	return ReaderFlask
 }

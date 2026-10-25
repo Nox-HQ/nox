@@ -231,7 +231,7 @@ func (b *builder) collectRoutes() {
 			},
 			Evidence: []Evidence{{
 				Artifact: artFindings, Ref: loc(r.FilePath, r.Line),
-				Statement: routeStatement(r.FilePath),
+				Statement: routeStatement(r.Reader, r.FilePath),
 			}},
 		}, r.FilePath)
 		e.spans = append(e.spans, span{r.FilePath, r.Line})
@@ -728,11 +728,15 @@ func (b *builder) ensureCapability(id, name string, ev Evidence) *elem {
 	})
 }
 
-// routeStatement says what read a route registration. The Python readers are
-// named; a JavaScript file keeps the wording it has always had.
-func routeStatement(file string) string {
-	if strings.HasSuffix(file, ".py") {
-		return "route registration read by the authorization reader (Flask or FastAPI)"
+// routeStatement says what read a route registration. It names the reader the
+// route carries; a report written before routes carried one falls back to the
+// file's language, which can only say so much.
+func routeStatement(reader, file string) string {
+	if reader != "" {
+		return "route registration read by the " + reader + " reader"
 	}
-	return "route registration read by the authorization reader (Express)"
+	if strings.HasSuffix(file, ".py") {
+		return "route registration read by the authorization reader (Python)"
+	}
+	return "route registration read by the authorization reader (JavaScript or TypeScript)"
 }

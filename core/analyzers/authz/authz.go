@@ -169,7 +169,19 @@ type Route struct {
 	// authorization (or record-loading) middleware on the route's chain.
 	Authn string
 	Authz string
+	// Reader names the framework reader that found the registration (one of
+	// the Reader* constants), so a report can say what actually read it.
+	Reader string
 }
+
+// The framework readers a Route can name.
+const (
+	ReaderExpress = "Express or Fastify"
+	ReaderFlask   = "Flask"
+	ReaderFastAPI = "FastAPI"
+	ReaderNextJS  = "Next.js"
+	ReaderDjango  = "Django"
+)
 
 // Lead is a route that meets AUTHZ-001's proposition, reported as something to
 // verify rather than as a finding.
@@ -582,6 +594,7 @@ func (ix *index) routeInventory(routes []route, uses map[string][]use, inherited
 			Line:     lineAt(r.file.lineStarts, r.offset),
 			Authn:    authn,
 			Authz:    authz,
+			Reader:   ReaderExpress,
 		}
 		_, mounted := inherited[r.file.path]
 		out = append(out, rt)

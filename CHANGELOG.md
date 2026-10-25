@@ -23,6 +23,14 @@ what needs attention. `nox fix` no longer runs package install scripts and keeps
 the project's version specifiers; MCP rug-pull pins are a committed project file
 instead of hidden machine state.
 
+### Fixed
+
+- **`nox model` names the reader that actually found a route.** Every JavaScript
+  route was "read by the authorization reader (Express)" and every Python route
+  "(Flask or FastAPI)", so Next.js and Django routes carried the wrong name. A
+  route now carries its reader (`reader` in `findings.json` routes: Express or
+  Fastify, Flask, FastAPI, Next.js, Django) and the model's evidence says so.
+
 ### Added
 
 - **`nox intel forget` rotates the reporter salt** once the service confirms

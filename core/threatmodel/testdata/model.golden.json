@@ -311,7 +311,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/routes/invoices.js:13",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -330,7 +330,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/routes/assistant.js:27",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -349,7 +349,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/server.js:6",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -483,7 +483,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/routes/invoices.js:13",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -497,7 +497,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/routes/assistant.js:27",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -511,7 +511,7 @@
         {
           "artifact": "findings.json",
           "ref": "src/server.js:6",
-          "statement": "route registration read by the authorization reader (Express)"
+          "statement": "route registration read by the Express or Fastify reader"
         }
       ]
     },
@@ -1745,7 +1745,7 @@
       "basis": {
         "artifact": "findings.json",
         "ref": "src/server.js:6",
-        "statement": "route registration read by the authorization reader (Express)"
+        "statement": "route registration read by the Express or Fastify reader"
       }
     },
     {
