@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.48.2",
+  "nox_release": "v1.49.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -28,24 +28,5 @@
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential",
     "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier"
   },
-  "entries": [
-    {
-      "rule": "VULN-002",
-      "classification": "refined-away",
-      "pr": 843,
-      "reason": "A package in the embedded established set (npm-high-impact 1.13.0; top 10,000 PyPI by downloads) is not a typosquat of the curated target it sits one edit from. Every corpus drop was read: reitit's safer-buffer (vs safe-buffer) and di (vs d3, the AngularJS DI library karma depends on), and anthropic-sdk-python's httpx2 (vs httpx), published from github.com/pydantic/httpx2 by httpx's author and declared in that SDK's own pyproject.toml. A known-malicious name is never exempt."
-    },
-    {
-      "rule": "DATA-012",
-      "classification": "value-shape-required",
-      "pr": 853,
-      "reason": "A passport number is upper-case and contains a digit (US: 9 digits or a letter and 8 digits; UK: 9 digits), or is a German serial of nine characters from the vowel-free PassV alphabet. Every corpus drop was read: all six are hackathon-starter's `const passport = require('passport')` / `require('passport-strategy')` lines, where the case-insensitive value class read `require` as the number. Generated real-format values in a passport-number key still fire, and the JSON key form (`\"passport_number\": ...`, `\"passport\": {\"number\": ...}`) now fires where it was missed before."
-    },
-    {
-      "rule": "IAC-296",
-      "classification": "applicability-narrowed",
-      "pr": 862,
-      "reason": "IAC-296 matched `kind: Ingress` and so fired on every Ingress; its claim is now that an Ingress WITH a tls block serves a host no tls entry covers, or has a tls entry with no secretName and no certificate-provisioning annotation. Both corpus drops were read. kubernetes/examples AI/model-serving-tensorflow/ingress.yaml has no tls block at all: that is IAC-149's condition, IAC-149 still reports it on the same line, and nothing about a covered host or a certificate source can be said of it. stefanprodan/podinfo charts/podinfo/templates/ingress.yaml is a Helm template whose tls block sits under `{{- if .Values.ingress.tls }}` and whose hosts are `{{ .host }}`; the rule cannot render it, so it reports nothing rather than guess. No Ingress with a covered-host or certificate gap lost its finding."
-    }
-  ]
+  "entries": []
 }
