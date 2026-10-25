@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Contribution is consented to, versioned, and erasable.** `nox scan` now
+  contributes (when `scan.intelligence.contribute: true`) only on a machine
+  that has accepted the contribution terms: `nox intel consent show` prints
+  them, `nox intel consent accept` records the accepted version in
+  `~/.nox/intel-consent.json` (per installation, beside the reporter salt; a
+  committed `.nox.yaml` cannot consent for whoever scans it). Observations are
+  sent as contribution schema 2 with `consent_version` and a `deletion_verifier`
+  (SHA-256 of a key derived from the private salt and never sent).
+  `nox intel forget` posts the key to `/v1/reporters/erase`, prints the counts
+  the service reports, and withdraws consent locally; if the service cannot be
+  reached or refuses, nothing changes locally. `nox intel preview` prints the
+  terms and the exact fields. **Behaviour change:** an existing installation
+  with `contribute: true` stops contributing until it runs
+  `nox intel consent accept`; each scan says so, as a non-blocking degradation,
+  and does the same when the terms version changes. With contribution off no
+  request is made and nothing is said. The terms text (version `2026-10`) is
+  pending owner review.
 - **The default scan now says when a route has no visible authentication.**
   `nox model` already printed "no authentication middleware visible" for
   `GET /api/admin/users` and `DELETE /api/users/:id`; the scan assessment said

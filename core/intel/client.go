@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -56,6 +57,11 @@ func (c *Client) Contribute(ctx context.Context, obs []Observation) Result {
 }
 
 func (c *Client) submit(ctx context.Context, o *Observation) error {
+	// Structural, not advisory: an observation that cannot name the terms its
+	// operator accepted is not sent, whoever built it.
+	if o.ConsentVersion == "" {
+		return errors.New("observation carries no consent_version; not sent")
+	}
 	body, err := json.Marshal(o)
 	if err != nil {
 		return fmt.Errorf("marshalling observation: %w", err)
@@ -89,4 +95,52 @@ func (c *Client) submit(ctx context.Context, o *Observation) error {
 		return fmt.Errorf("observation rejected with status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// ErasureResult is what the service reports it removed.
+type ErasureResult struct {
+	CandidatesAnonymised int    `json:"candidates_anonymised"`
+	IdentifiersRemoved   int    `json:"identifiers_removed"`
+	ConsentRemoved       bool   `json:"consent_removed"`
+	Proof                string `json:"proof"`
+}
+
+// Erase asks the service to remove reporterID from every report. It is a POST
+// with a body so the id never appears in a logged path. Any answer other than
+// 200 is an error: the caller must not treat an unconfirmed erasure as done.
+func (c *Client) Erase(ctx context.Context, reporterID, deletionKey string) (ErasureResult, error) {
+	var res ErasureResult
+	body, err := json.Marshal(map[string]string{
+		"reporter_id": reporterID, "deletion_key": deletionKey,
+	})
+	if err != nil {
+		return res, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/v1/reporters/erase", bytes.NewReader(body))
+	if err != nil {
+		return res, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return res, fmt.Errorf("could not reach the service: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		var e struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&e)
+		if e.Error != "" {
+			return res, fmt.Errorf("erasure refused (status %d): %s", resp.StatusCode, e.Error)
+		}
+		return res, fmt.Errorf("erasure refused with status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return res, fmt.Errorf("erasure answer unreadable (nothing confirmed): %w", err)
+	}
+	return res, nil
 }
