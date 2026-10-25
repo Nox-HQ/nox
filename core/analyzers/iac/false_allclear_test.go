@@ -84,7 +84,7 @@ func TestFalseAllClear_RuleFiresOnlyOnTheInsecureForm(t *testing.T) {
 		// ---- 3. terraform S3 public access block switched off ------------
 		{
 			name: "terraform block_public_acls = false",
-			rule: "IAC-504", path: "main.tf", want: 4,
+			rule: "IAC-504", path: "main.tf", want: 1,
 			body: "resource \"aws_s3_bucket_public_access_block\" \"invoices\" {\n  bucket                  = aws_s3_bucket.invoices.id\n  block_public_acls       = false\n  block_public_policy     = false\n  ignore_public_acls      = false\n  restrict_public_buckets = false\n}\n",
 		},
 		{

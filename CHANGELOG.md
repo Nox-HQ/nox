@@ -220,6 +220,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **IAC-504 reports one finding per resource, not one per switch.** A
+  `aws_s3_bucket_public_access_block` with all four flags `false` produced four
+  identical findings ("in 4 places"). It now produces one, which keeps the rule
+  ID, spans the flags, and names the ones that are off and the resource
+  (`aws_s3_bucket_public_access_block.invoices`; a module call or a tfvars file
+  is grouped by its block or file). Its identity follows the resource, so fixing
+  one switch or moving the block does not turn it into a different finding.
+  The rule was added in this release cycle, so no baseline, VEX statement or
+  alias needs an entry. The findings it folds away are recorded as refuted in
+  the stage accounting, with the reason.
+
 - **MCP `threat_model` takes a `previous` model.** The tool's input schema was
   `{}`, so an agent could not ask what changed since an earlier model, though
   `nox model --previous` could. It now accepts an optional `previous` (the

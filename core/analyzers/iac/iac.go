@@ -149,6 +149,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// Applicability is decided by the document, not by its name. See
 	// document_kind.go.
 	out = dropRulesOutsideTheirDocumentKind(path, out, content, a.engine.Rules(), drop)
+	// One finding per resource for IAC-504, not one per switch. See
+	// s3_public_access_block.go.
+	out = collapsePublicAccessBlock(out, content, drop)
 	// Compose resolves `${VAR:-default}` before it reads an image reference,
 	// so this one is decided by parsing the document rather than by a pattern.
 	out = append(out, scanComposeImages(path, content)...)
