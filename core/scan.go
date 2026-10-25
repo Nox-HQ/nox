@@ -102,6 +102,12 @@ type ScanResult struct {
 	// findings are incomplete and "no findings" must not be read as "clean".
 	Degradations []Degradation
 
+	// AdvisoryLookupSkipped is true when this scan did not look its
+	// dependencies up in a vulnerability source (offline, --no-osv, osv.disabled
+	// or no dependency scope). Its advisories are then absent because it did not
+	// ask, and a comparison with a scan that did must not read that as a change.
+	AdvisoryLookupSkipped bool
+
 	// Capabilities is what this installation can establish at all, and
 	// Coverage is what each capability actually concluded about each subject.
 	//
@@ -1080,7 +1086,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		routes = authzRoutes(authzAnalyzer)
 	}
 
-	return &ScanResult{
+	res := &ScanResult{
 		Leads:              leads,
 		LeadChecks:         leadChecks,
 		Routes:             routes,
@@ -1101,7 +1107,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Rules:              allRules,
 		Degradations:       degradations.Items(),
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
-	}, nil
+	}
+	res.AdvisoryLookupSkipped = !vulnLookupEnabled
+	return res, nil
 }
 
 // loadSlopFeed resolves and verifies the predictive slopsquat feed named in the

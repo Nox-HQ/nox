@@ -49,6 +49,15 @@ type Meta struct {
 	// the artifact — "this report was produced without the scanner touching the
 	// network" — backed by the enforced egress test, not just a claim.
 	Offline bool `json:"offline"`
+	// AdvisoryLookup is AdvisoryLookupSkipped when the scan did not look its
+	// dependencies up in a vulnerability source although it was not offline
+	// (--no-osv, osv.disabled, or no dependency scope). Omitted otherwise, which
+	// is also how a report from before the field reads: looked up.
+	//
+	// A comparison between two scans needs it. A scan that did not look has no
+	// advisories because it did not ask, and comparing it with one that did
+	// reports every advisory as new.
+	AdvisoryLookup string `json:"advisory_lookup,omitempty"`
 	// SASTLanguages records the resolved per-language SAST depth applied to the
 	// scan (language name → deep|standard|off). It makes the depth strategy
 	// auditable straight from the artifact: a reviewer can see that, say,
@@ -155,6 +164,10 @@ type CapabilityCoverage struct {
 	// one layer up.
 	Inconclusive int `json:"inconclusive"`
 }
+
+// AdvisoryLookupSkipped is Meta.AdvisoryLookup for a scan that did not look
+// its dependencies up.
+const AdvisoryLookupSkipped = "skipped"
 
 // Degradation is a single incomplete check, as recorded in the artifact.
 type Degradation struct {
@@ -334,6 +347,8 @@ type JSONReporter struct {
 	// Offline is recorded in the report Meta as the proof-of-offline
 	// attestation. Set it to the scan's `--offline` state before Generate.
 	Offline bool
+	// AdvisoryLookup is Meta.AdvisoryLookup; core's JSONReporter sets it.
+	AdvisoryLookup string
 	// Prioritize orders findings by priority (severity, then reachability, then
 	// confidence) instead of the canonical deterministic order — the most
 	// actionable findings first, likely-false-positive unreachable vulns last.
@@ -417,6 +432,8 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		LeadChecks:  r.LeadChecks,
 		Routes:      r.Routes,
 	}
+
+	report.Meta.AdvisoryLookup = r.AdvisoryLookup
 
 	return json.MarshalIndent(report, "", "  ")
 }

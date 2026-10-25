@@ -30,6 +30,9 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.SASTLanguages = r.SASTProfile
 	rep.Scope = r.Scope.report()
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
+	if r.AdvisoryLookupSkipped {
+		rep.AdvisoryLookup = report.AdvisoryLookupSkipped
+	}
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles

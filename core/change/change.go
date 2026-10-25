@@ -41,6 +41,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/advisory"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/findings"
@@ -68,7 +69,21 @@ type State struct {
 	Incomplete []string
 	// Scanned is the scopes a scoped scan covered; nil means a full scan.
 	Scanned []string
+	// AdvisoryLookup is empty when this scan looked its dependencies up in a
+	// vulnerability source, and otherwise says why it did not (offline,
+	// --no-osv, a lookup that failed). A scan that did not look reports no
+	// advisories because it did not ask, not because there are none, so the
+	// advisories of such a scan are never compared.
+	AdvisoryLookup string
 }
+
+// Why a scan did not look its dependencies up. They are the reasons State
+// carries and the words a caveat uses.
+const (
+	LookupOffline  = "it was offline"
+	LookupDisabled = "vulnerability lookups were disabled"
+	LookupFailed   = "its vulnerability lookup failed"
+)
 
 // FromReport builds a State from a loaded findings.json and, optionally, the
 // ai.inventory.json that sat beside it.
@@ -84,6 +99,15 @@ func FromReport(rep report.JSONReport, inv *ai.Inventory, label string) State {
 		if !d.Advisory {
 			s.Incomplete = append(s.Incomplete, d.Detail)
 		}
+		if d.Kind == string(degrade.OSV) {
+			s.AdvisoryLookup = LookupFailed
+		}
+	}
+	switch {
+	case rep.Meta.Offline:
+		s.AdvisoryLookup = LookupOffline
+	case rep.Meta.AdvisoryLookup == report.AdvisoryLookupSkipped:
+		s.AdvisoryLookup = LookupDisabled
 	}
 	if rep.Meta.Scope != nil {
 		s.Scanned = rep.Meta.Scope.Scanned
@@ -167,7 +191,11 @@ type Delta struct {
 // Compare returns what changed from prev to cur.
 func Compare(prev, cur State) Delta {
 	d := Delta{Since: prev.Label, New: []Item{}, Resolved: []Item{}}
-	compareFindings(&d, prev.Findings, cur.Findings)
+	pf, cf := prev.Findings, cur.Findings
+	if prev.AdvisoryLookup != "" || cur.AdvisoryLookup != "" {
+		pf, cf = withoutAdvisories(pf), withoutAdvisories(cf)
+	}
+	compareFindings(&d, pf, cf)
 	compareLeads(&d, prev, cur)
 	compareInventory(&d, prev, cur)
 	d.Caveats = append(d.Caveats, caveats(prev, cur)...)
@@ -226,6 +254,19 @@ func toItem(f *findings.Finding) Item {
 		it.Package, it.Version, it.Advisory = f.Metadata["package"], f.Metadata["version"], f.Metadata["vuln_id"]
 	}
 	return it
+}
+
+// withoutAdvisories drops dependency advisories. They are removed from BOTH
+// sides when either side did not look them up: the side that did look would
+// otherwise read as having gained (or lost) every advisory it has.
+func withoutAdvisories(ff []findings.Finding) []findings.Finding {
+	out := make([]findings.Finding, 0, len(ff))
+	for i := range ff {
+		if _, ok := advisory.IDs(&ff[i]); !ok {
+			out = append(out, ff[i])
+		}
+	}
+	return out
 }
 
 func compareFindings(d *Delta, prev, cur []findings.Finding) {
@@ -541,6 +582,17 @@ func caveats(prev, cur State) []string {
 	if len(cur.Incomplete) > 0 {
 		out = append(out, "This scan did not complete every check ("+strings.Join(cur.Incomplete, "; ")+
 			"); items it could not look for are not reported as resolved, but may be missing.")
+	}
+	switch {
+	case prev.AdvisoryLookup != "" && cur.AdvisoryLookup != "":
+		out = append(out, "Dependency advisories were not compared: the previous scan did not look up advisories ("+
+			prev.AdvisoryLookup+") and neither did this one ("+cur.AdvisoryLookup+").")
+	case prev.AdvisoryLookup != "":
+		out = append(out, "Dependency advisories were not compared: the previous scan did not look up advisories ("+
+			prev.AdvisoryLookup+"), so every advisory this scan found would read as new.")
+	case cur.AdvisoryLookup != "":
+		out = append(out, "Dependency advisories were not compared: this scan did not look up advisories ("+
+			cur.AdvisoryLookup+"), so every advisory the previous scan found would read as resolved.")
 	}
 	if !sameScopes(prev.Scanned, cur.Scanned) {
 		out = append(out, "The two scans covered different scopes ("+scopeWords(prev.Scanned)+" before, "+

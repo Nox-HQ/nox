@@ -220,6 +220,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`--previous` no longer lists every dependency advisory as new when one scan
+  was offline.** An offline scan reports no advisories because it did not look,
+  and comparing it with an online scan (`nox scan --previous <offline
+  findings.json>`, or the MCP `scan` tool) reported all of the online scan's
+  pre-existing advisories as new, and, the other way round, as resolved. A scan
+  that did not look its dependencies up (`--offline`, `--no-osv`, `osv.disabled`,
+  no dependency scope, or a failed OSV lookup) now has its advisories left out of
+  the comparison on both sides, with a caveat in either direction ("the previous
+  scan did not look up advisories (it was offline)..."). `--no-osv` previously
+  left no trace in `findings.json`; it now records `meta.advisory_lookup:
+  "skipped"`. `nox diff` scans both trees with the same flags and was not
+  affected in practice, but shares the guard.
+
 - **`nox fix verify` blamed the user for the dependency directory the fix
   created.** `nox fix apply` runs `npm`, which creates `node_modules/`; the next
   scan then read `node_modules/combined-stream/yarn.lock` (a lockfile that

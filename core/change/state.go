@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/nox-hq/nox-core/degrade"
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/report"
@@ -35,6 +36,12 @@ func FromScan(r *nox.ScanResult, label string) State {
 		if d.Blocks() {
 			s.Incomplete = append(s.Incomplete, d.Detail)
 		}
+		if d.Kind == degrade.OSV {
+			s.AdvisoryLookup = LookupFailed
+		}
+	}
+	if r.AdvisoryLookupSkipped {
+		s.AdvisoryLookup = LookupDisabled
 	}
 	if !r.Scope.Full() {
 		for _, sc := range r.Scope.Ran() {
