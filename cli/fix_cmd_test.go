@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -324,10 +325,10 @@ func TestNpmCommand_TheManifestDecidesTheVerb(t *testing.T) {
 		pkg  string
 		want string
 	}{
-		{"astro", "npm install astro@9.9.9"},
-		{"vitest", "npm install --save-dev vitest@9.9.9"},
-		{"fsevents", "npm install --save-optional fsevents@9.9.9"},
-		{"fast-uri", "npm update fast-uri"}, // transitive: never declared
+		{"astro", "npm install --ignore-scripts --save-prefix=^ astro@9.9.9"},
+		{"vitest", "npm install --ignore-scripts --save-dev --save-prefix=^ vitest@9.9.9"},
+		{"fsevents", "npm install --ignore-scripts --save-optional --save-prefix=^ fsevents@9.9.9"},
+		{"fast-uri", "npm update --ignore-scripts fast-uri"}, // transitive: never declared
 	} {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o600); err != nil {
@@ -451,5 +452,121 @@ func TestWorkdirFor_ARootMismatchSaysWhereItLooked(t *testing.T) {
 		if !strings.Contains(filepath.ToSlash(msg), want) {
 			t.Errorf("message %q does not mention %q", msg, want)
 		}
+	}
+}
+
+// A pin is a decision. The test app pinned lodash 4.17.15 exactly and `fix
+// apply` rewrote it to ^4.18.0, widening what any later install may resolve.
+func TestNpmCommand_KeepsTheSpecifierStyle(t *testing.T) {
+	for _, tc := range []struct {
+		spec string
+		want string
+	}{
+		{"4.17.15", "npm install --ignore-scripts --save-exact lodash@4.18.0"},
+		{"^4.17.15", "npm install --ignore-scripts --save-prefix=^ lodash@4.18.0"},
+		{"~4.17.0", "npm install --ignore-scripts --save-prefix=~ lodash@4.18.0"},
+		{">=4.0.0", "npm install --ignore-scripts lodash@4.18.0"}, // no faithful style: manager default
+	} {
+		dir := t.TempDir()
+		manifest := `{"dependencies": {"lodash": "` + tc.spec + `"}}`
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		touchFile(t, dir, "package-lock.json")
+		name, args := npmCommand(dir, "lodash", "4.18.0")
+		if got := name + " " + strings.Join(args, " "); got != tc.want {
+			t.Errorf("spec %q: got %q, want %q", tc.spec, got, tc.want)
+		}
+	}
+}
+
+func TestNpmCommand_YarnKeepsStyleAndEveryManagerIgnoresScripts(t *testing.T) {
+	for _, tc := range []struct {
+		lockfile, extra, want string
+	}{
+		{"pnpm-lock.yaml", "", "pnpm update --ignore-scripts --depth Infinity lodash@4.18.0"},
+		{"yarn.lock", "", "yarn upgrade --ignore-scripts --exact lodash@4.18.0"},
+		{"yarn.lock", ".yarnrc.yml", "yarn up --exact lodash@4.18.0"}, // scripts off via YARN_ENABLE_SCRIPTS
+		{"bun.lockb", "", "bun update --ignore-scripts lodash@4.18.0"},
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"lodash":"4.17.15"}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		touchFile(t, dir, tc.lockfile)
+		if tc.extra != "" {
+			touchFile(t, dir, tc.extra)
+		}
+		name, args := npmCommand(dir, "lodash", "4.18.0")
+		if got := name + " " + strings.Join(args, " "); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.lockfile+tc.extra, got, tc.want)
+		}
+	}
+}
+
+// Ecosystems whose manager would build or run package code get the flag that
+// stops it; the ones that only resolve keep their command.
+func TestOtherManagers_DoNotRunPackageCode(t *testing.T) {
+	a := upgradeAction{pkg: "pkg", toVersion: "v1.2.3"}
+	for name, tc := range map[string]struct {
+		got  []string
+		want string
+	}{
+		"pip":      {pipUpgradeArgs(a), "install --upgrade --only-binary :all: pkg==1.2.3"},
+		"bundler":  {rubyGemsUpgradeArgs(a), "lock --update pkg --conservative"},
+		"composer": {composerUpgradeArgs(a), "update pkg --with-dependencies --no-scripts --no-plugins"},
+		"nuget":    {nugetUpgradeArgs(a), "add package pkg --version 1.2.3 --no-restore"},
+	} {
+		if got := strings.Join(tc.got, " "); got != tc.want {
+			t.Errorf("%s: got %q, want %q", name, got, tc.want)
+		}
+	}
+}
+
+// The real call path, not just the argv builder: a fake npm on PATH records
+// what applyNpmUpgrade actually ran and with which environment.
+func TestApplyNpmUpgrade_RunsWithScriptsOffAndKeepsTheExactPin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell shim")
+	}
+	bin := t.TempDir()
+	log := filepath.Join(bin, "log")
+	shim := "#!/bin/sh\necho \"$*|$npm_config_ignore_scripts|$YARN_ENABLE_SCRIPTS\" >> " + log + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte(shim), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"dependencies":{"lodash":"4.17.15"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyNpmUpgrade(dir, upgradeAction{pkg: "lodash", toVersion: "4.18.0"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "install --ignore-scripts --save-exact lodash@4.18.0|true|false\n"; string(got) != want {
+		t.Errorf("ran %q, want %q", got, want)
+	}
+}
+
+func TestPrintScriptsNotRun_NamesOnlyWhatRan(t *testing.T) {
+	var b strings.Builder
+	printScriptsNotRun(&b, map[string]bool{"go": true})
+	if b.Len() != 0 {
+		t.Errorf("go runs no package code, yet printed %q", b.String())
+	}
+	printScriptsNotRun(&b, map[string]bool{"npm": true, "pypi": true})
+	out := b.String()
+	for _, want := range []string{"install scripts", "npm rebuild", "wheels"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "composer") {
+		t.Errorf("mentions an ecosystem that was not touched:\n%s", out)
 	}
 }
