@@ -479,7 +479,7 @@ func TestMirrorAnswerIsASpecificBlockingLimit(t *testing.T) {
 		Detail: "nox-intelligence answered 1 package(s) incompletely: npm/b@1 (incomplete: pagination stopped)",
 		Impact: "an empty or short advisory list is not proof",
 	}
-	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{mirror, cap}})
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{mirror, truncated}})
 	var sawMirror, sawGeneric bool
 	for _, l := range r.NotChecked {
 		switch {
