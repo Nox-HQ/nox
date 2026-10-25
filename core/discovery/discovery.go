@@ -333,6 +333,10 @@ func isAgentConfig(name, normalised string) bool {
 		(containsSegment(normalised, ".claude") || containsSegment(normalised, ".cursor")) {
 		return true
 	}
+	// Zed keeps its MCP servers (context_servers) in the project settings file.
+	if name == "settings.json" && containsSegment(normalised, ".zed") {
+		return true
+	}
 	return false
 }
 

@@ -43,26 +43,15 @@ instead of hidden machine state.
   per-record findings, so a baseline entry for the dropped id reads as fixed.
   Requires nox-core v0.6.0.
 
-||||||| parent of 449b2f8 (feat(authz): NestJS controllers and DRF @action routes in the route table)
-- **NestJS controllers join the route table.** `@Controller`/`@Get`/`@Post`...
-  (path, array and object forms, `setGlobalPrefix`, URI versioning) are read into
-  the table `nox model`, AUTHN-001 and WEBHOOK-001 use. `@UseGuards(...)` on the
-  class or method sets authentication (a guard named like an authenticator) or
-  authorization (a role or permission guard); a guard registered application-wide
-  (`app.useGlobalGuards`, `APP_GUARD`) covers the controllers under the
-  application that registers it, not every application in a monorepo. `@Public()`
-  and its lookalikes declare a route public; rate limiters are not access
-  control; application middleware, Fastify hooks and guards it cannot name are
-  never leads. Only files importing `@nestjs/*` are read (routing-controllers and
-  tsoa use the same decorators), and a path built from a constant is skipped, not
-  guessed. A webhook handler is checked together with the injected service it
-  delegates to; one it cannot read is silent, not a finding.
-- **DRF `@action` routes.** A viewset's `@action(detail=..., methods=[...],
-  url_path=...)` methods are routes of their own (`/orders/:pk/cancel`), with the
-  action's own `permission_classes`/`authentication_classes` read when it sets
-  them. Also fixes a false all-clear: an action's `permission_classes=` was read
-  as the viewset's, so one `AllowAny` action made every standard route public and
-  one `IsAuthenticated` action hid the lead on an unguarded `DELETE`.
+||||||| parent of cd272eb (feat(mcp): read each client's server key (VS Code servers, Zed context_servers))
+- **MCP configs are read by the client that owns them.** `.vscode/mcp.json`
+  keeps its servers under `servers`, not `mcpServers`, so VS Code's project
+  config showed up as one opaque component with no servers, no tool matrix, no
+  pin and no shadow check. The key is now chosen from the path (VS Code
+  `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
+  `mcpServers`), never from the content: a `servers` object in unrelated JSON is
+  not an MCP config. Zed's `command: {path, args}` form is read too.
+
 - **Next.js and Django routes join the route table.** Next.js route handlers
   (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
   prefixes, function and class views, DRF routers and viewsets) are read into

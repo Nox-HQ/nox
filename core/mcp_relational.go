@@ -12,6 +12,7 @@ import (
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/mcpconfig"
 	"github.com/nox-hq/nox/core/mcppin"
 	"github.com/nox-hq/nox/core/mcpshadow"
 )
@@ -35,6 +36,11 @@ func looksLikeMCPConfig(path string, content []byte) bool {
 	base := strings.ToLower(filepath.Base(path))
 	if mcpConfigBaseNames[base] || strings.HasSuffix(base, ".mcp.json") {
 		return true
+	}
+	// A file named by a client convention rather than by "mcp" (Zed's
+	// .zed/settings.json) is a config only if it carries that client's key.
+	if k := mcpconfig.ServersKey(path); k != mcpconfig.DefaultServersKey {
+		return mcpconfig.HasServersKey(path, content)
 	}
 	// Structural signal: an mcpServers key present in the bytes. This matches
 	// even when the JSON does not parse, so a rogue config with a trailing comma
