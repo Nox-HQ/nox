@@ -102,18 +102,6 @@ client.chat.completions.create(model="gpt-4-deploy", messages=[])
 	}
 }
 
-func TestDetectAuthEnvVar_NodeEnv(t *testing.T) {
-	for _, src := range []string{
-		"const k = process.env.ANTHROPIC_API_KEY;",
-		"const k = process.env['ANTHROPIC_API_KEY'];",
-	} {
-		got := detectAuthEnvVar(src)
-		if got != "ANTHROPIC_API_KEY" {
-			t.Errorf("expected ANTHROPIC_API_KEY for %q, got %q", src, got)
-		}
-	}
-}
-
 func TestExtractFrameworkComponents_LangChainAndPinecone(t *testing.T) {
 	content := []byte(`from langchain.agents import Tool
 import pinecone

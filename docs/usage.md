@@ -576,10 +576,16 @@ one later). Drift is emitted as findings, flowing into `findings.json` /
 `results.sarif` and gating CI like any scan.
 
 ```bash
+nox mcp pin                        # approve the MCP server definitions in this repo (commit .nox/mcp-pins.json)
 nox mcp baseline -- nox serve      # capture .nox/mcp-baseline.json (commit it)
 nox mcp drift    -- nox serve      # re-capture and report drift (exit 1 on drift)
 nox mcp show                       # print the stored baseline
 ```
+
+`nox mcp pin` is the offline half: it writes `.nox/mcp-pins.json`, a hash of each
+server definition in the repo's MCP configs. `nox scan` reports **MCP-015** for a
+changed or unpinned server on every run until you re-pin, and reports a missing
+pin file instead of staying silent. A scan never writes the file.
 
 The baseline is local, sorted JSON — diff it, commit it, review drift in PRs.
 **Security:** these commands launch the server as a subprocess; never run an
