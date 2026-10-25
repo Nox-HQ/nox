@@ -316,6 +316,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		py := newPyIndex(pyFiles, pyOrder, rls)
 		res := py.findings()
 		a.routes += len(py.routes)
+		a.routeList = append(a.routeList, py.routeInventory()...)
+		sortRoutes(a.routeList)
 		reported = append(reported, res.findings...)
 		leads = append(leads, res.leads...)
 		sortLeads(leads)
@@ -478,8 +480,15 @@ func routeInventory(routes []route, uses map[string][]use, inherited map[string]
 			Authz:    authz,
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
+	sortRoutes(out)
+	return out
+}
+
+// sortRoutes orders an inventory by file, line, method and path, so the JS and
+// Python halves merge into one deterministic list.
+func sortRoutes(rs []Route) {
+	sort.SliceStable(rs, func(i, j int) bool {
+		a, b := rs[i], rs[j]
 		if a.FilePath != b.FilePath {
 			return a.FilePath < b.FilePath
 		}
@@ -488,7 +497,6 @@ func routeInventory(routes []route, uses map[string][]use, inherited map[string]
 		}
 		return a.Method+" "+a.Path < b.Method+" "+b.Path
 	})
-	return out
 }
 
 // counterexample returns why a candidate route is not reported, or "".

@@ -226,7 +226,7 @@ func (b *builder) collectRoutes() {
 			},
 			Evidence: []Evidence{{
 				Artifact: artFindings, Ref: loc(r.FilePath, r.Line),
-				Statement: "route registration read by the authorization reader (Express)",
+				Statement: routeStatement(r.FilePath),
 			}},
 		}, r.FilePath)
 		e.spans = append(e.spans, span{r.FilePath, r.Line})
@@ -705,4 +705,13 @@ func (b *builder) ensureCapability(id, name string, ev Evidence) *elem {
 		ID: "effect:" + id, Kind: KindCapability, Name: name, Zone: ZoneHost,
 		Evidence: []Evidence{ev},
 	})
+}
+
+// routeStatement says what read a route registration. The Python readers are
+// named; a JavaScript file keeps the wording it has always had.
+func routeStatement(file string) string {
+	if strings.HasSuffix(file, ".py") {
+		return "route registration read by the authorization reader (Flask or FastAPI)"
+	}
+	return "route registration read by the authorization reader (Express)"
 }

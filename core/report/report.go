@@ -213,7 +213,7 @@ type JSONReport struct {
 	// descriptive context for a system model, never findings: no consumer of
 	// Findings (SARIF, baseline, VEX, gates, exit codes) reads them. Present
 	// only when the reader found at least one route. An absent key therefore
-	// means "no Express routes read", and a findings.json written before this
+	// means "no routes read", and a findings.json written before this
 	// key existed cannot be told apart from one with no routes; consumers must
 	// treat the two as "not recorded".
 	Routes []Route `json:"routes,omitempty"`

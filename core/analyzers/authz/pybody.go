@@ -645,6 +645,29 @@ func pyStringArg(raw string) bool {
 	return strings.HasPrefix(rest, "'") || strings.HasPrefix(rest, `"`)
 }
 
+// routeInventory describes every Python route, whether or not it meets
+// AUTHZ-001's proposition, with the authentication and authorization elements
+// visibly in front of it. It classifies with the same function the lead logic
+// uses (classifyPy over inherited router dependencies, the route's decorators
+// and its Depends() parameters), so what the inventory records as
+// authentication is exactly what the proposition treated as authentication.
+func (ix *pyIndex) routeInventory() []Route {
+	out := make([]Route, 0, len(ix.routes))
+	for i := range ix.routes {
+		r := &ix.routes[i]
+		authn, authz := classifyPy(append(ix.inheritedDeps(r.recv), r.deps...))
+		out = append(out, Route{
+			Method:   strings.ToUpper(r.method),
+			Path:     joinRoutePath(ix.fullPrefix(r.recv), r.path),
+			FilePath: r.file.path,
+			Line:     lineAt(r.file.lineStarts, r.offset),
+			Authn:    authn,
+			Authz:    authz,
+		})
+	}
+	return out
+}
+
 // ---- the route loop ----
 
 type pyResult struct {

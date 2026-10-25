@@ -19,7 +19,7 @@ var fixedLimits = []string{
 	"Runtime configuration: environment variables, feature flags, secret stores and anything set outside the repository.",
 	"The identity provider, session handling and token validation behind authentication. Middleware is read by name; nox does not evaluate whether it works.",
 	"Network topology beyond what infrastructure-as-code findings show: firewalls, service meshes, VPNs, peering, and what a load balancer actually forwards.",
-	"Entry points. Routes are read only from Express-style JavaScript and TypeScript servers, and authorization leads are Express-only for the same reason. Fastify, NestJS decorators, Next.js handlers, Python, Go, Java and other frameworks are not enumerated, and neither are gRPC services, queue consumers or scheduled jobs.",
+	"Entry points. Routes are read only from Express-style and Fastify servers (JavaScript and TypeScript) and Flask and FastAPI applications (Python), and authorization leads come from the same readers. NestJS decorators, Next.js handlers, Django, Go, Java and other frameworks are not enumerated, and neither are gRPC services, queue consumers or scheduled jobs.",
 	"Infrastructure. Only resources that an infrastructure rule reported on appear. A resource with nothing to report is not in this model.",
 	"Dependencies. Packages are known from the SBOM, which does not say whether a package is direct or transitive. A data store or service inferred from a package shows the application can reach it, not that it does.",
 	"Data flows are static and name-level. A flow joins two elements because the scan connects them (the same file, a taint finding, a dependency, a configuration entry). Nox does not trace calls between routes, services and stores, and does not see data at rest or in transit.",
@@ -61,7 +61,7 @@ func (b *builder) limits() []string {
 		out = append(out, "This findings.json records authorization leads but no routes, so it was written before routes were recorded. Re-run `nox scan` to include them.")
 	}
 	if len(rep.Routes) == 0 && len(rep.LeadChecks) == 0 {
-		out = append(out, "No Express routes were read, so the model has no HTTP entry points. That can mean the project has none, or that its framework is one nox does not read.")
+		out = append(out, "No routes were read, so the model has no HTTP entry points. That can mean the project has none, or that its framework is one nox does not read.")
 	}
 	return out
 }

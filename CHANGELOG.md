@@ -220,6 +220,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`findings.json` `routes` now lists Flask and FastAPI routes, with their
+  authentication.** The route inventory held only JavaScript routes, so `nox
+  model` showed Python entry points only through authorization leads, with
+  "authentication middleware: not recorded". Every Flask and FastAPI route is
+  now listed, and `@login_required`, `@jwt_required()`, `Depends(get_current_user)`
+  (as a parameter or a `dependencies=[...]` entry) and router-level
+  `dependencies` on an `APIRouter` or `include_router` are recorded as the
+  route's `authn`, using the same classification the AUTHZ-001 lead logic
+  applies; role and permission dependencies are recorded as `authz`, never as
+  authentication. The threat model's limits no longer say Python and Fastify
+  routes are not enumerated.
+
 - **`nox compliance iso27001`: a literal credential in a manifest now opens
   A.5.17.** A literal database password in a Kubernetes `env` block (IAC-502) or
   a Compose list entry (IAC-503) left "Authentication information" at "checks
