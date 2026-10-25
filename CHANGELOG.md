@@ -7,33 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.50.0] - 2026-10-25
+## [1.51.0] - 2026-10-25
 
-The intelligence and trust release. Contribution to NOX Intelligence now
-requires accepting versioned terms on the machine (`nox intel consent`), and
-`nox intel forget` erases a reporter and rotates its secret; existing
-installations with `scan.intelligence.contribute: true` pause until consent is
-given. Scans keep working through an OSV outage on the service's mirror and say
-so, report partial intelligence answers as incomplete rather than clean, and merge
-one vulnerability published under two ids into one finding (baselines keep
-matching). The default scan reports routes with no visible authentication
-(AUTHN-001 leads; Express, Fastify, Flask, FastAPI, Next.js, Django) and webhooks
-accepted without signature verification (WEBHOOK-001), and its headline counts
-what needs attention. `nox fix` no longer runs package install scripts and keeps
-the project's version specifiers; MCP rug-pull pins are a committed project file
-instead of hidden machine state.
-
-### Fixed
-
-- **`nox model` names NestJS and DRF action routes, and its entry-point limit
-  matches the readers.** NestJS routes are "read by the NestJS reader", DRF
-  `@action` routes by the Django reader, and the limit text no longer says
-  Next.js, Django or NestJS are not enumerated.
-- **`nox model` names the reader that actually found a route.** Every JavaScript
-  route was "read by the authorization reader (Express)" and every Python route
-  "(Flask or FastAPI)", so Next.js and Django routes carried the wrong name. A
-  route now carries its reader (`reader` in `findings.json` routes: Express or
-  Fastify, Flask, FastAPI, Next.js, Django) and the model's evidence says so.
+Affected-symbol intelligence, MCP advisories and wider route coverage.
+Advisory relevance can rise to "a call path reaches it" from OSV's own Go symbol
+lists and NOX Intelligence's patch-diff symbols, which can never lower it.
+NOX Intelligence's signed MCP advisory feed is checked against configured MCP
+servers (MCP-026), and MCP configs are read in each client's own format
+(VS Code, Zed). NestJS controllers and DRF `@action` routes join the route
+table behind AUTHN-001, WEBHOOK-001 and `nox model`, which now names the reader
+that found each route. Requires nox-core v0.7.0.
 
 ### Added
 
@@ -63,6 +46,52 @@ instead of hidden machine state.
   not checked, never "no advisories". See `docs/mcp-advisory-feed.md`. The
   package-runner parsing MCP-025 uses moved to `core/mcpconfig` so both read a
   launch the same way.
+- **MCP configs are read by the client that owns them.** `.vscode/mcp.json`
+  keeps its servers under `servers`, not `mcpServers`, so VS Code's project
+  config showed up as one opaque component with no servers, no tool matrix, no
+  pin and no shadow check. The key is now chosen from the path (VS Code
+  `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
+  `mcpServers`), never from the content: a `servers` object in unrelated JSON is
+  not an MCP config. Zed's `command: {path, args}` form is read too.
+- **NestJS controllers and DRF `@action` routes join the route table.** NestJS
+  `@Controller`/verb decorators (path forms, global prefix, URI versioning) are
+  read, with `@UseGuards`, `APP_GUARD`, `useGlobalGuards` and `@Public`-style
+  decorators counted as authentication, scoped per application directory; a
+  controller outside any guarded scope is silent rather than a lead. DRF
+  `@action` routes are routes of their own (`url_path`, `detail`), and an
+  action's `permission_classes` no longer stands in for the viewset's. Measured
+  on brocoders/nestjs-boilerplate, the nest samples, the realworld app,
+  readthedocs and netbox: no new false leads.
+
+### Fixed
+
+- **`nox model` names NestJS and DRF action routes, and its entry-point limit
+  matches the readers.** NestJS routes are "read by the NestJS reader", DRF
+  `@action` routes by the Django reader, and the limit text no longer says
+  Next.js, Django or NestJS are not enumerated.
+- **`nox model` names the reader that actually found a route.** Every JavaScript
+  route was "read by the authorization reader (Express)" and every Python route
+  "(Flask or FastAPI)", so Next.js and Django routes carried the wrong name. A
+  route now carries its reader (`reader` in `findings.json` routes: Express or
+  Fastify, Flask, FastAPI, Next.js, Django) and the model's evidence says so.
+
+## [1.50.0] - 2026-10-25
+
+The intelligence and trust release. Contribution to NOX Intelligence now
+requires accepting versioned terms on the machine (`nox intel consent`), and
+`nox intel forget` erases a reporter and rotates its secret; existing
+installations with `scan.intelligence.contribute: true` pause until consent is
+given. Scans keep working through an OSV outage on the service's mirror and say
+so, report partial intelligence answers as incomplete rather than clean, and merge
+one vulnerability published under two ids into one finding (baselines keep
+matching). The default scan reports routes with no visible authentication
+(AUTHN-001 leads; Express, Fastify, Flask, FastAPI, Next.js, Django) and webhooks
+accepted without signature verification (WEBHOOK-001), and its headline counts
+what needs attention. `nox fix` no longer runs package install scripts and keeps
+the project's version specifiers; MCP rug-pull pins are a committed project file
+instead of hidden machine state.
+
+### Added
 
 - **`nox intel forget` rotates the reporter salt** once the service confirms
   erasure, so consenting again is a new, unlinkable reporter instead of the
@@ -82,15 +111,6 @@ instead of hidden machine state.
   per-record findings, so a baseline entry for the dropped id reads as fixed.
   Requires nox-core v0.6.0.
 
-||||||| parent of cd272eb (feat(mcp): read each client's server key (VS Code servers, Zed context_servers))
-- **MCP configs are read by the client that owns them.** `.vscode/mcp.json`
-  keeps its servers under `servers`, not `mcpServers`, so VS Code's project
-  config showed up as one opaque component with no servers, no tool matrix, no
-  pin and no shadow check. The key is now chosen from the path (VS Code
-  `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
-  `mcpServers`), never from the content: a `servers` object in unrelated JSON is
-  not an MCP config. Zed's `command: {path, args}` form is read too.
-
 - **Next.js and Django routes join the route table.** Next.js route handlers
   (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
   prefixes, function and class views, DRF routers and viewsets) are read into
@@ -102,7 +122,7 @@ instead of hidden machine state.
   = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
   auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
   find are never leads. AUTHZ-001's object-level analysis does not run over
-  these handlers, and "Checks completed" now says so.
+  these handlers, and "Checks completed" now says so. NestJS is still not read.
 - **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
   decision `nox advisories` computes; the rendering and the "scan incomplete"
   rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
