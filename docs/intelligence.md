@@ -85,6 +85,31 @@ Contribution is a separate decision from querying, and it is off until
 dependency list; it would be a lie to say "contribute: false" meant nothing
 was sent, so the two are named separately and documented separately.
 
+### Consent, terms and erasure
+
+Setting `scan.intelligence.contribute: true` is not enough. `.nox.yaml` is
+project config and may be committed, so it cannot speak for whoever runs the
+scan; consent is recorded **per installation**, in `~/.nox/intel-consent.json`
+next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
+
+| command | does |
+|---|---|
+| `nox intel consent show` | prints the contribution terms (the single source: `core/intel/terms.go`) |
+| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
+| `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
+| `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
+| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent. Unreachable or refused: it exits non-zero and changes nothing locally |
+
+Observations are contribution schema 2: the allowlisted fields plus
+`schema_version`, `consent_version` (the terms version you accepted) and
+`deletion_verifier`. The verifier is the SHA-256 of a deletion key, itself an
+HMAC of the private salt under a fixed label; the key is sent only to the erase
+endpoint, so only this machine can erase its id once the service has bound the
+verifier. If the terms version changes, contribution pauses until you accept the
+new one, and each scan says so. With contribution off, a scan makes no
+contribution request and says nothing about it. An observation without a
+`consent_version` is never sent.
+
 A contribution that fails is recorded as a degradation and never fails the
 scan. Only `nox scan` contributes — `diff`, `bench` and `intel preview` derive
 observations and send nothing.

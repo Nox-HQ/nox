@@ -1141,7 +1141,8 @@ scan:
 Resolution order for the endpoint is `disabled` > `scan.intelligence.endpoint`
 > `NOX_INTEL_ENDPOINT` > the compiled-in public service. `--offline` turns off
 every lookup regardless. Contribution is a separate decision from querying and
-is off until `scan.intelligence.contribute: true` is set; only `nox scan`
+is off until `scan.intelligence.contribute: true` is set AND this machine has
+accepted the terms (`nox intel consent accept`; `nox intel forget` erases); only `nox scan`
 contributes (never `diff`, `bench` or `intel preview`), and
 `nox intel preview <path>` shows exactly what would be sent.
 
