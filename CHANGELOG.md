@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against `fix plan`'s 4.18.0). It is now planned over every active advisory,
   the way `nox fix` does, and the findings handed to `nox fix` include all the
   advisories that move fixes.
+- **An incomplete NOX Intelligence answer is no longer read as "no
+  vulnerabilities".** When the service marks a package's answer `incomplete`
+  or `unsupported` (`nox_coverage`, nox-intelligence v0.19.1), the scan records a
+  blocking `intel_incomplete` degradation naming the packages, sets
+  `meta.advisory_lookup` to `incomplete`, and `nox diff` does not compare that
+  scan's advisories against a full one. Records the reference restores for a
+  package the service reported as partial are not counted as `intel_suppression`.
+  A plain OSV.dev response carries no coverage statement and raises nothing.
+  Requires nox-core v0.5.0.
 
 ## [1.49.0] - 2026-10-25
 
