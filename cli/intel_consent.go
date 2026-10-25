@@ -151,8 +151,16 @@ func intelForget(args []string, out, errw io.Writer) int {
 		_, _ = fmt.Fprintf(errw, "nox intel forget: erased on the service, but %v\n", err)
 		return 1
 	}
+	// Only now, with the service's confirmation in hand: the salt is the one
+	// credential that can retry a failed erasure. Keeping it afterwards would
+	// make a later consent the same reporter again.
+	if err := intel.RotateSalt(sp); err != nil {
+		_, _ = fmt.Fprintf(errw, "nox intel forget: erased on the service and consent withdrawn, but %v\n", err)
+		return 1
+	}
 	_, _ = fmt.Fprintf(out, "Erased from %s: %d report(s) unlinked from this installation, %d identifier(s) removed, consent record removed: %t (proof: %s).\n",
 		*endpoint, res.CandidatesAnonymised, res.IdentifiersRemoved, res.ConsentRemoved, res.Proof)
+	_, _ = fmt.Fprintln(out, "The reporter salt was discarded: if you consent again, this machine becomes a new, unlinkable reporter.")
 	_, _ = fmt.Fprintln(out, "Contribution is now off on this machine (consent withdrawn). Set scan.intelligence.contribute: false in project config to stop the scan mentioning it.")
 	return 0
 }
