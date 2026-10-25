@@ -255,3 +255,34 @@ func TestReportSummaryNeverOverclaims(t *testing.T) {
 		t.Fatalf("summary = %q", s)
 	}
 }
+
+// The fix runs the package manager, which creates node_modules/. What the
+// re-run finds inside a directory a tool generated is not something the user's
+// change introduced, and listing it beside real regressions in the same words
+// ("Also new") reads as blame. It is reported, but separately and labelled.
+func TestVerifyFindingInAToolGeneratedDirIsNotAttributedToTheUser(t *testing.T) {
+	before := axiosBefore()
+	plan := Build(Input{Findings: before})
+	vendored := dep("lodash", "4.0.0", "4.17.21", "GHSA-lodash-1", "fp-l", findings.SeverityHigh)
+	vendored.Location.FilePath = "node_modules/combined-stream/yarn.lock"
+	own := iac("IAC-001", "deploy/pod.yaml", 3, "fp-own")
+	rep := Verify(context.Background(), plan, before, applied(plan), (&fakeRescan{rs: rescanOf(vendored, own)}).fn())
+
+	if len(rep.NewElsewhere) != 1 || strings.Contains(rep.NewElsewhere[0], "node_modules") {
+		t.Fatalf("new_elsewhere = %v, want only the project's own finding", rep.NewElsewhere)
+	}
+	if len(rep.NewInGeneratedDirs) != 1 {
+		t.Fatalf("new_in_generated_dirs = %v, want the node_modules finding", rep.NewInGeneratedDirs)
+	}
+	var b bytes.Buffer
+	if err := RenderReport(&b, rep); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "generated") || !strings.Contains(out, "node_modules") {
+		t.Fatalf("the report does not say the finding is in a generated directory:\n%s", out)
+	}
+	if strings.Contains(out, "Also new in what was re-checked (2)") {
+		t.Fatalf("the generated-directory finding was counted as the user's:\n%s", out)
+	}
+}

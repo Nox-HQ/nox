@@ -354,6 +354,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 
 	// Technical evidence for ISO/IEC 27001, derived from the cached scan.
 	s.registerComplianceTools(srv)
+	s.registerThreatModelTools(srv)
 
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").

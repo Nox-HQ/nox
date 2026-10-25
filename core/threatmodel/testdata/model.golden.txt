@@ -1,0 +1,37 @@
+Threat model: system evidence from your security scan
+
+Evidence only: a cell with no evidence is not evidenced either way, and nothing here says a threat does not exist.
+
+Based on a scan by nox 1.2.3 on 2026-10-24T17:18:36Z, repository at 0123456789ab.
+Evidence read: findings.json, sbom.cdx.json, ai.inventory.json
+
+Elements nox can evidence:
+  Entry points (routes)      3
+  AI agents                  1
+  Models                     1
+  MCP servers                1
+  MCP clients                1
+  Data stores                3
+  External services          1
+  Ingress                    1
+  Dependencies               1
+  Actors                     2
+  Host capabilities reached  3
+
+Data flows: 16, crossing 12 trust boundaries:
+  application → data store (1)
+  internet → exposed deployment resource (3)
+  application → model provider (1)
+  untrusted input → LLM prompt (1)
+  untrusted caller → route (3)
+  untrusted input → shell command (1)
+  application → third-party service (1)
+  model output → agent tool dispatch (1)
+  model output → MCP server tool (1)
+  model output → outbound network (1)
+  model output → shell (1)
+  model output → tool with a capability nox could not classify (1)
+
+STRIDE cells: 9 with open issues, 3 with leads to verify, 6 with context only, 54 not evidenced.
+2 active finding(s) belong to no modelled element; they are in findings.json.
+Questions for the team: 13. What nox cannot see: 13 limits listed in the written model.

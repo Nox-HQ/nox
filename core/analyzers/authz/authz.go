@@ -138,6 +138,31 @@ type Analyzer struct {
 	reasoning *reasoning.Store
 	leads     []Lead
 	routes    int
+	routeList []Route
+}
+
+// Route is one Express route registration this reader found, with the access
+// control it can attribute to the route by name.
+//
+// It is the evidence under a system description (what entry points exist and
+// what stands in front of them), not a verdict: Authn and Authz are the
+// middleware expressions the reader attributed to the route, read as text, and
+// an empty Authn means only that no authentication middleware is visible to
+// this reader. A handler that checks the caller inline, a framework that
+// authenticates before Express sees the request, or a route that is public on
+// purpose all look the same here.
+type Route struct {
+	// Method is upper-case (GET, POST, ALL); Path includes the prefix its
+	// router is mounted at when this reader resolved the mount.
+	Method string
+	Path   string
+	// FilePath and Line locate the registration.
+	FilePath string
+	Line     int
+	// Authn and Authz are the first authentication and the first
+	// authorization (or record-loading) middleware on the route's chain.
+	Authn string
+	Authz string
 }
 
 // Lead is a route that meets AUTHZ-001's proposition, reported as something to
@@ -170,6 +195,10 @@ const Coverage = "Express, Fastify, Flask, FastAPI routes"
 // FastAPI) the last ScanArtifacts call read. Zero means the scan saw none and
 // has nothing to say about authorization.
 func (a *Analyzer) RoutesRead() int { return a.routes }
+
+// Routes returns every route registration the last ScanArtifacts call read,
+// sorted by file, line, method and path. It is the same set RoutesRead counts.
+func (a *Analyzer) Routes() []Route { return a.routeList }
 
 // RecordReasoningTo directs this analyzer's refutations at store: every route
 // that met the proposition's antecedent (authenticated, identifier-keyed
@@ -217,6 +246,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // them.
 type index struct {
 	routes    int
+	routeList []Route
 	leads     []Lead
 	files     map[string]*jsFile
 	order     []string
@@ -232,7 +262,7 @@ var rlsRe = regexp.MustCompile(`(?i)\benable\s+row\s+level\s+security\b|\bcreate
 // read in path order and findings are sorted.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
-	a.leads, a.routes = nil, 0
+	a.leads, a.routes, a.routeList = nil, 0, nil
 	ix := &index{files: map[string]*jsFile{}}
 	if a.enabled {
 		// Refutations are filed only when the rule reports: in lead mode no
@@ -280,6 +310,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	ix.rls = rls
 	reported := ix.findings()
 	a.routes = ix.routes
+	a.routeList = ix.routeList
 	leads := ix.leads
 	if len(pyOrder) > 0 {
 		py := newPyIndex(pyFiles, pyOrder, rls)
@@ -330,6 +361,7 @@ func (ix *index) findings() []findings.Finding {
 	inherited := ix.inheritedMiddleware(uses)
 	prefixes := ix.mountPrefixes(uses)
 	ix.routes = len(routes)
+	ix.routeList = routeInventory(routes, uses, inherited, prefixes)
 
 	// One handler can serve several routes. A subject is reported if ANY of
 	// its routes meets the proposition, and refuted only if every route that
@@ -419,6 +451,42 @@ func (ix *index) findings() []findings.Finding {
 			return out[i].Location.FilePath < out[j].Location.FilePath
 		}
 		return out[i].Location.StartLine < out[j].Location.StartLine
+	})
+	return out
+}
+
+// routeInventory describes every route, whether or not it meets AUTHZ-001's
+// proposition. The handler is taken to be the last argument and everything
+// before it middleware; that is a positional reading, not the body analysis the
+// proposition uses, so it names what is visibly in front of the route and
+// nothing more.
+func routeInventory(routes []route, uses map[string][]use, inherited map[string][]mwRef, prefixes map[string]string) []Route {
+	out := make([]Route, 0, len(routes))
+	for i := range routes {
+		r := &routes[i]
+		var mw []span
+		if len(r.args) > 1 {
+			mw = r.args[:len(r.args)-1]
+		}
+		authn, authz := classifyChain(routeChain(r, mw, uses[r.file.path], inherited[r.file.path]))
+		out = append(out, Route{
+			Method:   strings.ToUpper(r.method),
+			Path:     joinRoutePath(prefixes[r.file.path], r.path),
+			FilePath: r.file.path,
+			Line:     lineAt(r.file.lineStarts, r.offset),
+			Authn:    authn,
+			Authz:    authz,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.FilePath != b.FilePath {
+			return a.FilePath < b.FilePath
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Method+" "+a.Path < b.Method+" "+b.Path
 	})
 	return out
 }

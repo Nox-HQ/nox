@@ -42,7 +42,7 @@ func extractToolPermissions(path string, content []byte, deg *degrade.Degradatio
 	var sets []ToolPermissionSet
 	fileName := baseName(path)
 
-	if fileName == "mcp.json" {
+	if isMCPConfigName(fileName) {
 		sets = append(sets, extractMCPToolPermissions(path, content, deg)...)
 	}
 

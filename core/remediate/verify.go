@@ -72,6 +72,11 @@ type Report struct {
 	// NewElsewhere are findings the re-run reports that the original scan did
 	// not and that no change touched.
 	NewElsewhere []string `json:"new_elsewhere,omitempty"`
+	// NewInGeneratedDirs are findings the re-run reports under a directory a
+	// package manager creates (node_modules, a virtualenv). The fix runs that
+	// tool, so these are not evidence the user's change introduced anything;
+	// they are listed apart so they are neither hidden nor blamed on it.
+	NewInGeneratedDirs []string `json:"new_in_generated_dirs,omitempty"`
 	// Untouched are the plan items nothing was attempted for.
 	Untouched []int `json:"untouched,omitempty"`
 }
@@ -215,7 +220,7 @@ func Verify(ctx context.Context, plan Plan, before []findings.Finding, attempts 
 			for _, it := range applied {
 				rep.Outcomes = append(rep.Outcomes, v.outcome(it))
 			}
-			rep.NewElsewhere = v.unclaimed()
+			rep.NewElsewhere, rep.NewInGeneratedDirs = v.unclaimed()
 		}
 	}
 	sort.SliceStable(rep.Outcomes, func(i, j int) bool { return rep.Outcomes[i].N < rep.Outcomes[j].N })
@@ -489,18 +494,39 @@ func (v *verifier) newRelated(it *Item) []string {
 	return out
 }
 
-// unclaimed lists the new findings no change accounts for.
-func (v *verifier) unclaimed() []string {
-	var out []string
+// unclaimed lists the new findings no change accounts for, apart from the ones
+// under a directory a tool generated.
+func (v *verifier) unclaimed() (elsewhere, generated []string) {
 	for i := range v.rescan.Active {
 		f := &v.rescan.Active[i]
 		if v.beforeID[identity(f)] || v.beforeLoose[looseKey(f)] || v.claimed[identity(f)+"|"+f.Fingerprint] {
 			continue
 		}
-		out = append(out, describe(f))
+		if dir := generatedDir(f.Location.FilePath); dir != "" {
+			generated = append(generated, describe(f)+" ("+dir+")")
+			continue
+		}
+		elsewhere = append(elsewhere, describe(f))
 	}
-	sort.Strings(out)
-	return out
+	sort.Strings(elsewhere)
+	sort.Strings(generated)
+	return elsewhere, generated
+}
+
+// generatedDirs are directory names a package manager creates in a project.
+// Running the fix is what can bring one into being, so a finding inside is not
+// attributable to the user's change.
+var generatedDirs = map[string]bool{"node_modules": true, ".venv": true, "site-packages": true}
+
+// generatedDir names the generated directory p sits in, or "" when it is not in
+// one.
+func generatedDir(p string) string {
+	for _, seg := range strings.Split(strings.ReplaceAll(p, "\\", "/"), "/") {
+		if generatedDirs[seg] {
+			return seg
+		}
+	}
+	return ""
 }
 
 // describe is a finding in one line.

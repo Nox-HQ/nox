@@ -195,6 +195,27 @@ type JSONReport struct {
 	// a later run can tell "this nox looked and found none" from "this nox
 	// predates leads". Omitted when the check read nothing.
 	LeadChecks []string `json:"lead_checks,omitempty"`
+	// Routes are the HTTP entry points the authorization reader found, with
+	// the access-control middleware it could see in front of each. They are
+	// descriptive context for a system model, never findings: no consumer of
+	// Findings (SARIF, baseline, VEX, gates, exit codes) reads them. Present
+	// only when the reader found at least one route. An absent key therefore
+	// means "no Express routes read", and a findings.json written before this
+	// key existed cannot be told apart from one with no routes; consumers must
+	// treat the two as "not recorded".
+	Routes []Route `json:"routes,omitempty"`
+}
+
+// Route is the serialised form of one route the authorization reader saw.
+// Authn and Authz are middleware text as written in the source, and an empty
+// Authn means no authentication middleware was visible, not that none exists.
+type Route struct {
+	Method   string `json:"method"`
+	Path     string `json:"path"`
+	FilePath string `json:"file_path"`
+	Line     int    `json:"line"`
+	Authn    string `json:"authn,omitempty"`
+	Authz    string `json:"authz,omitempty"`
 }
 
 // Lead is the serialised form of core.Lead: one thing a scan found worth
@@ -347,6 +368,8 @@ type JSONReporter struct {
 	// among them.
 	Leads      []Lead
 	LeadChecks []string
+	// Routes are the entry points the authorization reader found.
+	Routes []Route
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -392,6 +415,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		Enrichments: r.Enrichments,
 		Leads:       r.Leads,
 		LeadChecks:  r.LeadChecks,
+		Routes:      r.Routes,
 	}
 
 	return json.MarshalIndent(report, "", "  ")

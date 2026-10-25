@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`nox model`, and an MCP tool `threat_model`: a threat model from scan
+  evidence.** Reads the scan outputs you already have (`findings.json`, an SBOM,
+  `ai.inventory.json`) and writes `model.md` and `model.json`: the elements nox
+  can evidence (Express routes with the authentication middleware visible on
+  each, AI agents and their tool capabilities, MCP servers and their launch
+  commands, models, data stores and external services from the dependency set,
+  the ingress, workload, bucket, database and open-network-rule surface from
+  infrastructure findings), the data flows and trust boundaries between them
+  ("model output -> shell", "untrusted input -> LLM prompt", "internet -> exposed
+  deployment resource"), a STRIDE table citing the evidence per element and
+  category, questions for the team derived from the gaps, a Mermaid data-flow
+  diagram, and an explicit list of what nox cannot see. A cell with no evidence
+  says "nox has no evidence either way"; nothing is called secure, handled or
+  mitigated, and a test bans those words from every rendering. It never scans and
+  reads no clock: the same inputs give byte-identical output, with the SHA-256 of
+  each input recorded. `nox model --previous model.json` reports new and removed
+  elements, flows and trust boundaries and the STRIDE cells whose evidence
+  changed, and says when a comparison cannot be made (an input missing from one
+  side) instead of reading as "nothing changed". One implementation,
+  `core/threatmodel`; see `docs/threat-model.md`.
+- **`findings.json` records the routes the authorization reader found**, under a
+  new `routes` key (method, path, `file:line`, and the authentication and
+  authorization middleware visible on the route). They are context for a system
+  model, not findings: they reach no gate, exit code, SARIF output or fingerprint,
+  and the key is absent when no Express routes were read.
+
 - **Possible IDOR leads (AUTHZ-001) now cover Fastify, Flask and FastAPI.** The
   Express reader's proposition (an authenticated route loads a record by a
   caller-supplied id and nothing visible relates the record to the caller) is
@@ -36,7 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@fastify/autoload` directory prefixes and `autohooks`, Starlette, Sanic,
   Quart and aiohttp. Leads flow into `findings.json`, `scan --previous`,
   `nox diff` and MCP exactly as the Express ones do.
-
 - **Nox now says what changed, not only what is wrong.** `nox scan --previous
   <findings.json>` leads the assessment with a "Since the previous run:" section
   (new issues, what is no longer present, severity regressions, agents that
@@ -195,6 +220,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`nox fix verify` blamed the user for the dependency directory the fix
+  created.** `nox fix apply` runs `npm`, which creates `node_modules/`; the next
+  scan then read `node_modules/combined-stream/yarn.lock` (a lockfile that
+  package publishes for its own development) as this project's manifest and
+  reported "Also new ... VULN-002 at node_modules/combined-stream/yarn.lock:1".
+  That happens on any plain `nox scan` of a tree whose `node_modules/` is not
+  gitignored (measured: 3 packages in the inventory from nested lockfiles, with
+  the project's own lockfile already naming every installed package). A
+  lockfile inside `node_modules/` is no longer a project manifest, in the
+  dependency scan, SBOM and licence pass alike; the directory is still scanned
+  for secrets and code. Separately, `fix verify` now lists any new finding
+  under `node_modules`, `.venv` or `site-packages` apart from the rest, labelled
+  as inside a directory a tool generated and not attributed to the change
+  (`new_in_generated_dirs` in JSON).
+
+- **The project-scoped `.mcp.json` was inventoried as one opaque component.**
+  The AI inventory recognised an MCP configuration only when the file was named
+  exactly `mcp.json`, so the `.mcp.json` that Claude Code reads from the
+  repository root produced a single generic component, no servers and no tool
+  matrix, and everything built on the inventory (the AI-BOM, `nox attack plan`,
+  `nox model`) saw none of its servers. It is now read like `mcp.json` (and
+  `*.mcp.json`), and each server records its launch command and arguments (never
+  its `env` block).
 - **Configurations that got worse used to scan the same as, or better than, the
   ones before them.** Measured on a hardened application and the same
   application after a "just for debugging" commit: seven insecure changes

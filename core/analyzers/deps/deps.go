@@ -370,6 +370,24 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	return rs
 }
 
+// isInstalledDependencyPath reports whether path sits inside an installed
+// dependency tree: a node_modules directory below the scan root.
+//
+// A lockfile there (combined-stream publishes a yarn.lock) is that package's
+// own development pin, not a statement of what this project resolved; the
+// project's own lockfile already names every installed package. Reading it as a
+// project manifest attributed a dependency's advisories to the user, and made
+// them appear whenever a package manager had just populated the directory. Only
+// manifests are exempt: the directory is still scanned for secrets and code.
+func isInstalledDependencyPath(path string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if seg == "node_modules" {
+			return true
+		}
+	}
+	return false
+}
+
 // supportedLockfiles maps well-known lockfile basenames to their parser
 // functions.
 var supportedLockfiles = map[string]func([]byte) ([]Package, error){
@@ -435,7 +453,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 
 	for _, art := range artifacts {
-		if art.Type != discovery.Lockfile {
+		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
 		}
 
@@ -578,7 +596,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Detect licenses from manifest files alongside lockfiles.
 	// This is best-effort: failures are silently ignored.
 	for _, art := range artifacts {
-		if art.Type != discovery.Lockfile {
+		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
 		}
 		basePath := filepath.Dir(art.AbsPath)
