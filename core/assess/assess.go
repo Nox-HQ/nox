@@ -551,8 +551,13 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 			// "0 packages" reads like "0 vulnerable packages"; the honest
 			// statement is that there was nothing to check.
 			label = "dependencies (none found)"
-			if in.Packages > 0 {
+			switch {
+			case in.Packages > 0:
 				label = fmt.Sprintf("dependencies (%s)", plural(in.Packages, "package", "packages"))
+			case hasKind(in.Degradations, "lockfile_parse"):
+				// Something declared dependencies and none could be resolved.
+				// "none found" would say the opposite.
+				label = "dependencies (declared, but none could be resolved)"
 			}
 		}
 		checked = append(checked, label)
@@ -578,6 +583,15 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 	}
 	notChecked = append(notChecked, degradationLimits(in.Degradations)...)
 	return checked, notChecked
+}
+
+func hasKind(ds []nox.Degradation, kind string) bool {
+	for _, d := range ds {
+		if string(d.Kind) == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // kindHeadlines says what each kind of degradation leaves unchecked, in plain
@@ -655,6 +669,11 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 			g = rest
 		}
 		head := kindHeadlines[k.kind]
+		if k.kind == "lockfile_parse" && !k.blocking {
+			// Advisory, not a failure: a package.json with no lockfile beside
+			// it was read, but only as far as a manifest can be.
+			head = "No lockfile is committed beside a package.json"
+		}
 		if head == "" {
 			head = "A check did not complete (" + k.kind + ")"
 		}

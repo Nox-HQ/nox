@@ -25,6 +25,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source_reference`). It only raises: no hit leaves the verdict exactly where it
   was, and it never produces `not_impacting`.
 
+### Fixed
+
+- A project with a `package.json` and no lockfile scanned as `0 dependencies` /
+  `dependencies (none found)` / `No issues found in what was checked`, although
+  requirements.txt and go.mod without lockfiles were read. `package.json`
+  `dependencies`, `optionalDependencies` and `devDependencies` are now
+  inventoried and looked up. Exact versions are checked as written; a range
+  (`^`, `~`, `>=`, `1.x`, `||`) is checked at its lower bound, as requirements.txt
+  already does, and its findings carry `declared_spec`, medium confidence and a
+  message saying so. git/URL/`file:`/`workspace:` specs, dist-tags, `*` and
+  upper-bound-only ranges are never guessed: they are listed under "Not checked".
+  `peerDependencies` are not read. A lockfile in the same directory or an
+  ancestor stays authoritative (deduplicated by name), and `node_modules`
+  manifests are ignored. The assessment now says "No lockfile is committed beside
+  a package.json" and recommends committing one, and reads
+  "declared, but none could be resolved" instead of "none found" when nothing
+  could be resolved.
+
 ## [1.52.0] - 2026-10-25
 
 The NOX Intelligence feeds are verified and used by default. nox now ships the
