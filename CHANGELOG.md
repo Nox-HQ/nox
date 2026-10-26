@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `nox attack run|replay --contribute --candidate <fingerprint>` sends each executed run's allowlisted evidence (nox-core `RunReport`: no target, route, payload or response; a one-way trace digest) to NOX Intelligence as reporter-scoped evidence. It needs `NOX_INTEL_TOKEN`, separately accepted attack terms (`nox intel consent attack`) and refuses before any attack fires. Runs that were not executed, had an unsound control or never reached the target are skipped, not reported as prevented. `nox intel allowlist attack` prints the fields; `nox intel forget --attested` erases your organisation's contributions.
+- `scan.intelligence.attested: true` sends scan observations as your organisation (`NOX_INTEL_TOKEN`). Anonymous contributions are stored but no longer count as independent sources, because a reporter id is self-asserted; attested ones count once per organisation. With no token nothing is sent and the scan says so.
 - `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
 
 ### Fixed
