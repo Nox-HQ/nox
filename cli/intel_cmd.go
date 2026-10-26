@@ -17,7 +17,7 @@ func runIntel(args []string) int {
 	}
 	switch args[0] {
 	case "allowlist":
-		return runIntelAllowlist()
+		return runIntelAllowlist(args[1:]...)
 	case "preview":
 		return runIntelPreview(args[1:])
 	case "id":
@@ -85,7 +85,17 @@ func intelEndpointDefault() string {
 
 // runIntelAllowlist prints the allowlist. The design requires that "what would
 // you send?" be answerable without reading the source; this is that answer.
-func runIntelAllowlist() int {
+func runIntelAllowlist(args ...string) int {
+	if len(args) > 0 && (args[0] == "--attack" || args[0] == "attack") {
+		fmt.Println("Fields a contributed attack run may carry (nox attack run|replay --contribute):")
+		fmt.Println()
+		for _, f := range intel.AttackAllowlist() {
+			fmt.Printf("  %-16s %s\n", f.Name, f.Purpose)
+		}
+		fmt.Println("\nNever transmitted: the target URL, host or IP, the route, field names, payloads,")
+		fmt.Println("target responses, canary values, paths, source code, secrets, or the trace itself.")
+		return 0
+	}
 	if err := intel.PrintAllowlist(os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "nox intel: %v\n", err)
 		return 1

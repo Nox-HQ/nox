@@ -542,6 +542,16 @@ type IntelligenceConfig struct {
 	// Querying and contributing are two decisions, and both are off by default.
 	Contribute bool `yaml:"contribute"`
 
+	// Attested sends contributions as your ORGANISATION (NOX_INTEL_TOKEN)
+	// instead of anonymously. Anonymous contributions are stored but never
+	// count as independent sources, because a reporter id is self-asserted;
+	// attested ones count once per organisation. The price is stated: the
+	// service can join an attested contribution to your organisation. Off by
+	// default, and it needs contribute: true as well. With no token set
+	// nothing is sent and the scan says so, rather than quietly falling back
+	// to a contribution that cannot count.
+	Attested bool `yaml:"attested"`
+
 	// ReporterSaltPath overrides where the private reporter salt is kept.
 	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the
 	// machine; only an HMAC derived from it does.
