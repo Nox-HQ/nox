@@ -454,7 +454,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	srcImports := &sourceImports{}
 	for _, art := range artifacts {
 		if art.Type == discovery.Source {
-			srcImports.paths = append(srcImports.paths, art.AbsPath)
+			srcImports.add(art.AbsPath, art.Path)
 		}
 	}
 

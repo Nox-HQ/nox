@@ -236,7 +236,27 @@ const maxImportScanBytes = 1 << 20
 // read until the first finding actually asks.
 type sourceImports struct {
 	paths []string
+	// rel maps each path to the artifact's path inside the scanned tree, which
+	// is what a finding may show: the absolute path is the machine's.
+	rel   map[string]string
 	index *depimports.Index
+}
+
+// add registers one source file by its absolute path and its path in the tree.
+func (s *sourceImports) add(abs, rel string) {
+	if s.rel == nil {
+		s.rel = map[string]string{}
+	}
+	s.paths = append(s.paths, abs)
+	s.rel[abs] = rel
+}
+
+// site names where a use was found, relative to the scan root.
+func (s *sourceImports) site(file string, line int) string {
+	if r, ok := s.rel[file]; ok {
+		file = r
+	}
+	return fmt.Sprintf("%s:%d", file, line)
 }
 
 // get builds the index on first use and returns it.
@@ -510,7 +530,7 @@ func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src 
 	if !ok {
 		return v
 	}
-	where := fmt.Sprintf("%s:%d", use.File, use.Line)
+	where := src.site(use.File, use.Line)
 	meta["affected_symbol_reached"] = spec + "." + name
 	meta["affected_symbol_basis"] = "nox_symbols"
 	meta["affected_symbol_evidence"] = "source_reference"
