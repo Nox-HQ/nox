@@ -9,6 +9,8 @@ import (
 	"github.com/nox-hq/nox/core/assess"
 	"github.com/nox-hq/nox/core/change"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/fix/osvcheck"
 )
 
 // scanAssessment is what the human-readable end of `nox scan` needs to know
@@ -22,6 +24,10 @@ type scanAssessment struct {
 	formats []string
 	offline bool
 	verbose bool
+	// targets asks the advisory database what each upgrade target is still
+	// affected by, so the assessment names the same version `nox fix` applies.
+	// Nil when the scan asked nobody (offline, --no-osv, scan.osv.disabled).
+	targets fix.Checker
 	// since is what changed from the earlier run --previous named; nil when
 	// there was none, in which case the assessment prints as it always has.
 	since *change.Delta
@@ -51,6 +57,7 @@ func (a scanAssessment) findingsPath() string {
 // lists every issue instead of the first assess.DefaultLimit.
 func (a scanAssessment) print(w io.Writer) {
 	in := assess.FromScan(a.result, a.active, a.target, a.findingsPath(), a.offline)
+	in.Targets = a.targets
 	// Mirrors the write rule in runScan: the inventory is written whenever it
 	// holds a component, whatever --format says.
 	if a.result != nil && a.result.AIInventory != nil && len(a.result.AIInventory.Components) > 0 {
@@ -72,6 +79,18 @@ func (a scanAssessment) print(w io.Writer) {
 	if err := assess.Render(w, assess.Build(in), opts); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not print the assessment: %v\n", err)
 	}
+}
+
+// scanTargetChecker is the checker the assessment plans its upgrades with. It
+// asks the reference advisory database, the one the scan verified against, and
+// only when the scan itself reached the network: --offline, --no-osv and
+// scan.osv.disabled stay zero-network, and the plan is then built from the
+// findings alone.
+func scanTargetChecker(cfg *nox.ScanConfig, offline, noOSV bool) fix.Checker {
+	if offline || noOSV || cfg == nil || cfg.Scan.OSV.Disabled {
+		return nil
+	}
+	return osvcheck.New(cfg.Scan.OSV.ReferenceBaseURL())
 }
 
 // degradationsToPrint selects the [degraded] lines for stderr.

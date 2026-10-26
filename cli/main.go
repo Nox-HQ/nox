@@ -945,7 +945,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	if !quiet {
 		if assessmentShown(quiet, stagedFlag, historyFlag) {
 			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
-				formats: formats, offline: offlineFlag, verbose: verbose, since: sinceDelta(prev, havePrev, result)}.print(os.Stdout)
+				formats: formats, offline: offlineFlag, verbose: verbose, targets: scanTargetChecker(cfg, offlineFlag, noOSVFlag), since: sinceDelta(prev, havePrev, result)}.print(os.Stdout)
 		}
 		fmt.Println("[done]")
 	}
