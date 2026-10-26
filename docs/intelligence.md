@@ -242,8 +242,13 @@ for why it is a service at all.
 
 A reporter id on an anonymous contribution is self-asserted, so the service stores
 it and shows it as a triage signal but **never counts it as an independent source**.
-Two ways to be counted, both attributed to your organisation (the service can join
-them to it; that is the price, so both are off by default):
+Two ways to be counted, both **attributed to your organisation**: the service
+authenticates your token and can link the contribution to your organisation, which an
+anonymous contribution never allows. That is the price of counting, so both are off by
+default. The scan contribution terms (2026-10) describe the anonymous case and are
+unchanged; attributed scanning is disclosed here and in the attack-evidence terms
+(`nox intel consent attack show`), and you opt in to it separately with
+`scan.intelligence.attested: true`.
 
 - Scan observations: set `scan.intelligence.attested: true` (with
   `contribute: true` and accepted terms) and export `NOX_INTEL_TOKEN`, an
