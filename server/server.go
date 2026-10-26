@@ -1818,7 +1818,14 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	// so the actions an agent is shown here are exactly the ones the CLI would
 	// run — including the guards against downgrades, prereleases, and
 	// unsupported ecosystems that this handler used to lack.
-	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: osvcheck.New("")})
+	// The scan's own offline signal decides: a scan that made no advisory
+	// lookups (--offline, scan.osv.disabled, no deps scope) must not have its
+	// plan phone OSV either. Then the target is only what the findings name.
+	var targets fix.Checker
+	if !pc.result.AdvisoryLookupSkipped {
+		targets = osvcheck.New("")
+	}
+	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
 
 	resp := fixPlanResponse{
 		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",
@@ -1844,7 +1851,11 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 		Findings: pc.result.Findings.ActiveFindings(),
 		Rules:    pc.result.Rules,
 		Root:     pc.basePath,
+		Targets:  targets,
 	})
+	if targets == nil {
+		resp.Note += ". Offline: targets were not verified against all advisories; an advisory introduced after the installed version may still affect them"
+	}
 	var text strings.Builder
 	_ = remediate.RenderPlan(&text, resp.Plan)
 	resp.Text = text.String()

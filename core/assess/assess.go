@@ -255,7 +255,7 @@ func issues(in Input) []Issue {
 	// The planner `nox fix` applies and the MCP fix_plan tool shows. The
 	// assessment's upgrade lines are exactly its actions, so "upgrade axios"
 	// here is the command `nox fix --dry-run` prints next.
-	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.Targets})
+	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.checker()})
 	used := make([]bool, len(ff))
 
 	var out []Issue
@@ -333,6 +333,15 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
 		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf),
 		Attention: anyAttention(ff, a.Findings)}
+}
+
+// checker is Targets unless the scan was offline, whose plan must not reach
+// the network either.
+func (in Input) checker() fix.Checker {
+	if in.Offline {
+		return nil
+	}
+	return in.Targets
 }
 
 // targetNote says what the planner learned about the target beyond the
