@@ -46,6 +46,9 @@ import (
 type Index struct {
 	imports map[string]map[string]struct{}
 	seen    map[string]bool
+	// jsUses are the exports of npm modules that project source references:
+	// specifier, then export name. See jsuse.go.
+	jsUses map[string]map[string]JSUse
 }
 
 // New returns an empty Index. A zero tree answers Known(false) for everything,
@@ -74,6 +77,9 @@ func (ix *Index) Add(filePath string, content []byte) {
 	// Seeing the file is what makes a later absence meaningful, so record it
 	// before extraction and regardless of whether anything was found.
 	ix.seen[eco] = true
+	if eco == "npm" {
+		ix.addJSUses(filePath, content)
+	}
 	set := ix.imports[eco]
 	if set == nil {
 		set = map[string]struct{}{}

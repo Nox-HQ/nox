@@ -11,6 +11,7 @@ import (
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 )
 
 // planSchemaVersion identifies the attack-plan document format.
@@ -53,6 +54,11 @@ type PlanInput struct {
 	Findings []findings.Finding
 	// Inventory is the AI component inventory (may be nil).
 	Inventory *ai.Inventory
+	// Leads are the scan's authorization leads (findings.json "leads"). An
+	// object-level authorization lead becomes an AUTHZ-BOLA hypothesis. Leads
+	// are hints, never findings, so they ground a hypothesis but are not
+	// themselves skipped or counted.
+	Leads []report.Lead
 	// Now is an RFC3339 timestamp stamped onto the plan.
 	Now string
 
@@ -198,6 +204,9 @@ func BuildPlan(in PlanInput) (*Plan, error) {
 			hyps = append(hyps, h)
 		}
 	}
+
+	// Authorization leads and AUTHZ-001 findings → AUTHZ-BOLA.
+	hyps = append(hyps, authzGround(in, assets, boundaries, usedScenarios, grounded)...)
 
 	// Inventory tool matrix → TOOL-UNAUTH and EXFIL-FS-NET.
 	if in.Inventory != nil {

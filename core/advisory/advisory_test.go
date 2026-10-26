@@ -467,3 +467,30 @@ func TestRelevanceSentenceNamesTheReachedSymbol(t *testing.T) {
 		t.Errorf("without a reached symbol the sentence is unchanged: %q", got)
 	}
 }
+
+// The goal of the npm symbol work: with a referenced listed export, the DEFAULT
+// remediate gate (call_reachable) now merges an npm fix; without one it still
+// only prepares. The sentence must not claim a call path.
+func TestNpmSymbolReferenceMeetsTheDefaultMergeGate(t *testing.T) {
+	p := mustPolicy(t, Settings{Policy: "remediate"})
+
+	plain := adv("GHSA-npm", "nodemailer", "6.0.0", "6.0.1", findings.SeverityHigh, "undetermined", "symbol_used")
+	r := Evaluate(Input{Findings: []findings.Finding{plain}, HavePrevious: true, Policy: p})
+	if r.AutoMerge {
+		t.Fatal("an imported-only npm package must not merge by default")
+	}
+
+	hit := adv("GHSA-npm", "nodemailer", "6.0.0", "6.0.1", findings.SeverityHigh, "impacting", "call_reachable")
+	hit.Metadata["affected_symbol_reached"] = "nodemailer.sendMail"
+	hit.Metadata["affected_symbol_basis"] = "nox_symbols"
+	hit.Metadata["affected_symbol_evidence"] = "source_reference"
+	hit.Metadata["affected_symbol_site"] = "src/mail.js:12"
+	r = Evaluate(Input{Findings: []findings.Finding{hit}, HavePrevious: true, Policy: p})
+	d := only(t, r)
+	if !r.AutoMerge || d.Action != ActionRemediate {
+		t.Fatalf("a referenced listed export should meet the default gate: %+v", d)
+	}
+	if !strings.Contains(d.Reason, "src/mail.js:12") || !strings.Contains(d.Reason, "not a call path from an entry point") {
+		t.Errorf("reason must cite the site and the limit: %s", d.Reason)
+	}
+}

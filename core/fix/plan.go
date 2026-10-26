@@ -1,6 +1,7 @@
 package fix
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -54,6 +55,16 @@ type UpgradeAction struct {
 	// decides where the package manager runs; without it a monorepo gets
 	// upgraded at its root, a directory no dependency lives in.
 	Manifest string `json:"manifest,omitempty"`
+	// PolicyTarget is set on a held move that exists only because no version
+	// inside the allowed upgrade policy clears every advisory: the highest
+	// in-policy version considered, and Remaining the advisories that would
+	// still affect it. To then names the version that clears them, which needs
+	// IncludeMajor.
+	PolicyTarget string   `json:"policy_target,omitempty"`
+	Remaining    []string `json:"remaining,omitempty"`
+	// Unverified is set when the target was not checked against the advisory
+	// source (it was unreachable), so To is only what the findings name.
+	Unverified bool `json:"unverified,omitempty"`
 	// Findings are the positions, in the slice PlanUpgrades was given, of the
 	// findings this move resolves: every advisory for the package in its
 	// manifest directory, since the move goes to the highest fix. It lets a
@@ -93,6 +104,11 @@ type Options struct {
 	// default, because a major bump can break the build and a security PR is the
 	// wrong place to force one.
 	IncludeMajor bool
+	// Checker, when set, is asked what each candidate target is still
+	// vulnerable to, so the plan names a version that clears every known
+	// advisory and not merely every advisory the installed version has. Nil
+	// plans from the findings alone.
+	Checker Checker
 }
 
 // Plan is the result of planning upgrades over a finding set.
@@ -191,16 +207,23 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 			plan.Unplanned = append(plan.Unplanned, c.findings...)
 			continue
 		}
+		res := resolveTarget(context.Background(), opts.Checker, c.ecosystem, c.pkg, c.from, target)
+		target = res.Target
 		action := UpgradeAction{
-			RuleID:    c.ruleID,
-			Package:   c.pkg,
-			From:      c.from,
-			To:        target,
-			Ecosystem: c.ecosystem,
-			Manifest:  c.manifest,
-			Findings:  c.findings,
+			RuleID:     c.ruleID,
+			Package:    c.pkg,
+			From:       c.from,
+			To:         target,
+			Unverified: res.Unverified,
+			Remaining:  res.Remaining,
+			Ecosystem:  c.ecosystem,
+			Manifest:   c.manifest,
+			Findings:   c.findings,
 		}
 		if !opts.IncludeMajor && IsMajorBump(c.from, target) {
+			if res.PolicyTarget != "" {
+				action.PolicyTarget, action.Remaining = res.PolicyTarget, res.PolicyRemaining
+			}
 			plan.MajorSkipped++
 			plan.Held = append(plan.Held, action)
 			continue

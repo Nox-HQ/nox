@@ -49,6 +49,10 @@ type Input struct {
 	Degradations []nox.Degradation
 	// Packages is the number of dependencies inventoried.
 	Packages int
+	// Targets, when set, is asked what each planned upgrade target is still
+	// vulnerable to, so the upgrade names a version that clears every known
+	// advisory. Optional; nil plans from the findings alone.
+	Targets fix.Checker
 	// Offline is set when the scan made no network calls, so known
 	// vulnerabilities in dependencies were not looked up.
 	Offline bool
@@ -251,7 +255,7 @@ func issues(in Input) []Issue {
 	// The planner `nox fix` applies and the MCP fix_plan tool shows. The
 	// assessment's upgrade lines are exactly its actions, so "upgrade axios"
 	// here is the command `nox fix --dry-run` prints next.
-	plan := fix.PlanUpgrades(ff, fix.Options{})
+	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.checker()})
 	used := make([]bool, len(ff))
 
 	var out []Issue
@@ -324,10 +328,36 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 	if kind == KindMajorUpgrade {
 		s += MajorNote
 	}
+	s += targetNote(a)
 	up := a
 	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
 		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf),
 		Attention: anyAttention(ff, a.Findings)}
+}
+
+// checker is Targets unless the scan was offline, whose plan must not reach
+// the network either.
+func (in Input) checker() fix.Checker {
+	if in.Offline {
+		return nil
+	}
+	return in.Targets
+}
+
+// targetNote says what the planner learned about the target beyond the
+// findings: advisories that would remain, or that it could not check.
+func targetNote(a fix.UpgradeAction) string {
+	ids := strings.Join(a.Remaining, ", ")
+	switch {
+	case a.PolicyTarget != "":
+		return fmt.Sprintf(" No version inside the upgrade policy clears every advisory: %s would still be affected by %s; only %s does, and it needs --include-major.",
+			a.PolicyTarget, ids, a.To)
+	case len(a.Remaining) > 0:
+		return fmt.Sprintf(" Still affected after this upgrade, with no fix published: %s.", ids)
+	case a.Unverified:
+		return " Not checked against the advisory database: advisories introduced after the installed version may still affect the target."
+	}
+	return ""
 }
 
 // inDir names the manifest's directory when it is not the scan root, so a
@@ -551,8 +581,13 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 			// "0 packages" reads like "0 vulnerable packages"; the honest
 			// statement is that there was nothing to check.
 			label = "dependencies (none found)"
-			if in.Packages > 0 {
+			switch {
+			case in.Packages > 0:
 				label = fmt.Sprintf("dependencies (%s)", plural(in.Packages, "package", "packages"))
+			case hasKind(in.Degradations, "lockfile_parse"):
+				// Something declared dependencies and none could be resolved.
+				// "none found" would say the opposite.
+				label = "dependencies (declared, but none could be resolved)"
 			}
 		}
 		checked = append(checked, label)
@@ -578,6 +613,15 @@ func coverage(in Input) (checked []string, notChecked []Limit) {
 	}
 	notChecked = append(notChecked, degradationLimits(in.Degradations)...)
 	return checked, notChecked
+}
+
+func hasKind(ds []nox.Degradation, kind string) bool {
+	for _, d := range ds {
+		if string(d.Kind) == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // kindHeadlines says what each kind of degradation leaves unchecked, in plain
@@ -655,6 +699,11 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 			g = rest
 		}
 		head := kindHeadlines[k.kind]
+		if k.kind == "lockfile_parse" && !k.blocking {
+			// Advisory, not a failure: a package.json with no lockfile beside
+			// it was read, but only as far as a manifest can be.
+			head = "No lockfile is committed beside a package.json"
+		}
 		if head == "" {
 			head = "A check did not complete (" + k.kind + ")"
 		}
@@ -692,7 +741,7 @@ func optionalChecks(g []nox.Degradation) []Limit {
 		if !ok {
 			return []Limit{{
 				Summary: "Optional checks are installed but not enabled for this project, so they did not run.",
-				Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+				Action:  "run nox enable --list to see them and nox enable <name> to turn one on (writes .nox.yaml)",
 			}}
 		}
 		names = append(names, n...)
@@ -701,7 +750,7 @@ func optionalChecks(g []nox.Degradation) []Limit {
 	if opt := plugincap.Capabilities(names, plugincap.Optional); len(opt) > 0 {
 		out = append(out, Limit{
 			Summary: "Optional checks are installed but not enabled, so they did not run: " + plugincap.Join(opt) + ".",
-			Action:  "list the ones you want under plugins.required in .nox.yaml (--verbose names them)",
+			Action:  enableAction(plugincap.Slugs(names)),
 		})
 	}
 	if live := plugincap.Capabilities(names, plugincap.Live); len(live) > 0 {
@@ -711,6 +760,15 @@ func optionalChecks(g []nox.Degradation) []Limit {
 		})
 	}
 	return out
+}
+
+// enableAction is the one command that turns the listed checks on. It names
+// capabilities, never plugins: `nox enable` resolves them and writes .nox.yaml.
+func enableAction(slugs []string) string {
+	if len(slugs) == 0 {
+		return "run nox enable --list to see them and nox enable <name> to turn one on (writes .nox.yaml)"
+	}
+	return "run nox enable " + strings.Join(slugs, " ") + " (writes .nox.yaml; nox enable --list says what each checks)"
 }
 
 // undetermined states what the static scan left open, from the fields the

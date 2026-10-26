@@ -124,11 +124,14 @@ func runAttackPlan(args []string) int {
 		root = positionals[0]
 	}
 
-	found, err := loadFindings(findingsIn)
+	// The whole report, not only its findings: authorization leads live beside
+	// the findings in findings.json and ground the AUTHZ-BOLA hypotheses.
+	rep, err := report.LoadFindingsFileReport(findingsIn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: reading %s: %v (run `nox scan` first)\n", findingsIn, err)
 		return 2
 	}
+	found := rep.Findings
 
 	// The inventory is optional: without it nox can still hypothesise about
 	// prompt-injection entry points, it just cannot reason about tool topology.
@@ -150,6 +153,7 @@ func runAttackPlan(args []string) int {
 		Root:      root,
 		Findings:  found,
 		Inventory: inv,
+		Leads:     rep.Leads,
 		Now:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if evidenceIn != "" {
@@ -212,6 +216,9 @@ func printPlanSummary(p *attack.Plan, output string) {
 		}
 		if len(h.FindingFingerprints) > 0 {
 			fmt.Printf("    findings  : %s\n", strings.Join(h.FindingFingerprints, ", "))
+		}
+		for _, line := range h.TestProcedure.Render() {
+			fmt.Printf("    %s\n", line)
 		}
 	}
 
@@ -921,16 +928,6 @@ func budgetFrom(attempts, requests int, duration time.Duration) attack.Budget {
 		b.Duration = duration
 	}
 	return b
-}
-
-// loadFindings reads a findings.json emitted by `nox scan`, via the one shared
-// report loader, adding the CLI's "run scan first" hint on a read error.
-func loadFindings(path string) ([]findings.Finding, error) {
-	ff, err := report.LoadFindingsFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w (run `nox scan` first)", path, err)
-	}
-	return ff, nil
 }
 
 // loadInventory reads an ai.inventory.json emitted by `nox scan`.

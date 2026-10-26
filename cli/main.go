@@ -175,6 +175,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  rule-review      List rule propositions worth a maintainer read\n")
 		fmt.Fprintf(os.Stderr, "  ci-gate          Decide whether a scan should fail a build (degradations, dead baseline, net-new)\n")
 		fmt.Fprintf(os.Stderr, "  advisories       Decide what to do about newly disclosed dependency advisories (report, prepare, remediate)\n")
+		fmt.Fprintf(os.Stderr, "  enable           Turn on optional checks by what they check (writes .nox.yaml)\n")
 		fmt.Fprintf(os.Stderr, "  install-ci       Write a GitHub Actions workflow: scan on PRs, watch for new advisories on a schedule\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
@@ -282,6 +283,8 @@ func run(args []string) int {
 		return runAdvisories(remaining[1:])
 	case "install-ci":
 		return runInstallCI(remaining[1:])
+	case "enable":
+		return runEnable(remaining[1:])
 	case "install":
 		return runInstall(remaining[1:])
 	case "uri":
