@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/intel"
@@ -235,6 +236,11 @@ func evidenceFromResult(r *attack.Result, candidate, component string, only []st
 		} else {
 			ev.Deterministic = tr.Ledger.HasDeterministic()
 		}
+		ev.EvidenceKind = uploadEvidenceKind(tr)
+		if tr.Outcome.Executed {
+			sound := tr.Outcome.ControlSound
+			ev.ControlSound = &sound
+		}
 		out = append(out, ev)
 		notes = append(notes, fmt.Sprintf("  %s: %s — %s", tr.ID, tr.Exploitability, tr.Objective))
 	}
@@ -244,6 +250,32 @@ func evidenceFromResult(r *attack.Result, candidate, component string, only []st
 		}
 	}
 	return out, notes, nil
+}
+
+// uploadEvidenceKind is the evidence kind this trace honestly earned, in the
+// vocabulary the service lets a tenant assert (heuristic, semantic, static,
+// controlled_reproduction, dynamic_exploit).
+//
+// dynamic_exploit only when a machine-checkable oracle saw the violation AND the
+// determinism gate reproduced it. A deterministic oracle that did not reproduce
+// is heuristic; a model's judgment is semantic; a trace with no oracle evidence
+// is static when its ledger holds deterministic evidence and heuristic
+// otherwise. Never a kind the tenant cannot assert (maintainer, advisory).
+func uploadEvidenceKind(tr *attack.Trace) string {
+	if tr.Evidence == nil {
+		if tr.Ledger.HasDeterministic() {
+			return string(evidence.KindStatic)
+		}
+		return string(evidence.KindHeuristic)
+	}
+	switch {
+	case tr.Evidence.OracleKind == attack.OracleSemantic:
+		return string(evidence.KindSemantic)
+	case tr.Evidence.Reproduced:
+		return string(evidence.KindDynamicExploit)
+	default:
+		return string(evidence.KindHeuristic)
+	}
 }
 
 // orgToken returns the organisation token uploads authenticate with.
