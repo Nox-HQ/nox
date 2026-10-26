@@ -171,7 +171,7 @@ func npmLowerBound(spec string) (string, bool) {
 		return "", false
 	}
 	m := npmVersionRe.FindStringSubmatch(tok)
-	if m == nil || isWild(m[1]) {
+	if len(m) == 0 || isWild(m[1]) {
 		return "", false
 	}
 	part := func(s string) string {
