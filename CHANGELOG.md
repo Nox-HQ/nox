@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
+
 ### Fixed
 
+- A project with a `package.json` and no lockfile scanned as `0 dependencies` /
+  `dependencies (none found)` / `No issues found in what was checked`, although
+  requirements.txt and go.mod without lockfiles were read. `package.json`
+  `dependencies`, `optionalDependencies` and `devDependencies` are now
+  inventoried and looked up. Exact versions are checked as written; a range
+  (`^`, `~`, `>=`, `1.x`, `||`) is checked at its lower bound, as requirements.txt
+  already does, and its findings carry `declared_spec`, medium confidence and a
+  message saying so. git/URL/`file:`/`workspace:` specs, dist-tags, `*` and
+  upper-bound-only ranges are never guessed: they are listed under "Not checked".
+  `peerDependencies` are not read. A lockfile in the same directory or an
+  ancestor stays authoritative (deduplicated by name), and `node_modules`
+  manifests are ignored. The assessment now says "No lockfile is committed beside
+  a package.json" and recommends committing one, and reads
+  "declared, but none could be resolved" instead of "none found" when nothing
+  could be resolved.
 - Fix planning chose a target that was itself still vulnerable. It took the highest fix named by the advisories affecting the *installed* version, but an advisory introduced later does not affect the installed version and does affect the target: axios 0.21.1 planned to 0.33.0, which two advisories (fixed in 0.34.0) still cover, and only re-verification noticed. With the advisory database reachable, `nox fix`, `nox fix plan`, the assessment and the MCP `fix_plan` tool now ask what each candidate is still vulnerable to and move to the lowest version that clears them all. When only a major bump clears them, the move stays held and names what would remain in policy and the version that clears it (needs `--include-major`); an unreachable database marks the move unverified instead of clear. Semver policy is unchanged.
 
 ## [1.52.0] - 2026-10-25
