@@ -627,6 +627,9 @@ func relevanceSentence(f *findings.Finding, r Relevance) string {
 		return "This build was shown not to be affected (" + m["applicability_stopped_at"] + " was refuted); reported with that reason, not acted on."
 	case RelCallReachable:
 		if sym := m["affected_symbol_reached"]; sym != "" {
+			if m["affected_symbol_evidence"] == "source_reference" {
+				return "Project source references " + sym + " (" + m["affected_symbol_site"] + "), an export NOX Intelligence's analysis of the fix lists as changed (a hint about where the fix landed, not proof this function is the vulnerable one). A reference is not a call path from an entry point; that was not established."
+			}
 			if m["affected_symbol_basis"] == "advisory" {
 				return "A call path reaches " + sym + ", which the advisory lists as affected."
 			}
