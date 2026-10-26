@@ -1331,7 +1331,19 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	res := intel.NewClient(endpoint, intelHTTPClient()).Contribute(ctx, obs)
+	client := intel.NewClient(endpoint, intelHTTPClient())
+	if ic.Attested {
+		token := strings.TrimSpace(os.Getenv("NOX_INTEL_TOKEN"))
+		if token == "" {
+			deg.Add(degrade.IntelContribution,
+				"scan.intelligence.attested is set but NOX_INTEL_TOKEN is not",
+				"nothing was contributed: an attested contribution needs the organisation token, and an "+
+					"anonymous one could not count as an independent source. The scan's own findings are unaffected")
+			return
+		}
+		client = client.WithToken(token)
+	}
+	res := client.Contribute(ctx, obs)
 	if res.FirstError != nil {
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("%d of %d observations were not accepted: %v",

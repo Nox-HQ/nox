@@ -236,3 +236,35 @@ of itself, only with `--upload`, and only into its own tenant. See
 [design/intelligence-service.md](design/intelligence-service.md) for the
 service side and [ADR 0002](adr/0002-intelligence-layer-is-a-separate-service.md)
 for why it is a service at all.
+
+
+## Attested contribution and attack evidence
+
+A reporter id on an anonymous contribution is self-asserted, so the service stores
+it and shows it as a triage signal but **never counts it as an independent source**.
+Two ways to be counted, both attributed to your organisation (the service can join
+them to it; that is the price, so both are off by default):
+
+- Scan observations: set `scan.intelligence.attested: true` (with
+  `contribute: true` and accepted terms) and export `NOX_INTEL_TOKEN`, an
+  organisation token. Observations then go to `/v1/attested/observations`, and your
+  organisation counts as one source however many seats or machines it has. With no
+  token the scan sends nothing and says so; it does not fall back to a contribution
+  that could not count.
+- Attack evidence from your CI: `nox attack run|replay ... --contribute --candidate
+  <fingerprint>`. Needs `NOX_INTEL_TOKEN` and the separate attack-evidence terms
+  (`nox intel consent attack show|accept|withdraw`, or `--accept-attack-terms
+  attack-2026-10`). `nox intel allowlist --attack` prints every field. Nothing about
+  the target leaves: no URL, host, route, field names, payloads, responses or
+  canaries; only the nox-core `RunReport` fields and a one-way digest of the trace.
+  Only runs that actually executed against a target with a sound control and no
+  unreachable attempts are sent; everything else is listed as skipped, so "never
+  reached" is not stored as "prevented". Refusals (consent, token, candidate,
+  `--profile safe`) happen before any attack fires. A failed upload never changes the
+  attack's exit code.
+
+The service treats a contributed run as **reporter-scoped**: it can raise your own
+exposure view and appear as "reported by N attested reporters", and it cannot change
+the candidate's confidence for anyone else or make it CONFIRMED. Erase with
+`nox intel forget --attested`. Service-side rules: nox-intelligence
+`docs/contributions.md`.
