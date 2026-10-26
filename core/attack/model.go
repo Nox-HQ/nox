@@ -141,6 +141,39 @@ type Hypothesis struct {
 	// — adjudicate.MissingEvidence, carried across the boundary. They are why
 	// this is a hypothesis rather than a conclusion.
 	Unknowns []string `json:"unknowns,omitempty"`
+	// TestProcedure is the concrete, human-executable procedure that would
+	// settle this hypothesis. Set for scenarios whose test is a procedure
+	// rather than a payload corpus (AUTHZ-BOLA); nil otherwise.
+	TestProcedure *TestProcedure `json:"test_procedure,omitempty"`
+}
+
+// TestProcedure is a runnable-by-a-person test for a hypothesis that nox cannot
+// yet execute itself. It states what must be set up, what to send, and what a
+// secure and a vulnerable target each look like, so the result is decidable
+// before anyone sends a request.
+type TestProcedure struct {
+	// Method and Route name the endpoint under test.
+	Method string `json:"method"`
+	Route  string `json:"route"`
+	// ObjectParameter is the parameter that names the object, and
+	// ObjectParameterLocation says where it travels (path, query, body).
+	// ObjectParameter is empty when the scan did not record a name.
+	ObjectParameter         string `json:"object_parameter,omitempty"`
+	ObjectParameterLocation string `json:"object_parameter_location,omitempty"`
+	// Preconditions are what must exist before the test starts.
+	Preconditions []string `json:"preconditions"`
+	// Steps are the requests to make, in order.
+	Steps []string `json:"steps"`
+	// SecureResponse and VulnerableResponse are the two outcomes that settle it.
+	SecureResponse     string `json:"expected_secure"`
+	VulnerableResponse string `json:"expected_vulnerable"`
+	// Inconclusive names the outcomes that settle nothing, so a failed setup
+	// is not read as a defence.
+	Inconclusive string `json:"inconclusive"`
+	// Executable reports whether `nox attack run` can perform this test.
+	Executable bool `json:"executable"`
+	// ExecutionNote says why not, when Executable is false.
+	ExecutionNote string `json:"execution_note,omitempty"`
 }
 
 // Scenario is a reusable attack template in the V1 library: a class of exploit,
@@ -181,6 +214,11 @@ type Scenario struct {
 	// scenario under default assumptions. It describes the exploit at full
 	// demonstration; Classify is what discounts it for anything less.
 	CVSSVector string `json:"cvss_vector,omitempty"`
+	// PlanOnly marks a scenario `nox attack run` cannot execute. A run reports
+	// its hypotheses as not executed, with PlanOnlyReason, rather than firing
+	// the prompt-injection corpus at them and reading silence as a defence.
+	PlanOnly       bool   `json:"plan_only,omitempty"`
+	PlanOnlyReason string `json:"plan_only_reason,omitempty"`
 }
 
 // Scenario IDs in the V1 library.
@@ -189,6 +227,7 @@ const (
 	ScenarioPIIndirect = "PI-INDIRECT"
 	ScenarioToolUnauth = "TOOL-UNAUTH"
 	ScenarioExfilFSNet = "EXFIL-FS-NET"
+	ScenarioAuthzBOLA  = "AUTHZ-BOLA"
 )
 
 // scenarioLibrary is the V1 catalog. It is defined once, immutably, and copied
@@ -295,6 +334,7 @@ var scenarioLibrary = []Scenario{
 		CWE:        "CWE-200",
 		CVSSVector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
 	},
+	authzBOLAScenario,
 }
 
 // Scenarios returns a copy of the V1 scenario library sorted by ID.

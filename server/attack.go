@@ -85,6 +85,7 @@ func (s *Server) handleAttackPlan(_ context.Context, input attackPlanInput) (mcp
 		Root:      root,
 		Findings:  pc.result.Findings.ActiveFindings(),
 		Inventory: pc.result.AIInventory,
+		Leads:     pc.result.ReportLeads(),
 		Now:       time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {

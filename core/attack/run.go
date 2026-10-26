@@ -414,6 +414,20 @@ func (r *runner) attackHypothesis(h Hypothesis) Trace {
 	}
 	outcome := evidence.RunOutcome{HypothesisConstructed: true, ControlSound: true}
 
+	// A plan-only scenario has no executor. Without this it would fall through
+	// to scenarioPayloads, get an empty corpus, find no winning attempt, and be
+	// scored as if its defence had held. Nothing was exercised, so say that.
+	if scen.PlanOnly {
+		trace.Note = "plan only; not executed: " + scen.PlanOnlyReason
+		ledger := groundingLedger(h, r.cfg.Now)
+		trace.Outcome = outcome
+		trace.Ledger = *ledger
+		trace.Exploitability = evidence.DeriveExploitabilityAbout(outcome, ledger, InvariantSubject(h))
+		trace.Confidence = ledger.Confidence()
+		trace.ReplayNote = "nothing ran, so there is nothing to re-run"
+		return classified(trace)
+	}
+
 	// Profile gate: a scenario below the run's profile is not executed.
 	if profileRank(r.cfg.Profile) < profileRank(scen.MinProfile) {
 		trace.Note = fmt.Sprintf("profile %q is below scenario minimum %q; not executed", r.cfg.Profile, scen.MinProfile)
