@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
+
 ### Added
 
 - `nox attack plan` (and the MCP `attack_plan` tool, which shares the same core

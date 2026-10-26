@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/report"
 	"gopkg.in/yaml.v3"
@@ -378,6 +379,91 @@ func TestInstallCIEveryUsesIsPinnedOnAllJobs(t *testing.T) {
 		at := strings.LastIndex(m[1], "@")
 		if at < 0 || !sha.MatchString(m[1][at+1:]) {
 			t.Errorf("%q is not pinned to a 40-hex commit", m[1])
+		}
+	}
+}
+
+const releaseSHA = "9133597590c30b2235093c48425c0afcecef0700"
+
+func withBuild(t *testing.T, v, c string) {
+	t.Helper()
+	ov, oc := version, commit
+	version, commit = v, c
+	t.Cleanup(func() { version, commit = ov, oc })
+}
+
+// The default ref is the release commit with the version as a trailing comment,
+// at every place the template names nox-hq/nox, and it is not a tag.
+func TestInstallCIDefaultPinsReleaseCommit(t *testing.T) {
+	withBuild(t, "1.52.0", releaseSHA)
+	d, err := resolveInstallCI("main", "17 5 * * *", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Warning != "" {
+		t.Errorf("unexpected warning %q", d.Warning)
+	}
+	out, err := renderInstallCI(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"uses: nox-hq/nox@" + releaseSHA + " # v1.52.0",
+		"uses: nox-hq/nox/actions/remediate@" + releaseSHA + " # v1.52.0",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(out, "nox@v1.52.0") {
+		t.Error("workflow still pins the mutable tag")
+	}
+}
+
+// A release version whose commit was not embedded must not fall back to the tag.
+func TestInstallCIRefusesReleaseWithoutCommit(t *testing.T) {
+	withBuild(t, "1.52.0", "none")
+	if _, err := resolveInstallCI("main", "17 5 * * *", "", ""); err == nil {
+		t.Fatal("wrote a ref without a commit to pin")
+	}
+}
+
+func TestInstallCIWarnsOnExplicitTag(t *testing.T) {
+	d, err := resolveInstallCI("main", "17 5 * * *", "v1.2.3", "1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(d.Warning, "IAC-013") {
+		t.Errorf("a tag ref should warn, got %q", d.Warning)
+	}
+}
+
+// The generated workflow passes nox's own scan: no IAC-013.
+func TestInstallCIWorkflowHasNoIAC013(t *testing.T) {
+	withBuild(t, "1.52.0", releaseSHA)
+	d, err := resolveInstallCI("main", "17 5 * * *", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := renderInstallCI(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wf := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wf, 0o755); err != nil { //nolint:gosec // test dir
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wf, "nox.yml"), []byte(out), 0o644); err != nil { //nolint:gosec // test file
+		t.Fatal(err)
+	}
+	res, err := core.RunScanWithOptions(dir, core.ScanOptions{ToolVersion: version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range res.Findings.Findings() {
+		if f.RuleID == "IAC-013" {
+			t.Errorf("generated workflow trips IAC-013 at %s:%d", f.Location.FilePath, f.Location.StartLine)
 		}
 	}
 }
