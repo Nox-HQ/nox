@@ -61,7 +61,7 @@ func acceptAttackTerms(t *testing.T) {
 	}
 }
 
-func contributeArgs(dir string, plan string, target *httptest.Server, f *fakeIntel, extra ...string) []string {
+func contributeArgs(dir, plan string, target *httptest.Server, f *fakeIntel, extra ...string) []string {
 	out := filepath.Join(dir, "t.json")
 	return append(runArgs(plan, target.URL, out, "--route", "/chat", "--seed", "nox", "--samples", "3"),
 		append([]string{"--contribute", "--candidate", contribCandidate, "--endpoint", f.srv.URL}, extra...)...)

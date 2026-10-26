@@ -82,9 +82,7 @@ func (f contributeFlags) preflight(errw io.Writer) (token string, code int) {
 // runReportsFromTraces turns executed traces into reports and says why it left
 // any out. A trace nothing exercised is never sent: "the target was never
 // reached" must not become a stored "prevented".
-func runReportsFromTraces(traces []attack.Trace, candidate, profile, generatedAt, toolVersion string) ([]evidence.RunReport, []string) {
-	var out []evidence.RunReport
-	var skipped []string
+func runReportsFromTraces(traces []attack.Trace, candidate, profile, generatedAt, toolVersion string) (reports []evidence.RunReport, skipped []string) {
 	for i := range traces {
 		tr := &traces[i]
 		switch {
@@ -132,9 +130,9 @@ func runReportsFromTraces(traces []attack.Trace, candidate, profile, generatedAt
 			skipped = append(skipped, fmt.Sprintf("%s: %v", tr.ID, err))
 			continue
 		}
-		out = append(out, r)
+		reports = append(reports, r)
 	}
-	return out, skipped
+	return reports, skipped
 }
 
 // traceDigest is the SHA-256 of the trace as recorded: one-way, so it names the
@@ -160,7 +158,7 @@ func reportVersion(v string) string {
 // contribute sends the reports and prints what happened. It never changes the
 // exit code of the attack: a contribution is a courtesy to the network, and a
 // CI gate that failed because an upload did would make opting in hostile.
-func (f contributeFlags) contribute_(token string, traces []attack.Trace, profile, generatedAt string, out, errw io.Writer) {
+func (f contributeFlags) send(token string, traces []attack.Trace, profile, generatedAt string, out, errw io.Writer) {
 	reports, skipped := runReportsFromTraces(traces, *f.candidate, profile, generatedAt, version)
 	for _, s := range skipped {
 		_, _ = fmt.Fprintf(out, "[contribute] skipped %s\n", s)

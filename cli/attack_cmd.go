@@ -428,7 +428,7 @@ func runAttackRun(args []string) int {
 
 	printRunSummary(res, output)
 	if *cf.contribute {
-		cf.contribute_(contribToken, res.Traces, string(profile), res.GeneratedAt, os.Stdout, os.Stderr)
+		cf.send(contribToken, res.Traces, string(profile), res.GeneratedAt, os.Stdout, os.Stderr)
 	}
 	return res.ExitCode()
 }
@@ -659,7 +659,7 @@ func runAttackReplay(args []string) int {
 		if t.ReplayUnexercised() {
 			fmt.Println("[contribute] the target could not be exercised; nothing was sent")
 		} else {
-			cf.contribute_(contribToken, []attack.Trace{*t}, string(profile), cfg.Now, os.Stdout, os.Stderr)
+			cf.send(contribToken, []attack.Trace{*t}, string(profile), cfg.Now, os.Stdout, os.Stderr)
 		}
 	}
 
