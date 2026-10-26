@@ -220,7 +220,7 @@ var (
 // the file, so comments and formatting survive. It returns the new text and the
 // names actually added. A shape it does not recognise (flow style, anchors) is
 // an error, never a guess.
-func addRequiredPlugins(src string, names []string) (string, []string, error) {
+func addRequiredPlugins(src string, names []string) (updated string, added []string, err error) {
 	req := parseRequired(src)
 	var add []string
 	for _, n := range names {
@@ -259,7 +259,7 @@ func addRequiredPlugins(src string, names []string) (string, []string, error) {
 	return spliceInPlugins(lines, pi, end, add)
 }
 
-func spliceInPlugins(lines []string, pi, end int, add []string) (string, []string, error) {
+func spliceInPlugins(lines []string, pi, end int, add []string) (updated string, added []string, err error) {
 	for i := pi + 1; i < end; i++ {
 		if requiredEmpty.MatchString(lines[i]) {
 			ind := requiredEmpty.FindStringSubmatch(lines[i])[1]
