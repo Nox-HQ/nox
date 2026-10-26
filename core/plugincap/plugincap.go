@@ -168,3 +168,52 @@ func Join(items []string) string {
 	}
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
+
+// Slug is the short, stable word a person types to turn a capability on
+// (`nox enable api-abuse`). It exists so enabling is decided by what the check
+// does, not by which plugin performs it. Only Optional checks have one; a
+// plugin nobody has classified is addressed by its own name, because inventing
+// a slug for something this package knows nothing about would be a guess.
+func Slug(name string) string {
+	if i := strings.Index(name, "@"); i >= 0 {
+		name = name[:i]
+	}
+	name = strings.TrimSpace(name)
+	switch name {
+	case "nox/api-abuse":
+		return "api-abuse"
+	case "nox/attack-surface":
+		return "exposed-endpoints"
+	case "nox/depconfusion":
+		return "dependency-confusion"
+	case "freshness":
+		return "dependency-freshness"
+	}
+	if e := Lookup(name); e.Class == Optional {
+		return name
+	}
+	return ""
+}
+
+// Slugs returns the sorted, distinct slugs of the Optional checks among names.
+func Slugs(names []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range names {
+		if Lookup(n).Class != Optional {
+			continue
+		}
+		if s := Slug(n); s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// OptionalPlugins lists the registry names of the cataloged Optional checks, so
+// a caller can tell "not installed" from "not a check you can enable".
+func OptionalPlugins() []string {
+	return []string{"freshness", "nox/api-abuse", "nox/attack-surface", "nox/depconfusion"}
+}
