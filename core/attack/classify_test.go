@@ -28,6 +28,14 @@ var allExploitability = []evidence.Exploitability{
 func TestClassifyScenarioLibraryIsFullyMapped(t *testing.T) {
 	for _, s := range Scenarios() {
 		t.Run(s.ID, func(t *testing.T) {
+			if s.OWASPAPI != "" {
+				// A web-API scenario is classified by the API Top 10, not the
+				// AI taxonomies.
+				if !strings.HasPrefix(s.OWASPAPI, "API") || s.CWE == "" || s.CVSSVector == "" {
+					t.Errorf("incomplete API mapping: %+v", s)
+				}
+				return
+			}
 			if s.OWASPASI == "" {
 				t.Error("no OWASP ASI category")
 			}

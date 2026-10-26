@@ -58,6 +58,7 @@ var authzBOLAScenario = Scenario{
 	// Top 10 2023 API1 are the tags the static AUTHZ-001 finding already
 	// carries. The vector scores a demonstrated cross-account READ: network,
 	// low privilege (the attacker is a legitimate user), confidentiality only.
+	OWASPAPI:       "API1:2023",
 	CWE:            "CWE-639",
 	CVSSVector:     "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
 	PlanOnly:       true,

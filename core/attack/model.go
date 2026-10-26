@@ -208,6 +208,10 @@ type Scenario struct {
 	// Set from the canonical catalog (core/catalog) so the numbering has one
 	// source of truth and cannot drift from the analyzer rule tags.
 	OWASPLLM string `json:"owasp_llm,omitempty"`
+	// OWASPAPI is the OWASP API Security Top 10 (2023) category, e.g.
+	// "API1:2023". Set instead of the AI taxonomies for a scenario that tests
+	// an ordinary web-API weakness rather than an AI one.
+	OWASPAPI string `json:"owasp_api,omitempty"`
 	// CWE is the primary CWE identifier, e.g. "CWE-77".
 	CWE string `json:"cwe,omitempty"`
 	// CVSSVector is the CVSS v4.0 base vector for a CONFIRMED exploit of this

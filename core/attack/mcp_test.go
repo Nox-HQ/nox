@@ -218,6 +218,9 @@ func (erroringManifestSource) Capture(_ context.Context) (MCPManifest, error) {
 func TestScenarioOWASPLLMIsValid2025(t *testing.T) {
 	all := append(Scenarios(), MCPScenarios()...)
 	for _, s := range all {
+		if s.OWASPAPI != "" {
+			continue // not an AI scenario; classified by the API Top 10
+		}
 		if s.OWASPLLM == "" {
 			t.Errorf("scenario %s has no OWASP LLM category", s.ID)
 			continue
