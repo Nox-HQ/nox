@@ -50,6 +50,13 @@ func TestNpmSymbolReferenceEndToEnd(t *testing.T) {
 		t.Fatalf("a referenced listed export should reach call_reachable: %v", used.Metadata)
 	}
 
+	// The site is a path inside the scanned tree, not the machine's absolute
+	// path: findings.json, SARIF and the assessment are shared and compared
+	// across checkouts, and an absolute path differs on every one of them.
+	if got := used.Metadata["affected_symbol_site"]; got != "src.js:2" {
+		t.Errorf("affected_symbol_site = %q, want the scan-root-relative src.js:2", got)
+	}
+
 	// Imports the package, but not the listed export: stays where it was, and is
 	// never refuted.
 	other := run(t, "const nm = require('nodemailer');\nnm.createTransport({});\n")

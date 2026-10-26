@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A JavaScript call-reachable finding (`affected_symbol_site`) recorded the absolute path of the source file on the machine that ran the scan (`/Users/.../src/use.js:4`) in findings.json, SARIF and the assessment text. It is now the path inside the scanned tree (`src/use.js:4`), so output no longer differs between checkouts of the same commit.
+
 - The `nox scan` assessment named an upgrade target that could itself still be affected: it said `Upgrade axios 0.21.1 -> 0.33.0` while `nox fix plan` (and the MCP `fix_plan` tool) said `0.34.0`, because 0.33.0 carries two advisories the installed version does not. The assessment now asks the advisory database about its targets, as `nox fix` does, so the two agree. `--offline`, `--no-osv` and `scan.osv.disabled` still make no request and the plan is built from the findings alone.
 
 - Version comparison read only three numeric segments, so `6.6.0.7` and `6.6.0.3` compared equal and four-part
