@@ -219,6 +219,10 @@ type Lead struct {
 	Statement string
 	// Test says how to settle it.
 	Test string
+	// IDSource is where the caller-supplied identifier comes from: "path",
+	// "query", "body", or several joined by commas. Empty for leads that are
+	// not about an identifier.
+	IDSource string
 }
 
 // authzLeads converts the authorization analyzer's output into leads and the
@@ -240,6 +244,7 @@ func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
 			Line:      l.Line,
 			Statement: "loads a record by a caller-supplied id with no visible ownership check",
 			Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
+			IDSource:  l.IDSource,
 		}
 		if l.Category != "" {
 			lead.Category, lead.RuleID, lead.Statement, lead.Test = l.Category, l.RuleID, l.Statement, l.Test

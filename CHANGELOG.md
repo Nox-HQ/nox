@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
+
+### Added
+
+- `nox attack plan` (and the MCP `attack_plan` tool, which shares the same core
+  plan) now turns object-level authorization leads and AUTHZ-001 findings into
+  `AUTHZ-BOLA` hypotheses: the route, the parameter that names the object, the
+  missing-ownership-check reasoning, and a two-account test procedure with the
+  secure and vulnerable responses stated up front. Leads in `findings.json` now
+  carry `id_source`. The scenario is plan-only: `nox attack run` reports it as
+  not executed and never scores it PREVENTED or CONFIRMED.
+
+### Added
+
+- npm: nox now answers whether project source references an export that NOX
+  Intelligence's analysis of the fix lists as changed (`core/depimports`
+  `JSSymbolUse`). It reads every ordinary import idiom: ESM named, aliased,
+  default, namespace and mixed clauses (multi-line, `export`-less, TypeScript
+  `import x = require()`), CommonJS whole-module, destructured, renamed,
+  member-bound and inline `require('m').f()`, bracket access, destructuring a
+  whole-module binding, and dynamic `import()`. Comments, strings, `import type`,
+  relative and `node:` specifiers, same-named properties of other objects,
+  object keys, shadowing declarations and test, spec, mock and fixture paths do
+  not count. A hit raises the finding to `call_reachable` with the file and line
+  as the witness, so the default `advisories.remediate` gate can now merge an npm
+  fix. The evidence is a reference, not a call path from an entry point, and the
+  finding and the advisory reason say so (`affected_symbol_evidence:
+  source_reference`). It only raises: no hit leaves the verdict exactly where it
+  was, and it never produces `not_impacting`.
+
 ### Added
 
 - `nox attack run|replay --contribute --candidate <fingerprint>` sends each executed run's allowlisted evidence (nox-core `RunReport`: no target, route, payload or response; a one-way trace digest) to NOX Intelligence as reporter-scoped evidence. It needs `NOX_INTEL_TOKEN`, separately accepted attack terms (`nox intel consent attack`) and refuses before any attack fires. Runs that were not executed, had an unsound control or never reached the target are skipped, not reported as prevented. `nox intel allowlist attack` prints the fields; `nox intel forget --attested` erases your organisation's contributions.
@@ -38,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a package.json" and recommends committing one, and reads
   "declared, but none could be resolved" instead of "none found" when nothing
   could be resolved.
+- Fix planning chose a target that was itself still vulnerable. It took the highest fix named by the advisories affecting the *installed* version, but an advisory introduced later does not affect the installed version and does affect the target: axios 0.21.1 planned to 0.33.0, which two advisories (fixed in 0.34.0) still cover, and only re-verification noticed. With the advisory database reachable, `nox fix`, `nox fix plan`, the assessment and the MCP `fix_plan` tool now ask what each candidate is still vulnerable to and move to the lowest version that clears them all. When only a major bump clears them, the move stays held and names what would remain in policy and the version that clears it (needs `--include-major`); an unreachable database marks the move unverified instead of clear. Semver policy is unchanged.
 
 ## [1.52.0] - 2026-10-25
 

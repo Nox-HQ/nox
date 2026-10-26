@@ -60,6 +60,7 @@ func (r *ScanResult) ReportLeads() []report.Lead {
 		out = append(out, report.Lead{
 			Category: l.Category, RuleID: l.RuleID, Route: l.Route,
 			FilePath: l.FilePath, Line: l.Line, Statement: l.Statement, Test: l.Test,
+			IDSource: l.IDSource,
 		})
 	}
 	return out
