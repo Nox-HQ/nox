@@ -3,6 +3,7 @@ package deps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -445,4 +446,85 @@ func raiseOnListedSymbol(v applicability.Verdict, meta map[string]string, g *cal
 		return v // already at or above a call path
 	}
 	return applicability.Established(applicability.CallReachable, hit.path)
+}
+
+// jsListedSymbolHit looks for a project source file that references an export
+// NOX Intelligence's analysis of the fix lists as changed.
+//
+// Only symbols the service could place on a public import specifier carry a
+// Package (`nodemailer`, `nodemailer/lib/addressparser`); an internal helper
+// has none and cannot be matched, so it is never searched for. As with Go, this
+// can only raise: a project that does not reference a listed export has shown
+// nothing, because a binding can be passed on, re-exported or used through a
+// dependency.
+func jsListedSymbolHit(src *sourceImports, ov *osvVuln, module string) (spec, symbol string, use depimports.JSUse, ok bool) {
+	if src == nil {
+		return "", "", depimports.JSUse{}, false
+	}
+	type cand struct{ spec, name string }
+	var cands []cand
+	for _, as := range ov.Symbols {
+		if as.Package != module || as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, cs := range as.Symbols {
+			if cs.Name == "" || cs.Package == "" {
+				continue
+			}
+			if cs.Package != module && !strings.HasPrefix(cs.Package, module+"/") {
+				continue // another package's specifier never matches this one
+			}
+			cands = append(cands, cand{cs.Package, cs.Name})
+		}
+	}
+	if len(cands) == 0 {
+		return "", "", depimports.JSUse{}, false
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].spec != cands[j].spec {
+			return cands[i].spec < cands[j].spec
+		}
+		return cands[i].name < cands[j].name
+	})
+	ix := src.get()
+	if !ix.Known("npm") {
+		return "", "", depimports.JSUse{}, false
+	}
+	for _, c := range cands {
+		if u, found := ix.JSSymbolUse(c.spec, c.name); found {
+			return c.spec, c.name, u, true
+		}
+	}
+	return "", "", depimports.JSUse{}, false
+}
+
+// raiseOnJSListedSymbol is raiseOnListedSymbol for npm. The evidence is weaker
+// than Go's and is labelled so: a reference in non-test project source, not a
+// call path from an entry point, because nox has no JavaScript call graph.
+// affected_symbol_evidence says which, and the printed sentence repeats it.
+func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src *sourceImports, ov *osvVuln, pkg Package) applicability.Verdict {
+	if !strings.EqualFold(pkg.Ecosystem, "npm") || v.Outcome == applicability.NotImpacting {
+		return v
+	}
+	spec, name, use, ok := jsListedSymbolHit(src, ov, pkg.Name)
+	if !ok {
+		return v
+	}
+	where := fmt.Sprintf("%s:%d", use.File, use.Line)
+	meta["affected_symbol_reached"] = spec + "." + name
+	meta["affected_symbol_basis"] = "nox_symbols"
+	meta["affected_symbol_evidence"] = "source_reference"
+	meta["affected_symbol_site"] = where
+	if v.Outcome == applicability.Impacting && !applicability.CallReachable.Above(v.Reached) {
+		return v
+	}
+	return applicability.Established(applicability.CallReachable, []string{where + " references " + spec + "." + name})
+}
+
+// sourceReferenceSentence states a JavaScript symbol hit without borrowing the
+// Go call-path wording: a reference is not a path from an entry point.
+func sourceReferenceSentence(meta map[string]string) string {
+	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
+		"whether execution reaches it was not established, and neither was %q",
+		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable)
 }

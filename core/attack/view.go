@@ -108,6 +108,16 @@ type HypothesisView struct {
 	PathArrow           string   `json:"path_arrow,omitempty"`
 	FindingFingerprints []string `json:"finding_fingerprints,omitempty"`
 	Exploitability      string   `json:"exploitability"`
+	// AttackerInput, TriggerCondition, ExpectedOracle, Assumptions and Unknowns
+	// restate the hypothesis's own fields so a consumer sees the same question
+	// the plan file asks.
+	AttackerInput    string   `json:"attacker_input,omitempty"`
+	TriggerCondition string   `json:"trigger_condition,omitempty"`
+	ExpectedOracle   string   `json:"expected_oracle,omitempty"`
+	Assumptions      []string `json:"assumptions,omitempty"`
+	Unknowns         []string `json:"unknowns,omitempty"`
+	// TestProcedure is the concrete test, for hypotheses that have one.
+	TestProcedure *TestProcedure `json:"test_procedure,omitempty"`
 }
 
 // PlanView is the neutral projection of a plan for any consumer. It carries the
@@ -151,7 +161,44 @@ func NewPlanView(p *Plan) PlanView {
 			PathArrow:           RenderPath(h.Path),
 			FindingFingerprints: h.FindingFingerprints,
 			Exploitability:      string(evidence.Plausible),
+			AttackerInput:       h.AttackerInput,
+			TriggerCondition:    h.TriggerCondition,
+			ExpectedOracle:      h.ExpectedOracle,
+			Assumptions:         h.Assumptions,
+			Unknowns:            h.Unknowns,
+			TestProcedure:       h.TestProcedure,
 		})
 	}
 	return v
+}
+
+// Render returns the procedure as indented text lines, for any surface that
+// prints a plan. It is on the domain type so the CLI cannot word the test
+// differently from the plan file. A nil procedure renders nothing.
+func (p *TestProcedure) Render() []string {
+	if p == nil {
+		return nil
+	}
+	out := []string{"test      : " + p.Method + " " + p.Route}
+	if p.ObjectParameter != "" {
+		out = append(out, "object id : "+p.ObjectParameter+" ("+p.ObjectParameterLocation+")")
+	} else if p.ObjectParameterLocation != "" {
+		out = append(out, "object id : in the request "+p.ObjectParameterLocation+" (name not recorded)")
+	}
+	out = append(out, "setup     :")
+	for _, s := range p.Preconditions {
+		out = append(out, "  - "+s)
+	}
+	out = append(out, "steps     :")
+	for _, s := range p.Steps {
+		out = append(out, "  "+s)
+	}
+	out = append(out,
+		"secure    : "+p.SecureResponse,
+		"vulnerable: "+p.VulnerableResponse,
+		"settles nothing: "+p.Inconclusive)
+	if !p.Executable {
+		out = append(out, "execution : plan only; `nox attack run` does not execute this (see execution_note in the plan)")
+	}
+	return out
 }

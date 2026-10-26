@@ -124,11 +124,14 @@ func runAttackPlan(args []string) int {
 		root = positionals[0]
 	}
 
-	found, err := loadFindings(findingsIn)
+	// The whole report, not only its findings: authorization leads live beside
+	// the findings in findings.json and ground the AUTHZ-BOLA hypotheses.
+	rep, err := report.LoadFindingsFileReport(findingsIn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: reading %s: %v (run `nox scan` first)\n", findingsIn, err)
 		return 2
 	}
+	found := rep.Findings
 
 	// The inventory is optional: without it nox can still hypothesise about
 	// prompt-injection entry points, it just cannot reason about tool topology.
@@ -150,6 +153,7 @@ func runAttackPlan(args []string) int {
 		Root:      root,
 		Findings:  found,
 		Inventory: inv,
+		Leads:     rep.Leads,
 		Now:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if evidenceIn != "" {
@@ -212,6 +216,9 @@ func printPlanSummary(p *attack.Plan, output string) {
 		}
 		if len(h.FindingFingerprints) > 0 {
 			fmt.Printf("    findings  : %s\n", strings.Join(h.FindingFingerprints, ", "))
+		}
+		for _, line := range h.TestProcedure.Render() {
+			fmt.Printf("    %s\n", line)
 		}
 	}
 
@@ -280,6 +287,9 @@ Flags:
                       directory and never overwrites an existing file.
   --output <path>     write the traces here (default attack.trace.json)
   --authorize         REQUIRED for any profile other than safe
+  --contribute        send each executed run's allowlisted evidence to NOX Intelligence
+                      (fields: ` + "`nox intel allowlist attack`" + `); needs NOX_INTEL_TOKEN,
+                      --candidate <fingerprint> and ` + "`nox intel consent attack accept`" + `
 
 Exit: 0 = nothing confirmed, 1 = at least one CONFIRMED exploit, 2 = error.
 `
@@ -304,6 +314,7 @@ func runAttackRun(args []string) int {
 		output      string
 		authorize   bool
 	)
+	cf := addContributeFlags(fs)
 	fs.StringVar(&planPath, "plan", defaultPlanPath, "attack plan produced by `nox attack plan`")
 	fs.StringVar(&target, "target", "", "base URL of the running target")
 	fs.StringVar(&route, "route", "", "HTTP route to probe (e.g. /chat)")
@@ -328,6 +339,14 @@ func runAttackRun(args []string) int {
 	profile, err := attack.ParseProfile(profileName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	contribToken, code := cf.preflight(os.Stderr)
+	if code != 0 {
+		return code
+	}
+	if *cf.contribute && !profile.AllowsNetwork() {
+		fmt.Fprintln(os.Stderr, "error: --contribute with profile safe: a safe run sends nothing and observed nothing, so there is no evidence to contribute")
 		return 2
 	}
 
@@ -415,6 +434,9 @@ func runAttackRun(args []string) int {
 	}
 
 	printRunSummary(res, output)
+	if *cf.contribute {
+		cf.send(contribToken, res.Traces, string(profile), res.GeneratedAt, os.Stdout, os.Stderr)
+	}
 	return res.ExitCode()
 }
 
@@ -515,6 +537,7 @@ Flags:
                       a mismatch is refused, not reported: canary values are
                       minted from the seed, so the recorded signal cannot recur
   --authorize         REQUIRED
+  --contribute        as for ` + "`attack run`" + `: send the replay's allowlisted evidence
 
 Exit: 0 = did not reproduce, 1 = reproduced (still exploitable),
       2 = error, or the target could not be exercised at all (nothing proven).
@@ -541,6 +564,7 @@ func runAttackReplay(args []string) int {
 		seed        string
 		authorize   bool
 	)
+	cf := addContributeFlags(fs)
 	fs.StringVar(&tracePath, "trace", defaultTracePath, "traces from `nox attack run`")
 	fs.StringVar(&target, "target", "", "base URL of the running target")
 	fs.StringVar(&route, "route", "", "HTTP route to probe (defaults to the recorded route)")
@@ -568,6 +592,10 @@ func runAttackReplay(args []string) int {
 	if perr != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", perr)
 		return 2
+	}
+	contribToken, code := cf.preflight(os.Stderr)
+	if code != 0 {
+		return code
 	}
 	if profile.RequiresAuthorization() && !authorize {
 		fmt.Fprintln(os.Stderr, "error: replay is ACTIVE — it re-sends the recorded attack payload.")
@@ -633,6 +661,14 @@ func runAttackReplay(args []string) int {
 		fmt.Printf("    note      : %s\n", t.Note)
 	}
 	printReplayEnvironment(t.ReplayEnvironment)
+
+	if *cf.contribute {
+		if t.ReplayUnexercised() {
+			fmt.Println("[contribute] the target could not be exercised; nothing was sent")
+		} else {
+			cf.send(contribToken, []attack.Trace{*t}, string(profile), cfg.Now, os.Stdout, os.Stderr)
+		}
+	}
 
 	if t.Exploitability == evidence.Confirmed {
 		return 1
@@ -921,16 +957,6 @@ func budgetFrom(attempts, requests int, duration time.Duration) attack.Budget {
 		b.Duration = duration
 	}
 	return b
-}
-
-// loadFindings reads a findings.json emitted by `nox scan`, via the one shared
-// report loader, adding the CLI's "run scan first" hint on a read error.
-func loadFindings(path string) ([]findings.Finding, error) {
-	ff, err := report.LoadFindingsFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w (run `nox scan` first)", path, err)
-	}
-	return ff, nil
 }
 
 // loadInventory reads an ai.inventory.json emitted by `nox scan`.

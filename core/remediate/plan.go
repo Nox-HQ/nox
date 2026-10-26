@@ -156,6 +156,9 @@ type Input struct {
 	// Root is the directory finding paths are relative to. Content patches are
 	// computed against the files there; with no Root none are.
 	Root string
+	// Targets, when set, checks each upgrade target against the advisory
+	// source (see fix.Checker). Nil plans from the findings alone.
+	Targets fix.Checker
 }
 
 // BuiltinRules is the rule set of every built-in analyzer, for callers that
@@ -174,7 +177,7 @@ func Build(in Input) Plan {
 	if in.Rules == nil {
 		in.Rules = BuiltinRules()
 	}
-	report := assess.Build(assess.Input{Findings: in.Findings, Rules: in.Rules})
+	report := assess.Build(assess.Input{Findings: in.Findings, Rules: in.Rules, Targets: in.Targets})
 	reader := newFileReader(in.Root)
 
 	plan := Plan{FindingCount: report.FindingCount, Items: []Item{}}

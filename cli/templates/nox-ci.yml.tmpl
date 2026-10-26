@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Nox security scan
-        uses: nox-hq/nox@[[.NoxRef]]
+        uses: nox-hq/nox@[[.NoxRef]][[.NoxLabel]]
         with:
           format: sarif
           version: '[[.NoxVersion]]'
@@ -93,7 +93,7 @@ jobs:
           restore-keys: nox-advisories-
 
       - name: Scan
-        uses: nox-hq/nox@[[.NoxRef]]
+        uses: nox-hq/nox@[[.NoxRef]][[.NoxLabel]]
         with:
           format: json,sarif
           version: '[[.NoxVersion]]'
@@ -224,7 +224,7 @@ jobs:
       - name: Prepare the remediation pull request
         id: remediate
         if: steps.decide.outputs.action == 'prepare' || steps.decide.outputs.action == 'remediate'
-        uses: nox-hq/nox/actions/remediate@[[.NoxRef]]
+        uses: nox-hq/nox/actions/remediate@[[.NoxRef]][[.NoxLabel]]
         with:
           findings-file: nox-results/prepare.json
           version: '[[.NoxVersion]]'

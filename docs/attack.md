@@ -294,3 +294,10 @@ findings against a Flask-shaped HTTP target. `nox attack` is its generalisation 
 a scenario model, an asset and invariant model, budgets, profiles, replay, and
 regression. Both share the reflection-immunity property that makes their verdicts
 worth reading.
+
+
+## Contributing a run to NOX Intelligence
+
+`nox attack run` and `nox attack replay` accept `--contribute --candidate <fp>` to send
+the run's allowlisted evidence to the intelligence service as reporter-scoped
+evidence. See "Attested contribution and attack evidence" in `intelligence.md`.
