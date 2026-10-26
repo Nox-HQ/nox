@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Version comparison read only three numeric segments, so `6.6.0.7` and `6.6.0.3` compared equal and four-part
+  versions (NuGet, Maven) could be judged not affected. nox-core v0.9.0 compares every segment and adds OSV's
+  explicit `versions` lists, which decide affectedness before ranges.
+
 - `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
 
 ### Added
