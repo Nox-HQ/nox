@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a package.json" and recommends committing one, and reads
   "declared, but none could be resolved" instead of "none found" when nothing
   could be resolved.
+- Fix planning chose a target that was itself still vulnerable. It took the highest fix named by the advisories affecting the *installed* version, but an advisory introduced later does not affect the installed version and does affect the target: axios 0.21.1 planned to 0.33.0, which two advisories (fixed in 0.34.0) still cover, and only re-verification noticed. With the advisory database reachable, `nox fix`, `nox fix plan`, the assessment and the MCP `fix_plan` tool now ask what each candidate is still vulnerable to and move to the lowest version that clears them all. When only a major bump clears them, the move stays held and names what would remain in policy and the version that clears it (needs `--include-major`); an unreachable database marks the move unverified instead of clear. Semver policy is unchanged.
 
 ## [1.52.0] - 2026-10-25
 

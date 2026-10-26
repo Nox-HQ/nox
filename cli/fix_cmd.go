@@ -17,6 +17,7 @@ import (
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/fix/osvcheck"
 )
 
 // runFix applies safe upgrade actions derived from VULN-001 findings.
@@ -137,6 +138,9 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 	}
 	if plan.majorSkipped > 0 {
 		fmt.Printf("note: %d major-bump upgrades skipped (use --include-major to apply)\n", plan.majorSkipped)
+		for _, n := range plan.heldNotes {
+			fmt.Printf("  - %s\n", n)
+		}
 	}
 
 	if dryRun {
@@ -301,6 +305,8 @@ type upgradePlan struct {
 	actions      []upgradeAction
 	skipped      int
 	majorSkipped int
+	// heldNotes say which advisories a plan leaves, and what clears them.
+	heldNotes []string
 }
 
 // planUpgrades projects the shared core/fix planner into the CLI's internal
@@ -309,8 +315,19 @@ type upgradePlan struct {
 // decide identically. This wrapper only adapts the result to what the CLI
 // applier consumes (the ecosystem base command and the manifest path).
 func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
-	p := fix.PlanUpgrades(items, fix.Options{IncludeMajor: includeMajor})
+	p := fix.PlanUpgrades(items, fix.Options{IncludeMajor: includeMajor, Checker: targetChecker(false)})
 	plan := upgradePlan{skipped: p.Skipped, majorSkipped: p.MajorSkipped}
+	for _, h := range p.Held {
+		if h.PolicyTarget != "" {
+			plan.heldNotes = append(plan.heldNotes, fmt.Sprintf("%s: %s would still be affected by %s; only %s clears them (needs --include-major)",
+				h.Package, h.PolicyTarget, strings.Join(h.Remaining, ", "), h.To))
+		}
+	}
+	for _, a := range p.Actions {
+		if len(a.Remaining) > 0 {
+			plan.heldNotes = append(plan.heldNotes, fmt.Sprintf("%s %s: still affected by %s, no fix published", a.Package, a.To, strings.Join(a.Remaining, ", ")))
+		}
+	}
 	for _, a := range p.Actions {
 		base, _ := fix.SupportedEcosystem(a.Ecosystem)
 		plan.actions = append(plan.actions, upgradeAction{
@@ -832,4 +849,14 @@ func tidyEco(manifestRoot, eco string) error {
 		return nil
 	}
 	return nil
+}
+
+// targetChecker asks the advisory database what each upgrade target is still
+// vulnerable to, so the plan names a version that clears every known advisory.
+// Offline plans from the findings alone.
+func targetChecker(offline bool) fix.Checker {
+	if offline {
+		return nil
+	}
+	return osvcheck.New("")
 }
