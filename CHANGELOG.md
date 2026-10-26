@@ -7,17 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [1.53.0] - 2026-10-26
 
-- A JavaScript call-reachable finding (`affected_symbol_site`) recorded the absolute path of the source file on the machine that ran the scan (`/Users/.../src/use.js:4`) in findings.json, SARIF and the assessment text. It is now the path inside the scanned tree (`src/use.js:4`), so output no longer differs between checkouts of the same commit.
-
-- The `nox scan` assessment named an upgrade target that could itself still be affected: it said `Upgrade axios 0.21.1 -> 0.33.0` while `nox fix plan` (and the MCP `fix_plan` tool) said `0.34.0`, because 0.33.0 carries two advisories the installed version does not. The assessment now asks the advisory database about its targets, as `nox fix` does, so the two agree. `--offline`, `--no-osv` and `scan.osv.disabled` still make no request and the plan is built from the findings alone.
-
-- Version comparison read only three numeric segments, so `6.6.0.7` and `6.6.0.3` compared equal and four-part
-  versions (NuGet, Maven) could be judged not affected. nox-core v0.9.0 compares every segment and adds OSV's
-  explicit `versions` lists, which decide affectedness before ranges.
-
-- `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
+Every check nox runs now answers a question it used to get wrong or leave to you. A package.json
+without a lockfile is read instead of scanning as "0 dependencies, no issues" (the most common shape
+of an AI-built app); fix targets clear every advisory instead of stopping at a version that is itself
+vulnerable; an authorization lead becomes a two-account BOLA test plan; optional checks are turned on
+by what they check (`nox enable api-abuse`), never by plugin name; npm fixes can merge on evidence
+that the project references the vulnerable export; generated CI pins nox by commit SHA; and attack
+evidence from your own CI can be contributed to NOX Intelligence, attributed to your organisation,
+under separate terms (attack-2026-10). Version comparison now uses every segment and OSV's explicit
+version lists (nox-core v0.9.1).
 
 ### Added
 
@@ -28,8 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secure and vulnerable responses stated up front. Leads in `findings.json` now
   carry `id_source`. The scenario is plan-only: `nox attack run` reports it as
   not executed and never scores it PREVENTED or CONFIRMED.
-
-### Added
 
 - npm: nox now answers whether project source references an export that NOX
   Intelligence's analysis of the fix lists as changed (`core/depimports`
@@ -47,13 +45,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source_reference`). It only raises: no hit leaves the verdict exactly where it
   was, and it never produces `not_impacting`.
 
-### Added
-
 - `nox attack run|replay --contribute --candidate <fingerprint>` sends each executed run's allowlisted evidence (nox-core `RunReport`: no target, route, payload or response; a one-way trace digest) to NOX Intelligence as reporter-scoped evidence. It needs `NOX_INTEL_TOKEN`, separately accepted attack terms (`nox intel consent attack`) and refuses before any attack fires. Runs that were not executed, had an unsound control or never reached the target are skipped, not reported as prevented. `nox intel allowlist attack` prints the fields; `nox intel forget --attested` erases your organisation's contributions.
 - `scan.intelligence.attested: true` sends scan observations as your organisation (`NOX_INTEL_TOKEN`). Anonymous contributions are stored but no longer count as independent sources, because a reporter id is self-asserted; attested ones count once per organisation. With no token nothing is sent and the scan says so.
 - `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
 
 ### Fixed
+
+- A JavaScript call-reachable finding (`affected_symbol_site`) recorded the absolute path of the source file on the machine that ran the scan (`/Users/.../src/use.js:4`) in findings.json, SARIF and the assessment text. It is now the path inside the scanned tree (`src/use.js:4`), so output no longer differs between checkouts of the same commit.
+
+- The `nox scan` assessment named an upgrade target that could itself still be affected: it said `Upgrade axios 0.21.1 -> 0.33.0` while `nox fix plan` (and the MCP `fix_plan` tool) said `0.34.0`, because 0.33.0 carries two advisories the installed version does not. The assessment now asks the advisory database about its targets, as `nox fix` does, so the two agree. `--offline`, `--no-osv` and `scan.osv.disabled` still make no request and the plan is built from the findings alone.
+
+- Version comparison read only three numeric segments, so `6.6.0.7` and `6.6.0.3` compared equal and four-part
+  versions (NuGet, Maven) could be judged not affected. nox-core v0.9.0 compares every segment and adds OSV's
+  explicit `versions` lists, which decide affectedness before ranges.
+
+- `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
 
 - `nox intel evidence --upload` now sends the `evidence_kind` (and `control_sound`
   when the run executed) that NOX Intelligence derives a verdict from. The
