@@ -49,6 +49,10 @@ type Input struct {
 	Degradations []nox.Degradation
 	// Packages is the number of dependencies inventoried.
 	Packages int
+	// Targets, when set, is asked what each planned upgrade target is still
+	// vulnerable to, so the upgrade names a version that clears every known
+	// advisory. Optional; nil plans from the findings alone.
+	Targets fix.Checker
 	// Offline is set when the scan made no network calls, so known
 	// vulnerabilities in dependencies were not looked up.
 	Offline bool
@@ -251,7 +255,7 @@ func issues(in Input) []Issue {
 	// The planner `nox fix` applies and the MCP fix_plan tool shows. The
 	// assessment's upgrade lines are exactly its actions, so "upgrade axios"
 	// here is the command `nox fix --dry-run` prints next.
-	plan := fix.PlanUpgrades(ff, fix.Options{})
+	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.checker()})
 	used := make([]bool, len(ff))
 
 	var out []Issue
@@ -324,10 +328,36 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 	if kind == KindMajorUpgrade {
 		s += MajorNote
 	}
+	s += targetNote(a)
 	up := a
 	return Issue{Kind: kind, Summary: s, Severity: sev, Confidence: conf, Findings: len(a.Findings),
 		Fingerprints: fingerprints(ff, a.Findings), Upgrade: &up, rank: rank(sev, conf),
 		Attention: anyAttention(ff, a.Findings)}
+}
+
+// checker is Targets unless the scan was offline, whose plan must not reach
+// the network either.
+func (in Input) checker() fix.Checker {
+	if in.Offline {
+		return nil
+	}
+	return in.Targets
+}
+
+// targetNote says what the planner learned about the target beyond the
+// findings: advisories that would remain, or that it could not check.
+func targetNote(a fix.UpgradeAction) string {
+	ids := strings.Join(a.Remaining, ", ")
+	switch {
+	case a.PolicyTarget != "":
+		return fmt.Sprintf(" No version inside the upgrade policy clears every advisory: %s would still be affected by %s; only %s does, and it needs --include-major.",
+			a.PolicyTarget, ids, a.To)
+	case len(a.Remaining) > 0:
+		return fmt.Sprintf(" Still affected after this upgrade, with no fix published: %s.", ids)
+	case a.Unverified:
+		return " Not checked against the advisory database: advisories introduced after the installed version may still affect the target."
+	}
+	return ""
 }
 
 // inDir names the manifest's directory when it is not the scan root, so a
