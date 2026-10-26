@@ -27,7 +27,8 @@ Flags:
   --dir        repository root (default ".")
   --branch     branch whose pushes are scanned (default "main")
   --cron       schedule for the advisory run (default "17 5 * * *", daily)
-  --nox-ref    ref of nox-hq/nox the workflow uses (default: this release's tag)
+  --nox-ref    ref of nox-hq/nox the workflow uses (default: this release's commit SHA,
+               labelled with its version; a tag is accepted but warned about)
   --nox-version  nox version the action installs (default: this release)
   --force      overwrite an existing workflow
   --print      write the workflow to stdout instead of a file
@@ -35,6 +36,7 @@ Flags:
 
 var (
 	ciSafeValue = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+	fullSHA     = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	ciCronShape = regexp.MustCompile(`^[0-9*/,\-A-Za-z?#]+( [0-9*/,\-A-Za-z?#]+){4}$`)
 )
 
@@ -42,7 +44,9 @@ type installCIData struct {
 	Branch     string
 	Cron       string
 	NoxRef     string
+	NoxLabel   string // trailing comment naming the release a SHA pins, e.g. " # v1.52.0"
 	NoxVersion string
+	Warning    string // printed to stderr; the workflow is still written
 }
 
 func runInstallCI(args []string) int {
@@ -63,6 +67,9 @@ func runInstallCI(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
+	}
+	if data.Warning != "" {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", data.Warning)
 	}
 	out, err := renderInstallCI(data)
 	if err != nil {
@@ -99,7 +106,9 @@ func runInstallCI(args []string) int {
 	fmt.Println("     fine-grained token (secret NOX_TOKEN). Without one, the pull request is opened")
 	fmt.Println("     with GITHUB_TOKEN, CI will not run on it, and auto-merge stays off.")
 	fmt.Println("     Setup: docs/advisory-policy.md#opening-pull-requests-that-run-your-checks")
-	fmt.Println("  3. Pin the action refs to commit SHAs with: nox fix --actions")
+	if data.Warning != "" {
+		fmt.Println("  3. Pin the nox-hq/nox refs to commit SHAs with: nox fix --actions")
+	}
 	return 0
 }
 
@@ -111,11 +120,25 @@ func resolveInstallCI(branch, cron, ref, noxVersion string) (installCIData, erro
 		return installCIData{}, fmt.Errorf("--cron %q must be five space-separated cron fields", cron)
 	}
 	release := version != "" && version != "dev"
+	label := ""
+	warning := ""
 	if ref == "" {
 		if !release {
-			return installCIData{}, fmt.Errorf("this is a development build with no release tag; pass --nox-ref (a tag or commit of nox-hq/nox)")
+			return installCIData{}, fmt.Errorf("this is a development build with no release tag; pass --nox-ref (a commit SHA of nox-hq/nox)")
 		}
-		ref = "v" + strings.TrimPrefix(version, "v")
+		// A tag is a mutable pointer, and nox's own IAC-013 flags it. Pin the
+		// commit this release was built from; it is embedded at build time, so
+		// there is no network lookup and the answer is deterministic. Without
+		// it, refuse rather than write a ref the generated workflow's own scan
+		// would flag.
+		if !fullSHA.MatchString(commit) {
+			return installCIData{}, fmt.Errorf("this build does not record its release commit (commit=%q), so it cannot pin nox-hq/nox to one; pass --nox-ref <commit SHA of v%s>", commit, strings.TrimPrefix(version, "v"))
+		}
+		ref = commit
+		label = " # v" + strings.TrimPrefix(version, "v")
+	}
+	if !fullSHA.MatchString(ref) {
+		warning = fmt.Sprintf("--nox-ref %q is not a full commit SHA; the workflow will pin a movable ref and nox's own IAC-013 will flag it (fix with: nox fix --actions)", ref)
 	}
 	if !ciSafeValue.MatchString(ref) {
 		return installCIData{}, fmt.Errorf("--nox-ref %q must be a plain ref", ref)
@@ -129,7 +152,7 @@ func resolveInstallCI(branch, cron, ref, noxVersion string) (installCIData, erro
 	if !ciSafeValue.MatchString(noxVersion) {
 		return installCIData{}, fmt.Errorf("--nox-version %q must be a plain version", noxVersion)
 	}
-	return installCIData{Branch: branch, Cron: cron, NoxRef: ref, NoxVersion: noxVersion}, nil
+	return installCIData{Branch: branch, Cron: cron, NoxRef: ref, NoxLabel: label, NoxVersion: noxVersion, Warning: warning}, nil
 }
 
 // renderInstallCI fills the workflow template. Its delimiters are [[ ]] because
