@@ -27,6 +27,7 @@ import (
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/fix/osvcheck"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/remediate"
 	"github.com/nox-hq/nox/core/report"
@@ -1817,7 +1818,7 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	// so the actions an agent is shown here are exactly the ones the CLI would
 	// run — including the guards against downgrades, prereleases, and
 	// unsupported ecosystems that this handler used to lack.
-	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor})
+	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: osvcheck.New("")})
 
 	resp := fixPlanResponse{
 		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",

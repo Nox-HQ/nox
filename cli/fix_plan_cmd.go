@@ -70,7 +70,7 @@ func runFixSub(mode string, args []string) int {
 		// from its rule.
 		return runVerifySub(remediate.Build(remediate.Input{Findings: active}), active, o)
 	}
-	plan := remediate.Build(remediate.Input{Findings: active, Root: o.root})
+	plan := remediate.Build(remediate.Input{Findings: active, Root: o.root, Targets: targetChecker(o.offline)})
 	if mode == "plan" {
 		return printPlan(plan, o.format)
 	}
