@@ -864,6 +864,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
 					if pkg.Ecosystem == "go" {
 						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
+					} else {
+						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
 					}
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
@@ -905,7 +907,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// what was not. "not reachable" alone invites the reader to
 					// supply the more comfortable reading; the ladder says how
 					// far nox got and where it stopped.
-					message += " — " + verdict.Describe()
+					if meta["affected_symbol_evidence"] == "source_reference" {
+						// Describe speaks of calls from an entry point, which a
+						// source reference is not. Say what was established.
+						message += " — " + sourceReferenceSentence(meta)
+					} else {
+						message += " — " + verdict.Describe()
+					}
 
 					// A range's lower bound is what the manifest permits, not
 					// what was installed, so the match is weaker than a lock entry.

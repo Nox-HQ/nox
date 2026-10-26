@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- npm: nox now answers whether project source references an export that NOX
+  Intelligence's analysis of the fix lists as changed (`core/depimports`
+  `JSSymbolUse`). It reads every ordinary import idiom: ESM named, aliased,
+  default, namespace and mixed clauses (multi-line, `export`-less, TypeScript
+  `import x = require()`), CommonJS whole-module, destructured, renamed,
+  member-bound and inline `require('m').f()`, bracket access, destructuring a
+  whole-module binding, and dynamic `import()`. Comments, strings, `import type`,
+  relative and `node:` specifiers, same-named properties of other objects,
+  object keys, shadowing declarations and test, spec, mock and fixture paths do
+  not count. A hit raises the finding to `call_reachable` with the file and line
+  as the witness, so the default `advisories.remediate` gate can now merge an npm
+  fix. The evidence is a reference, not a call path from an entry point, and the
+  finding and the advisory reason say so (`affected_symbol_evidence:
+  source_reference`). It only raises: no hit leaves the verdict exactly where it
+  was, and it never produces `not_impacting`.
+
+### Added
+
 - `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
 
 ### Fixed
