@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source_reference`). It only raises: no hit leaves the verdict exactly where it
   was, and it never produces `not_impacting`.
 
+### Added
+
+- `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
+
 ### Fixed
 
 - A project with a `package.json` and no lockfile scanned as `0 dependencies` /
