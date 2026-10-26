@@ -1,6 +1,7 @@
 package attack
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -94,7 +95,7 @@ func TestObjectParameter(t *testing.T) {
 func TestAuthzPlanIsDeterministic(t *testing.T) {
 	a, _ := authzPlan(t, invoiceLead()).JSON()
 	b, _ := authzPlan(t, invoiceLead()).JSON()
-	if string(a) != string(b) {
+	if !bytes.Equal(a, b) {
 		t.Error("two plans from the same lead differ")
 	}
 }

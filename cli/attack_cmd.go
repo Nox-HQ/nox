@@ -930,16 +930,6 @@ func budgetFrom(attempts, requests int, duration time.Duration) attack.Budget {
 	return b
 }
 
-// loadFindings reads a findings.json emitted by `nox scan`, via the one shared
-// report loader, adding the CLI's "run scan first" hint on a read error.
-func loadFindings(path string) ([]findings.Finding, error) {
-	ff, err := report.LoadFindingsFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w (run `nox scan` first)", path, err)
-	}
-	return ff, nil
-}
-
 // loadInventory reads an ai.inventory.json emitted by `nox scan`.
 func loadInventory(path string) (*ai.Inventory, error) {
 	data, err := os.ReadFile(path)
