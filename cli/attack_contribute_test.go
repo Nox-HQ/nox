@@ -50,7 +50,9 @@ const contribCandidate = "0123456789abcdef0123456789abcdef0123456789abcdef012345
 // contributeEnv isolates the consent file and sets the org token.
 func contributeEnv(t *testing.T, token string) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	t.Setenv("NOX_INTEL_TOKEN", token)
 }
 
