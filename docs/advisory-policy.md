@@ -126,6 +126,12 @@ advisories:
     min_relevance: undetermined
 ```
 
+**npm: a referenced export.** When NOX Intelligence lists a publicly exported
+function that the fix changed and your non-test source references it (any import
+or `require` spelling), the advisory is `call_reachable` and the reason names the
+file and line. That is a reference, not a call path from an entry point: nox has
+no JavaScript call graph. No reference proves nothing and never lowers a finding.
+
 **Linked is not called.** For every ecosystem except Go, linked is as far as
 nox gets, so a merge gate that accepted `symbol_used` would be a merge gate on
 severity alone. The default remediate gate is therefore `call_reachable`, and

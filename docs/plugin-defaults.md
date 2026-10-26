@@ -104,6 +104,15 @@ run, with names, as an advisory entry in `findings.json` and in the
 `[degraded]` line under `--verbose`; `--fail-on-degraded` is unaffected. An
 unclassified (third-party) plugin is treated as an optional check, never hidden.
 
+## How a person turns one on
+
+By capability, never by plugin: `nox enable api-abuse` (or `nox enable all` for
+every installed optional check, `nox enable --list` to see them). It splices
+`plugins.required` into `.nox.yaml`, keeping the file's comments and layout, and
+reads the result back the way a scan does. The assessment prints the exact
+command for the checks it did not run. This changes who types the plugin name,
+not the default: nothing above meets the bar to run unasked.
+
 ## What would change the answer
 
 - **Core absorbs the real finding.** This happened during the work: the one
