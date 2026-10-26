@@ -19,6 +19,7 @@ import (
 type Classification struct {
 	OWASPASI string `json:"owasp_asi,omitempty"`
 	OWASPLLM string `json:"owasp_llm,omitempty"`
+	OWASPAPI string `json:"owasp_api,omitempty"`
 	CWE      string `json:"cwe,omitempty"`
 	// CVSSVector is the CVSS v4.0 base vector for a CONFIRMED exploit of this
 	// scenario. nox publishes the vector and does NOT publish a CVSS score:
@@ -233,6 +234,7 @@ func Classify(s Scenario, e evidence.Exploitability, reproducedHits, samples int
 	c := Classification{
 		OWASPASI:   s.OWASPASI,
 		OWASPLLM:   s.OWASPLLM,
+		OWASPAPI:   s.OWASPAPI,
 		CWE:        s.CWE,
 		CVSSVector: s.CVSSVector,
 	}

@@ -1343,6 +1343,11 @@ func attachGraphPaths(g *AttackGraph, hyps []Hypothesis) {
 	for i := range hyps {
 		h := &hyps[i]
 		var match *AttackPath
+		if h.ScenarioID == ScenarioAuthzBOLA {
+			// An authorization hypothesis is a route, not a walk over the
+			// agent graph; its path is already the route-to-object chain.
+			continue
+		}
 		switch h.ScenarioID {
 		case ScenarioPIDirect, ScenarioPIIndirect:
 			match = bestPath(paths, func(p AttackPath) bool {

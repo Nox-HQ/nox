@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `nox attack plan` (and the MCP `attack_plan` tool, which shares the same core
+  plan) now turns object-level authorization leads and AUTHZ-001 findings into
+  `AUTHZ-BOLA` hypotheses: the route, the parameter that names the object, the
+  missing-ownership-check reasoning, and a two-account test procedure with the
+  secure and vulnerable responses stated up front. Leads in `findings.json` now
+  carry `id_source`. The scenario is plan-only: `nox attack run` reports it as
+  not executed and never scores it PREVENTED or CONFIRMED.
+
+### Added
+
 - npm: nox now answers whether project source references an export that NOX
   Intelligence's analysis of the fix lists as changed (`core/depimports`
   `JSSymbolUse`). It reads every ordinary import idiom: ESM named, aliased,

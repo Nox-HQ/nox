@@ -259,6 +259,11 @@ type Lead struct {
 	Line      int    `json:"line"`
 	Statement string `json:"statement"`
 	Test      string `json:"test"`
+	// IDSource is where the caller-supplied identifier comes from ("path",
+	// "query", "body", or several joined by commas). Set for object-level
+	// authorization leads; it is what lets `nox attack plan` name the
+	// parameter that selects the object.
+	IDSource string `json:"id_source,omitempty"`
 }
 
 // ActiveFindings returns the report's findings that are still active — not
