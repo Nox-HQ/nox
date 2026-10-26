@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nox intel evidence --upload` now sends the `evidence_kind` (and `control_sound`
+  when the run executed) that NOX Intelligence derives a verdict from. The
+  service no longer trusts the uploaded `exploitability`, so without a kind every
+  run, however well earned, was recorded as INCONCLUSIVE. `dynamic_exploit` is
+  sent only for a deterministic oracle whose violation reproduced; a model's
+  judgment is `semantic`; a deterministic run that did not reproduce is
+  `heuristic`. Older releases upload as INCONCLUSIVE (the claim is kept).
+
 - A project with a `package.json` and no lockfile scanned as `0 dependencies` /
   `dependencies (none found)` / `No issues found in what was checked`, although
   requirements.txt and go.mod without lockfiles were read. `package.json`
