@@ -60,12 +60,13 @@ func enablePluginHint(name string) string {
 	return fmt.Sprintf(`[note] %s is installed but not enabled for this project.
        Plugins run only when the project asks for them, so that a scan does
        not depend on what happens to be installed on the machine.
-       Add it to .nox.yaml:
+       Turn it on with: nox enable %s
+       or add it to .nox.yaml yourself:
 
          plugins:
            required:
              - %s
-`, name, name)
+`, name, name, name)
 }
 
 // requiredPluginsForDir loads the `plugins.required` list for a directory,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/attack"
+	"github.com/nox-hq/nox/core/intel"
 )
 
 const testCandidate = "46f3edf20f27caba7f34aa15ed44f03b8019297434bd7fea4b2cefc4ce5bf772"
@@ -224,5 +225,81 @@ func TestIntelComponentsExplainsAMissingPlan(t *testing.T) {
 	})
 	if code != 1 || !strings.Contains(stderr, "Security or above") {
 		t.Errorf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+// serviceDerive restates, from nox-core's own rules, how nox-intelligence
+// derives exploitability from an upload (Nox-HQ/nox-intelligence#80,
+// domain.ExploitEvidence.Derive). It is the contract this client is held to:
+// if the service's rule moves, this copy and the recorded request below must
+// move with it, in this repository's review.
+//
+// CONFIRMED needs an observed violation, a sound control, a reproduction, and a
+// deterministic claim of a kind a tenant may assert at controlled_reproduction
+// strength or above, with a trace id and a timestamp.
+func serviceDerive(ev intel.ExploitEvidence) evidence.Exploitability {
+	tenantMay := map[evidence.Kind]bool{
+		evidence.KindHeuristic: true, evidence.KindSemantic: true, evidence.KindStatic: true,
+		evidence.KindControlledReproduction: true, evidence.KindDynamicExploit: true,
+	}
+	kind := evidence.Kind(ev.EvidenceKind)
+	subject := evidence.Subject{Kind: evidence.SubjectExploit, ID: ev.TraceID}
+	var ledger evidence.Ledger
+	if ev.Deterministic && ev.TraceID != "" && ev.ObservedAt != "" && tenantMay[kind] && kind.Deterministic() &&
+		kind.Strength() >= evidence.KindControlledReproduction.Strength() {
+		ledger.Add(evidence.Claim{Kind: kind, Subject: subject, Statement: "tenant-reported run"})
+	}
+	out := evidence.RunOutcome{ControlSound: ev.ControlSound == nil || *ev.ControlSound, Reproduced: ev.Reproduced}
+	switch evidence.Exploitability(ev.Exploitability) {
+	case evidence.Confirmed:
+		out.HypothesisConstructed, out.Executed, out.Violated = true, true, true
+	case evidence.Prevented:
+		out.HypothesisConstructed, out.Executed, out.DefenseObserved = true, true, true
+	case evidence.Inconclusive:
+		out.HypothesisConstructed, out.Executed = true, true
+	}
+	return evidence.DeriveExploitabilityAbout(out, &ledger, subject)
+}
+
+// A run that earned CONFIRMED here is CONFIRMED there; one that did not is not.
+// Without this, the service's derivation silently turned every legitimate
+// upload into INCONCLUSIVE.
+func TestUploadedEvidenceSurvivesTheServiceDerivation(t *testing.T) {
+	r := attackResult()
+	r.Traces[0].Outcome = evidence.RunOutcome{Executed: true, ControlSound: true, Violated: true, Reproduced: true}
+	r.Traces = append(r.Traces, attack.Trace{ID: "trace-hyp-d", Exploitability: evidence.Confirmed,
+		Evidence: &attack.ExploitEvidence{OracleKind: attack.OracleDeterministic, Reproduced: false}})
+	evs, _, err := evidenceFromResult(r, testCandidate, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]evidence.Exploitability{
+		"trace-hyp-a": evidence.Confirmed,    // deterministic oracle, reproduced
+		"trace-hyp-b": evidence.Inconclusive, // a model's judgment
+		"trace-hyp-d": evidence.Inconclusive, // deterministic oracle, not reproduced
+	}
+	assertable := map[string]bool{"heuristic": true, "semantic": true, "static": true,
+		"controlled_reproduction": true, "dynamic_exploit": true}
+	for _, ev := range evs {
+		if !assertable[ev.EvidenceKind] {
+			t.Errorf("%s: kind %q is not one a tenant can assert", ev.TraceID, ev.EvidenceKind)
+		}
+		if got := serviceDerive(ev); got != want[ev.TraceID] {
+			t.Errorf("%s: the service derives %s from %+v, want %s", ev.TraceID, got, ev, want[ev.TraceID])
+		}
+	}
+}
+
+// The request body as the service receives it, recorded. The service's parser
+// reads these field names; renaming one here without it is the drift this
+// guards.
+func TestUploadedEvidenceWireShape(t *testing.T) {
+	evs, _, _ := evidenceFromResult(attackResult(), testCandidate, "api", []string{"trace-hyp-a"})
+	b, _ := json.Marshal(evs[0])
+	const recorded = `{"trace_id":"trace-hyp-a","fingerprint":"` + testCandidate + `","component_id":"api",` +
+		`"exploitability":"CONFIRMED","deterministic":true,"reproduced":true,"observed_at":"2026-09-19T12:00:00Z",` +
+		`"evidence_kind":"dynamic_exploit"}`
+	if string(b) != recorded {
+		t.Errorf("wire shape changed:\n got %s\nwant %s", b, recorded)
 	}
 }
