@@ -101,9 +101,11 @@ release:
   footer: |
     **Full Changelog**: https://github.com/nox-hq/nox/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-brews:
+# Homebrew cask. GoReleaser deprecated `brews` (formulas) for pre-built
+# binaries in favour of casks (deprecations: brews, hard since v2.16).
+homebrew_casks:
   - name: nox
-    directory: Formula
+    directory: Casks
     repository:
       owner: felixgeelhaar
       name: homebrew-tap
@@ -111,14 +113,19 @@ brews:
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com # nox:ignore DATA-001 -- goreleaser bot email
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/nox-hq/nox"
     description: "Language-agnostic security scanner with first-class AI application security"
     license: "Apache-2.0"
-    install: |
-      bin.install "nox"
-    test: |
-      system "#{bin}/nox", "--help"
+    # The macOS binaries are not Apple-notarized, so Gatekeeper would refuse to
+    # run them ("nox is damaged and cannot be opened"). Strip the quarantine bit
+    # after install, as GoReleaser's cask guide prescribes for un-notarized builds.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/nox"]
+          end
     # "auto" already skips prereleases/snapshots. SKIP_BREW additionally skips
     # when the release workflow found TAP_GITHUB_TOKEN cannot reach the tap, so
     # an expired packaging credential cannot fail the release and take cosign

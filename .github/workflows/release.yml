@@ -50,7 +50,7 @@ jobs:
 
       # Probe the Homebrew tap credential BEFORE running goreleaser.
       #
-      # WHY: publishing the tap formula is a packaging convenience, but it ran
+      # WHY: publishing the tap cask is a packaging convenience, but it ran
       # inside the same goreleaser invocation as everything else, so when the
       # token expired the whole `release` job failed — and `sign`, `docker` and
       # `update-major-tag` all declare `needs: release`, so they were SKIPPED.
@@ -62,7 +62,7 @@ jobs:
       # backwards, and it failed loudly in the wrong place: the release looked
       # "failed" while actually being published-but-unsigned.
       #
-      # Now a bad tap token degrades to a warning and a skipped formula update.
+      # Now a bad tap token degrades to a warning and a skipped cask update.
       # Signing is never collateral damage.
       - name: Check Homebrew tap credential
         id: tap
@@ -71,7 +71,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Homebrew tap skipped::TAP_GITHUB_TOKEN cannot access felixgeelhaar/homebrew-tap (rotate the secret and re-run to publish the formula). The release itself, signing and the container image are unaffected."
+            echo "::warning title=Homebrew tap skipped::TAP_GITHUB_TOKEN cannot access felixgeelhaar/homebrew-tap (rotate the secret and re-run to publish the cask). The release itself, signing and the container image are unaffected."
           fi
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
@@ -221,7 +221,9 @@ jobs:
 
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: '~> v2'
+          # Exact version, not '~> v2': a floating range makes each release
+          # silently take whatever GoReleaser shipped last. Bump deliberately.
+          version: 'v2.19.0'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
