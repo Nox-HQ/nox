@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.54.0] - 2026-10-27
+
+Dependency scans get faster answers from NOX Intelligence without giving up verification. A verified
+scan now tells the service it can tell a lagging corpus from a withheld advisory, so the service may
+answer from its local OSV corpus instead of calling OSV live on every lookup; anything the corpus
+lacks because it changed after the last sync is restored from OSV.dev without an alarm, and anything
+older is still reported as suppression. Releases now publish a Homebrew cask and pin GoReleaser.
+
 ### Changed
 
 - Releases now publish a Homebrew **cask** (`Casks/nox.rb`) instead of a formula, ending the GoReleaser `brews` deprecation warning, and pin GoReleaser to exactly v2.19.0 rather than the floating `~> v2` so a release can no longer change behaviour because GoReleaser did. The cask strips the macOS quarantine attribute after install because the binaries are not Apple-notarized. The manual `Publish Homebrew Formula` workflow is now `Publish Homebrew Cask` and renders the same cask GoReleaser emits. `brew install felixgeelhaar/tap/nox` is unchanged. The old `Formula/nox.rb` in the tap is left in place until the first cask release has been verified.
