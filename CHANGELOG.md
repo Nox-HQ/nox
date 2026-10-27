@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-10-27
+
+A severity gate can no longer pass on a finding whose severity was never fetched, a worktree under an ignored directory is no longer scanned twice, and constrained required plugins are no longer reported as skipped. Dogfooded against NOX Intelligence main (93/93, including a real CLI scan answered from the mirror with the same 42 dependency findings as the live baseline).
+
 ### Changed
 
 - nox-core v0.11.1. It changes only `Record.Decide`, the version-list matching NOX Intelligence uses to answer from its OSV mirror (PyPI lists now compare under PEP 440, so `1.4` equals `1.4.0`; a near-equal entry elsewhere is undecidable and goes to live OSV). The CLI does not call it; no scan result changes.
