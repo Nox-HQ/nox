@@ -651,19 +651,31 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// scan a finding. It is also what makes a compiled-in default defensible:
 	// an unreachable service degrades to exactly the OSV scan nox ran before.
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
+		verify := cfg.Scan.Intelligence.VerificationEnabled()
 		newIntel := func(deg *degrade.Degradations) vulnsource.Source {
 			// Only this source asks for the mirror fallback, never the OSV.dev
 			// reference: it is what lets a scan keep working through an OSV
 			// outage. The answer comes back marked degraded, which the source
 			// records as a blocking intel_incomplete degradation, so the scan
 			// is honest about it rather than failing over to nothing.
-			return osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+			intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
 				WithAcceptDegraded().
 				WithCache(advisoryCache)
+			// mirror-lag lets the service answer from its synced OSV corpus
+			// instead of live OSV. That is only safe when the VerifyingSource
+			// applies the lag rule: it restores a record newer than the sync and
+			// still calls an older missing one a suppression. Without the
+			// verifier nothing would separate lag from withholding, so an
+			// unverified scan declares nothing and is answered live as before.
+			// Never sent to the OSV.dev reference, which does not know it.
+			if verify {
+				intel = intel.WithCapabilities(osvsource.CapabilityMirrorLag)
+			}
+			return intel
 		}
 
 		var src vulnsource.Source
-		if cfg.Scan.Intelligence.VerificationEnabled() {
+		if verify {
 			// The verifier builds both sources so it owns both degradation
 			// collectors: that is what lets it report an unreachable service
 			// as unreachable — answered by the reference alone — rather than
