@@ -442,6 +442,8 @@ func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
 	write("testdata/old/action.yml", step("fixture/action"))
 	write("node_modules/pkg/action.yml", step("vendored/action"))
 	write("docs/notes.yml", "uses: not/an-action-file@v1.0.0\n")
+	write(".claude/worktrees/agent-1/action.yml", step("worktree/action"))
+	write(".claude/worktrees/agent-1/.git", "gitdir: /r/.git/worktrees/agent-1\n")
 
 	var got []string
 	for _, p := range collectActionPins(root) {
@@ -453,7 +455,7 @@ func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
 			t.Errorf("%s not collected; got %v", want, got)
 		}
 	}
-	for _, not := range []string{"fixture/action", "vendored/action", "not/an-action-file"} {
+	for _, not := range []string{"fixture/action", "vendored/action", "not/an-action-file", "worktree/action"} {
 		if strings.Contains(joined, not) {
 			t.Errorf("%s must not be collected; got %v", not, got)
 		}

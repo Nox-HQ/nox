@@ -335,6 +335,13 @@ func collectActionPins(root string) []actionPin {
 			if path != root && skipForActionFiles[d.Name()] {
 				return filepath.SkipDir
 			}
+			// A linked worktree is another checkout of this repository
+			// (agents park them under gitignored directories). Its
+			// action.yml files are copies, and rewriting them edits a tree
+			// the repository does not contain (#830).
+			if path != root && discovery.IsLinkedWorktree(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if name := d.Name(); name == "action.yml" || name == "action.yaml" {

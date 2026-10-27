@@ -1111,6 +1111,13 @@ Exclude patterns follow gitignore syntax:
 
 Exclude patterns from `.nox.yaml` are combined with `.gitignore` patterns. Both are applied during file discovery.
 
+**Nested repositories and worktrees.** The parent's `.gitignore` keeps applying beneath a directory it ignores:
+
+- A linked worktree (`git worktree add`, `.git` is a file pointing into `.git/worktrees/`) under an ignored directory such as `.claude/worktrees/<name>/` is not scanned, even if the parent's index names it.
+- A nested clone (`.git` is a directory) under an ignored directory is not scanned, because its files are not in the parent's index. The `.git` directory itself is never scanned.
+- A submodule the parent tracks is still scanned, as git-tracked files are.
+- Neither is skipped when it sits in a directory that is *not* ignored; ignore it, or add it to `scan.exclude`, to leave it out.
+
 ### Exclude Artifact Types
 
 Skip entire artifact categories from scanning:
