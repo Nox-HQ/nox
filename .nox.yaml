@@ -1,6 +1,16 @@
 scan:
   exclude:
     - "plugins/"
+    # The install-ci workflow TEMPLATE. Its nox:ignore waivers (IAC-155/308/314)
+    # are written for the workflow it renders into a user's
+    # .github/workflows/, where they suppress 4 real findings. As a .yml.tmpl
+    # under cli/templates/ the file is not a GitHub workflow, so no IAC rule can
+    # fire here and the weekly audit reported each waiver as "matched no
+    # finding". They are not stale -- removing them would un-waive every
+    # installed workflow -- so the template is excluded from the self-scan
+    # rather than the waivers from the template. cli/ install-ci tests cover
+    # the rendered output.
+    - "cli/templates/nox-ci.yml.tmpl"
     - "dist/"
     - "*_test.go"
     # Intentionally-vulnerable ground-truth samples for `nox bench --precision`
