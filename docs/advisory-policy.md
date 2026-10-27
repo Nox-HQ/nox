@@ -170,7 +170,7 @@ match decides. The reason is printed with every decision.
 |---|---|
 | baselined, or waived through VEX (`not_affected`, `fixed`) | none (waived) |
 | present in the previous run (by ecosystem, package and advisory id or alias) | none (known) |
-| the scan could not finish looking (a non-advisory degradation, e.g. `osv_lookup`) | report; exit 1 |
+| the scan could not finish looking (a non-advisory degradation, e.g. `osv_lookup`, or `advisory_detail` when a severity could not be fetched) | report; exit 1 |
 | no previous run to compare against | report; nothing acted on |
 | policy is `report` | report |
 | relevance is `not_impacting` | report |

@@ -26,8 +26,8 @@ func twoIDIntel(t *testing.T, sameAs bool) *httptest.Server {
 	}
 	unrelated := `{"id":"GHSA-zzzz-zzzz-zzzz","modified":"2026-05-01T00:00:00Z","summary":"a different flaw"}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
-			http.Error(w, "nf", http.StatusNotFound)
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			_, _ = w.Write([]byte(`{"id":"` + id + `"}`)) // a 404 would be a missing detail: advisory_detail
 			return
 		}
 		body := `{"results":[{"vulns":[` + rec("GHSA-aaaa-bbbb-cccc", "GO-2021-9999", "proto pollution") + `,` +

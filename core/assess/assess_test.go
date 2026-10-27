@@ -496,3 +496,27 @@ func TestMirrorAnswerIsASpecificBlockingLimit(t *testing.T) {
 		t.Fatalf("NotChecked = %+v", r.NotChecked)
 	}
 }
+
+// advisory_detail has its own headline: the generic "A check did not complete
+// (advisory_detail)" fallback names a kind no reader knows and says nothing
+// about what is at risk (a severity gate).
+func TestAdvisoryDetailDegradationHasAHeadline(t *testing.T) {
+	d := nox.Degradation{
+		Kind:   "advisory_detail",
+		Detail: "2 findings kept a default severity (osv: GHSA-aaaa, GHSA-bbbb)",
+		Impact: "a severity gate may not see them",
+	}
+	r := Build(Input{Findings: saasFindings(), Scope: nox.FullScope(), Degradations: []nox.Degradation{d}})
+	var got *Limit
+	for i := range r.NotChecked {
+		if strings.Contains(r.NotChecked[i].Summary, "severities") {
+			got = &r.NotChecked[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("no advisory_detail headline in %+v", r.NotChecked)
+	}
+	if !got.Blocking || strings.Contains(got.Summary, "advisory_detail") {
+		t.Errorf("headline = %+v; want a blocking, plain-language line", *got)
+	}
+}

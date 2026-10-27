@@ -132,7 +132,7 @@ func scopesOrAll(scopes []nox.Scope) []nox.Scope {
 
 // depsFailures are the degradations that mean the dependency check could not
 // say what it normally says.
-var depsFailures = map[string]bool{"osv_lookup": true, "lockfile_parse": true, "vuln_data_load": true}
+var depsFailures = map[string]bool{"osv_lookup": true, "advisory_detail": true, "lockfile_parse": true, "vuln_data_load": true}
 
 // incomplete says why a scope's re-run cannot be trusted, or "" when it can.
 func incomplete(res *nox.ScanResult, s nox.Scope, offline bool) string {
