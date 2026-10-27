@@ -54,7 +54,7 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 ### Evidence Spine
 
 The evidence model lives in `github.com/nox-hq/nox-core/evidence`, a separate
-module pinned here at `v0.9.1` — not in this repository. It is the foundation
+module pinned here at `v0.10.0` — not in this repository. It is the foundation
 under dynamic exploit validation, and the model the intelligence service shares
 with the CLI; it sits in its own module precisely so neither side depends on the
 other. It owns the exploitability lifecycle (POTENTIAL, PLAUSIBLE, PREVENTED,

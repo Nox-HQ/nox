@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dependency scans now declare `X-Nox-Client-Capabilities: mirror-lag` to NOX Intelligence (never to OSV.dev, and only when verification against OSV is on). nox-core v0.10.0 can tell a mirror's sync lag from withholding: a reference advisory changed after the mirror's `mirror_synced_at` is restored without raising `intel_suppression`, while anything older, or any missing record with no usable sync time, is still reported as suppression. This lets the service answer from its local OSV corpus.
+
 ## [1.53.0] - 2026-10-26
 
 Every check nox runs now answers a question it used to get wrong or leave to you. A package.json
