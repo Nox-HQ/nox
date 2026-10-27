@@ -62,7 +62,12 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 
 	isRequired := make(map[string]bool, len(required))
 	for _, name := range required {
-		isRequired[name] = true
+		// A required entry may carry a version constraint (`nox/foo@^0.2.0`);
+		// the installed state records the bare name, so compare on that. Keying
+		// the set by the raw entry listed every constrained plugin as
+		// "not listed in plugins.required" while it was running (#829).
+		bare, _ := parseNameVersion(strings.TrimSpace(name))
+		isRequired[bare] = true
 	}
 
 	// An installed plugin that nothing declared does not run — but it must not

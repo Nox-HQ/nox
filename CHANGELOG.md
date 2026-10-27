@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A linked git worktree under a directory the repository `.gitignore`s (`.claude/worktrees/<name>/`) is no longer scanned when the parent's index names it. `git ls-files --recurse-submodules` expands a gitlink registered in `.gitmodules` into the worktree's files, which the tracked-file override then treated as tracked, so every finding of the real tree was reported twice under a path no waiver could stay ahead of. Linked worktrees (`.git` file pointing into `.git/worktrees/`) are now pruned under an ignored directory; submodules the parent tracks are still scanned. `nox fix --actions` also stops rewriting `action.yml` files inside nested worktrees. The behaviour for nested repositories is documented in `docs/usage.md` (#830).
 
+### Fixed
+
+- The `[degraded] N installed plugin(s) are not listed in plugins.required and did not run` advisory no longer lists plugins you did require. An entry with a version constraint (`nox/reachability@^0.9.0`) was compared to the installed name (`nox/reachability`) as a raw string, so every constrained plugin was reported as skipped while it ran, and the count was inflated to match. The list and count now hold only installed plugins that are not required (#829).
+
 ## [1.54.0] - 2026-10-27
 
 Dependency scans get faster answers from NOX Intelligence without giving up verification. A verified
