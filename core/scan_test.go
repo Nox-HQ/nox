@@ -2555,3 +2555,55 @@ func TestRunScan_EmailInFixtureTreeIsNoise(t *testing.T) {
 		t.Errorf("DATA-001 in source: got %q, want low", sev)
 	}
 }
+
+// gitIn runs git in dir for a test, failing it on error.
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto", "GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto", "GIT_CONFIG_VALUE_1=false")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// A linked worktree under a directory the parent .gitignores must not be
+// scanned, even when the parent's index names it. `git ls-files
+// --recurse-submodules` expands a gitlink registered in .gitmodules into the
+// worktree's files, which made every one of them look tracked and so exempt
+// from the parent's ignore: each finding of the real tree was reported twice,
+// the copy under a path no waiver could stay ahead of (#830).
+func TestWalkArtifacts_IgnoredLinkedWorktreeNotScanned(t *testing.T) {
+	repo := initGitRepo(t, map[string]string{
+		".gitignore":     ".claude/\n",
+		"scripts/run.py": "import os\n",
+	})
+	gitIn(t, repo, "worktree", "add", "-q", ".claude/worktrees/agent-1", "-b", "wt1")
+	// The ways a worktree ends up in the parent's index: `git add` of the
+	// embedded checkout, with its path registered as a submodule.
+	gitIn(t, repo, "add", "-f", ".claude/worktrees/agent-1")
+	if err := os.WriteFile(filepath.Join(repo, ".gitmodules"),
+		[]byte("[submodule \".claude/worktrees/agent-1\"]\n\tpath = .claude/worktrees/agent-1\n\turl = ./\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "submodule", "init")
+
+	artifacts, err := walkArtifacts(repo, &ScanConfig{}, ScanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawReal bool
+	for _, a := range artifacts {
+		if strings.HasPrefix(a.Path, ".claude/") {
+			t.Errorf("file under a gitignored linked worktree was scanned: %s", a.Path)
+		}
+		if a.Path == "scripts/run.py" {
+			sawReal = true
+		}
+	}
+	if !sawReal {
+		t.Fatalf("the real tree must still be scanned: %+v", artifacts)
+	}
+}
