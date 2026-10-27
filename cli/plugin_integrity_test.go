@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox/core/plugincap"
 	"github.com/nox-hq/nox/registry/trust"
 )
 
@@ -114,4 +115,37 @@ func TestInstalledPluginBinaries_IntegrityGate(t *testing.T) {
 			t.Fatalf("plugin without a recorded digest must still run; got %d, missing=%+v", len(bins), missing)
 		}
 	})
+}
+
+// A required entry carrying a version constraint is still required. The
+// "installed but not listed in plugins.required" advisory keyed its set by the
+// raw entry, so `nox/foo@^0.2.0` never matched the installed `nox/foo` and the
+// plugin that ran was reported as one that did not (#829).
+func TestInstalledPluginBinaries_UndeclaredIgnoresConstraintSuffix(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NOX_HOME", dir)
+	st := &State{Plugins: []InstalledPlugin{
+		{Name: "nox/reachability", Version: "0.9.1"},
+		{Name: "nox/taint-analysis", Version: "0.7.0"},
+		{Name: "nox/grc", Version: "1.0.0"},
+	}}
+	if err := SaveState(DefaultStatePath(), st); err != nil {
+		t.Fatal(err)
+	}
+	_, missing, err := installedPluginBinaries([]string{"nox/reachability@^0.9.0", "nox/taint-analysis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, d := range missing {
+		if names, ok := plugincap.Undeclared(d.Detail); ok {
+			got = names
+			if !strings.HasPrefix(d.Detail, "1 installed plugin(s)") {
+				t.Errorf("count must match the list: %q", d.Detail)
+			}
+		}
+	}
+	if len(got) != 1 || got[0] != "nox/grc" {
+		t.Fatalf("only nox/grc is installed and not required; got %v", got)
+	}
 }

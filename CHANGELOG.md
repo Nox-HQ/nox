@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `[degraded] N installed plugin(s) are not listed in plugins.required and did not run` advisory no longer lists plugins you did require. An entry with a version constraint (`nox/reachability@^0.9.0`) was compared to the installed name (`nox/reachability`) as a raw string, so every constrained plugin was reported as skipped while it ran, and the count was inflated to match. The list and count now hold only installed plugins that are not required (#829).
+
 ## [1.54.0] - 2026-10-27
 
 Dependency scans get faster answers from NOX Intelligence without giving up verification. A verified
