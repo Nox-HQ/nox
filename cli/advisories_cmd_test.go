@@ -467,3 +467,51 @@ func TestInstallCIWorkflowHasNoIAC013(t *testing.T) {
 		}
 	}
 }
+
+// The template carries nox:ignore waivers for IAC-155, IAC-308 and IAC-314 that
+// only take effect in the RENDERED workflow, so the repository's own audit
+// excludes the template (.nox.yaml) instead of reporting them as unused. This
+// is the guard that keeps that exclusion honest: every one of those waivers
+// must still suppress a real finding once rendered. If a rule is narrowed and a
+// waiver goes stale, this fails and the waiver is the thing to delete.
+func TestInstallCIWorkflowWaiversAreLive(t *testing.T) {
+	withBuild(t, "1.52.0", releaseSHA)
+	d, err := resolveInstallCI("main", "17 5 * * *", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := renderInstallCI(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wf := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wf, 0o755); err != nil { //nolint:gosec // test dir
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wf, "nox.yml"), []byte(out), 0o644); err != nil { //nolint:gosec // test file
+		t.Fatal(err)
+	}
+	res, err := core.RunScanWithOptions(dir, core.ScanOptions{ToolVersion: version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	suppressed := map[string]bool{}
+	for _, f := range res.Findings.Findings() {
+		if f.Status == findings.StatusSuppressed {
+			suppressed[f.RuleID] = true
+		} else if f.RuleID == "IAC-155" || f.RuleID == "IAC-308" || f.RuleID == "IAC-314" {
+			t.Errorf("%s fires unwaived at %s:%d", f.RuleID, f.Location.FilePath, f.Location.StartLine)
+		}
+	}
+	for _, id := range []string{"IAC-155", "IAC-308", "IAC-314"} {
+		if !suppressed[id] {
+			t.Errorf("the template waives %s but it suppressed nothing in the rendered workflow: the waiver is stale", id)
+		}
+	}
+	for _, dg := range res.Degradations {
+		if strings.Contains(dg.Detail, "matched no finding") {
+			t.Errorf("unused waiver in the rendered workflow: %s", dg.Detail)
+		}
+	}
+}
