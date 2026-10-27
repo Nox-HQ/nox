@@ -90,7 +90,7 @@ var (
 )
 
 var (
-	depKinds = []string{"osv_lookup", "lockfile_parse", "vuln_data_load"}
+	depKinds = []string{"osv_lookup", "advisory_detail", "lockfile_parse", "vuln_data_load"}
 
 	cryptoCWEs = []string{
 		"CWE-261", "CWE-295", "CWE-311", "CWE-312", "CWE-319", "CWE-321",

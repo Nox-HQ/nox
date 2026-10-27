@@ -22,7 +22,9 @@ survive this program intact:
 1. `WithOSVDisabled()` / `osv.disabled` — the capability is switchable off.
 2. `degrade.OSV` — a failed lookup reports *"dependency vulnerabilities are
    under-reported; this scan cannot confirm the absence of known CVEs"* rather
-   than a silent clean scan.
+   than a silent clean scan. `degrade.AdvisoryDetail` is its sibling for the
+   narrower failure where the advisory was found but its severity could not be
+   fetched from either source: it hides a severity, not the finding.
 3. Every finding remains derivable from data the scan already holds.
 
 **Decision:** intelligence is an in-binary vulnerability source, not a plugin.

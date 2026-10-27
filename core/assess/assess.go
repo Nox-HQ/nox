@@ -629,6 +629,7 @@ func hasKind(ds []nox.Degradation, kind string) bool {
 // plugins, files and errors, stays behind --verbose.
 var kindHeadlines = map[string]string{
 	"osv_lookup":         "Known-vulnerability lookup for dependencies did not complete",
+	"advisory_detail":    "Some dependency severities could not be fetched; a severity gate may not see them",
 	"lockfile_parse":     "Some dependency lockfiles could not be read",
 	"vuln_data_load":     "Vulnerability data could not be loaded",
 	"plugin":             "Some plugin checks did not run",

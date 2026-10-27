@@ -28,8 +28,8 @@ const mirrorOutageWire = `{"results":[{"vulns":[
 func mirrorOnlyIntel(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
-			http.Error(w, "not found", http.StatusNotFound)
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			_, _ = w.Write([]byte(`{"id":"` + id + `"}`)) // a 404 would be a missing detail: advisory_detail
 			return
 		}
 		if r.Header.Get("X-Nox-Accept-Degraded") != "mirror" {

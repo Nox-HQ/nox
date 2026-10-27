@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A severity gate (`fail_on: high`, `nox ci`) now fails when an advisory's details could not be fetched from either source, where it used to pass silently. Dependency scans find advisories in one request and fetch each one's severity, summary and affected ranges in a second; when that second request failed, the finding kept a default severity and could sit below the gate unnoticed. nox-core v0.11.0 retries the detail fetch twice on a transport error, a 5xx or a 429, fills a record one source could not hydrate from the same advisory on the other (NOX Intelligence or OSV.dev), and only when neither can supply it reports a blocking `advisory_detail` degradation naming the advisories. The finding itself is always reported; only its severity is in doubt. The scan summary, `nox fix` verification and the ISO 27001 report (`nox compliance`) treat the new kind like `osv_lookup`: the dependency check did not fully complete.
 - The `[degraded] N installed plugin(s) are not listed in plugins.required and did not run` advisory no longer lists plugins you did require. An entry with a version constraint (`nox/reachability@^0.9.0`) was compared to the installed name (`nox/reachability`) as a raw string, so every constrained plugin was reported as skipped while it ran, and the count was inflated to match. The list and count now hold only installed plugins that are not required (#829).
 
 ## [1.54.0] - 2026-10-27

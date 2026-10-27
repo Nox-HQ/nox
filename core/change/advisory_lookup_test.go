@@ -102,3 +102,17 @@ func TestIncompleteLookupIsNotComparedAndReadsFromTheReport(t *testing.T) {
 		t.Errorf("caveat missing: %v", d.Caveats)
 	}
 }
+
+// advisory_detail is not a failed lookup: the advisories were found, so they
+// compare by id; only a severity is in doubt. It must stay a blocking
+// "incomplete" note, not LookupFailed (which suppresses the whole comparison).
+func TestAdvisoryDetailIsIncompleteButNotALookupFailure(t *testing.T) {
+	rep := report.JSONReport{Meta: report.Meta{Degradations: []report.Degradation{{Kind: "advisory_detail", Detail: "1 finding kept a default severity"}}}}
+	s := FromReport(rep, nil, "x")
+	if s.AdvisoryLookup != "" {
+		t.Errorf("AdvisoryLookup = %q; the lookup itself succeeded", s.AdvisoryLookup)
+	}
+	if len(s.Incomplete) != 1 {
+		t.Errorf("Incomplete = %v; the blocking degradation must still be carried", s.Incomplete)
+	}
+}

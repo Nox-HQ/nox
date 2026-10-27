@@ -286,3 +286,16 @@ func TestVerifyFindingInAToolGeneratedDirIsNotAttributedToTheUser(t *testing.T) 
 		t.Fatalf("the generated-directory finding was counted as the user's:\n%s", out)
 	}
 }
+
+// A dependency re-run whose advisory details could not be fetched may carry
+// default severities, so "the advisory is gone" cannot be trusted from it.
+func TestIncompleteTreatsAdvisoryDetailAsADependencyFailure(t *testing.T) {
+	res := &nox.ScanResult{Scope: nox.FullScope()}
+	res.Degradations = []nox.Degradation{{Kind: "advisory_detail", Detail: "1 finding kept a default severity", Impact: "a severity gate may not see it"}}
+	if got := incomplete(res, nox.ScopeDeps, false); !strings.Contains(got, "did not complete") {
+		t.Fatalf("incomplete(deps) = %q, want the dependency check reported as incomplete", got)
+	}
+	if got := incomplete(res, nox.ScopeSecrets, false); got != "" {
+		t.Errorf("a dependency degradation leaked into the secrets scope: %q", got)
+	}
+}

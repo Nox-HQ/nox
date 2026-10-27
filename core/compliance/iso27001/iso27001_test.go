@@ -397,3 +397,20 @@ func TestParsers(t *testing.T) {
 		t.Errorf("AI inventory = %+v %v", ai, err)
 	}
 }
+
+// TestAdvisoryDetailDegradationMakesDependencyControlsIncomplete: an advisory
+// whose severity could not be fetched from either source is a dependency check
+// that did not fully complete, so A.8.8 and A.5.21 must say so rather than read
+// as clean evidence.
+func TestAdvisoryDetailDegradationMakesDependencyControlsIncomplete(t *testing.T) {
+	in := fixture()
+	in.Report.Meta.Degradations = []report.Degradation{{
+		Kind: "advisory_detail", Detail: "1 finding kept a default severity", Impact: "a severity gate may not see it",
+	}}
+	for _, id := range []string{"A.8.8", "A.5.21"} {
+		c := byID(t, Assess(in), id)
+		if !strings.Contains(strings.Join(c.Gaps, " "), "advisory_detail") {
+			t.Errorf("%s does not mention the advisory_detail gap: %v", id, c.Gaps)
+		}
+	}
+}

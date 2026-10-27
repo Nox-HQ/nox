@@ -50,7 +50,16 @@ says so: the scan carries an `intel_unreachable` degradation naming the
 endpoint, distinct from the `intel_suppression` a withheld record raises —
 silence is not withholding, and the two are never confused. Only when the
 reference is unreachable as well does the scan report an advisory under-report
-(`osv_lookup`), the one degradation that can hide a finding.
+(`osv_lookup`), the degradation that can hide a finding.
+
+A finding's existence and its severity are looked up separately. When the
+follow-up fetch for an advisory's details (severity, summary, affected ranges)
+fails, nox retries it twice on a transport error, a 5xx or a 429, and fills it
+from the other source (NOX Intelligence or OSV.dev) if that one has it. Only
+when neither source can supply the details does the scan raise a blocking
+`advisory_detail` degradation naming the advisories. The finding is still
+reported, but it kept a default severity, so a severity gate (`fail_on: high`)
+may not see it: that degradation can hide a severity, never a finding.
 
 An answer the service marks incomplete is not an answer of "none". Each query
 result may carry `nox_coverage` (`complete`, `incomplete`, `unsupported`); a
