@@ -2,6 +2,8 @@
 
 Scan with [Nox](https://github.com/nox-hq/nox), generate a deterministic dependency-upgrade plan, apply it, and open a pull request — Dependabot-style automation, repository-local, no SaaS.
 
+Released in step with Nox: `nox-remediate-action` vX.Y.Z is this action as of Nox vX.Y.Z, using that release's install action, and `@v1` follows the latest. The source lives in [`Nox-HQ/nox` under `actions/remediate`](https://github.com/nox-hq/nox/tree/main/actions/remediate), where issues and changes belong; [`Nox-HQ/nox-remediate-action`](https://github.com/nox-hq/nox-remediate-action) is the published copy, synced on every release.
+
 This is a thin composite action over the existing `nox` CLI:
 
 1. [`nox-hq/nox`](https://github.com/nox-hq/nox) installs Nox + runs `nox scan` to produce `findings.json`.
