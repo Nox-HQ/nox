@@ -2,6 +2,8 @@
 
 Scan with [Nox](https://github.com/nox-hq/nox), generate a deterministic dependency-upgrade plan, apply it, and open a pull request — Dependabot-style automation, repository-local, no SaaS.
 
+Released in step with Nox: `nox-remediate-action` vX.Y.Z is this action as of Nox vX.Y.Z, using that release's install action, and `@v1` follows the latest. The source lives in [`Nox-HQ/nox` under `actions/remediate`](https://github.com/nox-hq/nox/tree/main/actions/remediate), where issues and changes belong; [`Nox-HQ/nox-remediate-action`](https://github.com/nox-hq/nox-remediate-action) is the published copy, synced on every release.
+
 This is a thin composite action over the existing `nox` CLI:
 
 1. [`nox-hq/nox`](https://github.com/nox-hq/nox) installs Nox + runs `nox scan` to produce `findings.json`.
@@ -56,6 +58,7 @@ jobs:
 | `pr-labels` | `security,dependencies,nox-remediation` | Comma-separated PR labels. |
 | `pr-base` | _empty_ | Base branch for the PR (defaults to the repo default). |
 | `verify-cmd` | _empty_ | Optional shell command to run after applying upgrades. |
+| `upgrade-actions` | `false` | Also upgrade GitHub Action pins in `.github/workflows` to their latest release, SHA-pinned. Off by default, so upgrading this action never starts rewriting your workflow files unasked. |
 | `findings-file` | _empty_ | Plan from this `findings.json` instead of the scan's own. `nox advisories --prepare-findings` writes one holding only the newly disclosed advisories its policy chose to fix. |
 | `scan-format` | `json` | Scan output format(s) for `findings.json` generation. |
 | `scan-output` | `nox-out` | Scan output directory. |

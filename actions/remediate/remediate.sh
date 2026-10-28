@@ -19,6 +19,7 @@ fi
 OUTPUT_DIR="${INPUT_OUTPUT:-nox-out}"
 MANIFEST_ROOT="${INPUT_MANIFEST_ROOT:-.}"
 INCLUDE_MAJOR="${INPUT_INCLUDE_MAJOR:-false}"
+UPGRADE_ACTIONS="${INPUT_UPGRADE_ACTIONS:-false}"
 FINDINGS_PATH="${INPUT_FINDINGS_FILE:-${OUTPUT_DIR}/findings.json}"
 PLAN_PATH="${OUTPUT_DIR}/remediation-plan.txt"
 PR_BODY_PATH="${OUTPUT_DIR}/pr-body.md"
@@ -34,6 +35,11 @@ extra_args=()
 if [[ "$INCLUDE_MAJOR" == "true" ]]; then
   extra_args+=("--include-major")
 fi
+if [[ "$UPGRADE_ACTIONS" == "true" ]]; then
+  # Adds the workflow-pin pass alongside the package pass, so GitHub Action
+  # versions are upgraded and SHA-pinned in the same PR.
+  extra_args+=("--actions")
+fi
 
 case "$cmd" in
   plan)
@@ -47,10 +53,23 @@ case "$cmd" in
       exit "$plan_status"
     fi
 
-    if grep -q "no eligible upgrades found" "$PLAN_PATH"; then
-      has_updates="false"
-    else
+    # Detect work by the presence of planned changes, not by the absence of the
+    # package pass's "nothing to do" line.
+    #
+    # `nox fix` runs two passes and each reports independently, so with
+    # --actions the output routinely reads:
+    #
+    #     nox fix: no eligible upgrades found.       <- packages
+    #     plan: golangci/golangci-lint-action ...    <- actions
+    #
+    # Matching the first line alone therefore concluded "no updates" while real
+    # action upgrades sat directly beneath it, and the apply and PR steps were
+    # skipped. Both passes announce actual work with a `plan:` line, so that is
+    # the signal.
+    if grep -qE '^plan: ' "$PLAN_PATH"; then
       has_updates="true"
+    else
+      has_updates="false"
     fi
 
     {

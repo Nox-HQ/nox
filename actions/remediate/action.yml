@@ -58,6 +58,14 @@ inputs:
     description: 'Scan output directory'
     required: false
     default: 'nox-out'
+  upgrade-actions:
+    description: >-
+      Also upgrade GitHub Action pins in .github/workflows to their latest
+      release, SHA-pinned. Off by default: enabling it widens what the action
+      rewrites, and a consumer upgrading this action should not silently gain
+      commits to their workflow files.
+    required: false
+    default: 'false'
   findings-file:
     description: 'Plan from this findings.json instead of the one the scan above writes. `nox advisories --prepare-findings` writes the file holding only the newly disclosed advisories its policy decided to fix.'
     required: false
@@ -85,7 +93,7 @@ runs:
       # Pinned by commit SHA, not the floating @v1 tag: IAC-013 is nox's own
       # rule, and an action that remediates supply-chain risk must not itself
       # consume a mutable ref.
-      uses: nox-hq/nox@0c7ced2b6d42bbfe3fd0115e783390ff5397f815 # v1.52.0
+      uses: nox-hq/nox@49d67c3d69c5302b1ed9e71dd12dc3470764fcbb # v1.55.1
       with:
         path: ${{ inputs.path }}
         format: ${{ inputs.scan-format }}
@@ -100,7 +108,11 @@ runs:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
         INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+        INPUT_UPGRADE_ACTIONS: ${{ inputs.upgrade-actions }}
         INPUT_FINDINGS_FILE: ${{ inputs.findings-file }}
+        # `nox fix --actions` resolves each action's latest release through the
+        # GitHub API; without a token it is rate-limited to 60 requests/hour.
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: bash "${{ github.action_path }}/remediate.sh" plan
 
     - name: Apply remediation
@@ -110,7 +122,11 @@ runs:
         INPUT_OUTPUT: ${{ inputs.scan-output }}
         INPUT_INCLUDE_MAJOR: ${{ inputs.include-major }}
         INPUT_MANIFEST_ROOT: ${{ inputs.manifest-root }}
+        INPUT_UPGRADE_ACTIONS: ${{ inputs.upgrade-actions }}
         INPUT_FINDINGS_FILE: ${{ inputs.findings-file }}
+        # `nox fix --actions` resolves each action's latest release through the
+        # GitHub API; without a token it is rate-limited to 60 requests/hour.
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: bash "${{ github.action_path }}/remediate.sh" apply
 
     - name: Verify changes
