@@ -56,6 +56,7 @@ jobs:
 | `pr-labels` | `security,dependencies,nox-remediation` | Comma-separated PR labels. |
 | `pr-base` | _empty_ | Base branch for the PR (defaults to the repo default). |
 | `verify-cmd` | _empty_ | Optional shell command to run after applying upgrades. |
+| `upgrade-actions` | `false` | Also upgrade GitHub Action pins in `.github/workflows` to their latest release, SHA-pinned. Off by default, so upgrading this action never starts rewriting your workflow files unasked. |
 | `findings-file` | _empty_ | Plan from this `findings.json` instead of the scan's own. `nox advisories --prepare-findings` writes one holding only the newly disclosed advisories its policy chose to fix. |
 | `scan-format` | `json` | Scan output format(s) for `findings.json` generation. |
 | `scan-output` | `nox-out` | Scan output directory. |
