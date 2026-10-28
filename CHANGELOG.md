@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.1] - 2026-10-28
+
+nox-core v0.11.2: PyPI advisory ranges are ordered under PEP 440. Dogfooded against NOX Intelligence with the same pin.
+
+### Changed
+
+- nox-core v0.11.2. PEP 440 spells a prerelease without a separator (`1.11a1`), and the shared version comparator read that segment as 0, so a PyPI range starting at a prerelease covered every earlier minor release. NOX Intelligence applied GHSA-337x-4q8g-prc5 (django 1.11a1 to 1.11.18) and 11 other advisories to django 1.4.0 from its mirror; v0.24.6 fixes that with this version. In the CLI the comparator chooses the "fixed in" version when an advisory names one fix per release branch: PyPI bounds are now ordered under PEP 440 there too, and outside PyPI a bound that can only be read by zeroing a lettered segment is no longer trusted. Measured on 2,589 real (PyPI package, version, advisory) hits from live OSV, no reported fix version changes; this is the same rule the service now uses, not a behaviour change you should see.
+
 ## [1.55.0] - 2026-10-27
 
 A severity gate can no longer pass on a finding whose severity was never fetched, a worktree under an ignored directory is no longer scanned twice, and constrained required plugins are no longer reported as skipped. Dogfooded against NOX Intelligence main (93/93, including a real CLI scan answered from the mirror with the same 42 dependency findings as the live baseline).
