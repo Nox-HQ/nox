@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.2] - 2026-10-28
+
+The remediate action (`actions/remediate`) and its Marketplace copy, `nox-hq/nox-remediate-action`, are one action again, published from here on every release. The CLI is unchanged from 1.55.1.
+
+### Fixed
+
+- `actions/remediate` and `nox-hq/nox-remediate-action` had drifted apart since July. The published action lacked `findings-file`, so `nox advisories --prepare-findings` could not drive it, and still installed nox through the v1.38.2 install action. This copy lacked `upgrade-actions`, and with `--actions` it reported no updates when only action pins needed upgrading: the package pass prints `nox fix: no eligible upgrades found.` above the action plans, and that line was the signal. Work is now detected by `plan:` lines. Both copies now hold the union. Checked with the released 1.55.1 binary on a fixture: package-only, package and action, and action-only plans each report updates correctly, `findings-file` is honoured, and the script runs under bash 3.2 and 5 (#924).
+
+### Changed
+
+- `nox-hq/nox-remediate-action` is now released in step with nox. After each nox release its `sync` workflow copies `actions/remediate` at that release's commit, pins the install action to the same commit, runs a self-test against a fixture, then tags the same version (`vX.Y.Z`) and moves `v1`. Edit the action here; the published repository is a copy. Its versions jump from v1.0.3 to the nox version and stay in v1.
+
 ## [1.55.1] - 2026-10-28
 
 nox-core v0.11.2: PyPI advisory ranges are ordered under PEP 440. Dogfooded against NOX Intelligence with the same pin.
